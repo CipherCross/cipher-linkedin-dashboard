@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+sync-agent/config.yaml
+__pycache__/
+.venv/
+.DS_Store

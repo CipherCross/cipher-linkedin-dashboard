@@ -1,0 +1,122 @@
+# Copy to config.yaml on each notebook and edit. config.yaml is gitignored —
+# it contains the service-role key, never commit it.
+
+supabase_url: "https://YOUR-PROJECT.supabase.co"
+supabase_service_key: "YOUR-SERVICE-ROLE-KEY"   # Settings -> API -> service_role
+
+# Self-update: before each scheduled sync the agent fetches the latest
+# agent.py from the private 'agent' storage bucket (published from the dev
+# machine with deploy.sh) and restarts itself if it changed. Set to false to
+# pin this notebook to its current version.
+auto_update: true
+
+# Message-sequence view: the agent automatically extracts each campaign's
+# outbound steps (invite + follow-up messages) and their per-step reply rates
+# straight from lh.db — no mapping needed, the queries are built in. The step
+# TEMPLATE TEXT is synced too, so it becomes anon-readable in Supabase (same
+# tradeoff as mapping.messages below). Set to false to skip the whole thing.
+sync_steps: true
+
+# Unique per notebook. Use the same value forever so upserts stay idempotent.
+instance_id: "notebook-1"
+instance_label: "Notebook 1 — Alice"
+
+# Real LinkedIn identity of the account this instance runs as — shown on the
+# dashboard (name, profile link, photo) instead of the bare instance label.
+# Leave empty to pull from lh.db via the optional mapping.owner query below.
+# NOTE: LinkedIn image URLs (media.licdn.com/...) are signed and EXPIRE after
+# a few weeks — only paste a stable URL here; expiring avatars belong in the
+# owner query, which refreshes them on every sync.
+account_name: ""        # e.g. "Alice Petrova"
+account_url: ""         # e.g. "https://www.linkedin.com/in/alice-petrova/"
+account_avatar: ""      # stable image URL, or leave empty
+
+# Path to the Linked Helper 2 SQLite database (linked-helper-account-<ID>-main/lh.db).
+# Leave empty to auto-discover: the agent scans the default LH2 data dirs and
+# picks the most recently active account DB (it prints which one it chose).
+# Set explicitly only if auto-discovery picks the wrong account —
+# `python3 agent.py inspect` lists all candidates with row counts.
+lh2_db_path: ""
+
+# Map LH2's tables/columns (printed by `inspect`) to the normalized schema.
+# Each section takes either a simple `table:` or a raw `query:` — LH2 spreads
+# lead data across several tables (person_in_campaigns_history,
+# person_external_ids, person_original_mini_profile, ...), so leads usually
+# need a JOIN. Column keys refer to the query's result aliases. Timestamps
+# may be epoch milliseconds; the agent normalizes them automatically.
+# If your LH2 version has no readable SQLite, use `ingest-csv` instead.
+mapping:
+  campaigns:
+    table: "campaigns"
+    id: "id"
+    name: "name"
+    status: "state"
+  leads:
+    # Adapt the JOIN to your schema as printed by `inspect`. Example shape
+    # below. KNOWN PITFALLS (verified against a real LH2 lh.db):
+    #  - invited_at must come from InvitePerson action results (result=1),
+    #    NOT add_to_target_date (that's just "queued into campaign")
+    #  - replied_at lives in action_result_messages (type='Replied', written
+    #    by CheckForReplies actions), not on the campaign-history row
+    # Prefer copying a proven config.yaml from an already-synced notebook.
+    # Verify with `agent.py sync --dry-run` before the first real sync.
+    query: |
+      select
+        pic.campaign_id            as campaign_id,
+        'https://www.linkedin.com/in/' || pei.external_id as profile_url,
+        pmp.full_name              as full_name,
+        pmp.headline               as headline,
+        pic.invited_at             as invited_at,
+        pic.connected_at           as connected_at,
+        pic.replied_at             as replied_at,
+        pic.updated_at             as last_action_at
+      from person_in_campaigns_history pic
+      join person_external_ids pei
+        on pei.person_id = pic.person_id and pei.type_group = 'public'
+      left join person_original_mini_profile pmp
+        on pmp.person_id = pic.person_id
+    campaign_id: "campaign_id"
+    profile_url: "profile_url"
+    full_name: "full_name"
+    headline: "headline"
+    invited_at: "invited_at"
+    connected_at: "connected_at"
+    replied_at: "replied_at"
+    last_action_at: "last_action_at"
+
+  # Optional: reply texts for the dashboard's Replies feed. LH2 stores them
+  # in action_result_messages (type='Replied', written by CheckForReplies);
+  # adapt the person join to your schema as printed by `inspect`.
+  # PRIVACY: reply contents become anon-readable in Supabase — skip this
+  # section if that's not acceptable until Auth is enabled.
+  # messages:
+  #   query: |
+  #     select pic.campaign_id as campaign_id,
+  #            'https://www.linkedin.com/in/' || pei.external_id as profile_url,
+  #            arm.text as body,
+  #            arm.created_at as sent_at
+  #     from action_result_messages arm
+  #     join person_external_ids pei
+  #       on pei.person_id = arm.person_id and pei.type_group = 'public'
+  #     left join person_in_campaigns_history pic
+  #       on pic.person_id = arm.person_id
+  #     where arm.type = 'Replied'
+  #   campaign_id: "campaign_id"
+  #   profile_url: "profile_url"
+  #   body: "body"
+  #   sent_at: "sent_at"
+
+  # Optional: the logged-in account's own profile, straight from lh.db, so
+  # name/photo refresh on every sync. Locate where your LH2 version stores it
+  # with `agent.py inspect` — look for owner/"me"/settings-like tables or a
+  # key-value store; the result must expose the aliases referenced below.
+  # Values set manually above take precedence over this query.
+  # owner:
+  #   query: |
+  #     select full_name as name,
+  #            'https://www.linkedin.com/in/' || public_id as profile_url,
+  #            avatar_url as avatar_url
+  #     from me limit 1
+  #   name: "name"
+  #   profile_url: "profile_url"
+  #   avatar_url: "avatar_url"

@@ -1,0 +1,40 @@
+import { NavLink, Outlet } from 'react-router-dom'
+import { useData } from '../lib/DataContext'
+
+const LINKS = [
+  { to: '/', label: 'Overview', end: true },
+  { to: '/accounts', label: 'Accounts' },
+  { to: '/leads', label: 'Leads' },
+  { to: '/replies', label: 'Replies' },
+  { to: '/health', label: 'Health' },
+]
+
+export function Layout() {
+  const { data, loading } = useData()
+
+  return (
+    <div className="page">
+      <nav className="topnav">
+        <span className="brand">LinkedIn Campaigns</span>
+        {LINKS.map((l) => (
+          <NavLink
+            key={l.to}
+            to={l.to}
+            end={l.end}
+            className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
+          >
+            {l.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {data?.error && <div className="banner">Supabase error: {data.error}</div>}
+
+      {loading || !data ? (
+        <div className="center muted">Loading…</div>
+      ) : (
+        <Outlet />
+      )}
+    </div>
+  )
+}

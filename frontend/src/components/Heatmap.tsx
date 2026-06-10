@@ -1,0 +1,64 @@
+import { Fragment, useState } from 'react'
+import type { Lead } from '../lib/types'
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const METRICS = [
+  { id: 'accepted', label: 'Accepts', field: 'connected_at' as const, color: '52, 201, 142' },
+  { id: 'replied', label: 'Replies', field: 'replied_at' as const, color: '247, 185, 79' },
+]
+
+/** Day-of-week × hour distribution of accepts/replies, in the viewer's
+ *  timezone — shows when the audience actually responds. */
+export function Heatmap({ leads }: { leads: Lead[] }) {
+  const [metricId, setMetricId] = useState('accepted')
+  const metric = METRICS.find((m) => m.id === metricId)!
+
+  const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
+  let total = 0
+  for (const l of leads) {
+    const ts = l[metric.field]
+    if (!ts) continue
+    const d = new Date(ts)
+    grid[(d.getDay() + 6) % 7][d.getHours()] += 1
+    total += 1
+  }
+  const max = Math.max(...grid.flat(), 1)
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>Response times — {metric.label.toLowerCase()} by day &amp; hour</h2>
+        <div className="range-group">
+          {METRICS.map((m) => (
+            <button key={m.id} className={m.id === metricId ? 'active' : ''}
+              onClick={() => setMetricId(m.id)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="heatmap">
+        <div className="heatmap-corner" />
+        {Array.from({ length: 24 }, (_, h) => (
+          <div key={h} className="heatmap-hour muted">{h % 3 === 0 ? h : ''}</div>
+        ))}
+        {grid.map((row, d) => (
+          <Fragment key={d}>
+            <div className="heatmap-day muted">{DAYS[d]}</div>
+            {row.map((count, h) => (
+              <div
+                key={h}
+                className="heatmap-cell"
+                title={`${DAYS[d]} ${h}:00 — ${count}`}
+                style={{ background: count > 0 ? `rgba(${metric.color}, ${0.15 + 0.85 * (count / max)})` : '#1a2236' }}
+              />
+            ))}
+          </Fragment>
+        ))}
+      </div>
+      <div className="muted small" style={{ marginTop: 8 }}>
+        {total.toLocaleString('en-US')} events · times shown in your local timezone
+      </div>
+    </div>
+  )
+}
