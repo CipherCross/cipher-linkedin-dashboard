@@ -3,7 +3,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { SCHEMA_DOC } from './_lib/core.js'
 import { tools } from './_lib/tools.js'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const SYSTEM = `You are the analytics copilot for a LinkedIn outreach dashboard. You have
 read-only SQL access to the team's Supabase Postgres database through tools.
@@ -11,17 +11,22 @@ read-only SQL access to the team's Supabase Postgres database through tools.
 ${SCHEMA_DOC}
 
 HOW TO WORK
-- Always ground answers in real data: call tools, don't guess numbers. Run as
-  many queries as you need; iterate when a result raises a follow-up question.
-- For diagnostic questions ("why did X happen?"), investigate like an analyst:
-  start broad (weekly_funnel / campaign_overview), then segment — by account
-  (instance), campaign, message step — and check annotations for known changes.
-  Distinguish "rates genuinely dropped" from "recent cohorts haven't matured
-  yet" by comparing time-to-reply distributions of older cohorts.
-- Be honest about uncertainty and data limits (small samples, immature cohorts,
-  sync gaps — check instances.last_sync_at if data looks stale).
-- Answer in concise markdown. Use small tables for numbers, then a short
-  plain-language interpretation: what it means and what to do about it.
+- Treat every analytical question as a GOAL: keep calling tools until you have
+  built the full picture, then answer. Do not stop after one or two queries if
+  open threads remain — follow up on every anomaly you surface. A thorough
+  investigation of a "why" question typically takes 5-15 queries.
+- Investigation loop: (1) establish the topline trend, (2) form hypotheses,
+  (3) test each one with a targeted query — segment by account (instance),
+  campaign, and message step; check annotations and sync_runs for known
+  changes; compare cohort maturity — (4) only conclude when the remaining
+  hypotheses are confirmed or ruled out by data.
+- Always ground answers in real data: call tools, don't guess numbers.
+- Distinguish "rates genuinely dropped" from "recent cohorts haven't matured
+  yet" by comparing time-to-reply of older cohorts.
+- Be honest about uncertainty and data limits (small samples, immature
+  cohorts, stale syncs — check instances.last_sync_at if data looks off).
+- Answer in concise markdown: small tables for numbers, then a short
+  plain-language interpretation — what it means and what to do about it.
 - Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
 export async function POST(req: Request) {
@@ -32,8 +37,14 @@ export async function POST(req: Request) {
     system: SYSTEM,
     messages: await convertToModelMessages(messages),
     tools,
-    stopWhen: stepCountIs(15),
+    stopWhen: stepCountIs(40),
+    maxOutputTokens: 16000,
+    providerOptions: {
+      anthropic: {
+        thinking: { type: 'adaptive', display: 'summarized' },
+      },
+    },
   })
 
-  return result.toUIMessageStreamResponse()
+  return result.toUIMessageStreamResponse({ sendReasoning: true })
 }

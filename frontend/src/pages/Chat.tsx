@@ -53,6 +53,20 @@ function ToolCall({ part }: { part: any }) {
   )
 }
 
+function Reasoning({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  if (!text.trim()) return null
+  return (
+    <div className="chat-reasoning">
+      <button className="chat-tool-head" onClick={() => setOpen(!open)}>
+        <span className="chat-reasoning-label">Thinking</span>
+        <span className="chat-tool-caret">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div className="chat-reasoning-body">{text}</div>}
+    </div>
+  )
+}
+
 function Message({ m }: { m: UIMessage }) {
   return (
     <div className={`chat-msg ${m.role}`}>
@@ -65,6 +79,9 @@ function Message({ m }: { m: UIMessage }) {
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
               </div>
             )
+          }
+          if (part.type === 'reasoning') {
+            return <Reasoning key={i} text={part.text} />
           }
           if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
             return <ToolCall key={i} part={part} />

@@ -469,3 +469,6 @@ tr:last-child td { border-bottom: none; }
   padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .chat-send:disabled { opacity: 0.5; cursor: default; }
+.chat-reasoning { border: 1px dashed var(--border); border-radius: 8px; background: transparent; font-size: 12.5px; }
+.chat-reasoning-label { color: var(--muted); font-weight: 600; font-style: italic; }
+.chat-reasoning-body { border-top: 1px dashed var(--border); padding: 8px 12px; color: var(--muted); white-space: pre-wrap; font-size: 12.5px; max-height: 220px; overflow-y: auto; }
