@@ -8,7 +8,7 @@ import {
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
   executeSql,
-} from './_lib/core'
+} from './_lib/core.js'
 
 function asText(value: unknown) {
   return {

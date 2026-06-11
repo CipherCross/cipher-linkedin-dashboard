@@ -7,7 +7,7 @@ import {
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
   executeSql,
-} from './core'
+} from './core.js'
 
 export const tools = {
   run_sql: tool({

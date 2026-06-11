@@ -1,7 +1,7 @@
 import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
-import { SCHEMA_DOC } from './_lib/core'
-import { tools } from './_lib/tools'
+import { SCHEMA_DOC } from './_lib/core.js'
+import { tools } from './_lib/tools.js'
 
 export const maxDuration = 60
 

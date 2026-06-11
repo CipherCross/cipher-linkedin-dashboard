@@ -5,3 +5,4 @@ sync-agent/config.yaml
 __pycache__/
 .venv/
 .DS_Store
+.vercel
