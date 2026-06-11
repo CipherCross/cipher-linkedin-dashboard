@@ -73,11 +73,20 @@ messages — actual message texts (mostly inbound replies)
   id bigint PK, instance_id, campaign_id, profile_url, direction text ('in'|'out'),
   body text, sent_at timestamptz
 
-campaign_steps — outbound message sequence per campaign with aggregates
-  campaign_id -> campaigns, step_index int (0-based), step_label text,
-  step_type text, template_body text (the message copy),
-  sent_count int, replied_count int (first replies attributed to this step),
+campaign_steps — the FULL campaign sequence per campaign with aggregates,
+  including WARM-UP steps that run before the invite (profile visits, post
+  likes, follows, endorsements...), not just messaging steps.
+  campaign_id -> campaigns, step_index int (0-based position in sequence),
+  step_label text, step_type text, template_body text (message copy; null for
+  warm-up steps), sent_count int (people processed by this step),
+  replied_count int (first replies; only ever attributed to messaging steps),
   current_count int (people whose furthest step is this one), updated_at
+  step_type 'InvitePerson' and 'MessageToPerson' are messaging steps; any
+  other step_type is a warm-up/auxiliary action.
+  IMPORTANT: a lead with NULL invited_at is often NOT idle — it may be sitting
+  in a warm-up step that precedes the invite. Check current_count of the steps
+  before the InvitePerson step to see how many leads are still warming up.
+  (Synced by agent v1.5.0+; instances on older agents only show messaging steps.)
 
 annotations — manual notes pinned to dates (e.g. "changed template on X")
   id bigint PK, instance_id (null = all accounts), campaign_id (null = all),
@@ -110,6 +119,9 @@ ANALYSIS GUIDANCE
 - When rates differ across weeks, drill into segments: per instance (account),
   per campaign, per campaign step (campaign_steps shows which message in the
   sequence converts), and check annotations for known changes around the date.
+- "Why aren't invites going out?" — check campaign_steps for warm-up steps
+  before InvitePerson: leads accumulate there (current_count) until warm-up
+  completes, so low invite volume can simply mean a long warm-up pipeline.
 - All timestamps are timestamptz; use date_trunc for bucketing.
 `.trim()
 

@@ -58,6 +58,9 @@ mapping:
     #    NOT add_to_target_date (that's just "queued into campaign")
     #  - replied_at lives in action_result_messages (type='Replied', written
     #    by CheckForReplies actions), not on the campaign-history row
+    #  - person_external_ids has ~2 'public' rows per person (human slug +
+    #    opaque 'AC...' id) — joining it raw duplicates every lead with an
+    #    arbitrary slug pick. Dedupe to one slug per person as shown below.
     # Prefer copying a proven config.yaml from an already-synced notebook.
     # Verify with `agent.py sync --dry-run` before the first real sync.
     query: |
@@ -71,8 +74,14 @@ mapping:
         pic.replied_at             as replied_at,
         pic.updated_at             as last_action_at
       from person_in_campaigns_history pic
-      join person_external_ids pei
-        on pei.person_id = pic.person_id and pei.type_group = 'public'
+      join (
+        select person_id, external_id from (
+          select person_id, external_id,
+                 row_number() over (partition by person_id
+                   order by (external_id like 'AC%'), rowid desc) as rn
+          from person_external_ids where type_group = 'public'
+        ) where rn = 1
+      ) pei on pei.person_id = pic.person_id
       left join person_original_mini_profile pmp
         on pmp.person_id = pic.person_id
     campaign_id: "campaign_id"

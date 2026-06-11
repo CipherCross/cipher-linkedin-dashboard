@@ -30,7 +30,7 @@ export function MessageSequence({ steps }: { steps: CampaignStep[] }) {
 
   return (
     <div className="card">
-      <h2>Message sequence — reply rate per step</h2>
+      <h2>Campaign sequence — per-step funnel (warm-up + messages)</h2>
       <div className="msgseq">
         {ordered.map((s, i) => {
           const replyRate = s.sent_count > 0 ? (100 * s.replied_count) / s.sent_count : null
@@ -87,7 +87,8 @@ export function MessageSequence({ steps }: { steps: CampaignStep[] }) {
         })}
       </div>
       <div className="muted small" style={{ marginTop: 12 }}>
-        Reply % = of people who received that step, how many replied next.
+        Reply % = of people who received that step, how many replied next
+        (replies only attach to invite/message steps; the rest are warm-up).
         “Here now” = leads whose furthest step is this one. Sequence reflects the
         campaign’s latest version; steps removed in a later edit aren’t counted.
       </div>

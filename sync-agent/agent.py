@@ -32,7 +32,7 @@ import sys
 import requests
 import yaml
 
-AGENT_VERSION = "1.4.0"
+AGENT_VERSION = "1.5.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 LH2_DEFAULT_DIRS = [
@@ -269,7 +269,16 @@ def extract_owner(cfg, con):
 # LH2 version renames tables, extract_steps fails safe and the per-step view is
 # simply empty. Set `sync_steps: false` in config.yaml to opt out.
 
-# Ordered message steps of each campaign's LATEST version, with the template AST.
+# Action types that send something a person can reply to. Everything else in
+# the sequence (profile visits, post likes, follows, endorsements, ...) is a
+# warm-up/auxiliary step: synced so the full sequence is visible, but replies
+# are only attributed to messaging steps.
+MESSAGING_TYPES = ("InvitePerson", "MessageToPerson")
+# Monitor actions that run continuously rather than being a sequence position.
+EXCLUDED_TYPES = ("CheckForReplies",)
+
+# Ordered steps of each campaign's LATEST version (ALL types incl. warm-up),
+# with the template AST for messaging steps.
 STEP_DEFS_SQL = """
 WITH latest_v AS (
   SELECT campaign_id, MAX(id) AS version_id FROM campaign_versions GROUP BY campaign_id
@@ -285,11 +294,25 @@ JOIN latest_v lv ON lv.version_id = cva.version_id
 JOIN actions a   ON a.id = cva.action_id
 JOIN action_configs ac ON ac.id = (
   SELECT config_id FROM action_versions WHERE action_id = a.id ORDER BY id DESC LIMIT 1)
-WHERE ac.actionType IN ('InvitePerson', 'MessageToPerson')
+WHERE ac.actionType NOT IN ('CheckForReplies')
 """
 
+# person_external_ids holds ~2 'public' rows per person (human-readable slug
+# plus LinkedIn's opaque 'AC...' id). Joining it raw double-counts every
+# person, inflating per-step aggregates ~1.6x. Dedupe to ONE slug per person,
+# preferring the human-readable one (newest if several).
+PEI_ONE_SLUG_SQL = """(
+  SELECT person_id, external_id FROM (
+    SELECT person_id, external_id,
+           ROW_NUMBER() OVER (PARTITION BY person_id
+             ORDER BY (external_id LIKE 'AC%'), rowid DESC) AS rn
+    FROM person_external_ids
+    WHERE type_group = 'public'
+  ) WHERE rn = 1
+)"""
+
 # One row per outbound send (invite note or follow-up message) per person.
-STEP_SENDS_SQL = """
+STEP_SENDS_SQL = f"""
 SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
        a.campaign_id   AS campaign_id,
        a.id            AS action_id,
@@ -299,13 +322,29 @@ JOIN action_results ar  ON ar.id = arm.action_result_id
 JOIN action_versions av ON av.id = ar.action_version_id
 JOIN actions a          ON a.id = av.action_id
 JOIN action_configs ac  ON ac.id = av.config_id
-JOIN person_external_ids pei ON pei.person_id = ar.person_id AND pei.type_group = 'public'
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
 WHERE arm.type IN ('Sent', 'Message')
   AND ac.actionType IN ('InvitePerson', 'MessageToPerson')
 """
 
+# One row per execution of a NON-messaging action per person (profile visit,
+# like, follow, ...). Messaging steps keep the stricter arm.type-filtered
+# query above so their sent counts only include actual sends.
+STEP_EXECUTIONS_SQL = f"""
+SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+       a.campaign_id   AS campaign_id,
+       a.id            AS action_id,
+       ar.created_at   AS executed_at
+FROM action_results ar
+JOIN action_versions av ON av.id = ar.action_version_id
+JOIN actions a          ON a.id = av.action_id
+JOIN action_configs ac  ON ac.id = av.config_id
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
+WHERE ac.actionType NOT IN ('InvitePerson', 'MessageToPerson', 'CheckForReplies')
+"""
+
 # One row per inbound reply per person (CheckForReplies writes type='Replied').
-STEP_REPLIES_SQL = """
+STEP_REPLIES_SQL = f"""
 SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
        a.campaign_id   AS campaign_id,
        ar.created_at   AS replied_at
@@ -313,7 +352,7 @@ FROM action_result_messages arm
 JOIN action_results ar  ON ar.id = arm.action_result_id
 JOIN action_versions av ON av.id = ar.action_version_id
 JOIN actions a          ON a.id = av.action_id
-JOIN person_external_ids pei ON pei.person_id = ar.person_id AND pei.type_group = 'public'
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
 WHERE arm.type = 'Replied'
 """
 
@@ -349,9 +388,11 @@ def flatten_template(settings):
 
 
 def extract_steps(con, instance_id):
-    """Per-(campaign, step) send/reply aggregates for the message-sequence view.
-    Reply attribution and current-step are computed here over each person's
-    send/reply timeline — clearer than SQL window joins. Fails safe to []."""
+    """Per-(campaign, step) aggregates over the FULL sequence — warm-up steps
+    (visits, likes, follows, ...) included, so 'where is everyone stuck' is
+    answerable before the invite step. Reply attribution and current-step are
+    computed here over each person's timeline — clearer than SQL window
+    joins. Fails safe to []."""
     try:
         defs = list(con.execute(STEP_DEFS_SQL))
         sends = list(con.execute(STEP_SENDS_SQL))
@@ -359,6 +400,11 @@ def extract_steps(con, instance_id):
     except sqlite3.Error as e:
         print(f"step extraction skipped ({e}) — per-step view will be empty")
         return []
+    try:
+        executions = list(con.execute(STEP_EXECUTIONS_SQL))
+    except sqlite3.Error as e:  # warm-up counts are additive; don't lose messaging steps
+        print(f"warm-up execution extraction skipped ({e})")
+        executions = []
 
     # Order each campaign's steps by their position in the sequence and assign a
     # 0-based step_index; map (campaign, action) -> step_index for the sends.
@@ -377,16 +423,25 @@ def extract_steps(con, instance_id):
                 "template_body": flatten_template(r["settings"]),
             }
 
-    # Per-person send timeline (drop sends whose action was removed from the
-    # latest sequence — they have no step to attribute to).
-    timeline = {}  # (lh_cid, profile) -> [(sent_at_iso, step_index)]
-    for r in sends:
-        lh_cid = str(r["campaign_id"])
-        sidx = action_step.get((lh_cid, str(r["action_id"])))
-        ts = iso(r["sent_at"])
-        if sidx is None or not ts:
-            continue
-        timeline.setdefault((lh_cid, r["profile_url"]), []).append((ts, sidx))
+    # Steps a reply can be attributed to (messaging only — a profile visit or
+    # like can't be "replied to").
+    messaging_steps = {
+        (lh_cid, idx) for (lh_cid, idx), meta in step_meta.items()
+        if meta["step_type"] in MESSAGING_TYPES
+    }
+
+    # Per-person step timeline: message sends plus warm-up executions (drop
+    # rows whose action was removed from the latest sequence — they have no
+    # step to attribute to).
+    timeline = {}  # (lh_cid, profile) -> [(ts_iso, step_index)]
+    for rows, ts_col in ((sends, "sent_at"), (executions, "executed_at")):
+        for r in rows:
+            lh_cid = str(r["campaign_id"])
+            sidx = action_step.get((lh_cid, str(r["action_id"])))
+            ts = iso(r[ts_col])
+            if sidx is None or not ts:
+                continue
+            timeline.setdefault((lh_cid, r["profile_url"]), []).append((ts, sidx))
 
     # Per-person earliest reply.
     first_reply = {}  # (lh_cid, profile) -> earliest replied_at iso
@@ -406,9 +461,10 @@ def extract_steps(con, instance_id):
         furthest = max(s for _, s in events)              # where they are now
         current_n[(lh_cid, furthest)] = current_n.get((lh_cid, furthest), 0) + 1
         rep = first_reply.get((lh_cid, profile))          # attribute first reply
-        if rep:
-            attributed = events[0][1]
-            for ts, step in events:
+        msg_events = [(ts, s) for ts, s in events if (lh_cid, s) in messaging_steps]
+        if rep and msg_events:
+            attributed = msg_events[0][1]
+            for ts, step in msg_events:
                 if ts <= rep:
                     attributed = step
                 else:
@@ -532,7 +588,7 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner):
         print(f"{name:<42}{n:>7}{inv:>9}{acc:>10}{rep:>9}")
 
     if steps:
-        print("\nmessage steps (sent -> replied):")
+        print("\ncampaign steps incl. warm-up (processed -> replied):")
         sh = (f"{'campaign':<24}{'#':>2} {'step':<22}"
               f"{'sent':>7}{'replied':>9}{'reply%':>8}{'now':>6}")
         print(sh)
