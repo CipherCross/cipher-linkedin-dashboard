@@ -7,6 +7,7 @@ const LINKS = [
   { to: '/leads', label: 'Leads' },
   { to: '/replies', label: 'Replies' },
   { to: '/health', label: 'Health' },
+  { to: '/chat', label: 'Chat' },
 ]
 
 export function Layout() {

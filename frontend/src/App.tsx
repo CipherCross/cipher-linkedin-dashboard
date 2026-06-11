@@ -8,6 +8,7 @@ import { AccountDetail } from './pages/AccountDetail'
 import { LeadsExplorer } from './pages/LeadsExplorer'
 import { Replies } from './pages/Replies'
 import { Health } from './pages/Health'
+import { Chat } from './pages/Chat'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="leads" element={<LeadsExplorer />} />
             <Route path="replies" element={<Replies />} />
             <Route path="health" element={<Health />} />
+            <Route path="chat" element={<Chat />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

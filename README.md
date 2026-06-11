@@ -106,6 +106,27 @@ variables are required. Deploy `dist/` anywhere static (Vercel, Netlify,
 Cloudflare Pages); the anon key is safe to expose because RLS only allows
 reads.
 
+### 4. AI chat + MCP layer
+
+The **Chat** page lets you ask Claude analytical questions ("why did the
+invite spike not produce replies?"); it answers by running read-only SQL
+against Supabase through tools. The same tools are exposed as an MCP server
+for external clients (Claude Desktop / Claude Code).
+
+- `supabase/migrations/008_ai_readonly_sql.sql` — `ai_execute_sql(query)` RPC:
+  SELECT/WITH only, runs as a select-only role, 10s timeout, callable only
+  with the service-role key. Apply with `supabase db push`.
+- `frontend/api/chat.ts` — streaming chat endpoint (Vercel AI SDK +
+  `claude-opus-4-8`, multi-step tool use).
+- `frontend/api/mcp.ts` — MCP server at `https://<deployment>/api/mcp`
+  (Streamable HTTP) with `run_sql`, `get_schema`, `weekly_funnel`,
+  `campaign_overview`.
+
+Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
+`ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally
+`SUPABASE_URL`). Locally, plain `npm run dev` does not serve `api/` — use
+`vercel dev` from `frontend/` to run the functions too.
+
 ## Metrics & dashboard pages
 
 Topline numbers come from the `campaign_metrics` view (so any client gets the
