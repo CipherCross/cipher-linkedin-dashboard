@@ -22,7 +22,7 @@ export function AccountDetail() {
   if (!inst) {
     return (
       <div className="card">
-        Instance not found. <Link to="/accounts">Back to accounts</Link>
+        Instance not found. <Link to="/">Back to overview</Link>
       </div>
     )
   }
@@ -35,7 +35,7 @@ export function AccountDetail() {
           <Avatar inst={inst} size={52} />
           <div>
             <div className="breadcrumb muted small">
-              <Link to="/accounts">Accounts</Link> / account
+              <Link to="/">Overview</Link> / account
             </div>
             <h1>{instanceName(inst)}</h1>
             <div className="muted small">

@@ -472,3 +472,36 @@ tr:last-child td { border-bottom: none; }
 .chat-reasoning { border: 1px dashed var(--border); border-radius: 8px; background: transparent; font-size: 12.5px; }
 .chat-reasoning-label { color: var(--muted); font-weight: 600; font-style: italic; }
 .chat-reasoning-body { border-top: 1px dashed var(--border); padding: 8px 12px; color: var(--muted); white-space: pre-wrap; font-size: 12.5px; max-height: 220px; overflow-y: auto; }
+
+/* --- Overview: account cards grid ---------------------------------------- */
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (max-width: 480px) {
+  .account-grid { grid-template-columns: 1fr; }
+}
+.account-card { display: flex; flex-direction: column; gap: 14px; }
+.account-card-head { display: flex; gap: 12px; align-items: center; }
+.account-card-name { font-size: 16px; font-weight: 600; }
+.account-card-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.account-stat { text-align: center; }
+.account-stat-value { font-size: 17px; font-weight: 600; }
+.account-card-spark { display: flex; align-items: flex-end; gap: 10px; }
+.sparkline { flex: 1; min-width: 0; }
+.sparkline-empty { flex: 1; padding: 8px 0; }
+.account-card-spark .small { white-space: nowrap; }
+.account-card-section { text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
+.account-card-campaigns { display: flex; flex-direction: column; gap: 6px; }
+.account-campaign-link {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  text-decoration: none; color: var(--text); background: var(--bg);
+}
+.account-campaign-link:hover { border-color: var(--accent); }
+.account-campaign-name { color: var(--accent); font-weight: 600; }

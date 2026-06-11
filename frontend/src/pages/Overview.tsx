@@ -1,19 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
-import {
-  instanceName, leadsToActivity, presetRanges, rangeTotals, rangedCampaigns,
-} from '../lib/leads'
+import { presetRanges, rangeTotals } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
-import { ActivityChart } from '../components/ActivityChart'
-import { CampaignTable } from '../components/CampaignTable'
-import { InstancePanel } from '../components/InstancePanel'
+import { AccountCard } from '../components/AccountCard'
 import { DateRangePicker } from '../components/DateRangePicker'
+
+const STALE_HOURS = 24
 
 export function Overview() {
   const { data } = useData()
-  const [instanceFilter, setInstanceFilter] = useState('all')
-  const [campaignFilter, setCampaignFilter] = useState('all')
   const RANGES = useMemo(() => presetRanges(), [])
   const [range, setRange] = useState<DateRange>(
     () => RANGES.find((r) => r.id === '3_months') ?? RANGES[RANGES.length - 1],
@@ -21,38 +17,22 @@ export function Overview() {
 
   const view = useMemo(() => {
     if (!data) return null
-    const matchesInst = (id: string) => instanceFilter === 'all' || id === instanceFilter
-
-    // Campaigns selectable for the chosen account; fall back to "all" if the
-    // current pick no longer belongs to the selected account.
-    const availableCampaigns = data.campaigns.filter((c) => matchesInst(c.instance_id))
-    const campaignIds = new Set(availableCampaigns.map((c) => c.campaign_id))
-    const campaign = campaignIds.has(campaignFilter) ? campaignFilter : 'all'
-
-    const leads = data.leads.filter(
-      (l) => matchesInst(l.instance_id) && (campaign === 'all' || l.campaign_id === campaign),
-    )
-
-    const activity = leadsToActivity(leads).filter(
-      (a) => (!range.from || a.day >= range.from) && (!range.to || a.day <= range.to),
-    )
-    const annotations = data.annotations.filter(
-      (a) =>
-        !a.campaign_id &&
-        (!a.instance_id || matchesInst(a.instance_id)) &&
-        (!range.from || a.noted_at >= range.from) &&
-        (!range.to || a.noted_at <= range.to),
-    )
-
-    return {
-      availableCampaigns,
-      campaign,
-      activity,
-      annotations,
-      totals: rangeTotals(leads, range),
-      campaignRows: rangedCampaigns(leads, data.campaigns, range),
+    const leadsByInstance = new Map<string, typeof data.leads>()
+    for (const l of data.leads) {
+      const arr = leadsByInstance.get(l.instance_id)
+      if (arr) arr.push(l)
+      else leadsByInstance.set(l.instance_id, [l])
     }
-  }, [data, instanceFilter, campaignFilter, range])
+    // Fresh accounts first, then by pipeline size.
+    const staleCutoff = Date.now() - STALE_HOURS * 3_600_000
+    const instances = [...data.instances].sort((a, b) => {
+      const freshA = a.last_sync_at ? new Date(a.last_sync_at).getTime() > staleCutoff : false
+      const freshB = b.last_sync_at ? new Date(b.last_sync_at).getTime() > staleCutoff : false
+      if (freshA !== freshB) return freshA ? -1 : 1
+      return (leadsByInstance.get(b.id)?.length ?? 0) - (leadsByInstance.get(a.id)?.length ?? 0)
+    })
+    return { instances, leadsByInstance, totals: rangeTotals(data.leads, range) }
+  }, [data, range])
 
   if (!data || !view) return null
 
@@ -62,45 +42,30 @@ export function Overview() {
         <div>
           <h1>Overview</h1>
           <div className="muted small">
-            Team dashboard · {data.instances.length} Linked Helper instances
+            All LinkedIn accounts at a glance · {data.instances.length} Linked Helper instances
           </div>
         </div>
         <div className="controls">
-          <select
-            value={instanceFilter}
-            onChange={(e) => {
-              setInstanceFilter(e.target.value)
-              setCampaignFilter('all')
-            }}
-          >
-            <option value="all">All accounts</option>
-            {data.instances.map((i) => (
-              <option key={i.id} value={i.id}>{instanceName(i)}</option>
-            ))}
-          </select>
-          <select value={view.campaign} onChange={(e) => setCampaignFilter(e.target.value)}>
-            <option value="all">All campaigns</option>
-            {view.availableCampaigns.map((c) => (
-              <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>
-            ))}
-          </select>
           <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
         </div>
       </header>
 
       <KpiCards totals={view.totals} flowLabel={range.label} />
 
-      <div className="main-grid">
-        <ActivityChart
-          activity={view.activity}
-          annotations={view.annotations}
-          from={range.from}
-          to={range.to}
-        />
-        <InstancePanel instances={data.instances} />
+      <div className="account-grid">
+        {view.instances.map((inst) => (
+          <AccountCard
+            key={inst.id}
+            inst={inst}
+            leads={view.leadsByInstance.get(inst.id) ?? []}
+            campaignsMeta={data.campaigns}
+            range={range}
+          />
+        ))}
+        {view.instances.length === 0 && (
+          <div className="card muted">No instances registered yet.</div>
+        )}
       </div>
-
-      <CampaignTable campaigns={view.campaignRows} instances={data.instances} />
     </>
   )
 }

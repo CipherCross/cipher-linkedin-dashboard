@@ -196,6 +196,19 @@ export function rangeTotals(leads: Lead[], r: DateRange): Totals {
   return { leads: leads.length, invites, accepted, replies }
 }
 
+export interface AccountStats extends Totals {
+  acceptPct: string
+  replyPct: string
+}
+
+/** Totals for one account's leads scoped to `r`, with display-ready rates
+ *  (acceptance of invites in range, replies of accepted in range). */
+export function accountStats(leads: Lead[], r: DateRange): AccountStats {
+  const t = rangeTotals(leads, r)
+  const pct = (a: number, b: number) => (b > 0 ? ((100 * a) / b).toFixed(1) + '%' : '—')
+  return { ...t, acceptPct: pct(t.accepted, t.invites), replyPct: pct(t.replies, t.accepted) }
+}
+
 /** Per-campaign metrics computed from raw leads scoped to `r`, shaped like the
  *  campaign_metrics view. Names/instance pulled from `base` (the all-time view
  *  rows). Sorted by invites in range, then name. */

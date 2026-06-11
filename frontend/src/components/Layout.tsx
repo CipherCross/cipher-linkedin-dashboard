@@ -3,7 +3,6 @@ import { useData } from '../lib/DataContext'
 
 const LINKS = [
   { to: '/', label: 'Overview', end: true },
-  { to: '/accounts', label: 'Accounts' },
   { to: '/leads', label: 'Leads' },
   { to: '/replies', label: 'Replies' },
   { to: '/health', label: 'Health' },
