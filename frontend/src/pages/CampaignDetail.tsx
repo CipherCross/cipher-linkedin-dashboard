@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import type { CampaignMetrics, Lead } from '../lib/types'
-import { daysBetween, instanceName, leadsToActivity, segmentOf } from '../lib/leads'
+import { daysBetween, instanceName, latestRepliesByLead, leadKey, leadsToActivity, segmentOf } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { CohortChart } from '../components/CohortChart'
@@ -21,6 +21,14 @@ export function CampaignDetail() {
     () => data?.leads.filter((l) => l.campaign_id === id) ?? [],
     [data, id],
   )
+  // Positive replies for this campaign, from the latest inbound message per lead.
+  const positive = useMemo(() => {
+    if (!data) return 0
+    const latest = latestRepliesByLead(data.messages)
+    return leads.filter(
+      (l) => latest.get(leadKey(l.instance_id, l.profile_url))?.sentiment === 'positive',
+    ).length
+  }, [data, leads])
   const [compareIds, setCompareIds] = useState<string[]>([])
 
   // The base campaign (route) plus any added ones, in selection order, deduped
@@ -112,7 +120,7 @@ export function CampaignDetail() {
         </>
       ) : (
         <>
-          <KpiCards campaigns={[campaign]} />
+          <KpiCards campaigns={[campaign]} positive={positive} />
 
           <div className="two-col">
             <Funnel leads={leads} />

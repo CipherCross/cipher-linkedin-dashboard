@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
-import { presetRanges, rangeTotals } from '../lib/leads'
+import { latestRepliesByLead, presetRanges, rangeTotals } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { AccountCard } from '../components/AccountCard'
+import { HotLeads } from '../components/HotLeads'
 import { DateRangePicker } from '../components/DateRangePicker'
 
 const STALE_HOURS = 24
@@ -31,7 +32,8 @@ export function Overview() {
       if (freshA !== freshB) return freshA ? -1 : 1
       return (leadsByInstance.get(b.id)?.length ?? 0) - (leadsByInstance.get(a.id)?.length ?? 0)
     })
-    return { instances, leadsByInstance, totals: rangeTotals(data.leads, range) }
+    const latest = latestRepliesByLead(data.messages)
+    return { instances, leadsByInstance, latest, totals: rangeTotals(data.leads, range, latest) }
   }, [data, range])
 
   if (!data || !view) return null
@@ -50,7 +52,15 @@ export function Overview() {
         </div>
       </header>
 
-      <KpiCards totals={view.totals} flowLabel={range.label} />
+      <KpiCards totals={view.totals} flowLabel={range.label} positive={view.totals.positive} />
+
+      <HotLeads
+        leads={data.leads}
+        latest={view.latest}
+        range={range}
+        campaigns={data.campaigns}
+        instances={data.instances}
+      />
 
       <div className="account-grid">
         {view.instances.map((inst) => (
@@ -60,6 +70,7 @@ export function Overview() {
             leads={view.leadsByInstance.get(inst.id) ?? []}
             campaignsMeta={data.campaigns}
             range={range}
+            latest={view.latest}
           />
         ))}
         {view.instances.length === 0 && (

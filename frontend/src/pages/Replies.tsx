@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
-import { instanceName } from '../lib/leads'
+import { instanceName, latestRepliesByLead, leadKey } from '../lib/leads'
 import { ago } from '../components/CampaignTable'
 import type { Sentiment } from '../lib/types'
 
@@ -30,12 +30,6 @@ const SENTIMENT_META: Record<Sentiment, { label: string; cls: string }> = {
   auto: { label: 'Auto', cls: 'auto' },
 }
 
-interface Snippet {
-  body: string
-  sentiment: Sentiment | null
-  reason: string | null
-}
-
 /** Operational view: everyone who replied recently, newest first — the
  *  follow-up worklist for the team, now sorted by the reply's decision. */
 export function Replies() {
@@ -45,18 +39,8 @@ export function Replies() {
   const [classifying, setClassifying] = useState(false)
   const [classifyMsg, setClassifyMsg] = useState<string | null>(null)
 
-  // Latest inbound message (body + its classification) per lead. Messages
-  // arrive sorted desc, so the first one seen per key is the most recent.
-  const snippets = useMemo(() => {
-    const map = new Map<string, Snippet>()
-    for (const m of data?.messages ?? []) {
-      if (m.direction !== 'in' || !m.body) continue
-      const key = `${m.instance_id}|${m.profile_url}`
-      if (!map.has(key))
-        map.set(key, { body: m.body, sentiment: m.sentiment, reason: m.reason })
-    }
-    return map
-  }, [data])
+  // Latest inbound message (body + its classification) per lead.
+  const snippets = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
 
   const repliesAll = useMemo(() => {
     if (!data) return []
@@ -70,7 +54,7 @@ export function Replies() {
   const counts = useMemo(() => {
     const c: Record<string, number> = {}
     for (const l of repliesAll) {
-      const s = snippets.get(`${l.instance_id}|${l.profile_url}`)?.sentiment ?? 'unclassified'
+      const s = snippets.get(leadKey(l.instance_id, l.profile_url))?.sentiment ?? 'unclassified'
       c[s] = (c[s] ?? 0) + 1
     }
     return c
@@ -80,7 +64,7 @@ export function Replies() {
     if (!filter) return repliesAll
     return repliesAll.filter(
       (l) =>
-        (snippets.get(`${l.instance_id}|${l.profile_url}`)?.sentiment ?? 'unclassified') ===
+        (snippets.get(leadKey(l.instance_id, l.profile_url))?.sentiment ?? 'unclassified') ===
         filter
     )
   }, [repliesAll, filter, snippets])
@@ -170,7 +154,7 @@ export function Replies() {
       <div className="card">
         <div className="reply-list">
           {replies.map((l) => {
-            const snip = snippets.get(`${l.instance_id}|${l.profile_url}`)
+            const snip = snippets.get(leadKey(l.instance_id, l.profile_url))
             const meta = snip?.sentiment ? SENTIMENT_META[snip.sentiment] : null
             return (
               <div className="reply-row" key={l.id}>

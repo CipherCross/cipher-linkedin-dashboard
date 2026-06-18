@@ -141,6 +141,14 @@ select, .range-group button {
 .kpi-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
 .kpi-sub { color: var(--accent); font-size: 12px; margin-top: 2px; }
 
+.hot-leads { margin-bottom: 18px; }
+.hot-leads-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin-bottom: 6px;
+}
+.hot-leads-head h2 { margin: 0; }
+.hot-leads-more { display: inline-block; margin-top: 10px; }
+
 .main-grid {
   display: grid;
   grid-template-columns: 1fr 300px;
@@ -509,7 +517,7 @@ tr:last-child td { border-bottom: none; }
 .account-card-head { display: flex; gap: 12px; align-items: center; }
 .account-card-name { font-size: 16px; font-weight: 600; }
 .account-card-stats {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
   padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
 }
 .account-stat { text-align: center; }

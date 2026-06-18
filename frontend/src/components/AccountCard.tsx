@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { DateRange } from '../lib/leads'
+import type { ReplyInfo } from '../lib/leads'
 import { accountStats, instanceName, leadsToActivity, rangedCampaigns } from '../lib/leads'
 import { ago } from './CampaignTable'
 import { Avatar } from './Avatar'
@@ -16,15 +17,17 @@ export function AccountCard({
   leads,
   campaignsMeta,
   range,
+  latest,
 }: {
   inst: Instance
   leads: Lead[]
   campaignsMeta: CampaignMetrics[]
   range: DateRange
+  latest?: Map<string, ReplyInfo>
 }) {
   const last = inst.last_sync_at ? new Date(inst.last_sync_at).getTime() : 0
   const fresh = Date.now() - last < STALE_HOURS * 3_600_000
-  const stats = accountStats(leads, range)
+  const stats = accountStats(leads, range, latest)
   const activity = leadsToActivity(leads).filter(
     (a) => (!range.from || a.day >= range.from) && (!range.to || a.day <= range.to),
   )
@@ -57,6 +60,7 @@ export function AccountCard({
         <Stat value={stats.invites.toLocaleString('en-US')} label="invites" />
         <Stat value={stats.acceptPct} label="accept" />
         <Stat value={stats.replyPct} label="reply" />
+        <Stat value={stats.positive.toLocaleString('en-US')} label="positive" />
       </div>
 
       <div className="account-card-spark">

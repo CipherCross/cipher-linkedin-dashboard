@@ -1,12 +1,40 @@
 // Client-side analysis helpers over the raw leads table. All milestone logic
 // mirrors the agent's derive_events: invited_at / connected_at / replied_at
 // are the source of truth for funnel stages.
-import type { CampaignMetrics, DailyActivity, Instance, Lead } from './types'
+import type { CampaignMetrics, DailyActivity, Instance, Lead, Message, Sentiment } from './types'
 
 /** Display name for an instance: real LinkedIn account name when synced,
  *  else the configured label, else the raw id. */
 export function instanceName(inst: Instance | undefined, fallback = ''): string {
   return inst?.account_name || inst?.label || inst?.id || fallback
+}
+
+/** Stable key for one lead's conversation thread. profile_url is near-unique,
+ *  but scoping by instance too keeps the same person reached from two accounts
+ *  separate. */
+export const leadKey = (instance_id: string, profile_url: string) =>
+  `${instance_id}|${profile_url}`
+
+/** The latest inbound reply (body + its classification) seen per lead. */
+export interface ReplyInfo {
+  body: string
+  sentiment: Sentiment | null
+  reason: string | null
+  sent_at: string
+}
+
+/** Latest inbound reply per lead, keyed by leadKey(). `messages` MUST be sorted
+ *  by sent_at descending (as DataContext fetches them), so the first row seen
+ *  for a key is the most recent; outbound and empty rows are skipped. */
+export function latestRepliesByLead(messages: Message[]): Map<string, ReplyInfo> {
+  const map = new Map<string, ReplyInfo>()
+  for (const m of messages) {
+    if (m.direction !== 'in' || !m.body) continue
+    const k = leadKey(m.instance_id, m.profile_url)
+    if (!map.has(k))
+      map.set(k, { body: m.body, sentiment: m.sentiment, reason: m.reason, sent_at: m.sent_at })
+  }
+  return map
 }
 
 export type Stage = 'queued' | 'invited' | 'accepted' | 'replied'
@@ -179,21 +207,35 @@ export interface Totals {
   invites: number
   accepted: number
   replies: number
+  /** Replies whose latest inbound message classified as 'positive'. Only
+   *  counted when a latest-replies map is supplied (else 0). */
+  positive: number
 }
 
 /** Event flows within `r` (invites/accepted/replies counted by the day their
  *  milestone landed). `leads` is the snapshot count of the input set (not
- *  range-scoped — pipeline size is a current-state metric). */
-export function rangeTotals(leads: Lead[], r: DateRange): Totals {
+ *  range-scoped — pipeline size is a current-state metric). When `latest` is
+ *  given, also count replies in range whose latest inbound message is positive
+ *  (so positive ≤ replies always holds). */
+export function rangeTotals(
+  leads: Lead[],
+  r: DateRange,
+  latest?: Map<string, ReplyInfo>,
+): Totals {
   let invites = 0
   let accepted = 0
   let replies = 0
+  let positive = 0
   for (const l of leads) {
     if (tsInRange(l.invited_at, r)) invites++
     if (tsInRange(l.connected_at, r)) accepted++
-    if (tsInRange(l.replied_at, r)) replies++
+    if (tsInRange(l.replied_at, r)) {
+      replies++
+      if (latest?.get(leadKey(l.instance_id, l.profile_url))?.sentiment === 'positive')
+        positive++
+    }
   }
-  return { leads: leads.length, invites, accepted, replies }
+  return { leads: leads.length, invites, accepted, replies, positive }
 }
 
 export interface AccountStats extends Totals {
@@ -203,10 +245,35 @@ export interface AccountStats extends Totals {
 
 /** Totals for one account's leads scoped to `r`, with display-ready rates
  *  (acceptance of invites in range, replies of accepted in range). */
-export function accountStats(leads: Lead[], r: DateRange): AccountStats {
-  const t = rangeTotals(leads, r)
+export function accountStats(
+  leads: Lead[],
+  r: DateRange,
+  latest?: Map<string, ReplyInfo>,
+): AccountStats {
+  const t = rangeTotals(leads, r, latest)
   const pct = (a: number, b: number) => (b > 0 ? ((100 * a) / b).toFixed(1) + '%' : '—')
   return { ...t, acceptPct: pct(t.accepted, t.invites), replyPct: pct(t.replies, t.accepted) }
+}
+
+/** Leads whose reply landed in `r` and whose latest inbound message is
+ *  positive — the hot-lead worklist, newest reply first. */
+export interface PositiveLead {
+  lead: Lead
+  reply: ReplyInfo
+}
+export function positiveLeads(
+  leads: Lead[],
+  latest: Map<string, ReplyInfo>,
+  r: DateRange,
+): PositiveLead[] {
+  const out: PositiveLead[] = []
+  for (const l of leads) {
+    if (!tsInRange(l.replied_at, r)) continue
+    const reply = latest.get(leadKey(l.instance_id, l.profile_url))
+    if (reply?.sentiment === 'positive') out.push({ lead: l, reply })
+  }
+  out.sort((a, b) => (b.lead.replied_at ?? '').localeCompare(a.lead.replied_at ?? ''))
+  return out
 }
 
 /** Per-campaign metrics computed from raw leads scoped to `r`, shaped like the
