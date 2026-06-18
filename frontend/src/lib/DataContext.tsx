@@ -71,7 +71,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await Promise.all([
             supabase
               .from('instances')
-              .select('id,label,last_sync_at,agent_version,account_name,account_url,account_avatar')
+              .select('id,label,last_sync_at,agent_version,account_name,account_url,account_avatar,config,config_updated_at')
               .order('id'),
             supabase.from('campaign_metrics').select('*').order('campaign_name'),
             supabase.from('daily_activity').select('*').gte('day', since),

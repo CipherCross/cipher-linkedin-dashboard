@@ -1,5 +1,15 @@
 # Copy to config.yaml on each notebook and edit. config.yaml is gitignored —
 # it contains the service-role key, never commit it.
+#
+# ONLINE CONFIG: only the three bootstrap keys below (supabase_url,
+# supabase_service_key, instance_id) must be set locally — they're how the
+# notebook connects and identifies itself. EVERYTHING else in this file
+# (instance_label, account_*, the sync_* toggles, lh2_db_path, even the mapping)
+# can be overridden from the dashboard's Health page; the agent merges those
+# online values over this file on every sync and REMOTE WINS. So you rarely need
+# to touch this file again after the first sync. Set `ignore_remote_config: true`
+# to pin a notebook to this file only (escape hatch if a bad online value breaks
+# its sync).
 
 supabase_url: "https://YOUR-PROJECT.supabase.co"
 supabase_service_key: "YOUR-SERVICE-ROLE-KEY"   # Settings -> API -> service_role

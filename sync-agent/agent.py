@@ -32,7 +32,7 @@ import sys
 import requests
 import yaml
 
-AGENT_VERSION = "1.6.0"
+AGENT_VERSION = "1.7.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 LH2_DEFAULT_DIRS = [
@@ -138,6 +138,66 @@ def reexec():
     """Re-run the same command under the freshly installed agent.py."""
     env = dict(os.environ, LH2_AGENT_REEXEC="1")
     sys.exit(subprocess.call([sys.executable] + sys.argv, env=env))
+
+
+# Keys that may be overridden online from the dashboard's Health page (stored in
+# instances.config and merged over the local config.yaml on every sync). The
+# bootstrap keys — supabase_url, supabase_service_key, instance_id — are
+# deliberately absent: they're needed locally just to connect/identify, so a
+# remote blob can never change where the agent points or who it claims to be.
+REMOTE_CONFIG_KEYS = {
+    "instance_label",
+    "account_name", "account_url", "account_avatar",
+    "auto_update", "sync_steps", "sync_messages",
+    "lh2_db_path", "mapping",
+}
+
+
+def fetch_remote_config(cfg):
+    """Pull this instance's overrides from the instances.config blob in Supabase
+    (edited on the Health page). Returns a dict, or {} on any failure — like
+    self_update, a config-fetch problem must never break a scheduled sync."""
+    url = cfg["supabase_url"].rstrip("/") + "/rest/v1/instances"
+    headers = {"apikey": cfg["supabase_service_key"],
+               "Authorization": f"Bearer {cfg['supabase_service_key']}"}
+    params = {"id": f"eq.{cfg['instance_id']}", "select": "config", "limit": 1}
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=30)
+        r.raise_for_status()
+        rows = r.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"remote-config fetch failed ({e}) — using local config.yaml only")
+        return {}
+    remote = rows[0].get("config") if rows else None
+    return remote if isinstance(remote, dict) else {}
+
+
+def apply_remote_config(cfg):
+    """Merge the remote overrides (instances.config) over the local config.yaml so
+    settings can be changed online. Remote wins; only allowlisted keys are honored
+    (bootstrap keys are ignored); `mapping` is merged one level deep so a remote
+    override of one section doesn't drop the others. A local
+    `ignore_remote_config: true` opts out entirely — the escape hatch to recover a
+    notebook if a bad remote value breaks its sync."""
+    if cfg.get("ignore_remote_config"):
+        return cfg
+    remote = fetch_remote_config(cfg)
+    applied = []
+    for key in REMOTE_CONFIG_KEYS:
+        if key not in remote:
+            continue
+        val = remote[key]
+        if key == "mapping":
+            if not isinstance(val, dict):
+                continue  # ignore a malformed mapping override, keep the local one
+            base = cfg["mapping"] if isinstance(cfg.get("mapping"), dict) else {}
+            cfg["mapping"] = dict(base, **val)
+        else:
+            cfg[key] = val
+        applied.append(key)
+    if applied:
+        print(f"remote-config: applied online overrides for {', '.join(sorted(applied))}")
+    return cfg
 
 
 def iso(value):
@@ -664,6 +724,11 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner):
 def cmd_sync(args):
     cfg = load_config()
     instance_id = cfg["instance_id"]
+
+    # Pull online overrides (Health page) and merge over local config.yaml before
+    # anything else, so auto_update is itself remotely controllable and --dry-run
+    # previews exactly what a real sync will use.
+    cfg = apply_remote_config(cfg)
 
     if not args.dry_run and self_update(cfg):
         reexec()

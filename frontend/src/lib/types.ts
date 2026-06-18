@@ -6,6 +6,10 @@ export interface Instance {
   account_name: string | null
   account_url: string | null
   account_avatar: string | null
+  // Desired overrides edited on the Health page; merged over the notebook's local
+  // config.yaml by the sync agent (remote wins). null = never configured online.
+  config: Record<string, unknown> | null
+  config_updated_at: string | null
 }
 
 export type Sentiment =

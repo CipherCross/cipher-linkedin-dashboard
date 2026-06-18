@@ -527,3 +527,32 @@ tr:last-child td { border-bottom: none; }
 }
 .account-campaign-link:hover { border-color: var(--accent); }
 .account-campaign-name { color: var(--accent); font-weight: 600; }
+
+/* Per-instance online config editor (Health page) */
+.instance-item { display: flex; flex-direction: column; gap: 8px; }
+.instance-item + .instance-item { border-top: 1px solid var(--border); padding-top: 12px; }
+.link-btn {
+  background: none; border: none; padding: 0;
+  color: var(--accent); font-size: 12px; cursor: pointer;
+}
+.link-btn:hover { text-decoration: underline; }
+.link-btn:disabled { opacity: 0.55; cursor: default; text-decoration: none; }
+.config-toggle { padding-left: 44px; }
+.config-pending { color: var(--muted); font-size: 12px; }
+.config-editor {
+  padding: 10px; margin-left: 44px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.config-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.config-field { display: flex; flex-direction: column; gap: 3px; }
+.config-field span.config-label,
+.config-raw span.config-label { color: var(--muted); font-size: 11px; }
+.config-field input, .config-field select, .config-raw textarea {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 8px; font-size: 13px;
+}
+.config-raw { display: flex; flex-direction: column; gap: 3px; }
+.config-raw textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.config-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

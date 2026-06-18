@@ -91,6 +91,20 @@ download looks wrong, the agent keeps running its current version. Pin a
 notebook with `auto_update: false` in its config.yaml. Only the
 service-role key can read the bucket — the anon key gets a 4xx.
 
+#### Configuring notebooks online (no SSH)
+
+After the first sync you rarely need to touch a notebook's `config.yaml` again.
+Only the three **bootstrap** keys (`supabase_url`, `supabase_service_key`,
+`instance_id`) must live locally; everything else — the label, the displayed
+LinkedIn account (`account_*`), the `sync_*` toggles, `lh2_db_path`, even the LH2
+`mapping` SQL — can be edited from the dashboard's **Health** page (Accounts
+panel → **Configure**). Those overrides are stored in `instances.config`; the
+agent fetches and merges them over the local file on every sync and **remote
+wins**, so changes apply on the next run (≤30 min). Set `ADMIN_SECRET` on Vercel
+to require a secret for saves. Recovery: a bad online value only breaks that one
+notebook's sync (the error shows on Health), and `ignore_remote_config: true` in
+its local `config.yaml` pins it to the file, ignoring the online overrides.
+
 ### 3. Frontend
 
 ```bash
@@ -127,11 +141,15 @@ for external clients (Claude Desktop / Claude Code).
   daily via the `vercel.json` cron and on demand from the Replies page button.
   Only touches rows where `sentiment is null`, so it's cheap and idempotent.
 
+- `frontend/api/config.ts` — notebook config writer (service-role). Persists the
+  per-instance override blob edited on the Health page; the sync agent merges it
+  over its local `config.yaml` on the next run. See "Configuring notebooks online".
+
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
-and `CRON_SECRET` to lock the daily `/api/classify` cron). Locally, plain
-`npm run dev` does not serve `api/` — use `vercel dev` from `frontend/` to run
-the functions too.
+`CRON_SECRET` to lock the daily `/api/classify` cron, and `ADMIN_SECRET` to gate
+`/api/config` config writes). Locally, plain `npm run dev` does not serve `api/` —
+use `vercel dev` from `frontend/` to run the functions too.
 
 ## Metrics & dashboard pages
 
@@ -159,7 +177,9 @@ same figures); the deeper analysis is computed client-side from the raw
   replies. The full conversation thread (both directions) is synced built-in by
   the agent (`sync_messages`, default on) — which makes message contents
   anon-readable until Auth is on.
-- **Health** — sync-run history and per-instance freshness.
+- **Health** — sync-run history and per-instance freshness, plus a per-notebook
+  **Configure** editor that writes the online config overrides (see "Configuring
+  notebooks online").
 
 Extras: run `agent.py annotate "Switched to template B" [--date YYYY-MM-DD]
 [--campaign ID]` from any machine with a config.yaml to drop a purple marker

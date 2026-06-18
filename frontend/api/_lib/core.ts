@@ -51,7 +51,8 @@ TABLES
 instances — one row per LH2 instance / LinkedIn account
   id text PK (e.g. "notebook-kyiv"), label text, last_sync_at timestamptz,
   agent_version text, account_name text, account_url text, account_avatar text,
-  created_at timestamptz
+  created_at timestamptz, config jsonb (online config overrides the agent merges
+  over its local config.yaml; operational, not analytical), config_updated_at timestamptz
 
 campaigns — one row per LH2 campaign per instance
   id text PK ("<instance_id>:<lh_campaign_id>"), instance_id -> instances,
