@@ -32,13 +32,16 @@ import sys
 import requests
 import yaml
 
-AGENT_VERSION = "1.5.1"
+AGENT_VERSION = "1.6.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 LH2_DEFAULT_DIRS = [
-    "~/Library/Application Support/Linked Helper 2",   # macOS
-    os.path.join(os.environ.get("APPDATA", ""), "Linked Helper 2"),  # Windows
-    "~/.config/Linked Helper 2",                        # Linux
+    "~/Library/Application Support/Linked Helper 2",   # macOS (older builds)
+    "~/Library/Application Support/linked-helper",      # macOS (current builds)
+    os.path.join(os.environ.get("APPDATA", ""), "Linked Helper 2"),  # Windows (older)
+    os.path.join(os.environ.get("APPDATA", ""), "linked-helper"),    # Windows (current)
+    "~/.config/Linked Helper 2",                        # Linux (older)
+    "~/.config/linked-helper",                          # Linux (current)
 ]
 
 
@@ -356,6 +359,31 @@ JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
 WHERE arm.type = 'Replied'
 """
 
+# Full conversation thread, both directions: outbound sends (the invite note and
+# follow-up messages we sent) and inbound replies. Same proven join chain as the
+# step queries above, so it ships in agent.py and rolls out via deploy.sh — no
+# per-notebook config. The body is NOT on action_result_messages itself: that
+# table only holds a message_id FK, and the text lives in the separate `messages`
+# table (m.message_text) — verified against a real lh.db (account 524650: 2,488
+# outbound + 683 inbound, all with body text). campaign_id comes from the action
+# (correct attribution), not person_in_campaigns_history. Override per-notebook
+# with mapping.messages only for a non-standard schema; disable with
+# sync_messages:false.
+MESSAGES_SQL = f"""
+SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+       a.campaign_id   AS campaign_id,
+       m.message_text  AS body,
+       ar.created_at   AS sent_at,
+       CASE WHEN arm.type = 'Replied' THEN 'in' ELSE 'out' END AS direction
+FROM action_result_messages arm
+JOIN messages m         ON m.id = arm.message_id
+JOIN action_results ar  ON ar.id = arm.action_result_id
+JOIN action_versions av ON av.id = ar.action_version_id
+JOIN actions a          ON a.id = av.action_id
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
+WHERE arm.type IN ('Sent', 'Message', 'Replied')
+"""
+
 
 def flatten_template(settings):
     """Flatten LH2's action_configs.actionSettings JSON into readable text.
@@ -488,6 +516,28 @@ def extract_steps(con, instance_id):
     return out
 
 
+def extract_messages(con, instance_id):
+    """Full conversation threads (both directions) via the built-in MESSAGES_SQL.
+    No config needed; mirrors the dict shape the mapping path produces."""
+    out = []
+    for row in con.execute(MESSAGES_SQL):
+        profile = row["profile_url"]
+        sent_at = iso(row["sent_at"])
+        if not profile or not sent_at:
+            continue
+        body = row["body"]
+        lh_cid = row["campaign_id"]
+        out.append({
+            "instance_id": instance_id,
+            "campaign_id": f"{instance_id}:{lh_cid}" if lh_cid is not None else None,
+            "profile_url": str(profile),
+            "direction": str(row["direction"] or "in"),
+            "body": str(body)[:2000] if body else None,
+            "sent_at": sent_at,
+        })
+    return out
+
+
 def extract_local(cfg):
     """Read campaigns + leads (+ owner identity) from the local LH2 DB."""
     instance_id = cfg["instance_id"]
@@ -540,6 +590,7 @@ def extract_local(cfg):
     messages = []
     mmap = mapping.get("messages", {})
     if mmap.get("table") or mmap.get("query"):
+        # Per-notebook override for a non-standard schema.
         for row in rows_for(con, mmap):
             profile = row_get(row, mmap, "profile_url")
             sent_at = iso(row_get(row, mmap, "sent_at"))
@@ -555,6 +606,11 @@ def extract_local(cfg):
                 "body": str(body)[:2000] if body else None,
                 "sent_at": sent_at,
             })
+    elif cfg.get("sync_messages", True):
+        try:
+            messages = extract_messages(con, instance_id)
+        except Exception as e:  # schema mismatch must never break a sync
+            print(f"message extraction skipped ({e}) — Replies feed will be empty")
 
     steps = []
     if cfg.get("sync_steps", True):

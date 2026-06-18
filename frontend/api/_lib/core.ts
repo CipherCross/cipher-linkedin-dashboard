@@ -4,7 +4,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 let _client: SupabaseClient | null = null
 
-function db(): SupabaseClient {
+/** Service-role Supabase client (bypasses RLS). Shared by the AI SQL layer and
+ *  the reply classifier (/api/classify). */
+export function db(): SupabaseClient {
   if (_client) return _client
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -69,9 +71,15 @@ events — append-only action log (drives daily-activity charts)
   event_type text ('invite_sent'|'invite_accepted'|'message_sent'|'reply_received'|...),
   occurred_at timestamptz, raw jsonb
 
-messages — actual message texts (mostly inbound replies)
+messages — actual message texts; full conversation threads, both directions
   id bigint PK, instance_id, campaign_id, profile_url, direction text ('in'|'out'),
-  body text, sent_at timestamptz
+  body text, sent_at timestamptz,
+  sentiment text — reply classification, set ONLY on inbound replies (direction='in'):
+    'positive' (interested, wants to talk), 'neutral' (acknowledgement / not now),
+    'negative' (not interested / unsubscribe), 'objection' (question or pushback),
+    'referral' (talk to someone else), 'auto' (out-of-office / autoresponder).
+    NULL = outbound, or an inbound reply not yet classified.
+  reason text (one-line rationale), classified_at timestamptz, classified_model text
 
 campaign_steps — the FULL campaign sequence per campaign with aggregates,
   including WARM-UP steps that run before the invite (profile visits, post
@@ -106,7 +114,15 @@ campaign_metrics — per-campaign funnel rollup:
 daily_activity — events bucketed per day:
   day date, instance_id, event_type, cnt
 
+campaign_reply_sentiment — inbound reply sentiment counts per campaign:
+  campaign_id, sentiment, cnt (only classified inbound replies)
+
 ANALYSIS GUIDANCE
+- Reply QUALITY, not just count: messages.sentiment classifies each inbound
+  reply (positive/neutral/negative/objection/referral/auto). "Positive reply
+  rate" = positive inbound replies / total replies. Use campaign_reply_sentiment
+  for per-campaign breakdowns, or join messages (direction='in') to campaigns.
+  NULL sentiment on an inbound row means it hasn't been classified yet.
 - Replies LAG invites: someone invited this week typically accepts and replies
   days or weeks later. Never compare raw invites-this-week vs replies-this-week.
   For "did the invite spike convert?", build COHORTS by invite week from leads:

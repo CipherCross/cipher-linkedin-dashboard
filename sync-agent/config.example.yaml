@@ -14,8 +14,16 @@ auto_update: true
 # outbound steps (invite + follow-up messages) and their per-step reply rates
 # straight from lh.db — no mapping needed, the queries are built in. The step
 # TEMPLATE TEXT is synced too, so it becomes anon-readable in Supabase (same
-# tradeoff as mapping.messages below). Set to false to skip the whole thing.
+# tradeoff as sync_messages below). Set to false to skip the whole thing.
 sync_steps: true
+
+# Conversation history: the agent automatically extracts the full message thread
+# per lead — both the messages we sent and the replies we received — straight
+# from lh.db (built-in query, no mapping needed). Powers the Replies feed and
+# the server-side reply classifier (positive/negative/objection/...). PRIVACY:
+# message bodies become anon-readable in Supabase until Auth is on. Set to false
+# to skip. Override mapping.messages below only for a non-standard LH2 schema.
+sync_messages: true
 
 # Unique per notebook. Use the same value forever so upserts stay idempotent.
 instance_id: "notebook-1"
@@ -34,6 +42,8 @@ account_avatar: ""      # stable image URL, or leave empty
 # Path to the Linked Helper 2 SQLite database (linked-helper-account-<ID>-main/lh.db).
 # Leave empty to auto-discover: the agent scans the default LH2 data dirs and
 # picks the most recently active account DB (it prints which one it chose).
+# NOTE: current LH2 builds store data in a `linked-helper` folder (older builds
+# used `Linked Helper 2`); auto-discovery now checks both, on macOS/Windows/Linux.
 # Set explicitly only if auto-discovery picks the wrong account —
 # `python3 agent.py inspect` lists all candidates with row counts.
 lh2_db_path: ""
@@ -93,27 +103,28 @@ mapping:
     replied_at: "replied_at"
     last_action_at: "last_action_at"
 
-  # Optional: reply texts for the dashboard's Replies feed. LH2 stores them
-  # in action_result_messages (type='Replied', written by CheckForReplies);
-  # adapt the person join to your schema as printed by `inspect`.
-  # PRIVACY: reply contents become anon-readable in Supabase — skip this
-  # section if that's not acceptable until Auth is enabled.
+  # Conversation history is BUILT IN (see sync_messages above) — the agent reads
+  # the full thread from action_result_messages with no mapping. Uncomment and
+  # adapt this ONLY if your LH2 version stores messages differently than the
+  # built-in query expects (check with `agent.py inspect`). When set, it fully
+  # overrides the built-in. Emit a `direction` column ('in' for replies, 'out'
+  # for sends); dedupe person_external_ids to one slug per person as in `leads`.
   # messages:
   #   query: |
   #     select pic.campaign_id as campaign_id,
   #            'https://www.linkedin.com/in/' || pei.external_id as profile_url,
-  #            arm.text as body,
-  #            arm.created_at as sent_at
+  #            arm.text as body, arm.created_at as sent_at,
+  #            case when arm.type = 'Replied' then 'in' else 'out' end as direction
   #     from action_result_messages arm
-  #     join person_external_ids pei
-  #       on pei.person_id = arm.person_id and pei.type_group = 'public'
-  #     left join person_in_campaigns_history pic
-  #       on pic.person_id = arm.person_id
-  #     where arm.type = 'Replied'
+  #     join (<one-slug-per-person dedup, see leads mapping>) pei
+  #       on pei.person_id = arm.person_id
+  #     left join person_in_campaigns_history pic on pic.person_id = arm.person_id
+  #     where arm.type in ('Sent', 'Message', 'Replied')
   #   campaign_id: "campaign_id"
   #   profile_url: "profile_url"
   #   body: "body"
   #   sent_at: "sent_at"
+  #   direction: "direction"
 
   # Optional: the logged-in account's own profile, straight from lh.db, so
   # name/photo refresh on every sync. Locate where your LH2 version stores it

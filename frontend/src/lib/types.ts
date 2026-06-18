@@ -8,6 +8,14 @@ export interface Instance {
   account_avatar: string | null
 }
 
+export type Sentiment =
+  | 'positive'
+  | 'neutral'
+  | 'negative'
+  | 'objection'
+  | 'referral'
+  | 'auto'
+
 export interface Message {
   id: number
   instance_id: string
@@ -16,6 +24,9 @@ export interface Message {
   direction: string
   body: string | null
   sent_at: string
+  sentiment: Sentiment | null
+  reason: string | null
+  classified_at: string | null
 }
 
 export interface Annotation {

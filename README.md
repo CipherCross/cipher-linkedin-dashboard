@@ -121,11 +121,17 @@ for external clients (Claude Desktop / Claude Code).
 - `frontend/api/mcp.ts` — MCP server at `https://<deployment>/api/mcp`
   (Streamable HTTP) with `run_sql`, `get_schema`, `weekly_funnel`,
   `campaign_overview`.
+- `frontend/api/classify.ts` — reply classifier (`claude-haiku-4-5`): labels
+  each inbound reply `positive` / `neutral` / `negative` / `objection` /
+  `referral` / `auto` with a one-line reason, writing back to `messages`. Runs
+  daily via the `vercel.json` cron and on demand from the Replies page button.
+  Only touches rows where `sentiment is null`, so it's cheap and idempotent.
 
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
-`ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally
-`SUPABASE_URL`). Locally, plain `npm run dev` does not serve `api/` — use
-`vercel dev` from `frontend/` to run the functions too.
+`ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
+and `CRON_SECRET` to lock the daily `/api/classify` cron). Locally, plain
+`npm run dev` does not serve `api/` — use `vercel dev` from `frontend/` to run
+the functions too.
 
 ## Metrics & dashboard pages
 
@@ -146,9 +152,13 @@ same figures); the deeper analysis is computed client-side from the raw
 - **Leads** — filterable/sortable explorer (instance, campaign, stage, text
   search), at-risk flags (invite pending 14d+, accepted but no reply 14d+),
   CSV export; filters live in the URL so views are shareable.
-- **Replies** — newest-first follow-up worklist with profile links and the
-  reply text itself (when the notebook syncs the optional `mapping.messages`
-  query — note this makes reply contents anon-readable until Auth is on).
+- **Replies** — newest-first follow-up worklist with profile links, the reply
+  text, and its classified **decision** (positive / objection / neutral /
+  referral / negative / auto) as a colored badge plus filter chips with counts.
+  A "Classify new replies" button (and the daily cron) labels any unclassified
+  replies. The full conversation thread (both directions) is synced built-in by
+  the agent (`sync_messages`, default on) — which makes message contents
+  anon-readable until Auth is on.
 - **Health** — sync-run history and per-instance freshness.
 
 Extras: run `agent.py annotate "Switched to template B" [--date YYYY-MM-DD]

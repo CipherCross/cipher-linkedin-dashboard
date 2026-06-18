@@ -292,6 +292,14 @@ tr:last-child td { border-bottom: none; }
 .badge.status-error { color: #f76a5c; border-color: #f76a5c66; }
 .badge.status-running { color: #f7b94f; border-color: #f7b94f66; }
 
+/* reply sentiment — used on badges and on the filter chips below */
+.senti.pos { color: #34c98e; border-color: #34c98e66; }
+.senti.obj { color: #f7b94f; border-color: #f7b94f66; }
+.senti.neu { color: #8aa0c6; border-color: #8aa0c666; }
+.senti.ref { color: #b98cf0; border-color: #b98cf066; }
+.senti.neg { color: #f76a5c; border-color: #f76a5c66; }
+.senti.auto { color: var(--muted); border-color: var(--border); }
+
 /* leads explorer */
 .filter-bar {
   display: flex;
@@ -395,6 +403,20 @@ tr:last-child td { border-bottom: none; }
 .li-link:hover { background: #0e76dd; }
 
 /* replies feed */
+.btn-accent {
+  background: var(--panel);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-accent:disabled { opacity: 0.55; cursor: default; }
+.classify-status { margin: -4px 0 10px; }
+.sentiment-filter { margin-bottom: 12px; }
+.sentiment-filter .badge.senti { margin-right: 6px; }
+.reply-body .badge.senti { margin-right: 6px; vertical-align: 1px; }
 .reply-list { display: flex; flex-direction: column; }
 .reply-row {
   display: grid;

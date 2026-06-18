@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import type { DashboardData, Lead } from './types'
@@ -35,28 +35,35 @@ async function fetchAllLeads(): Promise<Lead[]> {
   return all
 }
 
-const Ctx = createContext<{ data: DashboardData | null; loading: boolean }>({
+const Ctx = createContext<{
+  data: DashboardData | null
+  loading: boolean
+  refetch: () => void
+}>({
   data: null,
   loading: true,
+  refetch: () => {},
 })
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  // Only the most recent load() wins, so a manual refetch can't be clobbered by
+  // an in-flight interval load (or vice versa).
+  const reqId = useRef(0)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      if (!supabase) {
-        setData({
-          ...EMPTY,
-          error:
-            'Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
-        })
-        setLoading(false)
-        return
-      }
-      try {
+  const load = useCallback(async () => {
+    const id = ++reqId.current
+    if (!supabase) {
+      setData({
+        ...EMPTY,
+        error:
+          'Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
+      })
+      setLoading(false)
+      return
+    }
+    try {
         const since = new Date(Date.now() - 90 * 86_400_000)
           .toISOString()
           .slice(0, 10)
@@ -75,7 +82,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               .limit(200),
             supabase
               .from('messages')
-              .select('id,instance_id,campaign_id,profile_url,direction,body,sent_at')
+              .select('id,instance_id,campaign_id,profile_url,direction,body,sent_at,sentiment,reason,classified_at')
               .gte('sent_at', since)
               .order('sent_at', { ascending: false })
               .limit(2000),
@@ -87,7 +94,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               .order('step_index'),
             fetchAllLeads(),
           ])
-        if (cancelled) return
+        if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
           syncRuns.error ?? messages.error ?? annotations.error ?? steps.error
@@ -106,20 +113,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
               },
         )
       } catch (e) {
-        if (!cancelled)
+        if (id === reqId.current)
           setData({ ...EMPTY, error: e instanceof Error ? e.message : String(e) })
       }
-      setLoading(false)
-    }
-    load()
-    const timer = setInterval(load, 5 * 60_000)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
+      if (id === reqId.current) setLoading(false)
   }, [])
 
-  return <Ctx.Provider value={{ data, loading }}>{children}</Ctx.Provider>
+  useEffect(() => {
+    load()
+    const timer = setInterval(load, 5 * 60_000)
+    return () => clearInterval(timer)
+  }, [load])
+
+  return <Ctx.Provider value={{ data, loading, refetch: load }}>{children}</Ctx.Provider>
 }
 
 export const useData = () => useContext(Ctx)
