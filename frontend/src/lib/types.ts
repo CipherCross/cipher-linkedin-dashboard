@@ -99,6 +99,67 @@ export interface SyncRun {
   error: string | null
 }
 
+// --- AI conversation coaching (see /api/coach) -------------------------------
+
+export type NextAction = 'reply' | 'wait' | 'book_call' | 'refer' | 'close' | 'none'
+
+export type IssueKind =
+  | 'ignored_question'
+  | 'too_long'
+  | 'too_salesy'
+  | 'generic'
+  | 'slow_followup'
+  | 'no_cta'
+  | 'multiple_asks'
+  | 'pushy'
+  | 'other'
+
+export type IssueSeverity = 'low' | 'med' | 'high'
+
+export interface CoachingIssue {
+  kind: IssueKind
+  severity: IssueSeverity
+  quote: string // the SDR's own outbound snippet that was the problem
+  fix: string // how to do it better
+}
+
+/** Per-conversation coaching as returned by POST /api/coach. */
+export interface Coaching {
+  next_action: NextAction
+  issues: CoachingIssue[]
+  tips: string[]
+  summary: string | null
+  last_msg_marker: string | null
+  coached_at: string | null
+  model: string | null
+  cached?: boolean
+}
+
+export interface CoachingPattern {
+  issue: string
+  count: number
+  advice: string
+}
+
+/** Per-account rolled-up self-correction digest (coaching_digest table). */
+export interface CoachingDigest {
+  instance_id: string
+  summary: string | null
+  patterns: CoachingPattern[]
+  computed_at: string | null
+  model: string | null
+}
+
+/** Product/voice grounding for the coach, stored in instances.config.playbook. */
+export interface Playbook {
+  product?: string
+  value_prop?: string
+  tone?: string
+  dos?: string[]
+  donts?: string[]
+  cta?: string
+}
+
 export interface DashboardData {
   instances: Instance[]
   campaigns: CampaignMetrics[]

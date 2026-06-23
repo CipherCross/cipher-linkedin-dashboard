@@ -1,7 +1,10 @@
 // Client-side analysis helpers over the raw leads table. All milestone logic
 // mirrors the agent's derive_events: invited_at / connected_at / replied_at
 // are the source of truth for funnel stages.
-import type { CampaignMetrics, DailyActivity, Instance, Lead, Message, Sentiment } from './types'
+import type {
+  CampaignMetrics, DailyActivity, Instance, IssueKind, IssueSeverity, Lead, Message,
+  NextAction, Sentiment,
+} from './types'
 
 /** Display name for an instance: real LinkedIn account name when synced,
  *  else the configured label, else the raw id. */
@@ -35,6 +38,37 @@ export const SENTIMENT_ORDER: Sentiment[] = [
   'negative',
   'auto',
 ]
+
+/** Coaching next-action display metadata. `cls` reuses the `.senti.*` colours so
+ *  the action badge matches the rest of the UI: attention=obj, good=pos, etc. */
+export const NEXT_ACTION_META: Record<NextAction, { label: string; cls: string }> = {
+  reply: { label: 'Reply now', cls: 'obj' },
+  book_call: { label: 'Book a call', cls: 'pos' },
+  refer: { label: 'Ask for referral', cls: 'ref' },
+  wait: { label: 'Wait', cls: 'neu' },
+  close: { label: 'Close out', cls: 'neg' },
+  none: { label: 'No action', cls: 'auto' },
+}
+
+/** Short human label per coaching issue kind, for the issue chips. */
+export const ISSUE_KIND_LABEL: Record<IssueKind, string> = {
+  ignored_question: 'Ignored question',
+  too_long: 'Too long',
+  too_salesy: 'Too salesy',
+  generic: 'Generic',
+  slow_followup: 'Slow follow-up',
+  no_cta: 'No CTA',
+  multiple_asks: 'Too many asks',
+  pushy: 'Pushy',
+  other: 'Issue',
+}
+
+/** Issue severity → `.senti.*` colour class (high=neg, med=obj, low=neu). */
+export const SEVERITY_CLS: Record<IssueSeverity, string> = {
+  high: 'neg',
+  med: 'obj',
+  low: 'neu',
+}
 
 /** The latest inbound reply (body + its classification) seen per lead. */
 export interface ReplyInfo {

@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
-import { SENTIMENT_META, SENTIMENT_ORDER, instanceName } from '../lib/leads'
-import type { Lead, Message, Sentiment } from '../lib/types'
+import {
+  ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
+  instanceName, leadKey,
+} from '../lib/leads'
+import type { Coaching, Lead, Message, Sentiment } from '../lib/types'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
@@ -34,6 +37,12 @@ export function ConversationDrawer({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
+  const [coaching, setCoaching] = useState<Coaching | null>(null)
+  const [coachLoading, setCoachLoading] = useState(false)
+  const [coachError, setCoachError] = useState<string | null>(null)
+  // Identifies the conversation a coach request was issued for, so a slow
+  // response can't land on a drawer the user has since switched away from.
+  const coachReqKey = useRef('')
 
   // Esc closes the drawer.
   useEffect(() => {
@@ -78,6 +87,52 @@ export function ConversationDrawer({
     }
   }, [lead])
 
+  // On-demand coaching: ask /api/coach for this conversation. The endpoint serves
+  // a cached take instantly when the thread is unchanged, else generates a fresh
+  // one (a few seconds). `force` bypasses the cache for the Regenerate button.
+  const loadCoaching = useCallback(
+    async (force: boolean) => {
+      if (!lead) return
+      const k = leadKey(lead.instance_id, lead.profile_url)
+      coachReqKey.current = k
+      setCoachLoading(true)
+      setCoachError(null)
+      if (force) setCoaching(null)
+      try {
+        const res = await fetch('/api/coach', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            instance_id: lead.instance_id,
+            profile_url: lead.profile_url,
+            force,
+          }),
+        })
+        const j = await res.json()
+        if (coachReqKey.current !== k) return // user switched conversations
+        if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+        setCoaching(j as Coaching)
+      } catch (e) {
+        if (coachReqKey.current === k)
+          setCoachError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (coachReqKey.current === k) setCoachLoading(false)
+      }
+    },
+    [lead],
+  )
+
+  useEffect(() => {
+    if (!lead) {
+      coachReqKey.current = ''
+      setCoaching(null)
+      setCoachError(null)
+      setCoachLoading(false)
+      return
+    }
+    loadCoaching(false)
+  }, [lead, loadCoaching])
+
   if (!lead) return null
 
   const campaignName =
@@ -95,6 +150,14 @@ export function ConversationDrawer({
   const statusMeta = latestInbound?.sentiment
     ? SENTIMENT_META[latestInbound.sentiment]
     : null
+
+  // Compare the live thread to what the coaching was generated against, so we can
+  // nudge for a Regenerate when new messages have arrived since.
+  const liveMarker =
+    rows && rows.length ? `${rows[rows.length - 1].sent_at}|${rows.length}` : null
+  const coachStale =
+    !!coaching?.last_msg_marker && !!liveMarker && coaching.last_msg_marker !== liveMarker
+  const actionMeta = coaching ? NEXT_ACTION_META[coaching.next_action] : null
 
   async function reclassify(msg: ThreadMsg, sentiment: Sentiment) {
     if (msg.sentiment === sentiment) return
@@ -214,6 +277,75 @@ export function ConversationDrawer({
               </div>
             )
           })}
+        </div>
+
+        <div className="conv-coaching">
+          <div className="conv-coaching-head">
+            <span className="conv-coaching-title">AI coach</span>
+            <span className="muted small grow">— how to earn the next reply</span>
+            <button
+              className="link-btn"
+              onClick={() => loadCoaching(true)}
+              disabled={coachLoading}
+            >
+              {coachLoading ? 'Coaching…' : 'Regenerate'}
+            </button>
+          </div>
+
+          {coachError && <div className="banner conv-error">{coachError}</div>}
+          {coachLoading && !coaching && (
+            <div className="muted small">Reading the conversation…</div>
+          )}
+
+          {coaching && (
+            <>
+              {actionMeta && (
+                <div className="coach-action">
+                  <span className="muted small">Next</span>
+                  <span className={`badge senti ${actionMeta.cls}`}>{actionMeta.label}</span>
+                  {coaching.cached && <span className="muted small">· cached</span>}
+                </div>
+              )}
+
+              {coaching.summary && <div className="coach-summary small">{coaching.summary}</div>}
+
+              {coaching.issues.length > 0 && (
+                <div className="coach-section">
+                  <div className="coach-label muted small">What hurt your reply odds</div>
+                  <div className="coach-issues">
+                    {coaching.issues.map((iss, i) => (
+                      <div className="coach-issue" key={i}>
+                        <span className={`badge senti ${SEVERITY_CLS[iss.severity]}`}>
+                          {ISSUE_KIND_LABEL[iss.kind]}
+                        </span>
+                        <div className="coach-issue-body small">
+                          {iss.quote && <div className="coach-quote muted">“{iss.quote}”</div>}
+                          <div>{iss.fix}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {coaching.tips.length > 0 && (
+                <div className="coach-section">
+                  <div className="coach-label muted small">How to respond now</div>
+                  <ul className="coach-tips small">
+                    {coaching.tips.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {coachStale && (
+                <div className="muted small coach-stale">
+                  New messages since this was generated — Regenerate for an updated take.
+                </div>
+              )}
+            </>
+          )}
         </div>
       </aside>
     </div>

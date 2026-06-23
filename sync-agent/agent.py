@@ -32,7 +32,7 @@ import sys
 import requests
 import yaml
 
-AGENT_VERSION = "1.7.0"
+AGENT_VERSION = "1.7.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 LH2_DEFAULT_DIRS = [
@@ -429,19 +429,40 @@ WHERE arm.type = 'Replied'
 # (correct attribution), not person_in_campaigns_history. Override per-notebook
 # with mapping.messages only for a non-standard schema; disable with
 # sync_messages:false.
+#
+# DEDUP: `sent_at` is ar.created_at (when the action RAN, not the true message
+# time). CheckForReplies re-records the whole thread on every run, so one real
+# message yields one action_result_messages row per run — each with a different
+# created_at. Without dedup the same message shows up N times in the conversation
+# view (and the unique constraint can't catch it, since sent_at differs). The
+# ROW_NUMBER() window keeps the EARLIEST observation per logical message: stable
+# across syncs (runs are only appended), so the upsert stays idempotent. Dedup is
+# by (person, direction, body) so it works regardless of whether LH reuses
+# messages.id across snapshots; NULL bodies fall back to message_id so genuinely
+# distinct empty-body sends aren't collapsed. If you confirm messages.id is reused
+# per logical message (see the inspect query in the repo plan), PARTITION BY
+# arm.message_id is more precise (never merges two distinct same-text messages).
 MESSAGES_SQL = f"""
-SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
-       a.campaign_id   AS campaign_id,
-       m.message_text  AS body,
-       ar.created_at   AS sent_at,
-       CASE WHEN arm.type = 'Replied' THEN 'in' ELSE 'out' END AS direction
-FROM action_result_messages arm
-JOIN messages m         ON m.id = arm.message_id
-JOIN action_results ar  ON ar.id = arm.action_result_id
-JOIN action_versions av ON av.id = ar.action_version_id
-JOIN actions a          ON a.id = av.action_id
-JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
-WHERE arm.type IN ('Sent', 'Message', 'Replied')
+SELECT profile_url, campaign_id, body, sent_at, direction FROM (
+  SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+         a.campaign_id   AS campaign_id,
+         m.message_text  AS body,
+         ar.created_at   AS sent_at,
+         CASE WHEN arm.type = 'Replied' THEN 'in' ELSE 'out' END AS direction,
+         ROW_NUMBER() OVER (
+           PARTITION BY pei.external_id,
+                        CASE WHEN arm.type = 'Replied' THEN 'in' ELSE 'out' END,
+                        COALESCE(m.message_text, 'arm:' || arm.message_id)
+           ORDER BY ar.created_at ASC
+         ) AS rn
+  FROM action_result_messages arm
+  JOIN messages m         ON m.id = arm.message_id
+  JOIN action_results ar  ON ar.id = arm.action_result_id
+  JOIN action_versions av ON av.id = ar.action_version_id
+  JOIN actions a          ON a.id = av.action_id
+  JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
+  WHERE arm.type IN ('Sent', 'Message', 'Replied')
+) WHERE rn = 1
 """
 
 

@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
 import {
   SENTIMENT_META, SENTIMENT_ORDER, instanceName, latestRepliesByLead, leadKey,
 } from '../lib/leads'
 import { ago } from '../components/CampaignTable'
 import { useConversation } from '../lib/ConversationContext'
-import type { Sentiment } from '../lib/types'
+import type { CoachingDigest, Sentiment } from '../lib/types'
 
 const RANGES = [
   { label: '7d', days: 7 },
@@ -24,6 +25,55 @@ export function Replies() {
   const [filter, setFilter] = useState<Sentiment | 'unclassified' | null>(null)
   const [classifying, setClassifying] = useState(false)
   const [classifyMsg, setClassifyMsg] = useState<string | null>(null)
+  const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
+  const [digestOpen, setDigestOpen] = useState(false)
+  const [digestBusy, setDigestBusy] = useState<string | null>(null)
+  const [digestErr, setDigestErr] = useState<string | null>(null)
+
+  // The per-account self-correction digests (coaching_digest), read anon like the
+  // rest of the dashboard; (re)computed on demand via the Refresh button below.
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    ;(async () => {
+      const { data: rows } = await supabase!.from('coaching_digest').select('*')
+      if (cancelled || !rows) return
+      const map: Record<string, CoachingDigest> = {}
+      for (const r of rows as CoachingDigest[]) map[r.instance_id] = r
+      setDigests(map)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function refreshDigest(instance_id: string) {
+    setDigestBusy(instance_id)
+    setDigestErr(null)
+    try {
+      const res = await fetch('/api/coach', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ instance_id, mode: 'digest' }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      setDigests((prev) => ({
+        ...prev,
+        [instance_id]: {
+          instance_id,
+          summary: j.summary ?? null,
+          patterns: j.patterns ?? [],
+          computed_at: j.computed_at ?? null,
+          model: j.model ?? null,
+        },
+      }))
+    } catch (e) {
+      setDigestErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDigestBusy(null)
+    }
+  }
 
   // Latest inbound message (body + its classification) per lead.
   const snippets = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
@@ -113,6 +163,58 @@ export function Replies() {
       {classifyMsg && (
         <div className="muted small classify-status">{classifyMsg}</div>
       )}
+
+      <div className="card coach-digest-card">
+        <button
+          className="coach-digest-toggle"
+          onClick={() => setDigestOpen((o) => !o)}
+        >
+          <span className="coach-digest-caret">{digestOpen ? '▾' : '▸'}</span>
+          Your coaching digest
+          <span className="muted small">— recurring habits to fix for more replies</span>
+        </button>
+        {digestOpen && (
+          <div className="coach-digest-body">
+            {digestErr && <div className="banner">{digestErr}</div>}
+            {data.instances.map((inst) => {
+              const d = digests[inst.id]
+              return (
+                <div className="coach-digest-inst" key={inst.id}>
+                  <div className="coach-digest-inst-head">
+                    <span className="coach-digest-name">{instanceName(inst, inst.id)}</span>
+                    <button
+                      className="link-btn"
+                      disabled={digestBusy === inst.id}
+                      onClick={() => refreshDigest(inst.id)}
+                    >
+                      {digestBusy === inst.id ? 'Analyzing…' : d ? 'Refresh' : 'Generate'}
+                    </button>
+                    {d?.computed_at && (
+                      <span className="muted small">· {d.computed_at.slice(0, 10)}</span>
+                    )}
+                  </div>
+                  {d?.summary && <div className="coach-digest-summary small">{d.summary}</div>}
+                  {d?.patterns?.length ? (
+                    <ul className="coach-digest-patterns small">
+                      {d.patterns.map((p, i) => (
+                        <li key={i}>
+                          <span className="badge senti obj">{p.count}×</span> {p.issue} — {p.advice}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : d ? (
+                    <div className="muted small">No recurring patterns yet.</div>
+                  ) : (
+                    <div className="muted small">
+                      Not generated yet — Generate to analyze this account's open threads.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="range-group sentiment-filter">
         <button className={!filter ? 'active' : ''} onClick={() => setFilter(null)}>

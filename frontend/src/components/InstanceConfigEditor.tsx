@@ -25,6 +25,19 @@ const BOOL_FIELDS: { key: string; label: string }[] = [
 const TEXT_KEYS = new Set(TEXT_FIELDS.map((f) => f.key))
 const BOOL_KEYS = new Set(BOOL_FIELDS.map((f) => f.key))
 
+// `config.playbook` grounds the AI conversation coach (see /api/coach). Single-line
+// fields plus two newline-separated lists, kept under the nested `playbook` key.
+const PB_TEXT: { key: string; label: string; placeholder?: string }[] = [
+  { key: 'product', label: 'Product', placeholder: 'What you sell' },
+  { key: 'value_prop', label: 'Value proposition', placeholder: 'The one-line outcome you deliver' },
+  { key: 'tone', label: 'Tone', placeholder: 'e.g. warm, concise, no jargon' },
+  { key: 'cta', label: 'Primary CTA', placeholder: 'e.g. a 15-minute call' },
+]
+const PB_LIST: { key: string; label: string; placeholder?: string }[] = [
+  { key: 'dos', label: "Do's (one per line)", placeholder: 'Answer questions before pitching' },
+  { key: 'donts', label: "Don'ts (one per line)", placeholder: 'No walls of text' },
+]
+
 type Tri = 'default' | 'on' | 'off'
 
 function initText(cfg: Record<string, unknown>) {
@@ -36,6 +49,16 @@ function initBool(cfg: Record<string, unknown>) {
   const out: Record<string, Tri> = {}
   for (const f of BOOL_FIELDS)
     out[f.key] = cfg[f.key] === true ? 'on' : cfg[f.key] === false ? 'off' : 'default'
+  return out
+}
+function initPlaybook(cfg: Record<string, unknown>) {
+  const pb =
+    cfg.playbook && typeof cfg.playbook === 'object' && !Array.isArray(cfg.playbook)
+      ? (cfg.playbook as Record<string, unknown>)
+      : {}
+  const out: Record<string, string> = {}
+  for (const f of PB_TEXT) out[f.key] = pb[f.key] != null ? String(pb[f.key]) : ''
+  for (const f of PB_LIST) out[f.key] = Array.isArray(pb[f.key]) ? (pb[f.key] as string[]).join('\n') : ''
   return out
 }
 
@@ -68,17 +91,37 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   const [raw, setRaw] = useState(false)
   const [text, setText] = useState(() => initText(cfg))
   const [bool, setBool] = useState(() => initBool(cfg))
+  const [playbook, setPlaybook] = useState(() => initPlaybook(cfg))
   const [rawText, setRawText] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
   // Keys present in config but not surfaced as structured fields (e.g. `mapping`)
-  // are preserved so editing a field never drops them.
+  // are preserved so editing a field never drops them. `playbook` is edited
+  // structurally below, so it's excluded here and re-attached in buildFromFields.
   const passthrough = () => {
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(cfg))
-      if (!TEXT_KEYS.has(k) && !BOOL_KEYS.has(k)) out[k] = v
+      if (!TEXT_KEYS.has(k) && !BOOL_KEYS.has(k) && k !== 'playbook') out[k] = v
     return out
+  }
+
+  // Nested playbook object from the structured fields, or undefined when empty
+  // (so an unconfigured account stores no `playbook` key at all).
+  const buildPlaybook = (): Record<string, unknown> | undefined => {
+    const out: Record<string, unknown> = {}
+    for (const f of PB_TEXT) {
+      const v = playbook[f.key].trim()
+      if (v) out[f.key] = v
+    }
+    for (const f of PB_LIST) {
+      const items = playbook[f.key]
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (items.length) out[f.key] = items
+    }
+    return Object.keys(out).length ? out : undefined
   }
 
   const buildFromFields = (): Record<string, unknown> => {
@@ -91,6 +134,8 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
       if (bool[f.key] === 'on') out[f.key] = true
       else if (bool[f.key] === 'off') out[f.key] = false // 'default' = omit
     }
+    const pb = buildPlaybook()
+    if (pb) out.playbook = pb
     return out
   }
 
@@ -105,6 +150,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           setText(initText(parsed))
           setBool(initBool(parsed))
+          setPlaybook(initPlaybook(parsed))
           setRaw(false)
           setMsg(null)
         } else {
@@ -204,6 +250,36 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
               </select>
             </label>
           ))}
+          <div className="config-playbook">
+            <span className="config-label">AI coach playbook</span>
+            <div className="muted small">
+              Grounds the conversation coach's suggestions. Leave blank to skip.
+            </div>
+            {PB_TEXT.map((f) => (
+              <label className="config-field" key={f.key}>
+                <span className="config-label">{f.label}</span>
+                <input
+                  type="text"
+                  value={playbook[f.key]}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setPlaybook({ ...playbook, [f.key]: e.target.value })}
+                />
+              </label>
+            ))}
+            {PB_LIST.map((f) => (
+              <label className="config-field" key={f.key}>
+                <span className="config-label">{f.label}</span>
+                <textarea
+                  rows={3}
+                  spellCheck={false}
+                  value={playbook[f.key]}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setPlaybook({ ...playbook, [f.key]: e.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+
           {Object.keys(passthrough()).length > 0 && (
             <div className="muted small">
               + {Object.keys(passthrough()).join(', ')} (edit via Advanced)
