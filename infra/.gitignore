@@ -1,0 +1,4 @@
+# Per-team secrets and rendered artifacts never go in git.
+tenants/*
+!tenants/.gitkeep
+sites/*.caddy

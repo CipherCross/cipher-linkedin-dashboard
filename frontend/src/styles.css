@@ -564,3 +564,48 @@ tr:last-child td { border-bottom: none; }
 .config-raw { display: flex; flex-direction: column; gap: 3px; }
 .config-raw textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
 .config-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* auth: login + member management */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.login-title { margin: 0; font-size: 18px; }
+.login-sub { margin-top: -4px; }
+.login-field { display: flex; flex-direction: column; gap: 4px; }
+.login-field input {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 11px; font-size: 14px;
+}
+.login-submit { margin-top: 4px; }
+
+.topnav-spacer { flex: 1; }
+.topnav-user { margin-right: 10px; }
+
+.member-form {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 8px;
+}
+.member-form input, .member-form select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; font-size: 13px;
+}
+.member-form input { min-width: 200px; }
+.data-table select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 6px; font-size: 12px;
+}
+.card + .card { margin-top: 14px; }

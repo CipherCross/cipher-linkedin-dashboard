@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
-import type { UIMessage } from 'ai'
+import { DefaultChatTransport, type UIMessage } from 'ai'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useAuth } from '../lib/auth'
 
 const SUGGESTIONS = [
   'Why did the recent spike in invites not produce the same reply count as a month ago?',
@@ -94,7 +95,22 @@ function Message({ m }: { m: UIMessage }) {
 }
 
 export function Chat() {
-  const { messages, sendMessage, status, error } = useChat()
+  const { token } = useAuth()
+  // Attach the user's access token so the server can authorize the call
+  // (chat is gated to member+). headers is evaluated per request, so it always
+  // sends the current (refreshed) token.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/chat',
+        headers: (): Record<string, string> => {
+          const t = token()
+          return t ? { authorization: `Bearer ${t}` } : {}
+        },
+      }),
+    [token],
+  )
+  const { messages, sendMessage, status, error } = useChat({ transport })
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const busy = status === 'submitted' || status === 'streaming'

@@ -1,0 +1,33 @@
+# Reverse proxy for all team containers. Run this once on the VPS:
+#   ACME_EMAIL=you@example.com docker compose -f infra/docker-compose.yml up -d
+#
+# Caddy terminates TLS (automatic Let's Encrypt) and routes each team subdomain
+# to that team's container by name on the shared `dashboard_net` network. Per-team
+# vhosts live in infra/sites/*.caddy (written by provision-team.sh); Caddy imports
+# them, so adding a team is just dropping a file + `caddy reload`.
+name: dashboard-proxy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - dashboard_net
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  dashboard_net:
+    name: dashboard_net

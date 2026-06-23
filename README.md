@@ -1,37 +1,51 @@
 # LinkedIn Campaign Dashboard
 
-Team dashboard for LinkedIn outreach run through **Linked Helper 2** on 3
-remote notebooks (3 instances under one LH2 account). Each notebook syncs its
-local LH2 data into **Supabase**; a React frontend computes and displays the
-campaign metrics.
+Team dashboard for LinkedIn outreach run through **Linked Helper 2** on remote
+notebooks (one instance per LH2 account). Each notebook syncs its local LH2 data
+into **Supabase**; a React frontend (behind login + RBAC) computes and displays
+the campaign metrics. The app is **distributed to multiple independent teams** —
+each team gets its own Supabase project and its own deployment, so data never
+mixes (see [Distributing to multiple teams](#distributing-to-multiple-teams)).
 
 ```
 notebook 1 ─┐  sync-agent (cron)
-notebook 2 ─┼──────────────────────▶  Supabase (Postgres + REST + RLS)
-notebook 3 ─┘   service-role key            │ anon key, read-only
+notebook 2 ─┼──────────────────────▶  Supabase (Postgres + Auth + Storage + RLS)
+notebook 3 ─┘   service-role key            │ authenticated reads (RLS)
                                             ▼
-                                   frontend (React + Vite)
-                          KPIs · funnel per campaign · daily activity
-                                 · per-instance sync health
+                          frontend (React + Vite) + /api (Hono, Node)
+                          login + roles: owner · admin · member · viewer
+                          KPIs · funnel · activity · AI copilot · sync health
 ```
 
 ## Components
 
 | Path | What it is |
 |---|---|
-| `supabase/migrations/001_init.sql` | Schema: `instances`, `campaigns`, `leads`, `events`, `sync_runs` + `campaign_metrics` / `daily_activity` views + RLS |
+| `supabase/migrations/` | Schema + RLS. `001_init.sql` core tables/views; `014_auth_rbac.sql` adds Auth/RBAC (`profiles`, roles, JWT hook) and locks reads to authenticated users |
 | `sync-agent/` | Python agent run on each notebook (`inspect` / `sync` / `ingest-csv`) |
-| `frontend/` | Dashboard (React 18, Vite, TypeScript, Recharts, supabase-js) |
+| `frontend/` | Dashboard (React 18, Vite, TypeScript, Recharts, supabase-js) + `api/` endpoints + `server/` (Hono) that serves the SPA and `/api` |
+| `infra/` | Hosting + provisioning: Docker image, Caddy proxy, and `provision-team.sh` for onboarding a team. See [`infra/README.md`](infra/README.md) |
 
 ## Setup
 
-### 1. Supabase (once)
+### 1. Supabase (once per team)
 
 1. Create a project at supabase.com.
-2. Open the SQL editor and run `supabase/migrations/001_init.sql`
-   (or `supabase db push` with the CLI).
-3. Note two keys from **Settings → API**: `anon` (frontend) and
-   `service_role` (sync agent only — keep it off the frontend).
+2. Apply **all** migrations in order — `supabase db push` with the CLI, or run
+   each `supabase/migrations/*.sql` in the SQL editor. `014_auth_rbac.sql` adds
+   Auth/RBAC and switches reads to authenticated-only.
+3. In **Authentication**: turn **off** public signups (invite-only), set the
+   **Site URL** to the team's dashboard URL, and enable the **Custom Access
+   Token** hook → `public.custom_access_token_hook` (stamps the `user_role`
+   claim used by RBAC).
+4. Create the first **admin** user (Authentication → Users) and set their role:
+   `update public.profiles set role='admin' where email='…';`
+5. Note from **Settings → API**: `anon` key (browser), `service_role` key (sync
+   agent + `/api` only — never the browser), and the **JWT secret** (the `/api`
+   server verifies user tokens with it).
+
+> `infra/provision-team.sh` automates steps 2–4 — see
+> [Distributing to multiple teams](#distributing-to-multiple-teams).
 
 ### 2. Sync agent (on each of the 3 notebooks)
 
@@ -100,25 +114,28 @@ LinkedIn account (`account_*`), the `sync_*` toggles, `lh2_db_path`, even the LH
 `mapping` SQL — can be edited from the dashboard's **Health** page (Accounts
 panel → **Configure**). Those overrides are stored in `instances.config`; the
 agent fetches and merges them over the local file on every sync and **remote
-wins**, so changes apply on the next run (≤30 min). Set `ADMIN_SECRET` on Vercel
-to require a secret for saves. Recovery: a bad online value only breaks that one
-notebook's sync (the error shows on Health), and `ignore_remote_config: true` in
-its local `config.yaml` pins it to the file, ignoring the online overrides.
+wins**, so changes apply on the next run (≤30 min). Saving config is restricted
+to **admin** users (the **Configure** editor is hidden for everyone else, and
+`/api/config` rejects non-admins). Recovery: a bad online value only breaks that
+one notebook's sync (the error shows on Health), and `ignore_remote_config: true`
+in its local `config.yaml` pins it to the file, ignoring the online overrides.
 
-### 3. Frontend
+### 3. Frontend + API server
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env    # set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-npm run dev             # local
-npm run build           # production bundle in dist/
+cp .env.example .env    # Supabase URL/anon/service-role + JWT secret + Anthropic key
+npm run dev             # SPA on Vite (uses /config.js from .env)
+npm run start           # the Hono server (SPA + /api) on :8080, for full local testing
+npm run build           # production SPA bundle in dist/
 ```
 
-Without `.env` the dashboard shows an error banner and no data — both
-variables are required. Deploy `dist/` anywhere static (Vercel, Netlify,
-Cloudflare Pages); the anon key is safe to expose because RLS only allows
-reads.
+You log in (no anonymous access — RLS requires an authenticated user). For
+production each team runs the **container** (`frontend/Dockerfile`: SPA + `/api`
+in one Node process) behind the shared Caddy proxy on your VPS. The Supabase URL
++ anon key are injected at **runtime** (`/config.js`), so one image serves every
+team — only the env file differs. See [`infra/README.md`](infra/README.md).
 
 ### 4. AI chat + MCP layer
 
@@ -131,25 +148,28 @@ for external clients (Claude Desktop / Claude Code).
   SELECT/WITH only, runs as a select-only role, 10s timeout, callable only
   with the service-role key. Apply with `supabase db push`.
 - `frontend/api/chat.ts` — streaming chat endpoint (Vercel AI SDK +
-  `claude-opus-4-8`, multi-step tool use).
+  `claude-opus-4-8`, multi-step tool use). Gated to **member+**.
 - `frontend/api/mcp.ts` — MCP server at `https://<deployment>/api/mcp`
   (Streamable HTTP) with `run_sql`, `get_schema`, `weekly_funnel`,
-  `campaign_overview`.
+  `campaign_overview`. **Off by default**; set `MCP_TOKEN` to enable, and clients
+  send it as a bearer token.
 - `frontend/api/classify.ts` — reply classifier (`claude-haiku-4-5`): labels
   each inbound reply `positive` / `neutral` / `negative` / `objection` /
   `referral` / `auto` with a one-line reason, writing back to `messages`. Runs
-  daily via the `vercel.json` cron and on demand from the Replies page button.
-  Only touches rows where `sentiment is null`, so it's cheap and idempotent.
+  daily via the server's in-process cron (guarded by `CRON_SECRET`) and on demand
+  from the Replies page button (member+). Only touches rows where `sentiment is
+  null`, so it's cheap and idempotent.
+- `frontend/api/config.ts` — notebook config writer (service-role), **admin+**.
+- `frontend/api/members.ts` — member management (list/create/role/remove),
+  **admin+**, via the GoTrue admin API.
 
-- `frontend/api/config.ts` — notebook config writer (service-role). Persists the
-  per-instance override blob edited on the Health page; the sync agent merges it
-  over its local `config.yaml` on the next run. See "Configuring notebooks online".
-
-Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
-`ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
-`CRON_SECRET` to lock the daily `/api/classify` cron, and `ADMIN_SECRET` to gate
-`/api/config` config writes). Locally, plain `npm run dev` does not serve `api/` —
-use `vercel dev` from `frontend/` to run the functions too.
+Every `/api` call is authorized in `frontend/server/index.ts`: the Hono server
+verifies the caller's Supabase JWT (`SUPABASE_JWT_SECRET`) and checks the
+`user_role` claim against each route's minimum role (`frontend/api/_lib/auth.ts`).
+**Server-only** env vars (no `VITE_` prefix): `ANTHROPIC_API_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` (and optionally `SUPABASE_URL`,
+`CRON_SECRET`, `MCP_TOKEN`). Run the full app locally with `npm run start` (serves
+both the SPA and `/api`); plain `npm run dev` serves only the SPA.
 
 ## Metrics & dashboard pages
 
@@ -175,8 +195,8 @@ same figures); the deeper analysis is computed client-side from the raw
   referral / negative / auto) as a colored badge plus filter chips with counts.
   A "Classify new replies" button (and the daily cron) labels any unclassified
   replies. The full conversation thread (both directions) is synced built-in by
-  the agent (`sync_messages`, default on) — which makes message contents
-  anon-readable until Auth is on.
+  the agent (`sync_messages`, default on); message contents are readable only by
+  authenticated members of that team (RLS).
 - **Health** — sync-run history and per-instance freshness, plus a per-notebook
   **Configure** editor that writes the online config overrides (see "Configuring
   notebooks online").
@@ -191,14 +211,50 @@ in the notebook's `config.yaml`, or add a `mapping.owner` query so the agent
 pulls them from lh.db on every sync (preferred for the photo — LinkedIn
 avatar URLs are signed and expire, so a DB-sourced URL stays fresh).
 
+## Auth & RBAC
+
+Login is required; reads need an authenticated user (RLS), and every `/api` call
+is re-checked server-side. Roles (`014_auth_rbac.sql`, `profiles.role`):
+
+| Role | Can |
+|---|---|
+| `viewer` | View all dashboards |
+| `member` | + AI Chat / classify replies |
+| `admin` | + edit notebook config, manage members |
+| `owner` | + cross-team support access (seeded only by the provisioner) |
+
+The role is stamped into the JWT (`user_role`) by the Custom Access Token hook,
+so both RLS and the API authorize without an extra query. Admins manage accounts
+from the **Members** page; public signup is off (invite-only).
+
 ## Security notes
 
-- The `service_role` key lives only in `sync-agent/config.yaml` on the
-  notebooks (gitignored). It bypasses RLS, which is how the agent writes.
-- The dashboard is currently readable by anyone holding the anon key + URL.
-  To lock it to your team: enable Supabase Auth, change each RLS policy from
-  `using (true)` to `using (auth.role() = 'authenticated')`, and add a login
-  screen (supabase-js `signInWithPassword` or magic link).
+- The `service_role` key lives only in `sync-agent/config.yaml` on the notebooks
+  and in each team's container env (both gitignored / off the VPS git). It
+  bypasses RLS — that's how the agent and `/api` write — and is **per team**, so
+  no key reaches another team's data.
+- Reads require a logged-in user in **that project's** user pool, so a leaked URL
+  or anon key exposes nothing on its own.
+- `/api/mcp` is the most powerful surface (read-only SQL); it's disabled unless
+  `MCP_TOKEN` is set per team.
+
+## Distributing to multiple teams
+
+Each team is fully isolated: its **own Supabase project** (separate Postgres,
+separate Auth user pool) and its **own container** on your VPS holding only that
+team's keys, behind a shared Caddy proxy. Your own dashboard is just another
+team's stack that others have no login to. Onboard a team with one script:
+
+```bash
+cp infra/templates/team.secrets.env.example infra/tenants/acme.secrets.env
+$EDITOR infra/tenants/acme.secrets.env     # Supabase keys, admin creds, subdomain
+infra/provision-team.sh acme               # migrate, seed admin, build, run, route + TLS
+```
+
+It applies migrations, seeds the first admin, renders + starts the container,
+adds the Caddy vhost, and prints the onboarding packet (app URL, admin login, and
+the per-notebook bootstrap `config.yaml`). Full ops guide:
+[`infra/README.md`](infra/README.md).
 
 ## Alternative approaches considered
 

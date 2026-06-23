@@ -1,0 +1,2 @@
+# Per-team Caddy vhosts (<slug>.caddy) are generated here by provision-team.sh.
+# This file just keeps the directory in git.

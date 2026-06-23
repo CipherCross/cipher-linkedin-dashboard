@@ -1,0 +1,24 @@
+# Tenant registry — the single source of truth for fleet operations
+# (migrate-all.sh, redeploy-all.sh, deploy-agent-all.sh). Add one block per team
+# when you provision it. Secrets do NOT live here — they live in
+# infra/tenants/<slug>/.env (gitignored). This file is safe to commit.
+#
+# Fields:
+#   slug:           short id, used for the compose project + container name (<slug>-app)
+#   subdomain:      public hostname Caddy serves (must point at the VPS)
+#   supabase_ref:   Supabase project ref (for Management API / supabase CLI)
+#   instance_ids:   the notebook instance_ids that sync into this team's project
+#   agent_version:  agent build currently deployed to this team's storage bucket
+
+teams:
+  # - slug: acme
+  #   subdomain: acme.app.example.com
+  #   supabase_ref: abcdefghijklmnop
+  #   instance_ids: [acme-nb-1, acme-nb-2, acme-nb-3]
+  #   agent_version: "1.6.0"
+
+  # - slug: globex
+  #   subdomain: globex.app.example.com
+  #   supabase_ref: qrstuvwxyz123456
+  #   instance_ids: [globex-nb-1]
+  #   agent_version: "1.6.0"

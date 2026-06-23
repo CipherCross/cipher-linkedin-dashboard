@@ -1,12 +1,12 @@
 // Notebook config writer. Persists the per-instance override blob that the sync
 // agent reads on its next run (see apply_remote_config in sync-agent/agent.py),
 // so notebooks can be reconfigured from the dashboard's Health page with no local
-// edits. Reads happen through the anon key (DataContext); only this WRITE needs
-// the service-role key, reused from /api/_lib/core.ts.
+// edits. Reads happen with the user's session (RLS); only this WRITE needs the
+// service-role key, reused from /api/_lib/core.ts.
 //
-// Guard: if ADMIN_SECRET is set on the Vercel project, callers must send it as an
-// `x-admin-secret` header; if unset, the endpoint is open (parity with
-// /api/classify — acceptable only because this is an internal tool).
+// Auth: the server gates this route to admin+ (requireRole('admin') in
+// server/index.ts), replacing the old ADMIN_SECRET header. By the time handle()
+// runs the caller is already an authenticated admin.
 import { db } from './_lib/core.js'
 
 export const maxDuration = 10
@@ -30,11 +30,6 @@ const json = (body: unknown, status = 200) =>
   })
 
 async function handle(req: Request): Promise<Response> {
-  const secret = process.env.ADMIN_SECRET
-  if (secret && req.headers.get('x-admin-secret') !== secret) {
-    return json({ error: 'unauthorized' }, 401)
-  }
-
   let payload: { instance_id?: unknown; config?: unknown }
   try {
     payload = await req.json()

@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import type { Instance } from '../lib/types'
 import { useData } from '../lib/DataContext'
+import { useAuth } from '../lib/auth'
 
 // Per-instance config editor for the Health page. Writes the `config` override
 // blob via /api/config; the sync agent merges it over the notebook's local
 // config.yaml on its next run (remote wins), so notebooks are reconfigured
 // online with no local edits. Structured fields cover the routine keys; the
 // Advanced raw-JSON box exposes everything else (e.g. the LH2 `mapping` SQL).
+//
+// Admin-only: /api/config is gated to admin+, and the editor is hidden for
+// everyone else (returns null below).
 
 const TEXT_FIELDS: { key: string; label: string; placeholder?: string }[] = [
   { key: 'instance_label', label: 'Label' },
@@ -39,30 +43,21 @@ function initBool(cfg: Record<string, unknown>) {
   return out
 }
 
-/** Save the admin secret in localStorage; on a 401 prompt for it and retry once. */
-async function postConfig(instance_id: string, config: unknown): Promise<Response> {
-  const send = (secret: string | null) =>
+export function InstanceConfigEditor({ inst }: { inst: Instance }) {
+  const { refetch } = useData()
+  const { token, hasRole } = useAuth()
+  const cfg = (inst.config ?? {}) as Record<string, unknown>
+
+  // Authorized with the signed-in admin's access token (server gates to admin+).
+  const postConfig = (instance_id: string, config: unknown) =>
     fetch('/api/config', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        ...(secret ? { 'x-admin-secret': secret } : {}),
+        authorization: `Bearer ${token() ?? ''}`,
       },
       body: JSON.stringify({ instance_id, config }),
     })
-  let res = await send(localStorage.getItem('adminSecret'))
-  if (res.status === 401) {
-    const entered = window.prompt('Admin secret required to save config:')
-    if (!entered) return res
-    localStorage.setItem('adminSecret', entered)
-    res = await send(entered)
-  }
-  return res
-}
-
-export function InstanceConfigEditor({ inst }: { inst: Instance }) {
-  const { refetch } = useData()
-  const cfg = (inst.config ?? {}) as Record<string, unknown>
 
   const [open, setOpen] = useState(false)
   const [raw, setRaw] = useState(false)
@@ -138,7 +133,11 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
       const res = await postConfig(inst.id, config)
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setMsg(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
+        setMsg(
+          res.status === 401 || res.status === 403
+            ? 'Not authorized — admin role required.'
+            : `Save failed: ${out.error ?? res.status}`,
+        )
       } else {
         setMsg('Saved — applies on the next sync (≤30 min).')
         refetch()
@@ -154,6 +153,9 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     inst.config_updated_at != null &&
     (inst.last_sync_at == null ||
       new Date(inst.config_updated_at) > new Date(inst.last_sync_at))
+
+  // Hidden entirely for non-admins (the endpoint is admin-gated too).
+  if (!hasRole('admin')) return null
 
   if (!open) {
     return (

@@ -7,6 +7,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Per-team runtime config (Supabase URL + anon key). Served by the Hono
+         server in prod and by a Vite dev plugin locally; sets window.__APP_CONFIG__
+         before the app module runs. Classic script => executes before the deferred module. -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,2 @@
+# Per-team files live here (gitignored): <slug>.secrets.env (operator inputs) and
+# <slug>/ (rendered .env + docker-compose.yml). This keeps the dir in git.

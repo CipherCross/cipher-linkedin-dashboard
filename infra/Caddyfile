@@ -1,0 +1,8 @@
+# Global options + per-team site imports. Each team gets a file in sites/<slug>.caddy
+# written by provision-team.sh; after adding one, reload with:
+#   docker compose -f infra/docker-compose.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+{
+	email {$ACME_EMAIL}
+}
+
+import /etc/caddy/sites/*.caddy
