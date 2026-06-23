@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { DateRange, ReplyInfo } from '../lib/leads'
 import { instanceName, positiveLeads } from '../lib/leads'
+import { useConversation } from '../lib/ConversationContext'
 import { ago } from './CampaignTable'
 
 const MAX = 12
@@ -22,6 +23,7 @@ export function HotLeads({
   campaigns: CampaignMetrics[]
   instances: Instance[]
 }) {
+  const { openConversation } = useConversation()
   const rows = positiveLeads(leads, latest, range)
   const campaignName = (id: string) =>
     campaigns.find((c) => c.campaign_id === id)?.campaign_name ?? id
@@ -47,9 +49,19 @@ export function HotLeads({
       ) : (
         <div className="reply-list">
           {rows.slice(0, MAX).map(({ lead, reply }) => (
-            <div className="reply-row" key={lead.id}>
+            <div
+              className="reply-row row-clickable"
+              key={lead.id}
+              onClick={() => openConversation(lead)}
+            >
               <div className="reply-who">
-                <a className="row-link" href={lead.profile_url} target="_blank" rel="noreferrer">
+                <a
+                  className="row-link"
+                  href={lead.profile_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')}
                 </a>
                 <div className="muted small ellipsis" title={lead.headline ?? ''}>
@@ -63,7 +75,11 @@ export function HotLeads({
                 </div>
               </div>
               <div className="reply-meta">
-                <Link className="row-link muted small" to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}>
+                <Link
+                  className="row-link muted small"
+                  to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {campaignName(lead.campaign_id)}
                 </Link>
                 <div className="muted small">{instanceLabel(lead.instance_id)}</div>

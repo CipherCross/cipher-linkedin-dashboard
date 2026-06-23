@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
+import { useConversation } from '../lib/ConversationContext'
 import type { Lead } from '../lib/types'
 import {
   RISK_LABEL, STAGES, downloadCsv, instanceName, riskOf, shortDate, stageMeta,
@@ -21,6 +22,7 @@ const COLUMNS: Array<{ key: SortKey; label: string }> = [
 
 export function LeadsExplorer() {
   const { data } = useData()
+  const { openConversation } = useConversation()
   const [params, setParams] = useSearchParams()
   const [sortKey, setSortKey] = useState<SortKey>('last_action_at')
   const [sortAsc, setSortAsc] = useState(false)
@@ -179,9 +181,15 @@ export function LeadsExplorer() {
           </thead>
           <tbody>
             {pageRows.map((l) => (
-              <tr key={l.id}>
+              <tr key={l.id} className="row-clickable" onClick={() => openConversation(l)}>
                 <td>
-                  <a className="row-link" href={l.profile_url} target="_blank" rel="noreferrer">
+                  <a
+                    className="row-link"
+                    href={l.profile_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {l.full_name || l.profile_url.replace('https://www.linkedin.com/in/', '')}
                   </a>
                   {l.company && <div className="muted small">{l.company}</div>}

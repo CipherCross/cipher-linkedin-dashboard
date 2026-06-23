@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
+import { ConversationProvider } from '../lib/ConversationContext'
 
 const LINKS = [
   { to: '/', label: 'Overview', end: true },
@@ -33,7 +34,9 @@ export function Layout() {
       {loading || !data ? (
         <div className="center muted">Loading…</div>
       ) : (
-        <Outlet />
+        <ConversationProvider>
+          <Outlet />
+        </ConversationProvider>
       )}
     </div>
   )

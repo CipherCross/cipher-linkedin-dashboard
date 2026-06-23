@@ -31,6 +31,7 @@ export interface Message {
   sentiment: Sentiment | null
   reason: string | null
   classified_at: string | null
+  classified_model?: string | null
 }
 
 export interface Annotation {

@@ -15,6 +15,27 @@ export function instanceName(inst: Instance | undefined, fallback = ''): string 
 export const leadKey = (instance_id: string, profile_url: string) =>
   `${instance_id}|${profile_url}`
 
+/** Sentiment display metadata, shared by the Replies page, Hot leads, and the
+ *  conversation drawer. `cls` maps to the `.senti.*` colours in styles.css. */
+export const SENTIMENT_META: Record<Sentiment, { label: string; cls: string }> = {
+  positive: { label: 'Positive', cls: 'pos' },
+  objection: { label: 'Objection', cls: 'obj' },
+  neutral: { label: 'Neutral', cls: 'neu' },
+  referral: { label: 'Referral', cls: 'ref' },
+  negative: { label: 'Negative', cls: 'neg' },
+  auto: { label: 'Auto', cls: 'auto' },
+}
+
+/** Display order by follow-up priority, not alphabetical. */
+export const SENTIMENT_ORDER: Sentiment[] = [
+  'positive',
+  'objection',
+  'neutral',
+  'referral',
+  'negative',
+  'auto',
+]
+
 /** The latest inbound reply (body + its classification) seen per lead. */
 export interface ReplyInfo {
   body: string
