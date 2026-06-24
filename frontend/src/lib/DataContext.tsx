@@ -12,6 +12,7 @@ const EMPTY: DashboardData = {
   messages: [],
   annotations: [],
   steps: [],
+  briefing: null,
 }
 
 const LEAD_COLUMNS =
@@ -67,7 +68,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const since = new Date(Date.now() - 90 * 86_400_000)
           .toISOString()
           .slice(0, 10)
-        const [instances, campaigns, activity, syncRuns, messages, annotations, steps, leads] =
+        const [instances, campaigns, activity, syncRuns, messages, annotations, steps, briefing, leads] =
           await Promise.all([
             supabase
               .from('instances')
@@ -92,12 +93,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
               .select('*')
               .order('campaign_id')
               .order('step_index'),
+            supabase
+              .from('briefings')
+              .select('*')
+              .order('briefing_date', { ascending: false })
+              .limit(1),
             fetchAllLeads(),
           ])
         if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
-          syncRuns.error ?? messages.error ?? annotations.error ?? steps.error
+          syncRuns.error ?? messages.error ?? annotations.error ?? steps.error ??
+          briefing.error
         setData(
           error
             ? { ...EMPTY, error: error.message }
@@ -109,6 +116,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 messages: messages.data ?? [],
                 annotations: annotations.data ?? [],
                 steps: steps.data ?? [],
+                briefing: briefing.data?.[0] ?? null,
                 leads,
               },
         )

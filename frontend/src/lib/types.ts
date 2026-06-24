@@ -160,6 +160,37 @@ export interface Playbook {
   cta?: string
 }
 
+// --- Morning Briefing (see /api/briefing) ------------------------------------
+
+export interface BriefingSection {
+  title: string
+  body: string
+}
+
+export interface BriefingAction {
+  text: string
+  priority: 'high' | 'med' | 'low'
+}
+
+export interface BriefingRisk {
+  kind: string
+  severity: 'low' | 'med' | 'high'
+  text: string
+}
+
+/** One daily AI-generated pipeline digest (briefings table). */
+export interface Briefing {
+  id: string
+  briefing_date: string
+  headline: string | null
+  summary: string | null
+  sections: BriefingSection[]
+  actions: BriefingAction[]
+  risks: BriefingRisk[]
+  model: string | null
+  created_at: string
+}
+
 export interface DashboardData {
   instances: Instance[]
   campaigns: CampaignMetrics[]
@@ -169,5 +200,6 @@ export interface DashboardData {
   messages: Message[]
   annotations: Annotation[]
   steps: CampaignStep[]
+  briefing: Briefing | null
   error?: string
 }

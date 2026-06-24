@@ -702,6 +702,25 @@ tr.row-clickable:hover { background: #161d30; }
 .coach-digest-summary { margin-top: 6px; line-height: 1.5; }
 .coach-digest-patterns { margin: 8px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
 
+/* Morning briefing card (Overview) */
+.briefing-card { margin-bottom: 18px; }
+.briefing-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.briefing-title { margin: 0 0 2px; color: var(--text); font-size: 15px; }
+.briefing-headline { margin-top: 12px; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.briefing-summary { margin: 8px 0 0; line-height: 1.55; }
+.briefing-label { margin: 14px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.briefing-actions ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+.briefing-risks ul { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+.briefing-actions .badge, .briefing-risks .badge { margin-right: 4px; }
+.briefing-details-toggle {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px;
+  background: none; border: none; color: var(--muted);
+  font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; text-align: left;
+}
+.briefing-sections { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+.briefing-section { border-top: 1px solid var(--border); padding-top: 10px; }
+.briefing-section-title { font-weight: 600; margin-bottom: 4px; }
+
 /* Playbook fields inside the instance config editor */
 .config-playbook {
   grid-column: 1 / -1;

@@ -145,11 +145,23 @@ for external clients (Claude Desktop / Claude Code).
   per-instance override blob edited on the Health page; the sync agent merges it
   over its local `config.yaml` on the next run. See "Configuring notebooks online".
 
+- `frontend/api/briefing.ts` — the **Morning Briefing**. Reuses the same agentic SQL
+  loop as `/api/chat` (same `_lib/tools.ts`) to investigate the whole pipeline on its
+  own, then structures the result and stores one row per day in `briefings`
+  (`008`-style read-only RLS; see `016_briefings.sql`). Runs daily at **07:00 UTC**
+  via the `vercel.json` cron — after the 06:00 `classify` cron, so replies are
+  sentiment-labelled first — and on demand from the **Refresh briefing** button on
+  the Overview card. If `SLACK_WEBHOOK_URL` is set it also posts the briefing to
+  Slack (Block Kit); without it the briefing still stores and shows on the dashboard.
+  The GET (cron) path is guarded by `CRON_SECRET`; the manual POST is open and
+  idempotent (upsert on the date).
+
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
-`CRON_SECRET` to lock the daily `/api/classify` cron, and `ADMIN_SECRET` to gate
-`/api/config` config writes). Locally, plain `npm run dev` does not serve `api/` —
-use `vercel dev` from `frontend/` to run the functions too.
+`CRON_SECRET` to lock the daily `/api/classify` + `/api/briefing` crons,
+`ADMIN_SECRET` to gate `/api/config` config writes, and `SLACK_WEBHOOK_URL` to
+deliver the Morning Briefing to Slack). Locally, plain `npm run dev` does not serve
+`api/` — use `vercel dev` from `frontend/` to run the functions too.
 
 ## Metrics & dashboard pages
 
@@ -157,8 +169,10 @@ Topline numbers come from the `campaign_metrics` view (so any client gets the
 same figures); the deeper analysis is computed client-side from the raw
 `leads` table:
 
-- **Overview** — KPIs (invites / accepted / acceptance rate / replies / reply
-  rate), daily activity chart, instance health, campaign table.
+- **Overview** — the **Morning Briefing** card (today's AI digest: headline,
+  what changed, risks, and the 3 actions to take — see `/api/briefing`), KPIs
+  (invites / accepted / acceptance rate / replies / reply rate), daily activity
+  chart, instance health, campaign table.
 - **Campaign detail** (click a campaign) — funnel with pending-invite count,
   weekly invite cohorts (acceptance by send week), invite→accept and
   accept→reply time histograms, campaign-scoped activity, performance by

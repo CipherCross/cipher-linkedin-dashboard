@@ -5,6 +5,7 @@ import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { AccountCard } from '../components/AccountCard'
 import { HotLeads } from '../components/HotLeads'
+import { BriefingCard } from '../components/BriefingCard'
 import { DateRangePicker } from '../components/DateRangePicker'
 
 const STALE_HOURS = 24
@@ -51,6 +52,8 @@ export function Overview() {
           <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
         </div>
       </header>
+
+      <BriefingCard />
 
       <KpiCards totals={view.totals} flowLabel={range.label} positive={view.totals.positive} />
 
