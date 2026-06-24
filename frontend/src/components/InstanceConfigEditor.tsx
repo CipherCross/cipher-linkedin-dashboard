@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Instance } from '../lib/types'
 import { useData } from '../lib/DataContext'
 
@@ -95,6 +95,25 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   const [rawText, setRawText] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  // True once the user edits a field. The form is seeded from props once; without
+  // this guard, a background refetch (every 5 min) leaves the form on its initial
+  // snapshot, and saving would silently overwrite any newer config.
+  const [dirty, setDirty] = useState(false)
+
+  // Re-seed the form when the underlying config changes (another save, or a sync
+  // updated config_updated_at) — but only when there are no unsaved edits.
+  const sig = `${inst.id}|${inst.config_updated_at ?? ''}`
+  const lastSig = useRef(sig)
+  useEffect(() => {
+    if (sig === lastSig.current) return
+    lastSig.current = sig
+    if (dirty) return
+    const c = (inst.config ?? {}) as Record<string, unknown>
+    setText(initText(c))
+    setBool(initBool(c))
+    setPlaybook(initPlaybook(c))
+    setRawText('')
+  }, [sig, dirty, inst.config])
 
   // Keys present in config but not surfaced as structured fields (e.g. `mapping`)
   // are preserved so editing a field never drops them. `playbook` is edited
@@ -187,6 +206,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         setMsg(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
       } else {
         setMsg('Saved — applies on the next sync (≤30 min).')
+        setDirty(false) // saved state is the new baseline; allow re-seeding from props
         refetch()
       }
     } catch (e) {
@@ -221,7 +241,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
             value={rawText}
             spellCheck={false}
             rows={Math.min(20, Math.max(6, rawText.split('\n').length + 1))}
-            onChange={(e) => setRawText(e.target.value)}
+            onChange={(e) => { setDirty(true); setRawText(e.target.value) }}
           />
         </label>
       ) : (
@@ -233,7 +253,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
                 type="text"
                 value={text[f.key]}
                 placeholder={f.placeholder}
-                onChange={(e) => setText({ ...text, [f.key]: e.target.value })}
+                onChange={(e) => { setDirty(true); setText({ ...text, [f.key]: e.target.value }) }}
               />
             </label>
           ))}
@@ -242,7 +262,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
               <span className="config-label">{f.label}</span>
               <select
                 value={bool[f.key]}
-                onChange={(e) => setBool({ ...bool, [f.key]: e.target.value as Tri })}
+                onChange={(e) => { setDirty(true); setBool({ ...bool, [f.key]: e.target.value as Tri }) }}
               >
                 <option value="default">Default (local)</option>
                 <option value="on">On</option>
@@ -262,7 +282,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
                   type="text"
                   value={playbook[f.key]}
                   placeholder={f.placeholder}
-                  onChange={(e) => setPlaybook({ ...playbook, [f.key]: e.target.value })}
+                  onChange={(e) => { setDirty(true); setPlaybook({ ...playbook, [f.key]: e.target.value }) }}
                 />
               </label>
             ))}
@@ -274,7 +294,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
                   spellCheck={false}
                   value={playbook[f.key]}
                   placeholder={f.placeholder}
-                  onChange={(e) => setPlaybook({ ...playbook, [f.key]: e.target.value })}
+                  onChange={(e) => { setDirty(true); setPlaybook({ ...playbook, [f.key]: e.target.value }) }}
                 />
               </label>
             ))}

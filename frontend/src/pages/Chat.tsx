@@ -96,11 +96,14 @@ function Message({ m }: { m: UIMessage }) {
 export function Chat() {
   const { messages, sendMessage, status, error } = useChat()
   const [input, setInput] = useState('')
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const busy = status === 'submitted' || status === 'streaming'
 
+  // Pin to the newest message by scrolling the chat container itself; using
+  // scrollIntoView here also scrolled the whole page, yanking it on every update.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [messages, status])
 
   const submit = (text: string) => {
@@ -123,7 +126,7 @@ export function Chat() {
       </header>
 
       <div className="card chat-card">
-        <div className="chat-scroll">
+        <div className="chat-scroll" ref={scrollRef}>
           {messages.length === 0 && (
             <div className="chat-empty">
               <div className="muted">Try one of these:</div>
@@ -144,7 +147,6 @@ export function Chat() {
               and SUPABASE_SERVICE_ROLE_KEY are set on the deployment.
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
 
         <form

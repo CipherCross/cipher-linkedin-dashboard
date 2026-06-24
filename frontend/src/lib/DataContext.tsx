@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
-import type { DashboardData, Lead } from './types'
+import type { DashboardData, Lead, Message } from './types'
 
 const EMPTY: DashboardData = {
   instances: [],
@@ -33,6 +33,36 @@ async function fetchAllLeads(): Promise<Lead[]> {
     all.push(...((data ?? []) as unknown as Lead[]))
     if (!data || data.length < page) break
   }
+  return all
+}
+
+const MESSAGE_COLUMNS =
+  'id,instance_id,campaign_id,profile_url,direction,body,sent_at,sentiment,reason,classified_at'
+
+// Inbound replies drive sentiment / positive-reply counts shown beside ALL-TIME
+// lead totals, so they must not be windowed — a 90-day / 2000-row cap silently
+// undercounts them on busy accounts. Fetch every inbound row (paginated past the
+// 1000-row cap); keep outbound to the 90-day window since it's only recent display.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchMessages(since: string): Promise<Message[]> {
+  const page = 1000
+  const all: Message[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pageThrough = async (build: () => any) => {
+    for (let from = 0; ; from += page) {
+      const { data, error } = await build()
+        .order('sent_at', { ascending: false })
+        .range(from, from + page - 1)
+      if (error) throw error
+      all.push(...((data ?? []) as unknown as Message[]))
+      if (!data || data.length < page) break
+    }
+  }
+  await pageThrough(() =>
+    supabase!.from('messages').select(MESSAGE_COLUMNS).eq('direction', 'in'))
+  await pageThrough(() =>
+    supabase!.from('messages').select(MESSAGE_COLUMNS).eq('direction', 'out').gte('sent_at', since))
+  all.sort((a, b) => (a.sent_at < b.sent_at ? 1 : a.sent_at > b.sent_at ? -1 : 0))
   return all
 }
 
@@ -81,12 +111,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               .select('id,instance_id,started_at,finished_at,status,rows_upserted,error')
               .order('started_at', { ascending: false })
               .limit(200),
-            supabase
-              .from('messages')
-              .select('id,instance_id,campaign_id,profile_url,direction,body,sent_at,sentiment,reason,classified_at')
-              .gte('sent_at', since)
-              .order('sent_at', { ascending: false })
-              .limit(2000),
+            fetchMessages(since),
             supabase.from('annotations').select('*').order('noted_at'),
             supabase
               .from('campaign_steps')
@@ -103,7 +128,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
-          syncRuns.error ?? messages.error ?? annotations.error ?? steps.error ??
+          syncRuns.error ?? annotations.error ?? steps.error ??
           briefing.error
         setData(
           error
@@ -113,7 +138,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 campaigns: campaigns.data ?? [],
                 activity: activity.data ?? [],
                 syncRuns: syncRuns.data ?? [],
-                messages: messages.data ?? [],
+                messages,
                 annotations: annotations.data ?? [],
                 steps: steps.data ?? [],
                 briefing: briefing.data?.[0] ?? null,

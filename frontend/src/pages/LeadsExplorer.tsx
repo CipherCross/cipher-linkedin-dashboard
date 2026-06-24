@@ -34,6 +34,13 @@ export function LeadsExplorer() {
   const risk = params.get('risk') ?? 'all'
   const q = params.get('q') ?? ''
 
+  // A `camp` from the URL can name a campaign in a different account than the
+  // selected `inst` (e.g. a shared link). Ignore it then instead of rendering an
+  // empty list with a stale campaign still selected in the dropdown.
+  const campInstance = data?.campaigns.find((c) => c.campaign_id === camp)?.instance_id
+  const effCamp =
+    camp !== 'all' && inst !== 'all' && campInstance && campInstance !== inst ? 'all' : camp
+
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params)
     if (value === 'all' || value === '') next.delete(key)
@@ -48,7 +55,7 @@ export function LeadsExplorer() {
     const needle = q.trim().toLowerCase()
     const rows = data.leads.filter((l) => {
       if (inst !== 'all' && l.instance_id !== inst) return false
-      if (camp !== 'all' && l.campaign_id !== camp) return false
+      if (effCamp !== 'all' && l.campaign_id !== effCamp) return false
       if (stage !== 'all' && stageOf(l) !== (stage as Stage)) return false
       if (risk !== 'all' && riskOf(l) !== (risk as RiskFlag)) return false
       if (needle) {
@@ -66,7 +73,7 @@ export function LeadsExplorer() {
       return sortAsc ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
     })
     return rows
-  }, [data, inst, camp, stage, risk, q, sortKey, sortAsc])
+  }, [data, inst, effCamp, stage, risk, q, sortKey, sortAsc])
 
   if (!data) return null
 
@@ -143,7 +150,7 @@ export function LeadsExplorer() {
             <option key={i.id} value={i.id}>{instanceName(i)}</option>
           ))}
         </select>
-        <select value={camp} onChange={(e) => setFilter('camp', e.target.value)}>
+        <select value={effCamp} onChange={(e) => setFilter('camp', e.target.value)}>
           <option value="all">All campaigns</option>
           {campaignOptions.map((c) => (
             <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>

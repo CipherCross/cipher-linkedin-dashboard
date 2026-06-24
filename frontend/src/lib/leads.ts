@@ -349,8 +349,11 @@ export function rangedCampaigns(
       acc.set(l.campaign_id, row)
     }
     row.total++
+    // last_activity_at is the campaign's TRUE most-recent milestone (matching the
+    // all-time campaign_metrics view it stands in for), independent of the range
+    // filter — which only scopes the invite/accept/reply counts.
     const touch = (ts: string | null) => {
-      if (tsInRange(ts, r) && (!row!.last || ts! > row!.last)) row!.last = ts
+      if (ts && (!row!.last || ts > row!.last)) row!.last = ts
     }
     if (tsInRange(l.invited_at, r)) row.invites++
     if (tsInRange(l.connected_at, r)) row.accepted++

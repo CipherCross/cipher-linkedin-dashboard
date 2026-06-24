@@ -32,6 +32,8 @@ export function Replies() {
 
   // The per-account self-correction digests (coaching_digest), read anon like the
   // rest of the dashboard; (re)computed on demand via the Refresh button below.
+  // Reloads whenever the dashboard data reloads (mount, interval, post-classify
+  // refetch) so the digests stay in sync rather than only fetching once on mount.
   useEffect(() => {
     if (!supabase) return
     let cancelled = false
@@ -45,7 +47,7 @@ export function Replies() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [data])
 
   async function refreshDigest(instance_id: string) {
     setDigestBusy(instance_id)

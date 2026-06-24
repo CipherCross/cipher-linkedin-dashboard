@@ -16,7 +16,9 @@ export function LagHistogram({
 }: { title: string; lags: number[]; color: string }) {
   const counts = BUCKETS.map((b) => ({ label: b.label, count: 0 }))
   for (const lag of lags) {
-    const i = BUCKETS.findIndex((b) => lag <= b.max)
+    // Bucket by whole elapsed days so a 1.4-day lag counts as "≤1d", not "2–3d".
+    const days = Math.floor(lag)
+    const i = BUCKETS.findIndex((b) => days <= b.max)
     counts[i === -1 ? BUCKETS.length - 1 : i].count += 1
   }
   const median = medianOf(lags)
