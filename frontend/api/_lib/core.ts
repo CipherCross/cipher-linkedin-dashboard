@@ -149,7 +149,8 @@ select
   count(l.connected_at)                  as accepted,
   count(l.replied_at)                    as replied,
   round(100.0 * count(l.connected_at) / nullif(count(*), 0), 1)               as acceptance_rate,
-  round(100.0 * count(l.replied_at) / nullif(count(l.connected_at), 0), 1)    as reply_rate_of_accepted,
+  round(100.0 * count(l.replied_at) filter (where l.connected_at is not null)
+        / nullif(count(l.connected_at), 0), 1)                                as reply_rate_of_accepted,
   round(avg(extract(epoch from (l.replied_at - l.invited_at)) / 86400.0), 1)  as avg_days_to_reply
 from leads l
 where l.invited_at is not null
