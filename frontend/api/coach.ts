@@ -91,15 +91,6 @@ Coach the SDR; do NOT write their message for them. Return:
 
 Be specific to THIS thread.`
 
-interface Playbook {
-  product?: string
-  value_prop?: string
-  tone?: string
-  dos?: string[]
-  donts?: string[]
-  cta?: string
-}
-
 interface Msg {
   direction: string
   body: string | null
@@ -114,29 +105,17 @@ const json = (body: unknown, status = 200) =>
 
 type Sb = ReturnType<typeof db>
 
-/** Build the playbook block, or '' when nothing usable is configured. */
-function renderPlaybook(p: Playbook | null): string {
-  if (!p) return ''
-  const lines: string[] = []
-  if (p.product) lines.push(`Product: ${p.product}`)
-  if (p.value_prop) lines.push(`Value proposition: ${p.value_prop}`)
-  if (p.tone) lines.push(`Preferred tone: ${p.tone}`)
-  if (p.cta) lines.push(`Primary call to action: ${p.cta}`)
-  if (Array.isArray(p.dos) && p.dos.length) lines.push(`Do: ${p.dos.join('; ')}`)
-  if (Array.isArray(p.donts) && p.donts.length) lines.push(`Don't: ${p.donts.join('; ')}`)
-  return lines.join('\n')
-}
-
-function systemFor(p: Playbook | null): string {
-  const pb = renderPlaybook(p)
-  if (!pb) {
+/** Inject the global playbook (Markdown) into the system prompt, or note its
+ *  absence so the coach stays generic until one is written. */
+function systemFor(playbook: string): string {
+  if (!playbook) {
     return (
       SYSTEM_BASE +
-      `\n\nNo product playbook is configured for this account — keep product claims generic and ` +
-      `note in "summary" that adding a playbook (Health → Configure) will sharpen the coaching.`
+      `\n\nNo playbook is configured — keep product claims generic and note in "summary" that ` +
+      `writing a playbook (the dashboard's Playbook page) will sharpen the coaching.`
     )
   }
-  return SYSTEM_BASE + `\n\nACCOUNT PLAYBOOK — ground every suggestion in this:\n` + pb
+  return SYSTEM_BASE + `\n\nPLAYBOOK — ground every suggestion in this:\n` + playbook
 }
 
 function renderThread(thread: Msg[]): string {
@@ -163,11 +142,11 @@ async function loadThread(sb: Sb, instance_id: string, profile_url: string): Pro
   return (data ?? []) as Msg[]
 }
 
-async function loadPlaybook(sb: Sb, instance_id: string): Promise<Playbook | null> {
-  const { data } = await sb.from('instances').select('config').eq('id', instance_id).maybeSingle()
-  const cfg = (data?.config ?? {}) as Record<string, unknown>
-  const pb = cfg.playbook
-  return pb && typeof pb === 'object' && !Array.isArray(pb) ? (pb as Playbook) : null
+/** The single global playbook (Markdown), trimmed; '' when unwritten. Shared by
+ *  every account's coaching — see migration 022_playbook. */
+async function loadPlaybook(sb: Sb): Promise<string> {
+  const { data } = await sb.from('playbook').select('content').maybeSingle()
+  return ((data?.content as string | undefined) ?? '').trim()
 }
 
 /** djb2 hash of a string → short hex, so the staleness marker also changes when the
@@ -201,7 +180,7 @@ async function coachConversation(
   sb: Sb,
   instance_id: string,
   profile_url: string,
-  playbook: Playbook | null,
+  playbook: string,
   force: boolean
 ): Promise<CoachingOut | null> {
   const thread = await loadThread(sb, instance_id, profile_url)
@@ -266,7 +245,7 @@ async function actionableProfiles(sb: Sb, instance_id: string): Promise<string[]
 }
 
 async function digest(sb: Sb, instance_id: string): Promise<Response> {
-  const playbook = await loadPlaybook(sb, instance_id)
+  const playbook = await loadPlaybook(sb)
 
   // Back-fill coaching for actionable threads so the first digest has coverage.
   const profiles = (await actionableProfiles(sb, instance_id)).slice(0, DIGEST_BATCH)
@@ -366,7 +345,7 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: 'profile_url (string) is required' }, 400)
   }
 
-  const playbook = await loadPlaybook(sb, instance_id)
+  const playbook = await loadPlaybook(sb)
   const out = await coachConversation(sb, instance_id, profile_url, playbook, body.force === true)
   if (!out) return json({ error: 'no messages in this conversation' }, 404)
   return json(out)

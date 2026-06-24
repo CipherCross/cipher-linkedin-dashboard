@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
 import {
   SENTIMENT_META, SENTIMENT_ORDER, instanceName, latestRepliesByLead, leadKey,
 } from '../lib/leads'
-import { ago } from '../components/CampaignTable'
-import { useConversation } from '../lib/ConversationContext'
+import { ReplyRow } from '../components/ReplyRow'
 import type { CoachingDigest, Sentiment } from '../lib/types'
 
 const RANGES = [
@@ -20,7 +18,6 @@ const RANGES = [
  *  follow-up worklist for the team, now sorted by the reply's decision. */
 export function Replies() {
   const { data, refetch } = useData()
-  const { openConversation } = useConversation()
   const [rangeDays, setRangeDays] = useState(30)
   const [filter, setFilter] = useState<Sentiment | 'unclassified' | null>(null)
   const [classifying, setClassifying] = useState(false)
@@ -108,11 +105,6 @@ export function Replies() {
   }, [repliesAll, filter, snippets])
 
   if (!data) return null
-
-  const campaignName = (id: string) =>
-    data.campaigns.find((c) => c.campaign_id === id)?.campaign_name ?? id
-  const instanceLabel = (id: string) =>
-    instanceName(data.instances.find((i) => i.id === id), id)
 
   async function classify() {
     setClassifying(true)
@@ -243,59 +235,15 @@ export function Replies() {
 
       <div className="card">
         <div className="reply-list">
-          {replies.map((l) => {
-            const snip = snippets.get(leadKey(l.instance_id, l.profile_url))
-            const meta = snip?.sentiment ? SENTIMENT_META[snip.sentiment] : null
-            return (
-              <div
-                className="reply-row row-clickable"
-                key={l.id}
-                onClick={() => openConversation(l)}
-              >
-                <div className="reply-who">
-                  <a
-                    className="row-link"
-                    href={l.profile_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {l.full_name || l.profile_url.replace('https://www.linkedin.com/in/', '')}
-                  </a>
-                  <div className="muted small ellipsis" title={l.headline ?? ''}>
-                    {[l.headline, l.company].filter(Boolean).join(' · ') || '—'}
-                  </div>
-                  {snip && (
-                    <div className="reply-body">
-                      {meta && (
-                        <span
-                          className={`badge senti ${meta.cls}`}
-                          title={snip.reason ?? ''}
-                        >
-                          {meta.label}
-                        </span>
-                      )}
-                      “{snip.body}”
-                    </div>
-                  )}
-                </div>
-                <div className="reply-meta">
-                  <Link
-                    className="row-link muted small"
-                    to={`/campaign/${encodeURIComponent(l.campaign_id)}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {campaignName(l.campaign_id)}
-                  </Link>
-                  <div className="muted small">{instanceLabel(l.instance_id)}</div>
-                </div>
-                <div className="reply-when muted small">
-                  {ago(l.replied_at)}
-                  <div>{l.replied_at!.slice(0, 10)}</div>
-                </div>
-              </div>
-            )
-          })}
+          {replies.map((l) => (
+            <ReplyRow
+              key={l.id}
+              lead={l}
+              reply={snippets.get(leadKey(l.instance_id, l.profile_url))}
+              campaigns={data.campaigns}
+              instances={data.instances}
+            />
+          ))}
           {replies.length === 0 && (
             <div className="muted">No replies in this period.</div>
           )}

@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Instance } from '../lib/types'
 import { useData } from '../lib/DataContext'
+import { adminPost } from '../lib/admin'
 
 // Per-instance config editor for the Health page. Writes the `config` override
 // blob via /api/config; the sync agent merges it over the notebook's local
 // config.yaml on its next run (remote wins), so notebooks are reconfigured
 // online with no local edits. Structured fields cover the routine keys; the
 // Advanced raw-JSON box exposes everything else (e.g. the LH2 `mapping` SQL).
+// (The AI coach's playbook is no longer per-instance — it's one global Markdown
+// doc edited on the Playbook page; see migration 022_playbook.)
 
 const TEXT_FIELDS: { key: string; label: string; placeholder?: string }[] = [
   { key: 'instance_label', label: 'Label' },
@@ -25,19 +28,6 @@ const BOOL_FIELDS: { key: string; label: string }[] = [
 const TEXT_KEYS = new Set(TEXT_FIELDS.map((f) => f.key))
 const BOOL_KEYS = new Set(BOOL_FIELDS.map((f) => f.key))
 
-// `config.playbook` grounds the AI conversation coach (see /api/coach). Single-line
-// fields plus two newline-separated lists, kept under the nested `playbook` key.
-const PB_TEXT: { key: string; label: string; placeholder?: string }[] = [
-  { key: 'product', label: 'Product', placeholder: 'What you sell' },
-  { key: 'value_prop', label: 'Value proposition', placeholder: 'The one-line outcome you deliver' },
-  { key: 'tone', label: 'Tone', placeholder: 'e.g. warm, concise, no jargon' },
-  { key: 'cta', label: 'Primary CTA', placeholder: 'e.g. a 15-minute call' },
-]
-const PB_LIST: { key: string; label: string; placeholder?: string }[] = [
-  { key: 'dos', label: "Do's (one per line)", placeholder: 'Answer questions before pitching' },
-  { key: 'donts', label: "Don'ts (one per line)", placeholder: 'No walls of text' },
-]
-
 type Tri = 'default' | 'on' | 'off'
 
 function initText(cfg: Record<string, unknown>) {
@@ -51,47 +41,16 @@ function initBool(cfg: Record<string, unknown>) {
     out[f.key] = cfg[f.key] === true ? 'on' : cfg[f.key] === false ? 'off' : 'default'
   return out
 }
-function initPlaybook(cfg: Record<string, unknown>) {
-  const pb =
-    cfg.playbook && typeof cfg.playbook === 'object' && !Array.isArray(cfg.playbook)
-      ? (cfg.playbook as Record<string, unknown>)
-      : {}
-  const out: Record<string, string> = {}
-  for (const f of PB_TEXT) out[f.key] = pb[f.key] != null ? String(pb[f.key]) : ''
-  for (const f of PB_LIST) out[f.key] = Array.isArray(pb[f.key]) ? (pb[f.key] as string[]).join('\n') : ''
-  return out
-}
-
-/** Save the admin secret in localStorage; on a 401 prompt for it and retry once. */
-async function postConfig(instance_id: string, config: unknown): Promise<Response> {
-  const send = (secret: string | null) =>
-    fetch('/api/config', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(secret ? { 'x-admin-secret': secret } : {}),
-      },
-      body: JSON.stringify({ instance_id, config }),
-    })
-  let res = await send(localStorage.getItem('adminSecret'))
-  if (res.status === 401) {
-    const entered = window.prompt('Admin secret required to save config:')
-    if (!entered) return res
-    localStorage.setItem('adminSecret', entered)
-    res = await send(entered)
-  }
-  return res
-}
 
 export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   const { refetch } = useData()
   const cfg = (inst.config ?? {}) as Record<string, unknown>
 
   const [open, setOpen] = useState(false)
+  const [viewRaw, setViewRaw] = useState(false)
   const [raw, setRaw] = useState(false)
   const [text, setText] = useState(() => initText(cfg))
   const [bool, setBool] = useState(() => initBool(cfg))
-  const [playbook, setPlaybook] = useState(() => initPlaybook(cfg))
   const [rawText, setRawText] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -111,36 +70,16 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     const c = (inst.config ?? {}) as Record<string, unknown>
     setText(initText(c))
     setBool(initBool(c))
-    setPlaybook(initPlaybook(c))
     setRawText('')
   }, [sig, dirty, inst.config])
 
   // Keys present in config but not surfaced as structured fields (e.g. `mapping`)
-  // are preserved so editing a field never drops them. `playbook` is edited
-  // structurally below, so it's excluded here and re-attached in buildFromFields.
+  // are preserved so editing a field never drops them.
   const passthrough = () => {
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(cfg))
-      if (!TEXT_KEYS.has(k) && !BOOL_KEYS.has(k) && k !== 'playbook') out[k] = v
+      if (!TEXT_KEYS.has(k) && !BOOL_KEYS.has(k)) out[k] = v
     return out
-  }
-
-  // Nested playbook object from the structured fields, or undefined when empty
-  // (so an unconfigured account stores no `playbook` key at all).
-  const buildPlaybook = (): Record<string, unknown> | undefined => {
-    const out: Record<string, unknown> = {}
-    for (const f of PB_TEXT) {
-      const v = playbook[f.key].trim()
-      if (v) out[f.key] = v
-    }
-    for (const f of PB_LIST) {
-      const items = playbook[f.key]
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      if (items.length) out[f.key] = items
-    }
-    return Object.keys(out).length ? out : undefined
   }
 
   const buildFromFields = (): Record<string, unknown> => {
@@ -153,8 +92,6 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
       if (bool[f.key] === 'on') out[f.key] = true
       else if (bool[f.key] === 'off') out[f.key] = false // 'default' = omit
     }
-    const pb = buildPlaybook()
-    if (pb) out.playbook = pb
     return out
   }
 
@@ -169,7 +106,6 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           setText(initText(parsed))
           setBool(initBool(parsed))
-          setPlaybook(initPlaybook(parsed))
           setRaw(false)
           setMsg(null)
         } else {
@@ -200,7 +136,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     setBusy(true)
     setMsg(null)
     try {
-      const res = await postConfig(inst.id, config)
+      const res = await adminPost('/api/config', { instance_id: inst.id, config })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
         setMsg(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
@@ -222,12 +158,26 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
       new Date(inst.config_updated_at) > new Date(inst.last_sync_at))
 
   if (!open) {
+    const hasConfig = cfg && Object.keys(cfg).length > 0
     return (
       <div className="config-toggle">
         <button className="link-btn" onClick={() => setOpen(true)}>
           Configure
         </button>
+        {' · '}
+        <button className="link-btn" onClick={() => setViewRaw((v) => !v)}>
+          {viewRaw ? 'Hide raw' : 'View raw'}
+        </button>
         {pending && <span className="config-pending"> · pending next sync</span>}
+        {viewRaw && (
+          // The literal stored override blob (not the editor's reconstructed
+          // view) so the true persisted config is auditable at a glance.
+          <pre className="config-view">
+            {hasConfig
+              ? JSON.stringify(cfg, null, 2)
+              : 'No online config — this notebook runs on its local config.yaml.'}
+          </pre>
+        )}
       </div>
     )
   }
@@ -270,35 +220,6 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
               </select>
             </label>
           ))}
-          <div className="config-playbook">
-            <span className="config-label">AI coach playbook</span>
-            <div className="muted small">
-              Grounds the conversation coach's suggestions. Leave blank to skip.
-            </div>
-            {PB_TEXT.map((f) => (
-              <label className="config-field" key={f.key}>
-                <span className="config-label">{f.label}</span>
-                <input
-                  type="text"
-                  value={playbook[f.key]}
-                  placeholder={f.placeholder}
-                  onChange={(e) => { setDirty(true); setPlaybook({ ...playbook, [f.key]: e.target.value }) }}
-                />
-              </label>
-            ))}
-            {PB_LIST.map((f) => (
-              <label className="config-field" key={f.key}>
-                <span className="config-label">{f.label}</span>
-                <textarea
-                  rows={3}
-                  spellCheck={false}
-                  value={playbook[f.key]}
-                  placeholder={f.placeholder}
-                  onChange={(e) => { setDirty(true); setPlaybook({ ...playbook, [f.key]: e.target.value }) }}
-                />
-              </label>
-            ))}
-          </div>
 
           {Object.keys(passthrough()).length > 0 && (
             <div className="muted small">

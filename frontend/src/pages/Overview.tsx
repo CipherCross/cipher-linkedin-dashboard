@@ -5,6 +5,7 @@ import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { AccountCard } from '../components/AccountCard'
 import { HotLeads } from '../components/HotLeads'
+import { RepliesPanel } from '../components/RepliesPanel'
 import { BriefingCard } from '../components/BriefingCard'
 import { DateRangePicker } from '../components/DateRangePicker'
 
@@ -58,6 +59,14 @@ export function Overview() {
       <KpiCards totals={view.totals} flowLabel={range.label} positive={view.totals.positive} />
 
       <HotLeads
+        leads={data.leads}
+        latest={view.latest}
+        range={range}
+        campaigns={data.campaigns}
+        instances={data.instances}
+      />
+
+      <RepliesPanel
         leads={data.leads}
         latest={view.latest}
         range={range}

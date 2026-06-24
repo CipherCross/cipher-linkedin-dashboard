@@ -6,6 +6,7 @@ import { CampaignDetail } from './pages/CampaignDetail'
 import { AccountDetail } from './pages/AccountDetail'
 import { LeadsExplorer } from './pages/LeadsExplorer'
 import { Replies } from './pages/Replies'
+import { Playbook } from './pages/Playbook'
 import { Health } from './pages/Health'
 import { Chat } from './pages/Chat'
 
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="account/:id" element={<AccountDetail />} />
             <Route path="leads" element={<LeadsExplorer />} />
             <Route path="replies" element={<Replies />} />
+            <Route path="playbook" element={<Playbook />} />
             <Route path="health" element={<Health />} />
             <Route path="chat" element={<Chat />} />
             <Route path="*" element={<Navigate to="/" replace />} />

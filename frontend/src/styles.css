@@ -425,6 +425,9 @@ tr:last-child td { border-bottom: none; }
 .sentiment-filter { margin-bottom: 12px; }
 .sentiment-filter .badge.senti { margin-right: 6px; }
 .reply-body .badge.senti { margin-right: 6px; vertical-align: 1px; }
+.reply-panel { margin-bottom: 18px; }
+.reply-panel-body { margin-top: 12px; }
+.reply-panel-more { display: inline-block; margin-top: 10px; }
 .reply-list { display: flex; flex-direction: column; }
 .reply-row {
   display: grid;
@@ -563,6 +566,13 @@ tr:last-child td { border-bottom: none; }
 }
 .config-raw { display: flex; flex-direction: column; gap: 3px; }
 .config-raw textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.config-view {
+  margin: 8px 0 0; padding: 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  color: #b9c4dd; white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow-y: auto;
+}
 .config-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 /* --- Conversation drawer -------------------------------------------------- */
@@ -721,14 +731,14 @@ tr.row-clickable:hover { background: #161d30; }
 .briefing-section { border-top: 1px solid var(--border); padding-top: 10px; }
 .briefing-section-title { font-weight: 600; margin-bottom: 4px; }
 
-/* Playbook fields inside the instance config editor */
-.config-playbook {
-  grid-column: 1 / -1;
-  display: flex; flex-direction: column; gap: 6px;
-  margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border);
+/* --- Playbook page -------------------------------------------------------- */
+.playbook-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.playbook-editor textarea {
+  width: 100%; box-sizing: border-box; min-height: 460px; resize: vertical;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px; line-height: 1.55;
 }
-.config-field textarea {
-  background: var(--panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 5px 8px; font-size: 13px; resize: vertical; font-family: inherit;
-}
+.playbook-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.playbook-preview { border: 1px solid var(--border); border-radius: 8px; padding: 4px 16px; background: var(--bg); }

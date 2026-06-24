@@ -150,16 +150,6 @@ export interface CoachingDigest {
   model: string | null
 }
 
-/** Product/voice grounding for the coach, stored in instances.config.playbook. */
-export interface Playbook {
-  product?: string
-  value_prop?: string
-  tone?: string
-  dos?: string[]
-  donts?: string[]
-  cta?: string
-}
-
 // --- Morning Briefing (see /api/briefing) ------------------------------------
 
 export interface BriefingSection {
