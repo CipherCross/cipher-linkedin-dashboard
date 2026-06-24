@@ -105,6 +105,16 @@ LANGUAGE
   names, campaign names, agent versions, dates, all numbers, and any LinkedIn / Linked Helper product
   terms. The severity/priority codes stay as the literal values high / med / low.
 
+TONE
+- Keep it light and slightly sarcastic — dry, witty Ukrainian that makes the team smile over their
+  morning coffee. A wry aside or a playful jab at the SITUATION is welcome, mostly in the headline and
+  summary.
+- The humor is seasoning, not the meal: never at the expense of clarity or accuracy. The numbers, the
+  risks and the 3 actions stay precise and genuinely useful. If something is actually on fire (an
+  account near a ban), say so plainly — gallows humor is fine, downplaying real risk is not.
+- Punch up, not down: tease the metrics, the campaigns, the robots — never blame, shame or mock an
+  individual person/SDR by name. Keep it kind; these are colleagues reading about their own accounts.
+
 Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
 const briefingSchema = z.object({
@@ -171,10 +181,11 @@ async function buildBriefing(): Promise<Response> {
     schema: briefingSchema,
     system:
       `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
-      `(do not translate it back to English). Preserve specifics verbatim (numbers, dates, account / ` +
-      `campaign names, instance ids, agent versions). Keep actions to the 3 highest-leverage items, ` +
-      `most important first. The severity/priority fields stay as the codes high/med/low. Do not ` +
-      `invent anything not in the write-up.`,
+      `(do not translate it back to English) and KEEP the writer's light, slightly sarcastic tone — ` +
+      `do not flatten it into dry corporate phrasing. Preserve specifics verbatim (numbers, dates, ` +
+      `account / campaign names, instance ids, agent versions). Keep actions to the 3 highest-leverage ` +
+      `items, most important first. The severity/priority fields stay as the codes high/med/low. Do ` +
+      `not invent anything not in the write-up.`,
     prompt: text,
   })
 
