@@ -25,15 +25,37 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 import yaml
 
-AGENT_VERSION = "1.7.1"
+AGENT_VERSION = "1.7.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
+# already absolute/UTC). Defaults to UTC so behavior is unchanged unless a notebook
+# sets `local_timezone` (an IANA name, e.g. "Europe/Kyiv") in its config; LH2 writes
+# some columns in local wall-clock time, and treating those as UTC shifts them.
+LOCAL_TZ = dt.timezone.utc
+
+
+def set_local_tz(cfg):
+    """Set LOCAL_TZ from cfg['local_timezone'] (IANA name). UTC on any problem."""
+    global LOCAL_TZ
+    name = cfg.get("local_timezone")
+    if not name:
+        LOCAL_TZ = dt.timezone.utc
+        return
+    try:
+        LOCAL_TZ = ZoneInfo(str(name))
+    except (ZoneInfoNotFoundError, ValueError):
+        print(f"local_timezone {name!r} not found — using UTC for naive timestamps")
+        LOCAL_TZ = dt.timezone.utc
 
 LH2_DEFAULT_DIRS = [
     "~/Library/Application Support/Linked Helper 2",   # macOS (older builds)
@@ -119,17 +141,35 @@ def self_update(cfg):
     except requests.RequestException as e:
         print(f"self-update check failed ({e}) — continuing with v{AGENT_VERSION}")
         return False
+    # Integrity gate: a truncated/corrupt download must NEVER overwrite a working
+    # agent (that would brick the notebook's scheduled sync). Verify the transfer
+    # completed and the bytes are a plausible, parseable agent before swapping.
+    clen = r.headers.get("Content-Length")
+    if clen is not None and clen.isdigit() and int(clen) != len(new):
+        print(f"self-update: truncated download ({len(new)}/{clen} bytes) — skipping")
+        return False
     me = os.path.abspath(__file__)
     with open(me, "rb") as f:
-        if hashlib.sha256(f.read()).digest() == hashlib.sha256(new).digest():
-            return False
+        current = f.read()
+    if hashlib.sha256(current).digest() == hashlib.sha256(new).digest():
+        return False
     if b'AGENT_VERSION = "' not in new:
         print("self-update: downloaded file doesn't look like agent.py — skipping")
+        return False
+    if len(new) < len(current) // 2:
+        print(f"self-update: download suspiciously small ({len(new)} bytes) — skipping")
+        return False
+    try:
+        compile(new, me, "exec")  # reject a syntactically broken build
+    except (SyntaxError, ValueError) as e:
+        print(f"self-update: downloaded agent does not parse ({e}) — skipping")
         return False
     tmp = me + ".new"
     with open(tmp, "wb") as f:
         f.write(new)
-    os.replace(tmp, me)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, me)  # atomic swap once we've validated the bytes
     print(f"self-update: installed new agent build (was v{AGENT_VERSION}), restarting")
     return True
 
@@ -149,7 +189,7 @@ REMOTE_CONFIG_KEYS = {
     "instance_label",
     "account_name", "account_url", "account_avatar",
     "auto_update", "sync_steps", "sync_messages",
-    "lh2_db_path", "mapping",
+    "lh2_db_path", "mapping", "local_timezone",
 }
 
 
@@ -200,6 +240,14 @@ def apply_remote_config(cfg):
     return cfg
 
 
+def content_hash(body):
+    """Stable disambiguator for a message body. Two genuinely different messages
+    that happen to share one action-run timestamp (CheckForReplies records a whole
+    thread at one created_at) must not collide on the messages unique key — the hash
+    of the body distinguishes them. NULL/empty bodies hash to a fixed value."""
+    return hashlib.md5((body or "").encode("utf-8")).hexdigest()
+
+
 def iso(value):
     """Best-effort timestamp normalization (epoch ms/s, ISO, common formats)."""
     if value in (None, "", 0, "0"):
@@ -216,7 +264,9 @@ def iso(value):
         try:
             d = dt.datetime.strptime(s, fmt)
             if d.tzinfo is None:
-                d = d.replace(tzinfo=dt.timezone.utc)
+                # Naive wall-clock time from LH2 — interpret in the configured local
+                # timezone (UTC by default) and normalize to UTC.
+                d = d.replace(tzinfo=LOCAL_TZ).astimezone(dt.timezone.utc)
             return d.isoformat()
         except ValueError:
             continue
@@ -292,7 +342,9 @@ def discover_db_path():
             "and set lh2_db_path in config.yaml, or use ingest-csv.")
     candidates.sort(key=os.path.getmtime, reverse=True)
     if len(candidates) > 1:
-        print("multiple LH2 account DBs found, using most recently active:")
+        print("WARNING: multiple LH2 account DBs found; guessing the most recently "
+              "modified one. If this is the wrong account, set lh2_db_path in "
+              "config.yaml (or on the Health page) to pin it explicitly:")
         for p in candidates:
             print(f"  {'->' if p == candidates[0] else '  '} {p}")
     return candidates[0]
@@ -405,6 +457,24 @@ JOIN action_configs ac  ON ac.id = av.config_id
 JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
 WHERE ac.actionType NOT IN ('InvitePerson', 'MessageToPerson', 'CheckForReplies')
 """
+
+# Earliest follow-up message (MessageToPerson) per person — the funnel's
+# first_message_at milestone (the invite note itself is an InvitePerson 'Sent',
+# excluded here). Same join chain as the step queries; fails safe to empty.
+FIRST_MESSAGE_SQL = f"""
+SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+       MIN(ar.created_at) AS first_message_at
+FROM action_result_messages arm
+JOIN action_results ar  ON ar.id = arm.action_result_id
+JOIN action_versions av ON av.id = ar.action_version_id
+JOIN actions a          ON a.id = av.action_id
+JOIN action_configs ac  ON ac.id = av.config_id
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = ar.person_id
+WHERE arm.type IN ('Sent', 'Message')
+  AND ac.actionType = 'MessageToPerson'
+GROUP BY 1
+"""
+
 
 # One row per inbound reply per person (CheckForReplies writes type='Replied').
 STEP_REPLIES_SQL = f"""
@@ -572,13 +642,18 @@ def extract_steps(con, instance_id):
         rep = first_reply.get((lh_cid, profile))          # attribute first reply
         msg_events = [(ts, s) for ts, s in events if (lh_cid, s) in messaging_steps]
         if rep and msg_events:
-            attributed = msg_events[0][1]
+            # Attribute to the latest messaging step sent at/before the reply. If the
+            # reply predates every send (clock skew / data anomaly), attribute to
+            # none — counting it against a step whose message went out later would
+            # inflate that step's reply rate for a message that can't have caused it.
+            attributed = None
             for ts, step in msg_events:
                 if ts <= rep:
                     attributed = step
                 else:
                     break
-            replied_n[(lh_cid, attributed)] = replied_n.get((lh_cid, attributed), 0) + 1
+            if attributed is not None:
+                replied_n[(lh_cid, attributed)] = replied_n.get((lh_cid, attributed), 0) + 1
 
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     out = []
@@ -607,15 +682,31 @@ def extract_messages(con, instance_id):
         if not profile or not sent_at:
             continue
         body = row["body"]
+        body = str(body)[:2000] if body else None
         lh_cid = row["campaign_id"]
         out.append({
             "instance_id": instance_id,
             "campaign_id": f"{instance_id}:{lh_cid}" if lh_cid is not None else None,
             "profile_url": str(profile),
             "direction": str(row["direction"] or "in"),
-            "body": str(body)[:2000] if body else None,
+            "body": body,
             "sent_at": sent_at,
+            "content_hash": content_hash(body),
         })
+    return out
+
+
+def extract_first_messages(con):
+    """Map profile_url -> first_message_at (earliest MessageToPerson send). Built-in
+    schema only; fails safe to {} so a schema change never breaks the sync."""
+    out = {}
+    try:
+        for row in con.execute(FIRST_MESSAGE_SQL):
+            ts = iso(row["first_message_at"])
+            if row["profile_url"] and ts:
+                out[row["profile_url"]] = ts
+    except sqlite3.Error as e:
+        print(f"first-message extraction skipped ({e}) — first_message_at will be empty")
     return out
 
 
@@ -664,6 +755,7 @@ def extract_local(cfg):
                 "status": str(row_get(row, lmap, "status") or ""),
                 "invited_at": iso(row_get(row, lmap, "invited_at")),
                 "connected_at": iso(row_get(row, lmap, "connected_at")),
+                "first_message_at": iso(row_get(row, lmap, "first_message_at")),
                 "replied_at": iso(row_get(row, lmap, "replied_at")),
                 "last_action_at": iso(row_get(row, lmap, "last_action_at")),
                 "updated_at": now,
@@ -678,14 +770,16 @@ def extract_local(cfg):
             if not profile or not sent_at:
                 continue
             body = row_get(row, mmap, "body")
+            body = str(body)[:2000] if body else None
             lh_cid = row_get(row, mmap, "campaign_id")
             messages.append({
                 "instance_id": instance_id,
                 "campaign_id": f"{instance_id}:{lh_cid}" if lh_cid is not None else None,
                 "profile_url": str(profile),
                 "direction": str(row_get(row, mmap, "direction") or "in"),
-                "body": str(body)[:2000] if body else None,
+                "body": body,
                 "sent_at": sent_at,
+                "content_hash": content_hash(body),
             })
     elif cfg.get("sync_messages", True):
         try:
@@ -699,6 +793,17 @@ def extract_local(cfg):
             steps = extract_steps(con, instance_id)
         except Exception as e:  # never let the per-step view break a sync
             print(f"step extraction skipped ({e}) — per-step view will be empty")
+
+    # Back-fill first_message_at (built-in schema) for any lead the mapping didn't
+    # supply it for, matching on the slug-format profile_url. Best-effort: a lead
+    # whose profile_url doesn't match simply keeps its NULL.
+    first_msgs = extract_first_messages(con)
+    if first_msgs:
+        for lead in leads:
+            if not lead.get("first_message_at"):
+                fm = first_msgs.get(lead["profile_url"])
+                if fm:
+                    lead["first_message_at"] = fm
 
     owner = extract_owner(cfg, con)
     con.close()
@@ -750,6 +855,7 @@ def cmd_sync(args):
     # anything else, so auto_update is itself remotely controllable and --dry-run
     # previews exactly what a real sync will use.
     cfg = apply_remote_config(cfg)
+    set_local_tz(cfg)
 
     if not args.dry_run and self_update(cfg):
         reexec()
@@ -774,8 +880,8 @@ def cmd_sync(args):
         total += sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
         total += sb.upsert("events", derive_events(instance_id, leads),
                            on_conflict="instance_id,campaign_id,profile_url,event_type,occurred_at")
-        total += sb.upsert("messages", messages,
-                           on_conflict="instance_id,profile_url,direction,sent_at")
+        total += sb.upsert("messages", dedupe_messages(messages),
+                           on_conflict="instance_id,profile_url,direction,sent_at,content_hash")
         total += sb.upsert("campaign_steps", steps,
                            on_conflict="campaign_id,step_index")
 
@@ -792,11 +898,25 @@ def cmd_sync(args):
         sys.exit(f"sync failed: {e}")
 
 
+def dedupe_messages(messages):
+    """Collapse rows sharing the messages unique key within one batch (keep the
+    earliest). A single Postgres upsert that targets the same conflict key twice
+    fails with 'ON CONFLICT ... cannot affect row a second time', which would abort
+    the whole messages push — so we guarantee uniqueness before sending."""
+    seen = {}
+    for m in sorted(messages, key=lambda x: x["sent_at"]):
+        k = (m["instance_id"], m["profile_url"], m["direction"],
+             m["sent_at"], m["content_hash"])
+        seen.setdefault(k, m)
+    return list(seen.values())
+
+
 def derive_events(instance_id, leads):
     """Turn lead milestone timestamps into append-only events for the chart."""
     events = []
     milestones = [("invited_at", "invite_sent"),
                   ("connected_at", "invite_accepted"),
+                  ("first_message_at", "message_sent"),
                   ("replied_at", "reply_received")]
     for lead in leads:
         for field, etype in milestones:
@@ -824,7 +944,7 @@ def cmd_annotate(args):
         "noted_at": args.date or dt.date.today().isoformat(),
         "instance_id": cfg["instance_id"] if args.instance else None,
         "campaign_id": args.campaign,
-    }], on_conflict="note,noted_at")
+    }], on_conflict="note,noted_at,instance_id,campaign_id")
     print(f"annotation saved: {args.note!r} @ {args.date or 'today'}")
 
 
@@ -850,11 +970,23 @@ def pick(header_map, key, row):
     return None
 
 
+def csv_campaign_slug(name):
+    """Stable, collision-resistant campaign id slug for CSV ingest. A short hash of
+    the exact name is appended so two distinct names that normalize to the same
+    readable slug (e.g. 'Q1 Sales' vs 'Q1  Sales!') never share an id and silently
+    overwrite each other's leads. Stable per exact name, so re-imports stay idempotent."""
+    base = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-") or "campaign"
+    suffix = hashlib.sha1(name.strip().encode("utf-8")).hexdigest()[:6]
+    return f"{base}-{suffix}"
+
+
 def cmd_ingest_csv(args):
     cfg = load_config()
+    set_local_tz(cfg)
     sb = Supabase(cfg)
     instance_id = cfg["instance_id"]
-    campaign_id = f"{instance_id}:{args.campaign.lower().replace(' ', '-')}"
+    slug = csv_campaign_slug(args.campaign)
+    campaign_id = f"{instance_id}:{slug}"
 
     sb.upsert("instances", [dict(extract_owner(cfg, None),
                                  id=instance_id,
@@ -862,7 +994,7 @@ def cmd_ingest_csv(args):
                                  agent_version=AGENT_VERSION)], on_conflict="id")
     sb.upsert("campaigns", [{
         "id": campaign_id, "instance_id": instance_id,
-        "lh_campaign_id": args.campaign.lower().replace(" ", "-"),
+        "lh_campaign_id": slug,
         "name": args.campaign,
         "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }], on_conflict="id")
@@ -889,11 +1021,16 @@ def cmd_ingest_csv(args):
                 "replied_at": iso(pick(hmap, "replied_at", row)),
                 "updated_at": now,
             }
-            # --kind lets exports without date columns still count milestones
+            # --kind lets exports without date columns still count milestones.
+            # A reply implies the connection happened, so synthesize connected_at
+            # too — otherwise the funnel shows replies with no acceptance and
+            # reply_rate (replies/accepted) blows past 100%.
             if args.kind == "successes" and not lead["connected_at"]:
                 lead["connected_at"] = now
             if args.kind == "replies" and not lead["replied_at"]:
                 lead["replied_at"] = now
+            if args.kind == "replies" and not lead["connected_at"]:
+                lead["connected_at"] = lead["replied_at"] or now
             if args.kind in ("successes", "replies") and not lead["invited_at"]:
                 lead["invited_at"] = lead["connected_at"] or now
             lead["last_action_at"] = (lead["replied_at"] or lead["connected_at"]
