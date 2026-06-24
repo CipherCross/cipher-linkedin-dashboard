@@ -1,13 +1,36 @@
 import { useState } from 'react'
 import { useData } from '../lib/DataContext'
-import { ago } from './CampaignTable'
-import type { BriefingRisk } from '../lib/types'
+import type { BriefingAction, BriefingRisk } from '../lib/types'
 
 // Severity → existing badge color classes (see styles.css).
 const SEV_CLS: Record<BriefingRisk['severity'], string> = {
   high: 'badge risk',
   med: 'badge status-running',
   low: 'badge senti neu',
+}
+
+// Ukrainian display labels for the severity/priority codes (the stored values
+// stay high/med/low so the rest of the code and the API contract are unchanged).
+const LEVEL_UK: Record<BriefingRisk['severity'], string> = {
+  high: 'високий',
+  med: 'середній',
+  low: 'низький',
+}
+
+const ACTION_CLS: Record<BriefingAction['priority'], string> = {
+  high: 'badge risk',
+  med: 'badge senti neu',
+  low: 'badge senti neu',
+}
+
+/** Ukrainian relative time (ago() in CampaignTable is English-only). */
+function agoUk(ts: string | null): string {
+  if (!ts) return '—'
+  const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60_000)
+  if (mins < 1) return 'щойно'
+  if (mins < 60) return `${mins} хв тому`
+  if (mins < 48 * 60) return `${Math.round(mins / 60)} год тому`
+  return `${Math.round(mins / 1440)} дн тому`
 }
 
 /** The Morning Briefing: a daily AI-generated digest of the whole pipeline,
@@ -40,21 +63,21 @@ export function BriefingCard() {
     <div className="card briefing-card">
       <div className="briefing-head">
         <div>
-          <h2 className="briefing-title">📣 Morning briefing</h2>
+          <h2 className="briefing-title">📣 Ранковий брифінг</h2>
           {briefing ? (
             <div className="muted small">
               {briefing.briefing_date}
-              {briefing.created_at ? ` · generated ${ago(briefing.created_at)}` : ''}
+              {briefing.created_at ? ` · згенеровано ${agoUk(briefing.created_at)}` : ''}
               {briefing.model ? ` · ${briefing.model}` : ''}
             </div>
           ) : (
             <div className="muted small">
-              No briefing yet — generate one to see today's pipeline at a glance.
+              Брифінгу ще немає — згенеруйте, щоб побачити стан пайплайну за сьогодні.
             </div>
           )}
         </div>
         <button className="btn-accent" onClick={refresh} disabled={busy}>
-          {busy ? 'Analyzing…' : briefing ? 'Refresh briefing' : 'Generate briefing'}
+          {busy ? 'Аналізую…' : briefing ? 'Оновити брифінг' : 'Згенерувати брифінг'}
         </button>
       </div>
 
@@ -67,13 +90,11 @@ export function BriefingCard() {
 
           {briefing.actions?.length > 0 && (
             <div className="briefing-actions">
-              <div className="briefing-label">Today’s actions</div>
+              <div className="briefing-label">Дії на сьогодні</div>
               <ol>
                 {briefing.actions.map((a, i) => (
                   <li key={i}>
-                    <span className={`badge ${a.priority === 'high' ? 'risk' : 'senti neu'}`}>
-                      {a.priority}
-                    </span>{' '}
+                    <span className={ACTION_CLS[a.priority]}>{LEVEL_UK[a.priority]}</span>{' '}
                     {a.text}
                   </li>
                 ))}
@@ -83,12 +104,12 @@ export function BriefingCard() {
 
           {briefing.risks?.length > 0 && (
             <div className="briefing-risks">
-              <div className="briefing-label">Risks</div>
+              <div className="briefing-label">Ризики</div>
               <ul>
                 {briefing.risks.map((r, i) => (
                   <li key={i}>
                     <span className={SEV_CLS[r.severity]} title={r.kind}>
-                      {r.severity}
+                      {LEVEL_UK[r.severity]}
                     </span>{' '}
                     {r.text}
                   </li>
@@ -104,7 +125,7 @@ export function BriefingCard() {
                 onClick={() => setShowDetails((s) => !s)}
               >
                 <span className="coach-digest-caret">{showDetails ? '▾' : '▸'}</span>
-                {showDetails ? 'Hide details' : `Details (${briefing.sections.length})`}
+                {showDetails ? 'Сховати деталі' : `Деталі (${briefing.sections.length})`}
               </button>
               {showDetails && (
                 <div className="briefing-sections">

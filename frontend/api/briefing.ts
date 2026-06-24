@@ -83,9 +83,13 @@ HOW TO WORK
 - Replies LAG invites — never compare raw invites-this-week vs replies-this-week; reason in cohorts and
   note when recent cohorts are simply still maturing rather than genuinely down.
 - Ground every number in real query results; never guess. Be honest about small samples and stale data.
+- RECONCILE rates before you cite them: a daily pace and a weekly/period total must be arithmetically
+  consistent (a "~65/day" claim cannot sit next to "261 in the week", which is ~37/day). State the time
+  window each figure is based on, and if recent days differ from the period average, say so explicitly
+  rather than quoting two numbers that contradict each other.
 
 THE BRIEFING (write it as your final message, in markdown)
-- A one-line HEADLINE capturing the single most important thing this morning.
+- A one-line HEADLINE (one tight clause, ~max 120 chars) capturing the single most important thing.
 - A short SUMMARY (2-4 sentences): the state of play and what changed since recent days.
 - A few SECTIONS (titled) covering what changed, notable campaigns/accounts, and reply quality.
 - RISKS: specific at-risk callouts (account near the invite limit, stale/failed sync, hot reply going
@@ -93,6 +97,14 @@ THE BRIEFING (write it as your final message, in markdown)
 - EXACTLY 3 ACTIONS: the three highest-leverage things the team should do TODAY, most important first,
   each concrete and specific to the data (name the account/campaign/lead-count).
 Be specific and brief. No filler, no generic advice.
+
+LANGUAGE
+- Write the ENTIRE briefing in UKRAINIAN (українською) — headline, summary, every section, every risk
+  and every action. Use natural, concise business Ukrainian, not a word-for-word translation.
+- Keep these VERBATIM (do not translate or transliterate): instance ids (e.g. notebook-3), account
+  names, campaign names, agent versions, dates, all numbers, and any LinkedIn / Linked Helper product
+  terms. The severity/priority codes stay as the literal values high / med / low.
+
 Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
 const briefingSchema = z.object({
@@ -158,9 +170,11 @@ async function buildBriefing(): Promise<Response> {
     model: anthropic(STRUCTURE_MODEL),
     schema: briefingSchema,
     system:
-      `Extract the structured briefing from the analyst's write-up below. Preserve specifics ` +
-      `(numbers, account/campaign names). Keep actions to the 3 highest-leverage items, most ` +
-      `important first. Do not invent anything not in the write-up.`,
+      `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
+      `(do not translate it back to English). Preserve specifics verbatim (numbers, dates, account / ` +
+      `campaign names, instance ids, agent versions). Keep actions to the 3 highest-leverage items, ` +
+      `most important first. The severity/priority fields stay as the codes high/med/low. Do not ` +
+      `invent anything not in the write-up.`,
     prompt: text,
   })
 

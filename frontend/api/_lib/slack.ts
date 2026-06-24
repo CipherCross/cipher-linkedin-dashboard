@@ -16,12 +16,21 @@ type Block = Record<string, unknown>
 
 const SEV_EMOJI: Record<string, string> = { high: '🔴', med: '🟠', low: '🟡' }
 
+/** Ukrainian plural for "ризик" (1 ризик / 2-4 ризики / 5+ ризиків). */
+function risksUk(n: number): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return `${n} ризик`
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ризики`
+  return `${n} ризиків`
+}
+
 /** Build the Slack Block Kit payload for one briefing. */
 function blocksFor(b: BriefingForSlack): Block[] {
   const blocks: Block[] = [
     {
       type: 'header',
-      text: { type: 'plain_text', text: `📣 ${b.headline || 'Daily briefing'}`.slice(0, 150) },
+      text: { type: 'plain_text', text: `📣 ${b.headline || 'Щоденний брифінг'}`.slice(0, 150) },
     },
   ]
 
@@ -33,7 +42,7 @@ function blocksFor(b: BriefingForSlack): Block[] {
   if (actions.length) {
     blocks.push({ type: 'divider' })
     const text =
-      '*Today’s actions*\n' +
+      '*Дії на сьогодні*\n' +
       actions.map((a, i) => `${i + 1}. ${a.text}`).join('\n')
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })
   }
@@ -41,7 +50,7 @@ function blocksFor(b: BriefingForSlack): Block[] {
   const risks = (b.risks ?? []).slice(0, 6)
   if (risks.length) {
     const text =
-      '*Risks*\n' +
+      '*Ризики*\n' +
       risks.map((r) => `${SEV_EMOJI[r.severity ?? ''] ?? '•'} ${r.text}`).join('\n')
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })
   }
@@ -51,7 +60,7 @@ function blocksFor(b: BriefingForSlack): Block[] {
     elements: [
       {
         type: 'mrkdwn',
-        text: `${b.briefing_date} · ${risks.length} risk${risks.length === 1 ? '' : 's'} · ${b.model ?? 'ai'}`,
+        text: `${b.briefing_date} · ${risksUk(risks.length)} · ${b.model ?? 'ai'}`,
       },
     ],
   })
@@ -70,7 +79,7 @@ export async function postBriefingToSlack(
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        text: `📣 ${briefing.headline || 'Daily briefing'}`, // notification fallback
+        text: `📣 ${briefing.headline || 'Щоденний брифінг'}`, // notification fallback
         blocks: blocksFor(briefing),
       }),
     })
