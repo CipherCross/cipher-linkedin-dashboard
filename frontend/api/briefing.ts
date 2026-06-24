@@ -218,7 +218,10 @@ async function buildBriefing(): Promise<Response> {
     .upsert(row, { onConflict: 'briefing_date' })
     .select()
     .single()
-  if (error) return json({ error: error.message }, 500)
+  if (error) {
+    console.error('briefing upsert failed:', error.message)
+    return json({ error: 'Failed to store the briefing.' }, 500)
+  }
 
   await postBriefingToSlack(process.env.SLACK_WEBHOOK_URL, {
     briefing_date,
@@ -243,7 +246,8 @@ async function handle(req: Request): Promise<Response> {
   try {
     return await buildBriefing()
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500)
+    console.error('briefing failed:', e instanceof Error ? e.message : String(e))
+    return json({ error: 'Failed to generate the briefing — check server logs.' }, 500)
   }
 }
 

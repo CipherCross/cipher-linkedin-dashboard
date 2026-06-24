@@ -170,8 +170,18 @@ async function loadPlaybook(sb: Sb, instance_id: string): Promise<Playbook | nul
   return pb && typeof pb === 'object' && !Array.isArray(pb) ? (pb as Playbook) : null
 }
 
-const markerOf = (thread: Msg[]) =>
-  `${thread[thread.length - 1]?.sent_at ?? ''}|${thread.length}`
+/** djb2 hash of a string → short hex, so the staleness marker also changes when the
+ *  last message's BODY changes (not just its timestamp/count). */
+function hashStr(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
+const markerOf = (thread: Msg[]) => {
+  const last = thread[thread.length - 1]
+  return `${last?.sent_at ?? ''}|${thread.length}|${last?.body ? hashStr(last.body) : '0'}`
+}
 
 interface CoachingOut {
   next_action: string
@@ -233,17 +243,24 @@ async function coachConversation(
   return { ...row, cached: false }
 }
 
-/** Profiles whose newest message is inbound — the prospect is waiting on us. */
+/** Profiles whose newest message is inbound — the prospect is waiting on us.
+ *  Paginated so a busy account beyond ~5000 messages isn't silently truncated
+ *  (which would drop actionable threads from the digest). */
 async function actionableProfiles(sb: Sb, instance_id: string): Promise<string[]> {
-  const { data } = await sb
-    .from('messages')
-    .select('profile_url,direction,sent_at')
-    .eq('instance_id', instance_id)
-    .order('sent_at', { ascending: false })
-    .limit(5000)
+  const PAGE = 1000
   const latestDir = new Map<string, string>()
-  for (const m of (data ?? []) as { profile_url: string; direction: string }[]) {
-    if (!latestDir.has(m.profile_url)) latestDir.set(m.profile_url, m.direction)
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await sb
+      .from('messages')
+      .select('profile_url,direction,sent_at')
+      .eq('instance_id', instance_id)
+      .order('sent_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    const rows = (data ?? []) as { profile_url: string; direction: string }[]
+    for (const m of rows) {
+      if (!latestDir.has(m.profile_url)) latestDir.set(m.profile_url, m.direction)
+    }
+    if (rows.length < PAGE) break
   }
   return [...latestDir.entries()].filter(([, d]) => d === 'in').map(([p]) => p)
 }

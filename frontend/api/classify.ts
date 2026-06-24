@@ -126,11 +126,17 @@ async function handle(req: Request): Promise<Response> {
   // group by (instance_id, profile_url). profile_url is near-unique, so the
   // .in() over-fetch is small and we filter to the exact pair client-side.
   const profiles = [...new Set(replies.map((r) => r.profile_url))]
+  const instances = [...new Set(replies.map((r) => r.instance_id))]
+  // Scope by instance too (profile_url isn't globally unique across accounts), and
+  // fetch newest-first so PostgREST's 1000-row cap drops the OLDEST context rather
+  // than the recent messages we actually need around each reply.
   const { data: ctxRows } = await sb
     .from('messages')
     .select('instance_id,profile_url,direction,body,sent_at')
+    .in('instance_id', instances)
     .in('profile_url', profiles)
-    .order('sent_at', { ascending: true })
+    .order('sent_at', { ascending: false })
+    .limit(5000)
   const threads = new Map<string, Msg[]>()
   for (const m of (ctxRows ?? []) as Msg[]) {
     const k = key(m.instance_id, m.profile_url)
@@ -138,6 +144,8 @@ async function handle(req: Request): Promise<Response> {
     if (!arr) threads.set(k, (arr = []))
     arr.push(m)
   }
+  // renderReply expects each thread oldest-first; we fetched newest-first.
+  for (const arr of threads.values()) arr.reverse()
 
   const now = new Date().toISOString()
   let classified = 0
@@ -162,8 +170,15 @@ async function handle(req: Request): Promise<Response> {
       prompt,
     })
 
+    // The model returns a `ref` per reply; trust it only as a valid, in-range,
+    // not-yet-used index into THIS group, so a hallucinated/duplicate ref can't
+    // write a sentiment onto the wrong message.
+    const usedRefs = new Set<number>()
     await Promise.all(
       object.results.map(async (r) => {
+        if (!Number.isInteger(r.ref) || r.ref < 0 || r.ref >= group.length) return
+        if (usedRefs.has(r.ref)) return
+        usedRefs.add(r.ref)
         const reply = group[r.ref]
         if (!reply) return
         const { error: upErr } = await sb
