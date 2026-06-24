@@ -34,8 +34,10 @@ const SEED_QUERIES: { label: string; sql: string }[] = [
   { label: 'Weekly invite cohorts (weekly_funnel)', sql: WEEKLY_FUNNEL_SQL },
   {
     label: 'Recent sync runs (freshness / failures)',
-    sql: `select instance_id, status, started_at, finished_at, rows_upserted, error
-          from sync_runs order by started_at desc limit 20`,
+    sql: `select coalesce(i.account_name, i.label, s.instance_id) as account, s.instance_id,
+                 s.status, s.started_at, s.finished_at, s.rows_upserted, s.error
+          from sync_runs s join instances i on i.id = s.instance_id
+          order by s.started_at desc limit 20`,
   },
   {
     label: 'Inbound replies in the last 24h by sentiment',
@@ -46,21 +48,18 @@ const SEED_QUERIES: { label: string; sql: string }[] = [
   },
   {
     label: 'Invites sent per account in the last 7 days (limit risk)',
-    sql: `select instance_id, count(*) as invites_7d
-          from leads where invited_at > now() - interval '7 days'
-          group by 1 order by 2 desc`,
+    sql: `select coalesce(i.account_name, i.label, l.instance_id) as account, l.instance_id,
+                 count(*) as invites_7d
+          from leads l join instances i on i.id = l.instance_id
+          where l.invited_at > now() - interval '7 days'
+          group by 1, 2 order by 3 desc`,
   },
   {
-    label: 'Hot replies (positive/objection) still awaiting our response',
-    sql: `with latest as (
-            select distinct on (instance_id, profile_url)
-              instance_id, profile_url, direction, sentiment, sent_at
-            from messages
-            order by instance_id, profile_url, sent_at desc
-          )
-          select instance_id, sentiment, count(*) as waiting
-          from latest
-          where direction = 'in' and sentiment in ('positive', 'objection')
+    label: 'Reply quality in the last 14 days by account (volume + sentiment)',
+    sql: `select coalesce(i.account_name, i.label, m.instance_id) as account,
+                 m.sentiment, count(*) as replies
+          from messages m join instances i on i.id = m.instance_id
+          where m.direction = 'in' and m.sent_at > now() - interval '14 days'
           group by 1, 2 order by 3 desc`,
   },
 ]
@@ -78,10 +77,15 @@ HOW TO WORK
   takes 5-15 targeted queries. Do not stop after the seed data.
 - Investigate what CHANGED and what's AT RISK: acceptance/reply-rate moves vs prior weeks (segment by
   account, campaign, and message step), accounts approaching LinkedIn's ~100-200 invites/week safe
-  zone, hot replies (positive/objection) left unanswered, stale or failed syncs (check
-  instances.last_sync_at and sync_runs), and stalled cohorts.
+  zone, stale or failed syncs (check instances.last_sync_at and sync_runs), and stalled cohorts.
 - Replies LAG invites — never compare raw invites-this-week vs replies-this-week; reason in cohorts and
   note when recent cohorts are simply still maturing rather than genuinely down.
+- DO NOT judge follow-up status from message threads. Linked Helper syncs its internal DB on a lag, so
+  outbound replies the SDR has ALREADY sent may not be in the data yet — a thread that looks
+  "unanswered" usually isn't. NEVER claim conversations are awaiting our reply or going cold, NEVER
+  count "N hot replies waiting", and NEVER turn response latency into an action or a risk. Use the
+  messages data only for reply VOLUME and SENTIMENT (did a reply come in, and what kind), never for
+  who-replied-last.
 - Ground every number in real query results; never guess. Be honest about small samples and stale data.
 - RECONCILE rates before you cite them: a daily pace and a weekly/period total must be arithmetically
   consistent (a "~65/day" claim cannot sit next to "261 in the week", which is ~37/day). State the time
@@ -90,30 +94,36 @@ HOW TO WORK
 
 THE BRIEFING (write it as your final message, in markdown)
 - A one-line HEADLINE (one tight clause, ~max 120 chars) capturing the single most important thing.
-- A short SUMMARY (2-4 sentences): the state of play and what changed since recent days.
-- A few SECTIONS (titled) covering what changed, notable campaigns/accounts, and reply quality.
-- RISKS: specific at-risk callouts (account near the invite limit, stale/failed sync, hot reply going
-  cold, rate cliff) — each with a severity (low/med/high). Omit if genuinely nothing is wrong.
-- EXACTLY 3 ACTIONS: the three highest-leverage things the team should do TODAY, most important first,
-  each concrete and specific to the data (name the account/campaign/lead-count).
-Be specific and brief. No filler, no generic advice.
+- A SUMMARY of 2-3 short sentences. Lead with the single most important fact; don't recap everything.
+- At most 2 short SECTIONS (titled), 1-2 sentences each — and only if they add something the summary
+  doesn't. Omit sections entirely on a quiet day.
+- RISKS: specific at-risk callouts (account near the invite limit, stale/failed sync, rate cliff,
+  stalled cohort) — each ONE short line with a severity (low/med/high). Omit if nothing is wrong.
+- EXACTLY 3 ACTIONS: the three highest-leverage moves for TODAY, most important first — each ONE
+  imperative sentence naming the account/campaign and the single number that justifies it.
 
 LANGUAGE
 - Write the ENTIRE briefing in UKRAINIAN (українською) — headline, summary, every section, every risk
   and every action. Use natural, concise business Ukrainian, not a word-for-word translation.
-- Keep these VERBATIM (do not translate or transliterate): instance ids (e.g. notebook-3), account
-  names, campaign names, agent versions, dates, all numbers, and any LinkedIn / Linked Helper product
-  terms. The severity/priority codes stay as the literal values high / med / low.
+- NAME ACCOUNTS BY THEIR LINKEDIN ACCOUNT NAME — that's what the team recognises. Every account-level
+  seed row has an "account" column with the name to use; fall back to the label, then the instance id,
+  ONLY when no name exists. Never surface a raw instance id like "notebook-3" when a name is available.
+- Keep these VERBATIM (do not translate or transliterate): account names, campaign names, agent
+  versions, dates, all numbers, and any LinkedIn / Linked Helper product terms. The severity/priority
+  codes stay as the literal values high / med / low.
 
-TONE
-- Keep it light and slightly sarcastic — dry, witty Ukrainian that makes the team smile over their
-  morning coffee. A wry aside or a playful jab at the SITUATION is welcome, mostly in the headline and
-  summary.
-- The humor is seasoning, not the meal: never at the expense of clarity or accuracy. The numbers, the
-  risks and the 3 actions stay precise and genuinely useful. If something is actually on fire (an
-  account near a ban), say so plainly — gallows humor is fine, downplaying real risk is not.
-- Punch up, not down: tease the metrics, the campaigns, the robots — never blame, shame or mock an
-  individual person/SDR by name. Keep it kind; these are colleagues reading about their own accounts.
+VOICE
+- Energetic, vivid, plain-spoken Ukrainian. Reach for punchy, concrete verbs ("шпарить", "холонуть",
+  "простоює") — they make it lively and quick to read.
+- NO sarcasm, NO jokes, NO snark, no cute asides — lively and direct, not a comedy set. Stay
+  respectful: describe what an ACCOUNT is doing, never blame or mock a person/SDR by name.
+
+BREVITY — the team must scan this in ~20 seconds, so keep it tight and airy
+- Short sentences over compound ones. Cut every word that isn't carrying weight.
+- ONE number per claim — the most telling one. Don't stack "263/week + 78/day + 7.3% + 186 queued"
+  into one sentence; pick the single figure that makes the point.
+- No repetition: if a point is in an action, don't re-explain it in the summary or risks. A risk an
+  action already handles gets one bare line, not the fix again.
 
 Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
@@ -181,11 +191,13 @@ async function buildBriefing(): Promise<Response> {
     schema: briefingSchema,
     system:
       `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
-      `(do not translate it back to English) and KEEP the writer's light, slightly sarcastic tone — ` +
-      `do not flatten it into dry corporate phrasing. Preserve specifics verbatim (numbers, dates, ` +
-      `account / campaign names, instance ids, agent versions). Keep actions to the 3 highest-leverage ` +
-      `items, most important first. The severity/priority fields stay as the codes high/med/low. Do ` +
-      `not invent anything not in the write-up.`,
+      `(do not translate it back to English) and KEEP the lively, punchy voice — but TIGHTEN it: trim ` +
+      `bloat, drop repetition, make every action ONE short imperative sentence and every risk ONE ` +
+      `short line. Preserve specifics verbatim (numbers, dates, account / campaign names, agent ` +
+      `versions) but keep only the single most telling number per point. Refer to accounts by their ` +
+      `LinkedIn account name, never by a raw instance id like "notebook-3". Keep the 3 highest-` +
+      `leverage actions, most important first. The severity/priority fields stay as the codes ` +
+      `high/med/low. Do not invent anything not in the write-up.`,
     prompt: text,
   })
 
