@@ -113,10 +113,11 @@ LANGUAGE
   codes stay as the literal values high / med / low.
 
 VOICE
-- Energetic, vivid, plain-spoken Ukrainian. Reach for punchy, concrete verbs ("шпарить", "холонуть",
-  "простоює") — they make it lively and quick to read.
-- NO sarcasm, NO jokes, NO snark, no cute asides — lively and direct, not a comedy set. Stay
-  respectful: describe what an ACCOUNT is doing, never blame or mock a person/SDR by name.
+- Clear, calm, professional Ukrainian. Concrete and specific, but measured — favour neutral, precise
+  verbs ("зростає", "сповільнюється", "простоює") over slangy or dramatic ones. Inform, don't alarm.
+- NO sarcasm, NO jokes, NO snark. Stay respectful and matter-of-fact: describe what an ACCOUNT is
+  doing, never blame or mock a person/SDR by name. Frame risks as observations to act on, not as
+  failures.
 
 BREVITY — the team must scan this in ~20 seconds, so keep it tight and airy
 - Short sentences over compound ones. Cut every word that isn't carrying weight.
@@ -191,7 +192,7 @@ async function buildBriefing(): Promise<Response> {
     schema: briefingSchema,
     system:
       `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
-      `(do not translate it back to English) and KEEP the lively, punchy voice — but TIGHTEN it: trim ` +
+      `(do not translate it back to English) and KEEP a clear, calm, professional voice — but TIGHTEN it: trim ` +
       `bloat, drop repetition, make every action ONE short imperative sentence and every risk ONE ` +
       `short line. Preserve specifics verbatim (numbers, dates, account / campaign names, agent ` +
       `versions) but keep only the single most telling number per point. Refer to accounts by their ` +
