@@ -1,8 +1,15 @@
 // Morning Briefing. The chat copilot (/api/chat) runs a deep autonomous SQL
 // investigation over the whole pipeline — but only when someone asks. This wraps
 // that SAME agentic loop (same `tools`, SCHEMA_DOC, executeSql) in a scheduled job
-// that investigates on its own each morning, structures the result, stores it
-// (one row per day) and pushes it to Slack. The Overview card reads the latest row.
+// that investigates on its own each morning, then stores one row/day and pushes
+// it to Slack. The Overview card reads the latest row.
+//
+// Accuracy matters (the sales team ACTS on this), so it's a 3-stage ensemble:
+//   1. INVESTIGATE — two Opus passes in parallel, risk-first and growth-first,
+//      each diffing today's data against the previous briefing.
+//   2. VERIFY+MERGE — a third Opus re-runs the queries behind every claim, fuses
+//      the two angles into one, reconciles rates, and enforces novelty vs yesterday.
+//   3. STRUCTURE — coerce the verified narrative into the stored/Slack schema.
 //
 // Triggers:
 //   GET  — the daily Vercel cron at 07:00 UTC (guarded by CRON_SECRET), after the
@@ -25,7 +32,28 @@ import { postBriefingToSlack } from './_lib/slack.js'
 export const maxDuration = 300
 
 const INVESTIGATE_MODEL = 'claude-opus-4-8' // deep autonomous investigation
-const STRUCTURE_MODEL = 'claude-sonnet-4-6' // coerce the narrative into a schema
+const VERIFY_MODEL = 'claude-opus-4-8' // adversarial fact-check + merge pass
+const STRUCTURE_MODEL = 'claude-opus-4-8' // coerce the narrative into a schema (Opus: don't lose nuance)
+
+// Two independent investigation angles run in parallel, then the verifier merges
+// the strongest data-backed points from each. Diverse lenses surface risks AND
+// opportunities one pass would under-explore.
+const ANGLES: { label: string; lens: string }[] = [
+  {
+    label: 'risk-first',
+    lens:
+      `INVESTIGATE WITH A RISK-FIRST LENS: hunt for what is AT RISK or DECLINING — accounts near LinkedIn's ` +
+      `invite safe-zone, falling acceptance/reply rates, stale or failed syncs, stalled cohorts, ` +
+      `negative-sentiment clusters. Lead with the most serious problems.`,
+  },
+  {
+    label: 'growth-first',
+    lens:
+      `INVESTIGATE WITH A GROWTH-FIRST LENS: hunt for what is WORKING and where to LEAN IN — accounts and ` +
+      `campaigns with rising acceptance/reply rates, strong positive sentiment, headroom under the invite ` +
+      `limit, message steps that outperform. Lead with the biggest opportunities.`,
+  },
+]
 
 // How stale the previous briefing may be and still be worth diffing against.
 // Beyond this (or with none at all) we skip continuity and just write today's.
@@ -149,6 +177,46 @@ BREVITY — the team must scan this in ~20 seconds, so keep it tight and airy
 
 Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
+// Stage 2's adversarial editor. The sales team ACTS on this briefing, so a second
+// model re-checks every claim against the database with the same SQL tools before
+// it ships — catching wrong/stale numbers, rate contradictions, immature-cohort
+// misreads, repeated standing facts, and framing violations the first pass missed.
+const VERIFY_SYSTEM = `You are the editor who fact-checks the morning briefing before it ships to a sales
+team that will ACT on it. You have the SAME read-only SQL tools as the analyst. You are given TWO draft
+briefings of the same morning — one written RISK-FIRST, one GROWTH-FIRST — plus the seed data and, when one
+exists, the previous day's briefing. Fact-check, MERGE them into ONE, and output the final briefing,
+correct and grounded and genuinely NEW.
+
+${SCHEMA_DOC}
+
+VERIFY (use the tools — re-run queries, do NOT trust the drafts' numbers)
+- MERGE the two drafts into a single coherent briefing: take the best-supported risk from the risk-first
+  draft and the best-supported opportunity from the growth-first draft, reconcile points they both make,
+  and drop the weaker or duplicated ones. The result is ONE briefing, never two concatenated.
+- Check EVERY figure in the draft against the database. Re-run the query behind it; if a number is wrong,
+  stale, or unsupported, fix it or cut it. A confidently wrong number is worse than an omitted one.
+- RECONCILE rates: a daily pace and a weekly/period total must be arithmetically consistent (a "~65/day"
+  claim cannot sit next to "261 in the week", ~37/day). Fix any two numbers that contradict each other and
+  state the time window behind each.
+- COHORTS: replies LAG invites. Confirm every acceptance/reply-rate claim is built from invite-week cohorts,
+  and that a "down vs last week" is a real decline, not a recent cohort still maturing — soften or cut it
+  if it's just immature.
+- NOVELTY: diff against the previous briefing. Cut anything that merely restates an unchanged standing fact.
+  Every CHANGES line must be a real, data-backed day-over-day delta with the right trend; drop or fix any
+  that isn't, and make sure a material change the analyst missed gets added.
+- FRAMING: never claim the team "did", "completed" or "fixed" anything — infer only from metric movement.
+  Never judge who-replied-last from message threads (Linked Helper syncs on a lag). Strip any such claim.
+- BREVITY: if the day is genuinely quiet, make the briefing SHORTER — never pad it to look busy.
+
+OUTPUT
+- The corrected FINAL briefing as markdown, in UKRAINIAN, in the SAME shape the analyst used: a one-line
+  headline, a 2-3 sentence summary, CHANGES (day-over-day deltas, each tagged up/down/flat/new/resolved;
+  empty if there's no previous briefing or nothing moved), at most 2 sections, risks with severities, and
+  EXACTLY 3 actions. Refer to accounts by their LinkedIn account name, never a raw instance id.
+- Output ONLY the briefing — no preamble, no notes about what you changed.
+
+Today's date: ${new Date().toISOString().slice(0, 10)}.`
+
 const briefingSchema = z.object({
   headline: z.string(),
   summary: z.string(),
@@ -258,13 +326,39 @@ async function buildBriefing(): Promise<Response> {
       `day-over-day deltas in CHANGES. Do not restate facts from it that have not changed.`
     : `\n\n(No recent previous briefing to compare against — leave CHANGES empty and just write today's briefing.)`
 
-  // Stage 1 — investigate with the same tools the chat copilot uses.
+  // Stage 1 — investigate from two independent angles IN PARALLEL (risk-first and
+  // growth-first), each with the same tools the chat copilot uses.
+  const drafts = await Promise.all(
+    ANGLES.map(async ({ label, lens }) => {
+      const { text } = await generateText({
+        model: anthropic(INVESTIGATE_MODEL),
+        system: BRIEFING_SYSTEM,
+        prompt:
+          `Here are today's seed query results. ${lens}\n\nInvestigate further with the tools, then ` +
+          `write the briefing.\n\n${seed}${priorBlock}`,
+        tools,
+        stopWhen: stepCountIs(40),
+        maxOutputTokens: 8000,
+        providerOptions: {
+          anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
+        },
+      })
+      return { label, text }
+    })
+  )
+  const draftsBlock = drafts.map((d) => `### DRAFT — ${d.label}\n${d.text}`).join('\n\n')
+
+  // Stage 2 — adversarial fact-check + merge. A third analyst re-runs the queries
+  // behind every claim, reconciles rates, enforces novelty vs yesterday, strips
+  // framing violations, and fuses the two angles into one corrected briefing.
   const { text } = await generateText({
-    model: anthropic(INVESTIGATE_MODEL),
-    system: BRIEFING_SYSTEM,
+    model: anthropic(VERIFY_MODEL),
+    system: VERIFY_SYSTEM,
     prompt:
-      `Here are today's seed query results. Investigate further with the tools, then write the ` +
-      `briefing.\n\n${seed}${priorBlock}`,
+      `Two draft briefings of the same morning, written from different angles — merge and correct them:\n\n` +
+      `${draftsBlock}\n\n---\nSEED DATA:\n${seed}` +
+      (priorInfo ? `\n\n---\nPREVIOUS BRIEFING:\n${priorMd}` : '') +
+      `\n\nFact-check against the database with the tools, then output ONLY the merged, corrected final briefing.`,
     tools,
     stopWhen: stepCountIs(30),
     maxOutputTokens: 8000,
@@ -273,7 +367,7 @@ async function buildBriefing(): Promise<Response> {
     },
   })
 
-  // Stage 2 — coerce the narrative into the stored/Slack shape.
+  // Stage 3 — coerce the verified narrative into the stored/Slack shape.
   const { object } = await generateObject({
     model: anthropic(STRUCTURE_MODEL),
     schema: briefingSchema,
