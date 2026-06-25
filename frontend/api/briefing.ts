@@ -27,6 +27,10 @@ export const maxDuration = 300
 const INVESTIGATE_MODEL = 'claude-opus-4-8' // deep autonomous investigation
 const STRUCTURE_MODEL = 'claude-sonnet-4-6' // coerce the narrative into a schema
 
+// How stale the previous briefing may be and still be worth diffing against.
+// Beyond this (or with none at all) we skip continuity and just write today's.
+const MAX_PRIOR_AGE_DAYS = 7
+
 // Lightweight grounding queries run before the model investigates, so the briefing
 // is anchored in current numbers even if it under-explores. Failures are skipped.
 const SEED_QUERIES: { label: string; sql: string }[] = [
@@ -92,9 +96,26 @@ HOW TO WORK
   window each figure is based on, and if recent days differ from the period average, say so explicitly
   rather than quoting two numbers that contradict each other.
 
+CONTINUITY (day-over-day) — this is what makes the briefing worth reading every morning
+- You may be given the PREVIOUS briefing after the seed data. When it's there, your job is to report what
+  CHANGED since then, not to rewrite it. Investigate each prior risk and action with SQL and decide whether
+  the underlying situation RESOLVED, PROGRESSED, or still PERSISTS — judging ONLY from the data.
+- Produce a short CHANGES list (≤4 lines): the day-over-day deltas that actually matter — a rate that moved,
+  a prior risk that cleared, a new development, an action whose situation now looks better or worse. One
+  line each, tagged with a trend: up (improved), down (worsened), flat (unchanged / still open), new (new
+  since the previous briefing), resolved (a prior risk or issue no longer present).
+- INFER progress ONLY from observable metric changes. You CANNOT see what the team actually did, and Linked
+  Helper syncs on a lag — so NEVER write that the team "did", "completed" or "fixed" an action. Say what the
+  NUMBERS now show ("acceptance піднялась до 31%"), never who did what.
+- NOVELTY: do not restate standing facts that are unchanged from the previous briefing — in CHANGES or
+  anywhere else. If nothing material moved, keep CHANGES short or empty rather than padding it. If there is
+  no previous briefing, leave CHANGES empty.
+
 THE BRIEFING (write it as your final message, in markdown)
 - A one-line HEADLINE (one tight clause, ~max 120 chars) capturing the single most important thing.
 - A SUMMARY of 2-3 short sentences. Lead with the single most important fact; don't recap everything.
+- CHANGES (only when a previous briefing is provided): up to 4 one-line day-over-day deltas, each tagged
+  up/down/flat/new/resolved. Omit entirely on the first briefing or when nothing material moved.
 - At most 2 short SECTIONS (titled), 1-2 sentences each — and only if they add something the summary
   doesn't. Omit sections entirely on a quiet day.
 - RISKS: specific at-risk callouts (account near the invite limit, stale/failed sync, rate cliff,
@@ -103,8 +124,8 @@ THE BRIEFING (write it as your final message, in markdown)
   imperative sentence naming the account/campaign and the single number that justifies it.
 
 LANGUAGE
-- Write the ENTIRE briefing in UKRAINIAN (українською) — headline, summary, every section, every risk
-  and every action. Use natural, concise business Ukrainian, not a word-for-word translation.
+- Write the ENTIRE briefing in UKRAINIAN (українською) — headline, summary, every change, every section,
+  every risk and every action. Use natural, concise business Ukrainian, not a word-for-word translation.
 - NAME ACCOUNTS BY THEIR LINKEDIN ACCOUNT NAME — that's what the team recognises. Every account-level
   seed row has an "account" column with the name to use; fall back to the label, then the instance id,
   ONLY when no name exists. Never surface a raw instance id like "notebook-3" when a name is available.
@@ -131,6 +152,14 @@ Today's date: ${new Date().toISOString().slice(0, 10)}.`
 const briefingSchema = z.object({
   headline: z.string(),
   summary: z.string(),
+  changes: z
+    .array(
+      z.object({
+        text: z.string(),
+        trend: z.enum(['up', 'down', 'flat', 'new', 'resolved']).optional(),
+      })
+    )
+    .max(6),
   sections: z.array(z.object({ title: z.string(), body: z.string() })).max(6),
   actions: z
     .array(z.object({ text: z.string(), priority: z.enum(['high', 'med', 'low']) }))
@@ -152,6 +181,54 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   })
 
+type PriorBriefing = {
+  briefing_date: string
+  headline: string | null
+  summary: string | null
+  actions: { text: string; priority?: string }[]
+  risks: { kind?: string; severity?: string; text: string }[]
+}
+
+/** The most recent briefing strictly before `today`, if it's recent enough to be
+ *  worth diffing against (within MAX_PRIOR_AGE_DAYS). Returns the row plus how many
+ *  days back it is, or null on the first run / a long gap / a read error. */
+async function fetchPriorBriefing(
+  today: string
+): Promise<{ prior: PriorBriefing; gapDays: number } | null> {
+  const { data, error } = await db()
+    .from('briefings')
+    .select('briefing_date, headline, summary, actions, risks')
+    .lt('briefing_date', today)
+    .order('briefing_date', { ascending: false })
+    .limit(1)
+  if (error || !data || data.length === 0) return null
+  const prior = data[0] as PriorBriefing
+  const gapDays = Math.round(
+    (Date.parse(today) - Date.parse(prior.briefing_date)) / 86_400_000
+  )
+  if (gapDays < 1 || gapDays > MAX_PRIOR_AGE_DAYS) return null
+  return { prior, gapDays }
+}
+
+/** Render the previous briefing as a markdown block the analyst diffs today against. */
+function renderPrior(prior: PriorBriefing, gapDays: number): string {
+  const when =
+    gapDays === 1 ? 'учора' : `у попередньому брифінгу (${prior.briefing_date})`
+  const actions = (prior.actions ?? []).map((a, i) => `${i + 1}. ${a.text}`).join('\n')
+  const risks = (prior.risks ?? [])
+    .map((r) => `- [${r.severity ?? '—'}] ${r.text}`)
+    .join('\n')
+  return [
+    `## Попередній брифінг (${when})`,
+    prior.headline ? `HEADLINE: ${prior.headline}` : '',
+    prior.summary ? `SUMMARY: ${prior.summary}` : '',
+    actions ? `ACTIONS:\n${actions}` : '',
+    risks ? `RISKS:\n${risks}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 /** Run the seed queries, returning a markdown block to anchor the investigation. */
 async function renderSeed(): Promise<string> {
   const parts = await Promise.all(
@@ -169,7 +246,17 @@ async function renderSeed(): Promise<string> {
 }
 
 async function buildBriefing(): Promise<Response> {
-  const seed = await renderSeed()
+  const today = new Date().toISOString().slice(0, 10)
+  const [seed, priorInfo] = await Promise.all([renderSeed(), fetchPriorBriefing(today)])
+
+  // Day-over-day continuity: hand the analyst the previous briefing to diff against,
+  // or tell it there's none so it leaves "changes" empty.
+  const priorMd = priorInfo ? renderPrior(priorInfo.prior, priorInfo.gapDays) : ''
+  const priorBlock = priorInfo
+    ? `\n\n---\n${priorMd}\n\nCompare today's data against this previous briefing. Verify with SQL ` +
+      `whether each prior risk and action RESOLVED, PROGRESSED, or still PERSISTS, and capture the ` +
+      `day-over-day deltas in CHANGES. Do not restate facts from it that have not changed.`
+    : `\n\n(No recent previous briefing to compare against — leave CHANGES empty and just write today's briefing.)`
 
   // Stage 1 — investigate with the same tools the chat copilot uses.
   const { text } = await generateText({
@@ -177,7 +264,7 @@ async function buildBriefing(): Promise<Response> {
     system: BRIEFING_SYSTEM,
     prompt:
       `Here are today's seed query results. Investigate further with the tools, then write the ` +
-      `briefing.\n\n${seed}`,
+      `briefing.\n\n${seed}${priorBlock}`,
     tools,
     stopWhen: stepCountIs(30),
     maxOutputTokens: 8000,
@@ -198,15 +285,21 @@ async function buildBriefing(): Promise<Response> {
       `versions) but keep only the single most telling number per point. Refer to accounts by their ` +
       `LinkedIn account name, never by a raw instance id like "notebook-3". Keep the 3 highest-` +
       `leverage actions, most important first. The severity/priority fields stay as the codes ` +
-      `high/med/low. Do not invent anything not in the write-up.`,
-    prompt: text,
+      `high/med/low. Populate CHANGES with the day-over-day deltas from the write-up — each ONE short ` +
+      `Ukrainian line tagged with a trend (up/down/flat/new/resolved); if the write-up has none, or ` +
+      `there was no previous briefing, return an empty changes array, and never add a change that just ` +
+      `repeats an unchanged fact from the previous briefing (shown below for reference). ` +
+      `Do not invent anything not in the write-up.`,
+    prompt: priorInfo
+      ? `${text}\n\n---\nFor reference, the PREVIOUS briefing — do NOT repeat unchanged points from it:\n${priorMd}`
+      : text,
   })
 
-  const briefing_date = new Date().toISOString().slice(0, 10)
   const row = {
-    briefing_date,
+    briefing_date: today,
     headline: object.headline.slice(0, 300),
     summary: object.summary.slice(0, 2000),
+    changes: object.changes,
     sections: object.sections,
     actions: object.actions,
     risks: object.risks,
@@ -225,9 +318,10 @@ async function buildBriefing(): Promise<Response> {
   }
 
   await postBriefingToSlack(process.env.SLACK_WEBHOOK_URL, {
-    briefing_date,
+    briefing_date: today,
     headline: row.headline,
     summary: row.summary,
+    changes: row.changes,
     actions: row.actions,
     risks: row.risks,
     model: row.model,

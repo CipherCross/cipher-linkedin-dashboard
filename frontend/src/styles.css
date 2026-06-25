@@ -720,8 +720,15 @@ tr.row-clickable:hover { background: #161d30; }
 .briefing-summary { margin: 8px 0 0; line-height: 1.55; }
 .briefing-label { margin: 14px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .briefing-actions ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
-.briefing-risks ul { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
-.briefing-actions .badge, .briefing-risks .badge { margin-right: 4px; }
+.briefing-risks ul,
+.briefing-changes ul { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+.briefing-actions .badge, .briefing-risks .badge, .briefing-changes .badge { margin-right: 4px; }
+.briefing-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.briefing-prev-toggle {
+  background: none; border: none; color: var(--muted);
+  font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 2px; white-space: nowrap;
+}
+.briefing-prev-toggle:hover { color: var(--text); }
 .briefing-details-toggle {
   display: flex; align-items: center; gap: 8px; margin-top: 14px;
   background: none; border: none; color: var(--muted);

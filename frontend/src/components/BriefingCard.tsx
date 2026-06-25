@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useData } from '../lib/DataContext'
-import type { BriefingAction, BriefingRisk } from '../lib/types'
+import type { Briefing, BriefingAction, BriefingChange, BriefingRisk } from '../lib/types'
 
 // Severity → existing badge color classes (see styles.css).
 const SEV_CLS: Record<BriefingRisk['severity'], string> = {
@@ -23,6 +23,16 @@ const ACTION_CLS: Record<BriefingAction['priority'], string> = {
   low: 'badge senti neu',
 }
 
+// Day-over-day trend → glyph + color class (mirrors slack.ts TREND_EMOJI).
+const TREND: Record<NonNullable<BriefingChange['trend']>, { icon: string; cls: string }> = {
+  up: { icon: '▲', cls: 'badge senti pos' },
+  down: { icon: '▼', cls: 'badge senti neg' },
+  flat: { icon: '▬', cls: 'badge senti neu' },
+  new: { icon: '✚', cls: 'badge senti ref' },
+  resolved: { icon: '✓', cls: 'badge senti pos' },
+}
+const TREND_DEFAULT = { icon: '•', cls: 'badge senti neu' }
+
 /** Ukrainian relative time (ago() in CampaignTable is English-only). */
 function agoUk(ts: string | null): string {
   if (!ts) return '—'
@@ -33,16 +43,25 @@ function agoUk(ts: string | null): string {
   return `${Math.round(mins / 1440)} дн тому`
 }
 
+const daysBetween = (a: string, b: string) =>
+  Math.round((Date.parse(a) - Date.parse(b)) / 86_400_000)
+
 /** The Morning Briefing: a daily AI-generated digest of the whole pipeline,
  *  generated server-side by /api/briefing (also runs on a cron + posts to Slack).
- *  This card shows the latest stored briefing and lets the team regenerate it. */
+ *  Shows the latest briefing — including what CHANGED since the previous one — and
+ *  lets the team regenerate it or flip back to read the previous day's briefing. */
 export function BriefingCard() {
   const { data, refetch } = useData()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [viewPrev, setViewPrev] = useState(false)
 
   const briefing = data?.briefing ?? null
+  const prevBriefing = data?.prevBriefing ?? null
+  const hasPrev = !!prevBriefing
+  const showingPrev = viewPrev && hasPrev
+  const active: Briefing | null = showingPrev ? prevBriefing : briefing
 
   async function refresh() {
     setBusy(true)
@@ -59,16 +78,28 @@ export function BriefingCard() {
     }
   }
 
+  // "з учора" only when the previous briefing is literally the day before today's;
+  // otherwise (a gap, or while viewing the previous one) use the neutral label.
+  const changesTitle =
+    !showingPrev &&
+    briefing &&
+    prevBriefing &&
+    daysBetween(briefing.briefing_date, prevBriefing.briefing_date) === 1
+      ? 'Зміни з учора'
+      : 'Зміни з попереднього брифінгу'
+
   return (
     <div className="card briefing-card">
       <div className="briefing-head">
         <div>
-          <h2 className="briefing-title">📣 Ранковий брифінг</h2>
-          {briefing ? (
+          <h2 className="briefing-title">
+            📣 Ранковий брифінг{showingPrev ? ' — попередній' : ''}
+          </h2>
+          {active ? (
             <div className="muted small">
-              {briefing.briefing_date}
-              {briefing.created_at ? ` · згенеровано ${agoUk(briefing.created_at)}` : ''}
-              {briefing.model ? ` · ${briefing.model}` : ''}
+              {active.briefing_date}
+              {active.created_at ? ` · згенеровано ${agoUk(active.created_at)}` : ''}
+              {active.model ? ` · ${active.model}` : ''}
             </div>
           ) : (
             <div className="muted small">
@@ -76,23 +107,48 @@ export function BriefingCard() {
             </div>
           )}
         </div>
-        <button className="btn-accent" onClick={refresh} disabled={busy}>
-          {busy ? 'Аналізую…' : briefing ? 'Оновити брифінг' : 'Згенерувати брифінг'}
-        </button>
+        <div className="briefing-head-actions">
+          {hasPrev && (
+            <button className="briefing-prev-toggle" onClick={() => setViewPrev((v) => !v)}>
+              {showingPrev ? 'До сьогодні →' : '← Попередній'}
+            </button>
+          )}
+          {!showingPrev && (
+            <button className="btn-accent" onClick={refresh} disabled={busy}>
+              {busy ? 'Аналізую…' : briefing ? 'Оновити брифінг' : 'Згенерувати брифінг'}
+            </button>
+          )}
+        </div>
       </div>
 
       {err && <div className="banner">{err}</div>}
 
-      {briefing && (
+      {active && (
         <>
-          {briefing.headline && <div className="briefing-headline">{briefing.headline}</div>}
-          {briefing.summary && <p className="briefing-summary">{briefing.summary}</p>}
+          {active.headline && <div className="briefing-headline">{active.headline}</div>}
+          {active.summary && <p className="briefing-summary">{active.summary}</p>}
 
-          {briefing.actions?.length > 0 && (
+          {active.changes?.length > 0 && (
+            <div className="briefing-changes">
+              <div className="briefing-label">{changesTitle}</div>
+              <ul>
+                {active.changes.map((c, i) => {
+                  const t = c.trend ? TREND[c.trend] : TREND_DEFAULT
+                  return (
+                    <li key={i}>
+                      <span className={t.cls}>{t.icon}</span> {c.text}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
+          {active.actions?.length > 0 && (
             <div className="briefing-actions">
               <div className="briefing-label">Дії на сьогодні</div>
               <ol>
-                {briefing.actions.map((a, i) => (
+                {active.actions.map((a, i) => (
                   <li key={i}>
                     <span className={ACTION_CLS[a.priority]}>{LEVEL_UK[a.priority]}</span>{' '}
                     {a.text}
@@ -102,11 +158,11 @@ export function BriefingCard() {
             </div>
           )}
 
-          {briefing.risks?.length > 0 && (
+          {active.risks?.length > 0 && (
             <div className="briefing-risks">
               <div className="briefing-label">Ризики</div>
               <ul>
-                {briefing.risks.map((r, i) => (
+                {active.risks.map((r, i) => (
                   <li key={i}>
                     <span className={SEV_CLS[r.severity]} title={r.kind}>
                       {LEVEL_UK[r.severity]}
@@ -118,18 +174,18 @@ export function BriefingCard() {
             </div>
           )}
 
-          {briefing.sections?.length > 0 && (
+          {active.sections?.length > 0 && (
             <>
               <button
                 className="briefing-details-toggle"
                 onClick={() => setShowDetails((s) => !s)}
               >
                 <span className="coach-digest-caret">{showDetails ? '▾' : '▸'}</span>
-                {showDetails ? 'Сховати деталі' : `Деталі (${briefing.sections.length})`}
+                {showDetails ? 'Сховати деталі' : `Деталі (${active.sections.length})`}
               </button>
               {showDetails && (
                 <div className="briefing-sections">
-                  {briefing.sections.map((s, i) => (
+                  {active.sections.map((s, i) => (
                     <div className="briefing-section" key={i}>
                       <div className="briefing-section-title">{s.title}</div>
                       <div className="small">{s.body}</div>

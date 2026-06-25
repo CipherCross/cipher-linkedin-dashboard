@@ -13,6 +13,7 @@ const EMPTY: DashboardData = {
   annotations: [],
   steps: [],
   briefing: null,
+  prevBriefing: null,
 }
 
 const LEAD_COLUMNS =
@@ -122,7 +123,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               .from('briefings')
               .select('*')
               .order('briefing_date', { ascending: false })
-              .limit(1),
+              .limit(2),
             fetchAllLeads(),
           ])
         if (id !== reqId.current) return
@@ -142,6 +143,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 annotations: annotations.data ?? [],
                 steps: steps.data ?? [],
                 briefing: briefing.data?.[0] ?? null,
+                prevBriefing: briefing.data?.[1] ?? null,
                 leads,
               },
         )

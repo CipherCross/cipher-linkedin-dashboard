@@ -7,6 +7,7 @@ interface BriefingForSlack {
   briefing_date: string
   headline: string | null
   summary: string | null
+  changes: { text: string; trend?: string }[]
   actions: { text: string; priority?: string }[]
   risks: { kind?: string; severity?: string; text: string }[]
   model: string | null
@@ -15,6 +16,15 @@ interface BriefingForSlack {
 type Block = Record<string, unknown>
 
 const SEV_EMOJI: Record<string, string> = { high: '🔴', med: '🟠', low: '🟡' }
+
+// Day-over-day deltas. Trend → glyph (matches the dashboard card's TREND_ICON).
+const TREND_EMOJI: Record<string, string> = {
+  up: '▲',
+  down: '▼',
+  flat: '▬',
+  new: '✚',
+  resolved: '✓',
+}
 
 /** Ukrainian plural for "ризик" (1 ризик / 2-4 ризики / 5+ ризиків). */
 function risksUk(n: number): string {
@@ -36,6 +46,14 @@ function blocksFor(b: BriefingForSlack): Block[] {
 
   if (b.summary) {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: b.summary.slice(0, 2900) } })
+  }
+
+  const changes = (b.changes ?? []).slice(0, 6)
+  if (changes.length) {
+    const text =
+      '*Зміни з учора*\n' +
+      changes.map((c) => `${TREND_EMOJI[c.trend ?? ''] ?? '•'} ${c.text}`).join('\n')
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })
   }
 
   const actions = (b.actions ?? []).slice(0, 5)

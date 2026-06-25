@@ -168,12 +168,19 @@ export interface BriefingRisk {
   text: string
 }
 
+/** A day-over-day delta vs the previous briefing (what changed / progressed). */
+export interface BriefingChange {
+  text: string
+  trend?: 'up' | 'down' | 'flat' | 'new' | 'resolved'
+}
+
 /** One daily AI-generated pipeline digest (briefings table). */
 export interface Briefing {
   id: string
   briefing_date: string
   headline: string | null
   summary: string | null
+  changes: BriefingChange[]
   sections: BriefingSection[]
   actions: BriefingAction[]
   risks: BriefingRisk[]
@@ -191,5 +198,6 @@ export interface DashboardData {
   annotations: Annotation[]
   steps: CampaignStep[]
   briefing: Briefing | null
+  prevBriefing: Briefing | null
   error?: string
 }
