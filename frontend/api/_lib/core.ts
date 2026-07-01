@@ -165,3 +165,23 @@ from campaign_metrics cm
 join instances i on i.id = cm.instance_id
 order by cm.invites_sent desc
 `.trim()
+
+// Same cohort math as WEEKLY_FUNNEL_SQL, but broken out per account instead of
+// aggregated across all of them — needed to spot one account's cohorts quietly
+// declining even while the fleet-wide trend looks fine.
+export const WEEKLY_FUNNEL_BY_ACCOUNT_SQL = `
+select
+  l.instance_id,
+  coalesce(i.account_name, i.label, l.instance_id)                            as account,
+  date_trunc('week', l.invited_at)::date                                      as invite_week,
+  count(*)                                                                    as invites,
+  count(l.connected_at)                                                       as accepted,
+  count(l.replied_at)                                                         as replied,
+  round(100.0 * count(l.replied_at) filter (where l.connected_at is not null)
+        / nullif(count(l.connected_at), 0), 1)                                as reply_rate_of_accepted
+from leads l
+join instances i on i.id = l.instance_id
+where l.invited_at is not null and l.invited_at > now() - interval '120 days'
+group by 1, 2, 3
+order by 1, 3 desc
+`.trim()

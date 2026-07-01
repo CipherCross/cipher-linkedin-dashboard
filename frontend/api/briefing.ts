@@ -28,12 +28,19 @@ import {
 } from './_lib/core.js'
 import { tools } from './_lib/tools.js'
 import { postBriefingToSlack } from './_lib/slack.js'
+import { computeAnomalySignals, renderSignals } from './_lib/anomalies.js'
 
 export const maxDuration = 300
 
 const INVESTIGATE_MODEL = 'claude-opus-4-8' // deep autonomous investigation
 const VERIFY_MODEL = 'claude-opus-4-8' // adversarial fact-check + merge pass
 const STRUCTURE_MODEL = 'claude-opus-4-8' // coerce the narrative into a schema (Opus: don't lose nuance)
+// Stored on the row so the model column reflects the whole ensemble, not just stage 1
+// — collapses to one name today since all three stages match, but stays accurate if
+// they ever diverge.
+const ENSEMBLE_MODEL_LABEL = Array.from(
+  new Set([INVESTIGATE_MODEL, VERIFY_MODEL, STRUCTURE_MODEL])
+).join(' + ')
 
 // Two independent investigation angles run in parallel, then the verifier merges
 // the strongest data-backed points from each. Diverse lenses surface risks AND
@@ -107,6 +114,13 @@ HOW TO WORK
 - You are given seed query results below as a starting point. Treat the briefing as a GOAL: keep
   calling tools to investigate anything notable until you can write it confidently. A good briefing
   takes 5-15 targeted queries. Do not stop after the seed data.
+- You are also given ANOMALY SIGNALS: deterministically computed (not model-judged) sustained
+  multi-day trends, stalls, and cohort reply-rate declines. Treat these as pre-verified leads —
+  investigate and prioritize them. A risk or change claiming a decline, rise, or stall should
+  correspond to one of these signals or be confirmed by a fresh query; don't invent a trend from a
+  single data point the signals don't support. An empty signals list doesn't mean nothing moved —
+  it means nothing SUSTAINED moved; smaller or single-day observations can still come from your own
+  investigation.
 - Investigate what CHANGED and what's AT RISK: acceptance/reply-rate moves vs prior weeks (segment by
   account, campaign, and message step), accounts approaching LinkedIn's ~100-200 invites/week safe
   zone, stale or failed syncs (check instances.last_sync_at and sync_runs), and stalled cohorts.
@@ -201,6 +215,9 @@ VERIFY (use the tools — re-run queries, do NOT trust the drafts' numbers)
 - COHORTS: replies LAG invites. Confirm every acceptance/reply-rate claim is built from invite-week cohorts,
   and that a "down vs last week" is a real decline, not a recent cohort still maturing — soften or cut it
   if it's just immature.
+- SIGNALS: cross-check every risk or change claiming a trend, decline, rise, or stall against the provided
+  ANOMALY SIGNALS block (deterministic, not model-judged). If a claim isn't backed by a signal and can't be
+  confirmed with a fresh query, cut it or soften it to what the data actually shows.
 - NOVELTY: diff against the previous briefing. Cut anything that merely restates an unchanged standing fact.
   Every CHANGES line must be a real, data-backed day-over-day delta with the right trend; drop or fix any
   that isn't, and make sure a material change the analyst missed gets added.
@@ -248,6 +265,33 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { 'content-type': 'application/json' },
   })
+
+// Belt-and-suspenders check for the framing rules already stated in BRIEFING_SYSTEM /
+// VERIFY_SYSTEM (never claim the team "did/fixed" something; never claim a reply is
+// "waiting on us"). Non-blocking — just gives log-based visibility into whether the
+// prompt rules are actually holding up over time.
+const FRAMING_VIOLATION_PATTERNS: RegExp[] = [
+  /чека(є|ють)\s+(на\s+)?(нас|наш)/i, // "waiting on us"
+  /очіку(є|ють)\s+(нашої\s+)?відповід/i, // "awaiting our reply"
+  /гаряч(а|і)\s+відповід/i, // "N hot replies waiting"
+  /команда\s+(виправила|завершила|зробила|виконала)/i, // "team did/fixed/completed X"
+]
+
+function logFramingViolations(object: z.infer<typeof briefingSchema>, date: string): void {
+  const text = [
+    object.headline,
+    object.summary,
+    ...object.changes.map((c) => c.text),
+    ...object.sections.map((s) => s.body),
+    ...object.actions.map((a) => a.text),
+    ...object.risks.map((r) => r.text),
+  ].join('\n')
+  for (const pattern of FRAMING_VIOLATION_PATTERNS) {
+    if (pattern.test(text)) {
+      console.warn(`briefing ${date}: possible framing-rule violation (matched ${pattern}) — review output`)
+    }
+  }
+}
 
 type PriorBriefing = {
   briefing_date: string
@@ -315,7 +359,12 @@ async function renderSeed(): Promise<string> {
 
 async function buildBriefing(): Promise<Response> {
   const today = new Date().toISOString().slice(0, 10)
-  const [seed, priorInfo] = await Promise.all([renderSeed(), fetchPriorBriefing(today)])
+  const [seed, priorInfo, signals] = await Promise.all([
+    renderSeed(),
+    fetchPriorBriefing(today),
+    computeAnomalySignals(),
+  ])
+  const signalsBlock = renderSignals(signals)
 
   // Day-over-day continuity: hand the analyst the previous briefing to diff against,
   // or tell it there's none so it leaves "changes" empty.
@@ -335,7 +384,7 @@ async function buildBriefing(): Promise<Response> {
         system: BRIEFING_SYSTEM,
         prompt:
           `Here are today's seed query results. ${lens}\n\nInvestigate further with the tools, then ` +
-          `write the briefing.\n\n${seed}${priorBlock}`,
+          `write the briefing.\n\n${seed}\n\n---\n${signalsBlock}${priorBlock}`,
         tools,
         stopWhen: stepCountIs(40),
         maxOutputTokens: 8000,
@@ -356,7 +405,7 @@ async function buildBriefing(): Promise<Response> {
     system: VERIFY_SYSTEM,
     prompt:
       `Two draft briefings of the same morning, written from different angles — merge and correct them:\n\n` +
-      `${draftsBlock}\n\n---\nSEED DATA:\n${seed}` +
+      `${draftsBlock}\n\n---\nSEED DATA:\n${seed}\n\n---\n${signalsBlock}` +
       (priorInfo ? `\n\n---\nPREVIOUS BRIEFING:\n${priorMd}` : '') +
       `\n\nFact-check against the database with the tools, then output ONLY the merged, corrected final briefing.`,
     tools,
@@ -389,6 +438,8 @@ async function buildBriefing(): Promise<Response> {
       : text,
   })
 
+  logFramingViolations(object, today)
+
   const row = {
     briefing_date: today,
     headline: object.headline.slice(0, 300),
@@ -397,7 +448,7 @@ async function buildBriefing(): Promise<Response> {
     sections: object.sections,
     actions: object.actions,
     risks: object.risks,
-    model: INVESTIGATE_MODEL,
+    model: ENSEMBLE_MODEL_LABEL,
   }
 
   const sb = db()
