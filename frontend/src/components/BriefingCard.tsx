@@ -46,6 +46,18 @@ function agoUk(ts: string | null): string {
 const daysBetween = (a: string, b: string) =>
   Math.round((Date.parse(a) - Date.parse(b)) / 86_400_000)
 
+// The pipeline now runs across multiple invocations (see frontend/api/briefing.ts) —
+// each POST advances one stage and reports back the job's status. Map that status to
+// the busy label the button already showed before the split.
+const STAGE_LABEL: Record<string, string> = {
+  pending: 'Аналізую…',
+  investigating: 'Аналізую…',
+  investigated: 'Перевіряю…',
+  verifying: 'Перевіряю…',
+  verified: 'Формую…',
+  structuring: 'Формую…',
+}
+
 /** The Morning Briefing: a daily AI-generated digest of the whole pipeline,
  *  generated server-side by /api/briefing (also runs on a cron + posts to Slack).
  *  Shows the latest briefing — including what CHANGED since the previous one — and
@@ -53,6 +65,7 @@ const daysBetween = (a: string, b: string) =>
 export function BriefingCard() {
   const { data, refetch } = useData()
   const [busy, setBusy] = useState(false)
+  const [busyStage, setBusyStage] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [viewPrev, setViewPrev] = useState(false)
@@ -63,18 +76,43 @@ export function BriefingCard() {
   const showingPrev = viewPrev && hasPrev
   const active: Briefing | null = showingPrev ? prevBriefing : briefing
 
+  // The pipeline is split across invocations now — one POST advances one stage. Loop
+  // calling it, showing the reported stage, until it's done/error or we give up. A slow
+  // day that never finishes here still keeps advancing via the daily cron / a later click.
   async function refresh() {
     setBusy(true)
     setErr(null)
+    setBusyStage(null)
+    const MAX_ITER = 12
+    const deadline = Date.now() + 4 * 60_000
     try {
-      const res = await fetch('/api/briefing', { method: 'POST' })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      refetch()
+      for (let i = 0; ; i++) {
+        const res = await fetch('/api/briefing', { method: 'POST' })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          // A non-JSON body here usually means the platform killed the function before
+          // it could return its own JSON error — surface that as "took too long" rather
+          // than a raw parse error.
+          throw new Error(j.error || `Брифінг не згенерувався (HTTP ${res.status}) — можливо, забракло часу; спробуйте ще раз.`)
+        }
+        if (j.status === 'done') {
+          refetch()
+          return
+        }
+        if (j.status === 'error') {
+          throw new Error(j.error || 'Брифінг не вдалося згенерувати.')
+        }
+        setBusyStage(j.status ?? null)
+        if (i >= MAX_ITER || Date.now() > deadline) {
+          throw new Error('Це триває довше, ніж очікувалось — спробуйте оновити сторінку за кілька хвилин.')
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+      setBusyStage(null)
     }
   }
 
@@ -115,7 +153,11 @@ export function BriefingCard() {
           )}
           {!showingPrev && (
             <button className="btn-accent" onClick={refresh} disabled={busy}>
-              {busy ? 'Аналізую…' : briefing ? 'Оновити брифінг' : 'Згенерувати брифінг'}
+              {busy
+                ? STAGE_LABEL[busyStage ?? 'pending'] ?? 'Аналізую…'
+                : briefing
+                  ? 'Оновити брифінг'
+                  : 'Згенерувати брифінг'}
             </button>
           )}
         </div>

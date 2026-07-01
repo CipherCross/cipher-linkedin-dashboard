@@ -372,122 +372,330 @@ async function renderSeed(): Promise<string> {
   return parts.join('\n\n')
 }
 
-async function buildBriefing(): Promise<Response> {
-  const today = new Date().toISOString().slice(0, 10)
-  const [seed, priorInfo, signals] = await Promise.all([
-    renderSeed(),
-    fetchPriorBriefing(today),
-    computeAnomalySignals(),
-  ])
-  const signalsBlock = renderSignals(signals)
+// --- Resumable job state machine ---------------------------------------------------
+//
+// The 4-stage ensemble above used to run inside one invocation and hit Vercel's 300s
+// timeout on slow days. Each stage now runs in its OWN invocation (a "tick"), reading
+// and writing a `briefing_jobs` row so the pipeline can resume across calls instead of
+// needing to finish inside a single request/response. `version` is bumped on every
+// write and used as an optimistic-concurrency token: a stage claims its transient
+// status via `UPDATE ... WHERE status=$observed AND version=$observed`, so a losing
+// racer's update always affects 0 rows — including when RECLAIMING a stale claim,
+// where `status` doesn't change but `version` still does.
 
-  // Day-over-day continuity: hand the analyst the previous briefing to diff against,
-  // or tell it there's none so it leaves "changes" empty.
-  const priorMd = priorInfo ? renderPrior(priorInfo.prior, priorInfo.gapDays) : ''
-  const priorBlock = priorInfo
-    ? `\n\n---\n${priorMd}\n\nCompare today's data against this previous briefing. Verify with SQL ` +
-      `whether each prior risk and action RESOLVED, PROGRESSED, or still PERSISTS, and capture the ` +
-      `day-over-day deltas in CHANGES. Do not restate facts from it that have not changed.`
-    : `\n\n(No recent previous briefing to compare against — leave CHANGES empty and just write today's briefing.)`
+type JobStatus =
+  | 'pending'
+  | 'investigating'
+  | 'investigated'
+  | 'verifying'
+  | 'verified'
+  | 'structuring'
+  | 'done'
+  | 'error'
 
-  // Stage 1 — investigate from two independent angles IN PARALLEL (risk-first and
-  // growth-first), each with the same tools the chat copilot uses.
-  const drafts = await Promise.all(
-    ANGLES.map(async ({ label, lens }) => {
-      const { text } = await generateText({
-        model: anthropic(INVESTIGATE_MODEL),
-        system: BRIEFING_SYSTEM,
-        prompt:
-          `Here are today's seed query results. ${lens}\n\nInvestigate further with the tools, then ` +
-          `write the briefing.\n\n${seed}\n\n---\n${signalsBlock}${priorBlock}`,
-        tools,
-        stopWhen: stepCountIs(40),
-        maxOutputTokens: 8000,
-        providerOptions: {
-          anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
-        },
-      })
-      return { label, text }
+interface BriefingJobRow {
+  briefing_date: string
+  status: JobStatus
+  version: number
+  attempt: number
+  seed: string | null
+  signals_block: string | null
+  prior_md: string | null
+  drafts: { label: string; text: string }[] | null
+  verified_text: string | null
+  error: string | null
+  updated_at: string
+}
+
+type Sb = ReturnType<typeof db>
+type TickResult = { status: JobStatus; error?: string; progressed: boolean }
+
+const MAX_ATTEMPTS = 3 // consecutive retries of one stage before giving up into 'error'
+const STALE_MS = 8 * 60_000 // comfortably longer than one 300s invocation
+
+/** Conditionally advance `job` to `next`, guarded on (status, version) so a losing
+ *  racer's update affects 0 rows — including a stale-claim RECLAIM, where `next` may
+ *  equal `job.status` (only version/attempt change). Returns the claimed row, or null
+ *  if another invocation claimed this stage first. */
+async function claim(sb: Sb, today: string, job: BriefingJobRow, next: JobStatus): Promise<BriefingJobRow | null> {
+  const { data } = await sb
+    .from('briefing_jobs')
+    .update({
+      status: next,
+      version: job.version + 1,
+      attempt: job.attempt + 1,
+      error: null,
+      updated_at: new Date().toISOString(),
     })
-  )
-  const draftsBlock = drafts.map((d) => `### DRAFT — ${d.label}\n${d.text}`).join('\n\n')
-
-  // Stage 2 — adversarial fact-check + merge. A third analyst re-runs the queries
-  // behind every claim, reconciles rates, enforces novelty vs yesterday, strips
-  // framing violations, and fuses the two angles into one corrected briefing.
-  const { text } = await generateText({
-    model: anthropic(VERIFY_MODEL),
-    system: VERIFY_SYSTEM,
-    prompt:
-      `Two draft briefings of the same morning, written from different angles — merge and correct them:\n\n` +
-      `${draftsBlock}\n\n---\nSEED DATA:\n${seed}\n\n---\n${signalsBlock}` +
-      (priorInfo ? `\n\n---\nPREVIOUS BRIEFING:\n${priorMd}` : '') +
-      `\n\nFact-check against the database with the tools, then output ONLY the merged, corrected final briefing.`,
-    tools,
-    stopWhen: stepCountIs(30),
-    maxOutputTokens: 8000,
-    providerOptions: {
-      anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
-    },
-  })
-
-  // Stage 3 — coerce the verified narrative into the stored/Slack shape.
-  const { object } = await generateObject({
-    model: anthropic(STRUCTURE_MODEL),
-    schema: briefingSchema,
-    system:
-      `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
-      `(do not translate it back to English) and KEEP a clear, calm, professional voice — but TIGHTEN it: trim ` +
-      `bloat, drop repetition, make every action ONE short imperative sentence and every risk ONE ` +
-      `short line. Preserve specifics verbatim (numbers, dates, account / campaign names, agent ` +
-      `versions) but keep only the single most telling number per point. Refer to accounts by their ` +
-      `LinkedIn account name, never by a raw instance id like "notebook-3". Keep the 3 highest-` +
-      `leverage actions, most important first. The severity/priority fields stay as the codes ` +
-      `high/med/low. Populate CHANGES with the day-over-day deltas from the write-up — each ONE short ` +
-      `Ukrainian line tagged with a trend (up/down/flat/new/resolved); if the write-up has none, or ` +
-      `there was no previous briefing, return an empty changes array, and never add a change that just ` +
-      `repeats an unchanged fact from the previous briefing (shown below for reference). ` +
-      `Do not invent anything not in the write-up.`,
-    prompt: priorInfo
-      ? `${text}\n\n---\nFor reference, the PREVIOUS briefing — do NOT repeat unchanged points from it:\n${priorMd}`
-      : text,
-  })
-
-  logFramingViolations(object, today)
-
-  const row = {
-    briefing_date: today,
-    headline: object.headline.slice(0, 300),
-    summary: object.summary.slice(0, 2000),
-    changes: object.changes,
-    sections: object.sections,
-    actions: object.actions,
-    risks: object.risks,
-    model: ENSEMBLE_MODEL_LABEL,
-  }
-
-  const sb = db()
-  const { data, error } = await sb
-    .from('briefings')
-    .upsert(row, { onConflict: 'briefing_date' })
+    .eq('briefing_date', today)
+    .eq('status', job.status)
+    .eq('version', job.version)
     .select()
-    .single()
-  if (error) {
-    console.error('briefing upsert failed:', error.message)
-    return json({ error: 'Failed to store the briefing.' }, 500)
+  return data && data.length === 1 ? (data[0] as BriefingJobRow) : null
+}
+
+/** Persist a stage's successful output and advance to `next`; `attempt` resets to 0 so
+ *  the next stage gets its own fresh retry budget. */
+async function finishStage(
+  sb: Sb,
+  today: string,
+  claimed: BriefingJobRow,
+  next: JobStatus,
+  patch: Record<string, unknown>
+): Promise<void> {
+  await sb
+    .from('briefing_jobs')
+    .update({ ...patch, status: next, attempt: 0, version: claimed.version + 1, updated_at: new Date().toISOString() })
+    .eq('briefing_date', today)
+    .eq('version', claimed.version)
+}
+
+/** A stage threw. Revert to its start-state for an immediate retry on the next tick,
+ *  unless the attempt cap is hit — then give up visibly into 'error' rather than
+ *  retrying forever. */
+async function failStage(
+  sb: Sb,
+  today: string,
+  claimed: BriefingJobRow,
+  startStatus: JobStatus,
+  message: string
+): Promise<void> {
+  const giveUp = claimed.attempt >= MAX_ATTEMPTS
+  await sb
+    .from('briefing_jobs')
+    .update({
+      status: giveUp ? 'error' : startStatus,
+      error: message,
+      version: claimed.version + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('briefing_date', today)
+    .eq('version', claimed.version)
+}
+
+/** Another invocation claimed this stage first — report its current state rather than
+ *  the stale `fallback` we observed before losing the race. */
+async function afterLostRace(sb: Sb, today: string, fallback: BriefingJobRow): Promise<TickResult> {
+  const { data } = await sb.from('briefing_jobs').select('*').eq('briefing_date', today)
+  const row = (data?.[0] as BriefingJobRow | undefined) ?? fallback
+  return { status: row.status, error: row.error ?? undefined, progressed: false }
+}
+
+/** Stage 1 — investigate from two independent angles IN PARALLEL (risk-first and
+ *  growth-first), each with the same tools the chat copilot uses. Computes and stores
+ *  seed/signals/prior so later stages fact-check against the SAME data snapshot this
+ *  stage drafted against, not one that's drifted since. */
+async function runInvestigateStage(sb: Sb, today: string, job: BriefingJobRow): Promise<TickResult> {
+  const claimed = await claim(sb, today, job, 'investigating')
+  if (!claimed) return afterLostRace(sb, today, job)
+
+  try {
+    const [seed, priorInfo, signals] = await Promise.all([
+      renderSeed(),
+      fetchPriorBriefing(today),
+      computeAnomalySignals(),
+    ])
+    const signalsBlock = renderSignals(signals)
+    const priorMd = priorInfo ? renderPrior(priorInfo.prior, priorInfo.gapDays) : ''
+    const priorBlock = priorInfo
+      ? `\n\n---\n${priorMd}\n\nCompare today's data against this previous briefing. Verify with SQL ` +
+        `whether each prior risk and action RESOLVED, PROGRESSED, or still PERSISTS, and capture the ` +
+        `day-over-day deltas in CHANGES. Do not restate facts from it that have not changed.`
+      : `\n\n(No recent previous briefing to compare against — leave CHANGES empty and just write today's briefing.)`
+
+    const drafts = await Promise.all(
+      ANGLES.map(async ({ label, lens }) => {
+        const { text } = await generateText({
+          model: anthropic(INVESTIGATE_MODEL),
+          system: BRIEFING_SYSTEM,
+          prompt:
+            `Here are today's seed query results. ${lens}\n\nInvestigate further with the tools, then ` +
+            `write the briefing.\n\n${seed}\n\n---\n${signalsBlock}${priorBlock}`,
+          tools,
+          stopWhen: stepCountIs(40),
+          maxOutputTokens: 8000,
+          providerOptions: {
+            anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
+          },
+        })
+        return { label, text }
+      })
+    )
+
+    await finishStage(sb, today, claimed, 'investigated', {
+      seed,
+      signals_block: signalsBlock,
+      prior_md: priorMd,
+      drafts,
+    })
+    return { status: 'investigated', progressed: true }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    await failStage(sb, today, claimed, 'pending', message)
+    return { status: 'pending', error: message, progressed: true }
+  }
+}
+
+/** Stage 2 — adversarial fact-check + merge, re-using stage 1's stored seed/signals/
+ *  prior/drafts (NOT recomputed — the verifier must fact-check against the same
+ *  snapshot the drafts were written against). */
+async function runVerifyStage(sb: Sb, today: string, job: BriefingJobRow): Promise<TickResult> {
+  const claimed = await claim(sb, today, job, 'verifying')
+  if (!claimed) return afterLostRace(sb, today, job)
+
+  try {
+    const seed = claimed.seed ?? ''
+    const signalsBlock = claimed.signals_block ?? ''
+    const priorMd = claimed.prior_md ?? ''
+    const draftsBlock = (claimed.drafts ?? []).map((d) => `### DRAFT — ${d.label}\n${d.text}`).join('\n\n')
+
+    const { text } = await generateText({
+      model: anthropic(VERIFY_MODEL),
+      system: VERIFY_SYSTEM,
+      prompt:
+        `Two draft briefings of the same morning, written from different angles — merge and correct them:\n\n` +
+        `${draftsBlock}\n\n---\nSEED DATA:\n${seed}\n\n---\n${signalsBlock}` +
+        (priorMd ? `\n\n---\nPREVIOUS BRIEFING:\n${priorMd}` : '') +
+        `\n\nFact-check against the database with the tools, then output ONLY the merged, corrected final briefing.`,
+      tools,
+      stopWhen: stepCountIs(30),
+      maxOutputTokens: 8000,
+      providerOptions: {
+        anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
+      },
+    })
+
+    await finishStage(sb, today, claimed, 'verified', { verified_text: text })
+    return { status: 'verified', progressed: true }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    await failStage(sb, today, claimed, 'investigated', message)
+    return { status: 'investigated', error: message, progressed: true }
+  }
+}
+
+/** Stage 3 — coerce the verified narrative into the stored/Slack shape, upsert into
+ *  `briefings`, and post to Slack. */
+async function runStructureStage(sb: Sb, today: string, job: BriefingJobRow): Promise<TickResult> {
+  const claimed = await claim(sb, today, job, 'structuring')
+  if (!claimed) return afterLostRace(sb, today, job)
+
+  try {
+    const text = claimed.verified_text ?? ''
+    const priorMd = claimed.prior_md ?? ''
+
+    const { object } = await generateObject({
+      model: anthropic(STRUCTURE_MODEL),
+      schema: briefingSchema,
+      system:
+        `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
+        `(do not translate it back to English) and KEEP a clear, calm, professional voice — but TIGHTEN it: trim ` +
+        `bloat, drop repetition, make every action ONE short imperative sentence and every risk ONE ` +
+        `short line. Preserve specifics verbatim (numbers, dates, account / campaign names, agent ` +
+        `versions) but keep only the single most telling number per point. Refer to accounts by their ` +
+        `LinkedIn account name, never by a raw instance id like "notebook-3". Keep the 3 highest-` +
+        `leverage actions, most important first. The severity/priority fields stay as the codes ` +
+        `high/med/low. Populate CHANGES with the day-over-day deltas from the write-up — each ONE short ` +
+        `Ukrainian line tagged with a trend (up/down/flat/new/resolved); if the write-up has none, or ` +
+        `there was no previous briefing, return an empty changes array, and never add a change that just ` +
+        `repeats an unchanged fact from the previous briefing (shown below for reference). ` +
+        `Do not invent anything not in the write-up.`,
+      prompt: priorMd
+        ? `${text}\n\n---\nFor reference, the PREVIOUS briefing — do NOT repeat unchanged points from it:\n${priorMd}`
+        : text,
+    })
+
+    logFramingViolations(object, today)
+
+    const row = {
+      briefing_date: today,
+      headline: object.headline.slice(0, 300),
+      summary: object.summary.slice(0, 2000),
+      changes: object.changes,
+      sections: object.sections,
+      actions: object.actions,
+      risks: object.risks,
+      model: ENSEMBLE_MODEL_LABEL,
+    }
+
+    const { error: upsertError } = await sb.from('briefings').upsert(row, { onConflict: 'briefing_date' })
+    if (upsertError) throw new Error(`briefing upsert failed: ${upsertError.message}`)
+
+    await finishStage(sb, today, claimed, 'done', {})
+
+    await postBriefingToSlack(process.env.SLACK_WEBHOOK_URL, {
+      briefing_date: today,
+      headline: row.headline,
+      summary: row.summary,
+      changes: row.changes,
+      actions: row.actions,
+      risks: row.risks,
+      model: row.model,
+    })
+
+    return { status: 'done', progressed: true }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    await failStage(sb, today, claimed, 'verified', message)
+    return { status: 'verified', error: message, progressed: true }
+  }
+}
+
+/** Advance today's briefing job by exactly one stage. `allowRestart` (only the manual
+ *  "Refresh briefing" button) resets an already-terminal job back to fresh so it
+ *  regenerates on demand; the cron path never restarts a finished/failed job on its own. */
+async function advanceBriefingJob(allowRestart: boolean): Promise<TickResult> {
+  const sb = db()
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Create today's row if it doesn't exist yet. ignoreDuplicates is essential here — a
+  // plain upsert would reset an in-flight job back to 'pending' on every single tick.
+  await sb.from('briefing_jobs').upsert({ briefing_date: today }, { onConflict: 'briefing_date', ignoreDuplicates: true })
+
+  const { data: rows } = await sb.from('briefing_jobs').select('*').eq('briefing_date', today)
+  let job = rows?.[0] as BriefingJobRow | undefined
+  if (!job) return { status: 'error', error: 'failed to load job row', progressed: false }
+
+  if (allowRestart && (job.status === 'done' || job.status === 'error')) {
+    const { data: reset } = await sb
+      .from('briefing_jobs')
+      .update({
+        status: 'pending',
+        attempt: 0,
+        version: job.version + 1,
+        drafts: null,
+        verified_text: null,
+        error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('briefing_date', today)
+      .eq('version', job.version)
+      .select()
+    if (reset && reset.length === 1) job = reset[0] as BriefingJobRow
+    // else: lost the race to something else touching this row — fall through with it as-is.
   }
 
-  await postBriefingToSlack(process.env.SLACK_WEBHOOK_URL, {
-    briefing_date: today,
-    headline: row.headline,
-    summary: row.summary,
-    changes: row.changes,
-    actions: row.actions,
-    risks: row.risks,
-    model: row.model,
-  })
+  const isTransient = job.status === 'investigating' || job.status === 'verifying' || job.status === 'structuring'
+  const stale = isTransient && Date.now() - Date.parse(job.updated_at) > STALE_MS
 
-  return json(data)
+  if (isTransient && stale && job.attempt >= MAX_ATTEMPTS) {
+    // Kept getting silently killed at this stage (platform timeout) — give up visibly
+    // rather than retrying forever every time staleness is re-checked.
+    const message = `stage ${job.status} kept timing out`
+    await sb
+      .from('briefing_jobs')
+      .update({ status: 'error', error: message, version: job.version + 1, updated_at: new Date().toISOString() })
+      .eq('briefing_date', today)
+      .eq('version', job.version)
+    return { status: 'error', error: message, progressed: false }
+  }
+
+  if (job.status === 'pending' || (job.status === 'investigating' && stale)) return runInvestigateStage(sb, today, job)
+  if (job.status === 'investigated' || (job.status === 'verifying' && stale)) return runVerifyStage(sb, today, job)
+  if (job.status === 'verified' || (job.status === 'structuring' && stale)) return runStructureStage(sb, today, job)
+
+  // done / error / an actively-claimed non-stale transient status — nothing to do.
+  return { status: job.status, error: job.error ?? undefined, progressed: false }
 }
 
 async function handle(req: Request): Promise<Response> {
@@ -499,7 +707,22 @@ async function handle(req: Request): Promise<Response> {
     }
   }
   try {
-    return await buildBriefing()
+    if (req.method === 'GET') {
+      // Unattended cron: best-effort walk as many stages as fit in this invocation's own
+      // budget, so a normal day finishes end-to-end from the single daily cron fire. A
+      // slow day that doesn't finish just waits for a manual "Refresh briefing" click to
+      // advance the rest.
+      const deadline = Date.now() + 280_000
+      let result = await advanceBriefingJob(false)
+      while (result.status !== 'done' && result.status !== 'error' && result.progressed && Date.now() < deadline) {
+        result = await advanceBriefingJob(false)
+      }
+      return json(result)
+    }
+    // POST (manual button): advance exactly one stage per request — the frontend drives
+    // the loop so it can show incremental progress instead of blocking for the whole
+    // pipeline in a single call.
+    return json(await advanceBriefingJob(true))
   } catch (e) {
     console.error('briefing failed:', e instanceof Error ? e.message : String(e))
     return json({ error: 'Failed to generate the briefing — check server logs.' }, 500)
