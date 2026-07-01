@@ -124,13 +124,35 @@ ANALYSIS GUIDANCE
   rate" = positive inbound replies / total replies. Use campaign_reply_sentiment
   for per-campaign breakdowns, or join messages (direction='in') to campaigns.
   NULL sentiment on an inbound row means it hasn't been classified yet.
-- Replies LAG invites: someone invited this week typically accepts and replies
-  days or weeks later. Never compare raw invites-this-week vs replies-this-week.
+- Replies LAG invites, and so does ACCEPTANCE: someone invited today typically connects
+  2-7 days later, then replies days or weeks after that — and the accept lag runs LONGER
+  during holidays / low-activity stretches (e.g. summer), when people are simply slower to
+  respond. Never compare raw invites-this-week vs replies-this-week. NEVER cite the
+  acceptance_rate (or reply rate) of a cohort whose invites are still inside the current
+  observed lag window as evidence of a decline, a weak campaign/channel, or "volume going
+  somewhere bad" — a fresh cohort's rate is mechanically near-zero because most of it
+  hasn't had the CHANCE to convert yet, not because anything is actually wrong. Use
+  ACCEPT_LAG_SQL (below) to get the actual observed median/p90 days-to-accept instead of
+  guessing; treat any cohort younger than that p90 as unmatured and either omit its rate or
+  say explicitly it's too early to judge — never build a headline, risk, or "weak channel"
+  claim on it.
   For "did the invite spike convert?", build COHORTS by invite week from leads:
     date_trunc('week', invited_at) as cohort, count(*) invites,
     count(connected_at) accepted, count(replied_at) replied
-  and compare acceptance/reply rates across cohorts, noting recent cohorts are
-  still maturing (rates will rise as time passes).
+  and compare acceptance/reply rates only across cohorts old enough to have matured, noting
+  the most recent 1-2 cohorts are still maturing (rates will keep rising as time passes).
+- ACCEPT_LAG_SQL — the actual observed invite-to-accept lag (last 90 days), to ground
+  "how mature does a cohort need to be" in real data instead of a guess:
+    select round(percentile_cont(0.5) within group (
+             order by extract(epoch from (connected_at - invited_at)) / 86400), 1) as median_days_to_accept,
+           round(percentile_cont(0.9) within group (
+             order by extract(epoch from (connected_at - invited_at)) / 86400), 1) as p90_days_to_accept,
+           count(*) as accepted_n
+    from leads
+    where connected_at is not null and invited_at > now() - interval '90 days'
+  Compare a recent 30-day window against this 90-day one if you suspect the lag itself has
+  shifted (e.g. a summer/holiday slowdown) — a rising median/p90 means people are simply
+  slower to accept right now, not that the campaign got worse.
 - Time-to-reply: replied_at - invited_at (or - connected_at) on leads.
 - Volume by calendar day/week comes from events or daily_activity.
 - When rates differ across weeks, drill into segments: per instance (account),
@@ -157,6 +179,21 @@ where l.invited_at is not null
 group by 1
 order by 1 desc
 limit 16
+`.trim()
+
+// Actual observed invite-to-accept lag, last 90 days. Grounds "is this cohort old enough
+// to judge yet" in real data instead of a guessed threshold — see SCHEMA_DOC's ACCEPT_LAG_SQL
+// note. A rising median/p90 vs the historical norm means people are slower to accept right
+// now (e.g. a holiday slowdown), not that a campaign got worse.
+export const ACCEPT_LAG_SQL = `
+select
+  round(percentile_cont(0.5) within group (
+    order by extract(epoch from (connected_at - invited_at)) / 86400), 1) as median_days_to_accept,
+  round(percentile_cont(0.9) within group (
+    order by extract(epoch from (connected_at - invited_at)) / 86400), 1) as p90_days_to_accept,
+  count(*) as accepted_n
+from leads
+where connected_at is not null and invited_at > now() - interval '90 days'
 `.trim()
 
 export const CAMPAIGN_OVERVIEW_SQL = `

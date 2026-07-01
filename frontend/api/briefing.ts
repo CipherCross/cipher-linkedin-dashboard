@@ -20,6 +20,7 @@ import { generateObject, generateText, stepCountIs } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import {
+  ACCEPT_LAG_SQL,
   CAMPAIGN_OVERVIEW_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
@@ -71,6 +72,10 @@ const MAX_PRIOR_AGE_DAYS = 7
 const SEED_QUERIES: { label: string; sql: string }[] = [
   { label: 'Per-campaign funnel (campaign_overview)', sql: CAMPAIGN_OVERVIEW_SQL },
   { label: 'Weekly invite cohorts (weekly_funnel)', sql: WEEKLY_FUNNEL_SQL },
+  {
+    label: 'Invite → accept lag (days, last 90d) — cohort maturity floor, NOT a metric to report',
+    sql: ACCEPT_LAG_SQL,
+  },
   {
     label: 'Recent sync runs (freshness / failures)',
     sql: `select coalesce(i.account_name, i.label, s.instance_id) as account, s.instance_id,
@@ -124,8 +129,14 @@ HOW TO WORK
 - Investigate what CHANGED and what's AT RISK: acceptance/reply-rate moves vs prior weeks (segment by
   account, campaign, and message step), accounts approaching LinkedIn's ~100-200 invites/week safe
   zone, stale or failed syncs (check instances.last_sync_at and sync_runs), and stalled cohorts.
-- Replies LAG invites — never compare raw invites-this-week vs replies-this-week; reason in cohorts and
-  note when recent cohorts are simply still maturing rather than genuinely down.
+- Replies LAG invites, and so does ACCEPTANCE — someone invited today typically connects 2-7 days later,
+  slower still during holidays / low-activity stretches (e.g. summer). Never compare raw
+  invites-this-week vs replies-this-week; reason in cohorts. The seed data includes the actual observed
+  invite→accept lag (median/p90, last 90d) — a cohort younger than that p90 has not had the CHANCE to
+  convert yet. NEVER cite the acceptance or reply rate of such a cohort as a decline, a weak
+  campaign/channel, or "volume flowing somewhere bad" — that reads as a real problem to the team when
+  it's actually just an immature cohort. Either omit its rate or say plainly it's too early to judge; a
+  fresh cohort's VOLUME is fine to report, its RATE is not, until it clears the lag window.
 - DO NOT judge follow-up status from message threads. Linked Helper syncs its internal DB on a lag, so
   outbound replies the SDR has ALREADY sent may not be in the data yet — a thread that looks
   "unanswered" usually isn't. NEVER claim conversations are awaiting our reply or going cold, NEVER
@@ -212,9 +223,13 @@ VERIFY (use the tools — re-run queries, do NOT trust the drafts' numbers)
 - RECONCILE rates: a daily pace and a weekly/period total must be arithmetically consistent (a "~65/day"
   claim cannot sit next to "261 in the week", ~37/day). Fix any two numbers that contradict each other and
   state the time window behind each.
-- COHORTS: replies LAG invites. Confirm every acceptance/reply-rate claim is built from invite-week cohorts,
-  and that a "down vs last week" is a real decline, not a recent cohort still maturing — soften or cut it
-  if it's just immature.
+- COHORTS: replies AND acceptance LAG invites (acceptance typically 2-7 days, longer around holidays / slow
+  periods) — check the seed data's invite→accept lag (median/p90, last 90d) for the currently observed
+  window. Confirm every acceptance/reply-rate claim is built from invite-week cohorts old enough to have
+  cleared that p90, and that a "down vs last week" is a real decline, not a recent cohort still maturing.
+  CUT or soften ANY claim — including the headline — that cites the raw acceptance/reply rate of a cohort
+  still inside the lag window as if it were a problem; a low rate there is expected, not a signal. Its
+  volume can still be reported, just not its rate.
 - SIGNALS: cross-check every risk or change claiming a trend, decline, rise, or stall against the provided
   ANOMALY SIGNALS block (deterministic, not model-judged). If a claim isn't backed by a signal and can't be
   confirmed with a fresh query, cut it or soften it to what the data actually shows.
