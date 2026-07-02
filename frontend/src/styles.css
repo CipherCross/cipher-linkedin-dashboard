@@ -165,6 +165,7 @@ th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--bor
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
 tr:last-child td { border-bottom: none; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
+.table-scroll { max-height: 320px; overflow-y: auto; }
 
 .instance-list { display: flex; flex-direction: column; gap: 12px; }
 .instance-row { display: flex; gap: 10px; align-items: center; }

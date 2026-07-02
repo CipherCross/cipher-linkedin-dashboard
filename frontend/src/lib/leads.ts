@@ -136,6 +136,19 @@ export function weekRange(from: string): string[] {
   return out
 }
 
+/** Continuous days from `from` through today (UTC), so quiet days show as
+ *  zero instead of vanishing from a chart's x-axis. */
+export function dayRange(from: string): string[] {
+  const out: string[] = []
+  const last = new Date().toISOString().slice(0, 10)
+  for (const d = new Date(`${from}T00:00:00Z`); ; d.setUTCDate(d.getUTCDate() + 1)) {
+    const day = d.toISOString().slice(0, 10)
+    if (day > last) break
+    out.push(day)
+  }
+  return out
+}
+
 export function lastWeeks(n: number): string[] {
   const out: string[] = []
   const monday = new Date(weekStart(new Date().toISOString()))
@@ -183,6 +196,22 @@ export function leadsToActivity(leads: Lead[]): DailyActivity[] {
     add(l, l.replied_at, 'reply_received')
   }
   return [...counts.values()]
+}
+
+/** Leads bucketed by UTC day of added_at; undated = rows with NULL added_at
+ *  (unknown add date, not "never added"). */
+export function addedByDay(leads: Lead[]): { byDay: Map<string, number>; undated: number } {
+  const byDay = new Map<string, number>()
+  let undated = 0
+  for (const l of leads) {
+    if (!l.added_at) {
+      undated++
+      continue
+    }
+    const day = l.added_at.slice(0, 10)
+    byDay.set(day, (byDay.get(day) ?? 0) + 1)
+  }
+  return { byDay, undated }
 }
 
 const SEGMENT_RULES: Array<[string, RegExp]> = [

@@ -7,6 +7,7 @@ import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { CohortChart } from '../components/CohortChart'
 import { LeadAdditionsChart } from '../components/LeadAdditionsChart'
+import { AddBatchesTable } from '../components/AddBatchesTable'
 import { LagHistogram } from '../components/LagHistogram'
 import { ActivityChart } from '../components/ActivityChart'
 import { CampaignCompareTable } from '../components/CampaignCompareTable'
@@ -129,7 +130,8 @@ export function CampaignDetail() {
           </div>
 
           <div className="stack">
-            <LeadAdditionsChart leads={leads} />
+            <LeadAdditionsChart leads={leads} granularity="day" />
+            <AddBatchesTable leads={leads} />
           </div>
 
           <div className="stack">
