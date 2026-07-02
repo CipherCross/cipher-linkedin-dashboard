@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
+import { ImportHistoryPanel } from './ImportHistoryPanel'
 import {
   ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
   instanceName, leadKey,
@@ -40,6 +41,9 @@ export function ConversationDrawer({
   const [coaching, setCoaching] = useState<Coaching | null>(null)
   const [coachLoading, setCoachLoading] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  // Bumped after a manual import so the thread effect refetches the new rows.
+  const [reloadKey, setReloadKey] = useState(0)
   // Identifies the conversation a coach request was issued for, so a slow
   // response can't land on a drawer the user has since switched away from.
   const coachReqKey = useRef('')
@@ -54,7 +58,10 @@ export function ConversationDrawer({
     return () => document.removeEventListener('keydown', onKey)
   }, [lead, onClose])
 
-  // Fetch the full thread whenever the active lead changes.
+  // Switching leads always starts on the thread view, not a stale import panel.
+  useEffect(() => setImportOpen(false), [lead])
+
+  // Fetch the full thread whenever the active lead changes (or an import lands).
   useEffect(() => {
     if (!lead) {
       setRows(null)
@@ -85,7 +92,7 @@ export function ConversationDrawer({
     return () => {
       cancelled = true
     }
-  }, [lead])
+  }, [lead, reloadKey])
 
   // On-demand coaching: ask /api/coach for this conversation. The endpoint serves
   // a cached take instantly when the thread is unchanged, else generates a fresh
@@ -217,6 +224,19 @@ export function ConversationDrawer({
             </Link>
             {' · '}
             {accountLabel}
+            {!importOpen && (
+              <>
+                {' · '}
+                <button
+                  className="link-btn"
+                  onClick={() => setImportOpen(true)}
+                  disabled={!rows}
+                  title="Paste a conversation copied from LinkedIn"
+                >
+                  Import history
+                </button>
+              </>
+            )}
           </div>
           <div className="conv-status">
             <span className="muted small">Lead status</span>
@@ -236,6 +256,23 @@ export function ConversationDrawer({
 
         {error && <div className="banner conv-error">{error}</div>}
 
+        {importOpen && (
+          <ImportHistoryPanel
+            lead={lead}
+            accountName={
+              data?.instances.find((i) => i.id === lead.instance_id)?.account_name ?? null
+            }
+            existing={rows}
+            onImported={() => {
+              setReloadKey((k) => k + 1)
+              refetch()
+            }}
+            onClose={() => setImportOpen(false)}
+          />
+        )}
+
+        {!importOpen && (
+        <>
         <div className="conv-thread">
           {loading && <div className="muted center">Loading conversation…</div>}
           {rows && rows.length === 0 && !loading && (
@@ -347,6 +384,8 @@ export function ConversationDrawer({
             </>
           )}
         </div>
+        </>
+        )}
       </aside>
     </div>
   )

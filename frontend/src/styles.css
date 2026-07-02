@@ -749,3 +749,47 @@ tr.row-clickable:hover { background: #161d30; }
 }
 .playbook-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .playbook-preview { border: 1px solid var(--border); border-radius: 8px; padding: 4px 16px; background: var(--bg); }
+
+/* --- Manual conversation import (ConversationDrawer "Import history") ----- */
+.import-panel {
+  flex: 1; overflow-y: auto;
+  padding: 12px 16px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.import-panel textarea {
+  width: 100%; resize: vertical;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; line-height: 1.45;
+  font-family: inherit;
+}
+.import-panel textarea.import-paste { min-height: 220px; }
+.import-us { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.import-us label { cursor: pointer; }
+.import-block {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; background: var(--bg);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.import-block.excluded { opacity: 0.5; }
+.import-block-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.import-block-head .grow { flex: 1; min-width: 0; }
+.import-block input[type='datetime-local'] {
+  align-self: flex-start;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 8px; font-size: 12px;
+}
+.import-dir {
+  background: none; border: 1px solid var(--border); border-radius: 9px;
+  padding: 1px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.import-dir.out { color: var(--accent); border-color: #4f8ef766; }
+.import-dir.in { color: #34c98e; border-color: #34c98e66; }
+.import-flag {
+  font-size: 11px; padding: 1px 7px; border-radius: 9px; white-space: nowrap;
+  border: 1px solid #5d4d1a; background: #2a2410; color: #e8c96a;
+}
+.import-flag.dup { border-color: var(--border); background: #1d2538; color: var(--muted); }
+.import-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.import-foot .grow { flex: 1; }

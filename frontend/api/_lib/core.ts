@@ -125,6 +125,9 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   synced before v1.8.0). Use it for "when / how many leads were added per
   campaign": date_trunc('week', added_at), count(*) grouped by campaign_id.
   NULL added_at = unknown add date, not "never added".
+  Milestones may also be backfilled from manually imported conversations
+  (/api/import-conversation); a DB trigger keeps a non-NULL milestone from
+  regressing to NULL when the agent re-syncs.
 
 events — append-only action log (drives daily-activity charts)
   id bigint PK, instance_id, campaign_id, profile_url,
@@ -134,6 +137,11 @@ events — append-only action log (drives daily-activity charts)
 messages — actual message texts; full conversation threads, both directions
   id bigint PK, instance_id, campaign_id, profile_url, direction text ('in'|'out'),
   body text, sent_at timestamptz,
+  source text ('sync'|'manual') — 'sync' rows come from the LH2 agent and their
+    sent_at is the LH2 action-RUN time, which can lag the real message by
+    hours/days; 'manual' rows were pasted by the SDR from LinkedIn ("Import
+    history" in the dashboard) and carry the real message time. Threads the SDR
+    took over by hand are complete only thanks to manual imports.
   sentiment text — reply classification, set ONLY on inbound replies (direction='in'):
     'positive' (interested, wants to talk), 'neutral' (acknowledgement / not now),
     'negative' (not interested / unsubscribe), 'objection' (question or pushback),

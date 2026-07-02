@@ -68,6 +68,15 @@ these four columns:
 - `events` is append-only and derived from the same milestones (`derive_events`);
   it backs the daily-activity charts only.
 
+LH2 stops capturing a thread once the SDR takes it over by hand, so the
+ConversationDrawer has an **Import history** flow: paste a LinkedIn thread →
+parse (`src/lib/parseLinkedInThread.ts`) → preview/edit → `/api/import-conversation`
+writes `messages` rows with `source='manual'` and backfills NULL lead milestones.
+Manual rows carry real message times; agent rows carry LH2 action-run times — so
+dedup is by normalized body + direction, never the messages unique key. A trigger
+(`leads_keep_milestones`, migration 026) keeps the agent's re-sync from regressing
+a non-NULL milestone back to NULL.
+
 ### ID and key conventions
 - Campaign id = `"<instance_id>:<lh_campaign_id>"` (e.g. `notebook-1:42`). Built
   everywhere a campaign is written.
@@ -150,7 +159,8 @@ sit beside all-time totals; outbound is windowed to 90 days.
 - Server-only (Vercel project settings, **never** `VITE_`-prefixed):
   `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (optionally `SUPABASE_URL`),
   `CRON_SECRET` (guards the GET cron paths of `/api/classify` + `/api/briefing`),
-  `ADMIN_SECRET` (guards writes to `/api/config` + `/api/playbook`),
+  `ADMIN_SECRET` (guards writes to `/api/config` + `/api/playbook` +
+  `/api/import-conversation`),
   `SLACK_WEBHOOK_URL` (delivers the briefing to Slack).
 
 Crons (`frontend/vercel.json`): `/api/classify` at 06:00 UTC, `/api/briefing` at

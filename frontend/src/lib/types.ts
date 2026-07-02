@@ -32,6 +32,9 @@ export interface Message {
   reason: string | null
   classified_at: string | null
   classified_model?: string | null
+  /** 'sync' = written by the LH2 agent (sent_at is the action-run time);
+   *  'manual' = pasted by the SDR via Import history (real message time). */
+  source?: string | null
 }
 
 export interface Annotation {
