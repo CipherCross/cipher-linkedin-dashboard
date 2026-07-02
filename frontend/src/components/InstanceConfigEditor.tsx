@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Instance } from '../lib/types'
 import { useData } from '../lib/DataContext'
+import { useToast } from '../lib/ToastContext'
+import { instanceName } from '../lib/leads'
 import { adminPost } from '../lib/admin'
 
 // Per-instance config editor for the Health page. Writes the `config` override
@@ -44,6 +46,7 @@ function initBool(cfg: Record<string, unknown>) {
 
 export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   const { refetch } = useData()
+  const toast = useToast()
   const cfg = (inst.config ?? {}) as Record<string, unknown>
 
   const [open, setOpen] = useState(false)
@@ -139,14 +142,14 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
       const res = await adminPost('/api/config', { instance_id: inst.id, config })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setMsg(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
+        toast.error(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
       } else {
-        setMsg('Saved — applies on the next sync (≤30 min).')
+        toast.success(`${instanceName(inst)} config saved — applies on the next sync (≤30 min).`)
         setDirty(false) // saved state is the new baseline; allow re-seeding from props
         refetch()
       }
     } catch (e) {
-      setMsg(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
+      toast.error(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(false)
     }

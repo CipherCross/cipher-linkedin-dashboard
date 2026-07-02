@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ChevronDown, ChevronRight, MessagesSquare } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
+import { InitialsAvatar } from './Avatar'
+import { EmptyState } from './EmptyState'
+import { Skeleton } from './Skeleton'
 import {
   ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
   instanceName, leadKey,
 } from '../lib/leads'
-import { dateTime } from '../lib/format'
+import { clockTime, dayHeading } from '../lib/format'
 import type { Coaching, Lead, Message, Sentiment } from '../lib/types'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
@@ -34,18 +38,45 @@ export function ConversationDrawer({
   const [coaching, setCoaching] = useState<Coaching | null>(null)
   const [coachLoading, setCoachLoading] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
+  const [coachOpen, setCoachOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const drawerRef = useRef<HTMLDivElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
   // Identifies the conversation a coach request was issued for, so a slow
   // response can't land on a drawer the user has since switched away from.
   const coachReqKey = useRef('')
 
-  // Esc closes the drawer.
+  // Esc closes; Tab is trapped inside the drawer while it's open (modal dialog).
   useEffect(() => {
     if (!lead) return
+    const el = drawerRef.current
+    // Move focus into the dialog so keyboard users start inside it.
+    el?.focus()
+    const focusables = () =>
+      Array.from(
+        el?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((n) => n.offsetParent !== null)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab' || !el) return
+      const items = focusables()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey && (active === first || active === el)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -129,6 +160,7 @@ export function ConversationDrawer({
     setCoaching(null)
     setCoachError(null)
     setCoachLoading(false)
+    setCoachOpen(false)
   }, [lead])
 
   if (!lead) return null
@@ -187,61 +219,76 @@ export function ConversationDrawer({
 
   return (
     <div className="conv-overlay" onClick={onClose}>
-      <aside className="conv-drawer" onClick={(e) => e.stopPropagation()}>
+      <aside
+        className="conv-drawer"
+        onClick={(e) => e.stopPropagation()}
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Conversation with ${name}`}
+        tabIndex={-1}
+      >
         <header className="conv-head">
           <div className="conv-head-top">
-            <a
-              className="row-link conv-name"
-              href={lead.profile_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {name}
-            </a>
+            <InitialsAvatar name={name} size={40} />
+            <div className="conv-head-id">
+              <div className="conv-head-name-row">
+                <a
+                  className="row-link conv-name"
+                  href={lead.profile_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {name}
+                </a>
+                <a
+                  className="li-link"
+                  href={lead.profile_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open LinkedIn profile"
+                >
+                  in
+                </a>
+              </div>
+              <div className="muted small ellipsis" title={[lead.headline, lead.company].filter(Boolean).join(' · ')}>
+                {[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
+              </div>
+            </div>
             <button className="conv-close" onClick={onClose} aria-label="Close">
               ✕
             </button>
           </div>
-          <div className="muted small ellipsis">
-            {[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
-          </div>
-          <div className="muted small">
+
+          <div className="conv-status">
             <Link
-              className="row-link"
+              className="row-link muted small"
               to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
               onClick={onClose}
             >
               {campaignName}
             </Link>
-            {' · '}
-            {accountLabel}
-            {!importOpen && (
-              <>
-                {' · '}
-                <button
-                  className="link-btn"
-                  onClick={() => setImportOpen(true)}
-                  disabled={!rows}
-                  title="Paste a conversation copied from LinkedIn"
-                >
-                  Import history
-                </button>
-              </>
-            )}
-          </div>
-          <div className="conv-status">
-            <span className="muted small">Lead status</span>
+            <span className="muted small">· {accountLabel}</span>
             {statusMeta ? (
               <span
                 className={`badge senti ${statusMeta.cls}`}
-                title={latestInbound?.reason ?? ''}
+                title={latestInbound?.reason ?? 'Follows the most recent reply'}
               >
                 {statusMeta.label}
               </span>
             ) : (
-              <span className="muted small">— no classified reply</span>
+              <span className="badge">No reply yet</span>
             )}
-            <span className="muted small">· follows the most recent reply</span>
+            {!importOpen && (
+              <button
+                className="link-btn conv-import-btn"
+                onClick={() => setImportOpen(true)}
+                disabled={!rows}
+                title="Paste a conversation copied from LinkedIn"
+              >
+                Import history
+              </button>
+            )}
           </div>
         </header>
 
@@ -265,19 +312,41 @@ export function ConversationDrawer({
         {!importOpen && (
         <>
         <div className="conv-thread">
-          {loading && <div className="muted center">Loading conversation…</div>}
-          {rows && rows.length === 0 && !loading && (
-            <div className="muted center">No messages in this thread.</div>
+          {loading && (
+            <div className="conv-thread-skeleton" aria-hidden="true">
+              <Skeleton className="sk-bubble in" width="68%" height={44} radius="10px 10px 10px 2px" />
+              <Skeleton className="sk-bubble out" width="54%" height={32} radius="10px 10px 2px 10px" />
+              <Skeleton className="sk-bubble in" width="60%" height={38} radius="10px 10px 10px 2px" />
+            </div>
           )}
-          {rows?.map((m) => {
+          {rows && rows.length === 0 && !loading && (
+            <EmptyState
+              icon={MessagesSquare}
+              title="No messages yet"
+              hint="LH2 stops capturing a thread once you take it over by hand. Paste the LinkedIn conversation to import its history."
+              action={
+                <button className="link-btn" onClick={() => setImportOpen(true)}>
+                  Import history
+                </button>
+              }
+            />
+          )}
+          {rows?.map((m, idx) => {
             const inbound = m.direction === 'in'
             const meta = inbound && m.sentiment ? SENTIMENT_META[m.sentiment] : null
+            const prev = idx > 0 ? rows[idx - 1] : null
+            const newDay =
+              !prev || new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString()
             return (
-              <div className={`msg ${inbound ? 'in' : 'out'}`} key={m.id}>
+              <Fragment key={m.id}>
+              {newDay && (
+                <div className="msg-day-sep"><span>{dayHeading(m.sent_at)}</span></div>
+              )}
+              <div className={`msg ${inbound ? 'in' : 'out'}`}>
                 <div className="msg-bubble">
                   {m.body || <span className="muted">(empty)</span>}
                 </div>
-                <div className="msg-time muted small">{dateTime(m.sent_at)}</div>
+                <div className="msg-time muted small">{clockTime(m.sent_at)}</div>
                 {inbound && (
                   <div className="msg-reclassify">
                     {meta && (
@@ -303,37 +372,52 @@ export function ConversationDrawer({
                   </div>
                 )}
               </div>
+              </Fragment>
             )
           })}
         </div>
 
-        <div className="conv-coaching">
+        <div className={`conv-coaching ${coachOpen ? 'open' : ''}`}>
           <div className="conv-coaching-head">
-            <span className="conv-coaching-title">AI coach</span>
-            <span className="muted small grow">— how to earn the next reply</span>
+            <button
+              className="conv-coaching-toggle"
+              onClick={() => setCoachOpen((o) => !o)}
+              aria-expanded={coachOpen}
+            >
+              {coachOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+              <span className="conv-coaching-title">AI coach</span>
+            </button>
+            {actionMeta && (
+              <span className={`badge senti ${actionMeta.cls}`} title="Suggested next action">
+                {actionMeta.label}
+              </span>
+            )}
+            <span className="grow" />
             <button
               className="link-btn"
-              onClick={() => loadCoaching(!!coaching)}
+              onClick={() => {
+                setCoachOpen(true)
+                loadCoaching(!!coaching)
+              }}
               disabled={coachLoading}
             >
               {coachLoading ? 'Coaching…' : coaching ? 'Regenerate' : 'Get coaching'}
             </button>
           </div>
 
+          {coachOpen && (
+          <div className="conv-coaching-body">
           {coachError && <div className="banner conv-error">{coachError}</div>}
           {coachLoading && !coaching && (
             <div className="muted small">Reading the conversation…</div>
           )}
+          {!coaching && !coachLoading && !coachError && (
+            <div className="muted small">Get an AI read on what to say next to earn a reply.</div>
+          )}
 
           {coaching && (
             <>
-              {actionMeta && (
-                <div className="coach-action">
-                  <span className="muted small">Next</span>
-                  <span className={`badge senti ${actionMeta.cls}`}>{actionMeta.label}</span>
-                  {coaching.cached && <span className="muted small">· cached</span>}
-                </div>
-              )}
+              {coaching.cached && <div className="muted small coach-cached">Cached take</div>}
 
               {coaching.summary && <div className="coach-summary small">{coaching.summary}</div>}
 
@@ -373,6 +457,8 @@ export function ConversationDrawer({
                 </div>
               )}
             </>
+          )}
+          </div>
           )}
         </div>
         </>

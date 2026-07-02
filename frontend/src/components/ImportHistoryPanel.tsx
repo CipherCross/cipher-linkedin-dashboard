@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { adminPost } from '../lib/admin'
+import { useToast } from '../lib/ToastContext'
 import { normalizeForDedup, parseLinkedInThread } from '../lib/parseLinkedInThread'
 import type { Lead } from '../lib/types'
 
@@ -67,6 +68,7 @@ export function ImportHistoryPanel({
   onImported: () => void
   onClose: () => void
 }) {
+  const toast = useToast()
   const [text, setText] = useState('')
   const [blocks, setBlocks] = useState<Block[] | null>(null)
   const [senders, setSenders] = useState<string[]>([])
@@ -178,8 +180,13 @@ export function ImportHistoryPanel({
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      setResult(j as SaveResult)
+      const saved = j as SaveResult
+      setResult(saved)
       onImported()
+      toast.success(
+        `Imported ${saved.inserted} message${saved.inserted === 1 ? '' : 's'}` +
+          (saved.skipped ? ` · ${saved.skipped} skipped` : ''),
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -187,9 +194,26 @@ export function ImportHistoryPanel({
     }
   }
 
+  // Which of the three stages the panel is on, for the numbered step header.
+  const step = result ? 3 : blocks ? 2 : 1
+  const stepsHeader = (
+    <ol className="import-steps">
+      {['Paste', 'Review', 'Import'].map((label, i) => {
+        const n = i + 1
+        return (
+          <li key={label} className={n === step ? 'active' : n < step ? 'done' : ''}>
+            <span className="import-step-n">{n}</span>
+            {label}
+          </li>
+        )
+      })}
+    </ol>
+  )
+
   if (result) {
     return (
       <div className="import-panel">
+        {stepsHeader}
         <div>
           Imported <strong>{result.inserted}</strong> new message{result.inserted === 1 ? '' : 's'}
           {result.skipped > 0 && (
@@ -213,6 +237,7 @@ export function ImportHistoryPanel({
 
   return (
     <div className="import-panel">
+      {stepsHeader}
       {!blocks && (
         <>
           <div className="muted small">

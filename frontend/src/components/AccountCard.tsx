@@ -36,23 +36,26 @@ export function AccountCard({
   return (
     <div className="card account-card">
       <div className="account-card-head">
-        <Avatar inst={inst} size={38} />
-        <div style={{ minWidth: 0 }}>
-          <div className="account-cell">
-            <span className={`dot inline ${fresh ? 'ok' : 'stale'}`} />
-            <Link className="row-link account-card-name" to={`/account/${encodeURIComponent(inst.id)}`}>
-              {instanceName(inst)}
-            </Link>
-            {inst.account_url && (
-              <a className="li-link" href={inst.account_url} target="_blank"
-                rel="noreferrer" title="Open LinkedIn profile">in</a>
-            )}
+        <Link
+          className="account-card-identity row-link"
+          to={`/account/${encodeURIComponent(inst.id)}`}
+        >
+          <Avatar inst={inst} size={38} />
+          <div style={{ minWidth: 0 }}>
+            <div className="account-cell">
+              <span className={`dot inline ${fresh ? 'ok' : 'stale'}`} />
+              <span className="account-card-name">{instanceName(inst)}</span>
+            </div>
+            <div className="muted small">
+              {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
+              {inst.agent_version && ` · agent v${inst.agent_version}`}
+            </div>
           </div>
-          <div className="muted small">
-            {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
-            {inst.agent_version && ` · agent v${inst.agent_version}`}
-          </div>
-        </div>
+        </Link>
+        {inst.account_url && (
+          <a className="li-link" href={inst.account_url} target="_blank"
+            rel="noreferrer" title="Open LinkedIn profile">in</a>
+        )}
       </div>
 
       <div className="account-card-stats">

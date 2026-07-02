@@ -37,6 +37,23 @@ export function dateTime(ts: string): string {
   })
 }
 
+/** "2:04 PM" — the time only, local. Pairs with day separators in a thread. */
+export function clockTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Day heading for a thread separator: "Today" / "Yesterday" / "Jun 25" (local). */
+export function dayHeading(ts: string): string {
+  const d = new Date(ts)
+  const now = new Date()
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diff = Math.round((startOf(now) - startOf(d)) / 86_400_000)
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Yesterday'
+  const label = `${MONTHS[d.getMonth()]} ${d.getDate()}`
+  return d.getFullYear() === now.getFullYear() ? label : `${label} '${String(d.getFullYear()).slice(2)}`
+}
+
 /** Integer with thousands separators. */
 export function num(n: number): string {
   return n.toLocaleString('en-US')

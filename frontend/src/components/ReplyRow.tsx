@@ -4,6 +4,7 @@ import type { ReplyInfo } from '../lib/leads'
 import { SENTIMENT_META, instanceName } from '../lib/leads'
 import { useConversation } from '../lib/ConversationContext'
 import { ago, shortDate } from '../lib/format'
+import { InitialsAvatar } from './Avatar'
 
 /** One reply row — the lead, their latest inbound message + sentiment badge, the
  *  campaign/account, and when they replied. Shared by the Replies page, Hot
@@ -29,31 +30,32 @@ export function ReplyRow({
     lead.instance_id,
   )
 
+  const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
+
   return (
     <div className="reply-row row-clickable" onClick={() => openConversation(lead)}>
+      <InitialsAvatar name={name} size={34} />
       <div className="reply-who">
-        <a
-          className="row-link"
-          href={lead.profile_url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')}
-        </a>
+        <div className="reply-who-top">
+          <a
+            className="row-link"
+            href={lead.profile_url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {name}
+          </a>
+          {meta && (
+            <span className={`badge senti ${meta.cls}`} title={reply?.reason ?? ''}>
+              {meta.label}
+            </span>
+          )}
+        </div>
         <div className="muted small ellipsis" title={lead.headline ?? ''}>
           {[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
         </div>
-        {reply && (
-          <div className="reply-body">
-            {meta && (
-              <span className={`badge senti ${meta.cls}`} title={reply.reason ?? ''}>
-                {meta.label}
-              </span>
-            )}
-            “{reply.body}”
-          </div>
-        )}
+        {reply && <div className="reply-body">“{reply.body}”</div>}
       </div>
       <div className="reply-meta">
         <Link

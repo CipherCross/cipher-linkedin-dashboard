@@ -1,6 +1,9 @@
+import { useState } from 'react'
+import { Activity } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { instanceName } from '../lib/leads'
 import { InstancePanel } from '../components/InstancePanel'
+import { EmptyState } from '../components/EmptyState'
 import { ago } from '../lib/format'
 
 export function Health() {
@@ -22,9 +25,10 @@ export function Health() {
         </div>
       </header>
 
-      <div className="main-grid">
-        <div className="card">
+      <div className="main-grid health-grid">
+        <div className="card health-runs">
           <h2>Recent sync runs</h2>
+          <div className="table-scroll tall">
           <table>
             <thead>
               <tr>
@@ -46,20 +50,45 @@ export function Health() {
                     <span className={`badge status-${r.status}`}>{r.status}</span>
                   </td>
                   <td className="num">{r.rows_upserted ?? '—'}</td>
-                  <td className="muted small ellipsis" title={r.error ?? ''}>
-                    {r.error ?? ''}
-                  </td>
+                  <ErrorCell error={r.error} />
                 </tr>
               ))}
               {data.syncRuns.length === 0 && (
-                <tr><td colSpan={6} className="muted">No sync runs recorded yet.</td></tr>
+                <tr>
+                  <td colSpan={6}>
+                    <EmptyState
+                      icon={Activity}
+                      title="No sync runs yet"
+                      hint="Runs appear here once an agent syncs a notebook (agents run every ~30 min)."
+                    />
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
+          </div>
         </div>
-        <InstancePanel instances={data.instances} />
+        <InstancePanel instances={data.instances} runs={data.syncRuns} />
       </div>
     </>
+  )
+}
+
+/** The error column — one truncated line by default, expands to the full text on
+ *  click (previously only reachable via the browser title tooltip). */
+function ErrorCell({ error }: { error: string | null }) {
+  const [open, setOpen] = useState(false)
+  if (!error) return <td className="muted">—</td>
+  return (
+    <td className="error-cell">
+      <button
+        className={`error-cell-btn ${open ? 'open' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        title={open ? 'Collapse' : 'Show full error'}
+      >
+        {error}
+      </button>
+    </td>
   )
 }
 

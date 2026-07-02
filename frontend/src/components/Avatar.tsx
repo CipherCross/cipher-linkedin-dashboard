@@ -2,6 +2,30 @@ import { useState } from 'react'
 import type { Instance } from '../lib/types'
 import { instanceName } from '../lib/leads'
 
+/** Initials-only circular avatar for entities without a photo (e.g. leads —
+ *  LinkedIn contacts have no synced avatar). Neutral fill so it never competes
+ *  with the sentiment colours around it. */
+export function InitialsAvatar({ name, size = 32 }: { name: string; size?: number }) {
+  const initials =
+    name
+      .replace(/https?:\/\/[^\s]*\//, '')
+      .split(/\s+/)
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || '?'
+  return (
+    <span
+      className="avatar fallback lead"
+      style={{ width: size, height: size, fontSize: size * 0.36 }}
+      aria-hidden="true"
+    >
+      {initials}
+    </span>
+  )
+}
+
 /** LinkedIn profile photo with an initials fallback — avatar URLs from
  *  media.licdn.com are signed and can expire between syncs. */
 export function Avatar({ inst, size = 32 }: { inst: Instance; size?: number }) {

@@ -3,6 +3,9 @@ import { useChat } from '@ai-sdk/react'
 import type { UIMessage } from 'ai'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import {
+  Check, ChevronDown, ChevronRight, Database, Loader2, Send, Sparkles, Square, X,
+} from 'lucide-react'
 
 const SUGGESTIONS = [
   'Why did the recent spike in invites not produce the same reply count as a month ago?',
@@ -27,14 +30,16 @@ function ToolCall({ part }: { part: any }) {
   const rowCount = typeof out === 'object' && out ? out.rowCount : undefined
 
   return (
-    <div className={`chat-tool ${failed ? 'failed' : ''}`}>
+    <div className={`chat-tool ${failed ? 'failed' : running ? 'running' : ''}`}>
       <button className="chat-tool-head" onClick={() => setOpen(!open)}>
-        <span className="chat-tool-name">
-          {running ? '⏳' : failed ? '✕' : '✓'} {name}
+        <span className="chat-tool-icon">
+          {running ? <Loader2 size={13} className="spin" /> : failed ? <X size={13} /> : <Check size={13} />}
         </span>
+        <Database size={13} className="chat-tool-glyph" />
+        <span className="chat-tool-name">{name}</span>
         {part.input?.purpose && <span className="muted">{part.input.purpose}</span>}
         {rowCount != null && <span className="muted">{rowCount} rows</span>}
-        <span className="chat-tool-caret">{open ? '▾' : '▸'}</span>
+        {open ? <ChevronDown size={14} className="chat-tool-caret" /> : <ChevronRight size={14} className="chat-tool-caret" />}
       </button>
       {open && (
         <div className="chat-tool-body">
@@ -60,7 +65,7 @@ function Reasoning({ text }: { text: string }) {
     <div className="chat-reasoning">
       <button className="chat-tool-head" onClick={() => setOpen(!open)}>
         <span className="chat-reasoning-label">Thinking</span>
-        <span className="chat-tool-caret">{open ? '▾' : '▸'}</span>
+        {open ? <ChevronDown size={14} className="chat-tool-caret" /> : <ChevronRight size={14} className="chat-tool-caret" />}
       </button>
       {open && <div className="chat-reasoning-body">{text}</div>}
     </div>
@@ -94,9 +99,10 @@ function Message({ m }: { m: UIMessage }) {
 }
 
 export function Chat() {
-  const { messages, sendMessage, status, error } = useChat()
+  const { messages, sendMessage, status, error, stop } = useChat()
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const busy = status === 'submitted' || status === 'streaming'
 
   // Pin to the newest message by scrolling the chat container itself; using
@@ -105,6 +111,15 @@ export function Chat() {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, status])
+
+  // Grow the textarea with its content up to a cap, then scroll internally.
+  const grow = () => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }
+  useEffect(grow, [input])
 
   const submit = (text: string) => {
     const trimmed = text.trim()
@@ -129,12 +144,19 @@ export function Chat() {
         <div className="chat-scroll" ref={scrollRef}>
           {messages.length === 0 && (
             <div className="chat-empty">
-              <div className="muted">Try one of these:</div>
-              {SUGGESTIONS.map((s) => (
-                <button key={s} className="chat-suggestion" onClick={() => submit(s)}>
-                  {s}
-                </button>
-              ))}
+              <div className="chat-empty-icon"><Sparkles size={26} /></div>
+              <div className="chat-empty-title">Ask about your campaign data</div>
+              <div className="chat-empty-blurb muted">
+                Claude answers with read-only SQL against Supabase — funnels, cohorts,
+                per-account and per-step performance. Try one of these:
+              </div>
+              <div className="chat-suggestions">
+                {SUGGESTIONS.map((s) => (
+                  <button key={s} className="chat-suggestion" onClick={() => submit(s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {messages.map((m) => (
@@ -156,17 +178,30 @@ export function Chat() {
             submit(input)
           }}
         >
-          <input
+          <textarea
+            ref={inputRef}
             className="chat-input"
             value={input}
+            rows={1}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="e.g. Why are replies down despite more invites?"
-            disabled={busy}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                submit(input)
+              }
+            }}
+            placeholder="Ask anything — Enter to send, Shift+Enter for a new line"
             autoFocus
           />
-          <button className="chat-send" type="submit" disabled={busy || !input.trim()}>
-            {busy ? '…' : 'Send'}
-          </button>
+          {busy ? (
+            <button className="chat-send stop" type="button" onClick={() => stop()} title="Stop">
+              <Square size={15} fill="currentColor" />
+            </button>
+          ) : (
+            <button className="chat-send" type="submit" disabled={!input.trim()} title="Send">
+              <Send size={16} />
+            </button>
+          )}
         </form>
       </div>
     </>

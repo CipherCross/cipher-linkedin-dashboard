@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { ChevronDown, ChevronRight, Sunrise } from 'lucide-react'
 import { useData } from '../lib/DataContext'
+import { useToast } from '../lib/ToastContext'
 import type { Briefing, BriefingAction, BriefingChange, BriefingRisk } from '../lib/types'
 
 // Severity → existing badge color classes (see styles.css).
@@ -64,11 +66,14 @@ const STAGE_LABEL: Record<string, string> = {
  *  lets the team regenerate it or flip back to read the previous day's briefing. */
 export function BriefingCard() {
   const { data, refetch } = useData()
+  const toast = useToast()
   const [busy, setBusy] = useState(false)
   const [busyStage, setBusyStage] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [viewPrev, setViewPrev] = useState(false)
+  // Collapsed by default — the briefing is long and Ukrainian; the KPI row above
+  // is the primary content, so show only the headline + top action until expanded.
+  const [expanded, setExpanded] = useState(false)
 
   const briefing = data?.briefing ?? null
   const prevBriefing = data?.prevBriefing ?? null
@@ -81,7 +86,6 @@ export function BriefingCard() {
   // day that never finishes here still keeps advancing via the daily cron / a later click.
   async function refresh() {
     setBusy(true)
-    setErr(null)
     setBusyStage(null)
     const MAX_ITER = 12
     const deadline = Date.now() + 4 * 60_000
@@ -97,6 +101,7 @@ export function BriefingCard() {
         }
         if (j.status === 'done') {
           refetch()
+          toast.success('Брифінг оновлено')
           return
         }
         if (j.status === 'error') {
@@ -109,7 +114,7 @@ export function BriefingCard() {
         await new Promise((r) => setTimeout(r, 2000))
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      toast.error(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
       setBusyStage(null)
@@ -131,7 +136,8 @@ export function BriefingCard() {
       <div className="briefing-head">
         <div>
           <h2 className="briefing-title">
-            📣 Ранковий брифінг{showingPrev ? ' — попередній' : ''}
+            <Sunrise size={16} className="briefing-title-icon" />
+            Ранковий брифінг{showingPrev ? ' — попередній' : ''}
           </h2>
           {active ? (
             <div className="muted small">
@@ -163,11 +169,30 @@ export function BriefingCard() {
         </div>
       </div>
 
-      {err && <div className="banner">{err}</div>}
-
       {active && (
         <>
           {active.headline && <div className="briefing-headline">{active.headline}</div>}
+
+          {/* Collapsed digest: headline (above) + the single top action. */}
+          {!expanded && active.actions?.length > 0 && (
+            <div className="briefing-top-action">
+              <span className={ACTION_CLS[active.actions[0].priority]}>
+                {LEVEL_UK[active.actions[0].priority]}
+              </span>{' '}
+              {active.actions[0].text}
+            </div>
+          )}
+
+          <button
+            className="briefing-details-toggle briefing-expand-toggle"
+            onClick={() => setExpanded((e) => !e)}
+          >
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {expanded ? 'Згорнути' : 'Показати весь брифінг'}
+          </button>
+
+          {expanded && (
+          <>
           {active.summary && <p className="briefing-summary">{active.summary}</p>}
 
           {active.changes?.length > 0 && (
@@ -236,6 +261,8 @@ export function BriefingCard() {
                 </div>
               )}
             </>
+          )}
+          </>
           )}
         </>
       )}

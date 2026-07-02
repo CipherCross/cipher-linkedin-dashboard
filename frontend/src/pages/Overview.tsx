@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Users } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
   latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeTotals,
@@ -10,6 +12,7 @@ import { HotLeads } from '../components/HotLeads'
 import { RepliesPanel } from '../components/RepliesPanel'
 import { BriefingCard } from '../components/BriefingCard'
 import { DateRangePicker } from '../components/DateRangePicker'
+import { EmptyState } from '../components/EmptyState'
 
 const STALE_HOURS = 24
 
@@ -64,8 +67,6 @@ export function Overview() {
         </div>
       </header>
 
-      <BriefingCard />
-
       <KpiCards
         totals={view.totals}
         prev={view.prevTotals}
@@ -74,6 +75,8 @@ export function Overview() {
         flowLabel={range.label}
         positive={view.totals.positive}
       />
+
+      <BriefingCard />
 
       <HotLeads
         leads={data.leads}
@@ -91,21 +94,28 @@ export function Overview() {
         instances={data.instances}
       />
 
-      <div className="account-grid">
-        {view.instances.map((inst) => (
-          <AccountCard
-            key={inst.id}
-            inst={inst}
-            leads={view.leadsByInstance.get(inst.id) ?? []}
-            campaignsMeta={data.campaigns}
-            range={range}
-            latest={view.latest}
-          />
-        ))}
-        {view.instances.length === 0 && (
-          <div className="card muted">No instances registered yet.</div>
-        )}
-      </div>
+      {view.instances.length === 0 ? (
+        <EmptyState
+          className="card"
+          icon={Users}
+          title="No accounts yet"
+          hint="Run the sync agent on a notebook to register your first LinkedIn account."
+          action={<Link className="link-btn" to="/health">Open Sync health</Link>}
+        />
+      ) : (
+        <div className="account-grid">
+          {view.instances.map((inst) => (
+            <AccountCard
+              key={inst.id}
+              inst={inst}
+              leads={view.leadsByInstance.get(inst.id) ?? []}
+              campaignsMeta={data.campaigns}
+              range={range}
+              latest={view.latest}
+            />
+          ))}
+        </div>
+      )}
     </>
   )
 }

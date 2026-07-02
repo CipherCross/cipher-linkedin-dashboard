@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { ChevronDown, ChevronRight, GraduationCap, Inbox, Loader2, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
+import { useToast } from '../lib/ToastContext'
 import {
   SENTIMENT_META, SENTIMENT_ORDER, instanceName, latestRepliesByLead, leadKey,
 } from '../lib/leads'
 import { ReplyRow } from '../components/ReplyRow'
+import { EmptyState } from '../components/EmptyState'
 import { num, shortDate } from '../lib/format'
 import type { CoachingDigest, Sentiment } from '../lib/types'
+
+type Filter = Sentiment | 'unclassified'
+const isFilter = (v: string | null): v is Filter =>
+  v === 'unclassified' || SENTIMENT_ORDER.includes(v as Sentiment)
 
 const RANGES = [
   { label: '7d', days: 7 },
@@ -19,10 +27,21 @@ const RANGES = [
  *  follow-up worklist for the team, now sorted by the reply's decision. */
 export function Replies() {
   const { data, refetch } = useData()
+  const toast = useToast()
+  const [params, setParams] = useSearchParams()
   const [rangeDays, setRangeDays] = useState(30)
-  const [filter, setFilter] = useState<Sentiment | 'unclassified' | null>(null)
+  // Sentiment filter lives in the URL so deep links (e.g. the Overview "Hot
+  // leads → View all" → /replies?sentiment=positive) land pre-filtered and views
+  // are shareable.
+  const filterParam = params.get('sentiment')
+  const filter: Filter | null = isFilter(filterParam) ? filterParam : null
+  const setFilter = (f: Filter | null) => {
+    const next = new URLSearchParams(params)
+    if (f) next.set('sentiment', f)
+    else next.delete('sentiment')
+    setParams(next, { replace: true })
+  }
   const [classifying, setClassifying] = useState(false)
-  const [classifyMsg, setClassifyMsg] = useState<string | null>(null)
   const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
   const [digestOpen, setDigestOpen] = useState(false)
   const [digestBusy, setDigestBusy] = useState<string | null>(null)
@@ -109,18 +128,17 @@ export function Replies() {
 
   async function classify() {
     setClassifying(true)
-    setClassifyMsg(null)
     try {
       const res = await fetch('/api/classify', { method: 'POST' })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      setClassifyMsg(
+      toast.success(
         `Classified ${j.classified} repl${j.classified === 1 ? 'y' : 'ies'}` +
           (j.remaining ? `, ${j.remaining} still queued` : ' — all caught up')
       )
       refetch()
     } catch (e) {
-      setClassifyMsg(`Couldn't classify: ${e instanceof Error ? e.message : String(e)}`)
+      toast.error(`Couldn't classify: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setClassifying(false)
     }
@@ -138,7 +156,12 @@ export function Replies() {
           </div>
         </div>
         <div className="controls">
-          <button className="btn-accent" onClick={classify} disabled={classifying}>
+          <button className="btn-accent icon-btn" onClick={classify} disabled={classifying}>
+            {classifying ? (
+              <Loader2 size={15} className="spin" />
+            ) : (
+              <Sparkles size={15} />
+            )}
             {classifying ? 'Classifying…' : 'Classify new replies'}
           </button>
           <div className="range-group">
@@ -155,16 +178,13 @@ export function Replies() {
         </div>
       </header>
 
-      {classifyMsg && (
-        <div className="muted small classify-status">{classifyMsg}</div>
-      )}
-
       <div className="card coach-digest-card">
         <button
           className="coach-digest-toggle"
           onClick={() => setDigestOpen((o) => !o)}
         >
-          <span className="coach-digest-caret">{digestOpen ? '▾' : '▸'}</span>
+          {digestOpen ? <ChevronDown size={15} className="coach-digest-caret" /> : <ChevronRight size={15} className="coach-digest-caret" />}
+          <GraduationCap size={16} className="coach-digest-icon" />
           Your coaching digest
           <span className="muted small">— recurring habits to fix for more replies</span>
         </button>
@@ -211,25 +231,35 @@ export function Replies() {
         )}
       </div>
 
-      <div className="range-group sentiment-filter">
-        <button className={!filter ? 'active' : ''} onClick={() => setFilter(null)}>
-          All {repliesAll.length}
+      <div className="segmented sentiment-filter" role="tablist" aria-label="Filter replies by sentiment">
+        <button
+          className={`segmented-item ${!filter ? 'active' : ''}`}
+          role="tab"
+          aria-selected={!filter}
+          onClick={() => setFilter(null)}
+        >
+          All <span className="segmented-count">{repliesAll.length}</span>
         </button>
         {SENTIMENT_ORDER.filter((s) => counts[s]).map((s) => (
           <button
             key={s}
-            className={`senti ${SENTIMENT_META[s].cls} ${filter === s ? 'active' : ''}`}
+            className={`segmented-item ${filter === s ? 'active' : ''}`}
+            role="tab"
+            aria-selected={filter === s}
             onClick={() => setFilter(filter === s ? null : s)}
           >
-            {SENTIMENT_META[s].label} {counts[s]}
+            <span className={`seg-dot ${SENTIMENT_META[s].cls}`} />
+            {SENTIMENT_META[s].label} <span className="segmented-count">{counts[s]}</span>
           </button>
         ))}
         {counts['unclassified'] ? (
           <button
-            className={filter === 'unclassified' ? 'active' : ''}
+            className={`segmented-item ${filter === 'unclassified' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={filter === 'unclassified'}
             onClick={() => setFilter(filter === 'unclassified' ? null : 'unclassified')}
           >
-            Unclassified {counts['unclassified']}
+            Unclassified <span className="segmented-count">{counts['unclassified']}</span>
           </button>
         ) : null}
       </div>
@@ -246,7 +276,20 @@ export function Replies() {
             />
           ))}
           {replies.length === 0 && (
-            <div className="muted">No replies in this period.</div>
+            <EmptyState
+              icon={Inbox}
+              title={filter ? 'No replies match this filter' : 'No replies in this period'}
+              hint={
+                filter
+                  ? 'Try a different sentiment or a wider date range.'
+                  : 'Replies from your prospects show up here, newest first.'
+              }
+              action={
+                filter ? (
+                  <button className="link-btn" onClick={() => setFilter(null)}>Show all replies</button>
+                ) : undefined
+              }
+            />
           )}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DataProvider } from './lib/DataContext'
+import { ToastProvider } from './lib/ToastContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { Overview } from './pages/Overview'
@@ -15,6 +16,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <DataProvider>
+        <ToastProvider>
         <HashRouter>
           <Routes>
             <Route element={<Layout />}>
@@ -31,6 +33,7 @@ export default function App() {
             </Route>
           </Routes>
         </HashRouter>
+        </ToastProvider>
       </DataProvider>
     </ErrorBoundary>
   )

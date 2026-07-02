@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -13,6 +13,7 @@ import { ConversationProvider } from '../lib/ConversationContext'
 import type { Instance } from '../lib/types'
 import { ago } from '../lib/format'
 import { Logo } from './Logo'
+import { PageSkeleton } from './Skeleton'
 
 const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -23,8 +24,18 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/chat', label: 'Chat', icon: Sparkles },
 ]
 
+// Which loading skeleton best matches the route the user landed on (deep links
+// can open any page first). Keeps the first paint shaped like the real page.
+function skeletonVariant(pathname: string): 'overview' | 'table' | 'list' | 'simple' {
+  if (pathname.startsWith('/leads') || pathname.startsWith('/health')) return 'table'
+  if (pathname.startsWith('/replies')) return 'list'
+  if (pathname.startsWith('/playbook') || pathname.startsWith('/chat')) return 'simple'
+  return 'overview'
+}
+
 export function Layout() {
   const { data, loading } = useData()
+  const location = useLocation()
 
   return (
     <div className="app">
@@ -58,7 +69,7 @@ export function Layout() {
         {data?.error && <div className="banner">Supabase error: {data.error}</div>}
 
         {loading || !data ? (
-          <Splash />
+          <PageSkeleton variant={skeletonVariant(location.pathname)} />
         ) : (
           <ConversationProvider>
             <Outlet />
@@ -107,19 +118,5 @@ function SyncChip({ instances }: { instances: Instance[] }) {
       <span className="sync-dot" aria-hidden="true" />
       <span className="sync-chip-label">{label}</span>
     </Link>
-  )
-}
-
-function Splash() {
-  return (
-    <div className="splash">
-      <div className="splash-mark">
-        <Logo size={44} />
-      </div>
-      <div className="splash-name">Outreach Deck</div>
-      <div className="splash-bar" role="progressbar" aria-label="Loading dashboard">
-        <span />
-      </div>
-    </div>
   )
 }

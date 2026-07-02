@@ -3,7 +3,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { supabase } from '../lib/supabase'
 import { adminPost } from '../lib/admin'
+import { useToast } from '../lib/ToastContext'
 import { shortDate } from '../lib/format'
+import { Skeleton } from '../components/Skeleton'
 
 // The single global playbook: one Markdown document that grounds the AI
 // conversation coach (/api/coach) for every account. Read here with the anon
@@ -33,6 +35,7 @@ e.g. a 15-minute call.
 - Stack multiple asks in one message`
 
 export function Playbook() {
+  const toast = useToast()
   const [content, setContent] = useState('')
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -68,19 +71,18 @@ export function Playbook() {
 
   async function save() {
     setBusy(true)
-    setMsg(null)
     try {
       const res = await adminPost('/api/playbook', { content })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setMsg(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
+        toast.error(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
       } else {
         setSavedAt(new Date().toISOString())
         setDirty(false)
-        setMsg('Saved — the coach uses it on the next analysis.')
+        toast.success('Playbook saved — the coach uses it on the next analysis.')
       }
     } catch (e) {
-      setMsg(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
+      toast.error(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(false)
     }
@@ -98,36 +100,51 @@ export function Playbook() {
           </div>
         </div>
         <div className="controls">
-          <button className="link-btn" onClick={() => setPreview((p) => !p)}>
+          {/* the toggle only matters on narrow screens; wide shows both panes */}
+          <button className="link-btn playbook-toggle" onClick={() => setPreview((p) => !p)}>
             {preview ? 'Edit' : 'Preview'}
           </button>
-          <button className="btn-accent" onClick={save} disabled={busy || !loaded}>
-            {busy ? 'Saving…' : 'Save'}
+          <button
+            className="btn-accent icon-btn"
+            onClick={save}
+            disabled={busy || !loaded || !dirty}
+          >
+            {dirty && !busy && <span className="unsaved-dot" />}
+            {busy ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
           </button>
         </div>
       </header>
 
       <div className="card playbook-editor">
         {!loaded ? (
-          <div className="muted">Loading…</div>
-        ) : preview ? (
-          <div className="playbook-preview chat-md">
-            {content.trim() ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-            ) : (
-              <p className="muted">Nothing to preview yet — write the playbook in Edit mode.</p>
-            )}
+          <div className="sk-lines" aria-busy="true">
+            {['40%', '92%', '88%', '70%', '95%', '64%', '90%', '80%', '55%', '86%'].map((w, i) => (
+              <Skeleton key={i} width={w} height={13} />
+            ))}
           </div>
         ) : (
-          <textarea
-            value={content}
-            spellCheck={false}
-            placeholder={PLACEHOLDER}
-            onChange={(e) => {
-              setDirty(true)
-              setContent(e.target.value)
-            }}
-          />
+          <div className={`playbook-panes ${preview ? 'show-preview' : 'show-edit'}`}>
+            <div className="playbook-pane playbook-edit-pane">
+              <textarea
+                value={content}
+                spellCheck={false}
+                placeholder={PLACEHOLDER}
+                onChange={(e) => {
+                  setDirty(true)
+                  setContent(e.target.value)
+                }}
+              />
+            </div>
+            <div className="playbook-pane playbook-preview-pane">
+              <div className="playbook-preview chat-md">
+                {content.trim() ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                ) : (
+                  <p className="muted">Nothing to preview yet — write the playbook on the left.</p>
+                )}
+              </div>
+            </div>
+          </div>
         )}
         {msg && (
           <div className="playbook-actions">
