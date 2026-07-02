@@ -22,6 +22,7 @@ import { z } from 'zod'
 import {
   ACCEPT_LAG_SQL,
   CAMPAIGN_OVERVIEW_SQL,
+  INVITE_QUEUE_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
   db,
@@ -71,6 +72,13 @@ const MAX_PRIOR_AGE_DAYS = 7
 // is anchored in current numbers even if it under-explores. Failures are skipped.
 const SEED_QUERIES: { label: string; sql: string }[] = [
   { label: 'Per-campaign funnel (campaign_overview)', sql: CAMPAIGN_OVERVIEW_SQL },
+  {
+    label:
+      'Invite queue per campaign — leads awaiting an invite. 0 recent invites with a NON-EMPTY queue ' +
+      '= the batch is still in multi-day warm-up (invites expected), NOT a stopped campaign; an EMPTY ' +
+      'queue = the campaign needs NEW leads, not "reactivation". Ignore rows with has_invite_step=false',
+    sql: INVITE_QUEUE_SQL,
+  },
   { label: 'Weekly invite cohorts (weekly_funnel)', sql: WEEKLY_FUNNEL_SQL },
   {
     label: 'Invite → accept lag (days, last 90d) — cohort maturity floor, NOT a metric to report',
@@ -137,6 +145,15 @@ HOW TO WORK
   campaign/channel, or "volume flowing somewhere bad" — that reads as a real problem to the team when
   it's actually just an immature cohort. Either omit its rate or say plainly it's too early to judge; a
   fresh cohort's VOLUME is fine to report, its RATE is not, until it clears the lag window.
+- You CANNOT see whether a campaign (or Linked Helper itself) is RUNNING or PAUSED — that runtime state
+  is not synced, and campaigns.status is a raw unreliable LH2 code. NEVER write that a campaign is
+  paused/stopped/dead ("на паузі", "зупинена", "стоїть") and NEVER tell the team to resume/reactivate
+  one. When invites sit at 0 for days, read the invite-queue seed instead of guessing a cause:
+  leads_awaiting_invite / in_pre_invite_warmup > 0 means the batch is progressing through the multi-day
+  warm-up delays that precede InvitePerson — several zero-invite days are NORMAL there, so say invites
+  should resume as warm-up completes and report the queued volume. An EMPTY queue means the campaign has
+  run out of people to invite — the finding is "черга порожня" and the action is "додайте нових лідів у
+  <campaign>", never "відновіть кампанію".
 - DO NOT judge follow-up status from message threads. Linked Helper syncs its internal DB on a lag, so
   outbound replies the SDR has ALREADY sent may not be in the data yet — a thread that looks
   "unanswered" usually isn't. NEVER claim conversations are awaiting our reply or going cold, NEVER
@@ -236,6 +253,12 @@ VERIFY (use the tools — re-run queries, do NOT trust the drafts' numbers)
 - NOVELTY: diff against the previous briefing. Cut anything that merely restates an unchanged standing fact.
   Every CHANGES line must be a real, data-backed day-over-day delta with the right trend; drop or fix any
   that isn't, and make sure a material change the analyst missed gets added.
+- RUNTIME STATE: LH2's running/paused state is not synced and cannot be observed. CUT or reframe any
+  claim that a campaign is paused/stopped/dead and any "resume/reactivate" action. For a campaign with
+  invites at 0, re-check its invite queue (the "Invite queue per campaign" seed, or re-run that query):
+  queued/warming leads > 0 → invites are expected as the multi-day warm-up completes (normal, not a
+  stall); queue EMPTY → the correct finding is "no leads left to invite" with the action to add new
+  leads.
 - FRAMING: never claim the team "did", "completed" or "fixed" anything — infer only from metric movement.
   Never judge who-replied-last from message threads (Linked Helper syncs on a lag). Strip any such claim.
 - BREVITY: if the day is genuinely quiet, make the briefing SHORTER — never pad it to look busy.
@@ -290,6 +313,9 @@ const FRAMING_VIOLATION_PATTERNS: RegExp[] = [
   /очіку(є|ють)\s+(нашої\s+)?відповід/i, // "awaiting our reply"
   /гаряч(а|і)\s+відповід/i, // "N hot replies waiting"
   /команда\s+(виправила|завершила|зробила|виконала)/i, // "team did/fixed/completed X"
+  /на\s+паузі/i, // "campaign is paused" — LH2 runtime state is not synced
+  /реактив/i, // "reactivate the campaign"
+  /відновіть\s+(подачу|кампані)/i, // "resume feeding / the campaign"
 ]
 
 function logFramingViolations(object: z.infer<typeof briefingSchema>, date: string): void {

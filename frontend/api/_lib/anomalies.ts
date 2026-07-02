@@ -2,7 +2,7 @@
 // computed BEFORE any model call, so a "declining/stalled/at-risk" claim in the
 // briefing can be grounded in a real, pre-verified multi-day pattern instead of a
 // model's read of one snapshot. Never model-judged; fail-soft like the seed queries.
-import { WEEKLY_FUNNEL_BY_ACCOUNT_SQL, db, executeSql } from './core.js'
+import { INVITE_QUEUE_SQL, WEEKLY_FUNNEL_BY_ACCOUNT_SQL, db, executeSql } from './core.js'
 
 export type AnomalySignal = {
   account: string
@@ -158,23 +158,70 @@ function cohortDeclineSignals(rows: CohortRow[]): AnomalySignal[] {
   return signals
 }
 
+type QueueRow = {
+  campaign_id: string
+  campaign: string
+  instance_id: string
+  account: string
+  has_invite_step: boolean
+  leads_awaiting_invite: number
+  in_pre_invite_warmup: number
+  added_last_3d: number
+}
+
+/** Append per-campaign invite-queue context to invite_sent declines, so the model
+ *  reads the CAUSE (batch still warming up vs out of leads) from a deterministic
+ *  source instead of inventing one ("campaign paused"). LH2's runtime state isn't
+ *  synced — the queue is the only observable distinction between the two. */
+function withInviteQueueContext(signals: AnomalySignal[], queueRows: QueueRow[]): AnomalySignal[] {
+  const byInstance = new Map<string, QueueRow[]>()
+  for (const r of queueRows) {
+    if (!r.has_invite_step) continue // never sends invites (scraping/analysis-only campaign)
+    if (!byInstance.has(r.instance_id)) byInstance.set(r.instance_id, [])
+    byInstance.get(r.instance_id)!.push(r)
+  }
+  return signals.map((s) => {
+    if (s.metric !== 'invite_sent' || s.direction !== 'down') return s
+    const rows = byInstance.get(s.instanceId)
+    if (!rows || rows.length === 0) return s
+    const parts = rows.map((r) => {
+      const waiting = Number(r.leads_awaiting_invite)
+      const warming = Number(r.in_pre_invite_warmup)
+      if (waiting <= 0) return `${r.campaign}: queue EMPTY (needs new leads, not "reactivation")`
+      if (warming > 0)
+        return (
+          `${r.campaign}: ${waiting} awaiting invite, ${warming} mid pre-invite warm-up ` +
+          `(invites expected as warm-up completes — NOT a stopped campaign)`
+        )
+      return `${r.campaign}: ${waiting} awaiting invite (none mid warm-up yet)`
+    })
+    return { ...s, detail: `${s.detail}; invite queue — ${parts.join('; ')}` }
+  })
+}
+
 /** Compute deterministic anomaly signals (sustained trends, stalls, cohort reply-rate
  *  declines). Never throws — a failure here should never break briefing generation. */
 export async function computeAnomalySignals(): Promise<AnomalySignal[]> {
   try {
-    const [daily, cohorts, instances] = await Promise.all([
+    const [daily, cohorts, instances, queue] = await Promise.all([
       executeSql(DAILY_TREND_SQL),
       executeSql(WEEKLY_FUNNEL_BY_ACCOUNT_SQL),
       db().from('instances').select('id, account_name, label'),
+      // Enrichment only — a queue failure must never suppress the signals themselves.
+      executeSql(INVITE_QUEUE_SQL).catch((e) => {
+        console.error('invite queue query failed:', e instanceof Error ? e.message : String(e))
+        return { rows: [] as unknown[], rowCount: 0, truncated: false }
+      }),
     ])
     const accountNames = new Map<string, string>()
     for (const i of instances.data ?? []) {
       accountNames.set(i.id, i.account_name || i.label || i.id)
     }
-    return [
+    const signals = [
       ...trendAndStallSignals(daily.rows as DailyRow[], accountNames),
       ...cohortDeclineSignals(cohorts.rows as CohortRow[]),
     ]
+    return withInviteQueueContext(signals, queue.rows as QueueRow[])
   } catch (e) {
     console.error('anomaly signal computation failed:', e instanceof Error ? e.message : String(e))
     return []

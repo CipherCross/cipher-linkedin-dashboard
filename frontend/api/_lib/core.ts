@@ -41,6 +41,57 @@ export async function executeSql(query: string): Promise<SqlResult> {
   return { rows, rowCount: all.length, truncated: rows.length < all.length }
 }
 
+// Per-campaign invite queue: who is still WAITING for an invite (not yet invited,
+// not excluded), how many of those sit in warm-up steps before InvitePerson, and how
+// recently leads were added. This is the ground truth for interpreting a zero-invite
+// stretch — LH2's runtime state (running/paused) is NOT synced, so the queue is the
+// only observable distinction between "batch still warming up" and "ran out of leads".
+export const INVITE_QUEUE_SQL = `
+with invite_step as (
+  select campaign_id, min(step_index) as invite_idx
+  from campaign_steps
+  where step_type = 'InvitePerson'
+  group by 1
+),
+warmup as (
+  select s.campaign_id, sum(s.current_count) as in_warmup
+  from campaign_steps s
+  join invite_step v on v.campaign_id = s.campaign_id
+  where s.step_index < v.invite_idx
+  group by 1
+),
+queue as (
+  select campaign_id,
+         count(*) filter (where coalesce(status, '') not like '-%') as awaiting_invite,
+         count(*) filter (where coalesce(status, '') not like '-%'
+                            and added_at > now() - interval '3 days') as added_3d,
+         max(added_at) filter (where coalesce(status, '') not like '-%') as last_added_at
+  from leads
+  where invited_at is null
+  group by 1
+),
+last_inv as (
+  select campaign_id, max(invited_at)::date as last_invite_date
+  from leads
+  group by 1
+)
+select c.id as campaign_id, c.name as campaign, c.instance_id,
+       coalesce(i.account_name, i.label, c.instance_id) as account,
+       (v.invite_idx is not null)      as has_invite_step,
+       coalesce(q.awaiting_invite, 0)  as leads_awaiting_invite,
+       coalesce(w.in_warmup, 0)        as in_pre_invite_warmup,
+       coalesce(q.added_3d, 0)         as added_last_3d,
+       q.last_added_at,
+       li.last_invite_date
+from campaigns c
+join instances i on i.id = c.instance_id
+left join invite_step v on v.campaign_id = c.id
+left join queue q on q.campaign_id = c.id
+left join warmup w on w.campaign_id = c.id
+left join last_inv li on li.campaign_id = c.id
+order by 4, 2
+`.trim()
+
 export const SCHEMA_DOC = `
 PostgreSQL (Supabase) schema for a LinkedIn outreach dashboard. Data is synced
 from Linked Helper 2 (LH2) running on several machines ("instances"); each
@@ -56,12 +107,14 @@ instances — one row per LH2 instance / LinkedIn account
 
 campaigns — one row per LH2 campaign per instance
   id text PK ("<instance_id>:<lh_campaign_id>"), instance_id -> instances,
-  lh_campaign_id text, name text, status text ('active'|...), created_at,
+  lh_campaign_id text, name text, status text (raw LH2 value — a mix of codes
+  like 'active'/'1'; NOT a reliable running/paused indicator), created_at,
   updated_at
 
 leads — one row per person per campaign; milestone timestamps drive the funnel
   id uuid PK, instance_id, campaign_id -> campaigns, profile_url text,
-  full_name text, headline text, company text, status text (raw LH2 status),
+  full_name text, headline text, company text, status text (raw LH2 code:
+  '1' = active; negative codes like '-1'/'-999' = excluded/failed/withdrawn),
   added_at timestamptz, invited_at timestamptz, connected_at timestamptz,
   first_message_at timestamptz, replied_at timestamptz, last_action_at timestamptz,
   raw jsonb, updated_at
@@ -164,9 +217,23 @@ ANALYSIS GUIDANCE
 - When rates differ across weeks, drill into segments: per instance (account),
   per campaign, per campaign step (campaign_steps shows which message in the
   sequence converts), and check annotations for known changes around the date.
-- "Why aren't invites going out?" — check campaign_steps for warm-up steps
-  before InvitePerson: leads accumulate there (current_count) until warm-up
-  completes, so low invite volume can simply mean a long warm-up pipeline.
+- LH2's RUNTIME state is NOT synced: whether a campaign is running or paused in
+  Linked Helper — or whether LH2 itself is open on the notebook — is invisible
+  here (campaigns.status is a raw unreliable code). NEVER claim a campaign is
+  paused/stopped/dead and never prescribe "resume/reactivate" it: you cannot
+  observe that. Describe the observable instead (invites at 0 for N days) and
+  use the invite queue below to interpret it.
+- "Why aren't invites going out?" — check the INVITE QUEUE before interpreting a
+  zero-invite stretch. Warm-up sequences put multi-day Waiter delays before the
+  InvitePerson step, so a freshly added batch of leads yields 0 invites for
+  several days BY DESIGN. INVITE_QUEUE_SQL (per campaign):
+${INVITE_QUEUE_SQL}
+  Non-empty queue (leads_awaiting_invite / in_pre_invite_warmup > 0) → the batch
+  is progressing through warm-up; invites are expected — report the queued volume
+  and when leads were added (added_last_3d / last_added_at), not a stall cause.
+  Empty queue → the campaign ran out of people to invite; the correct action is
+  "add new leads to <campaign>", never "reactivate". Ignore campaigns with
+  has_invite_step = false — they never send invites (scraping/analysis-only).
 - All timestamps are timestamptz; use date_trunc for bucketing.
 `.trim()
 
