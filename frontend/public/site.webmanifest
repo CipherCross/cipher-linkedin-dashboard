@@ -1,0 +1,13 @@
+{
+  "name": "Outreach Deck",
+  "short_name": "Outreach Deck",
+  "description": "Team dashboard for LinkedIn outreach campaigns.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0b1120",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ]
+}

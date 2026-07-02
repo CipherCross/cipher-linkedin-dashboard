@@ -3,7 +3,7 @@ import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { DateRange } from '../lib/leads'
 import type { ReplyInfo } from '../lib/leads'
 import { accountStats, instanceName, leadsToActivity, rangedCampaigns } from '../lib/leads'
-import { ago } from './CampaignTable'
+import { ago, num, rate } from '../lib/format'
 import { Avatar } from './Avatar'
 import { Sparkline } from './Sparkline'
 
@@ -56,11 +56,11 @@ export function AccountCard({
       </div>
 
       <div className="account-card-stats">
-        <Stat value={stats.leads.toLocaleString('en-US')} label="leads" />
-        <Stat value={stats.invites.toLocaleString('en-US')} label="invites" />
+        <Stat value={num(stats.leads)} label="leads" />
+        <Stat value={num(stats.invites)} label="invites" />
         <Stat value={stats.acceptPct} label="accept" />
         <Stat value={stats.replyPct} label="reply" />
-        <Stat value={stats.positive.toLocaleString('en-US')} label="positive" />
+        <Stat value={num(stats.positive)} label="positive" />
       </div>
 
       <div className="account-card-spark">
@@ -78,9 +78,8 @@ export function AccountCard({
           >
             <span className="account-campaign-name">▸ {c.campaign_name}</span>
             <span className="muted small">
-              {c.total_leads.toLocaleString('en-US')} leads
-              {(c.leads_added ?? 0) > 0 &&
-                ` · +${c.leads_added!.toLocaleString('en-US')} added`}
+              {num(c.total_leads)} leads
+              {(c.leads_added ?? 0) > 0 && ` · +${num(c.leads_added!)} added`}
               {' · '}{rate(c.acceptance_rate)} acc · {rate(c.reply_rate)} rep
               {c.last_activity_at && ` · ${ago(c.last_activity_at)}`}
             </span>
@@ -100,5 +99,3 @@ function Stat({ value, label }: { value: string; label: string }) {
     </div>
   )
 }
-
-const rate = (r: number | null) => (r == null ? '—' : r.toFixed(1) + '%')

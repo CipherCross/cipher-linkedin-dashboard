@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import type { CampaignMetrics, Lead } from '../lib/types'
 import { daysBetween, instanceName, latestRepliesByLead, leadKey, leadsToActivity, segmentOf } from '../lib/leads'
+import { pct } from '../lib/format'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { CohortChart } from '../components/CohortChart'
@@ -143,12 +144,12 @@ export function CampaignDetail() {
           <div className="two-col">
             <LagHistogram
               title="Time from invite to accept"
-              color="#34c98e"
+              color="var(--success)"
               lags={lagList(leads, 'invited_at', 'connected_at')}
             />
             <LagHistogram
               title="Time from accept to reply"
-              color="#f7b94f"
+              color="var(--warning)"
               lags={lagList(leads, 'connected_at', 'replied_at')}
             />
           </div>
@@ -292,5 +293,3 @@ function CompanyTable({ leads }: { leads: Lead[] }) {
     </div>
   )
 }
-
-const pct = (a: number, b: number) => (b > 0 ? ((100 * a) / b).toFixed(1) + '%' : '—')

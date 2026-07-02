@@ -2,10 +2,11 @@ import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { instanceName, latestRepliesByLead, leadKey } from '../lib/leads'
+import { ago, num } from '../lib/format'
 import { KpiCards } from '../components/KpiCards'
 import { WarmupChart } from '../components/WarmupChart'
 import { Heatmap } from '../components/Heatmap'
-import { CampaignTable, ago } from '../components/CampaignTable'
+import { CampaignTable } from '../components/CampaignTable'
 import { Avatar } from '../components/Avatar'
 
 export function AccountDetail() {
@@ -57,7 +58,7 @@ export function AccountDetail() {
               )}
               {inst.account_name && inst.label && `${inst.label} · `}
               {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'} ·{' '}
-              {campaigns.length} campaigns · {leads.length.toLocaleString('en-US')} leads
+              {campaigns.length} campaigns · {num(leads.length)} leads
             </div>
           </div>
         </div>

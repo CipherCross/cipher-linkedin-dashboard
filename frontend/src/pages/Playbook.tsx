@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { supabase } from '../lib/supabase'
 import { adminPost } from '../lib/admin'
+import { shortDate } from '../lib/format'
 
 // The single global playbook: one Markdown document that grounds the AI
 // conversation coach (/api/coach) for every account. Read here with the anon
@@ -92,7 +93,7 @@ export function Playbook() {
           <h1>Playbook</h1>
           <div className="muted small">
             One Markdown document that grounds the AI conversation coach for every account.
-            {savedAt && ` · last saved ${savedAt.slice(0, 10)}`}
+            {savedAt && ` · last saved ${shortDate(savedAt)}`}
             {dirty && ' · unsaved changes'}
           </div>
         </div>

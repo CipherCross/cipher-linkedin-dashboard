@@ -250,8 +250,6 @@ export function downloadCsv(filename: string, csv: string) {
   URL.revokeObjectURL(a.href)
 }
 
-export const shortDate = (ts: string | null) => (ts ? ts.slice(0, 10) : '—')
-
 // --- Date ranges --------------------------------------------------------
 // Inclusive [from, to] day strings (YYYY-MM-DD); null = open end. All math is
 // in UTC to match the day slices used by the activity view and lead milestones.
@@ -289,6 +287,29 @@ export function presetRanges(now: Date = new Date()): DateRange[] {
     { id: '3_months', label: '3 months', from: shift(today, -89), to: today },
     { id: 'all', label: 'All time', from: null, to: null },
   ]
+}
+
+/** The equal-length window immediately before `r`, for range-over-range deltas.
+ *  Null when `r` has an open end — an all-time range has no comparable prior
+ *  period. Purely date arithmetic; it doesn't touch funnel semantics. */
+export function previousRange(r: DateRange): DateRange | null {
+  if (!r.from || !r.to) return null
+  const days =
+    Math.round(
+      (new Date(`${r.to}T00:00:00Z`).getTime() - new Date(`${r.from}T00:00:00Z`).getTime()) /
+        86_400_000,
+    ) + 1
+  const shift = (base: string, n: number) => {
+    const d = new Date(`${base}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return dayStr(d)
+  }
+  return {
+    id: `${r.id}_prev`,
+    label: `Previous ${days}d`,
+    from: shift(r.from, -days),
+    to: shift(r.from, -1),
+  }
 }
 
 export function tsInRange(ts: string | null, r: DateRange): boolean {

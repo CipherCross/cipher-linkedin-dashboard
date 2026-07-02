@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance } from '../lib/types'
 import { instanceName } from '../lib/leads'
+import { ago, rate } from '../lib/format'
 
 interface Props {
   campaigns: CampaignMetrics[]
@@ -57,14 +58,4 @@ export function CampaignTable({ campaigns, instances, title = 'Campaigns' }: Pro
       </table>
     </div>
   )
-}
-
-const rate = (r: number | null) => (r == null ? '—' : r.toFixed(1) + '%')
-
-export function ago(ts: string | null): string {
-  if (!ts) return '—'
-  const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60_000)
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 48 * 60) return `${Math.round(mins / 60)}h ago`
-  return `${Math.round(mins / 1440)}d ago`
 }

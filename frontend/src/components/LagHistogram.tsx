@@ -1,6 +1,7 @@
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import { AXIS, BAR_CURSOR, GRID, TOOLTIP } from './chartTheme'
 
 const BUCKETS: Array<{ label: string; max: number }> = [
   { label: '≤1d', max: 1 },
@@ -28,15 +29,11 @@ export function LagHistogram({
       <h2>{title}</h2>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={counts} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
-          <CartesianGrid stroke="#26304a" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="label" stroke="#7c89a8" fontSize={11} />
-          <YAxis stroke="#7c89a8" fontSize={11} allowDecimals={false} />
-          <Tooltip
-            cursor={{ fill: '#26304a55' }}
-            contentStyle={{ background: '#141a2b', border: '1px solid #26304a', borderRadius: 8 }}
-            labelStyle={{ color: '#e7ecf5' }}
-          />
-          <Bar dataKey="count" name="Leads" fill={color} radius={[3, 3, 0, 0]} />
+          <CartesianGrid {...GRID} vertical={false} />
+          <XAxis dataKey="label" {...AXIS} />
+          <YAxis {...AXIS} allowDecimals={false} />
+          <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} />
+          <Bar dataKey="count" name="Leads" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40} />
         </BarChart>
       </ResponsiveContainer>
       <div className="muted small">

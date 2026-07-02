@@ -5,6 +5,7 @@ import {
   SENTIMENT_META, SENTIMENT_ORDER, instanceName, latestRepliesByLead, leadKey,
 } from '../lib/leads'
 import { ReplyRow } from '../components/ReplyRow'
+import { num, shortDate } from '../lib/format'
 import type { CoachingDigest, Sentiment } from '../lib/types'
 
 const RANGES = [
@@ -131,7 +132,7 @@ export function Replies() {
         <div>
           <h1>Replies</h1>
           <div className="muted small">
-            {replies.length.toLocaleString('en-US')} replies
+            {num(replies.length)} replies
             {rangeDays > 0 ? ` in the last ${rangeDays} days` : ' total'} — newest
             first. Open the profile to continue the conversation.
           </div>
@@ -184,7 +185,7 @@ export function Replies() {
                       {digestBusy === inst.id ? 'Analyzing…' : d ? 'Refresh' : 'Generate'}
                     </button>
                     {d?.computed_at && (
-                      <span className="muted small">· {d.computed_at.slice(0, 10)}</span>
+                      <span className="muted small">· {shortDate(d.computed_at)}</span>
                     )}
                   </div>
                   {d?.summary && <div className="coach-digest-summary small">{d.summary}</div>}

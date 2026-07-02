@@ -3,11 +3,12 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts'
 import type { Annotation, DailyActivity } from '../lib/types'
+import { AXIS, ChartEmpty, GRID, SERIES as HUE, TOOLTIP, dateTick, legendText } from './chartTheme'
 
 const SERIES = [
-  { key: 'invite_sent', label: 'Invites', color: '#4f8ef7' },
-  { key: 'invite_accepted', label: 'Accepted', color: '#34c98e' },
-  { key: 'reply_received', label: 'Replies', color: '#f7b94f' },
+  { key: 'invite_sent', label: 'Invites', color: HUE.invite },
+  { key: 'invite_accepted', label: 'Accepted', color: HUE.accepted },
+  { key: 'reply_received', label: 'Replies', color: HUE.reply },
 ]
 
 export function ActivityChart({
@@ -49,32 +50,27 @@ export function ActivityChart({
   return (
     <div className="card chart-card">
       <h2>{title}</h2>
+      {data.length === 0 ? (
+        <ChartEmpty height={260} label="No activity in this range" />
+      ) : (
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-          <CartesianGrid stroke="#26304a" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="day"
-            stroke="#7c89a8"
-            fontSize={11}
-            tickFormatter={(d: string) => d.slice(5)}
-          />
-          <YAxis stroke="#7c89a8" fontSize={11} allowDecimals={false} />
-          <Tooltip
-            contentStyle={{ background: '#141a2b', border: '1px solid #26304a', borderRadius: 8 }}
-            labelStyle={{ color: '#e7ecf5' }}
-          />
-          <Legend />
+          <CartesianGrid {...GRID} />
+          <XAxis dataKey="day" {...AXIS} tickFormatter={dateTick} minTickGap={24} />
+          <YAxis {...AXIS} allowDecimals={false} />
+          <Tooltip {...TOOLTIP} labelFormatter={dateTick} />
+          <Legend formatter={legendText} />
           {annotations
             .filter((a) => data.some((d) => d.day === a.noted_at))
             .map((a) => (
               <ReferenceLine
                 key={a.id}
                 x={a.noted_at}
-                stroke="#b48cf2"
+                stroke="var(--purple)"
                 strokeDasharray="4 4"
                 label={{
                   value: a.note.length > 24 ? a.note.slice(0, 23) + '…' : a.note,
-                  fill: '#b48cf2', fontSize: 10, position: 'insideTopLeft', angle: -90,
+                  fill: 'var(--purple)', fontSize: 10, position: 'insideTopLeft', angle: -90,
                   dx: -4, dy: 8,
                 }}
               />
@@ -87,12 +83,13 @@ export function ActivityChart({
               name={s.label}
               stroke={s.color}
               fill={s.color}
-              fillOpacity={0.15}
+              fillOpacity={0.12}
               strokeWidth={2}
             />
           ))}
         </AreaChart>
       </ResponsiveContainer>
+      )}
     </div>
   )
 }

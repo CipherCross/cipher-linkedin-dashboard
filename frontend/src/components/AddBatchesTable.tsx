@@ -1,5 +1,6 @@
 import type { Lead } from '../lib/types'
 import { addedByDay } from '../lib/leads'
+import { num, shortDate } from '../lib/format'
 
 /** Batch history of when leads were queued into the campaign: one row per
  *  add date with its count, newest first, over the full campaign history. */
@@ -21,8 +22,8 @@ export function AddBatchesTable({ leads }: { leads: Lead[] }) {
           <tbody>
             {rows.map(([day, added]) => (
               <tr key={day}>
-                <td>{day}</td>
-                <td className="num">{added}</td>
+                <td>{shortDate(day)}</td>
+                <td className="num">{num(added)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -33,7 +34,7 @@ export function AddBatchesTable({ leads }: { leads: Lead[] }) {
       </div>
       {undated > 0 && (
         <div className="muted small">
-          {undated.toLocaleString('en-US')} lead{undated === 1 ? '' : 's'} with no known add date.
+          {num(undated)} lead{undated === 1 ? '' : 's'} with no known add date.
         </div>
       )}
     </div>

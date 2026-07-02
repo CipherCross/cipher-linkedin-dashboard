@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
 import type { Lead } from '../lib/types'
+import { num } from '../lib/format'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const METRICS = [
@@ -50,14 +51,14 @@ export function Heatmap({ leads }: { leads: Lead[] }) {
                 key={h}
                 className="heatmap-cell"
                 title={`${DAYS[d]} ${h}:00 — ${count}`}
-                style={{ background: count > 0 ? `rgba(${metric.color}, ${0.15 + 0.85 * (count / max)})` : '#1a2236' }}
+                style={{ background: count > 0 ? `rgba(${metric.color}, ${0.15 + 0.85 * (count / max)})` : 'var(--surface-2)' }}
               />
             ))}
           </Fragment>
         ))}
       </div>
       <div className="muted small" style={{ marginTop: 8 }}>
-        {total.toLocaleString('en-US')} events · times shown in your local timezone
+        {num(total)} events · times shown in your local timezone
       </div>
     </div>
   )

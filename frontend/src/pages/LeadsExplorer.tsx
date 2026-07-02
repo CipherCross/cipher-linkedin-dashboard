@@ -4,10 +4,11 @@ import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
 import type { Lead } from '../lib/types'
 import {
-  RISK_LABEL, STAGES, downloadCsv, instanceName, riskOf, shortDate, stageMeta,
+  RISK_LABEL, STAGES, downloadCsv, instanceName, riskOf, stageMeta,
   stageOf, toCsv,
 } from '../lib/leads'
 import type { RiskFlag, Stage } from '../lib/leads'
+import { num, shortDate } from '../lib/format'
 
 const PAGE_SIZE = 50
 
@@ -127,9 +128,8 @@ export function LeadsExplorer() {
         <div>
           <h1>Leads</h1>
           <div className="muted small">
-            {filtered.length.toLocaleString('en-US')} of{' '}
-            {data.leads.length.toLocaleString('en-US')} leads match — filters are
-            in the URL, so views are shareable.
+            {num(filtered.length)} of {num(data.leads.length)} leads match —
+            filters are in the URL, so views are shareable.
           </div>
         </div>
         <div className="controls">
@@ -172,6 +172,7 @@ export function LeadsExplorer() {
       </div>
 
       <div className="card">
+        <div className="table-scroll tall">
         <table>
           <thead>
             <tr>
@@ -190,7 +191,20 @@ export function LeadsExplorer() {
           </thead>
           <tbody>
             {pageRows.map((l) => (
-              <tr key={l.id} className="row-clickable" onClick={() => openConversation(l)}>
+              <tr
+                key={l.id}
+                className="row-clickable"
+                tabIndex={0}
+                role="button"
+                aria-label={`Open conversation with ${l.full_name || 'lead'}`}
+                onClick={() => openConversation(l)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openConversation(l)
+                  }
+                }}
+              >
                 <td>
                   <a
                     className="row-link"
@@ -218,6 +232,7 @@ export function LeadsExplorer() {
             )}
           </tbody>
         </table>
+        </div>
         {pages > 1 && (
           <div className="pager">
             <button className="btn" disabled={page === 0} onClick={() => setPage(page - 1)}>

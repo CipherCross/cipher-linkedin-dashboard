@@ -3,7 +3,7 @@ import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { ReplyInfo } from '../lib/leads'
 import { SENTIMENT_META, instanceName } from '../lib/leads'
 import { useConversation } from '../lib/ConversationContext'
-import { ago } from './CampaignTable'
+import { ago, shortDate } from '../lib/format'
 
 /** One reply row — the lead, their latest inbound message + sentiment badge, the
  *  campaign/account, and when they replied. Shared by the Replies page, Hot
@@ -67,7 +67,7 @@ export function ReplyRow({
       </div>
       <div className="reply-when muted small">
         {ago(lead.replied_at)}
-        <div>{lead.replied_at!.slice(0, 10)}</div>
+        <div>{shortDate(lead.replied_at)}</div>
       </div>
     </div>
   )

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
-import { latestRepliesByLead, presetRanges, rangeTotals } from '../lib/leads'
+import {
+  latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeTotals,
+} from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { AccountCard } from '../components/AccountCard'
@@ -35,7 +37,15 @@ export function Overview() {
       return (leadsByInstance.get(b.id)?.length ?? 0) - (leadsByInstance.get(a.id)?.length ?? 0)
     })
     const latest = latestRepliesByLead(data.messages)
-    return { instances, leadsByInstance, latest, totals: rangeTotals(data.leads, range, latest) }
+    const prevRange = previousRange(range)
+    return {
+      instances,
+      leadsByInstance,
+      latest,
+      totals: rangeTotals(data.leads, range, latest),
+      prevTotals: prevRange ? rangeTotals(data.leads, prevRange, latest) : undefined,
+      activity: leadsToActivity(data.leads),
+    }
   }, [data, range])
 
   if (!data || !view) return null
@@ -56,7 +66,14 @@ export function Overview() {
 
       <BriefingCard />
 
-      <KpiCards totals={view.totals} flowLabel={range.label} positive={view.totals.positive} />
+      <KpiCards
+        totals={view.totals}
+        prev={view.prevTotals}
+        activity={view.activity}
+        range={range}
+        flowLabel={range.label}
+        positive={view.totals.positive}
+      />
 
       <HotLeads
         leads={data.leads}

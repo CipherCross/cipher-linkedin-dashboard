@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { Instance } from '../lib/types'
 import { instanceName } from '../lib/leads'
-import { ago } from './CampaignTable'
+import { ago } from '../lib/format'
 import { Avatar } from './Avatar'
 import { InstanceConfigEditor } from './InstanceConfigEditor'
 

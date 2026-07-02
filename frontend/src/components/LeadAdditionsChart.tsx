@@ -3,6 +3,8 @@ import {
 } from 'recharts'
 import type { Lead } from '../lib/types'
 import { addedByDay, dayRange, weekRange, weekStart } from '../lib/leads'
+import { num } from '../lib/format'
+import { AXIS, BAR_CURSOR, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 /** When and how many leads were queued into the campaign(s): counts of
  *  added_at per week (default) or per day. Leads synced before added_at
@@ -33,25 +35,24 @@ export function LeadAdditionsChart({
   return (
     <div className="card chart-card">
       <h2>{daily ? 'Leads added per day' : 'Leads added per week'}</h2>
+      {data.length === 0 ? (
+        <ChartEmpty label="No leads with a known add date in this range" />
+      ) : (
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 8, right: 0, left: -16, bottom: 0 }}>
-          <CartesianGrid stroke="#26304a" strokeDasharray="3 3" />
-          <XAxis dataKey="date" stroke="#7c89a8" fontSize={11}
-            tickFormatter={(d: string) => d.slice(5)} />
-          <YAxis stroke="#7c89a8" fontSize={11} allowDecimals={false} />
-          <Tooltip
-            contentStyle={{ background: '#141a2b', border: '1px solid #26304a', borderRadius: 8 }}
-            labelStyle={{ color: '#e7ecf5' }}
-            cursor={{ fill: '#26304a', fillOpacity: 0.35 }}
-          />
-          <Bar dataKey="added" name="Leads added" fill="#a578ec" fillOpacity={0.85}
-            radius={[4, 4, 0, 0]} />
+          <CartesianGrid {...GRID} />
+          <XAxis dataKey="date" {...AXIS} tickFormatter={dateTick} minTickGap={24} />
+          <YAxis {...AXIS} allowDecimals={false} />
+          <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} labelFormatter={dateTick} />
+          <Bar dataKey="added" name="Leads added" fill={SERIES.added} fillOpacity={0.85}
+            radius={[4, 4, 0, 0]} maxBarSize={28} />
         </BarChart>
       </ResponsiveContainer>
+      )}
       <div className="muted small">
         {daily ? 'Day' : 'Week'} the lead was queued into the campaign.
         {undated > 0 &&
-          ` ${undated.toLocaleString('en-US')} lead${undated === 1 ? '' : 's'} with no known add date not shown.`}
+          ` ${num(undated)} lead${undated === 1 ? '' : 's'} with no known add date not shown.`}
       </div>
     </div>
   )

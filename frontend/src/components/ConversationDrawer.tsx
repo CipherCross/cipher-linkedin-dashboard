@@ -7,6 +7,7 @@ import {
   ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
   instanceName, leadKey,
 } from '../lib/leads'
+import { dateTime } from '../lib/format'
 import type { Coaching, Lead, Message, Sentiment } from '../lib/types'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
@@ -15,14 +16,6 @@ type ThreadMsg = Pick<
   Message,
   'id' | 'direction' | 'body' | 'sent_at' | 'sentiment' | 'reason' | 'classified_model'
 >
-
-const fmtTime = (ts: string) =>
-  new Date(ts).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 
 /** Slide-in panel showing one lead's full conversation, both directions, oldest
  *  first. Inbound replies can be reclassified in place. */
@@ -284,7 +277,7 @@ export function ConversationDrawer({
                 <div className="msg-bubble">
                   {m.body || <span className="muted">(empty)</span>}
                 </div>
-                <div className="msg-time muted small">{fmtTime(m.sent_at)}</div>
+                <div className="msg-time muted small">{dateTime(m.sent_at)}</div>
                 {inbound && (
                   <div className="msg-reclassify">
                     {meta && (

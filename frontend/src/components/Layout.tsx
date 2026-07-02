@@ -1,44 +1,125 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
+import {
+  LayoutDashboard,
+  Users,
+  MessageSquare,
+  BookOpen,
+  Activity,
+  Sparkles,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { ConversationProvider } from '../lib/ConversationContext'
+import type { Instance } from '../lib/types'
+import { ago } from '../lib/format'
+import { Logo } from './Logo'
 
-const LINKS = [
-  { to: '/', label: 'Overview', end: true },
-  { to: '/leads', label: 'Leads' },
-  { to: '/replies', label: 'Replies' },
-  { to: '/playbook', label: 'Playbook' },
-  { to: '/health', label: 'Health' },
-  { to: '/chat', label: 'Chat' },
+const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/leads', label: 'Leads', icon: Users },
+  { to: '/replies', label: 'Replies', icon: MessageSquare },
+  { to: '/playbook', label: 'Playbook', icon: BookOpen },
+  { to: '/health', label: 'Health', icon: Activity },
+  { to: '/chat', label: 'Chat', icon: Sparkles },
 ]
 
 export function Layout() {
   const { data, loading } = useData()
 
   return (
-    <div className="page">
-      <nav className="topnav">
-        <span className="brand">LinkedIn Campaigns</span>
-        {LINKS.map((l) => (
-          <NavLink
-            key={l.to}
-            to={l.to}
-            end={l.end}
-            className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
-          >
-            {l.label}
-          </NavLink>
-        ))}
-      </nav>
+    <div className="app">
+      <header className="appbar">
+        <div className="appbar-inner">
+          <Link to="/" className="brand" aria-label="Outreach Deck — home">
+            <Logo size={26} className="brand-mark" />
+            <span className="brand-name">Outreach Deck</span>
+          </Link>
 
-      {data?.error && <div className="banner">Supabase error: {data.error}</div>}
+          <nav className="topnav" aria-label="Primary">
+            {LINKS.map(({ to, label, icon: Icon, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                title={label}
+                className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
+              >
+                <Icon size={16} className="navlink-icon" aria-hidden="true" />
+                <span className="navlink-label">{label}</span>
+              </NavLink>
+            ))}
+          </nav>
 
-      {loading || !data ? (
-        <div className="center muted">Loading…</div>
-      ) : (
-        <ConversationProvider>
-          <Outlet />
-        </ConversationProvider>
-      )}
+          {data && <SyncChip instances={data.instances} />}
+        </div>
+      </header>
+
+      <div className="page">
+        {data?.error && <div className="banner">Supabase error: {data.error}</div>}
+
+        {loading || !data ? (
+          <Splash />
+        ) : (
+          <ConversationProvider>
+            <Outlet />
+          </ConversationProvider>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Worst-case (least fresh) instance decides the header status. Tiers mirror the
+ *  Health page: agents run every ~30 min, so <2h is healthy, <24h is aging,
+ *  ≥24h (or never synced) is stale. */
+function worstFreshness(
+  instances: Instance[],
+): { level: 'ok' | 'warn' | 'stale'; label: string } {
+  if (instances.length === 0) return { level: 'stale', label: 'No accounts' }
+  let worstAge = -1
+  let worstTs: string | null = null
+  let hasNever = false
+  for (const i of instances) {
+    if (!i.last_sync_at) {
+      hasNever = true
+      continue
+    }
+    const age = Date.now() - new Date(i.last_sync_at).getTime()
+    if (age > worstAge) {
+      worstAge = age
+      worstTs = i.last_sync_at
+    }
+  }
+  if (hasNever) return { level: 'stale', label: 'Sync stale' }
+  const hours = worstAge / 3_600_000
+  const level = hours >= 24 ? 'stale' : hours >= 2 ? 'warn' : 'ok'
+  return { level, label: `Synced ${ago(worstTs)}` }
+}
+
+function SyncChip({ instances }: { instances: Instance[] }) {
+  const { level, label } = worstFreshness(instances)
+  return (
+    <Link
+      to="/health"
+      className={`sync-chip ${level}`}
+      title="Data freshness — open Sync health"
+    >
+      <span className="sync-dot" aria-hidden="true" />
+      <span className="sync-chip-label">{label}</span>
+    </Link>
+  )
+}
+
+function Splash() {
+  return (
+    <div className="splash">
+      <div className="splash-mark">
+        <Logo size={44} />
+      </div>
+      <div className="splash-name">Outreach Deck</div>
+      <div className="splash-bar" role="progressbar" aria-label="Loading dashboard">
+        <span />
+      </div>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useData } from '../lib/DataContext'
 import { instanceName } from '../lib/leads'
 import { InstancePanel } from '../components/InstancePanel'
-import { ago } from '../components/CampaignTable'
+import { ago } from '../lib/format'
 
 export function Health() {
   const { data } = useData()
