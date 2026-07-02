@@ -123,6 +123,19 @@ export function weekStart(ts: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** Continuous Mondays from `from` through the current week, so quiet weeks
+ *  show as zero instead of vanishing from a chart's x-axis. */
+export function weekRange(from: string): string[] {
+  const out: string[] = []
+  const last = weekStart(new Date().toISOString())
+  for (const d = new Date(`${from}T00:00:00Z`); ; d.setUTCDate(d.getUTCDate() + 7)) {
+    const week = d.toISOString().slice(0, 10)
+    if (week > last) break
+    out.push(week)
+  }
+  return out
+}
+
 export function lastWeeks(n: number): string[] {
   const out: string[] = []
   const monday = new Date(weekStart(new Date().toISOString()))
@@ -340,12 +353,12 @@ export function rangedCampaigns(
   r: DateRange,
 ): CampaignMetrics[] {
   const meta = new Map(base.map((c) => [c.campaign_id, c]))
-  type Acc = { invites: number; accepted: number; replies: number; total: number; last: string | null }
+  type Acc = { added: number; invites: number; accepted: number; replies: number; total: number; last: string | null }
   const acc = new Map<string, Acc>()
   for (const l of leads) {
     let row = acc.get(l.campaign_id)
     if (!row) {
-      row = { invites: 0, accepted: 0, replies: 0, total: 0, last: null }
+      row = { added: 0, invites: 0, accepted: 0, replies: 0, total: 0, last: null }
       acc.set(l.campaign_id, row)
     }
     row.total++
@@ -355,6 +368,7 @@ export function rangedCampaigns(
     const touch = (ts: string | null) => {
       if (ts && (!row!.last || ts > row!.last)) row!.last = ts
     }
+    if (tsInRange(l.added_at, r)) row.added++
     if (tsInRange(l.invited_at, r)) row.invites++
     if (tsInRange(l.connected_at, r)) row.accepted++
     if (tsInRange(l.replied_at, r)) row.replies++
@@ -371,6 +385,7 @@ export function rangedCampaigns(
       instance_id: m?.instance_id ?? '',
       status: m?.status ?? '',
       total_leads: row.total,
+      leads_added: row.added,
       invites_sent: row.invites,
       accepted: row.accepted,
       replies: row.replies,

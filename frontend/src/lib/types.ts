@@ -65,6 +65,9 @@ export interface CampaignMetrics {
   acceptance_rate: number | null
   reply_rate: number | null
   last_activity_at: string | null
+  /** Leads added within the selected range. Only present on rows computed
+   *  client-side by rangedCampaigns — the campaign_metrics view has no ranges. */
+  leads_added?: number
 }
 
 export interface DailyActivity {
@@ -82,6 +85,9 @@ export interface Lead {
   full_name: string | null
   headline: string | null
   company: string | null
+  /** When the lead was queued into the campaign (LH2 add_to_target_date;
+   *  earliest milestone as fallback). null = unknown, not "never". */
+  added_at: string | null
   invited_at: string | null
   connected_at: string | null
   first_message_at: string | null

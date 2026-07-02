@@ -6,6 +6,7 @@ import { daysBetween, instanceName, latestRepliesByLead, leadKey, leadsToActivit
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { CohortChart } from '../components/CohortChart'
+import { LeadAdditionsChart } from '../components/LeadAdditionsChart'
 import { LagHistogram } from '../components/LagHistogram'
 import { ActivityChart } from '../components/ActivityChart'
 import { CampaignCompareTable } from '../components/CampaignCompareTable'
@@ -128,6 +129,10 @@ export function CampaignDetail() {
           </div>
 
           <div className="stack">
+            <LeadAdditionsChart leads={leads} />
+          </div>
+
+          <div className="stack">
             <MessageSequence
               steps={data.steps.filter((s) => s.campaign_id === campaign.campaign_id)}
             />
@@ -183,6 +188,7 @@ function CampaignColumn({ campaign, leads }: { campaign: CampaignMetrics; leads:
       </div>
       <Funnel leads={leads} />
       <CohortChart leads={leads} weeks={12} />
+      <LeadAdditionsChart leads={leads} weeks={12} />
     </div>
   )
 }

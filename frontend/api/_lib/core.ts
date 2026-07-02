@@ -62,10 +62,16 @@ campaigns — one row per LH2 campaign per instance
 leads — one row per person per campaign; milestone timestamps drive the funnel
   id uuid PK, instance_id, campaign_id -> campaigns, profile_url text,
   full_name text, headline text, company text, status text (raw LH2 status),
-  invited_at timestamptz, connected_at timestamptz, first_message_at timestamptz,
-  replied_at timestamptz, last_action_at timestamptz, raw jsonb, updated_at
+  added_at timestamptz, invited_at timestamptz, connected_at timestamptz,
+  first_message_at timestamptz, replied_at timestamptz, last_action_at timestamptz,
+  raw jsonb, updated_at
   NOTE: a NULL timestamp means the milestone never happened. Funnel order:
   invited_at -> connected_at -> first_message_at -> replied_at.
+  added_at is NOT a funnel milestone: it is when the lead was QUEUED into the
+  campaign (LH2's add_to_target_date; earliest milestone as fallback for rows
+  synced before v1.8.0). Use it for "when / how many leads were added per
+  campaign": date_trunc('week', added_at), count(*) grouped by campaign_id.
+  NULL added_at = unknown add date, not "never added".
 
 events — append-only action log (drives daily-activity charts)
   id bigint PK, instance_id, campaign_id, profile_url,

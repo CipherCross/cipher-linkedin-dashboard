@@ -79,6 +79,8 @@ export function AccountCard({
             <span className="account-campaign-name">▸ {c.campaign_name}</span>
             <span className="muted small">
               {c.total_leads.toLocaleString('en-US')} leads
+              {(c.leads_added ?? 0) > 0 &&
+                ` · +${c.leads_added!.toLocaleString('en-US')} added`}
               {' · '}{rate(c.acceptance_rate)} acc · {rate(c.reply_rate)} rep
               {c.last_activity_at && ` · ${ago(c.last_activity_at)}`}
             </span>

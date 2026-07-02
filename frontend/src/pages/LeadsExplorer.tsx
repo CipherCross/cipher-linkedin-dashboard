@@ -11,9 +11,10 @@ import type { RiskFlag, Stage } from '../lib/leads'
 
 const PAGE_SIZE = 50
 
-type SortKey = 'full_name' | 'invited_at' | 'connected_at' | 'replied_at' | 'last_action_at'
+type SortKey = 'full_name' | 'added_at' | 'invited_at' | 'connected_at' | 'replied_at' | 'last_action_at'
 
 const COLUMNS: Array<{ key: SortKey; label: string }> = [
+  { key: 'added_at', label: 'Added' },
   { key: 'invited_at', label: 'Invited' },
   { key: 'connected_at', label: 'Accepted' },
   { key: 'replied_at', label: 'Replied' },
@@ -111,6 +112,7 @@ export function LeadsExplorer() {
           instance: instanceLabel(l.instance_id),
           stage: stageOf(l),
           risk: riskLabel(l),
+          added_at: l.added_at,
           invited_at: l.invited_at,
           connected_at: l.connected_at,
           replied_at: l.replied_at,
@@ -204,6 +206,7 @@ export function LeadsExplorer() {
                 <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 <td className="muted small">{campaignName(l.campaign_id)}</td>
                 <td><StageBadge lead={l} /></td>
+                <td className="muted">{shortDate(l.added_at)}</td>
                 <td className="muted">{shortDate(l.invited_at)}</td>
                 <td className="muted">{shortDate(l.connected_at)}</td>
                 <td className="muted">{shortDate(l.replied_at)}</td>
@@ -211,7 +214,7 @@ export function LeadsExplorer() {
               </tr>
             ))}
             {pageRows.length === 0 && (
-              <tr><td colSpan={8} className="muted">No leads match these filters.</td></tr>
+              <tr><td colSpan={9} className="muted">No leads match these filters.</td></tr>
             )}
           </tbody>
         </table>

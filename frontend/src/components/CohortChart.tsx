@@ -3,20 +3,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts'
 import type { Lead } from '../lib/types'
-import { weekStart } from '../lib/leads'
-
-// Continuous Mondays from `from` through the current week, so quiet weeks
-// show as zero instead of vanishing from the x-axis.
-function weekRange(from: string): string[] {
-  const out: string[] = []
-  const last = weekStart(new Date().toISOString())
-  for (const d = new Date(`${from}T00:00:00Z`); ; d.setUTCDate(d.getUTCDate() + 7)) {
-    const week = d.toISOString().slice(0, 10)
-    if (week > last) break
-    out.push(week)
-  }
-  return out
-}
+import { weekRange, weekStart } from '../lib/leads'
 
 interface Cohort {
   week: string

@@ -34,7 +34,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.7.2"
+AGENT_VERSION = "1.8.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -758,6 +758,7 @@ def extract_local(cfg):
                 "first_message_at": iso(row_get(row, lmap, "first_message_at")),
                 "replied_at": iso(row_get(row, lmap, "replied_at")),
                 "last_action_at": iso(row_get(row, lmap, "last_action_at")),
+                "added_at": iso(row_get(row, lmap, "added_at")),
                 "updated_at": now,
             })
     messages = []
@@ -804,6 +805,18 @@ def extract_local(cfg):
                 fm = first_msgs.get(lead["profile_url"])
                 if fm:
                     lead["first_message_at"] = fm
+
+    # added_at = LH2's add_to_target_date when the mapping supplies it; else the
+    # earliest milestone (same fallback as the 025 migration backfill, so mapped
+    # and unmapped notebooks converge on the same values). Runs after the
+    # first_message_at back-fill so the fallback sees the complete milestones.
+    for lead in leads:
+        if not lead.get("added_at"):
+            lead["added_at"] = min(
+                (t for t in (lead["invited_at"], lead["connected_at"],
+                             lead["first_message_at"], lead["replied_at"],
+                             lead["last_action_at"]) if t),
+                default=None)
 
     owner = extract_owner(cfg, con)
     con.close()
@@ -960,6 +973,8 @@ CSV_ALIASES = {
     "invited_at": ["invited", "invite sent", "invitation date", "date of invitation"],
     "connected_at": ["connected", "connection date", "accepted", "date connected"],
     "replied_at": ["replied", "reply date", "answered", "date of reply"],
+    "added_at": ["added", "date added", "added at", "add to target date",
+                 "date of adding"],
 }
 
 
@@ -1019,6 +1034,7 @@ def cmd_ingest_csv(args):
                 "invited_at": iso(pick(hmap, "invited_at", row)),
                 "connected_at": iso(pick(hmap, "connected_at", row)),
                 "replied_at": iso(pick(hmap, "replied_at", row)),
+                "added_at": iso(pick(hmap, "added_at", row)),
                 "updated_at": now,
             }
             # --kind lets exports without date columns still count milestones.
@@ -1035,6 +1051,11 @@ def cmd_ingest_csv(args):
                 lead["invited_at"] = lead["connected_at"] or now
             lead["last_action_at"] = (lead["replied_at"] or lead["connected_at"]
                                       or lead["invited_at"])
+            # Same earliest-milestone fallback as the sqlite path / 025 backfill.
+            lead["added_at"] = lead["added_at"] or min(
+                (t for t in (lead["invited_at"], lead["connected_at"],
+                             lead["replied_at"]) if t),
+                default=None)
             leads.append(lead)
 
     n = sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")

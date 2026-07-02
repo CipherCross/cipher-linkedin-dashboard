@@ -18,7 +18,7 @@ const EMPTY: DashboardData = {
 
 const LEAD_COLUMNS =
   'id,instance_id,campaign_id,profile_url,full_name,headline,company,' +
-  'invited_at,connected_at,first_message_at,replied_at,last_action_at'
+  'added_at,invited_at,connected_at,first_message_at,replied_at,last_action_at'
 
 // PostgREST caps responses at 1000 rows; page until a short page comes back.
 async function fetchAllLeads(): Promise<Lead[]> {

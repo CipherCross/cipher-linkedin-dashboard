@@ -75,7 +75,8 @@ mapping:
     # Adapt the JOIN to your schema as printed by `inspect`. Example shape
     # below. KNOWN PITFALLS (verified against a real LH2 lh.db):
     #  - invited_at must come from InvitePerson action results (result=1),
-    #    NOT add_to_target_date (that's just "queued into campaign")
+    #    NOT add_to_target_date (that's just "queued into campaign" — which is
+    #    exactly what added_at wants, so map it there instead)
     #  - replied_at lives in action_result_messages (type='Replied', written
     #    by CheckForReplies actions), not on the campaign-history row
     #  - person_external_ids has ~2 'public' rows per person (human slug +
@@ -89,6 +90,7 @@ mapping:
         'https://www.linkedin.com/in/' || pei.external_id as profile_url,
         pmp.full_name              as full_name,
         pmp.headline               as headline,
+        pic.add_to_target_date     as added_at,
         pic.invited_at             as invited_at,
         pic.connected_at           as connected_at,
         pic.replied_at             as replied_at,
@@ -108,6 +110,7 @@ mapping:
     profile_url: "profile_url"
     full_name: "full_name"
     headline: "headline"
+    added_at: "added_at"
     invited_at: "invited_at"
     connected_at: "connected_at"
     replied_at: "replied_at"
