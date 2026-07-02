@@ -129,16 +129,14 @@ export function ConversationDrawer({
     [lead],
   )
 
+  // Coaching is generated on demand via the button only — auto-loading on every
+  // drawer open burned model credits for conversations nobody wanted coached.
   useEffect(() => {
-    if (!lead) {
-      coachReqKey.current = ''
-      setCoaching(null)
-      setCoachError(null)
-      setCoachLoading(false)
-      return
-    }
-    loadCoaching(false)
-  }, [lead, loadCoaching])
+    coachReqKey.current = ''
+    setCoaching(null)
+    setCoachError(null)
+    setCoachLoading(false)
+  }, [lead])
 
   if (!lead) return null
 
@@ -322,10 +320,10 @@ export function ConversationDrawer({
             <span className="muted small grow">— how to earn the next reply</span>
             <button
               className="link-btn"
-              onClick={() => loadCoaching(true)}
+              onClick={() => loadCoaching(!!coaching)}
               disabled={coachLoading}
             >
-              {coachLoading ? 'Coaching…' : 'Regenerate'}
+              {coachLoading ? 'Coaching…' : coaching ? 'Regenerate' : 'Get coaching'}
             </button>
           </div>
 
