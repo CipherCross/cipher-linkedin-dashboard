@@ -40,17 +40,40 @@ export const AXIS = {
   tick: { fill: 'var(--text-muted)', fontSize: 11 },
 } as const
 
-/** <Tooltip {...TOOLTIP} /> — dark card, value-forward. Mirrors the `.chart-tip`
- *  CSS class (used by custom-content tooltips) in styles.css — keep in sync. */
+/** Recharts applies `contentStyle` as an INLINE style on the default tooltip, so
+ *  it can't reach the CSS `@media (prefers-reduced-transparency: reduce)` fallback
+ *  that `.chart-tip` relies on. Detect the preference once at module load and drop
+ *  the glass (opaque surface, no blur, plain shadow) for those users — mirroring
+ *  what the CSS fallback does for custom-content tooltips. */
+const reduceTransparency =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-transparency: reduce)').matches
+
+/** <Tooltip {...TOOLTIP} /> — dark glass card, value-forward. Mirrors the
+ *  `.chart-tip` CSS class (used by custom-content tooltips) in styles.css — keep
+ *  the non-reduced branch in sync with it, including the glass tint/blur/rim. The
+ *  strong 78%-opaque tint keeps the tooltip readable even where blur is dropped. */
 export const TOOLTIP = {
-  contentStyle: {
-    background: 'var(--surface-1)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    boxShadow: 'var(--shadow-md)',
-    fontSize: 12,
-    padding: '8px 10px',
-  },
+  contentStyle: reduceTransparency
+    ? {
+        background: 'var(--surface-1)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-md)',
+        fontSize: 12,
+        padding: '8px 10px',
+      }
+    : {
+        background: 'var(--glass-tint-strong)',
+        WebkitBackdropFilter: 'saturate(var(--glass-saturate)) blur(var(--glass-blur))',
+        backdropFilter: 'saturate(var(--glass-saturate)) blur(var(--glass-blur))',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--glass-rim), var(--shadow-md)',
+        fontSize: 12,
+        padding: '8px 10px',
+      },
   labelStyle: { color: 'var(--text)', fontWeight: 600, marginBottom: 4 },
   itemStyle: { color: 'var(--text-secondary)', padding: 0 },
 } as const
