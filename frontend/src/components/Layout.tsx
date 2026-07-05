@@ -61,6 +61,37 @@ export function Layout() {
 
   return (
     <div className="app">
+      {/* Tier-2 "liquid glass" displacement filter. Referenced from styles.css
+          via `backdrop-filter: url(#liquid-glass)` — a Chromium-only path gated
+          behind @supports, so Safari/Firefox never reach it. Rendered once,
+          zero-size, aria-hidden. Static (no animation): a low-frequency single
+          octave of turbulence displaced by a small scale gives a subtle
+          refractive edge appropriate for a data dashboard. */}
+      <svg
+        aria-hidden="true"
+        focusable="false"
+        width="0"
+        height="0"
+        style={{ position: 'absolute', width: 0, height: 0 }}
+      >
+        <filter id="liquid-glass" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.008"
+            numOctaves="1"
+            seed="7"
+            result="noise"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="noise"
+            scale="8"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          />
+        </filter>
+      </svg>
+
       <a className="skip-link" href="#main-content">Skip to content</a>
 
       <header className="appbar">

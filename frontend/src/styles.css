@@ -98,6 +98,15 @@
   /* ---- Overlay ---------------------------------------------------------- */
   --overlay: rgba(4, 8, 16, 0.55);
 
+  /* ---- Glass (floating/overlay chrome only — never cards/tables) --------- */
+  /* Tint stays ≥65% opaque so text keeps contrast over busy content behind. */
+  --glass-tint: color-mix(in srgb, var(--surface-1) 68%, transparent);
+  --glass-tint-strong: color-mix(in srgb, var(--surface-1) 78%, transparent);
+  --glass-blur: 14px;
+  --glass-saturate: 160%;
+  /* rim highlight: top edge-light + faint inner hairline for the "glass" edge */
+  --glass-rim: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 0 0 1px rgb(255 255 255 / 0.03);
+
   /* ---- Charts ----------------------------------------------------------- */
   --chart-grid: rgba(255, 255, 255, 0.06);
   /* Categorical hues for per-item charts, past the status ramp. Teal + pink
@@ -133,7 +142,14 @@
 
 body {
   margin: 0;
-  background: radial-gradient(1100px 700px at 15% -8%, #111a30 0%, var(--bg) 60%) fixed;
+  /* Two stacked radials give the glass something to refract: the original
+   * indigo top-left wash, plus a faint teal glow bottom-right (different hue
+   * from the accent-blue family, ~10% alpha so it stays subdued). Both layers
+   * share `fixed` attachment. */
+  background:
+    radial-gradient(760px 620px at 100% 104%, rgba(38, 74, 92, 0.10) 0%, transparent 60%),
+    radial-gradient(1100px 700px at 15% -8%, #111a30 0%, var(--bg) 60%);
+  background-attachment: fixed;
   color: var(--text);
   font: 14px/1.5 var(--font-sans);
   font-feature-settings: 'cv11';
@@ -242,9 +258,24 @@ select:hover { border-color: var(--border-strong); }
 
 .drp-pop {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
-  display: flex; background: var(--panel);
-  border: 1px solid var(--border); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); overflow: hidden;
+  display: flex; overflow: hidden;
+  border-radius: var(--radius-lg);
+  /* glass (see .glass) — floating popover */
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  border: 1px solid var(--border);
+  box-shadow: var(--glass-rim), var(--shadow-lg);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .drp-pop { background: var(--surface-1); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .drp-pop {
+    background: var(--surface-1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 .drp-presets {
@@ -319,6 +350,35 @@ select:hover { border-color: var(--border-strong); }
   /* inset top edge-highlight lifts the card off the dark bg (plain --shadow-sm
    * is invisible here); popovers/drawers keep their stronger --shadow-md/lg. */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--shadow-sm);
+}
+
+/* --- Glass ---------------------------------------------------------------
+ * Apple-style glassmorphism for FLOATING / OVERLAY chrome only (app bar,
+ * drawer, popovers, toasts, chips). Deliberately NOT used on .card / .kpi /
+ * tables — backdrop-filter is a per-frame GPU repaint and those surfaces hold
+ * Recharts SVGs + data grids. Never nest two glass surfaces: an inner glass
+ * candidate inside a glass parent must stay solid (double backdrop-filter is
+ * both muddy and costly). No will-change. */
+.glass {
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  border: 1px solid var(--border);
+  box-shadow: var(--glass-rim), var(--shadow-md);
+}
+.glass--strong { background: var(--glass-tint-strong); }
+
+/* Fallbacks: browsers without backdrop-filter, and users who ask for less
+ * transparency, get an opaque surface instead of an unreadable tint. */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass, .glass--strong { background: var(--surface-1); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass--strong {
+    background: var(--surface-1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 .kpi-grid {
@@ -456,10 +516,13 @@ tr:last-child td { border-bottom: none; }
   z-index: 50;
   display: block; /* override generic header{display:flex} */
   margin: 0;
+  /* Glass idiom (see .glass): the bar keeps its darker --bg-based tint so it
+   * reads as chrome, but adopts the shared saturate/blur + rim highlight. */
   background: color-mix(in srgb, var(--bg) 72%, transparent);
-  -webkit-backdrop-filter: saturate(160%) blur(12px);
-  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(12px);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(12px);
   border-bottom: 1px solid var(--border);
+  box-shadow: var(--glass-rim);
 }
 .appbar-inner {
   max-width: 1280px;
@@ -517,13 +580,27 @@ tr:last-child td { border-bottom: none; }
   padding: 6px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--surface-1);
+  /* subtle glass — lower blur than .glass since it's a small pill in the bar */
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(8px);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(8px);
+  box-shadow: var(--glass-rim);
   color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: 600;
   white-space: nowrap;
   text-decoration: none;
   transition: border-color 0.14s ease, color 0.14s ease;
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .sync-chip { background: var(--surface-1); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .sync-chip {
+    background: var(--surface-1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 .sync-chip:hover { border-color: var(--border-strong); color: var(--text); }
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -1216,9 +1293,18 @@ tr.row-clickable:focus-visible,
   inset: 0;
   z-index: 60; /* above the sticky app bar (z-index 50) — it's a modal */
   background: var(--overlay);
+  /* light scrim blur so the page behind recedes without going fully opaque */
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: flex-end;
   animation: conv-fade-in 0.15s var(--ease-out);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .conv-overlay { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .conv-overlay { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 /* wave-2 hook: add `.closing` before unmount to play the reverse animation */
 .conv-overlay.closing { animation: conv-fade-out 0.15s ease-in forwards; }
@@ -1227,14 +1313,49 @@ tr.row-clickable:focus-visible,
   width: 480px;
   max-width: 100%;
   height: 100%;
-  background: var(--panel);
+  /* glass--strong (see .glass): 78%-opaque tint keeps message bubbles + any
+   * data it slides over readable, while blur softens the scrim behind it. */
+  background: var(--glass-tint-strong);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--glass-rim), var(--shadow-lg);
   animation: conv-slide-in 0.25s var(--ease-out);
 }
+@supports not (backdrop-filter: blur(1px)) {
+  .conv-drawer { background: var(--surface-1); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .conv-drawer {
+    background: var(--surface-1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Tier 2 — liquid refraction edge (progressive enhancement, Chromium-only).
+ * `url(#liquid-glass)` inside backdrop-filter only parses in Chromium, so the
+ * @supports test is a clean feature gate: Safari/Firefox fail it and silently
+ * keep tier-1 plain blur (their -webkit-/base rules stay untouched — those
+ * lines never carry url()). Applied ONLY to the two signature surfaces. The
+ * SVG filter (#liquid-glass) is injected once, zero-size, from Layout.tsx.
+ * The filter is static — no animation — so nothing to gate on reduced-motion,
+ * but we still honour reduced-transparency by scoping to no-preference.
+ * MUST stay after every base .conv-drawer / .drp-pop declaration: same single-
+ * class specificity means source order decides, and the frost blur is repeated
+ * here so it isn't dropped when the url() displacement applies. */
+@supports (backdrop-filter: url(#liquid-glass) blur(1px)) {
+  @media (prefers-reduced-transparency: no-preference) {
+    .conv-drawer,
+    .drp-pop {
+      backdrop-filter: url(#liquid-glass) saturate(var(--glass-saturate)) blur(var(--glass-blur));
+    }
+  }
+}
+
 @media (max-width: 700px) {
   .conv-drawer { width: 100%; }
 }
@@ -1528,14 +1649,27 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .toast {
   pointer-events: auto;
   display: flex; align-items: flex-start; gap: 10px;
-  background: var(--surface-1);
+  /* glass (see .glass) — floating notification */
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
   border: 1px solid var(--border);
   border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--glass-rim), var(--shadow-lg);
   padding: 11px 12px;
   font-size: var(--text-sm); line-height: 1.45; color: var(--text);
   animation: toast-in 0.16s ease-out;
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .toast { background: var(--surface-1); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .toast {
+    background: var(--surface-1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 .toast.success { border-left-color: var(--success); }
 .toast.error { border-left-color: var(--danger); }
