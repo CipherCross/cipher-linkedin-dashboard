@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DataProvider } from './lib/DataContext'
 import { ToastProvider } from './lib/ToastContext'
+import { ThemeProvider } from './lib/ThemeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { Overview } from './pages/Overview'
@@ -16,6 +17,7 @@ import { Review } from './pages/Review'
 export default function App() {
   return (
     <ErrorBoundary variant="screen">
+      <ThemeProvider>
       <DataProvider>
         <ToastProvider>
         <HashRouter>
@@ -37,6 +39,7 @@ export default function App() {
         </HashRouter>
         </ToastProvider>
       </DataProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

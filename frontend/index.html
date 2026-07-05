@@ -12,6 +12,28 @@
       content="Team dashboard for LinkedIn outreach campaigns run through Linked Helper 2."
     />
     <title>Outreach Deck</title>
+    <!-- Resolve + paint the theme BEFORE the app bundle loads so there's no
+         flash of the wrong theme: stored choice wins, else OS preference,
+         else dark. Mirrored by src/lib/ThemeContext.tsx. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('theme')
+          if (t !== 'light' && t !== 'dark') {
+            t =
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+          }
+          document.documentElement.setAttribute('data-theme', t)
+          var m = document.querySelector('meta[name="theme-color"]')
+          if (m) m.setAttribute('content', t === 'light' ? '#f4f6fb' : '#0b1120')
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -78,8 +78,9 @@ export const TOOLTIP = {
   itemStyle: { color: 'var(--text-secondary)', padding: 0 },
 } as const
 
-/** Hover backdrop for bar/scatter charts (the mark is the hit target). */
-export const BAR_CURSOR = { fill: 'rgba(255, 255, 255, 0.04)' }
+/** Hover backdrop for bar/scatter charts (the mark is the hit target).
+ *  Tokenised so it inverts (dark-on-light) with the theme. */
+export const BAR_CURSOR = { fill: 'var(--chart-bar-cursor)' }
 
 /** X-axis tick formatter for YYYY-MM-DD day/week keys → "Jun 25". */
 export const dateTick = (d: string) => shortDate(d)

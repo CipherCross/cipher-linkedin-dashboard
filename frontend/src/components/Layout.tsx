@@ -9,9 +9,12 @@ import {
   Activity,
   Sparkles,
   RotateCw,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useData } from '../lib/DataContext'
+import { useTheme } from '../lib/ThemeContext'
 import { ConversationProvider } from '../lib/ConversationContext'
 import type { Instance } from '../lib/types'
 import { ago } from '../lib/format'
@@ -117,7 +120,10 @@ export function Layout() {
             ))}
           </nav>
 
-          {data && <SyncChip instances={data.instances} />}
+          <div className="appbar-actions">
+            <ThemeToggle />
+            {data && <SyncChip instances={data.instances} />}
+          </div>
         </div>
       </header>
 
@@ -187,6 +193,29 @@ function worstFreshness(
   if (hasNever) return { level: 'stale', label: 'Sync stale' }
   const level = freshnessLevel(worstTs)
   return { level, label: `Synced ${ago(worstTs)}` }
+}
+
+/** Header light/dark switch. Seeds from OS preference on first visit, then
+ *  persists the user's manual choice (see lib/ThemeContext). Shows the icon of
+ *  the theme it will switch TO. */
+function ThemeToggle() {
+  const { theme, toggle } = useTheme()
+  const next = theme === 'dark' ? 'light' : 'dark'
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={toggle}
+      title={`Switch to ${next} theme`}
+      aria-label={`Switch to ${next} theme`}
+    >
+      {theme === 'dark' ? (
+        <Sun size={16} aria-hidden="true" />
+      ) : (
+        <Moon size={16} aria-hidden="true" />
+      )}
+    </button>
+  )
 }
 
 function SyncChip({ instances }: { instances: Instance[] }) {

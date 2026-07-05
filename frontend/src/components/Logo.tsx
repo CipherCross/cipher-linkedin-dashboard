@@ -18,7 +18,7 @@ export function Logo({ size = 28, className }: { size?: number; className?: stri
         </linearGradient>
       </defs>
       <rect width="32" height="32" rx="8" fill="url(#od-logo-bg)" />
-      <g fill="#ffffff">
+      <g fill="var(--linkedin-fg)">
         <rect x="8" y="9" width="16" height="4" rx="2" />
         <rect x="10" y="15" width="12" height="4" rx="2" opacity="0.85" />
         <rect x="12" y="21" width="8" height="4" rx="2" opacity="0.7" />
