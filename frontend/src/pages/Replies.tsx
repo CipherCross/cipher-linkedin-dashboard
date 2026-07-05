@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, GraduationCap, Inbox, Loader2, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -29,10 +29,9 @@ export function Replies() {
   const { data, refetch } = useData()
   const toast = useToast()
   const [params, setParams] = useSearchParams()
-  const [rangeDays, setRangeDays] = useState(30)
-  // Sentiment filter lives in the URL so deep links (e.g. the Overview "Hot
-  // leads → View all" → /replies?sentiment=positive) land pre-filtered and views
-  // are shareable.
+  // Both the sentiment filter and the date range live in the URL so deep links
+  // (e.g. the Overview "Hot leads → View all" → /replies?sentiment=positive) land
+  // pre-filtered and views are shareable.
   const filterParam = params.get('sentiment')
   const filter: Filter | null = isFilter(filterParam) ? filterParam : null
   const setFilter = (f: Filter | null) => {
@@ -41,6 +40,25 @@ export function Replies() {
     else next.delete('sentiment')
     setParams(next, { replace: true })
   }
+  const rangeParam = params.get('range')
+  const rangeDays = RANGES.some((r) => String(r.days) === rangeParam) ? Number(rangeParam) : 30
+  const setRangeDays = (days: number) => {
+    const next = new URLSearchParams(params)
+    next.set('range', String(days))
+    setParams(next, { replace: true })
+  }
+  // "New since last visit": snapshot the previous visit time on mount (before
+  // overwriting it), so rows with a newer reply can show the accent dot.
+  const lastSeenRef = useRef(0)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('replies:lastSeen')
+      lastSeenRef.current = raw ? Number(raw) || 0 : 0
+      localStorage.setItem('replies:lastSeen', String(Date.now()))
+    } catch {
+      /* storage full / disabled — just skip the "new" markers */
+    }
+  }, [])
   const [classifying, setClassifying] = useState(false)
   const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
   const [digestOpen, setDigestOpen] = useState(false)
@@ -240,7 +258,7 @@ export function Replies() {
         >
           All <span className="segmented-count">{repliesAll.length}</span>
         </button>
-        {SENTIMENT_ORDER.filter((s) => counts[s]).map((s) => (
+        {SENTIMENT_ORDER.filter((s) => counts[s] || filter === s).map((s) => (
           <button
             key={s}
             className={`segmented-item ${filter === s ? 'active' : ''}`}
@@ -252,29 +270,37 @@ export function Replies() {
             {SENTIMENT_META[s].label} <span className="segmented-count">{counts[s]}</span>
           </button>
         ))}
-        {counts['unclassified'] ? (
+        {counts['unclassified'] || filter === 'unclassified' ? (
           <button
             className={`segmented-item ${filter === 'unclassified' ? 'active' : ''}`}
             role="tab"
             aria-selected={filter === 'unclassified'}
             onClick={() => setFilter(filter === 'unclassified' ? null : 'unclassified')}
           >
-            Unclassified <span className="segmented-count">{counts['unclassified']}</span>
+            Unclassified <span className="segmented-count">{counts['unclassified'] ?? 0}</span>
           </button>
         ) : null}
       </div>
 
       <div className="card">
         <div className="reply-list">
-          {replies.map((l) => (
-            <ReplyRow
-              key={l.id}
-              lead={l}
-              reply={snippets.get(leadKey(l.instance_id, l.profile_url))}
-              campaigns={data.campaigns}
-              instances={data.instances}
-            />
-          ))}
+          {replies.map((l) => {
+            const reply = snippets.get(leadKey(l.instance_id, l.profile_url))
+            const repliedTs = reply?.sent_at ?? l.replied_at
+            const isNew =
+              lastSeenRef.current > 0 && !!repliedTs &&
+              new Date(repliedTs).getTime() > lastSeenRef.current
+            return (
+              <ReplyRow
+                key={l.id}
+                lead={l}
+                reply={reply}
+                campaigns={data.campaigns}
+                instances={data.instances}
+                isNew={isNew}
+              />
+            )
+          })}
           {replies.length === 0 && (
             <EmptyState
               icon={Inbox}

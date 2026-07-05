@@ -1,7 +1,7 @@
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { AXIS, BAR_CURSOR, GRID, TOOLTIP } from './chartTheme'
+import { AXIS, BAR_CURSOR, ChartEmpty, GRID, TOOLTIP } from './chartTheme'
 
 const BUCKETS: Array<{ label: string; max: number }> = [
   { label: '≤1d', max: 1 },
@@ -24,22 +24,29 @@ export function LagHistogram({
   }
   const median = medianOf(lags)
 
+  if (lags.length === 0) {
+    return (
+      <div className="card chart-card">
+        <h2>{title}</h2>
+        <ChartEmpty height={240} label="No timing data yet" />
+      </div>
+    )
+  }
+
   return (
     <div className="card chart-card">
       <h2>{title}</h2>
-      <ResponsiveContainer width="100%" height={180}>
+      <ResponsiveContainer width="100%" height={240}>
         <BarChart data={counts} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
           <CartesianGrid {...GRID} vertical={false} />
           <XAxis dataKey="label" {...AXIS} />
           <YAxis {...AXIS} allowDecimals={false} />
           <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} />
-          <Bar dataKey="count" name="Leads" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40} />
+          <Bar dataKey="count" name="Leads" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       <div className="muted small">
-        {lags.length === 0
-          ? 'No data yet.'
-          : `Median ${median!.toFixed(1)} days · ${lags.length} leads`}
+        Median {median!.toFixed(1)} days · {lags.length} leads
       </div>
     </div>
   )

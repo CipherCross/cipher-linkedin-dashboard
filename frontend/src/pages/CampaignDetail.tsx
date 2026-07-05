@@ -1,9 +1,16 @@
-import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useMemo } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { FileQuestion } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import type { CampaignMetrics, Lead } from '../lib/types'
-import { daysBetween, instanceName, latestRepliesByLead, leadKey, leadsToActivity, segmentOf } from '../lib/leads'
-import { pct } from '../lib/format'
+import {
+  daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
+  presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam, segmentOf,
+} from '../lib/leads'
+import type { DateRange } from '../lib/leads'
+import { num, pct, rate } from '../lib/format'
+import { DateRangePicker } from '../components/DateRangePicker'
+import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { CohortChart } from '../components/CohortChart'
@@ -18,21 +25,52 @@ import { MessageSequence } from '../components/MessageSequence'
 export function CampaignDetail() {
   const { id } = useParams<{ id: string }>()
   const { data } = useData()
+  const [params, setParams] = useSearchParams()
+
+  const RANGES = useMemo(() => presetRanges(), [])
+  const rangeParam = params.get('range')
+  // Default to All time so drilling in from the Overview shows the same all-time
+  // numbers as before — the picker only narrows on demand.
+  const range = useMemo<DateRange>(
+    () =>
+      rangeFromParam(rangeParam, RANGES) ??
+      RANGES.find((r) => r.id === 'all') ??
+      RANGES[RANGES.length - 1],
+    [rangeParam, RANGES],
+  )
+  const setRange = (r: DateRange) => {
+    const next = new URLSearchParams(params)
+    next.set('range', rangeToParam(r))
+    setParams(next, { replace: true })
+  }
 
   const campaign = data?.campaigns.find((c) => c.campaign_id === id)
   const leads = useMemo(
     () => data?.leads.filter((l) => l.campaign_id === id) ?? [],
     [data, id],
   )
-  // Positive replies for this campaign, from the latest inbound message per lead.
-  const positive = useMemo(() => {
-    if (!data) return 0
-    const latest = latestRepliesByLead(data.messages)
-    return leads.filter(
-      (l) => latest.get(leadKey(l.instance_id, l.profile_url))?.sentiment === 'positive',
-    ).length
-  }, [data, leads])
-  const [compareIds, setCompareIds] = useState<string[]>([])
+  const latest = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
+  // Range-scoped funnel for this campaign, recomputed client-side from raw leads
+  // (same helpers as the Overview) so drill-down KPIs get delta chips + sparklines.
+  const kpis = useMemo(() => {
+    const prev = previousRange(range)
+    return {
+      totals: rangeTotals(leads, range, latest),
+      prevTotals: prev ? rangeTotals(leads, prev, latest) : undefined,
+      activity: leadsToActivity(leads),
+    }
+  }, [leads, range, latest])
+
+  const compareIds = useMemo(() => {
+    const raw = params.get('cmp')
+    return raw ? raw.split(',').filter(Boolean) : []
+  }, [params])
+  const writeCompare = (ids: string[]) => {
+    const next = new URLSearchParams(params)
+    if (ids.length) next.set('cmp', ids.join(','))
+    else next.delete('cmp')
+    setParams(next, { replace: true })
+  }
 
   // The base campaign (route) plus any added ones, in selection order, deduped
   // against campaigns that may have disappeared from a refresh.
@@ -49,9 +87,13 @@ export function CampaignDetail() {
   if (!data) return null
   if (!campaign) {
     return (
-      <div className="card">
-        Campaign not found. <Link to="/">Back to overview</Link>
-      </div>
+      <EmptyState
+        className="card"
+        icon={FileQuestion}
+        title="Campaign not found"
+        hint="It may have been removed or belongs to an account that hasn't synced."
+        action={<Link className="link-btn" to="/">Back to overview</Link>}
+      />
     )
   }
 
@@ -76,10 +118,11 @@ export function CampaignDetail() {
           </div>
         </div>
         <div className="controls">
+          <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
           <select
             value=""
             onChange={(e) => {
-              if (e.target.value) setCompareIds((ids) => [...ids, e.target.value])
+              if (e.target.value) writeCompare([...compareIds, e.target.value])
             }}
           >
             <option value="">Compare with…</option>
@@ -105,7 +148,7 @@ export function CampaignDetail() {
                 ) : (
                   <button
                     aria-label={`Remove ${c.campaign_name}`}
-                    onClick={() => setCompareIds((ids) => ids.filter((x) => x !== c.campaign_id))}
+                    onClick={() => writeCompare(compareIds.filter((x) => x !== c.campaign_id))}
                   >×</button>
                 )}
               </span>
@@ -123,7 +166,14 @@ export function CampaignDetail() {
         </>
       ) : (
         <>
-          <KpiCards campaigns={[campaign]} positive={positive} />
+          <KpiCards
+            totals={kpis.totals}
+            prev={kpis.prevTotals}
+            activity={kpis.activity}
+            range={range}
+            flowLabel={range.label}
+            positive={kpis.totals.positive}
+          />
 
           <div className="two-col">
             <Funnel leads={leads} />
@@ -184,9 +234,9 @@ function CampaignColumn({ campaign, leads }: { campaign: CampaignMetrics; leads:
           </Link>
         </h2>
         <div className="muted small">
-          {campaign.invites_sent} invites · {campaign.accepted} accepted (
-          {campaign.acceptance_rate ?? '—'}%) · {campaign.replies} replies (
-          {campaign.reply_rate ?? '—'}%)
+          {num(campaign.invites_sent)} invites · {num(campaign.accepted)} accepted (
+          {rate(campaign.acceptance_rate)}) · {num(campaign.replies)} replies (
+          {rate(campaign.reply_rate)})
         </div>
       </div>
       <Funnel leads={leads} />
@@ -235,11 +285,11 @@ function SegmentTable({ leads }: { leads: Lead[] }) {
         <tbody>
           {sorted.map(([seg, r]) => (
             <tr key={seg}>
-              <td>{seg}</td>
-              <td className="num">{r.leads}</td>
-              <td className="num">{r.accepted}</td>
+              <td className="ellipsis" title={seg}>{seg}</td>
+              <td className="num">{num(r.leads)}</td>
+              <td className="num">{num(r.accepted)}</td>
               <td className="num">{pct(r.accepted, r.invited)}</td>
-              <td className="num">{r.replied}</td>
+              <td className="num">{num(r.replied)}</td>
               <td className="num">{pct(r.replied, r.accepted)}</td>
             </tr>
           ))}
@@ -279,10 +329,10 @@ function CompanyTable({ leads }: { leads: Lead[] }) {
         <tbody>
           {top.map(([name, r]) => (
             <tr key={name}>
-              <td>{name}</td>
-              <td className="num">{r.leads}</td>
-              <td className="num">{r.accepted}</td>
-              <td className="num">{r.replied}</td>
+              <td className="ellipsis" title={name}>{name}</td>
+              <td className="num">{num(r.leads)}</td>
+              <td className="num">{num(r.accepted)}</td>
+              <td className="num">{num(r.replied)}</td>
             </tr>
           ))}
           {top.length === 0 && (

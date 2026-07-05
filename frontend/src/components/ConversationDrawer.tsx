@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight, MessagesSquare } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, MessagesSquare, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
+import { useToast } from '../lib/ToastContext'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
 import { InitialsAvatar } from './Avatar'
 import { EmptyState } from './EmptyState'
@@ -18,29 +19,36 @@ import type { Coaching, Lead, Message, Sentiment } from '../lib/types'
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
 type ThreadMsg = Pick<
   Message,
-  'id' | 'direction' | 'body' | 'sent_at' | 'sentiment' | 'reason' | 'classified_model'
+  'id' | 'direction' | 'body' | 'sent_at' | 'sentiment' | 'reason' | 'classified_model' | 'source'
 >
 
 /** Slide-in panel showing one lead's full conversation, both directions, oldest
  *  first. Inbound replies can be reclassified in place. */
 export function ConversationDrawer({
   lead,
+  closing,
   onClose,
 }: {
   lead: Lead | null
+  closing?: boolean
   onClose: () => void
 }) {
   const { data, refetch } = useData()
+  const toast = useToast()
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [savingId, setSavingId] = useState<number | null>(null)
+  // The message + target sentiment currently being saved (for the inline spinner).
+  const [saving, setSaving] = useState<{ id: number; to: Sentiment } | null>(null)
+  // Which inbound bubble has its sentiment button row revealed (badge clicked).
+  const [openSentiId, setOpenSentiId] = useState<number | null>(null)
   const [coaching, setCoaching] = useState<Coaching | null>(null)
   const [coachLoading, setCoachLoading] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
   // Identifies the conversation a coach request was issued for, so a slow
@@ -85,6 +93,24 @@ export function ConversationDrawer({
   // Switching leads always starts on the thread view, not a stale import panel.
   useEffect(() => setImportOpen(false), [lead])
 
+  // Lock the background from scrolling while the drawer is open (restore on close).
+  useEffect(() => {
+    if (!lead) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [lead])
+
+  // The thread renders oldest-first; triage users click a recent reply, so open
+  // at the newest message. Re-runs after an import bumps reloadKey.
+  useEffect(() => {
+    if (!rows || importOpen) return
+    const el = threadRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [rows, reloadKey, importOpen])
+
   // Fetch the full thread whenever the active lead changes (or an import lands).
   useEffect(() => {
     if (!lead) {
@@ -104,7 +130,7 @@ export function ConversationDrawer({
       }
       const { data: msgs, error: err } = await supabase
         .from('messages')
-        .select('id,direction,body,sent_at,sentiment,reason,classified_model')
+        .select('id,direction,body,sent_at,sentiment,reason,classified_model,source')
         .eq('instance_id', lead.instance_id)
         .eq('profile_url', lead.profile_url)
         .order('sent_at', { ascending: true })
@@ -191,8 +217,7 @@ export function ConversationDrawer({
 
   async function reclassify(msg: ThreadMsg, sentiment: Sentiment) {
     if (msg.sentiment === sentiment) return
-    setSavingId(msg.id)
-    setError(null)
+    setSaving({ id: msg.id, to: sentiment })
     try {
       const res = await fetch('/api/reclassify', {
         method: 'POST',
@@ -207,18 +232,20 @@ export function ConversationDrawer({
             m.id === msg.id ? { ...m, sentiment, classified_model: 'manual' } : m,
           ) ?? prev,
       )
+      setOpenSentiId(null)
       refetch()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      // A banner at the top of a long thread scrolls off-screen — toast instead.
+      toast.error(`Couldn't reclassify: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setSavingId(null)
+      setSaving(null)
     }
   }
 
   const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
 
   return (
-    <div className="conv-overlay" onClick={onClose}>
+    <div className={`conv-overlay ${closing ? 'closing' : ''}`} onClick={onClose}>
       <aside
         className="conv-drawer"
         onClick={(e) => e.stopPropagation()}
@@ -256,7 +283,7 @@ export function ConversationDrawer({
               </div>
             </div>
             <button className="conv-close" onClick={onClose} aria-label="Close">
-              ✕
+              <X size={18} />
             </button>
           </div>
 
@@ -311,7 +338,7 @@ export function ConversationDrawer({
 
         {!importOpen && (
         <>
-        <div className="conv-thread">
+        <div className="conv-thread" ref={threadRef}>
           {loading && (
             <div className="conv-thread-skeleton" aria-hidden="true">
               <Skeleton className="sk-bubble in" width="68%" height={44} radius="10px 10px 10px 2px" />
@@ -346,28 +373,51 @@ export function ConversationDrawer({
                 <div className="msg-bubble">
                   {m.body || <span className="muted">(empty)</span>}
                 </div>
-                <div className="msg-time muted small">{clockTime(m.sent_at)}</div>
+                <div className="msg-meta">
+                  <span className="msg-time muted small">{clockTime(m.sent_at)}</span>
+                  {m.source === 'manual' && (
+                    <span
+                      className="msg-imported"
+                      title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
+                    >
+                      imported
+                    </span>
+                  )}
+                </div>
                 {inbound && (
-                  <div className="msg-reclassify">
-                    {meta && (
-                      <span className={`badge senti ${meta.cls}`} title={m.reason ?? ''}>
-                        {meta.label}
-                        {m.classified_model === 'manual' ? ' ✓' : ''}
-                      </span>
-                    )}
+                  <div className={`msg-reclassify ${openSentiId === m.id ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      className={`msg-senti-badge badge senti ${meta ? meta.cls : ''}`}
+                      title={meta ? (m.reason ?? 'Click to reclassify') : 'Set sentiment'}
+                      onClick={() => setOpenSentiId(openSentiId === m.id ? null : m.id)}
+                    >
+                      {meta ? (
+                        <>
+                          {meta.label}
+                          {m.classified_model === 'manual' ? ' ✓' : ''}
+                        </>
+                      ) : (
+                        'Set sentiment'
+                      )}
+                    </button>
                     <div className="msg-senti-btns">
-                      {SENTIMENT_ORDER.map((s) => (
-                        <button
-                          key={s}
-                          className={`senti ${SENTIMENT_META[s].cls} ${
-                            m.sentiment === s ? 'active' : ''
-                          }`}
-                          disabled={savingId === m.id}
-                          onClick={() => reclassify(m, s)}
-                        >
-                          {SENTIMENT_META[s].label}
-                        </button>
-                      ))}
+                      {SENTIMENT_ORDER.map((s) => {
+                        const savingThis = saving?.id === m.id && saving.to === s
+                        return (
+                          <button
+                            key={s}
+                            className={`senti ${SENTIMENT_META[s].cls} ${
+                              m.sentiment === s ? 'active' : ''
+                            }`}
+                            disabled={saving?.id === m.id}
+                            onClick={() => reclassify(m, s)}
+                          >
+                            {savingThis && <Loader2 size={11} className="spin" />}
+                            {SENTIMENT_META[s].label}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )}

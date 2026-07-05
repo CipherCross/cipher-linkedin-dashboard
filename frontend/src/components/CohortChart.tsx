@@ -51,9 +51,9 @@ export function CohortChart({ leads, weeks = 16 }: { leads: Lead[]; weeks?: numb
           <Tooltip {...TOOLTIP} labelFormatter={dateTick} />
           <Legend formatter={legendText} />
           <Bar yAxisId="n" dataKey="invites" name="Invites sent" fill={SERIES.invite}
-            fillOpacity={0.5} maxBarSize={28} radius={[3, 3, 0, 0]} />
+            fillOpacity={0.5} maxBarSize={28} radius={[3, 3, 0, 0]} isAnimationActive={false} />
           <Line yAxisId="pct" dataKey="rate" name="Acceptance %" stroke={SERIES.accepted}
-            strokeWidth={2} dot={{ r: 2 }} connectNulls />
+            strokeWidth={2} dot={{ r: 2 }} connectNulls isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
       )}

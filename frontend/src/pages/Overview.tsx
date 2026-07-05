@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
-  latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeTotals,
+  latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeFromParam,
+  rangeToParam, rangeTotals,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
@@ -18,10 +19,21 @@ const STALE_HOURS = 24
 
 export function Overview() {
   const { data } = useData()
+  const [params, setParams] = useSearchParams()
   const RANGES = useMemo(() => presetRanges(), [])
-  const [range, setRange] = useState<DateRange>(
-    () => RANGES.find((r) => r.id === '3_months') ?? RANGES[RANGES.length - 1],
+  const rangeParam = params.get('range')
+  const range = useMemo<DateRange>(
+    () =>
+      rangeFromParam(rangeParam, RANGES) ??
+      RANGES.find((r) => r.id === '3_months') ??
+      RANGES[RANGES.length - 1],
+    [rangeParam, RANGES],
   )
+  const setRange = (r: DateRange) => {
+    const next = new URLSearchParams(params)
+    next.set('range', rangeToParam(r))
+    setParams(next, { replace: true })
+  }
 
   const view = useMemo(() => {
     if (!data) return null

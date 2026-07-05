@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useChat } from '@ai-sdk/react'
 import type { UIMessage } from 'ai'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Check, ChevronDown, ChevronRight, Database, Loader2, Send, Sparkles, Square, X,
+  ArrowDown, Check, ChevronDown, ChevronRight, Copy, Database, Loader2, Plus, RotateCw,
+  Send, Sparkles, Square, X,
 } from 'lucide-react'
 
 const SUGGESTIONS = [
@@ -14,10 +16,78 @@ const SUGGESTIONS = [
   'Are any accounts dragging down the overall reply rate?',
 ]
 
+// Chat history is kept in sessionStorage so a stray navigation (open a campaign,
+// hit back) doesn't wipe an investigation. Cleared explicitly via "New chat".
+const STORAGE_KEY = 'chat:messages'
+
+function loadStored(): UIMessage[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    return Array.isArray(parsed) ? (parsed as UIMessage[]) : []
+  } catch {
+    return []
+  }
+}
+
+// A server 500 (bad/missing keys) is worth naming the env vars for; a plain
+// network failure isn't — showing the key hint there just misleads.
+function looksLikeServerError(err: Error): boolean {
+  return /5\d\d|internal|api.?key|supabase|anthropic|service.?role/i.test(err.message || '')
+}
+
 interface SqlOutput {
   rows?: unknown[]
   rowCount?: number
   truncated?: boolean
+}
+
+function CopyButton({ text, label, className }: { text: string; label?: boolean; className?: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard blocked — nothing useful to show */
+    }
+  }
+  return (
+    <button
+      type="button"
+      className={`chat-copy ${className ?? ''}`}
+      onClick={copy}
+      title={copied ? 'Copied' : 'Copy'}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+      {label && <span>{copied ? 'Copied' : 'Copy'}</span>}
+    </button>
+  )
+}
+
+// Code fences get their own copy button; the pre text is read off the DOM at
+// click time so we don't reconstruct the string from markdown AST nodes.
+function CodeBlock({ children }: { children?: ReactNode }) {
+  const ref = useRef<HTMLPreElement>(null)
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(ref.current?.innerText ?? '')
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard blocked */
+    }
+  }
+  return (
+    <div className="chat-code">
+      <button type="button" className="chat-copy chat-code-copy" onClick={copy} title={copied ? 'Copied' : 'Copy code'}>
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
+      <pre ref={ref}>{children}</pre>
+    </div>
+  )
 }
 
 function ToolCall({ part }: { part: any }) {
@@ -73,6 +143,11 @@ function Reasoning({ text }: { text: string }) {
 }
 
 function Message({ m }: { m: UIMessage }) {
+  const assistantText = m.parts
+    .filter((p) => p.type === 'text')
+    .map((p) => (p as { text: string }).text)
+    .join('\n\n')
+    .trim()
   return (
     <div className={`chat-msg ${m.role}`}>
       <div className="chat-role">{m.role === 'user' ? 'You' : 'Claude'}</div>
@@ -81,7 +156,9 @@ function Message({ m }: { m: UIMessage }) {
           if (part.type === 'text') {
             return (
               <div key={i} className="chat-md">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock }}>
+                  {part.text}
+                </ReactMarkdown>
               </div>
             )
           }
@@ -93,24 +170,62 @@ function Message({ m }: { m: UIMessage }) {
           }
           return null
         })}
+        {m.role === 'assistant' && assistantText && (
+          <div className="chat-msg-actions">
+            <CopyButton text={assistantText} label className="chat-msg-copy" />
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 export function Chat() {
-  const { messages, sendMessage, status, error, stop } = useChat()
+  const [initialMessages] = useState(loadStored)
+  const { messages, sendMessage, status, error, stop, regenerate, setMessages } = useChat({
+    messages: initialMessages,
+  })
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // Whether the view is stuck to the bottom; a ref so the streaming effect reads
+  // the live value without re-subscribing on every scroll.
+  const pinnedRef = useRef(true)
+  const [showJump, setShowJump] = useState(false)
   const busy = status === 'submitted' || status === 'streaming'
 
-  // Pin to the newest message by scrolling the chat container itself; using
-  // scrollIntoView here also scrolled the whole page, yanking it on every update.
+  // Only auto-scroll while the user is pinned to the bottom — reading back
+  // through a long answer shouldn't get yanked down on every streamed token.
   useEffect(() => {
+    if (!pinnedRef.current) return
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, status])
+
+  const onScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    pinnedRef.current = atBottom
+    setShowJump(!atBottom)
+  }
+
+  const jumpToLatest = () => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+    pinnedRef.current = true
+    setShowJump(false)
+  }
+
+  // Persist the transcript so navigation away and back doesn't lose it.
+  useEffect(() => {
+    try {
+      if (messages.length) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+      else sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* storage full / disabled — chat just won't persist */
+    }
+  }, [messages])
 
   // Grow the textarea with its content up to a cap, then scroll internally.
   const grow = () => {
@@ -124,8 +239,22 @@ export function Chat() {
   const submit = (text: string) => {
     const trimmed = text.trim()
     if (!trimmed || busy) return
+    pinnedRef.current = true
+    setShowJump(false)
     sendMessage({ text: trimmed })
     setInput('')
+  }
+
+  const newChat = () => {
+    if (busy) stop()
+    setMessages([])
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+    setInput('')
+    inputRef.current?.focus()
   }
 
   return (
@@ -138,10 +267,18 @@ export function Chat() {
             read-only SQL.
           </div>
         </div>
+        {messages.length > 0 && (
+          <div className="controls">
+            <button className="btn sm" onClick={newChat}>
+              <Plus size={15} />
+              New chat
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="card chat-card">
-        <div className="chat-scroll" ref={scrollRef}>
+        <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
           {messages.length === 0 && (
             <div className="chat-empty">
               <div className="chat-empty-icon"><Sparkles size={26} /></div>
@@ -164,12 +301,26 @@ export function Chat() {
           ))}
           {status === 'submitted' && <div className="muted small chat-thinking">Thinking…</div>}
           {error && (
-            <div className="banner">
-              Chat error: {error.message || 'request failed'}. Check that ANTHROPIC_API_KEY
-              and SUPABASE_SERVICE_ROLE_KEY are set on the deployment.
+            <div className="banner chat-error-banner" role="alert">
+              <span>
+                {looksLikeServerError(error)
+                  ? `Chat error: ${error.message}. Check that ANTHROPIC_API_KEY and SUPABASE_SERVICE_ROLE_KEY are set on the deployment.`
+                  : `Request failed${error.message ? `: ${error.message}` : ''}.`}
+              </span>
+              <button className="btn sm" onClick={() => regenerate()} disabled={busy}>
+                <RotateCw size={13} />
+                Retry
+              </button>
             </div>
           )}
         </div>
+
+        {showJump && (
+          <button className="chat-jump" type="button" onClick={jumpToLatest}>
+            <ArrowDown size={14} />
+            Jump to latest
+          </button>
+        )}
 
         <form
           className="chat-input-row"

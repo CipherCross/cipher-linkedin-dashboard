@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Download } from 'lucide-react'
+import { Download, CalendarRange } from 'lucide-react'
 import type { Instance } from '../lib/types'
+import { EmptyState } from './EmptyState'
 import { downloadCsv, instanceName, toCsv } from '../lib/leads'
 import {
   SMALL_COHORT, cellAcceptRate, cellPositiveShare, cellReplyRate, reviewCsvRows,
@@ -105,7 +106,13 @@ export function CohortComparisonTable({
             ))}
             {data.rows.length === 0 && (
               <tr>
-                <td colSpan={colSpan} className="muted">No invites in this window.</td>
+                <td colSpan={colSpan}>
+                  <EmptyState
+                    icon={CalendarRange}
+                    title="No invites in this window"
+                    hint="Widen the week range or wait for accounts to send invites."
+                  />
+                </td>
               </tr>
             )}
           </tbody>

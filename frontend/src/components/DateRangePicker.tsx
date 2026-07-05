@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Calendar, ChevronDown } from 'lucide-react'
 import type { DateRange } from '../lib/leads'
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
@@ -63,9 +64,20 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
     const onDoc = (e: MouseEvent) => {
       if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false)
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
     document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
+
+  // Today as a UTC day-string, so future days are disabled by string compare
+  // (matching the UTC day-slices used everywhere else — no local-tz drift).
+  const todayStr = new Date().toISOString().slice(0, 10)
 
   const pickPreset = (p: DateRange) => {
     onChange(p)
@@ -94,9 +106,9 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
   return (
     <div className="drp" ref={wrap}>
       <button className="drp-trigger" onClick={() => setOpen((o) => !o)}>
-        <span className="drp-cal-icon" aria-hidden>▦</span>
+        <Calendar className="drp-cal-icon" size={14} aria-hidden />
         {rangeButtonLabel(value)}
-        <span className="drp-caret" aria-hidden>▾</span>
+        <ChevronDown className="drp-caret" size={14} aria-hidden />
       </button>
 
       {open && (
@@ -134,13 +146,20 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
                 const isEnd = day === draftEnd
                 const inRange =
                   draftStart && draftEnd && day > draftStart && day < draftEnd
+                const future = day > todayStr
                 const cls = [
                   'drp-day',
                   isStart || isEnd ? 'edge' : '',
                   inRange ? 'between' : '',
+                  future ? 'disabled' : '',
                 ].filter(Boolean).join(' ')
                 return (
-                  <button key={day} className={cls} onClick={() => clickDay(day)}>
+                  <button
+                    key={day}
+                    className={cls}
+                    disabled={future}
+                    onClick={() => clickDay(day)}
+                  >
                     {d}
                   </button>
                 )

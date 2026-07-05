@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { supabase } from '../lib/supabase'
@@ -42,32 +42,50 @@ export function Playbook() {
   const [preview, setPreview] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
+  // Set on a failed load. While non-null the editor is locked so the user can't
+  // type into an empty box and Save a fragment over the real playbook.
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const reqId = useRef(0)
+
+  const load = useCallback(async () => {
+    const id = ++reqId.current
     if (!supabase) {
-      setMsg('Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+      setLoadError('Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
       setLoaded(true)
       return
     }
-    let cancelled = false
-    ;(async () => {
-      const { data, error } = await supabase!
-        .from('playbook')
-        .select('content,updated_at')
-        .maybeSingle()
-      if (cancelled) return
-      if (error) setMsg(`Couldn't load playbook: ${error.message}`)
-      else {
-        setContent(data?.content ?? '')
-        setSavedAt(data?.updated_at ?? null)
-      }
-      setLoaded(true)
-    })()
-    return () => {
-      cancelled = true
+    setLoaded(false)
+    setLoadError(null)
+    const { data, error } = await supabase
+      .from('playbook')
+      .select('content,updated_at')
+      .maybeSingle()
+    if (id !== reqId.current) return
+    if (error) {
+      setLoadError(`Couldn't load playbook: ${error.message}`)
+    } else {
+      setContent(data?.content ?? '')
+      setSavedAt(data?.updated_at ?? null)
+      setDirty(false)
     }
+    setLoaded(true)
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  // Warn on tab close / reload while there are unsaved edits.
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   async function save() {
     setBusy(true)
@@ -107,7 +125,7 @@ export function Playbook() {
           <button
             className="btn-accent icon-btn"
             onClick={save}
-            disabled={busy || !loaded || !dirty}
+            disabled={busy || !loaded || !dirty || loadError != null}
           >
             {dirty && !busy && <span className="unsaved-dot" />}
             {busy ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
@@ -116,6 +134,23 @@ export function Playbook() {
       </header>
 
       <div className="card playbook-editor">
+        {loadError && (
+          <div
+            className="banner error"
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <span>{loadError}</span>
+            <button className="btn sm" onClick={load} disabled={!loaded}>
+              {loaded ? 'Retry' : 'Loading…'}
+            </button>
+          </div>
+        )}
         {!loaded ? (
           <div className="sk-lines" aria-busy="true">
             {['40%', '92%', '88%', '70%', '95%', '64%', '90%', '80%', '55%', '86%'].map((w, i) => (
@@ -129,6 +164,7 @@ export function Playbook() {
                 value={content}
                 spellCheck={false}
                 placeholder={PLACEHOLDER}
+                disabled={loadError != null}
                 onChange={(e) => {
                   setDirty(true)
                   setContent(e.target.value)
@@ -144,11 +180,6 @@ export function Playbook() {
                 )}
               </div>
             </div>
-          </div>
-        )}
-        {msg && (
-          <div className="playbook-actions">
-            <span className="muted small">{msg}</span>
           </div>
         )}
       </div>

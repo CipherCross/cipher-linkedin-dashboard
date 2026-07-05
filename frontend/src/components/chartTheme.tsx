@@ -15,11 +15,19 @@ export const SERIES = {
   added: 'var(--purple)',
 } as const
 
-/** Categorical hues for per-item charts (one bubble/slice per campaign). */
+/** Categorical hues for per-item charts (one bubble/slice per campaign).
+ *  Drawn from the theme's --chart-cat-* tokens so they match the palette's
+ *  saturation (the old Material lime/orange were off-ramp). */
 export const CATEGORICAL = [
   'var(--accent)', 'var(--success)', 'var(--warning)', 'var(--danger)', 'var(--purple)',
-  '#3fc9d6', '#e87fb0', '#9ccc65', '#ffa94d', 'var(--text-muted)',
+  'var(--chart-cat-teal)', 'var(--chart-cat-pink)', 'var(--chart-cat-lime)',
+  'var(--chart-cat-amber)', 'var(--text-muted)',
 ]
+
+/** Kill Recharts' grow-from-zero mount animation. Data refreshes every 5 min and
+ *  the replay reads as a glitch — spread onto every series, or set the prop
+ *  directly (`isAnimationActive={false}`). */
+export const NO_ANIM = { isAnimationActive: false } as const
 
 /** <CartesianGrid {...GRID} /> — recessive, solid, one step off the surface. */
 export const GRID = { stroke: 'var(--chart-grid)', strokeDasharray: '0' as const }
@@ -32,12 +40,13 @@ export const AXIS = {
   tick: { fill: 'var(--text-muted)', fontSize: 11 },
 } as const
 
-/** <Tooltip {...TOOLTIP} /> — dark card, value-forward. */
+/** <Tooltip {...TOOLTIP} /> — dark card, value-forward. Mirrors the `.chart-tip`
+ *  CSS class (used by custom-content tooltips) in styles.css — keep in sync. */
 export const TOOLTIP = {
   contentStyle: {
     background: 'var(--surface-1)',
     border: '1px solid var(--border)',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-md)',
     boxShadow: 'var(--shadow-md)',
     fontSize: 12,
     padding: '8px 10px',

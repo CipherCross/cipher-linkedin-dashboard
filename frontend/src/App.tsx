@@ -15,7 +15,7 @@ import { Review } from './pages/Review'
 
 export default function App() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary variant="screen">
       <DataProvider>
         <ToastProvider>
         <HashRouter>

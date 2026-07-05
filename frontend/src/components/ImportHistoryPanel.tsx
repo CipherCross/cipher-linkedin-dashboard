@@ -77,6 +77,9 @@ export function ImportHistoryPanel({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<SaveResult | null>(null)
+  // Set once the user tweaks the parsed blocks (direction, time, split, remove,
+  // who-is-us) so "Back" can warn before throwing those edits away.
+  const [edited, setEdited] = useState(false)
   const nextKey = useRef(0)
 
   // Dedup identities of what's already stored; recomputed live so edits to a
@@ -117,16 +120,23 @@ export function ImportHistoryPanel({
     setUsSender(us)
     setWarnings(res.warnings)
     setBlocks(parsed)
+    setEdited(false)
   }
 
-  const patch = (key: number, p: Partial<Block>) =>
+  const patch = (key: number, p: Partial<Block>) => {
+    setEdited(true)
     setBlocks((prev) => prev?.map((b) => (b.key === key ? { ...b, ...p } : b)) ?? prev)
+  }
 
-  const remove = (key: number) => setBlocks((prev) => prev?.filter((b) => b.key !== key) ?? prev)
+  const remove = (key: number) => {
+    setEdited(true)
+    setBlocks((prev) => prev?.filter((b) => b.key !== key) ?? prev)
+  }
 
   // LinkedIn collapses rapid-fire messages under one header; LH2 synced them as
   // separate rows, so splitting is what makes the dup badges line up.
-  const split = (key: number) =>
+  const split = (key: number) => {
+    setEdited(true)
     setBlocks(
       (prev) =>
         prev?.flatMap((b) => {
@@ -141,8 +151,10 @@ export function ImportHistoryPanel({
           }))
         }) ?? prev,
     )
+  }
 
   const pickUs = (sender: string) => {
+    setEdited(true)
     setUsSender(sender)
     setBlocks(
       (prev) =>
@@ -264,7 +276,7 @@ export function ImportHistoryPanel({
       {blocks && (
         <>
           {warnings.map((w, i) => (
-            <div className="banner conv-error" key={i}>{w}</div>
+            <div className="banner warn" key={i}>{w}</div>
           ))}
           {senders.length > 1 && (
             <div className="import-us small">
@@ -331,7 +343,15 @@ export function ImportHistoryPanel({
             <span className="muted small grow">
               {dupCount > 0 ? `${dupCount} already saved` : ''}
             </span>
-            <button className="link-btn" onClick={() => setBlocks(null)} disabled={saving}>
+            <button
+              className="link-btn"
+              onClick={() => {
+                if (edited && !window.confirm('Discard your edits and go back to the paste step? Direction, time and split changes will be lost.')) return
+                setBlocks(null)
+                setEdited(false)
+              }}
+              disabled={saving}
+            >
               Back
             </button>
             <button className="link-btn" onClick={onClose} disabled={saving}>

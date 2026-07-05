@@ -76,6 +76,31 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     setRawText('')
   }, [sig, dirty, inst.config])
 
+  // Warn on tab close / reload while there are unsaved edits.
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
+
+  // Closing with unsaved edits confirms, then resets to the last-saved baseline
+  // so reopening doesn't resurrect the discarded changes.
+  const close = () => {
+    if (dirty && !window.confirm('Discard unsaved config changes?')) return
+    const c = (inst.config ?? {}) as Record<string, unknown>
+    setText(initText(c))
+    setBool(initBool(c))
+    setRawText('')
+    setRaw(false)
+    setMsg(null)
+    setDirty(false)
+    setOpen(false)
+  }
+
   // Keys present in config but not surfaced as structured fields (e.g. `mapping`)
   // are preserved so editing a field never drops them.
   const passthrough = () => {
@@ -239,10 +264,10 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         <button className="link-btn" onClick={toggleRaw} disabled={busy}>
           {raw ? 'Structured' : 'Advanced (raw JSON)'}
         </button>
-        <button className="link-btn" onClick={() => setOpen(false)} disabled={busy}>
+        <button className="link-btn" onClick={close} disabled={busy}>
           Close
         </button>
-        {msg && <span className="muted small">{msg}</span>}
+        {msg && <span className="small text-danger">{msg}</span>}
       </div>
     </div>
   )

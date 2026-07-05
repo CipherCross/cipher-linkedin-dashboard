@@ -51,9 +51,9 @@ export function ActivityChart({
     <div className="card chart-card">
       <h2>{title}</h2>
       {data.length === 0 ? (
-        <ChartEmpty height={260} label="No activity in this range" />
+        <ChartEmpty height={240} label="No activity in this range" />
       ) : (
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={data} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
           <CartesianGrid {...GRID} />
           <XAxis dataKey="day" {...AXIS} tickFormatter={dateTick} minTickGap={24} />
@@ -85,6 +85,7 @@ export function ActivityChart({
               fill={s.color}
               fillOpacity={0.12}
               strokeWidth={2}
+              isAnimationActive={false}
             />
           ))}
         </AreaChart>

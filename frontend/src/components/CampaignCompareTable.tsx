@@ -60,9 +60,11 @@ export function CampaignCompareTable({
       setSortAsc(key === 'campaign_name')
     }
   }
-  const arrow = (key: SortKey) => (key === sortKey ? (sortAsc ? ' ↑' : ' ↓') : '')
+  const sortInd = (key: SortKey) => (
+    <span className="sort-ind">{key === sortKey ? (sortAsc ? '↑' : '↓') : ''}</span>
+  )
   const head = (key: SortKey, label: string, cls = '') => (
-    <th className={`sortable ${cls}`} onClick={() => onSort(key)}>{label}{arrow(key)}</th>
+    <th className={`sortable ${cls}`} onClick={() => onSort(key)}>{label}{sortInd(key)}</th>
   )
 
   return (
@@ -98,9 +100,9 @@ export function CampaignCompareTable({
                 <td className="num">{c.total_leads.toLocaleString('en-US')}</td>
                 <td className="num">{c.invites_sent.toLocaleString('en-US')}</td>
                 <td className="num">{c.accepted.toLocaleString('en-US')}</td>
-                <td className="num">{rateCell(c.acceptance_rate, maxAccept, '#34c98e')}</td>
+                <td className="num">{rateCell(c.acceptance_rate, maxAccept, 'var(--success)')}</td>
                 <td className="num">{c.replies.toLocaleString('en-US')}</td>
-                <td className="num">{rateCell(c.reply_rate, maxReply, '#f7b94f')}</td>
+                <td className="num">{rateCell(c.reply_rate, maxReply, 'var(--warning)')}</td>
               </tr>
             )
           })}

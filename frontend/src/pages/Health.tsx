@@ -84,6 +84,7 @@ function ErrorCell({ error }: { error: string | null }) {
       <button
         className={`error-cell-btn ${open ? 'open' : ''}`}
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         title={open ? 'Collapse' : 'Show full error'}
       >
         {error}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Download, SearchX, X } from 'lucide-react'
 import { useData } from '../lib/DataContext'
@@ -15,6 +15,10 @@ import { num, shortDate } from '../lib/format'
 const PAGE_SIZE = 50
 
 type SortKey = 'full_name' | 'added_at' | 'invited_at' | 'connected_at' | 'replied_at' | 'last_action_at'
+
+const SORT_KEYS: SortKey[] = [
+  'full_name', 'added_at', 'invited_at', 'connected_at', 'replied_at', 'last_action_at',
+]
 
 // The date/milestone columns. `added_at` is opt-in (deploy-pending on most
 // notebooks, so it's mostly em-dashes today) — toggled on from the table toolbar.
@@ -36,16 +40,49 @@ export function LeadsExplorer() {
   const { data } = useData()
   const { openConversation } = useConversation()
   const [params, setParams] = useSearchParams()
-  const [sortKey, setSortKey] = useState<SortKey>('last_action_at')
-  const [sortAsc, setSortAsc] = useState(false)
-  const [page, setPage] = useState(0)
-  const [showAdded, setShowAdded] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Sort / page / column toggle all live in the URL so the page is fully
+  // shareable (as its subtitle advertises).
+  const rawSort = params.get('sort')
+  const sortKey: SortKey = (SORT_KEYS as string[]).includes(rawSort ?? '')
+    ? (rawSort as SortKey)
+    : 'last_action_at'
+  const sortAsc = params.get('dir') === 'asc'
+  const page = Math.max(0, (Number(params.get('page')) || 1) - 1)
+  const showAdded = params.get('added') === '1'
 
   const inst = params.get('inst') ?? 'all'
   const camp = params.get('camp') ?? 'all'
   const stage = params.get('stage') ?? 'all'
   const risk = params.get('risk') ?? 'all'
   const q = params.get('q') ?? ''
+
+  // Search is debounced: it types into local state and only commits to the URL
+  // param (which re-filters every lead) ~200ms after the last keystroke.
+  const [qInput, setQInput] = useState(q)
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const t = qInput.trim()
+      if (t === q) return
+      // Functional form so a filter change during the debounce window isn't
+      // clobbered by a stale params snapshot.
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (t) next.set('q', t)
+        else next.delete('q')
+        next.delete('page')
+        return next
+      }, { replace: true })
+    }, 200)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qInput])
+  // Re-sync the input when q changes from outside (chip clear / clear all).
+  useEffect(() => {
+    setQInput(q)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q])
 
   // A `camp` from the URL can name a campaign in a different account than the
   // selected `inst` (e.g. a shared link). Ignore it then instead of rendering an
@@ -59,13 +96,20 @@ export function LeadsExplorer() {
     if (value === 'all' || value === '') next.delete(key)
     else next.set(key, value)
     if (key === 'inst') next.delete('camp')
+    next.delete('page') // back to the first page on any filter change
     setParams(next, { replace: true })
-    setPage(0)
   }
 
   const clearAll = () => {
     setParams(new URLSearchParams(), { replace: true })
-    setPage(0)
+  }
+
+  const goPage = (n: number) => {
+    const next = new URLSearchParams(params)
+    if (n <= 0) next.delete('page')
+    else next.set('page', String(n + 1))
+    setParams(next, { replace: true })
+    scrollRef.current?.scrollTo({ top: 0 })
   }
 
   const filtered = useMemo(() => {
@@ -130,14 +174,16 @@ export function LeadsExplorer() {
     })
 
   const onSort = (key: SortKey) => {
-    if (key === sortKey) setSortAsc(!sortAsc)
-    else {
-      setSortKey(key)
-      setSortAsc(key === 'full_name')
-    }
-    setPage(0)
+    const nextAsc = key === sortKey ? !sortAsc : key === 'full_name'
+    const next = new URLSearchParams(params)
+    next.set('sort', key)
+    next.set('dir', nextAsc ? 'asc' : 'desc')
+    next.delete('page')
+    setParams(next, { replace: true })
   }
-  const arrow = (key: SortKey) => (key === sortKey ? (sortAsc ? ' ↑' : ' ↓') : '')
+  const sortInd = (key: SortKey) => (
+    <span className="sort-ind">{key === sortKey ? (sortAsc ? '↑' : '↓') : ''}</span>
+  )
 
   const exportCsv = () =>
     downloadCsv(
@@ -178,8 +224,8 @@ export function LeadsExplorer() {
           <input
             type="search"
             placeholder="Name, headline, company…"
-            value={q}
-            onChange={(e) => setFilter('q', e.target.value)}
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
           />
         </label>
         <label className="filter-field">
@@ -243,7 +289,7 @@ export function LeadsExplorer() {
               <input
                 type="checkbox"
                 checked={showAdded}
-                onChange={(e) => setShowAdded(e.target.checked)}
+                onChange={(e) => setFilter('added', e.target.checked ? '1' : '')}
               />
               Added date
             </label>
@@ -252,19 +298,19 @@ export function LeadsExplorer() {
             </button>
           </div>
         </div>
-        <div className="table-scroll tall">
+        <div className="table-scroll tall" ref={scrollRef}>
         <table>
           <thead>
             <tr>
               <th className="sortable" onClick={() => onSort('full_name')}>
-                Lead{arrow('full_name')}
+                Lead{sortInd('full_name')}
               </th>
               <th>Headline</th>
               <th>Campaign</th>
               <th>Stage</th>
               {dateColumns.map((c) => (
                 <th key={c.key} className="sortable" onClick={() => onSort(c.key)}>
-                  {c.label}{arrow(c.key)}
+                  {c.label}{sortInd(c.key)}
                 </th>
               ))}
             </tr>
@@ -332,11 +378,11 @@ export function LeadsExplorer() {
         </div>
         {pages > 1 && (
           <div className="pager">
-            <button className="btn" disabled={page === 0} onClick={() => setPage(page - 1)}>
+            <button className="btn" disabled={page === 0} onClick={() => goPage(page - 1)}>
               ← Prev
             </button>
             <span className="muted small">page {page + 1} / {pages}</span>
-            <button className="btn" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
+            <button className="btn" disabled={page >= pages - 1} onClick={() => goPage(page + 1)}>
               Next →
             </button>
           </div>

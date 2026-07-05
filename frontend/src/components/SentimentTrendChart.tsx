@@ -98,6 +98,7 @@ export function SentimentTrendChart({
                 stackId="s"
                 fill={BUCKET_COLOR[b]}
                 maxBarSize={34}
+                isAnimationActive={false}
               />
             ))}
           </BarChart>

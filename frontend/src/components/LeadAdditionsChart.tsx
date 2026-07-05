@@ -45,7 +45,7 @@ export function LeadAdditionsChart({
           <YAxis {...AXIS} allowDecimals={false} />
           <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} labelFormatter={dateTick} />
           <Bar dataKey="added" name="Leads added" fill={SERIES.added} fillOpacity={0.85}
-            radius={[4, 4, 0, 0]} maxBarSize={28} />
+            radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       )}

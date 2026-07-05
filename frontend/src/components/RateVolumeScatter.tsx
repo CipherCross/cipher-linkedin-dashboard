@@ -42,6 +42,9 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
   const avgX = points.length ? points.reduce((s, p) => s + p.x, 0) / points.length : 0
   const avgY = points.length ? points.reduce((s, p) => s + p.y, 0) / points.length : 0
   const yLabel = metric === 'reply' ? 'Reply %' : 'Accept %'
+  // Per-bubble labels overlap once there are more than a handful of campaigns;
+  // past that, drop them and lean on the tooltip + a colour-chip legend instead.
+  const showLabels = points.length <= 3
 
   return (
     <div className="card chart-card">
@@ -70,20 +73,49 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
             </>
           )}
           <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<PointTooltip metric={metric} />} />
-          <Scatter data={points} fillOpacity={0.78}>
+          <Scatter data={points} fillOpacity={0.78} isAnimationActive={false}>
             {points.map((p) => (
               <Cell key={p.name} fill={p.color} />
             ))}
-            <LabelList dataKey="name" position="top" style={{ fill: 'var(--text)', fontSize: 11 }} />
+            {showLabels && (
+              <LabelList
+                dataKey="name"
+                position="top"
+                formatter={truncName}
+                style={{ fill: 'var(--text)', fontSize: 11 }}
+              />
+            )}
           </Scatter>
         </ScatterChart>
       </ResponsiveContainer>
+      {!showLabels && points.length > 0 && (
+        <div
+          style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', margin: '8px 0 0' }}
+        >
+          {points.map((p) => (
+            <span
+              key={p.name}
+              title={p.name}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', maxWidth: 220 }}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.color, display: 'inline-block', flexShrink: 0 }} />
+              <span className="ellipsis" style={{ maxWidth: 200 }}>{p.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="muted small">
         Bubble size = lead volume. Up-and-right = strong rate on a real sample;
         up-and-left = high rate but few leads, so treat with caution.
       </div>
     </div>
   )
+}
+
+/** Keep on-bubble labels short so they don't clip the plot area. */
+function truncName(value: unknown): string {
+  const s = String(value ?? '')
+  return s.length > 18 ? `${s.slice(0, 17)}…` : s
 }
 
 function PointTooltip({ active, payload, metric }: {

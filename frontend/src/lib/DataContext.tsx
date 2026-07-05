@@ -84,14 +84,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // an in-flight interval load (or vice versa).
   const reqId = useRef(0)
 
+  // Surface an error without wiping on-screen data: keep the last successful
+  // load and only stamp the error field. First-load failures (prev === null)
+  // still fall back to the empty-with-error state.
+  const showError = useCallback((message: string) => {
+    setData((prev) => (prev ? { ...prev, error: message } : { ...EMPTY, error: message }))
+  }, [])
+
   const load = useCallback(async () => {
     const id = ++reqId.current
     if (!supabase) {
-      setData({
-        ...EMPTY,
-        error:
-          'Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
-      })
+      showError(
+        'Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
+      )
       setLoading(false)
       return
     }
@@ -131,28 +136,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
           instances.error ?? campaigns.error ?? activity.error ??
           syncRuns.error ?? annotations.error ?? steps.error ??
           briefing.error
-        setData(
-          error
-            ? { ...EMPTY, error: error.message }
-            : {
-                instances: instances.data ?? [],
-                campaigns: campaigns.data ?? [],
-                activity: activity.data ?? [],
-                syncRuns: syncRuns.data ?? [],
-                messages,
-                annotations: annotations.data ?? [],
-                steps: steps.data ?? [],
-                briefing: briefing.data?.[0] ?? null,
-                prevBriefing: briefing.data?.[1] ?? null,
-                leads,
-              },
-        )
+        if (error) {
+          // Query-level failure: keep prior data, just flag the error.
+          showError(error.message)
+        } else {
+          // Success replaces everything with fresh data (no error field),
+          // which clears any error left by a previous failed refresh.
+          setData({
+            instances: instances.data ?? [],
+            campaigns: campaigns.data ?? [],
+            activity: activity.data ?? [],
+            syncRuns: syncRuns.data ?? [],
+            messages,
+            annotations: annotations.data ?? [],
+            steps: steps.data ?? [],
+            briefing: briefing.data?.[0] ?? null,
+            prevBriefing: briefing.data?.[1] ?? null,
+            leads,
+          })
+        }
       } catch (e) {
         if (id === reqId.current)
-          setData({ ...EMPTY, error: e instanceof Error ? e.message : String(e) })
+          showError(e instanceof Error ? e.message : String(e))
       }
       if (id === reqId.current) setLoading(false)
-  }, [])
+  }, [showError])
 
   useEffect(() => {
     load()

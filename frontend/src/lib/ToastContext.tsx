@@ -81,7 +81,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => {
           const Icon = ICON[t.kind]
           return (
-            <div key={t.id} className={`toast ${t.kind}`} role="status">
+            <div key={t.id} className={`toast ${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
               <Icon size={16} className="toast-icon" aria-hidden="true" />
               <span className="toast-msg">{t.message}</span>
               <button className="toast-close" onClick={() => dismiss(t.id)} aria-label="Dismiss">

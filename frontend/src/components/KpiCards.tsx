@@ -49,19 +49,21 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
     },
     {
       key: 'accepted', label: 'Accepted' + suffix, value: accepted, icon: UserCheck,
-      sub: pct(accepted, invites) + ' acceptance', event: 'invite_accepted',
+      sub: invites > 0 ? pct(accepted, invites) + ' acceptance' : undefined,
+      event: 'invite_accepted',
       cur: accepted, prevCount: prev?.accepted,
     },
     {
       key: 'replies', label: 'Replies' + suffix, value: replies, icon: MessageSquare,
-      sub: pct(replies, accepted) + ' reply rate', event: 'reply_received',
+      sub: accepted > 0 ? pct(replies, accepted) + ' reply rate' : undefined,
+      event: 'reply_received',
       cur: replies, prevCount: prev?.replies, maturing: true,
     },
   ]
   if (positive !== undefined)
     cards.push({
       key: 'positive', label: 'Positive' + suffix, value: positive, icon: ThumbsUp,
-      sub: pct(positive, replies) + ' of replies',
+      sub: replies > 0 ? pct(positive, replies) + ' of replies' : undefined,
       cur: positive, prevCount: prev?.positive, maturing: true,
     })
 

@@ -15,11 +15,13 @@ export function ReplyRow({
   reply,
   campaigns,
   instances,
+  isNew = false,
 }: {
   lead: Lead
   reply: ReplyInfo | undefined
   campaigns: CampaignMetrics[]
   instances: Instance[]
+  isNew?: boolean
 }) {
   const { openConversation } = useConversation()
   const meta = reply?.sentiment ? SENTIMENT_META[reply.sentiment] : null
@@ -33,10 +35,22 @@ export function ReplyRow({
   const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
 
   return (
-    <div className="reply-row row-clickable" onClick={() => openConversation(lead)}>
+    <div
+      className="reply-row row-clickable"
+      role="button"
+      tabIndex={0}
+      onClick={() => openConversation(lead)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          openConversation(lead)
+        }
+      }}
+    >
       <InitialsAvatar name={name} size={34} />
       <div className="reply-who">
         <div className="reply-who-top">
+          {isNew && <span className="reply-new" title="New since your last visit" />}
           <a
             className="row-link"
             href={lead.profile_url}

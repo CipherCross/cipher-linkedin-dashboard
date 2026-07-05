@@ -4,7 +4,7 @@ import {
 } from 'recharts'
 import type { Lead } from '../lib/types'
 import { lastWeeks, weekStart } from '../lib/leads'
-import { AXIS, BAR_CURSOR, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
+import { AXIS, BAR_CURSOR, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 /** Invites per calendar week vs LinkedIn's ~100–200/week safe zone.
  *  The main view for ramping a warming-up account safely. */
@@ -18,6 +18,15 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
   }
   const data = weeks.map((week) => ({ week, invites: counts.get(week) ?? 0 }))
   const peak = Math.max(...data.map((d) => d.invites), 0)
+
+  if (peak === 0) {
+    return (
+      <div className="card chart-card">
+        <h2>Invite volume per week (warm-up / limit tracker)</h2>
+        <ChartEmpty height={240} label="No invites in the last 12 weeks" />
+      </div>
+    )
+  }
 
   return (
     <div className="card chart-card">
@@ -33,7 +42,7 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
           <ReferenceLine y={200} stroke="var(--danger)" strokeDasharray="4 4"
             label={{ value: '~200/wk cap', fill: 'var(--danger)', fontSize: 11, position: 'insideTopRight' }} />
           <Bar dataKey="invites" name="Invites" fill={SERIES.invite} radius={[3, 3, 0, 0]}
-            maxBarSize={28} />
+            maxBarSize={28} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       <div className="muted small">

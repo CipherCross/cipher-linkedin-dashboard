@@ -312,6 +312,37 @@ export function previousRange(r: DateRange): DateRange | null {
   }
 }
 
+const ddmmyyyy = (day: string) => {
+  const [y, m, d] = day.split('-')
+  return `${d}.${m}.${y}`
+}
+
+/** Serialize a DateRange to a compact URL param value: a preset keeps its id;
+ *  a custom range becomes "from~to" (either side may be empty for an open end). */
+export function rangeToParam(r: DateRange): string {
+  if (r.id !== 'custom') return r.id
+  return `${r.from ?? ''}~${r.to ?? ''}`
+}
+
+/** Resolve a URL param back to a DateRange: a known preset id, else a "from~to"
+ *  custom range, else null (caller supplies its own default). Labels are rebuilt
+ *  so the trigger/flow labels stay meaningful after a refresh or shared link. */
+export function rangeFromParam(v: string | null, presets: DateRange[]): DateRange | null {
+  if (!v) return null
+  const preset = presets.find((p) => p.id === v)
+  if (preset) return preset
+  if (!v.includes('~')) return null
+  const [rawFrom, rawTo] = v.split('~')
+  const from = rawFrom || null
+  const to = rawTo || null
+  if (!from && !to) return null
+  const label =
+    from && to ? `${ddmmyyyy(from)} – ${ddmmyyyy(to)}`
+      : from ? `since ${ddmmyyyy(from)}`
+        : `until ${ddmmyyyy(to!)}`
+  return { id: 'custom', label, from, to }
+}
+
 export function tsInRange(ts: string | null, r: DateRange): boolean {
   if (!ts) return false
   const day = ts.slice(0, 10)

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { DateRange, ReplyInfo } from '../lib/leads'
 import { leadKey, tsInRange } from '../lib/leads'
@@ -36,7 +37,7 @@ export function RepliesPanel({
   return (
     <div className="card reply-panel">
       <button className="coach-digest-toggle" onClick={() => setOpen((o) => !o)}>
-        <span className="coach-digest-caret">{open ? '▾' : '▸'}</span>
+        {open ? <ChevronDown size={15} className="coach-digest-caret" /> : <ChevronRight size={15} className="coach-digest-caret" />}
         Lead replies
         <span className="muted small">
           — {replies.length} in {range.label.toLowerCase()}, newest first

@@ -1,11 +1,14 @@
 import { Fragment, useState } from 'react'
 import type { Lead } from '../lib/types'
 import { num } from '../lib/format'
+import { ChartEmpty } from './chartTheme'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+// `token` is the theme colour the cell intensity is mixed from, so the heatmap
+// tracks the palette instead of carrying its own rgb triplets.
 const METRICS = [
-  { id: 'accepted', label: 'Accepts', field: 'connected_at' as const, color: '52, 201, 142' },
-  { id: 'replied', label: 'Replies', field: 'replied_at' as const, color: '247, 185, 79' },
+  { id: 'accepted', label: 'Accepts', field: 'connected_at' as const, token: 'var(--success)' },
+  { id: 'replied', label: 'Replies', field: 'replied_at' as const, token: 'var(--warning)' },
 ]
 
 /** Day-of-week × hour distribution of accepts/replies, in the viewer's
@@ -38,28 +41,38 @@ export function Heatmap({ leads }: { leads: Lead[] }) {
           ))}
         </div>
       </div>
-      <div className="heatmap">
-        <div className="heatmap-corner" />
-        {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="heatmap-hour muted">{h % 3 === 0 ? h : ''}</div>
-        ))}
-        {grid.map((row, d) => (
-          <Fragment key={d}>
-            <div className="heatmap-day muted">{DAYS[d]}</div>
-            {row.map((count, h) => (
-              <div
-                key={h}
-                className="heatmap-cell"
-                title={`${DAYS[d]} ${h}:00 — ${count}`}
-                style={{ background: count > 0 ? `rgba(${metric.color}, ${0.15 + 0.85 * (count / max)})` : 'var(--surface-2)' }}
-              />
+      {total === 0 ? (
+        <ChartEmpty height={200} label="No response data yet" />
+      ) : (
+        <>
+          <div className="heatmap">
+            <div className="heatmap-corner" />
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} className="heatmap-hour muted">{h % 3 === 0 ? h : ''}</div>
             ))}
-          </Fragment>
-        ))}
-      </div>
-      <div className="muted small" style={{ marginTop: 8 }}>
-        {num(total)} events · times shown in your local timezone
-      </div>
+            {grid.map((row, d) => (
+              <Fragment key={d}>
+                <div className="heatmap-day muted">{DAYS[d]}</div>
+                {row.map((count, h) => (
+                  <div
+                    key={h}
+                    className="heatmap-cell"
+                    title={`${DAYS[d]} ${h}:00 — ${count}`}
+                    style={{
+                      background: count > 0
+                        ? `color-mix(in srgb, ${metric.token} ${(15 + 85 * (count / max)).toFixed(1)}%, transparent)`
+                        : 'var(--surface-2)',
+                    }}
+                  />
+                ))}
+              </Fragment>
+            ))}
+          </div>
+          <div className="muted small" style={{ marginTop: 8 }}>
+            {num(total)} events · times shown in your local timezone
+          </div>
+        </>
+      )}
     </div>
   )
 }

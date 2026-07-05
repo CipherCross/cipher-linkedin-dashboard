@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
+import { LayoutGrid } from 'lucide-react'
 import type { CampaignMetrics, CampaignStep, Instance, Lead } from '../lib/types'
 import { instanceName } from '../lib/leads'
 import type { ReplyInfo } from '../lib/leads'
 import { pooledMaturedRates } from '../lib/review'
 import type { MaturityInfo } from '../lib/review'
 import { rate } from '../lib/format'
+import { EmptyState } from './EmptyState'
 import { MessageSequence } from './MessageSequence'
 
 const DEFAULT_COLUMNS = 2
@@ -32,7 +34,10 @@ export function TemplateComparison({
   const effective = useMemo(() => {
     const kept = selected.filter((id) => availIds.has(id))
     if (kept.length > 0) return kept
-    return available.slice(0, DEFAULT_COLUMNS).map((c) => c.campaign_id)
+    return [...available]
+      .sort((a, b) => b.invites_sent - a.invites_sent)
+      .slice(0, DEFAULT_COLUMNS)
+      .map((c) => c.campaign_id)
   }, [selected, availIds, available])
 
   const columns = useMemo(
@@ -79,7 +84,11 @@ export function TemplateComparison({
           ))}
         </div>
       ) : (
-        <div className="muted small">No campaigns in this account scope to compare.</div>
+        <EmptyState
+          icon={LayoutGrid}
+          title="No campaigns to compare"
+          hint="No campaigns in this account scope have data to line up side by side."
+        />
       )}
 
       <div className="compare-grid">

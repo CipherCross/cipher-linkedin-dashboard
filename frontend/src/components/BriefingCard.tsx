@@ -247,7 +247,7 @@ export function BriefingCard() {
                 className="briefing-details-toggle"
                 onClick={() => setShowDetails((s) => !s)}
               >
-                <span className="coach-digest-caret">{showDetails ? '▾' : '▸'}</span>
+                {showDetails ? <ChevronDown size={14} className="coach-digest-caret" /> : <ChevronRight size={14} className="coach-digest-caret" />}
                 {showDetails ? 'Сховати деталі' : `Деталі (${active.sections.length})`}
               </button>
               {showDetails && (
