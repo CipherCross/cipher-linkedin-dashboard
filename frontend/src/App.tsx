@@ -11,6 +11,7 @@ import { Replies } from './pages/Replies'
 import { Playbook } from './pages/Playbook'
 import { Health } from './pages/Health'
 import { Chat } from './pages/Chat'
+import { Review } from './pages/Review'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
               <Route path="account/:id" element={<AccountDetail />} />
               <Route path="leads" element={<LeadsExplorer />} />
               <Route path="replies" element={<Replies />} />
+              <Route path="review" element={<Review />} />
               <Route path="playbook" element={<Playbook />} />
               <Route path="health" element={<Health />} />
               <Route path="chat" element={<Chat />} />

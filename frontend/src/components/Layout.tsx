@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Users,
   MessageSquare,
+  ClipboardCheck,
   BookOpen,
   Activity,
   Sparkles,
@@ -19,6 +20,7 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/replies', label: 'Replies', icon: MessageSquare },
+  { to: '/review', label: 'Review', icon: ClipboardCheck },
   { to: '/playbook', label: 'Playbook', icon: BookOpen },
   { to: '/health', label: 'Health', icon: Activity },
   { to: '/chat', label: 'Chat', icon: Sparkles },
@@ -27,7 +29,7 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
 // Which loading skeleton best matches the route the user landed on (deep links
 // can open any page first). Keeps the first paint shaped like the real page.
 function skeletonVariant(pathname: string): 'overview' | 'table' | 'list' | 'simple' {
-  if (pathname.startsWith('/leads') || pathname.startsWith('/health')) return 'table'
+  if (pathname.startsWith('/leads') || pathname.startsWith('/health') || pathname.startsWith('/review')) return 'table'
   if (pathname.startsWith('/replies')) return 'list'
   if (pathname.startsWith('/playbook') || pathname.startsWith('/chat')) return 'simple'
   return 'overview'

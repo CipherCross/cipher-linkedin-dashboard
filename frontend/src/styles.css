@@ -1450,6 +1450,40 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .sk-bubble.in { align-self: flex-start; }
 .sk-bubble.out { align-self: flex-end; }
 
+/* --- Manager Review ------------------------------------------------------ */
+.cohort-scroll { overflow-x: auto; }
+.cohort-table { min-width: 640px; }
+.cohort-table th, .cohort-table td { white-space: nowrap; }
+.cohort-camp-col {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface-1);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+}
+.cohort-subhead td {
+  color: var(--text-secondary); font-weight: 600; font-size: 12px;
+  background: var(--surface-2);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cohort-subhead td.cohort-camp-col { background: var(--surface-2); }
+/* provisional rate of a cohort still inside its maturity window */
+.cohort-rate { font-variant-numeric: tabular-nums; }
+.cohort-rate.maturing { color: var(--text-muted); opacity: 0.65; cursor: help; }
+.cohort-d { margin-left: 6px; padding: 0 5px; }
+.cohort-foot { margin-top: 12px; }
+
+/* template comparison — pooled stat card atop each column's message sequence */
+.tmpl-stat-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin: 12px 0 4px;
+}
+.tmpl-stat-cell {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 10px; text-align: center;
+}
+.tmpl-stat-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tmpl-stat-n { margin-top: 3px; font-size: 11px; line-height: 1.3; }
+.tmpl-stat-note { margin-top: 4px; }
+
 /* --- Motion: tactile press feedback (snaps back via each element's transition) */
 .btn:active:not(:disabled),
 .btn-accent:active:not(:disabled),
