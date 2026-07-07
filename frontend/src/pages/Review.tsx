@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ClipboardCheck, Loader2, Send } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
-import { instanceName, latestRepliesByLead } from '../lib/leads'
+import {
+  instanceName, latestRepliesByLead, presetRanges, rangeFromParam, rangeToParam, rangedCampaigns,
+} from '../lib/leads'
+import type { DateRange } from '../lib/leads'
 import { adminPost } from '../lib/admin'
 import { EmptyState } from '../components/EmptyState'
 import { CohortComparisonTable } from '../components/CohortComparisonTable'
 import { TemplateComparison } from '../components/TemplateComparison'
 import { SentimentTrendChart } from '../components/SentimentTrendChart'
+import { LeadsAddedTable } from '../components/LeadsAddedTable'
+import { DateRangePicker } from '../components/DateRangePicker'
 import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
@@ -15,13 +21,40 @@ import type { Instance } from '../lib/types'
 const WEEK_OPTIONS = [8, 12, 16]
 const DEFAULT_WEEKS = 12
 
+const TABS = [
+  { id: 'review', label: 'Review' },
+  { id: 'leads-added', label: 'Leads Added' },
+] as const
+
 /** Manager weekly review: cohort-matured funnel comparison, reply-sentiment trend
  *  and message-template comparison over the already-fetched data. Read-only; the
- *  only write is the admin-guarded "Send to Slack" digest. */
+ *  only write is the admin-guarded "Send to Slack" digest. A second tab breaks out
+ *  per-campaign leads added over a chosen date range. */
 export function Review() {
   const { data } = useData()
+  const [params, setParams] = useSearchParams()
   const [inst, setInst] = useState('all')
   const [weeks, setWeeks] = useState(DEFAULT_WEEKS)
+
+  const RANGES = useMemo(() => presetRanges(), [])
+  const tab = params.get('tab') === 'leads-added' ? 'leads-added' : 'review'
+  const range = useMemo<DateRange>(
+    () =>
+      rangeFromParam(params.get('range'), RANGES) ??
+      RANGES.find((r) => r.id === '3_months') ??
+      RANGES[RANGES.length - 1],
+    [params, RANGES],
+  )
+  const setTab = (id: string) => {
+    const next = new URLSearchParams(params)
+    next.set('tab', id)
+    setParams(next, { replace: true })
+  }
+  const setRange = (r: DateRange) => {
+    const next = new URLSearchParams(params)
+    next.set('range', rangeToParam(r))
+    setParams(next, { replace: true })
+  }
 
   const latest = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
 
@@ -40,6 +73,11 @@ export function Review() {
     [leads, campaigns, latest, weeks],
   )
 
+  const rangedAdded = useMemo(
+    () => (data ? rangedCampaigns(leads, campaigns, range) : []),
+    [data, leads, campaigns, range],
+  )
+
   const scope = inst === 'all' ? 'All accounts' : instanceName(data?.instances.find((i) => i.id === inst), inst)
   const digest = useMemo(
     () => (data ? buildDigest(cohortData, data.instances, scope) : null),
@@ -49,27 +87,6 @@ export function Review() {
   if (!data) return null
 
   const anyInvited = data.leads.some((l) => l.invited_at)
-  if (!anyInvited) {
-    return (
-      <>
-        <ReviewHeader
-          instances={data.instances}
-          inst={inst}
-          setInst={setInst}
-          weeks={weeks}
-          setWeeks={setWeeks}
-          digest={null}
-        />
-        <div className="card">
-          <EmptyState
-            icon={ClipboardCheck}
-            title="Nothing to review yet"
-            hint="Cohort comparisons appear here once your accounts have sent invites."
-          />
-        </div>
-      </>
-    )
-  }
 
   return (
     <>
@@ -79,32 +96,62 @@ export function Review() {
         setInst={setInst}
         weeks={weeks}
         setWeeks={setWeeks}
-        digest={digest}
+        digest={tab === 'review' && anyInvited ? digest : null}
+        tab={tab}
+        range={range}
+        presets={RANGES}
+        setRange={setRange}
       />
 
-      <div className="stack">
-        <CohortComparisonTable data={cohortData} instances={data.instances} />
-        <TemplateComparison
-          campaigns={campaigns}
-          leads={leads}
-          steps={data.steps}
-          latestReplies={latest}
-          maturity={cohortData.maturity}
-          instances={data.instances}
-          weeks={weeks}
-        />
-        <SentimentTrendChart
-          messages={data.messages}
-          instanceId={inst === 'all' ? undefined : inst}
-          weeks={weeks}
-        />
+      <div className="segmented review-tabs" role="tablist" aria-label="Review section">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`segmented-item ${tab === t.id ? 'active' : ''}`}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+
+      {tab === 'leads-added' ? (
+        <LeadsAddedTable campaigns={rangedAdded} instances={data.instances} />
+      ) : !anyInvited ? (
+        <div className="card">
+          <EmptyState
+            icon={ClipboardCheck}
+            title="Nothing to review yet"
+            hint="Cohort comparisons appear here once your accounts have sent invites."
+          />
+        </div>
+      ) : (
+        <div className="stack">
+          <CohortComparisonTable data={cohortData} instances={data.instances} />
+          <TemplateComparison
+            campaigns={campaigns}
+            leads={leads}
+            steps={data.steps}
+            latestReplies={latest}
+            maturity={cohortData.maturity}
+            instances={data.instances}
+            weeks={weeks}
+          />
+          <SentimentTrendChart
+            messages={data.messages}
+            instanceId={inst === 'all' ? undefined : inst}
+            weeks={weeks}
+          />
+        </div>
+      )}
     </>
   )
 }
 
 function ReviewHeader({
-  instances, inst, setInst, weeks, setWeeks, digest,
+  instances, inst, setInst, weeks, setWeeks, digest, tab, range, presets, setRange,
 }: {
   instances: Instance[]
   inst: string
@@ -112,6 +159,10 @@ function ReviewHeader({
   weeks: number
   setWeeks: (v: number) => void
   digest: DigestPayload | null
+  tab: string
+  range: DateRange
+  presets: DateRange[]
+  setRange: (r: DateRange) => void
 }) {
   return (
     <header>
@@ -129,14 +180,20 @@ function ReviewHeader({
             <option key={i.id} value={i.id}>{instanceName(i)}</option>
           ))}
         </select>
-        <div className="range-group">
-          {WEEK_OPTIONS.map((w) => (
-            <button key={w} className={w === weeks ? 'active' : ''} onClick={() => setWeeks(w)}>
-              {w}w
-            </button>
-          ))}
-        </div>
-        <SendToSlackButton digest={digest} />
+        {tab === 'leads-added' ? (
+          <DateRangePicker presets={presets} value={range} onChange={setRange} />
+        ) : (
+          <>
+            <div className="range-group">
+              {WEEK_OPTIONS.map((w) => (
+                <button key={w} className={w === weeks ? 'active' : ''} onClick={() => setWeeks(w)}>
+                  {w}w
+                </button>
+              ))}
+            </div>
+            <SendToSlackButton digest={digest} />
+          </>
+        )}
       </div>
     </header>
   )

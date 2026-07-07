@@ -4,12 +4,13 @@ import { Users } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
   latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeFromParam,
-  rangeToParam, rangeTotals,
+  rangeToParam, rangeTotals, tsInRange,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { AccountCard } from '../components/AccountCard'
 import { HotLeads } from '../components/HotLeads'
+import { LeadsVelocityChart } from '../components/LeadsVelocityChart'
 import { RepliesPanel } from '../components/RepliesPanel'
 import { BriefingCard } from '../components/BriefingCard'
 import { DateRangePicker } from '../components/DateRangePicker'
@@ -53,12 +54,17 @@ export function Overview() {
     })
     const latest = latestRepliesByLead(data.messages)
     const prevRange = previousRange(range)
+    const added = data.leads.filter((l) => tsInRange(l.added_at, range)).length
     return {
       instances,
       leadsByInstance,
       latest,
       totals: rangeTotals(data.leads, range, latest),
       prevTotals: prevRange ? rangeTotals(data.leads, prevRange, latest) : undefined,
+      added,
+      addedPrev: prevRange
+        ? data.leads.filter((l) => tsInRange(l.added_at, prevRange)).length
+        : undefined,
       activity: leadsToActivity(data.leads),
     }
   }, [data, range])
@@ -86,9 +92,13 @@ export function Overview() {
         range={range}
         flowLabel={range.label}
         positive={view.totals.positive}
+        added={view.added}
+        addedPrev={view.addedPrev}
       />
 
       <BriefingCard />
+
+      <LeadsVelocityChart leads={data.leads} range={range} />
 
       <HotLeads
         leads={data.leads}

@@ -1,7 +1,9 @@
-import { MessageSquare, Send, ThumbsUp, UserCheck, Users } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { MessageSquare, Send, ThumbsUp, UserCheck, UserPlus, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CampaignMetrics, DailyActivity } from '../lib/types'
 import type { DateRange, Totals } from '../lib/leads'
+import { rangeToParam } from '../lib/leads'
 import { num, pct } from '../lib/format'
 import { Sparkline } from './Sparkline'
 
@@ -17,6 +19,9 @@ interface Props {
   flowLabel?: string
   /** When set, appends a "Positive" card (count + share of replies). */
   positive?: number
+  /** Leads added within the range; renders a clickable "Leads added" card. */
+  added?: number
+  addedPrev?: number
 }
 
 interface Card {
@@ -32,9 +37,11 @@ interface Card {
   prevCount?: number
   /** Replies lag invites, so their deltas are provisional — softened, not red/green. */
   maturing?: boolean
+  /** When set, the card becomes a router link to this path. */
+  to?: string
 }
 
-export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLabel, positive }: Props) {
+export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLabel, positive, added, addedPrev }: Props) {
   const invites = totals ? totals.invites : sum(campaigns, (c) => c.invites_sent)
   const accepted = totals ? totals.accepted : sum(campaigns, (c) => c.accepted)
   const replies = totals ? totals.replies : sum(campaigns, (c) => c.replies)
@@ -43,6 +50,14 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
 
   const cards: Card[] = [
     { key: 'leads', label: 'Leads in pipeline', value: leads, icon: Users },
+  ]
+  if (added !== undefined)
+    cards.push({
+      key: 'added', label: 'Leads added' + suffix, value: added, icon: UserPlus,
+      cur: added, prevCount: addedPrev,
+      to: `/review?tab=leads-added${range ? `&range=${rangeToParam(range)}` : ''}`,
+    })
+  cards.push(
     {
       key: 'invites', label: 'Invites sent' + suffix, value: invites, icon: Send,
       event: 'invite_sent', cur: invites, prevCount: prev?.invites,
@@ -59,7 +74,7 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
       event: 'reply_received',
       cur: replies, prevCount: prev?.replies, maturing: true,
     },
-  ]
+  )
   if (positive !== undefined)
     cards.push({
       key: 'positive', label: 'Positive' + suffix, value: positive, icon: ThumbsUp,
@@ -73,8 +88,8 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
     <div className="kpi-grid">
       {cards.map((c) => {
         const Icon = c.icon
-        return (
-          <div className="card kpi" key={c.key}>
+        const body = (
+          <>
             <div className="kpi-top">
               <span className="kpi-label"><Icon size={14} strokeWidth={2} /> {c.label}</span>
               {c.cur !== undefined && c.prevCount !== undefined && (
@@ -94,7 +109,12 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
                 />
               </div>
             )}
-          </div>
+          </>
+        )
+        return c.to ? (
+          <Link className="card kpi kpi-link" key={c.key} to={c.to}>{body}</Link>
+        ) : (
+          <div className="card kpi" key={c.key}>{body}</div>
         )
       })}
     </div>
