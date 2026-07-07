@@ -89,12 +89,21 @@ Coach the SDR; do NOT write their message for them. Return:
   the ball is in the prospect's court and chasing now would hurt.
 - summary: one or two sentences on the state of play and the path to a reply.
 
-Be specific to THIS thread.`
+Be specific to THIS thread.
+
+MANUAL-REPLY BLIND SPOT: the auto-sync captures only the scripted funnel (invite → first templated
+message → the inbound reply). Outbound messages the SDR types by HAND after a reply are captured ONLY
+once the thread is manually imported (tagged [imported] above). So on a SYNC-ONLY thread, later SDR
+follow-ups may be missing from what you see — NEVER scold the SDR for "not replying", "going slow", or
+"ignoring" a prospect, and never make slow_followup the issue, when the thread has no imported messages.
+In that case the only safe next step is to import the thread's full history so the real exchange becomes
+visible; say so in tips/summary instead of assuming a lapse.`
 
 interface Msg {
   direction: string
   body: string | null
   sent_at: string
+  source: string | null
 }
 
 const json = (body: unknown, status = 200) =>
@@ -122,20 +131,36 @@ function renderThread(thread: Msg[]): string {
   const recent = thread.slice(-MAX_MSGS)
   const lines = recent.map((m) => {
     const who = m.direction === 'in' ? 'PROSPECT' : 'SDR'
-    return `${who}: ${(m.body ?? '').slice(0, BODY_CAP)}`
+    const tag = m.source === 'manual' ? ' [imported]' : ''
+    return `${who}${tag}: ${(m.body ?? '').slice(0, BODY_CAP)}`
   })
+  // The LH2 agent can't see hand-typed SDR follow-ups; those only appear once a
+  // thread is manually imported (source='manual'). A sync-only thread may be
+  // MISSING later SDR messages that were actually sent — so "who is waiting" can't
+  // be trusted on it. Only trust the last-message direction when at least one
+  // message was manually imported.
+  const hasManual = recent.some((m) => m.source === 'manual')
   const last = recent[recent.length - 1]
-  const waiting =
-    last?.direction === 'in'
-      ? 'The latest message is from the PROSPECT — they are waiting on the SDR to respond.'
-      : 'The latest message is from the SDR — we are waiting on the prospect to reply.'
-  return `${waiting}\n\nCONVERSATION (oldest first):\n${lines.join('\n')}`
+  let waiting: string
+  if (last?.direction === 'in' && !hasManual) {
+    waiting =
+      'This thread is SYNC-ONLY (no manually imported messages), so any hand-typed SDR follow-up ' +
+      'after the prospect replied is NOT captured here. The latest message being from the PROSPECT ' +
+      'may simply mean the SDR replied by hand and the thread has not been re-imported — do NOT assume ' +
+      'the SDR ignored them. If the thread genuinely stops at the prospect, the right move is to import ' +
+      'its full history (dashboard "Import history") so the real state is visible.'
+  } else if (last?.direction === 'in') {
+    waiting = 'The latest message is from the PROSPECT — they are waiting on the SDR to respond.'
+  } else {
+    waiting = 'The latest message is from the SDR — we are waiting on the prospect to reply.'
+  }
+  return `${waiting}\n\nCONVERSATION (oldest first; [imported] = manually imported, others are auto-synced):\n${lines.join('\n')}`
 }
 
 async function loadThread(sb: Sb, instance_id: string, profile_url: string): Promise<Msg[]> {
   const { data } = await sb
     .from('messages')
-    .select('direction,body,sent_at')
+    .select('direction,body,sent_at,source')
     .eq('instance_id', instance_id)
     .eq('profile_url', profile_url)
     .order('sent_at', { ascending: true })

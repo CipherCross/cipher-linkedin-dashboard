@@ -9,10 +9,8 @@ import {
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
 import { AccountCard } from '../components/AccountCard'
-import { HotLeads } from '../components/HotLeads'
-import { LeadsVelocityChart } from '../components/LeadsVelocityChart'
-import { RepliesPanel } from '../components/RepliesPanel'
 import { BriefingCard } from '../components/BriefingCard'
+import { ImportCalloutCard } from '../components/ImportCalloutCard'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { EmptyState } from '../components/EmptyState'
 
@@ -94,27 +92,12 @@ export function Overview() {
         positive={view.totals.positive}
         added={view.added}
         addedPrev={view.addedPrev}
+        velocityLeads={data.leads}
       />
 
       <BriefingCard />
 
-      <LeadsVelocityChart leads={data.leads} range={range} />
-
-      <HotLeads
-        leads={data.leads}
-        latest={view.latest}
-        range={range}
-        campaigns={data.campaigns}
-        instances={data.instances}
-      />
-
-      <RepliesPanel
-        leads={data.leads}
-        latest={view.latest}
-        range={range}
-        campaigns={data.campaigns}
-        instances={data.instances}
-      />
+      <ImportCalloutCard />
 
       {view.instances.length === 0 ? (
         <EmptyState

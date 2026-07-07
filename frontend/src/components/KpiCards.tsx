@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { MessageSquare, Send, ThumbsUp, UserCheck, UserPlus, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { CampaignMetrics, DailyActivity } from '../lib/types'
+import type { CampaignMetrics, DailyActivity, Lead } from '../lib/types'
 import type { DateRange, Totals } from '../lib/leads'
 import { rangeToParam } from '../lib/leads'
 import { num, pct } from '../lib/format'
 import { Sparkline } from './Sparkline'
+import { LeadsVelocityChart } from './LeadsVelocityChart'
 
 interface Props {
   campaigns?: CampaignMetrics[]
@@ -22,6 +23,9 @@ interface Props {
   /** Leads added within the range; renders a clickable "Leads added" card. */
   added?: number
   addedPrev?: number
+  /** All leads (unfiltered by range); when set, renders a "Leads velocity"
+   *  tile with a per-week trend line (Overview only). */
+  velocityLeads?: Lead[]
 }
 
 interface Card {
@@ -41,7 +45,7 @@ interface Card {
   to?: string
 }
 
-export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLabel, positive, added, addedPrev }: Props) {
+export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLabel, positive, added, addedPrev, velocityLeads }: Props) {
   const invites = totals ? totals.invites : sum(campaigns, (c) => c.invites_sent)
   const accepted = totals ? totals.accepted : sum(campaigns, (c) => c.accepted)
   const replies = totals ? totals.replies : sum(campaigns, (c) => c.replies)
@@ -117,6 +121,7 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
           <div className="card kpi" key={c.key}>{body}</div>
         )
       })}
+      {velocityLeads && range && <LeadsVelocityChart leads={velocityLeads} range={range} />}
     </div>
   )
 }

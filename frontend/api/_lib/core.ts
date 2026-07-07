@@ -141,7 +141,9 @@ messages — actual message texts; full conversation threads, both directions
     sent_at is the LH2 action-RUN time, which can lag the real message by
     hours/days; 'manual' rows were pasted by the SDR from LinkedIn ("Import
     history" in the dashboard) and carry the real message time. Threads the SDR
-    took over by hand are complete only thanks to manual imports.
+    took over by hand are complete only thanks to manual imports — see the
+    MANUAL-REPLY BLIND SPOT guidance before reading anything into a missing
+    outbound follow-up.
   sentiment text — reply classification, set ONLY on inbound replies (direction='in'):
     'positive' (interested, wants to talk), 'neutral' (acknowledgement / not now),
     'negative' (not interested / unsubscribe), 'objection' (question or pushback),
@@ -191,6 +193,75 @@ ANALYSIS GUIDANCE
   rate" = positive inbound replies / total replies. Use campaign_reply_sentiment
   for per-campaign breakdowns, or join messages (direction='in') to campaigns.
   NULL sentiment on an inbound row means it hasn't been classified yet.
+- MANUAL-REPLY BLIND SPOT — never mistake a missing follow-up for a dropped lead.
+  The LH2 agent syncs only the scripted funnel (invite → first templated message →
+  the inbound reply); it CANNOT see outbound messages the SDR types by hand in
+  LinkedIn after a lead replies. Those human follow-ups enter the DB ONLY when
+  someone runs "Import history" (messages.source='manual'). Consequences:
+  - A thread with an inbound reply but no later outbound row is NOT evidence the
+    lead was dropped — usually it just hasn't been manually re-imported. Absence
+    of follow-up in the data ≠ absence of follow-up in reality.
+  - Before EVER claiming "warm/positive replies aren't being followed up" (or any
+    post-reply drop-off / SDR-not-responding pattern), check message source on the
+    threads in question. If the "no follow-up" threads are source='sync' only
+    (zero manual rows) while the "followed-up" threads are the manually-imported
+    ones, the pattern is a data-completeness artifact, not SDR behaviour — say so
+    and RETRACT the leak claim.
+  - This is NOT a stale-sync problem: instances.last_sync_at can be minutes old and
+    the blind spot still applies. It is structural to how LH2 syncs — do NOT
+    diagnose or dismiss it via sync freshness.
+  - Detection: split the threads in question by source, e.g.
+      select profile_url,
+             count(*) filter (where source='manual') as manual_n,
+             count(*) filter (where source='sync')   as sync_n
+      from messages where instance_id = <id> and profile_url in (<urls>)
+      group by profile_url
+    A clean split (followed-up = manual_n > 0; not-followed-up = sync-only,
+    manual_n = 0) confirms the artifact.
+  - Correct recommendation is "manually import these threads so post-reply activity
+    becomes visible/measurable" — NEVER "the SDR is dropping leads" or "add an
+    automated follow-up sequence". Only after import can post-reply conversion
+    (reply → follow-up → call) be measured honestly.
+- PROACTIVE IMPORT SUGGESTIONS — surface blind-spot leads without being asked.
+  When the user asks about warm replies, follow-ups, post-reply drop-off, pipeline
+  health, or which leads need attention, proactively list the import candidates:
+  leads with a valuable inbound reply (priority positive > objection > referral,
+  most recent first) whose thread is sync-only (zero source='manual' rows), because
+  their post-reply state is unknown. Use:
+      with inbound as (
+        select instance_id, profile_url,
+               max(sent_at) filter (where direction='in') as last_reply_at,
+               (array_agg(sentiment order by array_position(
+                   array['positive','objection','referral'], sentiment))
+                 filter (where direction='in'
+                         and sentiment in ('positive','objection','referral')))[1] as best_sentiment,
+               count(*) filter (where source='manual') as manual_msgs
+        from messages
+        group by 1, 2
+      )
+      select coalesce(i.account_name, i.label, ib.instance_id) as account,
+             l.full_name, l.company, ib.best_sentiment,
+             ib.last_reply_at::date as replied_on, ib.profile_url
+      from inbound ib
+      join instances i on i.id = ib.instance_id
+      left join (
+        select distinct on (instance_id, profile_url)
+               instance_id, profile_url, full_name, company
+        from leads
+        order by instance_id, profile_url, updated_at desc nulls last
+      ) l on l.instance_id = ib.instance_id and l.profile_url = ib.profile_url
+      where ib.manual_msgs = 0            -- never hand-imported -> post-reply state unknown
+        and ib.best_sentiment is not null -- had a valuable reply worth pursuing
+      order by array_position(array['positive','objection','referral'], ib.best_sentiment),
+               ib.last_reply_at desc
+  - Frame this as a data-completeness action, not a performance problem: "these
+    warm threads are sync-only, so we're blind to what happened after the reply —
+    import their history to make follow-ups and booked calls visible."
+  - List the specific leads (name, company, account, reply date, sentiment) so the
+    SDR can act immediately.
+  - NEVER infer from this list that a lead was dropped or follow-up is missing —
+    the point is the data can't yet tell us.
+  - Point the user to the dashboard's "Import history" action for each listed lead.
 - Replies LAG invites, and so does ACCEPTANCE: someone invited today typically connects
   2-7 days later, then replies days or weeks after that — and the accept lag runs LONGER
   during holidays / low-activity stretches (e.g. summer), when people are simply slower to

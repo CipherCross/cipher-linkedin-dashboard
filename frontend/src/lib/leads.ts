@@ -425,6 +425,48 @@ export function positiveLeads(
   return out
 }
 
+/** Warm-reply sentiments worth chasing: the latest inbound is a real opening
+ *  (positive/objection/referral), not a dead end or automated bounce. */
+const WARM_SENTIMENTS: Sentiment[] = ['positive', 'objection', 'referral']
+
+/** A warm-reply lead whose thread has no manually-imported messages, so what
+ *  happened after the reply is invisible — an "import history" candidate. */
+export interface BlindSpotLead {
+  lead: Lead
+  reply: ReplyInfo
+}
+
+/** Leads whose LATEST inbound reply is warm (positive/objection/referral) but
+ *  whose thread (by leadKey) carries ZERO manually-imported messages
+ *  (messages.source === 'manual', counted across both directions). LH2 stops
+ *  capturing once the SDR takes the thread over by hand, so these warm threads
+ *  are sync-only — their post-reply state is unknown until the SDR imports the
+ *  history. Sorted by follow-up priority (positive > objection > referral), then
+ *  newest reply first. Reuses latestRepliesByLead (`messages` must be sorted
+ *  desc, as DataContext fetches them). */
+export function blindSpotLeads(leads: Lead[], messages: Message[]): BlindSpotLead[] {
+  const latest = latestRepliesByLead(messages)
+  const manualKeys = new Set<string>()
+  for (const m of messages) {
+    if (m.source === 'manual') manualKeys.add(leadKey(m.instance_id, m.profile_url))
+  }
+  const priority = (s: Sentiment) => WARM_SENTIMENTS.indexOf(s)
+  const out: BlindSpotLead[] = []
+  for (const l of leads) {
+    const k = leadKey(l.instance_id, l.profile_url)
+    const reply = latest.get(k)
+    if (!reply?.sentiment || !WARM_SENTIMENTS.includes(reply.sentiment)) continue
+    if (manualKeys.has(k)) continue
+    out.push({ lead: l, reply })
+  }
+  out.sort(
+    (a, b) =>
+      priority(a.reply.sentiment!) - priority(b.reply.sentiment!) ||
+      b.reply.sent_at.localeCompare(a.reply.sent_at),
+  )
+  return out
+}
+
 /** Per-campaign metrics computed from raw leads scoped to `r`, shaped like the
  *  campaign_metrics view. Names/instance pulled from `base` (the all-time view
  *  rows). Sorted by invites in range, then name. */

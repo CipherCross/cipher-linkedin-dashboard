@@ -1653,6 +1653,39 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .briefing-section { border-top: 1px solid var(--border); padding-top: 10px; }
 .briefing-section-title { font-weight: 600; margin-bottom: 4px; }
 
+/* --- Import-history callout (Overview) ------------------------------------ */
+/* A warm, amber-accented .card: solid panel with a faint warning tint + thicker
+ * left rule, so it reads as a gentle data-completeness nudge (reusing the same
+ * --warning tokens as the sentiment/briefing accents). */
+.import-callout {
+  margin-bottom: var(--space-8);
+  border-color: var(--warning-border);
+  border-left: 3px solid var(--warning);
+  background: linear-gradient(0deg, var(--warning-subtle), var(--warning-subtle)), var(--panel);
+}
+.import-callout-title {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 2px;
+  color: var(--text); font-size: var(--text-md);
+}
+.import-callout-icon { color: var(--warning); flex-shrink: 0; }
+.import-callout-lede { margin: 8px 0 0; line-height: 1.55; color: var(--text-secondary); }
+.import-callout-list { margin-top: 14px; display: flex; flex-direction: column; }
+.import-callout-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px;
+  padding: 10px 8px; border-bottom: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.import-callout-row:last-child { border-bottom: none; }
+.import-callout-row.row-clickable:hover { background: var(--surface-3); }
+.import-callout-row.row-clickable:focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: -2px;
+}
+.import-callout-who { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.import-callout-name { font-weight: 600; }
+.import-callout-meta { grid-column: 1; grid-row: 2; min-width: 0; }
+.import-callout-when { grid-column: 2; grid-row: 1 / 3; text-align: right; white-space: nowrap; }
+.import-callout-more { margin-top: 8px; }
+.import-callout-hint { margin-top: 12px; color: var(--muted); }
+
 /* --- Playbook page -------------------------------------------------------- */
 .playbook-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-7); }
 .playbook-panes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); align-items: stretch; }

@@ -37,15 +37,28 @@ async function fetchAllLeads(): Promise<Lead[]> {
   return all
 }
 
-const MESSAGE_COLUMNS =
+const MESSAGE_COLUMNS_BASE =
   'id,instance_id,campaign_id,profile_url,direction,body,sent_at,sentiment,reason,classified_at'
+// `source` (migration 026: 'sync' | 'manual') may not exist on the live DB yet.
+// Requesting a missing column makes PostgREST 400 the whole query, so fetchMessages
+// retries once without it (see below) — pre-migration DBs keep loading, and the
+// import callout simply renders nothing.
+const MESSAGE_COLUMNS = `${MESSAGE_COLUMNS_BASE},source`
+
+// True only for PostgREST's "undefined column" error (Postgres SQLSTATE 42703),
+// i.e. the `source` column doesn't exist yet. supabase-js error shapes vary, so
+// also accept a message that names the missing column as a fallback.
+function isMissingSourceColumn(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null
+  if (err?.code === '42703') return true
+  return !!err?.message && /column\s+.*source.*\s+does not exist/i.test(err.message)
+}
 
 // Inbound replies drive sentiment / positive-reply counts shown beside ALL-TIME
 // lead totals, so they must not be windowed — a 90-day / 2000-row cap silently
 // undercounts them on busy accounts. Fetch every inbound row (paginated past the
 // 1000-row cap); keep outbound to the 90-day window since it's only recent display.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchMessages(since: string): Promise<Message[]> {
+async function fetchMessages(since: string, columns: string = MESSAGE_COLUMNS): Promise<Message[]> {
   const page = 1000
   const all: Message[] = []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,10 +72,21 @@ async function fetchMessages(since: string): Promise<Message[]> {
       if (!data || data.length < page) break
     }
   }
-  await pageThrough(() =>
-    supabase!.from('messages').select(MESSAGE_COLUMNS).eq('direction', 'in'))
-  await pageThrough(() =>
-    supabase!.from('messages').select(MESSAGE_COLUMNS).eq('direction', 'out').gte('sent_at', since))
+  try {
+    await pageThrough(() =>
+      supabase!.from('messages').select(columns).eq('direction', 'in'))
+    await pageThrough(() =>
+      supabase!.from('messages').select(columns).eq('direction', 'out').gte('sent_at', since))
+  } catch (e) {
+    // Pre-migration DB has no `source` column → PostgREST 400 with code 42703
+    // ("undefined column"). Retry once with the base columns so the dashboard
+    // still loads (partial `all` is discarded by the retry). Any OTHER error
+    // (network, timeout, RLS, …) must propagate — falling back on those would
+    // silently hide the callout and mask a real failure.
+    if (columns !== MESSAGE_COLUMNS_BASE && isMissingSourceColumn(e))
+      return fetchMessages(since, MESSAGE_COLUMNS_BASE)
+    throw e
+  }
   all.sort((a, b) => (a.sent_at < b.sent_at ? 1 : a.sent_at > b.sent_at ? -1 : 0))
   return all
 }

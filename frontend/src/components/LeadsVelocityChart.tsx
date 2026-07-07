@@ -1,11 +1,10 @@
-import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts'
+import { Line, LineChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { TrendingUp } from 'lucide-react'
 import type { Lead } from '../lib/types'
 import type { DateRange } from '../lib/leads'
 import { tsInRange, weekStart } from '../lib/leads'
 import { num } from '../lib/format'
-import { AXIS, ChartEmpty, GRID, NO_ANIM, SERIES, TOOLTIP, dateTick } from './chartTheme'
+import { SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 function velocityByWeek(leads: Lead[], range: DateRange) {
   const buckets = new Map<string, number>()
@@ -31,39 +30,45 @@ function velocityByWeek(leads: Lead[], range: DateRange) {
   return { data, undated }
 }
 
-/** Lead-intake velocity: new leads added per week, zero-filled across gap
- *  weeks so a quiet sourcing week reads as a dip instead of vanishing. */
+/** Compact KPI-tile version of lead-intake velocity: avg leads added per week
+ *  over the range, with a tiny zero-filled trend line in place of the usual
+ *  activity sparkline. Sits inline in KpiCards' grid, not a full chart card. */
 export function LeadsVelocityChart({ leads, range }: { leads: Lead[]; range: DateRange }) {
   const { data, undated } = velocityByWeek(leads, range)
+  const hasTrend = data.length >= 2
+  const avg = data.length > 0
+    ? Math.round(data.reduce((a, d) => a + d.added, 0) / data.length)
+    : 0
+  const title = undated > 0
+    ? `${num(undated)} lead${undated === 1 ? '' : 's'} with no known add date not shown`
+    : undefined
 
   return (
-    <div className="card chart-card">
-      <h2>Leads velocity</h2>
-      {data.length < 2 ? (
-        <ChartEmpty label="Not enough weeks of data yet to chart velocity" />
-      ) : (
-      <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={data} margin={{ top: 8, right: 0, left: -16, bottom: 0 }}>
-          <CartesianGrid {...GRID} />
-          <XAxis dataKey="week" {...AXIS} tickFormatter={dateTick} minTickGap={24} />
-          <YAxis {...AXIS} allowDecimals={false} />
-          <Tooltip {...TOOLTIP} cursor={false} labelFormatter={dateTick} />
-          <Line
-            {...NO_ANIM}
-            type="monotone"
-            dataKey="added"
-            name="Leads added"
-            stroke={SERIES.added}
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-      )}
-      <div className="muted small">
-        Added per week, by the week the lead was queued in.
-        {undated > 0 &&
-          ` ${num(undated)} lead${undated === 1 ? '' : 's'} with no known add date not shown.`}
+    <div className="card kpi" title={title}>
+      <div className="kpi-top">
+        <span className="kpi-label"><TrendingUp size={14} strokeWidth={2} /> Leads velocity</span>
+      </div>
+      <div className="kpi-value">{hasTrend ? num(avg) : '—'}</div>
+      <div className="kpi-sub">{hasTrend ? 'per week' : 'not enough weeks yet'}</div>
+      <div className="kpi-spark">
+        {hasTrend ? (
+          <ResponsiveContainer width="100%" height={28}>
+            <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+              <Tooltip {...TOOLTIP} cursor={false} labelFormatter={dateTick} />
+              <Line
+                type="monotone"
+                dataKey="added"
+                name="Leads added"
+                stroke={SERIES.added}
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="sparkline-empty muted small">no weekly trend yet</div>
+        )}
       </div>
     </div>
   )
