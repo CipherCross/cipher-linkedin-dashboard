@@ -1,4 +1,4 @@
-import { Line, LineChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import { TrendingUp } from 'lucide-react'
 import type { Lead } from '../lib/types'
 import type { DateRange } from '../lib/leads'
@@ -54,6 +54,11 @@ export function LeadsVelocityChart({ leads, range }: { leads: Lead[]; range: Dat
         {hasTrend ? (
           <ResponsiveContainer width="100%" height={28}>
             <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+              {/* Hidden but still gives Tooltip a "week" dataKey to look the label up
+                  by — without an XAxis, Recharts falls back to the numeric data index
+                  as the tooltip label, which dateTick (expects a date string) then
+                  chokes on. */}
+              <XAxis dataKey="week" hide />
               <Tooltip {...TOOLTIP} cursor={false} labelFormatter={dateTick} />
               <Line
                 type="monotone"
