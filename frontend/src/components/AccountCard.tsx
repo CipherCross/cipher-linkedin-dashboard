@@ -74,7 +74,7 @@ export function AccountCard({
           value={`${num(weekAdded)}/${WEEKLY_ADD_LIMIT}`}
           label="added 7d"
           color={capColor}
-          title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used in the last 7 days · approximate until agent v1.8.0 rollout`}
+          title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used in the last 7 days`}
         />
       </div>
 

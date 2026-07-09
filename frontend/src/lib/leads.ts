@@ -220,7 +220,7 @@ export function addedByDay(leads: Lead[]): { byDay: Map<string, number>; undated
 export const WEEKLY_ADD_LIMIT = 200
 
 /** A lead's add date: added_at when known, else the earliest non-null milestone
- *  (added_at is approximate until sync agent v1.8.0 backfills real add dates —
+ *  (rows synced before added_at existed carry only a backfilled approximation —
  *  hence the fallback). null = no dated activity at all. */
 function addedDate(l: Lead): string | null {
   if (l.added_at) return l.added_at
@@ -233,8 +233,8 @@ function addedDate(l: Lead): string | null {
 
 /** How many of one account's leads were added within the rolling last 7 days
  *  (UTC, relative to now), for the 200/week capacity gauge. Uses each lead's
- *  add date (added_at ?? earliest milestone), so it degrades gracefully while
- *  added_at is still approximate pre-v1.8.0. */
+ *  add date (added_at ?? earliest milestone), so it degrades gracefully for
+ *  rows that predate the added_at column. */
 export function weeklyAdded(leads: Lead[], instanceId: string): number {
   const cutoff = Date.now() - 7 * 86_400_000
   let count = 0

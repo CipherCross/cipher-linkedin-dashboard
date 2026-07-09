@@ -135,8 +135,7 @@ export function AccountDetail() {
         </div>
         <div className="muted small">
           {remaining > 0 ? `${num(remaining)} more can be added this week` : 'Weekly add limit reached'}
-          {' · '}~200/week keeps the account safe. Count is approximate until the
-          agent v1.8.0 rollout backfills exact add dates.
+          {' · '}~200/week keeps the account safe.
         </div>
       </div>
 
