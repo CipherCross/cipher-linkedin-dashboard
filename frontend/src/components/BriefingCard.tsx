@@ -196,7 +196,20 @@ export function BriefingCard() {
                     border: '1px solid rgba(127,127,127,0.18)',
                   }}
                 >
-                  <div style={{ fontSize: '1.05rem', fontWeight: 600, lineHeight: 1.2 }}>
+                  {/* Long composite values ("39.2% (335 із 855)") step the font
+                      down instead of wrapping to a second line, which made the
+                      chip row ragged. */}
+                  <div
+                    style={{
+                      fontSize: m.value.length > 12 ? '0.92rem' : '1.05rem',
+                      fontWeight: 600,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
                     {m.value}
                   </div>
                   <div className="muted small" style={{ marginTop: 2 }}>
@@ -205,6 +218,11 @@ export function BriefingCard() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {metrics.some((m) => m.note) && (
+            <div className="muted small" style={{ marginTop: 4 }}>
+              * — наведіть курсор на картку, щоб побачити деталі
             </div>
           )}
 

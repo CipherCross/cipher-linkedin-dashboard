@@ -30,5 +30,7 @@ alter table instances add column if not exists weekly_invite_target int;
 
 alter table messages enable row level security;
 alter table annotations enable row level security;
+drop policy if exists "messages are readable" on messages;
 create policy "messages are readable" on messages for select using (true);
+drop policy if exists "annotations are readable" on annotations;
 create policy "annotations are readable" on annotations for select using (true);

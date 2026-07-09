@@ -477,11 +477,14 @@ select:hover { border-color: var(--border-strong); }
  * no specificity, so source order is what lets the opaque background win. */
 
 .kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  /* Flex (not grid) on purpose: with a grid, a partial last row left a dead
+   * zone of empty tracks; flex lets the trailing tiles grow to fill the row. */
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-6);
   margin-bottom: var(--space-8);
 }
+.kpi-grid > * { flex: 1 1 200px; min-width: 0; }
 
 /* KPI tiles are `.card.kpi` but hold only text + a tiny sparkline, so glass is
  * cheap here (unlike chart/table cards). Override the solid card surface with a
@@ -525,6 +528,9 @@ select:hover { border-color: var(--border-strong); }
 .kpi-spark { margin-top: auto; padding-top: 6px; }
 .kpi-spark .sparkline { width: 100%; height: 28px; display: block; }
 .kpi-spark .sparkline-empty { padding: 6px 0 2px; }
+/* Blank stand-in for tiles with no activity series, so all values in a row sit
+ * on the same baseline instead of floating in tiles of different anatomy. */
+.kpi-spark-spacer { height: 28px; }
 
 .hot-leads { margin-bottom: var(--space-8); }
 .hot-leads-head {
@@ -560,6 +566,19 @@ tr:last-child td { border-bottom: none; }
 .sort-ind { display: inline-block; width: 12px; text-align: center; color: var(--text-muted); }
 .table-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; }
 .table-scroll.tall { max-height: calc(100vh - 300px); min-height: 320px; }
+/* Bottom fade so a clipped last row reads as "scroll for more", not a bug.
+ * The sticky pseudo rides the scrollport's bottom edge while scrollable, then
+ * comes to rest in its own 28px flow slot after the table — where a fade into
+ * the card surface is invisible. Pure CSS, correct at both scroll extremes. */
+.table-scroll::after {
+  content: '';
+  display: block;
+  height: 28px;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(to bottom, transparent, var(--surface-1));
+  pointer-events: none;
+}
 /* header stays put while the body scrolls (border-collapse drops the th border
  * on scroll, so pin the divider with an inset shadow) */
 /* Glass (see .glass): sticky headers float over scrolling rows — a safe, classic
@@ -1480,9 +1499,10 @@ tr.row-clickable:focus-visible,
   width: 480px;
   max-width: 100%;
   height: 100%;
-  /* glass--strong (see .glass): 78%-opaque tint keeps message bubbles + any
-   * data it slides over readable, while blur softens the scrim behind it. */
-  background: var(--glass-tint-strong);
+  /* Glass, but more opaque than --glass-tint-strong (78%): at 78% the table
+   * rows behind ghosted through empty thread areas and read as phantom
+   * content. 90% keeps the glass feel while the drawer body stays legible. */
+  background: color-mix(in srgb, var(--surface-1) 90%, transparent);
   -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
   backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
   border-left: 1px solid var(--border);
@@ -1680,7 +1700,9 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 }
 .import-callout-icon { color: var(--warning); flex-shrink: 0; }
 .import-callout-lede { margin: 8px 0 0; line-height: 1.55; color: var(--text-secondary); }
-.import-callout-list { margin-top: 14px; display: flex; flex-direction: column; }
+/* Capped width: at full card width the right-aligned date sat ~900px from the
+ * name and the eye lost the row on the way across. */
+.import-callout-list { margin-top: 14px; display: flex; flex-direction: column; max-width: 760px; }
 .import-callout-row {
   display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px;
   padding: 10px 8px; border-bottom: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -1914,7 +1936,20 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .sk-bubble.out { align-self: flex-end; }
 
 /* --- Manager Review ------------------------------------------------------ */
-.cohort-scroll { overflow-x: auto; }
+/* Right-edge fade as a "more columns this way" affordance: a sticky pseudo
+ * pins to the scrollport's right edge while there's content to scroll, then
+ * slides into its own (empty) flow slot at scroll end, where fading into the
+ * card surface makes it invisible. Same pattern as .table-scroll::after. */
+.cohort-scroll { display: flex; overflow-x: auto; }
+.cohort-scroll > table { flex: 0 0 auto; }
+.cohort-scroll::after {
+  content: '';
+  flex: 0 0 28px;
+  position: sticky;
+  right: 0;
+  background: linear-gradient(to right, transparent, var(--surface-1));
+  pointer-events: none;
+}
 .cohort-table { min-width: 640px; }
 .cohort-table th, .cohort-table td { white-space: nowrap; }
 .cohort-camp-col {
@@ -1928,6 +1963,7 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   text-transform: uppercase; letter-spacing: var(--tracking-caps);
 }
 .cohort-subhead td.cohort-camp-col { background: var(--surface-2); }
+.cohort-subhead-label { position: sticky; left: 10px; display: inline-block; }
 /* provisional rate of a cohort still inside its maturity window */
 .cohort-rate { font-variant-numeric: tabular-nums; }
 .cohort-rate.maturing { color: var(--text-muted); opacity: 0.65; cursor: help; }
@@ -2135,6 +2171,9 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   min-width: 260px;
   background: var(--surface-1);
   border: 1px solid var(--border);
+  /* Stage accent along the top edge (color set inline per column) — the 9px
+   * dot alone was the only thing telling columns apart at a glance. */
+  border-top: 2px solid var(--border);
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
@@ -2219,6 +2258,47 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .substatus-chip { margin-top: 4px; }
 .pipe-card-controls { display: flex; gap: 6px; margin-top: 4px; }
 .pipe-card-controls select { flex: 1; min-width: 0; }
+
+/* Quiet resting state for the per-card selects: dragging is the primary way to
+ * move cards, so the two dropdowns read as plain muted text until the card is
+ * hovered or holds focus — the card stops being mostly control chrome. No
+ * display toggling, so the card never changes height under the cursor. */
+.pipe-card .substatus-chip,
+.pipe-card .pipe-stage-select,
+.pipe-card .pipe-assign-select {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.pipe-card:hover .substatus-chip,
+.pipe-card:hover .pipe-stage-select,
+.pipe-card:hover .pipe-assign-select,
+.pipe-card:focus-within .substatus-chip,
+.pipe-card:focus-within .pipe-stage-select,
+.pipe-card:focus-within .pipe-assign-select {
+  background-color: var(--surface-1);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* Leads table: an unset pipeline select rests as quiet text — a bordered "—"
+ * control on every row made the emptiest column the visually heaviest one.
+ * Hovering the row (or focusing the control) materializes it. */
+td .pipe-stage-select.quiet {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+tr:hover td .pipe-stage-select.quiet,
+td .pipe-stage-select.quiet:focus-visible {
+  background-color: var(--surface-2);
+  border-color: var(--border);
+}
 .pipe-add-member { display: inline-flex; gap: 6px; align-items: center; }
 .pipe-add-member input { max-width: 160px; }
 

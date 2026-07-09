@@ -374,6 +374,14 @@ export interface Totals {
   /** Replies whose latest inbound message classified as 'positive'. Only
    *  counted when a latest-replies map is supplied (else 0). */
   positive: number
+  /** Rate numerators mirroring the campaign_metrics view (migrations 019/030):
+   *  acceptedOfInvited = connected-in-range leads whose invite exists
+   *  (invited_at not null); repliedOfConnected = replied-in-range leads whose
+   *  connection exists (connected_at not null). The displayed counts above stay
+   *  totals; only the RATE numerators carry the constraint, so a lead connected
+   *  in-range but invited earlier no longer pushes a rate past 100%. */
+  acceptedOfInvited: number
+  repliedOfConnected: number
 }
 
 /** Event flows within `r` (invites/accepted/replies counted by the day their
@@ -390,16 +398,26 @@ export function rangeTotals(
   let accepted = 0
   let replies = 0
   let positive = 0
+  let acceptedOfInvited = 0
+  let repliedOfConnected = 0
   for (const l of leads) {
     if (tsInRange(l.invited_at, r)) invites++
-    if (tsInRange(l.connected_at, r)) accepted++
+    if (tsInRange(l.connected_at, r)) {
+      accepted++
+      // Acceptance-rate numerator counts connected leads only where the invite
+      // exists — matches campaign_metrics view (migrations 019/030).
+      if (l.invited_at) acceptedOfInvited++
+    }
     if (tsInRange(l.replied_at, r)) {
       replies++
+      // Reply-rate numerator counts replied leads only where the connection
+      // exists — matches campaign_metrics view (migrations 019/030).
+      if (l.connected_at) repliedOfConnected++
       if (latest?.get(leadKey(l.instance_id, l.profile_url))?.sentiment === 'positive')
         positive++
     }
   }
-  return { leads: leads.length, invites, accepted, replies, positive }
+  return { leads: leads.length, invites, accepted, replies, positive, acceptedOfInvited, repliedOfConnected }
 }
 
 export interface AccountStats extends Totals {
@@ -416,7 +434,14 @@ export function accountStats(
 ): AccountStats {
   const t = rangeTotals(leads, r, latest)
   const pct = (a: number, b: number) => (b > 0 ? ((100 * a) / b).toFixed(1) + '%' : '—')
-  return { ...t, acceptPct: pct(t.accepted, t.invites), replyPct: pct(t.replies, t.accepted) }
+  // Rate numerators are the constrained counts (connected-with-invite,
+  // replied-with-connect) to match campaign_metrics view (migrations 019/030);
+  // denominators stay the in-range totals.
+  return {
+    ...t,
+    acceptPct: pct(t.acceptedOfInvited, t.invites),
+    replyPct: pct(t.repliedOfConnected, t.accepted),
+  }
 }
 
 /** Warm-reply sentiments worth chasing: the latest inbound is a real opening
@@ -470,12 +495,17 @@ export function rangedCampaigns(
   r: DateRange,
 ): CampaignMetrics[] {
   const meta = new Map(base.map((c) => [c.campaign_id, c]))
-  type Acc = { added: number; invites: number; accepted: number; replies: number; total: number; last: string | null }
+  type Acc = {
+    added: number; invites: number; accepted: number; replies: number
+    // Rate numerators, constrained like the campaign_metrics view (see below).
+    acceptedOfInvited: number; repliedOfConnected: number
+    total: number; last: string | null
+  }
   const acc = new Map<string, Acc>()
   for (const l of leads) {
     let row = acc.get(l.campaign_id)
     if (!row) {
-      row = { added: 0, invites: 0, accepted: 0, replies: 0, total: 0, last: null }
+      row = { added: 0, invites: 0, accepted: 0, replies: 0, acceptedOfInvited: 0, repliedOfConnected: 0, total: 0, last: null }
       acc.set(l.campaign_id, row)
     }
     row.total++
@@ -487,8 +517,14 @@ export function rangedCampaigns(
     }
     if (tsInRange(l.added_at, r)) row.added++
     if (tsInRange(l.invited_at, r)) row.invites++
-    if (tsInRange(l.connected_at, r)) row.accepted++
-    if (tsInRange(l.replied_at, r)) row.replies++
+    if (tsInRange(l.connected_at, r)) {
+      row.accepted++
+      if (l.invited_at) row.acceptedOfInvited++
+    }
+    if (tsInRange(l.replied_at, r)) {
+      row.replies++
+      if (l.connected_at) row.repliedOfConnected++
+    }
     touch(l.invited_at)
     touch(l.connected_at)
     touch(l.replied_at)
@@ -506,8 +542,11 @@ export function rangedCampaigns(
       invites_sent: row.invites,
       accepted: row.accepted,
       replies: row.replies,
-      acceptance_rate: row.invites > 0 ? (100 * row.accepted) / row.invites : null,
-      reply_rate: row.accepted > 0 ? (100 * row.replies) / row.accepted : null,
+      // Constrained numerators (connected-with-invite, replied-with-connect)
+      // over the total denominators — matches campaign_metrics view
+      // (migrations 019/030), so displayed counts stay totals but rates ≤ 100%.
+      acceptance_rate: row.invites > 0 ? (100 * row.acceptedOfInvited) / row.invites : null,
+      reply_rate: row.accepted > 0 ? (100 * row.repliedOfConnected) / row.accepted : null,
       last_activity_at: row.last,
     })
   }

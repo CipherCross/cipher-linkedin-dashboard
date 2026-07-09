@@ -24,4 +24,5 @@ create index if not exists briefings_date_idx on briefings (briefing_date desc);
 -- The dashboard reads with the anon key; only /api/briefing (service-role, which
 -- bypasses RLS) writes. Tighten to authenticated-only once Supabase Auth is on.
 alter table briefings enable row level security;
+drop policy if exists "read briefings" on briefings;
 create policy "read briefings" on briefings for select using (true);

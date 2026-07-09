@@ -50,39 +50,49 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
   const accepted = totals ? totals.accepted : sum(campaigns, (c) => c.accepted)
   const replies = totals ? totals.replies : sum(campaigns, (c) => c.replies)
   const leads = totals ? totals.leads : sum(campaigns, (c) => c.total_leads)
-  const suffix = flowLabel ? ` · ${flowLabel}` : ''
+  // Rate numerators constrained to the prior milestone being present, matching the
+  // campaign_metrics view (migrations 019/030) — otherwise manual-import/InMail leads
+  // (connected without invite, replied without connect) push the rates past 100%.
+  // The campaigns fallback has no constrained numerators; its counts stay approximate.
+  const acceptedOfInvited = totals ? totals.acceptedOfInvited : accepted
+  const repliedOfConnected = totals ? totals.repliedOfConnected : replies
 
+  // The active range already sits in the page-header picker; repeating it inside
+  // every label made them wrap to two lines. It appears once per tile at most,
+  // in the quiet sub line of tiles that have no rate to show there. Lowercased
+  // to match the sentence-fragment style of the other subs ("per week", …).
+  const rangeSub = flowLabel?.toLowerCase()
   const cards: Card[] = [
-    { key: 'leads', label: 'Leads in pipeline', value: leads, icon: Users },
+    { key: 'leads', label: 'Leads in pipeline', value: leads, icon: Users, sub: 'all time' },
   ]
   if (added !== undefined)
     cards.push({
-      key: 'added', label: 'Leads added' + suffix, value: added, icon: UserPlus,
-      cur: added, prevCount: addedPrev,
+      key: 'added', label: 'Leads added', value: added, icon: UserPlus,
+      sub: rangeSub, cur: added, prevCount: addedPrev,
       to: `/review?tab=leads-added${range ? `&range=${rangeToParam(range)}` : ''}`,
     })
   cards.push(
     {
-      key: 'invites', label: 'Invites sent' + suffix, value: invites, icon: Send,
-      event: 'invite_sent', cur: invites, prevCount: prev?.invites,
+      key: 'invites', label: 'Invites sent', value: invites, icon: Send,
+      sub: rangeSub, event: 'invite_sent', cur: invites, prevCount: prev?.invites,
     },
     {
-      key: 'accepted', label: 'Accepted' + suffix, value: accepted, icon: UserCheck,
-      sub: invites > 0 ? pct(accepted, invites) + ' acceptance' : undefined,
+      key: 'accepted', label: 'Accepted', value: accepted, icon: UserCheck,
+      sub: invites > 0 ? pct(acceptedOfInvited, invites) + ' acceptance' : rangeSub,
       event: 'invite_accepted',
       cur: accepted, prevCount: prev?.accepted,
     },
     {
-      key: 'replies', label: 'Replies' + suffix, value: replies, icon: MessageSquare,
-      sub: accepted > 0 ? pct(replies, accepted) + ' reply rate' : undefined,
+      key: 'replies', label: 'Replies', value: replies, icon: MessageSquare,
+      sub: accepted > 0 ? pct(repliedOfConnected, accepted) + ' reply rate' : rangeSub,
       event: 'reply_received',
       cur: replies, prevCount: prev?.replies, maturing: true,
     },
   )
   if (positive !== undefined)
     cards.push({
-      key: 'positive', label: 'Positive' + suffix, value: positive, icon: ThumbsUp,
-      sub: replies > 0 ? pct(positive, replies) + ' of replies' : undefined,
+      key: 'positive', label: 'Positive', value: positive, icon: ThumbsUp,
+      sub: replies > 0 ? pct(positive, replies) + ' of replies' : rangeSub,
       cur: positive, prevCount: prev?.positive, maturing: true,
     })
 
@@ -101,16 +111,22 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
               )}
             </div>
             <div className="kpi-value">{num(c.value)}</div>
-            {c.sub && <div className="kpi-sub">{c.sub}</div>}
-            {showSpark && c.event && (
+            {/* Sub + spark are always rendered (spacer when absent) so every
+                tile shares one anatomy and the values align across the row. */}
+            <div className="kpi-sub">{c.sub ?? ' '}</div>
+            {showSpark && (
               <div className="kpi-spark">
-                <Sparkline
-                  activity={activity!}
-                  eventType={c.event}
-                  from={range!.from}
-                  to={range!.to}
-                  height={28}
-                />
+                {c.event ? (
+                  <Sparkline
+                    activity={activity!}
+                    eventType={c.event}
+                    from={range!.from}
+                    to={range!.to}
+                    height={28}
+                  />
+                ) : (
+                  <div className="kpi-spark-spacer" aria-hidden="true" />
+                )}
               </div>
             )}
           </>
@@ -139,9 +155,15 @@ function Delta({ cur, prev, maturing }: { cur: number; prev: number; maturing?: 
   const title = maturing
     ? 'vs previous period — recent replies are still arriving, so this is provisional'
     : 'vs previous equal-length period'
+  // Triple-digit percentages read as alarm rather than scale ("↑ 400%") —
+  // switch to a multiplier once the change is at least 3× / a third.
+  const text =
+    isNew ? 'New'
+    : change! >= 200 ? `${arrow} ×${(cur / prev).toFixed(1)}`
+    : `${arrow} ${change}%`
   return (
     <span className={`kpi-delta ${cls}`} title={title}>
-      {isNew ? 'New' : `${arrow} ${change}%`}
+      {text}
     </span>
   )
 }

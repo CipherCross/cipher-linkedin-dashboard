@@ -29,12 +29,13 @@ import re
 import sqlite3
 import subprocess
 import sys
+import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 import yaml
 
-AGENT_VERSION = "1.8.0"
+AGENT_VERSION = "1.9.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -90,6 +91,47 @@ class Supabase:
             "Content-Type": "application/json",
         }
 
+    def _request(self, method, url, retriable=True, **kwargs):
+        """Issue one PostgREST request with bounded retry, then raise_for_status.
+
+        A scheduled sync shouldn't fail on a momentary network/Supabase blip, so
+        transient failures are retried up to 3 attempts with backoff (~2s then
+        ~8s): connection errors/timeouts and 429/5xx responses. Everything else —
+        a 4xx other than 429 — raises immediately, since retrying a malformed or
+        rejected request never helps and would just delay a real error. Callers
+        need not raise_for_status themselves; this does it for them.
+
+        retriable=False disables the retry loop (single attempt) for a NON-idempotent
+        write, where a Timeout after the server committed would otherwise duplicate
+        the row on retry — the caller must own that risk explicitly."""
+        kwargs.setdefault("timeout", 30)
+        backoffs = (2, 8) if retriable else ()  # () -> single attempt, no retry
+        for attempt in range(len(backoffs) + 1):
+            try:
+                r = requests.request(method, url, **kwargs)
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout) as e:
+                if attempt == len(backoffs):
+                    raise
+                wait = backoffs[attempt]
+                print(f"supabase {method} {url.rsplit('/', 1)[-1]}: "
+                      f"{type(e).__name__} (attempt {attempt + 1}/"
+                      f"{len(backoffs) + 1}) — retrying in {wait}s")
+                time.sleep(wait)
+                continue
+            # Retry throttling (429) and server errors (5xx); a 4xx like 400/409
+            # is a client problem the retry can't fix, so fall through and raise.
+            if (r.status_code == 429 or r.status_code >= 500) \
+                    and attempt < len(backoffs):
+                wait = backoffs[attempt]
+                print(f"supabase {method} {url.rsplit('/', 1)[-1]}: "
+                      f"HTTP {r.status_code} (attempt {attempt + 1}/"
+                      f"{len(backoffs) + 1}) — retrying in {wait}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            return r
+
     def upsert(self, table, rows, on_conflict=None):
         """Idempotent batch upsert. Returns number of rows sent."""
         if not rows:
@@ -98,25 +140,22 @@ class Supabase:
         headers = dict(self.headers,
                        Prefer="resolution=merge-duplicates,return=minimal")
         for i in range(0, len(rows), 500):
-            r = requests.post(f"{self.base}/{table}", params=params,
-                              headers=headers, data=json.dumps(rows[i:i + 500]),
-                              timeout=60)
-            r.raise_for_status()
+            self._request("POST", f"{self.base}/{table}", params=params,
+                          headers=headers, data=json.dumps(rows[i:i + 500]),
+                          timeout=60)
         return len(rows)
 
-    def insert(self, table, row):
+    def insert(self, table, row, retriable=True):
         headers = dict(self.headers, Prefer="return=representation")
-        r = requests.post(f"{self.base}/{table}", headers=headers,
-                          data=json.dumps(row), timeout=60)
-        r.raise_for_status()
+        r = self._request("POST", f"{self.base}/{table}", retriable=retriable,
+                          headers=headers, data=json.dumps(row), timeout=60)
         return r.json()[0]
 
     def update(self, table, match, patch):
         params = {k: f"eq.{v}" for k, v in match.items()}
-        r = requests.patch(f"{self.base}/{table}", params=params,
-                           headers=self.headers, data=json.dumps(patch),
-                           timeout=60)
-        r.raise_for_status()
+        self._request("PATCH", f"{self.base}/{table}", params=params,
+                      headers=self.headers, data=json.dumps(patch),
+                      timeout=60)
 
 
 def self_update(cfg):
@@ -350,7 +389,19 @@ def discover_db_path():
     return candidates[0]
 
 
-def extract_owner(cfg, con):
+def note_warning(warnings, section, exc):
+    """Record a swallowed per-section extraction failure so a schema-drift error
+    that fails safe to empty (message/step/owner extraction) is still VISIBLE.
+    Each caller keeps its own fail-safe-to-empty behavior AND its own print; this
+    only appends a compact "section: ExceptionType: message" line to the shared
+    list so cmd_sync can flag the run 'partial' instead of a falsely-green 'ok'
+    (the worst failure mode: the Replies feed silently empties while the dashboard
+    stays green). No-op when warnings is None (paths without run-status tracking)."""
+    if warnings is not None:
+        warnings.append(f"{section}: {type(exc).__name__}: {exc}")
+
+
+def extract_owner(cfg, con, warnings=None):
     """LinkedIn identity of the account this instance runs as. Manual config
     values (account_name / account_url / account_avatar) win; an optional
     mapping.owner query fills the rest from lh.db — preferable for the
@@ -366,6 +417,7 @@ def extract_owner(cfg, con):
         try:
             row = next(iter(rows_for(con, omap)), None)
         except sqlite3.Error as e:
+            note_warning(warnings, "owner", e)
             print(f"owner mapping failed ({e}) — continuing without it")
             row = None
         if row is not None:
@@ -566,7 +618,7 @@ def flatten_template(settings):
     return text[:4000] or None
 
 
-def extract_steps(con, instance_id):
+def extract_steps(con, instance_id, warnings=None):
     """Per-(campaign, step) aggregates over the FULL sequence — warm-up steps
     (visits, likes, follows, ...) included, so 'where is everyone stuck' is
     answerable before the invite step. Reply attribution and current-step are
@@ -577,11 +629,13 @@ def extract_steps(con, instance_id):
         sends = list(con.execute(STEP_SENDS_SQL))
         replies = list(con.execute(STEP_REPLIES_SQL))
     except sqlite3.Error as e:
+        note_warning(warnings, "steps", e)
         print(f"step extraction skipped ({e}) — per-step view will be empty")
         return []
     try:
         executions = list(con.execute(STEP_EXECUTIONS_SQL))
     except sqlite3.Error as e:  # warm-up counts are additive; don't lose messaging steps
+        note_warning(warnings, "steps.warmup", e)
         print(f"warm-up execution extraction skipped ({e})")
         executions = []
 
@@ -696,7 +750,7 @@ def extract_messages(con, instance_id):
     return out
 
 
-def extract_first_messages(con):
+def extract_first_messages(con, warnings=None):
     """Map profile_url -> first_message_at (earliest MessageToPerson send). Built-in
     schema only; fails safe to {} so a schema change never breaks the sync."""
     out = {}
@@ -706,12 +760,17 @@ def extract_first_messages(con):
             if row["profile_url"] and ts:
                 out[row["profile_url"]] = ts
     except sqlite3.Error as e:
+        note_warning(warnings, "first_message", e)
         print(f"first-message extraction skipped ({e}) — first_message_at will be empty")
     return out
 
 
-def extract_local(cfg):
-    """Read campaigns + leads (+ owner identity) from the local LH2 DB."""
+def extract_local(cfg, warnings=None):
+    """Read campaigns + leads (+ owner identity) from the local LH2 DB.
+
+    `warnings` (a list, when provided) collects any per-section extraction failure
+    that fails safe to empty — messages/steps/first-message/owner — so cmd_sync can
+    downgrade the run to 'partial' rather than reporting a falsely-green 'ok'."""
     instance_id = cfg["instance_id"]
     mapping = cfg.get("mapping") or {}
     db_path = os.path.expanduser(cfg.get("lh2_db_path") or "") or discover_db_path()
@@ -786,19 +845,21 @@ def extract_local(cfg):
         try:
             messages = extract_messages(con, instance_id)
         except Exception as e:  # schema mismatch must never break a sync
+            note_warning(warnings, "messages", e)
             print(f"message extraction skipped ({e}) — Replies feed will be empty")
 
     steps = []
     if cfg.get("sync_steps", True):
         try:
-            steps = extract_steps(con, instance_id)
+            steps = extract_steps(con, instance_id, warnings)
         except Exception as e:  # never let the per-step view break a sync
+            note_warning(warnings, "steps", e)
             print(f"step extraction skipped ({e}) — per-step view will be empty")
 
     # Back-fill first_message_at (built-in schema) for any lead the mapping didn't
     # supply it for, matching on the slug-format profile_url. Best-effort: a lead
     # whose profile_url doesn't match simply keeps its NULL.
-    first_msgs = extract_first_messages(con)
+    first_msgs = extract_first_messages(con, warnings)
     if first_msgs:
         for lead in leads:
             if not lead.get("first_message_at"):
@@ -818,7 +879,7 @@ def extract_local(cfg):
                              lead["last_action_at"]) if t),
                 default=None)
 
-    owner = extract_owner(cfg, con)
+    owner = extract_owner(cfg, con, warnings)
     con.close()
     return campaigns, leads, messages, steps, owner
 
@@ -874,8 +935,14 @@ def cmd_sync(args):
         reexec()
 
     if args.dry_run:
-        campaigns, leads, messages, steps, owner = extract_local(cfg)
+        warnings = []
+        campaigns, leads, messages, steps, owner = extract_local(cfg, warnings)
         print_dry_run(instance_id, campaigns, leads, messages, steps, owner)
+        if warnings:
+            print("\nWARNING: a real sync would report status 'partial' — "
+                  "these sections failed and returned empty:")
+            for w in warnings:
+                print(f"  - {w}")
         return
 
     sb = Supabase(cfg)
@@ -884,26 +951,45 @@ def cmd_sync(args):
         "label": cfg.get("instance_label", instance_id),
         "agent_version": AGENT_VERSION,
     }], on_conflict="id")
-    run = sb.insert("sync_runs", {"instance_id": instance_id})
+    # sync_runs.status is one of: running (row inserted here) | ok | partial | error.
+    # 'partial' means the run pushed successfully but at least one fail-safe-to-empty
+    # section (messages/steps/first-message/owner) hit a schema-drift error — the run
+    # is green-ish but a feed may be silently empty, so it must NOT read as a clean 'ok'.
+    # NOT retriable: a plain insert with no on_conflict isn't idempotent, so a Timeout
+    # after the server committed would, on retry, leave an orphaned status='running'
+    # row (whose id we'd never keep) stuck forever on the Health page.
+    run = sb.insert("sync_runs", {"instance_id": instance_id}, retriable=False)
 
     total = 0
+    warnings = []
     try:
-        campaigns, leads, messages, steps, owner = extract_local(cfg)
+        campaigns, leads, messages, steps, owner = extract_local(cfg, warnings)
         total += sb.upsert("campaigns", campaigns, on_conflict="id")
         total += sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
-        total += sb.upsert("events", derive_events(instance_id, leads),
-                           on_conflict="instance_id,campaign_id,profile_url,event_type,occurred_at")
+        # events on_conflict key matches migration 035 (occurred_at dropped from the
+        # key so a corrected LH2 milestone UPDATES the event instead of inserting a
+        # duplicate). DEPLOY ORDER: migration 035 must be applied BEFORE this agent
+        # version rolls out — until then this key has no unique constraint and
+        # PostgREST rejects the on_conflict loudly (visible, not silent).
+        total += sb.upsert("events", dedupe_events(derive_events(instance_id, leads)),
+                           on_conflict="instance_id,campaign_id,profile_url,event_type")
         total += sb.upsert("messages", dedupe_messages(messages),
                            on_conflict="instance_id,profile_url,direction,sent_at,content_hash")
         total += sb.upsert("campaign_steps", steps,
                            on_conflict="campaign_id,step_index")
 
-        sb.update("sync_runs", {"id": run["id"]}, {
-            "status": "ok", "rows_upserted": total,
-            "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+        # A successful push with swallowed per-section failures is 'partial', not 'ok'.
+        status = "partial" if warnings else "ok"
+        run_patch = {
+            "status": status, "rows_upserted": total,
+            "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+        if warnings:
+            run_patch["error"] = "; ".join(warnings)[:500]
+        sb.update("sync_runs", {"id": run["id"]}, run_patch)
         sb.update("instances", {"id": instance_id}, dict(
             owner, last_sync_at=dt.datetime.now(dt.timezone.utc).isoformat()))
-        print(f"sync ok: {total} rows upserted for instance {instance_id}")
+        print(f"sync {status}: {total} rows upserted for instance {instance_id}"
+              + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
     except Exception as e:
         sb.update("sync_runs", {"id": run["id"]}, {
             "status": "error", "error": str(e)[:2000],
@@ -921,6 +1007,25 @@ def dedupe_messages(messages):
         k = (m["instance_id"], m["profile_url"], m["direction"],
              m["sent_at"], m["content_hash"])
         seen.setdefault(k, m)
+    return list(seen.values())
+
+
+def dedupe_events(events):
+    """Collapse events sharing the NEW unique key within one batch, keeping the
+    LATEST occurred_at. Since migration 035 the key is
+    (instance_id, campaign_id, profile_url, event_type) — occurred_at is no longer
+    part of it — so two rows for the same lead+milestone with different timestamps
+    now collide. A single upsert that hits the same conflict key twice fails with
+    'ON CONFLICT ... cannot affect row a second time' and aborts the whole events
+    push, so we guarantee uniqueness first (same guard as dedupe_messages). The
+    sync path can't produce such a pair (leads are unique per campaign+profile in a
+    run, one event per type), but the CSV ingest path can if the export repeats a
+    profile — keeping the latest occurred_at matches the point of the key change:
+    the newest correction of a milestone time wins."""
+    seen = {}
+    for e in sorted(events, key=lambda x: x["occurred_at"]):
+        k = (e["instance_id"], e["campaign_id"], e["profile_url"], e["event_type"])
+        seen[k] = e  # ascending sort → last assignment kept = latest occurred_at
     return list(seen.values())
 
 
@@ -1059,8 +1164,12 @@ def cmd_ingest_csv(args):
             leads.append(lead)
 
     n = sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
-    sb.upsert("events", derive_events(instance_id, leads),
-              on_conflict="instance_id,campaign_id,profile_url,event_type,occurred_at")
+    # events on_conflict key matches migration 035 (occurred_at dropped from the key);
+    # dedupe_events pre-collapses in case the CSV repeats a profile. DEPLOY ORDER:
+    # migration 035 must be applied before this agent version runs, else PostgREST
+    # rejects the on_conflict loudly (visible, not silent).
+    sb.upsert("events", dedupe_events(derive_events(instance_id, leads)),
+              on_conflict="instance_id,campaign_id,profile_url,event_type")
     sb.update("instances", {"id": instance_id},
               {"last_sync_at": dt.datetime.now(dt.timezone.utc).isoformat()})
     print(f"ingested {n} leads into campaign '{args.campaign}'")

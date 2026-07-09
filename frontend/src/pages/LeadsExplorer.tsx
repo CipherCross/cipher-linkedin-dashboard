@@ -686,7 +686,7 @@ export function LeadsExplorer() {
                 <td><StageBadge lead={l} /></td>
                 <td onClick={(e) => e.stopPropagation()}>
                   <select
-                    className="pipe-stage-select"
+                    className={`pipe-stage-select${l.pipeline_stage ? '' : ' quiet'}`}
                     value={l.pipeline_stage ?? ''}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {

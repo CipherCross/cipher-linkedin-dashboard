@@ -20,6 +20,7 @@ create table if not exists playbook (
 insert into playbook (id, content) values (true, '') on conflict (id) do nothing;
 
 alter table playbook enable row level security;
+drop policy if exists "read playbook" on playbook;
 create policy "read playbook" on playbook for select using (true);
 
 -- Drop the now-defunct per-instance structured playbook so no stale copy can

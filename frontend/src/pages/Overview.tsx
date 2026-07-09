@@ -7,6 +7,7 @@ import {
   rangeToParam, rangeTotals, tsInRange,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
+import type { Lead } from '../lib/types'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { AccountCard } from '../components/AccountCard'
@@ -16,6 +17,10 @@ import { DateRangePicker } from '../components/DateRangePicker'
 import { EmptyState } from '../components/EmptyState'
 
 const STALE_HOURS = 24
+
+// Shared empty-leads reference for instances with no leads, so the AccountCard
+// `leads` prop stays reference-equal across refreshes instead of a fresh `[]`.
+const NO_LEADS: Lead[] = []
 
 export function Overview() {
   const { data } = useData()
@@ -35,40 +40,54 @@ export function Overview() {
     setParams(next, { replace: true })
   }
 
-  const view = useMemo(() => {
-    if (!data) return null
-    const leadsByInstance = new Map<string, typeof data.leads>()
-    for (const l of data.leads) {
-      const arr = leadsByInstance.get(l.instance_id)
+  // Each derivation is keyed on the exact data slice(s) it reads (not the whole
+  // `data`, whose identity changes every 5-min refresh) and each slice is now
+  // reference-stable across a no-op refresh (see DataContext). So on a no-op tick
+  // these memos return their cached values, every AccountCard prop stays identical,
+  // and React.memo skips the whole grid — the periodic-refresh target.
+
+  // Buckets keyed on data.leads only, so an instance-only change (e.g. a
+  // last_sync_at bump) doesn't hand AccountCard fresh per-instance arrays.
+  const leadsByInstance = useMemo(() => {
+    const map = new Map<string, Lead[]>()
+    for (const l of data?.leads ?? []) {
+      const arr = map.get(l.instance_id)
       if (arr) arr.push(l)
-      else leadsByInstance.set(l.instance_id, [l])
+      else map.set(l.instance_id, [l])
     }
-    // Fresh accounts first, then by pipeline size.
+    return map
+  }, [data?.leads])
+
+  // Fresh accounts first, then by pipeline size.
+  const instances = useMemo(() => {
+    if (!data) return []
     const staleCutoff = Date.now() - STALE_HOURS * 3_600_000
-    const instances = [...data.instances].sort((a, b) => {
+    return [...data.instances].sort((a, b) => {
       const freshA = a.last_sync_at ? new Date(a.last_sync_at).getTime() > staleCutoff : false
       const freshB = b.last_sync_at ? new Date(b.last_sync_at).getTime() > staleCutoff : false
       if (freshA !== freshB) return freshA ? -1 : 1
       return (leadsByInstance.get(b.id)?.length ?? 0) - (leadsByInstance.get(a.id)?.length ?? 0)
     })
-    const latest = latestRepliesByLead(data.messages)
+  }, [data?.instances, leadsByInstance])
+
+  const latest = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data?.messages])
+
+  // KPI / funnel aggregates (not consumed by AccountCard).
+  const kpis = useMemo(() => {
+    if (!data) return null
     const prevRange = previousRange(range)
-    const added = data.leads.filter((l) => tsInRange(l.added_at, range)).length
     return {
-      instances,
-      leadsByInstance,
-      latest,
       totals: rangeTotals(data.leads, range, latest),
       prevTotals: prevRange ? rangeTotals(data.leads, prevRange, latest) : undefined,
-      added,
+      added: data.leads.filter((l) => tsInRange(l.added_at, range)).length,
       addedPrev: prevRange
         ? data.leads.filter((l) => tsInRange(l.added_at, prevRange)).length
         : undefined,
       activity: leadsToActivity(data.leads),
     }
-  }, [data, range])
+  }, [data?.leads, range, latest])
 
-  if (!data || !view) return null
+  if (!data || !kpis) return null
 
   return (
     <>
@@ -85,14 +104,14 @@ export function Overview() {
       </header>
 
       <KpiCards
-        totals={view.totals}
-        prev={view.prevTotals}
-        activity={view.activity}
+        totals={kpis.totals}
+        prev={kpis.prevTotals}
+        activity={kpis.activity}
         range={range}
         flowLabel={range.label}
-        positive={view.totals.positive}
-        added={view.added}
-        addedPrev={view.addedPrev}
+        positive={kpis.totals.positive}
+        added={kpis.added}
+        addedPrev={kpis.addedPrev}
         velocityLeads={data.leads}
       />
 
@@ -100,7 +119,7 @@ export function Overview() {
 
       <ImportCalloutCard />
 
-      {view.instances.length === 0 ? (
+      {instances.length === 0 ? (
         <EmptyState
           className="card"
           icon={Users}
@@ -110,14 +129,16 @@ export function Overview() {
         />
       ) : (
         <div className="account-grid">
-          {view.instances.map((inst) => (
+          {instances.map((inst) => (
             <AccountCard
               key={inst.id}
               inst={inst}
-              leads={view.leadsByInstance.get(inst.id) ?? []}
+              // Shared stable empty ref for zero-lead instances so the prop stays
+              // reference-equal across refreshes (keeps React.memo skipping).
+              leads={leadsByInstance.get(inst.id) ?? NO_LEADS}
               campaignsMeta={data.campaigns}
               range={range}
-              latest={view.latest}
+              latest={latest}
             />
           ))}
         </div>

@@ -107,8 +107,13 @@ alter table leads      enable row level security;
 alter table events     enable row level security;
 alter table sync_runs  enable row level security;
 
+drop policy if exists "read instances"  on instances;
 create policy "read instances"  on instances  for select using (true);
+drop policy if exists "read campaigns"  on campaigns;
 create policy "read campaigns"  on campaigns  for select using (true);
+drop policy if exists "read leads"      on leads;
 create policy "read leads"      on leads      for select using (true);
+drop policy if exists "read events"     on events;
 create policy "read events"     on events     for select using (true);
+drop policy if exists "read sync_runs"  on sync_runs;
 create policy "read sync_runs"  on sync_runs  for select using (true);

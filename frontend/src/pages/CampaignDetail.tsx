@@ -206,7 +206,7 @@ export function CampaignDetail() {
 
           <div className="stack">
             <ActivityChart
-              activity={leadsToActivity(leads)}
+              activity={kpis.activity}
               title="Campaign activity over time"
               annotations={data.annotations.filter(
                 (a) => !a.campaign_id || a.campaign_id === campaign.campaign_id,

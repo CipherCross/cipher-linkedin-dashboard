@@ -31,4 +31,5 @@ create table if not exists briefing_jobs (
 );
 
 alter table briefing_jobs enable row level security;
+drop policy if exists "read briefing_jobs" on briefing_jobs;
 create policy "read briefing_jobs" on briefing_jobs for select using (true);

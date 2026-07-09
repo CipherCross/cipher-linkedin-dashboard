@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { ConversationDrawer } from '../components/ConversationDrawer'
 import type { Lead } from './types'
 
@@ -41,6 +42,16 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       closeTimer.current = undefined
     }, CLOSE_MS)
   }, [])
+
+  // The drawer is modal to the page it was opened from — navigating (browser
+  // back, a link inside the drawer, …) must not leave it floating over the new
+  // page. Lead is read via ref so opening the drawer doesn't retrigger this.
+  const { pathname } = useLocation()
+  const leadRef = useRef(lead)
+  leadRef.current = lead
+  useEffect(() => {
+    if (leadRef.current) close()
+  }, [pathname, close])
 
   useEffect(() => () => clearTimer(), [])
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -17,6 +17,7 @@ import { useData } from '../lib/DataContext'
 import { useTheme } from '../lib/ThemeContext'
 import { ConversationProvider } from '../lib/ConversationContext'
 import type { Instance } from '../lib/types'
+import { instanceName } from '../lib/leads'
 import { ago } from '../lib/format'
 import { freshnessLevel } from '../lib/freshness'
 import { Logo } from './Logo'
@@ -54,12 +55,30 @@ export function Layout() {
   const { data, loading, refetch } = useData()
   const location = useLocation()
 
-  // Reset scroll + set the document title on every navigation.
+  // Reset scroll on every navigation. Separate from the title effect below,
+  // which also depends on `data` — the periodic refetch must not yank the
+  // user's scroll position back to the top.
   useEffect(() => {
     window.scrollTo(0, 0)
-    const name = pageName(location.pathname)
-    document.title = name ? `${name} — Outreach Deck` : 'Outreach Deck'
   }, [location.pathname])
+
+  // Document title. Detail routes (campaign/account) title by the entity they
+  // show, resolved from data — so this also re-runs when data first arrives on
+  // a deep link.
+  useEffect(() => {
+    let name = pageName(location.pathname)
+    if (!name && data) {
+      const m = location.pathname.match(/^\/(campaign|account)\/(.+)$/)
+      if (m) {
+        const id = decodeURIComponent(m[2])
+        name =
+          m[1] === 'campaign'
+            ? data.campaigns.find((c) => c.campaign_id === id)?.campaign_name ?? null
+            : instanceName(data.instances.find((i) => i.id === id), id)
+      }
+    }
+    document.title = name ? `${name} — Outreach Deck` : 'Outreach Deck'
+  }, [location.pathname, data])
 
   return (
     <div className="app">
@@ -136,7 +155,11 @@ export function Layout() {
             {/* Keyed by pathname so navigating to another page auto-resets a
                 crashed route; a single page fault no longer takes the shell. */}
             <ErrorBoundary variant="inline" key={location.pathname}>
-              <Outlet />
+              {/* Pages are lazy-loaded (code-split in App); show the route-shaped
+                  skeleton while a chunk streams in. */}
+              <Suspense fallback={<PageSkeleton variant={skeletonVariant(location.pathname)} />}>
+                <Outlet />
+              </Suspense>
             </ErrorBoundary>
           </ConversationProvider>
         )}

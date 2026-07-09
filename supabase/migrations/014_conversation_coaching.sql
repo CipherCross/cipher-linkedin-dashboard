@@ -35,5 +35,7 @@ create table if not exists coaching_digest (
 
 alter table conversation_coaching enable row level security;
 alter table coaching_digest        enable row level security;
+drop policy if exists "conversation_coaching is readable" on conversation_coaching;
 create policy "conversation_coaching is readable" on conversation_coaching for select using (true);
+drop policy if exists "coaching_digest is readable"       on coaching_digest;
 create policy "coaching_digest is readable"       on coaching_digest        for select using (true);

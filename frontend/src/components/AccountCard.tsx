@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { DateRange } from '../lib/leads'
@@ -14,7 +15,7 @@ const STALE_HOURS = 24
 /** One LinkedIn account on the Overview grid: identity + sync status, the
  *  range-scoped funnel stats, an invite-activity sparkline, and every campaign
  *  as a prominent link into its detail page. `leads` is this instance's subset. */
-export function AccountCard({
+export const AccountCard = memo(function AccountCard({
   inst,
   leads,
   campaignsMeta,
@@ -29,12 +30,22 @@ export function AccountCard({
 }) {
   const last = inst.last_sync_at ? new Date(inst.last_sync_at).getTime() : 0
   const fresh = Date.now() - last < STALE_HOURS * 3_600_000
-  const stats = accountStats(leads, range, latest)
-  const activity = leadsToActivity(leads).filter(
-    (a) => (!range.from || a.day >= range.from) && (!range.to || a.day <= range.to),
+  // Each derivation is memoized on just the inputs it uses, so a re-render that
+  // changes only one prop (e.g. range) doesn't recompute the rest — and React.memo
+  // skips the whole card when Overview re-renders with the same props.
+  const stats = useMemo(() => accountStats(leads, range, latest), [leads, range, latest])
+  const activity = useMemo(
+    () =>
+      leadsToActivity(leads).filter(
+        (a) => (!range.from || a.day >= range.from) && (!range.to || a.day <= range.to),
+      ),
+    [leads, range],
   )
-  const campaigns = rangedCampaigns(leads, campaignsMeta, range)
-  const weekAdded = weeklyAdded(leads, inst.id)
+  const campaigns = useMemo(
+    () => rangedCampaigns(leads, campaignsMeta, range),
+    [leads, campaignsMeta, range],
+  )
+  const weekAdded = useMemo(() => weeklyAdded(leads, inst.id), [leads, inst.id])
   const addedFrac = weekAdded / WEEKLY_ADD_LIMIT
   const capTone = addedFrac >= 1 ? 'danger' : addedFrac >= 0.7 ? 'warning' : 'success'
 
@@ -116,7 +127,7 @@ export function AccountCard({
       </div>
     </div>
   )
-}
+})
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (

@@ -40,25 +40,29 @@ function isMissingColumn(e: unknown): boolean {
 // PostgREST caps responses at 1000 rows; page until a short page comes back.
 // Falls back to the pre-pipeline column list on a missing-column error so a
 // DB that hasn't run the pipeline migration still renders.
-async function fetchAllLeads(columns: string = LEAD_COLUMNS): Promise<Lead[]> {
+// `updatedSince` (delta refresh, migration 031) restricts to rows whose
+// updated_at moved since the cursor; a DB without that column 42703s, which the
+// caller catches to disable delta and fall back to a full fetch permanently.
+async function fetchAllLeads(
+  columns: string = LEAD_COLUMNS,
+  updatedSince?: string,
+): Promise<Lead[]> {
   const page = 1000
   const all: Lead[] = []
   try {
     for (let from = 0; ; from += page) {
-      const { data, error } = await supabase!
-        .from('leads')
-        .select(columns)
-        .order('id')
-        .range(from, from + page - 1)
+      let q = supabase!.from('leads').select(columns).order('id')
+      if (updatedSince) q = q.gte('updated_at', updatedSince)
+      const { data, error } = await q.range(from, from + page - 1)
       if (error) throw error
       all.push(...((data ?? []) as unknown as Lead[]))
       if (!data || data.length < page) break
     }
   } catch (e) {
     // Pre-migration DB has no pipeline columns → retry once with the base list.
-    // Any OTHER error (network, RLS, …) must propagate.
+    // Any OTHER error (network, RLS, missing updated_at, …) must propagate.
     if (columns !== LEAD_COLUMNS_BASE && isMissingColumn(e))
-      return fetchAllLeads(LEAD_COLUMNS_BASE)
+      return fetchAllLeads(LEAD_COLUMNS_BASE, updatedSince)
     throw e
   }
   return all
@@ -68,16 +72,19 @@ async function fetchAllLeads(columns: string = LEAD_COLUMNS): Promise<Lead[]> {
 // PostgREST's 1000-row cap; page through it (like fetchAllLeads / inbound
 // messages) or the funnel's "ever reached" math silently truncates. A missing
 // table (migration pending) resolves to an empty list, never a failed load.
-async function fetchAllPipelineEvents(): Promise<Record<string, unknown>[]> {
+// `occurredSince` (delta refresh) restricts to events appended since the cursor;
+// the log is append-only so occurred_at is a safe delta key (no updated_at).
+async function fetchAllPipelineEvents(occurredSince?: string): Promise<Record<string, unknown>[]> {
   const page = 1000
   const all: Record<string, unknown>[] = []
   for (let from = 0; ; from += page) {
-    const { data, error } = await supabase!
+    let q = supabase!
       .from('pipeline_events')
       .select('*')
       .order('occurred_at')
       .order('id') // tiebreaker: bulk auto-advance inserts share one occurred_at
-      .range(from, from + page - 1)
+    if (occurredSince) q = q.gte('occurred_at', occurredSince)
+    const { data, error } = await q.range(from, from + page - 1)
     if (error) return all // missing table / query error → whatever we have (usually none)
     all.push(...((data ?? []) as Record<string, unknown>[]))
     if (!data || data.length < page) break
@@ -106,14 +113,29 @@ function isMissingSourceColumn(e: unknown): boolean {
 // lead totals, so they must not be windowed — a 90-day / 2000-row cap silently
 // undercounts them on busy accounts. Fetch every inbound row (paginated past the
 // 1000-row cap); keep outbound to the 90-day window since it's only recent display.
-async function fetchMessages(since: string, columns: string = MESSAGE_COLUMNS): Promise<Message[]> {
+// `updatedSince` (delta refresh, migration 031) restricts to rows whose
+// updated_at moved since the cursor; the direction filters and the outbound
+// 90-day window are preserved so a delta merges like-for-like. A DB without the
+// updated_at column 42703s — the caller catches it, disables delta, and falls
+// back to a full fetch permanently.
+async function fetchMessages(
+  since: string,
+  columns: string = MESSAGE_COLUMNS,
+  updatedSince?: string,
+): Promise<Message[]> {
   const page = 1000
   const all: Message[] = []
+  const withUpdated = <T,>(q: T): T =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    updatedSince ? ((q as any).gte('updated_at', updatedSince) as T) : q
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pageThrough = async (build: () => any) => {
     for (let from = 0; ; from += page) {
       const { data, error } = await build()
+        // sent_at isn't unique (bulk syncs stamp identical times), so add id as a
+        // stable tiebreaker or page boundaries can drop/duplicate rows.
         .order('sent_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(from, from + page - 1)
       if (error) throw error
       all.push(...((data ?? []) as unknown as Message[]))
@@ -122,21 +144,44 @@ async function fetchMessages(since: string, columns: string = MESSAGE_COLUMNS): 
   }
   try {
     await pageThrough(() =>
-      supabase!.from('messages').select(columns).eq('direction', 'in'))
+      withUpdated(supabase!.from('messages').select(columns).eq('direction', 'in')))
     await pageThrough(() =>
-      supabase!.from('messages').select(columns).eq('direction', 'out').gte('sent_at', since))
+      withUpdated(supabase!.from('messages').select(columns).eq('direction', 'out').gte('sent_at', since)))
   } catch (e) {
     // Pre-migration DB has no `source` column → PostgREST 400 with code 42703
     // ("undefined column"). Retry once with the base columns so the dashboard
     // still loads (partial `all` is discarded by the retry). Any OTHER error
-    // (network, timeout, RLS, …) must propagate — falling back on those would
-    // silently hide the callout and mask a real failure.
+    // (network, timeout, RLS, missing updated_at, …) must propagate — falling
+    // back on those would silently hide the callout and mask a real failure.
     if (columns !== MESSAGE_COLUMNS_BASE && isMissingSourceColumn(e))
-      return fetchMessages(since, MESSAGE_COLUMNS_BASE)
+      return fetchMessages(since, MESSAGE_COLUMNS_BASE, updatedSince)
     throw e
   }
   all.sort((a, b) => (a.sent_at < b.sent_at ? 1 : a.sent_at > b.sent_at ? -1 : 0))
   return all
+}
+
+// Delta refresh returns only the rows that changed; fold them onto the array we
+// already hold, replacing matched ids and appending new ones. Order is not
+// preserved (callers that need a sort re-sort after merging).
+function mergeById<T extends { id: string | number }>(existing: T[], updates: T[]): T[] {
+  if (updates.length === 0) return existing
+  const map = new Map<string | number, T>()
+  for (const r of existing) map.set(r.id, r)
+  for (const r of updates) map.set(r.id, r)
+  return [...map.values()]
+}
+
+// A 2-minute overlap on the delta cursor absorbs clock skew and commits that
+// landed mid-fetch; overlapping rows just re-merge idempotently (never missed).
+const REFRESH_OVERLAP_MS = 2 * 60_000
+
+// The always-full-refetched small tables get a fresh array every cycle even when
+// their data is unchanged. Keep the previous reference when the payload is
+// deep-equal so consumers memoized on a data slice don't recompute on a no-op
+// refresh. These tables are small, so a JSON compare is cheap.
+function stableSlice<T>(prev: T, next: T): T {
+  return JSON.stringify(prev) === JSON.stringify(next) ? prev : next
 }
 
 const Ctx = createContext<{
@@ -160,6 +205,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Only the most recent load() wins, so a manual refetch can't be clobbered by
   // an in-flight interval load (or vice versa).
   const reqId = useRef(0)
+  // Delta-refresh state. cursor = "changed since" watermark for the next interval
+  // fetch (max updated_at proxy: load start minus an overlap buffer). deltaSupported
+  // flips to false permanently if the DB lacks the updated_at column (migration 031
+  // pending), pinning the session to full refetches.
+  const cursorRef = useRef<string | null>(null)
+  const deltaSupported = useRef(true)
+  // Optimistic pipeline patches still awaiting server confirmation, kept so a
+  // load() already in flight can't revert them (re-applied after every commit).
+  const pendingPatches = useRef<Map<string, { patch: Partial<Lead>; at: number }>>(new Map())
 
   // Surface an error without wiping on-screen data: keep the last successful
   // load and only stamp the error field. First-load failures (prev === null)
@@ -168,16 +222,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setData((prev) => (prev ? { ...prev, error: message } : { ...EMPTY, error: message }))
   }, [])
 
-  // Merge a partial update into one lead in place (optimistic pipeline writes).
+  // Re-apply still-pending optimistic patches on top of freshly-fetched leads so
+  // an in-flight load() can't revert them. A patch is confirmed/dropped only when
+  // a row that was GENUINELY fetched this cycle reflects it, or after a 30s TTL.
+  // `fetchedIds` = the lead ids this fetch actually returned (null = a full fetch,
+  // so every id counts). In a delta merge a pending-patched lead that's absent
+  // from the batch is carried over from state still holding the optimistic value;
+  // comparing that to itself would clear the patch with no server confirmation, so
+  // carried-over rows keep their pending entry (TTL still applies).
+  const applyPending = useCallback((leads: Lead[], fetchedIds: Set<string> | null): Lead[] => {
+    const pend = pendingPatches.current
+    if (pend.size === 0) return leads
+    const now = Date.now()
+    for (const [lid, p] of pend) if (now - p.at > 30_000) pend.delete(lid)
+    if (pend.size === 0) return leads
+    const byId = new Map(leads.map((l) => [l.id, l]))
+    for (const [lid, p] of pend) {
+      if (fetchedIds && !fetchedIds.has(lid)) continue // not fetched this cycle → keep
+      const row = byId.get(lid)
+      if (row && Object.entries(p.patch).every(([k, v]) => (row as unknown as Record<string, unknown>)[k] === v))
+        pend.delete(lid)
+    }
+    if (pend.size === 0) return leads
+    return leads.map((l) => {
+      const p = pend.get(l.id)
+      return p ? { ...l, ...p.patch } : l
+    })
+  }, [])
+
+  // Merge a partial update into one lead in place (optimistic pipeline writes),
+  // AND record it as pending so a concurrent load()'s commit re-applies it.
   const patchLead = useCallback((leadId: string, patch: Partial<Lead>) => {
-    setData((prev) =>
-      prev
-        ? { ...prev, leads: prev.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)) }
-        : prev,
+    const prev = pendingPatches.current.get(leadId)?.patch
+    pendingPatches.current.set(leadId, { patch: { ...prev, ...patch }, at: Date.now() })
+    setData((prevData) =>
+      prevData
+        ? { ...prevData, leads: prevData.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)) }
+        : prevData,
     )
   }, [])
 
-  const load = useCallback(async () => {
+  // `mode` = 'full' re-downloads everything (initial load + manual refetch after a
+  // write); 'delta' (the 5-min interval) fetches only rows changed since the
+  // cursor and merges them, falling back to a full refetch if the DB has no
+  // updated_at column yet (migration 031 pending).
+  const load = useCallback(async (mode: 'full' | 'delta' = 'full') => {
     const id = ++reqId.current
     if (!supabase) {
       showError(
@@ -186,47 +275,53 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
+    const cursor = cursorRef.current
+    const delta = mode === 'delta' && deltaSupported.current && cursor != null
+    const startedAt = Date.now()
     try {
-        const since = new Date(Date.now() - 90 * 86_400_000)
+        const since = new Date(startedAt - 90 * 86_400_000)
           .toISOString()
           .slice(0, 10)
-        const [
-          instances, campaigns, activity, syncRuns, messages, annotations, steps,
-          briefing, teamMembers, pipelineEvents, leads,
-        ] =
-          await Promise.all([
-            supabase
-              .from('instances')
-              .select('id,label,last_sync_at,agent_version,account_name,account_url,account_avatar,config,config_updated_at')
-              .order('id'),
-            supabase.from('campaign_metrics').select('*').order('campaign_name'),
-            supabase.from('daily_activity').select('*').gte('day', since),
-            supabase
-              .from('sync_runs')
-              .select('id,instance_id,started_at,finished_at,status,rows_upserted,error')
-              .order('started_at', { ascending: false })
-              .limit(200),
-            fetchMessages(since),
-            supabase.from('annotations').select('*').order('noted_at'),
-            supabase
-              .from('campaign_steps')
-              .select('*')
-              .order('campaign_id')
-              .order('step_index'),
-            supabase
-              .from('briefings')
-              .select('*')
-              .order('briefing_date', { ascending: false })
-              .limit(2),
-            // Manual-pipeline tables may not exist yet (migration pending). Their
-            // errors are intentionally NOT folded into the aggregate `error`
-            // below — a missing table just yields an empty list, never a failed
-            // load. team_members' .select() resolves with {data,error} (never
-            // throws); fetchAllPipelineEvents swallows its own errors to [].
-            supabase.from('team_members').select('id,name,active,created_at').order('id'),
-            fetchAllPipelineEvents(),
-            fetchAllLeads(),
-          ])
+        // Small / view-backed tables can't delta (views) and are cheap — always
+        // full, even on an interval refresh.
+        const smallP = Promise.all([
+          supabase
+            .from('instances')
+            .select('id,label,last_sync_at,agent_version,account_name,account_url,account_avatar,config,config_updated_at')
+            .order('id'),
+          supabase.from('campaign_metrics').select('*').order('campaign_name'),
+          supabase.from('daily_activity').select('*').gte('day', since),
+          supabase
+            .from('sync_runs')
+            .select('id,instance_id,started_at,finished_at,status,rows_upserted,error')
+            .order('started_at', { ascending: false })
+            .limit(200),
+          supabase.from('annotations').select('*').order('noted_at'),
+          supabase
+            .from('campaign_steps')
+            .select('*')
+            .order('campaign_id')
+            .order('step_index'),
+          supabase
+            .from('briefings')
+            .select('*')
+            .order('briefing_date', { ascending: false })
+            .limit(2),
+          // Manual-pipeline tables may not exist yet (migration pending). Their
+          // errors are intentionally NOT folded into the aggregate `error`
+          // below — a missing table just yields an empty list, never a failed
+          // load. team_members' .select() resolves with {data,error} (never
+          // throws); fetchAllPipelineEvents swallows its own errors to [].
+          supabase.from('team_members').select('id,name,active,created_at').order('id'),
+        ])
+        // Big append-heavy tables delta on an interval refresh, full otherwise.
+        const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
+        const messagesP = delta ? fetchMessages(since, MESSAGE_COLUMNS, cursor!) : fetchMessages(since)
+        const eventsP = delta ? fetchAllPipelineEvents(cursor!) : fetchAllPipelineEvents()
+        const [small, leads, messages, pipelineEvents] = await Promise.all([
+          smallP, leadsP, messagesP, eventsP,
+        ])
+        const [instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers] = small
         if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
@@ -236,38 +331,89 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // Query-level failure: keep prior data, just flag the error.
           showError(error.message)
         } else {
-          // Success replaces everything with fresh data (no error field),
-          // which clears any error left by a previous failed refresh.
-          setData({
-            instances: instances.data ?? [],
-            campaigns: campaigns.data ?? [],
-            activity: activity.data ?? [],
-            syncRuns: syncRuns.data ?? [],
-            messages,
-            annotations: annotations.data ?? [],
-            steps: steps.data ?? [],
-            briefing: briefing.data?.[0] ?? null,
-            prevBriefing: briefing.data?.[1] ?? null,
-            teamMembers: teamMembers.data ?? [],
-            pipelineEvents: pipelineEvents as unknown as DashboardData['pipelineEvents'],
-            leads,
+          // Success replaces the small tables wholesale (clearing any prior
+          // error); the big tables replace on a full load and merge-by-id on a
+          // delta, with still-pending optimistic patches re-applied on top.
+          setData((prev) => {
+            const base = prev ?? EMPTY
+            // Only rows genuinely returned this cycle can confirm a pending patch
+            // (a delta merge carries absent leads over from state unchanged).
+            const fetchedLeadIds = delta ? new Set(leads.map((l) => l.id)) : null
+            const nextLeads = applyPending(delta ? mergeById(base.leads, leads) : leads, fetchedLeadIds)
+            let nextMessages: Message[]
+            if (delta) {
+              const merged = mergeById(base.messages, messages) // === base.messages when batch empty
+              // Delta merges are additive: prune outbound rows that have aged past
+              // the 90-day window (same cutoff as the fetch filter; inbound
+              // untouched) so they don't linger until a full fetch. filter() always
+              // allocates, so only adopt the result when it actually removed a row —
+              // otherwise keep `merged`'s reference for a no-op tick.
+              const pruned = merged.filter((m) => m.direction !== 'out' || m.sent_at.slice(0, 10) >= since)
+              const trimmed = pruned.length === merged.length ? merged : pruned
+              nextMessages =
+                trimmed === base.messages
+                  ? base.messages // nothing merged or pruned → stable reference
+                  : [...trimmed].sort((a, b) =>
+                      a.sent_at < b.sent_at ? 1 : a.sent_at > b.sent_at ? -1 : 0)
+            } else {
+              nextMessages = messages
+            }
+            const events = delta
+              ? mergeById(
+                  base.pipelineEvents as unknown as { id: number }[],
+                  pipelineEvents as unknown as { id: number }[],
+                )
+              : pipelineEvents
+            // Small tables reuse the prior reference when deep-equal, so a no-op
+            // refresh keeps every data slice reference-stable for downstream memos.
+            return {
+              instances: stableSlice(base.instances, instances.data ?? []),
+              campaigns: stableSlice(base.campaigns, campaigns.data ?? []),
+              activity: stableSlice(base.activity, activity.data ?? []),
+              syncRuns: stableSlice(base.syncRuns, syncRuns.data ?? []),
+              messages: nextMessages,
+              annotations: stableSlice(base.annotations, annotations.data ?? []),
+              steps: stableSlice(base.steps, steps.data ?? []),
+              briefing: stableSlice(base.briefing, briefing.data?.[0] ?? null),
+              prevBriefing: stableSlice(base.prevBriefing, briefing.data?.[1] ?? null),
+              teamMembers: stableSlice(base.teamMembers, teamMembers.data ?? []),
+              // Already reference-stable on a no-op delta (mergeById returns the
+              // prior array when the batch is empty); full fetch gets a fresh one.
+              pipelineEvents: events as unknown as DashboardData['pipelineEvents'],
+              leads: nextLeads,
+            }
           })
+          // Advance the cursor for the next delta (start-time minus overlap).
+          cursorRef.current = new Date(startedAt - REFRESH_OVERLAP_MS).toISOString()
         }
       } catch (e) {
+        // A delta query hit a missing updated_at column (migration 031 pending):
+        // disable delta for the session and immediately retry as a full load so
+        // the dashboard keeps working pre-migration.
+        if (delta && isMissingColumn(e)) {
+          deltaSupported.current = false
+          return load('full')
+        }
         if (id === reqId.current)
           showError(e instanceof Error ? e.message : String(e))
       }
       if (id === reqId.current) setLoading(false)
-  }, [showError])
+  }, [showError, applyPending])
+
+  // Manual refetch (post-write) always forces a full fetch — a delta could miss
+  // a row the caller just changed if updated_at ordering/skew raced the commit.
+  const refetch = useCallback(() => {
+    void load('full')
+  }, [load])
 
   useEffect(() => {
-    load()
-    const timer = setInterval(load, 5 * 60_000)
+    void load('full')
+    const timer = setInterval(() => void load('delta'), 5 * 60_000)
     return () => clearInterval(timer)
   }, [load])
 
   return (
-    <Ctx.Provider value={{ data, loading, refetch: load, patchLead }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ data, loading, refetch, patchLead }}>{children}</Ctx.Provider>
   )
 }
 

@@ -3,7 +3,7 @@ import type { Lead } from '../lib/types'
 import { num, pct } from '../lib/format'
 import { useData } from '../lib/DataContext'
 import { leadKey } from '../lib/leads'
-import { PIPELINE_CHECKPOINTS, checkpointCount, reachByPerson, stageColor } from '../lib/pipeline'
+import { PIPELINE_CHECKPOINTS, checkpointCount, reachByPerson } from '../lib/pipeline'
 
 /** One continuous vertical funnel. The automated milestones (Leads → Invited →
  *  Accepted → Replied), computed client-side from lead timestamps, flow straight
@@ -90,10 +90,10 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
       : null
 
   const rows: FunnelRow[] = [
-    { key: 'leads', label: 'Leads', count: total, color: 'var(--text-muted)', base: null, verb: '' },
-    { key: 'invited', label: 'Invited', count: invited, color: 'var(--accent)', base: total, verb: 'invited' },
-    { key: 'accepted', label: 'Accepted', count: accepted, color: 'var(--success)', base: invited, verb: 'accepted' },
-    { key: 'replied', label: 'Replied', count: replied, color: 'var(--warning)', base: accepted, verb: 'replied' },
+    { key: 'leads', label: 'Leads', count: total, color: '', base: null, verb: '' },
+    { key: 'invited', label: 'Invited', count: invited, color: '', base: total, verb: 'invited' },
+    { key: 'accepted', label: 'Accepted', count: accepted, color: '', base: invited, verb: 'accepted' },
+    { key: 'replied', label: 'Replied', count: replied, color: '', base: accepted, verb: 'replied' },
   ]
 
   if (pipelineRows) {
@@ -103,7 +103,7 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
         key: r.id,
         label: r.label,
         count: r.count,
-        color: stageColor(r.id),
+        color: '',
         base: prev,
         verb: PIPELINE_VERB[r.id] ?? '',
         pipeline: true,
@@ -113,11 +113,33 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
     })
   }
 
+  // One hue ramp for the whole funnel — accent at the top deepening into success
+  // (= "won") at the bottom — so the bar colors read as progression instead of a
+  // categorical palette. The Leads baseline row stays neutral. (The pipeline
+  // BOARD keeps its per-stage categorical colors from stageColor(); this ramp is
+  // funnel-only.)
+  const ramp = rows.length - 2 // colored rows after Leads, zero-indexed span
+  rows.forEach((r, i) => {
+    r.color =
+      i === 0
+        ? 'var(--text-muted)'
+        : `color-mix(in srgb, var(--success) ${ramp > 0 ? Math.round((100 * (i - 1)) / ramp) : 0}%, var(--accent))`
+  })
+
   // Overall Lead → Client conversion (only when pipeline data exists).
   const clients = pipelineRows ? pipelineRows[pipelineRows.length - 1].count : 0
 
-  const barWidth = (count: number) =>
-    total > 0 ? `${Math.max((100 * count) / total, count > 0 ? 2 : 0)}%` : 0
+  // Manual-pipeline rows re-scale to their own widest stage: on the lead-count
+  // scale they render as invisible slivers (12 vs 2,802), hiding exactly the
+  // drop-offs this section exists to show. It reads as a zoomed inset — the
+  // "Manual pipeline" divider fences it off and the footer states the zoom;
+  // the connector rates carry the true stage-to-stage conversion either way.
+  const pipelineMax = pipelineRows ? Math.max(...pipelineRows.map((r) => r.count)) : 0
+  const pipelineBase = pipelineMax > 0 ? pipelineMax : total
+  const barWidth = (count: number, pipeline?: boolean) => {
+    const base = pipeline ? pipelineBase : total
+    return base > 0 ? `${Math.max((100 * count) / base, count > 0 ? 2 : 0)}%` : 0
+  }
 
   return (
     <div className="card">
@@ -149,7 +171,7 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
               <div className="funnel-track">
                 <div
                   className="funnel-bar"
-                  style={{ width: barWidth(s.count), background: s.color }}
+                  style={{ width: barWidth(s.count, s.pipeline), background: s.color }}
                 />
               </div>
               <span className="funnel-count">{num(s.count)}</span>
@@ -163,6 +185,7 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
           {num(pending)} invites still pending (sent, not yet accepted)
           {preExisting > 0 &&
             ` · ${num(preExisting)} existing connections (never invited) excluded`}
+          {pipelineRows && pipelineMax > 0 && ' · manual-pipeline bars use their own zoomed scale'}
         </span>
         {pipelineRows && (
           <span className="funnel-overall">

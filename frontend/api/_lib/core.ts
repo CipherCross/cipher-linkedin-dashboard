@@ -19,6 +19,8 @@ export function db(): SupabaseClient {
   return _client
 }
 
+// ai_execute_sql (migration 021, updated 030-035) hard-caps results at 1000 rows
+// server-side; this layer trims further to MAX_ROWS / MAX_CHARS below.
 const MAX_ROWS = 200
 const MAX_CHARS = 24_000
 
@@ -100,10 +102,15 @@ instance corresponds to one real LinkedIn account.
 TABLES
 
 instances — one row per LH2 instance / LinkedIn account
-  id text PK (e.g. "notebook-kyiv"), label text, last_sync_at timestamptz,
-  agent_version text, account_name text, account_url text, account_avatar text,
-  created_at timestamptz, config jsonb (online config overrides the agent merges
-  over its local config.yaml; operational, not analytical), config_updated_at timestamptz
+  READABLE COLUMNS: id text PK (e.g. "notebook-kyiv"), label text,
+  last_sync_at timestamptz, agent_version text, created_at timestamptz,
+  account_name text, account_url text, account_avatar text,
+  config_updated_at timestamptz
+  WARNING: never \`select *\` from instances — it also has a config jsonb column
+  (online config overrides the agent merges over its local config.yaml;
+  operational, not analytical) that the AI's SQL role can NOT read (column-level
+  grant); \`select *\` will fail with a permission error. List columns explicitly,
+  e.g. select id, label, account_name, last_sync_at from instances.
 
 campaigns — one row per LH2 campaign per instance
   id text PK ("<instance_id>:<lh_campaign_id>"), instance_id -> instances,
@@ -140,14 +147,21 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   (/api/import-conversation); a DB trigger keeps a non-NULL milestone from
   regressing to NULL when the agent re-syncs.
 
-events — append-only action log (drives daily-activity charts)
+events — action log (drives daily-activity charts)
   id bigint PK, instance_id, campaign_id, profile_url,
   event_type text ('invite_sent'|'invite_accepted'|'message_sent'|'reply_received'|...),
   occurred_at timestamptz, raw jsonb
+  NOT append-only: unique per (instance_id, campaign_id, profile_url, event_type) —
+  one row per lead per event type, upserted. occurred_at is NOT part of that key
+  and can shift later if the underlying milestone is corrected (e.g. a backfilled
+  reply time) — don't expect duplicate rows for the same event_type on a lead,
+  and don't treat occurred_at as immutable history.
 
 messages — actual message texts; full conversation threads, both directions
   id bigint PK, instance_id, campaign_id, profile_url, direction text ('in'|'out'),
   body text, sent_at timestamptz,
+  content_hash text (internal dedup hash of body; part of the identity key that
+    distinguishes manually-imported rows from agent-synced ones),
   source text ('sync'|'manual') — 'sync' rows come from the LH2 agent and their
     sent_at is the LH2 action-RUN time, which can lag the real message by
     hours/days; 'manual' rows were pasted by the SDR from LinkedIn ("Import
@@ -160,7 +174,10 @@ messages — actual message texts; full conversation threads, both directions
     'negative' (not interested / unsubscribe), 'objection' (question or pushback),
     'referral' (talk to someone else), 'auto' (out-of-office / autoresponder).
     NULL = outbound, or an inbound reply not yet classified.
-  reason text (one-line rationale), classified_at timestamptz, classified_model text
+  reason text (one-line rationale), classified_at timestamptz, classified_model text,
+  updated_at timestamptz (bumps only on a real change, e.g. sentiment gets
+    classified — not touched by every sync pass; same only-on-real-change
+    semantics apply to leads.updated_at and campaigns.updated_at)
 
 campaign_steps — the FULL campaign sequence per campaign with aggregates,
   including WARM-UP steps that run before the invite (profile visits, post
@@ -214,7 +231,10 @@ STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses
   (interested/neutral/negative all rank 1; client/lost both rank 7).
 
 sync_runs — sync agent run log
-  id uuid PK, instance_id, started_at, finished_at, status ('running'|'ok'|'error'),
+  id uuid PK, instance_id, started_at, finished_at,
+  status ('running'|'ok'|'partial'|'error') — 'partial' means the sync completed
+    but one or more sections (messages/steps) failed extraction and returned
+    empty; see error for which section and why,
   rows_upserted int, error text
 
 VIEWS

@@ -318,7 +318,10 @@ export function ConversationDrawer({
             ) : (
               <span className="badge">No reply yet</span>
             )}
-            {!importOpen && (
+            {/* Hidden while the empty state shows — that state carries its own
+                Import-history CTA, and two identical links one viewport apart
+                read as clutter. */}
+            {!importOpen && !(rows && rows.length === 0) && (
               <button
                 className="link-btn conv-import-btn"
                 onClick={() => setImportOpen(true)}

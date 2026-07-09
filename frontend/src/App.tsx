@@ -1,18 +1,22 @@
+import { lazy } from 'react'
 import { HashRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { DataProvider } from './lib/DataContext'
 import { ToastProvider } from './lib/ToastContext'
 import { ThemeProvider } from './lib/ThemeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
-import { Overview } from './pages/Overview'
-import { CampaignDetail } from './pages/CampaignDetail'
-import { AccountDetail } from './pages/AccountDetail'
-import { LeadsExplorer } from './pages/LeadsExplorer'
-import { Pipeline } from './pages/Pipeline'
-import { Playbook } from './pages/Playbook'
-import { Health } from './pages/Health'
-import { Chat } from './pages/Chat'
-import { Review } from './pages/Review'
+
+// Pages are code-split so each route ships its own chunk — the initial bundle no
+// longer carries all nine. These modules use named exports, so map to default.
+const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m.Overview })))
+const CampaignDetail = lazy(() => import('./pages/CampaignDetail').then((m) => ({ default: m.CampaignDetail })))
+const AccountDetail = lazy(() => import('./pages/AccountDetail').then((m) => ({ default: m.AccountDetail })))
+const LeadsExplorer = lazy(() => import('./pages/LeadsExplorer').then((m) => ({ default: m.LeadsExplorer })))
+const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
+const Playbook = lazy(() => import('./pages/Playbook').then((m) => ({ default: m.Playbook })))
+const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })))
+const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })))
+const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
 
 /** Replies folded into Leads, but old deep links carried a `sentiment` query
  *  param (positive/curious/neutral/negative/later/other/unclassified) — forward

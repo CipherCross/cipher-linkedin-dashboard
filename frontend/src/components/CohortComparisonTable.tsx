@@ -48,12 +48,22 @@ export function CohortComparisonTable({
       list.push(row)
       byAccount.set(row.instanceId, list)
     }
-    return [...byAccount.entries()]
-      .map(([instanceId, rows]) => ({
-        instanceId,
-        account: instanceName(instances.find((i) => i.id === instanceId), instanceId),
-        rows,
-      }))
+    const list = [...byAccount.entries()].map(([instanceId, rows]) => ({
+      instanceId,
+      account: instanceName(instances.find((i) => i.id === instanceId), instanceId),
+      rows,
+    }))
+    // Two instances can share one owner name (e.g. the same person on two
+    // notebooks) — suffix the instance id so the repeated subheads stay tellable
+    // apart instead of reading as an accidental duplicate.
+    const nameCount = new Map<string, number>()
+    for (const g of list) nameCount.set(g.account, (nameCount.get(g.account) ?? 0) + 1)
+    return list
+      .map((g) =>
+        (nameCount.get(g.account) ?? 0) > 1
+          ? { ...g, account: `${g.account} · ${g.instanceId}` }
+          : g,
+      )
       .sort((a, b) => a.account.localeCompare(b.account))
   }, [data.rows, instances])
 
@@ -144,7 +154,11 @@ function SubGroup({
   return (
     <>
       <tr className="cohort-subhead">
-        <td colSpan={colSpan}>{account}</td>
+        <td colSpan={colSpan}>
+          {/* Sticky so the group label stays readable while the matrix is
+              scrolled horizontally (the full-width td itself can't be pinned). */}
+          <span className="cohort-subhead-label">{account}</span>
+        </td>
       </tr>
       {rows.map((row) => (
         <tr key={row.campaignId}>

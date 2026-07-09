@@ -245,6 +245,7 @@ export function Pipeline() {
             <section
               key={col.id}
               className={`pipe-col ${dragOver === col.id ? 'drag-over' : ''}`}
+              style={{ borderTopColor: col.color }}
               onDragOver={(e) => {
                 e.preventDefault()
                 setDragOver(col.id)

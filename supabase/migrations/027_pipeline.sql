@@ -104,6 +104,9 @@ alter table team_members    enable row level security;
 alter table lead_notes      enable row level security;
 alter table pipeline_events enable row level security;
 
+drop policy if exists "read team_members"    on team_members;
 create policy "read team_members"    on team_members    for select using (true);
+drop policy if exists "read lead_notes"       on lead_notes;
 create policy "read lead_notes"       on lead_notes       for select using (true);
+drop policy if exists "read pipeline_events"  on pipeline_events;
 create policy "read pipeline_events"  on pipeline_events  for select using (true);
