@@ -18,8 +18,8 @@ export function instanceName(inst: Instance | undefined, fallback = ''): string 
 export const leadKey = (instance_id: string, profile_url: string) =>
   `${instance_id}|${profile_url}`
 
-/** Sentiment display metadata, shared by the Replies page, Hot leads, and the
- *  conversation drawer. `cls` maps to the `.senti.*` colours in styles.css. */
+/** Sentiment display metadata, shared by LeadsExplorer and the conversation
+ *  drawer. `cls` maps to the `.senti.*` colours in styles.css. */
 export const SENTIMENT_META: Record<Sentiment, { label: string; cls: string }> = {
   positive: { label: 'Positive', cls: 'pos' },
   objection: { label: 'Objection', cls: 'obj' },
@@ -214,21 +214,36 @@ export function addedByDay(leads: Lead[]): { byDay: Map<string, number>; undated
   return { byDay, undated }
 }
 
-const SEGMENT_RULES: Array<[string, RegExp]> = [
-  ['Founder / Owner', /founder|owner|entrepreneur/i],
-  ['C-level', /\bceo\b|\bcto\b|\bcoo\b|\bcfo\b|\bcmo\b|\bcio\b|chief/i],
-  ['VP / Director / Head', /\bvp\b|vice president|director|head of/i],
-  ['Manager / Lead', /manager|\blead\b/i],
-  ['Engineering', /engineer|developer|architect|devops/i],
-  ['Sales / Marketing', /sales|marketing|growth|business development/i],
-  ['Recruiting / HR', /recruit|talent|\bhr\b|people ops/i],
-]
+/** Leads each LinkedIn account can safely add per week. LinkedIn's real limit is
+ *  a rolling ~200/week; kept as a code constant (per-account overrides were
+ *  dropped in migration 006). */
+export const WEEKLY_ADD_LIMIT = 200
 
-export function segmentOf(headline: string | null): string {
-  if (headline) {
-    for (const [name, re] of SEGMENT_RULES) if (re.test(headline)) return name
+/** A lead's add date: added_at when known, else the earliest non-null milestone
+ *  (added_at is approximate until sync agent v1.8.0 backfills real add dates —
+ *  hence the fallback). null = no dated activity at all. */
+function addedDate(l: Lead): string | null {
+  if (l.added_at) return l.added_at
+  let earliest: string | null = null
+  for (const ts of [l.invited_at, l.connected_at, l.first_message_at, l.replied_at]) {
+    if (ts && (!earliest || ts < earliest)) earliest = ts
   }
-  return 'Other / Unknown'
+  return earliest
+}
+
+/** How many of one account's leads were added within the rolling last 7 days
+ *  (UTC, relative to now), for the 200/week capacity gauge. Uses each lead's
+ *  add date (added_at ?? earliest milestone), so it degrades gracefully while
+ *  added_at is still approximate pre-v1.8.0. */
+export function weeklyAdded(leads: Lead[], instanceId: string): number {
+  const cutoff = Date.now() - 7 * 86_400_000
+  let count = 0
+  for (const l of leads) {
+    if (l.instance_id !== instanceId) continue
+    const added = addedDate(l)
+    if (added && new Date(added).getTime() >= cutoff) count++
+  }
+  return count
 }
 
 export function toCsv(rows: Array<Record<string, string | number | null>>): string {
@@ -402,27 +417,6 @@ export function accountStats(
   const t = rangeTotals(leads, r, latest)
   const pct = (a: number, b: number) => (b > 0 ? ((100 * a) / b).toFixed(1) + '%' : '—')
   return { ...t, acceptPct: pct(t.accepted, t.invites), replyPct: pct(t.replies, t.accepted) }
-}
-
-/** Leads whose reply landed in `r` and whose latest inbound message is
- *  positive — the hot-lead worklist, newest reply first. */
-export interface PositiveLead {
-  lead: Lead
-  reply: ReplyInfo
-}
-export function positiveLeads(
-  leads: Lead[],
-  latest: Map<string, ReplyInfo>,
-  r: DateRange,
-): PositiveLead[] {
-  const out: PositiveLead[] = []
-  for (const l of leads) {
-    if (!tsInRange(l.replied_at, r)) continue
-    const reply = latest.get(leadKey(l.instance_id, l.profile_url))
-    if (reply?.sentiment === 'positive') out.push({ lead: l, reply })
-  }
-  out.sort((a, b) => (b.lead.replied_at ?? '').localeCompare(a.lead.replied_at ?? ''))
-  return out
 }
 
 /** Warm-reply sentiments worth chasing: the latest inbound is a real opening

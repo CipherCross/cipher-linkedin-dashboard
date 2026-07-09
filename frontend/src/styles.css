@@ -2054,15 +2054,55 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .drp-day.disabled { opacity: 0.3; cursor: not-allowed; }
 .drp-day.disabled:hover { background: none; }
 
-/* --- Manual pipeline funnel section (Funnel showPipeline) ------------------ */
-.funnel-section-label {
-  margin: 16px 0 8px;
+/* --- Continuous funnel: manual-pipeline half (Funnel showPipeline) --------- */
+/* Labelled divider riding the connector where the automated milestones hand off
+   to the manual CRM pipeline (Replied → Interested). */
+.funnel-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 82px; /* align under the track (72px label + 10px gap) */
+  margin: 3px 0;
   font-size: var(--text-2xs);
+  line-height: 1.4;
+}
+.funnel-divider-label {
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
   color: var(--text-muted);
   font-weight: 600;
+  white-space: nowrap;
 }
+.funnel-divider::before {
+  content: '';
+  align-self: stretch;
+  border-left: 2px dashed var(--border-strong);
+  margin-left: -1px;
+}
+.funnel-divider-label + .funnel-conv-inline { display: inline-flex; gap: 6px; }
+
+/* Manual-pipeline rows: tinted track + left accent so the half reads as its own
+   color family, distinct from the automated milestones above it. */
+.funnel-row--pipeline .funnel-track {
+  background: var(--surface-3, var(--surface-2));
+  box-shadow: inset 2px 0 0 var(--border-strong);
+}
+
+/* Footer: pending-invites note + overall Lead→Client conversion. */
+.funnel-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 12px;
+}
+.funnel-overall {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.funnel-overall strong { color: var(--text); font-weight: 600; }
 
 /* --- Pipeline board (pages/Pipeline.tsx) ----------------------------------- */
 .pipe-board {

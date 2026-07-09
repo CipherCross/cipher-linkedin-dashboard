@@ -226,6 +226,13 @@ export interface BriefingChange {
   trend?: 'up' | 'down' | 'flat' | 'new' | 'resolved'
 }
 
+/** One headline number in the briefing's key-metrics strip. */
+export interface BriefingMetric {
+  label: string
+  value: string
+  note?: string
+}
+
 /** One daily AI-generated pipeline digest (briefings table). */
 export interface Briefing {
   id: string
@@ -236,6 +243,7 @@ export interface Briefing {
   sections: BriefingSection[]
   actions: BriefingAction[]
   risks: BriefingRisk[]
+  metrics?: BriefingMetric[]
   model: string | null
   created_at: string
 }

@@ -80,6 +80,9 @@ export function BriefingCard() {
   const hasPrev = !!prevBriefing
   const showingPrev = viewPrev && hasPrev
   const active: Briefing | null = showingPrev ? prevBriefing : briefing
+  // Structured key-metrics strip (label + value shown; note surfaced as a hover
+  // tooltip). Optional — old rows / a briefing without metrics simply have none.
+  const metrics = active?.metrics ?? []
 
   // The pipeline is split across invocations now — one POST advances one stage. Loop
   // calling it, showing the reported stage, until it's done/error or we give up. A slow
@@ -172,6 +175,38 @@ export function BriefingCard() {
       {active && (
         <>
           {active.headline && <div className="briefing-headline">{active.headline}</div>}
+
+          {/* Key-metrics strip: the day's headline numbers, always visible. Inline
+              styles (no styles.css edits); rgba tints adapt to light/dark. */}
+          {metrics.length > 0 && (
+            <div
+              className="briefing-metrics"
+              style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '10px 0 4px' }}
+            >
+              {metrics.map((m, i) => (
+                <div
+                  key={i}
+                  title={m.note || undefined}
+                  style={{
+                    flex: '1 1 110px',
+                    minWidth: 100,
+                    padding: '7px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(127,127,127,0.10)',
+                    border: '1px solid rgba(127,127,127,0.18)',
+                  }}
+                >
+                  <div style={{ fontSize: '1.05rem', fontWeight: 600, lineHeight: 1.2 }}>
+                    {m.value}
+                  </div>
+                  <div className="muted small" style={{ marginTop: 2 }}>
+                    {m.label}
+                    {m.note ? ' *' : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Collapsed digest: headline (above) + the single top action. */}
           {!expanded && active.actions?.length > 0 && (

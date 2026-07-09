@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Download, SearchX, X } from 'lucide-react'
+import {
+  ChevronDown, ChevronRight, Download, GraduationCap, Loader2, SearchX, Sparkles, X,
+} from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
+import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { EmptyState } from '../components/EmptyState'
 import { LostReasonModal } from '../components/LostReasonModal'
-import type { Lead } from '../lib/types'
+import type { CoachingDigest, Lead, Sentiment } from '../lib/types'
 import {
-  RISK_LABEL, STAGES, downloadCsv, instanceName, riskOf, stageMeta,
-  stageOf, toCsv,
+  RISK_LABEL, SENTIMENT_META, SENTIMENT_ORDER, STAGES, downloadCsv, instanceName,
+  latestRepliesByLead, leadKey, riskOf, stageMeta, stageOf, toCsv,
 } from '../lib/leads'
 import type { RiskFlag, Stage } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
@@ -39,23 +43,23 @@ const RISK_CHIP: Record<RiskFlag, string> = {
   no_reply_2w: 'No reply 14d+',
 }
 
+// The sentiment filter buckets: every classified sentiment, plus `unclassified`
+// (replied but not yet labelled) and `any` (has any reply, the /replies default).
+type SentFilter = Sentiment | 'unclassified' | 'any'
+const isSentFilter = (v: string | null): v is SentFilter =>
+  v === 'any' || v === 'unclassified' || SENTIMENT_ORDER.includes(v as Sentiment)
+
+// The "replied within" window options (days). '' / absent = any time.
+const REPLIED_DAYS = new Set(['7', '30', '90'])
+
 export function LeadsExplorer() {
-  const { data } = useData()
+  const { data, refetch } = useData()
   const { openConversation } = useConversation()
   const { setStage, members, memberName } = usePipelineActions()
+  const toast = useToast()
   const [params, setParams] = useSearchParams()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [pendingLost, setPendingLost] = useState<Lead | null>(null)
-
-  // Sort / page / column toggle all live in the URL so the page is fully
-  // shareable (as its subtitle advertises).
-  const rawSort = params.get('sort')
-  const sortKey: SortKey = (SORT_KEYS as string[]).includes(rawSort ?? '')
-    ? (rawSort as SortKey)
-    : 'last_action_at'
-  const sortAsc = params.get('dir') === 'asc'
-  const page = Math.max(0, (Number(params.get('page')) || 1) - 1)
-  const showAdded = params.get('added') === '1'
 
   const inst = params.get('inst') ?? 'all'
   const camp = params.get('camp') ?? 'all'
@@ -64,6 +68,28 @@ export function LeadsExplorer() {
   const pipe = params.get('pipe') ?? 'all'
   const who = params.get('who') ?? 'all'
   const q = params.get('q') ?? ''
+
+  // Reply filters (folded in from the old Replies page): a sentiment bucket and
+  // a "replied within N days" window, both URL-persisted like the rest.
+  const sentRaw = params.get('sentiment')
+  const sent: SentFilter | null = isSentFilter(sentRaw) ? sentRaw : null
+  const repliedRaw = params.get('replied')
+  const repliedDays = REPLIED_DAYS.has(repliedRaw ?? '') ? Number(repliedRaw) : 0
+  // Reply-mode = either reply filter is engaged; it flips on the snippet/badge in
+  // rows and defaults the sort to newest reply first (the old Replies ordering).
+  const replyActive = sent != null || repliedDays > 0
+
+  // Sort / page / column toggle all live in the URL so the page is fully
+  // shareable (as its subtitle advertises).
+  const rawSort = params.get('sort')
+  const sortKey: SortKey = (SORT_KEYS as string[]).includes(rawSort ?? '')
+    ? (rawSort as SortKey)
+    : replyActive
+      ? 'replied_at'
+      : 'last_action_at'
+  const sortAsc = params.get('dir') === 'asc'
+  const page = Math.max(0, (Number(params.get('page')) || 1) - 1)
+  const showAdded = params.get('added') === '1'
 
   // Search is debounced: it types into local state and only commits to the URL
   // param (which re-filters every lead) ~200ms after the last keystroke.
@@ -111,6 +137,88 @@ export function LeadsExplorer() {
     setParams(new URLSearchParams(), { replace: true })
   }
 
+  const setSentiment = (f: SentFilter | null) => {
+    const next = new URLSearchParams(params)
+    if (f) next.set('sentiment', f)
+    else next.delete('sentiment')
+    next.delete('page')
+    setParams(next, { replace: true })
+  }
+
+  // Latest inbound reply (body + classification) per lead — powers the sentiment
+  // buckets/counts and the per-row snippet shown in reply mode.
+  const snippets = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
+
+  // «Classify new replies» — moved here from the Replies page; same endpoint and
+  // refetch behaviour so freshly-labelled replies flow into the buckets.
+  const [classifying, setClassifying] = useState(false)
+  async function classify() {
+    setClassifying(true)
+    try {
+      const res = await fetch('/api/classify', { method: 'POST' })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      toast.success(
+        `Classified ${j.classified} repl${j.classified === 1 ? 'y' : 'ies'}` +
+          (j.remaining ? `, ${j.remaining} still queued` : ' — all caught up'),
+      )
+      refetch()
+    } catch (e) {
+      toast.error(`Couldn't classify: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setClassifying(false)
+    }
+  }
+
+  // Per-account coaching digest — collapsible, collapsed by default. Read anon
+  // like the rest of the dashboard; (re)computed on demand via POST /api/coach.
+  const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
+  const [digestOpen, setDigestOpen] = useState(false)
+  const [digestBusy, setDigestBusy] = useState<string | null>(null)
+  const [digestErr, setDigestErr] = useState<string | null>(null)
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    ;(async () => {
+      const { data: rows } = await supabase!.from('coaching_digest').select('*')
+      if (cancelled || !rows) return
+      const map: Record<string, CoachingDigest> = {}
+      for (const r of rows as CoachingDigest[]) map[r.instance_id] = r
+      setDigests(map)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [data])
+
+  async function refreshDigest(instance_id: string) {
+    setDigestBusy(instance_id)
+    setDigestErr(null)
+    try {
+      const res = await fetch('/api/coach', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ instance_id, mode: 'digest' }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      setDigests((prev) => ({
+        ...prev,
+        [instance_id]: {
+          instance_id,
+          summary: j.summary ?? null,
+          patterns: j.patterns ?? [],
+          computed_at: j.computed_at ?? null,
+          model: j.model ?? null,
+        },
+      }))
+    } catch (e) {
+      setDigestErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDigestBusy(null)
+    }
+  }
+
   const goPage = (n: number) => {
     const next = new URLSearchParams(params)
     if (n <= 0) next.delete('page')
@@ -119,10 +227,13 @@ export function LeadsExplorer() {
     scrollRef.current?.scrollTo({ top: 0 })
   }
 
-  const filtered = useMemo(() => {
+  // Everything except the two reply filters — the shared base that both the
+  // sentiment bucket counts and the final row list derive from, so bucket counts
+  // stay truthful against the other active filters (account/campaign/stage/…).
+  const baseFiltered = useMemo(() => {
     if (!data) return []
     const needle = q.trim().toLowerCase()
-    const rows = data.leads.filter((l) => {
+    return data.leads.filter((l) => {
       if (inst !== 'all' && l.instance_id !== inst) return false
       if (effCamp !== 'all' && l.campaign_id !== effCamp) return false
       if (stage !== 'all' && stageOf(l) !== (stage as Stage)) return false
@@ -139,6 +250,40 @@ export function LeadsExplorer() {
       }
       return true
     })
+  }, [data, inst, effCamp, stage, risk, pipe, who, q])
+
+  const bucketOf = (l: Lead): Sentiment | 'unclassified' =>
+    snippets.get(leadKey(l.instance_id, l.profile_url))?.sentiment ?? 'unclassified'
+
+  // Sentiment bucket counts over the base set, restricted to replied leads inside
+  // the reply-date window but NOT by the sentiment filter itself (so the numbers
+  // don't collapse to the selected bucket) — matches the old Replies page.
+  const replyCounts = useMemo(() => {
+    const c: Record<string, number> = {}
+    let total = 0
+    const since = repliedDays > 0 ? Date.now() - repliedDays * 86_400_000 : 0
+    for (const l of baseFiltered) {
+      if (!l.replied_at) continue
+      if (repliedDays > 0 && new Date(l.replied_at).getTime() < since) continue
+      c[bucketOf(l)] = (c[bucketOf(l)] ?? 0) + 1
+      total++
+    }
+    return { c, total }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseFiltered, repliedDays, snippets])
+
+  const filtered = useMemo(() => {
+    const since = repliedDays > 0 ? Date.now() - repliedDays * 86_400_000 : 0
+    const rows = baseFiltered.filter((l) => {
+      if (repliedDays > 0) {
+        if (!l.replied_at || new Date(l.replied_at).getTime() < since) return false
+      }
+      if (sent) {
+        if (!l.replied_at) return false
+        if (sent !== 'any' && bucketOf(l) !== sent) return false
+      }
+      return true
+    })
     rows.sort((a, b) => {
       const av = a[sortKey] ?? ''
       const bv = b[sortKey] ?? ''
@@ -148,7 +293,8 @@ export function LeadsExplorer() {
       return sortAsc ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
     })
     return rows
-  }, [data, inst, effCamp, stage, risk, pipe, who, q, sortKey, sortAsc])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseFiltered, repliedDays, sent, snippets, sortKey, sortAsc])
 
   if (!data) return null
 
@@ -196,6 +342,20 @@ export function LeadsExplorer() {
       id: 'who',
       label: `Owner: ${who === 'unassigned' ? 'Unassigned' : memberName(Number(who)) || who}`,
       onClear: () => setFilter('who', 'all'),
+    })
+  if (repliedDays > 0)
+    activeFilters.push({
+      id: 'replied',
+      label: `Replied: last ${repliedDays} days`,
+      onClear: () => setFilter('replied', 'all'),
+    })
+  if (sent)
+    activeFilters.push({
+      id: 'sentiment',
+      label: `Reply: ${
+        sent === 'any' ? 'any' : sent === 'unclassified' ? 'unclassified' : SENTIMENT_META[sent].label
+      }`,
+      onClear: () => setSentiment(null),
     })
 
   const onSort = (key: SortKey) => {
@@ -246,6 +406,60 @@ export function LeadsExplorer() {
           </div>
         </div>
       </header>
+
+      <div className="card coach-digest-card">
+        <button className="coach-digest-toggle" onClick={() => setDigestOpen((o) => !o)}>
+          {digestOpen ? (
+            <ChevronDown size={15} className="coach-digest-caret" />
+          ) : (
+            <ChevronRight size={15} className="coach-digest-caret" />
+          )}
+          <GraduationCap size={16} className="coach-digest-icon" />
+          Your coaching digest
+          <span className="muted small">— recurring habits to fix for more replies</span>
+        </button>
+        {digestOpen && (
+          <div className="coach-digest-body">
+            {digestErr && <div className="banner">{digestErr}</div>}
+            {data.instances.map((instance) => {
+              const d = digests[instance.id]
+              return (
+                <div className="coach-digest-inst" key={instance.id}>
+                  <div className="coach-digest-inst-head">
+                    <span className="coach-digest-name">{instanceName(instance, instance.id)}</span>
+                    <button
+                      className="link-btn"
+                      disabled={digestBusy === instance.id}
+                      onClick={() => refreshDigest(instance.id)}
+                    >
+                      {digestBusy === instance.id ? 'Analyzing…' : d ? 'Refresh' : 'Generate'}
+                    </button>
+                    {d?.computed_at && (
+                      <span className="muted small">· {shortDate(d.computed_at)}</span>
+                    )}
+                  </div>
+                  {d?.summary && <div className="coach-digest-summary small">{d.summary}</div>}
+                  {d?.patterns?.length ? (
+                    <ul className="coach-digest-patterns small">
+                      {d.patterns.map((p, i) => (
+                        <li key={i}>
+                          <span className="badge senti obj">{p.count}×</span> {p.issue} — {p.advice}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : d ? (
+                    <div className="muted small">No recurring patterns yet.</div>
+                  ) : (
+                    <div className="muted small">
+                      Not generated yet — Generate to analyze this account's open threads.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="filter-bar card">
         <label className="filter-field filter-field-grow">
@@ -312,6 +526,18 @@ export function LeadsExplorer() {
             ))}
           </select>
         </label>
+        <label className="filter-field">
+          <span className="filter-label">Replied</span>
+          <select
+            value={repliedDays ? String(repliedDays) : 'all'}
+            onChange={(e) => setFilter('replied', e.target.value)}
+          >
+            <option value="all">Any time</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </label>
       </div>
 
       {activeFilters.length > 0 && (
@@ -328,6 +554,51 @@ export function LeadsExplorer() {
         </div>
       )}
 
+      <div
+        className="segmented sentiment-filter"
+        role="tablist"
+        aria-label="Filter leads by reply sentiment"
+      >
+        <button
+          className={`segmented-item ${!sent ? 'active' : ''}`}
+          role="tab"
+          aria-selected={!sent}
+          onClick={() => setSentiment(null)}
+        >
+          All leads
+        </button>
+        <button
+          className={`segmented-item ${sent === 'any' ? 'active' : ''}`}
+          role="tab"
+          aria-selected={sent === 'any'}
+          onClick={() => setSentiment(sent === 'any' ? null : 'any')}
+        >
+          Any reply <span className="segmented-count">{replyCounts.total}</span>
+        </button>
+        {SENTIMENT_ORDER.filter((s) => replyCounts.c[s] || sent === s).map((s) => (
+          <button
+            key={s}
+            className={`segmented-item ${sent === s ? 'active' : ''}`}
+            role="tab"
+            aria-selected={sent === s}
+            onClick={() => setSentiment(sent === s ? null : s)}
+          >
+            <span className={`seg-dot ${SENTIMENT_META[s].cls}`} />
+            {SENTIMENT_META[s].label} <span className="segmented-count">{replyCounts.c[s] ?? 0}</span>
+          </button>
+        ))}
+        {replyCounts.c['unclassified'] || sent === 'unclassified' ? (
+          <button
+            className={`segmented-item ${sent === 'unclassified' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={sent === 'unclassified'}
+            onClick={() => setSentiment(sent === 'unclassified' ? null : 'unclassified')}
+          >
+            Unclassified <span className="segmented-count">{replyCounts.c['unclassified'] ?? 0}</span>
+          </button>
+        ) : null}
+      </div>
+
       <div className="card">
         <div className="table-toolbar">
           <span className="muted small">
@@ -342,6 +613,10 @@ export function LeadsExplorer() {
               />
               Added date
             </label>
+            <button className="btn sm" onClick={classify} disabled={classifying}>
+              {classifying ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
+              {classifying ? 'Classifying…' : 'Classify new replies'}
+            </button>
             <button className="btn sm" onClick={exportCsv} disabled={filtered.length === 0}>
               <Download size={14} /> Export CSV
             </button>
@@ -366,7 +641,14 @@ export function LeadsExplorer() {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((l) => (
+            {pageRows.map((l) => {
+              // In reply mode surface the latest inbound snippet + sentiment badge
+              // (the old ReplyRow presentation, inlined into the table cell).
+              const reply = replyActive
+                ? snippets.get(leadKey(l.instance_id, l.profile_url))
+                : undefined
+              const senti = reply?.sentiment ? SENTIMENT_META[reply.sentiment] : null
+              return (
               <tr
                 key={l.id}
                 className="row-clickable"
@@ -391,7 +673,13 @@ export function LeadsExplorer() {
                   >
                     {l.full_name || l.profile_url.replace('https://www.linkedin.com/in/', '')}
                   </a>
+                  {senti && (
+                    <span className={`badge senti ${senti.cls}`} title={reply?.reason ?? ''}>
+                      {senti.label}
+                    </span>
+                  )}
                   {l.company && <div className="muted small">{l.company}</div>}
+                  {reply && <div className="reply-body">“{reply.body}”</div>}
                 </td>
                 <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 <td className="muted small">{campaignName(l.campaign_id)}</td>
@@ -419,7 +707,8 @@ export function LeadsExplorer() {
                   </td>
                 ))}
               </tr>
-            ))}
+              )
+            })}
             {pageRows.length === 0 && (
               <tr>
                 <td colSpan={colSpan}>

@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { DataProvider } from './lib/DataContext'
 import { ToastProvider } from './lib/ToastContext'
 import { ThemeProvider } from './lib/ThemeContext'
@@ -9,11 +9,19 @@ import { CampaignDetail } from './pages/CampaignDetail'
 import { AccountDetail } from './pages/AccountDetail'
 import { LeadsExplorer } from './pages/LeadsExplorer'
 import { Pipeline } from './pages/Pipeline'
-import { Replies } from './pages/Replies'
 import { Playbook } from './pages/Playbook'
 import { Health } from './pages/Health'
 import { Chat } from './pages/Chat'
 import { Review } from './pages/Review'
+
+/** Replies folded into Leads, but old deep links carried a `sentiment` query
+ *  param (positive/curious/neutral/negative/later/other/unclassified) — forward
+ *  it as-is to /leads, defaulting to `any` when absent. */
+function RepliesRedirect() {
+  const [params] = useSearchParams()
+  const sentiment = params.get('sentiment') ?? 'any'
+  return <Navigate to={`/leads?sentiment=${encodeURIComponent(sentiment)}`} replace />
+}
 
 export default function App() {
   return (
@@ -30,7 +38,8 @@ export default function App() {
               <Route path="account/:id" element={<AccountDetail />} />
               <Route path="leads" element={<LeadsExplorer />} />
               <Route path="pipeline" element={<Pipeline />} />
-              <Route path="replies" element={<Replies />} />
+              {/* Replies folded into Leads — deep links land on replied leads. */}
+              <Route path="replies" element={<RepliesRedirect />} />
               <Route path="review" element={<Review />} />
               <Route path="playbook" element={<Playbook />} />
               <Route path="health" element={<Health />} />

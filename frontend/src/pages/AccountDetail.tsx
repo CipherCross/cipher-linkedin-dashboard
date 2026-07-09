@@ -3,8 +3,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FileQuestion } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
-  instanceName, latestRepliesByLead, leadsToActivity, presetRanges, previousRange,
-  rangeFromParam, rangeTotals, rangeToParam,
+  WEEKLY_ADD_LIMIT, instanceName, latestRepliesByLead, leadsToActivity, presetRanges,
+  previousRange, rangeFromParam, rangeTotals, rangeToParam, weeklyAdded,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { ago, num } from '../lib/format'
@@ -68,6 +68,11 @@ export function AccountDetail() {
     )
   }
   const campaigns = data.campaigns.filter((c) => c.instance_id === inst.id)
+  const added7d = weeklyAdded(leads, inst.id)
+  const remaining = Math.max(0, WEEKLY_ADD_LIMIT - added7d)
+  const addedFrac = added7d / WEEKLY_ADD_LIMIT
+  const capColor =
+    addedFrac >= 1 ? 'var(--danger)' : addedFrac >= 0.7 ? 'var(--warning)' : 'var(--success)'
 
   return (
     <>
@@ -107,6 +112,33 @@ export function AccountDetail() {
         flowLabel={range.label}
         positive={kpis.totals.positive}
       />
+
+      <div className="card">
+        <div className="account-cell" style={{ justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0 }}>Added last 7 days</h2>
+          <div className="small" style={{ color: capColor, fontWeight: 600 }}>
+            {num(added7d)} / {WEEKLY_ADD_LIMIT}
+          </div>
+        </div>
+        <div
+          style={{
+            height: 8, borderRadius: 4, background: 'var(--surface-2)',
+            overflow: 'hidden', margin: '10px 0 8px',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.min(100, addedFrac * 100)}%`,
+              height: '100%', background: capColor, transition: 'width .2s',
+            }}
+          />
+        </div>
+        <div className="muted small">
+          {remaining > 0 ? `${num(remaining)} more can be added this week` : 'Weekly add limit reached'}
+          {' · '}~200/week keeps the account safe. Count is approximate until the
+          agent v1.8.0 rollout backfills exact add dates.
+        </div>
+      </div>
 
       <div className="stack">
         <WarmupChart leads={leads} />

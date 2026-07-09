@@ -5,10 +5,10 @@ import { useData } from '../lib/DataContext'
 import type { CampaignMetrics, Lead } from '../lib/types'
 import {
   daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
-  presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam, segmentOf,
+  presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
-import { num, pct, rate } from '../lib/format'
+import { num, rate } from '../lib/format'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
@@ -213,11 +213,6 @@ export function CampaignDetail() {
               )}
             />
           </div>
-
-          <div className="two-col">
-            <SegmentTable leads={leads} />
-            <CompanyTable leads={leads} />
-          </div>
         </>
       )}
     </>
@@ -255,91 +250,3 @@ function lagList(leads: Lead[], from: keyof Lead, to: keyof Lead): number[] {
   return out
 }
 
-function SegmentTable({ leads }: { leads: Lead[] }) {
-  const rows = new Map<string, { leads: number; invited: number; accepted: number; replied: number }>()
-  for (const l of leads) {
-    const seg = segmentOf(l.headline)
-    const r = rows.get(seg) ?? { leads: 0, invited: 0, accepted: 0, replied: 0 }
-    r.leads += 1
-    if (l.invited_at) r.invited += 1
-    if (l.connected_at) r.accepted += 1
-    if (l.replied_at) r.replied += 1
-    rows.set(seg, r)
-  }
-  const sorted = [...rows.entries()].sort((a, b) => b[1].leads - a[1].leads)
-
-  return (
-    <div className="card">
-      <h2>Performance by audience segment (from headline)</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Segment</th>
-            <th className="num">Leads</th>
-            <th className="num">Accepted</th>
-            <th className="num">Accept %</th>
-            <th className="num">Replied</th>
-            <th className="num">Reply %</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(([seg, r]) => (
-            <tr key={seg}>
-              <td className="ellipsis" title={seg}>{seg}</td>
-              <td className="num">{num(r.leads)}</td>
-              <td className="num">{num(r.accepted)}</td>
-              <td className="num">{pct(r.accepted, r.invited)}</td>
-              <td className="num">{num(r.replied)}</td>
-              <td className="num">{pct(r.replied, r.accepted)}</td>
-            </tr>
-          ))}
-          {sorted.length === 0 && (
-            <tr><td colSpan={6} className="muted">No leads yet.</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function CompanyTable({ leads }: { leads: Lead[] }) {
-  const rows = new Map<string, { leads: number; accepted: number; replied: number }>()
-  for (const l of leads) {
-    if (!l.company) continue
-    const r = rows.get(l.company) ?? { leads: 0, accepted: 0, replied: 0 }
-    r.leads += 1
-    if (l.connected_at) r.accepted += 1
-    if (l.replied_at) r.replied += 1
-    rows.set(l.company, r)
-  }
-  const top = [...rows.entries()].sort((a, b) => b[1].leads - a[1].leads).slice(0, 10)
-
-  return (
-    <div className="card">
-      <h2>Top companies</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Company</th>
-            <th className="num">Leads</th>
-            <th className="num">Accepted</th>
-            <th className="num">Replied</th>
-          </tr>
-        </thead>
-        <tbody>
-          {top.map(([name, r]) => (
-            <tr key={name}>
-              <td className="ellipsis" title={name}>{name}</td>
-              <td className="num">{num(r.leads)}</td>
-              <td className="num">{num(r.accepted)}</td>
-              <td className="num">{num(r.replied)}</td>
-            </tr>
-          ))}
-          {top.length === 0 && (
-            <tr><td colSpan={4} className="muted">No company data synced.</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
-}

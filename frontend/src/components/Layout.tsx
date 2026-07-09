@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Users,
   KanbanSquare,
-  MessageSquare,
   ClipboardCheck,
   BookOpen,
   Activity,
@@ -28,7 +27,6 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
-  { to: '/replies', label: 'Replies', icon: MessageSquare },
   { to: '/review', label: 'Review', icon: ClipboardCheck },
   { to: '/playbook', label: 'Playbook', icon: BookOpen },
   { to: '/health', label: 'Health', icon: Activity },
@@ -39,7 +37,6 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
 // can open any page first). Keeps the first paint shaped like the real page.
 function skeletonVariant(pathname: string): 'overview' | 'table' | 'list' | 'simple' {
   if (pathname.startsWith('/leads') || pathname.startsWith('/health') || pathname.startsWith('/review') || pathname.startsWith('/pipeline')) return 'table'
-  if (pathname.startsWith('/replies')) return 'list'
   if (pathname.startsWith('/playbook') || pathname.startsWith('/chat')) return 'simple'
   return 'overview'
 }

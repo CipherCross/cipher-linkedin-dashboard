@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance, Lead } from '../lib/types'
 import type { DateRange } from '../lib/leads'
 import type { ReplyInfo } from '../lib/leads'
-import { accountStats, instanceName, leadsToActivity, rangedCampaigns } from '../lib/leads'
+import {
+  WEEKLY_ADD_LIMIT, accountStats, instanceName, leadsToActivity, rangedCampaigns, weeklyAdded,
+} from '../lib/leads'
 import { ago, num, rate } from '../lib/format'
 import { Avatar } from './Avatar'
 import { Sparkline } from './Sparkline'
@@ -32,6 +34,10 @@ export function AccountCard({
     (a) => (!range.from || a.day >= range.from) && (!range.to || a.day <= range.to),
   )
   const campaigns = rangedCampaigns(leads, campaignsMeta, range)
+  const weekAdded = weeklyAdded(leads, inst.id)
+  const addedFrac = weekAdded / WEEKLY_ADD_LIMIT
+  const capColor =
+    addedFrac >= 1 ? 'var(--danger)' : addedFrac >= 0.7 ? 'var(--warning)' : 'var(--success)'
 
   return (
     <div className="card account-card">
@@ -64,6 +70,12 @@ export function AccountCard({
         <Stat value={stats.acceptPct} label="accept" />
         <Stat value={stats.replyPct} label="reply" />
         <Stat value={num(stats.positive)} label="positive" />
+        <Stat
+          value={`${num(weekAdded)}/${WEEKLY_ADD_LIMIT}`}
+          label="added 7d"
+          color={capColor}
+          title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used in the last 7 days · approximate until agent v1.8.0 rollout`}
+        />
       </div>
 
       <div className="account-card-spark">
@@ -94,10 +106,13 @@ export function AccountCard({
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat(
+  { value, label, color, title }:
+  { value: string; label: string; color?: string; title?: string },
+) {
   return (
-    <div className="account-stat">
-      <div className="account-stat-value">{value}</div>
+    <div className="account-stat" title={title}>
+      <div className="account-stat-value" style={color ? { color } : undefined}>{value}</div>
       <div className="muted small">{label}</div>
     </div>
   )

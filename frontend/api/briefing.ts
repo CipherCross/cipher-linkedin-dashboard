@@ -198,7 +198,8 @@ THE BRIEFING (write it as your final message, in markdown)
 - RISKS: specific at-risk callouts (account near the invite limit, stale/failed sync, rate cliff,
   stalled cohort) — each ONE short line with a severity (low/med/high). Omit if nothing is wrong.
 - EXACTLY 3 ACTIONS: the three highest-leverage moves for TODAY, most important first — each ONE
-  imperative sentence naming the account/campaign and the single number that justifies it.
+  imperative sentence naming the account/campaign and the numbers that justify it (count + base + %
+  where one applies, e.g. «12 відповідей із 240 інвайтів = 5%»).
 
 LANGUAGE
 - Write the ENTIRE briefing in UKRAINIAN (українською) — headline, summary, every change, every section,
@@ -210,17 +211,25 @@ LANGUAGE
   versions, dates, all numbers, and any LinkedIn / Linked Helper product terms. The severity/priority
   codes stay as the literal values high / med / low.
 
-VOICE
-- Clear, calm, professional Ukrainian. Concrete and specific, but measured — favour neutral, precise
-  verbs ("зростає", "сповільнюється", "простоює") over slangy or dramatic ones. Inform, don't alarm.
+VOICE — write for the WHOLE team, not for analysts
+- Plain, everyday Ukrainian that a salesperson (not an analyst) understands at a glance. Short, simple
+  sentences. Prefer common words; avoid analytical jargon. If a technical term is truly unavoidable,
+  explain it inline in a few plain words the first time (e.g. «когорта» — група лідів, запрошених
+  одного тижня).
+- Concrete and calm. Favour neutral, precise verbs ("зростає", "сповільнюється", "простоює") over
+  slangy or dramatic ones. Inform, don't alarm.
 - NO sarcasm, NO jokes, NO snark. Stay respectful and matter-of-fact: describe what an ACCOUNT is
   doing, never blame or mock a person/SDR by name. Frame risks as observations to act on, not as
   failures.
 
-BREVITY — the team must scan this in ~20 seconds, so keep it tight and airy
-- Short sentences over compound ones. Cut every word that isn't carrying weight.
-- ONE number per claim — the most telling one. Don't stack "263/week + 78/day + 7.3% + 186 queued"
-  into one sentence; pick the single figure that makes the point.
+NUMBERS & LENGTH — the team must scan this in ~20 seconds AND trust every claim
+- Keep it tight and airy: short sentences, cut every word that isn't carrying weight. Simpler words
+  do NOT mean longer text.
+- Back EVERY conclusion with the numbers that justify it — show the COUNT, the BASE it is out of, and
+  the PERCENTAGE where one applies, e.g. «12 відповідей із 240 інвайтів = 5%». Up to ~3 numbers per
+  claim; use only as many as the point needs — don't stack five figures into one sentence.
+- State the time window behind each figure, and keep a daily pace and a weekly/period total
+  arithmetically consistent (a "~65/день" claim can't sit next to "261 за тиждень", ~37/день).
 - No repetition: if a point is in an action, don't re-explain it in the summary or risks. A risk an
   action already handles gets one bare line, not the fix again.
 
@@ -272,13 +281,21 @@ VERIFY (use the tools — re-run queries, do NOT trust the drafts' numbers)
   isn't re-imported — structural, not a sync-freshness lag. Strip any "awaiting our reply / going cold /
   hot replies waiting / warm replies not followed up" claim, and any "SDR is dropping leads" action; if
   a post-reply drop-off is raised, the only correct move is "manually import these threads".
-- BREVITY: if the day is genuinely quiet, make the briefing SHORTER — never pad it to look busy.
+- LANGUAGE & NUMBERS: keep the whole briefing in plain, everyday Ukrainian a salesperson understands at
+  a glance — short simple sentences, no analytical jargon (explain any unavoidable term inline). Every
+  conclusion the merged briefing keeps MUST show the numbers that justify it — count + base + % where one
+  applies, e.g. «12 відповідей із 240 інвайтів = 5%», up to ~3 numbers per claim. If a draft states a
+  conclusion without its supporting numbers, add them from a fresh query or cut the claim; don't ship a
+  bare percentage with no base, or a base with no rate where a rate is the point.
+- BREVITY: if the day is genuinely quiet, make the briefing SHORTER — never pad it to look busy. Simpler
+  words and fuller numbers do NOT mean longer text.
 
 OUTPUT
-- The corrected FINAL briefing as markdown, in UKRAINIAN, in the SAME shape the analyst used: a one-line
-  headline, a 2-3 sentence summary, CHANGES (day-over-day deltas, each tagged up/down/flat/new/resolved;
-  empty if there's no previous briefing or nothing moved), at most 2 sections, risks with severities, and
-  EXACTLY 3 actions. Refer to accounts by their LinkedIn account name, never a raw instance id.
+- The corrected FINAL briefing as markdown, in plain everyday UKRAINIAN, in the SAME shape the analyst
+  used: a one-line headline, a 2-3 sentence summary, CHANGES (day-over-day deltas, each tagged
+  up/down/flat/new/resolved; empty if there's no previous briefing or nothing moved), at most 2 sections,
+  risks with severities, and EXACTLY 3 actions. Every claim carries its supporting numbers (count + base
+  + %). Refer to accounts by their LinkedIn account name, never a raw instance id.
 - Output ONLY the briefing — no preamble, no notes about what you changed.
 
 Today's date: ${new Date().toISOString().slice(0, 10)}.`
@@ -307,6 +324,19 @@ const briefingSchema = z.object({
       })
     )
     .max(6),
+  // Structured key-metrics strip — 5-8 headline numbers of the day, extracted by the
+  // STRUCTURE stage from the verified write-up. OPTIONAL so old stored rows (and any
+  // row saved before the `metrics` column is migrated) still parse and render.
+  metrics: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.string(),
+        note: z.string().optional(),
+      })
+    )
+    .max(8)
+    .optional(),
 })
 
 const json = (body: unknown, status = 200) =>
@@ -337,6 +367,7 @@ function logFramingViolations(object: z.infer<typeof briefingSchema>, date: stri
     ...object.sections.map((s) => s.body),
     ...object.actions.map((a) => a.text),
     ...object.risks.map((r) => r.text),
+    ...(object.metrics ?? []).flatMap((m) => [m.label, m.value, m.note ?? '']),
   ].join('\n')
   for (const pattern of FRAMING_VIOLATION_PATTERNS) {
     if (pattern.test(text)) {
@@ -625,17 +656,25 @@ async function runStructureStage(sb: Sb, today: string, job: BriefingJobRow): Pr
       model: anthropic(STRUCTURE_MODEL),
       schema: briefingSchema,
       system:
-        `Extract the structured briefing from the analyst's write-up below. Keep ALL text in UKRAINIAN ` +
-        `(do not translate it back to English) and KEEP a clear, calm, professional voice — but TIGHTEN it: trim ` +
-        `bloat, drop repetition, make every action ONE short imperative sentence and every risk ONE ` +
-        `short line. Preserve specifics verbatim (numbers, dates, account / campaign names, agent ` +
-        `versions) but keep only the single most telling number per point. Refer to accounts by their ` +
-        `LinkedIn account name, never by a raw instance id like "notebook-3". Keep the 3 highest-` +
-        `leverage actions, most important first. The severity/priority fields stay as the codes ` +
+        `Extract the structured briefing from the analyst's write-up below. Keep ALL text in plain, ` +
+        `everyday UKRAINIAN (do not translate it back to English) that a salesperson understands at a ` +
+        `glance — short simple sentences, no analytical jargon — and KEEP a calm, professional voice, ` +
+        `but TIGHTEN it: trim bloat, drop repetition, make every action ONE short imperative sentence and ` +
+        `every risk ONE short line. Preserve specifics verbatim (numbers, dates, account / campaign ` +
+        `names, agent versions). KEEP the numbers that justify each point — the count, the base it is out ` +
+        `of, and the % where one applies (e.g. «12 відповідей із 240 інвайтів = 5%»), up to ~3 numbers ` +
+        `per point; do NOT strip the base or the percentage down to a single bare figure. Refer to ` +
+        `accounts by their LinkedIn account name, never by a raw instance id like "notebook-3". Keep the ` +
+        `3 highest-leverage actions, most important first. The severity/priority fields stay as the codes ` +
         `high/med/low. Populate CHANGES with the day-over-day deltas from the write-up — each ONE short ` +
         `Ukrainian line tagged with a trend (up/down/flat/new/resolved); if the write-up has none, or ` +
         `there was no previous briefing, return an empty changes array, and never add a change that just ` +
         `repeats an unchanged fact from the previous briefing (shown below for reference). ` +
+        `Populate METRICS with 5-8 headline numbers of the day pulled ONLY from the write-up — each ` +
+        `{label, value, note?} in Ukrainian, where label is a short caption («Інвайти за 7 днів», ` +
+        `«Відповіді», «Конверсія в клієнта»), value is the number as a short string that may embed its ` +
+        `base/% («62 із 240 = 5%»), and note is optional one-phrase context. Pick the metrics that best ` +
+        `summarise today; if the write-up lacks clear headline numbers, return fewer or omit metrics. ` +
         `Do not invent anything not in the write-up.`,
       prompt: priorMd
         ? `${text}\n\n---\nFor reference, the PREVIOUS briefing — do NOT repeat unchanged points from it:\n${priorMd}`
@@ -644,7 +683,7 @@ async function runStructureStage(sb: Sb, today: string, job: BriefingJobRow): Pr
 
     logFramingViolations(object, today)
 
-    const row = {
+    const baseRow = {
       briefing_date: today,
       headline: object.headline.slice(0, 300),
       summary: object.summary.slice(0, 2000),
@@ -654,20 +693,34 @@ async function runStructureStage(sb: Sb, today: string, job: BriefingJobRow): Pr
       risks: object.risks,
       model: ENSEMBLE_MODEL_LABEL,
     }
+    const metrics = object.metrics ?? []
+    const row = { ...baseRow, metrics }
 
-    const { error: upsertError } = await sb.from('briefings').upsert(row, { onConflict: 'briefing_date' })
+    // `metrics` is a new column. On a DB where the migration adding it hasn't run yet
+    // the upsert errors on the unknown column — fall back to persisting the rest so the
+    // briefing still stores and renders (metrics still ship to Slack from this run).
+    // Remove the fallback once `briefings.metrics` exists everywhere.
+    let { error: upsertError } = await sb.from('briefings').upsert(row, { onConflict: 'briefing_date' })
+    const isMissingMetricsColumn =
+      upsertError != null &&
+      (upsertError.code === 'PGRST204' ||
+        (/metrics/i.test(upsertError.message) && /column/i.test(upsertError.message)))
+    if (isMissingMetricsColumn) {
+      ;({ error: upsertError } = await sb.from('briefings').upsert(baseRow, { onConflict: 'briefing_date' }))
+    }
     if (upsertError) throw new Error(`briefing upsert failed: ${upsertError.message}`)
 
     await finishStage(sb, today, claimed, 'done', {})
 
     await postBriefingToSlack(process.env.SLACK_WEBHOOK_URL, {
       briefing_date: today,
-      headline: row.headline,
-      summary: row.summary,
-      changes: row.changes,
-      actions: row.actions,
-      risks: row.risks,
-      model: row.model,
+      headline: baseRow.headline,
+      summary: baseRow.summary,
+      changes: baseRow.changes,
+      actions: baseRow.actions,
+      risks: baseRow.risks,
+      metrics,
+      model: baseRow.model,
     })
 
     return { status: 'done', progressed: true }

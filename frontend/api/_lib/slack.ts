@@ -13,6 +13,8 @@ interface BriefingForSlack {
   changes: { text: string; trend?: string }[]
   actions: { text: string; priority?: string }[]
   risks: { kind?: string; severity?: string; text: string }[]
+  // Optional structured key-metrics strip (added later; guard for absence on old rows).
+  metrics?: { label: string; value: string; note?: string }[]
   model: string | null
 }
 
@@ -49,6 +51,18 @@ function blocksFor(b: BriefingForSlack): Block[] {
 
   if (b.summary) {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: b.summary.slice(0, 2900) } })
+  }
+
+  // Key-metrics strip: a 2-column fields grid (Slack caps a section at 10 fields).
+  const metrics = (b.metrics ?? []).slice(0, 8)
+  if (metrics.length) {
+    blocks.push({
+      type: 'section',
+      fields: metrics.map((m) => ({
+        type: 'mrkdwn',
+        text: `*${m.value}*\n${m.label}`.slice(0, 2000),
+      })),
+    })
   }
 
   const changes = (b.changes ?? []).slice(0, 6)
