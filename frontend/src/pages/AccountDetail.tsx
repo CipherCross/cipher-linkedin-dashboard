@@ -71,8 +71,7 @@ export function AccountDetail() {
   const added7d = weeklyAdded(leads, inst.id)
   const remaining = Math.max(0, WEEKLY_ADD_LIMIT - added7d)
   const addedFrac = added7d / WEEKLY_ADD_LIMIT
-  const capColor =
-    addedFrac >= 1 ? 'var(--danger)' : addedFrac >= 0.7 ? 'var(--warning)' : 'var(--success)'
+  const capTone = addedFrac >= 1 ? 'danger' : addedFrac >= 0.7 ? 'warning' : 'success'
 
   return (
     <>
@@ -116,20 +115,21 @@ export function AccountDetail() {
       <div className="card">
         <div className="account-cell" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>Added last 7 days</h2>
-          <div className="small" style={{ color: capColor, fontWeight: 600 }}>
+          <div className="small" style={{ fontWeight: 600 }}>
             {num(added7d)} / {WEEKLY_ADD_LIMIT}
           </div>
         </div>
         <div
           style={{
-            height: 8, borderRadius: 4, background: 'var(--surface-2)',
+            height: 8, borderRadius: 4, background: `var(--${capTone}-subtle)`,
             overflow: 'hidden', margin: '10px 0 8px',
           }}
         >
           <div
             style={{
               width: `${Math.min(100, addedFrac * 100)}%`,
-              height: '100%', background: capColor, transition: 'width .2s',
+              height: '100%', borderRadius: 4, background: `var(--${capTone})`,
+              transition: 'width .2s',
             }}
           />
         </div>

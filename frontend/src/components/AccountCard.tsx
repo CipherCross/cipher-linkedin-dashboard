@@ -36,8 +36,7 @@ export function AccountCard({
   const campaigns = rangedCampaigns(leads, campaignsMeta, range)
   const weekAdded = weeklyAdded(leads, inst.id)
   const addedFrac = weekAdded / WEEKLY_ADD_LIMIT
-  const capColor =
-    addedFrac >= 1 ? 'var(--danger)' : addedFrac >= 0.7 ? 'var(--warning)' : 'var(--success)'
+  const capTone = addedFrac >= 1 ? 'danger' : addedFrac >= 0.7 ? 'warning' : 'success'
 
   return (
     <div className="card account-card">
@@ -70,12 +69,25 @@ export function AccountCard({
         <Stat value={stats.acceptPct} label="accept" />
         <Stat value={stats.replyPct} label="reply" />
         <Stat value={num(stats.positive)} label="positive" />
-        <Stat
-          value={`${num(weekAdded)}/${WEEKLY_ADD_LIMIT}`}
-          label="added 7d"
-          color={capColor}
-          title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used in the last 7 days`}
-        />
+      </div>
+
+      <div
+        className="account-card-cap"
+        title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used in the last 7 days`}
+      >
+        <span className="muted small">weekly cap</span>
+        <div className="account-cap-track" style={{ background: `var(--${capTone}-subtle)` }}>
+          <div
+            className="account-cap-fill"
+            style={{
+              width: `${Math.min(100, addedFrac * 100)}%`,
+              background: `var(--${capTone})`,
+            }}
+          />
+        </div>
+        <span className="small account-cap-value">
+          {num(weekAdded)}/{WEEKLY_ADD_LIMIT}
+        </span>
       </div>
 
       <div className="account-card-spark">
@@ -106,13 +118,10 @@ export function AccountCard({
   )
 }
 
-function Stat(
-  { value, label, color, title }:
-  { value: string; label: string; color?: string; title?: string },
-) {
+function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="account-stat" title={title}>
-      <div className="account-stat-value" style={color ? { color } : undefined}>{value}</div>
+    <div className="account-stat">
+      <div className="account-stat-value">{value}</div>
       <div className="muted small">{label}</div>
     </div>
   )

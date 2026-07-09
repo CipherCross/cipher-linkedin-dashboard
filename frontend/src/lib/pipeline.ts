@@ -5,6 +5,7 @@
 // slug/label here without changing it there (or vice versa) will silently drop
 // moves on the floor.
 import type { Lead, PipelineEvent } from './types'
+import { leadKey } from './leads'
 
 export type PipelineStageId =
   | 'first_contact'
@@ -148,10 +149,13 @@ export const PIPELINE_CHECKPOINTS: Array<{
   { id: 'client', label: 'Client', rank: 7, terminalId: 'client' },
 ]
 
-/** Per-lead pipeline reach across the current stage ∪ event history, for the
- *  funnel. Only events whose lead_id is among `leads` are counted — callers pass
- *  a lead SUBSET (e.g. one campaign) but the shared pipelineEvents list is global,
- *  so unscoped events would leak other campaigns' progress into the counts. */
+/** Per-person pipeline reach across the current stage ∪ event history, for the
+ *  funnel. Keyed by leadKey(instance, profile) — the same person can hold a lead
+ *  row in several campaigns of one instance (invite + messenger), and keying by
+ *  lead id would count them once per row. Only events whose lead_id is among
+ *  `leads` are counted — callers pass a lead SUBSET (e.g. one campaign) but the
+ *  shared pipelineEvents list is global, so unscoped events would leak other
+ *  campaigns' progress into the counts. */
 export interface LeadReach {
   /** Deepest happy-path rank ever reached (current stage or any to_stage). */
   rank: number
@@ -160,19 +164,21 @@ export interface LeadReach {
   isClient: boolean
 }
 
-export function reachByLead(leads: Lead[], events: PipelineEvent[]): Map<string, LeadReach> {
-  const ids = new Set(leads.map((l) => l.id))
+export function reachByPerson(leads: Lead[], events: PipelineEvent[]): Map<string, LeadReach> {
+  const keyById = new Map(leads.map((l) => [l.id, leadKey(l.instance_id, l.profile_url)]))
   const out = new Map<string, LeadReach>()
-  const bump = (id: string, stage: string | null) => {
+  const bump = (key: string, stage: string | null) => {
     const rank = pipelineRank(stage)
     const isClient = stage === 'client'
     if (rank < 0 && !isClient) return
-    const cur = out.get(id) ?? { rank: -1, isClient: false }
-    out.set(id, { rank: Math.max(cur.rank, rank), isClient: cur.isClient || isClient })
+    const cur = out.get(key) ?? { rank: -1, isClient: false }
+    out.set(key, { rank: Math.max(cur.rank, rank), isClient: cur.isClient || isClient })
   }
-  for (const l of leads) bump(l.id, l.pipeline_stage)
+  for (const l of leads) bump(leadKey(l.instance_id, l.profile_url), l.pipeline_stage)
   for (const e of events) {
-    if (e.kind === 'stage' && ids.has(e.lead_id)) bump(e.lead_id, e.to_stage)
+    if (e.kind !== 'stage') continue
+    const key = keyById.get(e.lead_id)
+    if (key) bump(key, e.to_stage)
   }
   return out
 }

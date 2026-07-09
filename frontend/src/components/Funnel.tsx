@@ -2,7 +2,8 @@ import { Fragment } from 'react'
 import type { Lead } from '../lib/types'
 import { num, pct } from '../lib/format'
 import { useData } from '../lib/DataContext'
-import { PIPELINE_CHECKPOINTS, checkpointCount, reachByLead, stageColor } from '../lib/pipeline'
+import { leadKey } from '../lib/leads'
+import { PIPELINE_CHECKPOINTS, checkpointCount, reachByPerson, stageColor } from '../lib/pipeline'
 
 /** One continuous vertical funnel. The automated milestones (Leads → Invited →
  *  Accepted → Replied), computed client-side from lead timestamps, flow straight
@@ -46,15 +47,43 @@ const PIPELINE_VERB: Record<string, string> = {
 
 export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: boolean }) {
   const { data } = useData()
-  const total = leads.length
-  const invited = leads.filter((l) => l.invited_at).length
-  const accepted = leads.filter((l) => l.connected_at).length
-  const replied = leads.filter((l) => l.replied_at).length
-  const pending = leads.filter((l) => l.invited_at && !l.connected_at).length
+  // Merge lead ROWS into persons by leadKey(instance, profile) before counting:
+  // the same person can hold a row in several campaigns of one instance (e.g. an
+  // invite campaign + a messenger campaign over existing connections), and
+  // counting rows double-counts them at every stage. A person's milestones are
+  // the union across their rows.
+  const persons = new Map<string, { invited: boolean; connected: boolean; replied: boolean }>()
+  for (const l of leads) {
+    const k = leadKey(l.instance_id, l.profile_url)
+    const p = persons.get(k) ?? { invited: false, connected: false, replied: false }
+    p.invited ||= !!l.invited_at
+    p.connected ||= !!l.connected_at
+    p.replied ||= !!l.replied_at
+    persons.set(k, p)
+  }
+  // Strict invite-cohort chain: each stage is a subset of the previous one, so
+  // every connector is a true conversion rate. People who connected without ever
+  // being invited (messenger campaigns over existing connections) are excluded
+  // from the automated half and disclosed in the footer instead — counting them
+  // as "Accepted" would inflate invite acceptance. They still count in the
+  // manual-pipeline half below: a staged deal is a deal wherever it came from.
+  const total = persons.size
+  let invited = 0
+  let accepted = 0
+  let replied = 0
+  let pending = 0
+  let preExisting = 0
+  for (const p of persons.values()) {
+    if (p.invited) invited++
+    if (p.invited && p.connected) accepted++
+    if (p.invited && p.connected && p.replied) replied++
+    if (p.invited && !p.connected) pending++
+    if (p.connected && !p.invited) preExisting++
+  }
 
-  // How far each lead reached in the manual pipeline (current stage ∪ event
+  // How far each person reached in the manual pipeline (current stage ∪ event
   // history), scoped to the leads passed in (events are filtered to these ids).
-  const reach = showPipeline ? reachByLead(leads, data?.pipelineEvents ?? []) : null
+  const reach = showPipeline ? reachByPerson(leads, data?.pipelineEvents ?? []) : null
   const pipelineRows =
     reach && reach.size > 0
       ? PIPELINE_CHECKPOINTS.map((cp) => ({ ...cp, count: checkpointCount(reach, cp) }))
@@ -132,6 +161,8 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
       <div className="funnel-footer">
         <span className="muted small">
           {num(pending)} invites still pending (sent, not yet accepted)
+          {preExisting > 0 &&
+            ` · ${num(preExisting)} existing connections (never invited) excluded`}
         </span>
         {pipelineRows && (
           <span className="funnel-overall">

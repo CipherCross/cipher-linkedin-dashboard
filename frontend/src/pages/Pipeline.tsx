@@ -371,20 +371,20 @@ function PipeCard({
         {campaignName}
       </div>
 
-      <div className="pipe-card-foot">
-        {assigneeName ? (
-          <span className="assignee-chip" title={assigneeName}>
-            <InitialsAvatar name={assigneeName} size={20} />
-          </span>
-        ) : (
-          <span className="assignee-chip empty" title="Unassigned">·</span>
-        )}
-        {days != null && (
-          <span className="pipe-days muted small" title="Days in this stage">
-            {days}d
-          </span>
-        )}
-      </div>
+      {(assigneeName || days != null) && (
+        <div className="pipe-card-foot">
+          {assigneeName && (
+            <span className="assignee-chip" title={assigneeName}>
+              <InitialsAvatar name={assigneeName} size={20} />
+            </span>
+          )}
+          {days != null && (
+            <span className="pipe-days muted small" title="Days in this stage">
+              {days}d
+            </span>
+          )}
+        </div>
+      )}
 
       {substatuses.length > 0 && (
         <select

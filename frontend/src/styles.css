@@ -1376,6 +1376,13 @@ tr:last-child td { border-bottom: none; }
  * next, even when a value wraps or differs in width */
 .account-stat { display: grid; grid-template-rows: 1fr auto; text-align: center; }
 .account-stat-value { font-size: var(--text-lg); font-weight: 600; font-variant-numeric: tabular-nums; align-self: end; }
+/* Weekly invite-cap meter: track is a subtle tint of the fill's own status hue
+ * so the state reads across the whole bar, not just the filled part */
+.account-card-cap { display: flex; align-items: center; gap: 10px; margin-top: -4px; }
+.account-card-cap .small { white-space: nowrap; }
+.account-cap-track { flex: 1; height: 6px; border-radius: 3px; overflow: hidden; }
+.account-cap-fill { height: 100%; border-radius: 3px; transition: width 0.2s ease; }
+.account-cap-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 .account-card-spark { display: flex; align-items: flex-end; gap: 10px; }
 .sparkline { flex: 1; min-width: 0; }
 .sparkline-empty { flex: 1; padding: 8px 0; }
@@ -2186,11 +2193,6 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   margin-top: 2px;
 }
 .assignee-chip { display: inline-flex; align-items: center; }
-.assignee-chip.empty {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--surface-3); color: var(--text-muted);
-  align-items: center; justify-content: center; font-size: var(--text-xs);
-}
 .pipe-days { margin-left: auto; }
 .substatus-chip,
 .pipe-stage-select,
