@@ -168,7 +168,12 @@ export function reachByPerson(leads: Lead[], events: PipelineEvent[]): Map<strin
   const keyById = new Map(leads.map((l) => [l.id, leadKey(l.instance_id, l.profile_url)]))
   const out = new Map<string, LeadReach>()
   const bump = (key: string, stage: string | null) => {
-    const rank = pipelineRank(stage)
+    // 'lost' is a terminal off-ramp, not happy-path depth: it shares rank 7 with
+    // 'client', so letting it through would count a person bulk-moved straight to
+    // Lost as having "reached" every checkpoint up to Proposal Presented. Treat it
+    // as rank 0 — the person entered the pipeline (kept in the reach map) but
+    // clears no checkpoint; any real stage they touched still sets their depth.
+    const rank = stage === 'lost' ? 0 : pipelineRank(stage)
     const isClient = stage === 'client'
     if (rank < 0 && !isClient) return
     const cur = out.get(key) ?? { rank: -1, isClient: false }

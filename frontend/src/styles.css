@@ -247,6 +247,10 @@
 
 body {
   margin: 0;
+  /* Full-bleed scrollers (.pipe-board) size themselves with 50vw, which
+   * includes the scrollbar on non-overlay-scrollbar platforms; clip the
+   * few px of resulting overflow instead of growing a horizontal bar. */
+  overflow-x: clip;
   /* Two stacked radials give the glass something to refract: the original
    * indigo top-left wash, plus a faint teal glow bottom-right (different hue
    * from the accent-blue family, ~10% alpha so it stays subdued). Both layers
@@ -2120,6 +2124,11 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   align-items: flex-start;
   /* Horizontal drag-scroll shouldn't chain into a browser back/forward swipe. */
   overscroll-behavior-x: contain;
+  /* Full-bleed: escape the centered .page container so columns scroll to the
+   * viewport edges instead of clipping at the 1280px content box. The inner
+   * padding puts the first column back on the page's left edge. */
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
 }
 .pipe-col {
   flex: 0 0 260px;
