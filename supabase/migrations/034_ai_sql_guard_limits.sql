@@ -88,6 +88,11 @@ alter default privileges in schema public revoke select on tables from ai_sql_ru
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'ai_readonly') then
+    -- Postgres only lets a role's members (or a superuser) run DROP OWNED BY for it,
+    -- and Supabase migrations run as non-superuser `postgres` — so grant ourselves
+    -- membership first. The grant vanishes with the role two statements later.
+    execute format('grant ai_readonly to %I', current_user);
+
     -- Undo 010's membership so service_role no longer inherits this role.
     execute 'revoke ai_readonly from service_role';
 
