@@ -117,7 +117,18 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   '1' = active; negative codes like '-1'/'-999' = excluded/failed/withdrawn),
   added_at timestamptz, invited_at timestamptz, connected_at timestamptz,
   first_message_at timestamptz, replied_at timestamptz, last_action_at timestamptz,
-  raw jsonb, updated_at
+  raw jsonb, updated_at,
+  -- MANUAL CRM LAYER (set by the team on the dashboard's pipeline board; NOT
+  -- synced from LH2). Distinct from the raw LH2 status code above AND from the
+  -- milestone timestamps — those track LH2's scripted funnel; these track where
+  -- the human sales process has taken the lead.
+  pipeline_stage text (canonical stage slug, see STAGE VOCABULARY below;
+    NULL pipeline_stage = NOT YET TRIAGED, it NEVER means the lead was dropped),
+  pipeline_substatus text (a sub-state slug valid only for certain stages),
+  lost_reason text (free text, set only when pipeline_stage='lost'),
+  pipeline_stage_changed_at timestamptz (when pipeline_stage last MOVED; a
+    substatus-only edit does not touch it — use it for time-in-current-stage),
+  assigned_to bigint -> team_members.id (the SDR who owns this lead; NULL = unassigned)
   NOTE: a NULL timestamp means the milestone never happened. Funnel order:
   invited_at -> connected_at -> first_message_at -> replied_at.
   added_at is NOT a funnel milestone: it is when the lead was QUEUED into the
@@ -170,6 +181,38 @@ annotations — manual notes pinned to dates (e.g. "changed template on X")
   id bigint PK, instance_id (null = all accounts), campaign_id (null = all),
   note text, noted_at date, created_at
 
+team_members — the SDRs who own leads in the manual CRM pipeline
+  id bigint PK, name text (unique), active bool (default true; inactive members
+  can't be newly assigned), created_at
+  leads.assigned_to references this table.
+
+lead_notes — free-text notes pinned to a single lead in the pipeline board
+  id bigint PK, lead_id uuid -> leads, author text (nullable), body text, created_at
+
+pipeline_events — append-only log of every manual pipeline change on a lead.
+  This is the ONLY source for pipeline history / time-in-stage — reconstruct
+  durations from the gaps between a lead's consecutive events.
+  id bigint PK, lead_id uuid -> leads, kind text ('stage'|'assignment'),
+  actor text (who made the change; default 'unknown'),
+  from_stage/to_stage text, from_substatus/to_substatus text (kind='stage'),
+  from_assignee/to_assignee text — assignee NAMES, not ids (kind='assignment'),
+  lost_reason text, occurred_at timestamptz (default now())
+
+STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses)
+  rank 0  first_contact          "First Contact"            (no substatuses)
+  rank 1  interested             "Interested"               (no substatuses)
+  rank 1  neutral                "Neutral"                  (no substatuses)
+  rank 1  negative               "Negative"                 substatus: soft_no | hard_no | lost
+  rank 2  negotiations_call      "Negotiations about Call"  (no substatuses)
+  rank 3  call_booked            "Call Booked"              (no substatuses)
+  rank 4  call_done              "Call Done"                substatus: proposal | later | not_a_fit
+  rank 5  proposal_in_progress   "Proposal In Progress"     (no substatuses)
+  rank 6  proposal_presented     "Proposal Presented"       substatus: waiting_decision | contract | needs_changes
+  rank 7  client                 "Client (Contracted)"      (no substatuses)
+  rank 7  lost                   "Lost"                     (no substatuses; free-text lost_reason applies here)
+  Higher rank = further down the sales funnel. Some ranks hold several stages
+  (interested/neutral/negative all rank 1; client/lost both rank 7).
+
 sync_runs — sync agent run log
   id uuid PK, instance_id, started_at, finished_at, status ('running'|'ok'|'error'),
   rows_upserted int, error text
@@ -186,6 +229,12 @@ daily_activity — events bucketed per day:
 
 campaign_reply_sentiment — inbound reply sentiment counts per campaign:
   campaign_id, sentiment, cnt (only classified inbound replies)
+
+pipeline_metrics — current manual-CRM stage distribution per campaign:
+  campaign_id, instance_id, pipeline_stage, pipeline_substatus, leads (count in
+  that stage/substatus), oldest_in_stage timestamptz (min pipeline_stage_changed_at),
+  stale_14d (count sitting in-stage > 14 days). Only counts leads with a
+  non-NULL pipeline_stage (i.e. already triaged).
 
 ANALYSIS GUIDANCE
 - Reply QUALITY, not just count: messages.sentiment classifies each inbound
@@ -313,7 +362,52 @@ ${INVITE_QUEUE_SQL}
   Empty queue → the campaign ran out of people to invite; the correct action is
   "add new leads to <campaign>", never "reactivate". Ignore campaigns with
   has_invite_step = false — they never send invites (scraping/analysis-only).
+- MANUAL CRM PIPELINE vs the LH2 funnel — keep them separate. Questions about
+  calls, negotiations, proposals, or won/lost CLIENTS are about the manual
+  pipeline: answer them from leads.pipeline_stage / pipeline_substatus /
+  lost_reason / assigned_to and the pipeline_events log — NOT from the milestone
+  timestamps (invited_at…replied_at), which only track LH2's scripted funnel and
+  know nothing about calls or deals. A lead with pipeline_stage NULL is simply
+  not-yet-triaged (often a fresh reply awaiting a human); NULL here NEVER means
+  the lead was dropped or lost — 'lost' is an explicit stage.
+- TIME-IN-STAGE / pipeline velocity — reconstruct from pipeline_events, which is
+  the only history. For a lead, the time it spent in a stage is the gap between
+  the event that moved it INTO that stage and the next event; current-stage age
+  is now() - leads.pipeline_stage_changed_at (use pipeline_metrics.stale_14d for
+  a ready-made "stuck > 14 days" count per stage). Do not infer pipeline timing
+  from milestone timestamps.
 - All timestamps are timestamptz; use date_trunc for bucketing.
+`.trim()
+
+// Current manual-CRM pipeline snapshot: how many leads sit in each stage per
+// campaign (with account name), how many are stale (>14d in-stage), plus a single
+// summary row counting UNTRIAGED replies — leads that have replied but nobody has
+// put into the pipeline yet (pipeline_stage IS NULL), the top of the triage queue.
+export const PIPELINE_OVERVIEW_SQL = `
+with by_stage as (
+  select pm.campaign_id,
+         coalesce(c.name, pm.campaign_id)              as campaign,
+         pm.instance_id,
+         coalesce(i.account_name, i.label, pm.instance_id) as account,
+         pm.pipeline_stage,
+         pm.pipeline_substatus,
+         sum(pm.leads)     as leads,
+         min(pm.oldest_in_stage) as oldest_in_stage,
+         sum(pm.stale_14d) as stale_14d
+  from pipeline_metrics pm
+  left join campaigns c on c.id = pm.campaign_id
+  left join instances i on i.id = pm.instance_id
+  group by 1, 2, 3, 4, 5, 6
+)
+select 'stage'::text as row_type, campaign_id, campaign, instance_id, account,
+       pipeline_stage, pipeline_substatus, leads, oldest_in_stage, stale_14d
+from by_stage
+union all
+select 'untriaged_replies'::text, null, null, null, null,
+       null, null, count(*), null, null
+from leads
+where replied_at is not null and pipeline_stage is null
+order by row_type, leads desc nulls last
 `.trim()
 
 export const WEEKLY_FUNNEL_SQL = `

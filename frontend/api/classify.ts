@@ -120,7 +120,17 @@ async function handle(req: Request): Promise<Response> {
     .order('sent_at', { ascending: false })
     .limit(BATCH)
   if (error) return json({ error: error.message }, 500)
-  if (!replies?.length) return json({ classified: 0, remaining: 0 })
+  if (!replies?.length) {
+    // No backlog to classify, but auto-advance still runs: migration 028's RPC
+    // doubles as the launch backfill, so already-classified-but-untriaged leads
+    // must get advanced even when the cron has no new replies to label.
+    const auto_advanced = await autoAdvancePipeline(sb)
+    return json({
+      classified: 0,
+      remaining: 0,
+      ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+    })
+  }
 
   // Pull conversation context for every lead in the batch in one query, then
   // group by (instance_id, profile_url). profile_url is near-unique, so the
@@ -202,7 +212,33 @@ async function handle(req: Request): Promise<Response> {
     .is('sentiment', null)
     .not('body', 'is', null)
 
-  return json({ classified, remaining: count ?? 0 })
+  // Freshly-classified replies may unblock automatic pipeline advancement.
+  // Non-fatal and tolerant of migration 028 not being pushed yet: supabase-js
+  // returns {error} (e.g. SQLSTATE 42883, function does not exist) rather than
+  // throwing, but guard both. A missing/failed RPC just omits auto_advanced.
+  const auto_advanced = await autoAdvancePipeline(sb)
+
+  return json({
+    classified,
+    remaining: count ?? 0,
+    ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+  })
+}
+
+/** Run pipeline_auto_advance() (migration 028); returns its count or undefined
+ *  if the RPC is missing / errors. Never throws. */
+async function autoAdvancePipeline(sb: ReturnType<typeof db>): Promise<number | undefined> {
+  try {
+    const { data, error } = await sb.rpc('pipeline_auto_advance')
+    if (error) {
+      console.warn('pipeline_auto_advance skipped:', error.message)
+      return undefined
+    }
+    return typeof data === 'number' ? data : undefined
+  } catch (e) {
+    console.warn('pipeline_auto_advance threw:', e)
+    return undefined
+  }
 }
 
 export const GET = (req: Request) => handle(req)

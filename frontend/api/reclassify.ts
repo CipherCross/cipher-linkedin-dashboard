@@ -63,7 +63,34 @@ async function handle(req: Request): Promise<Response> {
   if (error) return json({ error: error.message }, 500)
   if (!data) return json({ error: 'no inbound message with that id' }, 404)
 
-  return json({ ok: true, id: data.id, sentiment: data.sentiment })
+  // A corrected sentiment may unblock automatic pipeline advancement. Non-fatal
+  // and tolerant of migration 028 not being pushed yet: supabase-js returns
+  // {error} (e.g. SQLSTATE 42883, function does not exist) rather than throwing,
+  // but guard both. A missing/failed RPC just omits auto_advanced.
+  const auto_advanced = await autoAdvancePipeline(sb)
+
+  return json({
+    ok: true,
+    id: data.id,
+    sentiment: data.sentiment,
+    ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+  })
+}
+
+/** Run pipeline_auto_advance() (migration 028); returns its count or undefined
+ *  if the RPC is missing / errors. Never throws. */
+async function autoAdvancePipeline(sb: ReturnType<typeof db>): Promise<number | undefined> {
+  try {
+    const { data, error } = await sb.rpc('pipeline_auto_advance')
+    if (error) {
+      console.warn('pipeline_auto_advance skipped:', error.message)
+      return undefined
+    }
+    return typeof data === 'number' ? data : undefined
+  } catch (e) {
+    console.warn('pipeline_auto_advance threw:', e)
+    return undefined
+  }
 }
 
 export const POST = (req: Request) => handle(req)

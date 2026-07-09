@@ -8,6 +8,7 @@ import {
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { KpiCards } from '../components/KpiCards'
+import { Funnel } from '../components/Funnel'
 import { AccountCard } from '../components/AccountCard'
 import { BriefingCard } from '../components/BriefingCard'
 import { ImportCalloutCard } from '../components/ImportCalloutCard'
@@ -121,6 +122,11 @@ export function Overview() {
           ))}
         </div>
       )}
+
+      {/* Global funnel across every account — its Manual-pipeline section is
+          self-hiding when no lead has been staged, so this is a no-op until the
+          team starts using the pipeline board. */}
+      <Funnel leads={data.leads} showPipeline />
     </>
   )
 }

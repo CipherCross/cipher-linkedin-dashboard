@@ -4,7 +4,10 @@ import { ChevronDown, ChevronRight, Loader2, MessagesSquare, X } from 'lucide-re
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
+import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
+import { LeadNotesPanel } from './LeadNotesPanel'
+import { LostReasonModal } from './LostReasonModal'
 import { InitialsAvatar } from './Avatar'
 import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
@@ -12,6 +15,7 @@ import {
   ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
   instanceName, leadKey,
 } from '../lib/leads'
+import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
 import { clockTime, dayHeading } from '../lib/format'
 import type { Coaching, Lead, Message, Sentiment } from '../lib/types'
 
@@ -35,6 +39,8 @@ export function ConversationDrawer({
 }) {
   const { data, refetch } = useData()
   const toast = useToast()
+  const { setStage, assign, members } = usePipelineActions()
+  const [pendingLost, setPendingLost] = useState(false)
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -191,6 +197,12 @@ export function ConversationDrawer({
 
   if (!lead) return null
 
+  // The `lead` prop is a snapshot captured when the drawer opened; pipeline
+  // fields (stage/substatus/assignee) mutate in place via patchLead, so read
+  // the live row from context for those controls.
+  const live = data?.leads.find((x) => x.id === lead.id) ?? lead
+  const liveStage = stageById(live.pipeline_stage)
+
   const campaignName =
     data?.campaigns.find((c) => c.campaign_id === lead.campaign_id)?.campaign_name ??
     lead.campaign_id
@@ -316,6 +328,53 @@ export function ConversationDrawer({
                 Import history
               </button>
             )}
+          </div>
+
+          <div className="conv-pipeline-controls">
+            <label className="filter-field">
+              <span className="filter-label">Stage</span>
+              <select
+                value={live.pipeline_stage ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === 'lost') setPendingLost(true)
+                  else void setStage(live, v || null)
+                }}
+              >
+                <option value="">Not in pipeline</option>
+                {PIPELINE_STAGES.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+            {liveStage && liveStage.substatuses.length > 0 && (
+              <label className="filter-field">
+                <span className="filter-label">Substatus</span>
+                <select
+                  value={live.pipeline_substatus ?? ''}
+                  onChange={(e) =>
+                    void setStage(live, live.pipeline_stage, { substatus: e.target.value || null })
+                  }
+                >
+                  <option value="">—</option>
+                  {liveStage.substatuses.map((s) => (
+                    <option key={s} value={s}>{substatusLabel(s)}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="filter-field">
+              <span className="filter-label">Owner</span>
+              <select
+                value={String(live.assigned_to ?? '')}
+                onChange={(e) => void assign(live, e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.id} value={String(m.id)}>{m.name}</option>
+                ))}
+              </select>
+            </label>
           </div>
         </header>
 
@@ -511,9 +570,22 @@ export function ConversationDrawer({
           </div>
           )}
         </div>
+
+        <LeadNotesPanel lead={lead} />
         </>
         )}
       </aside>
+
+      {pendingLost && (
+        <LostReasonModal
+          leadName={live.full_name}
+          onCancel={() => setPendingLost(false)}
+          onConfirm={(reason) => {
+            setPendingLost(false)
+            void setStage(live, 'lost', { lostReason: reason })
+          }}
+        />
+      )}
     </div>
   )
 }

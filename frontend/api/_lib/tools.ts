@@ -4,6 +4,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import {
   CAMPAIGN_OVERVIEW_SQL,
+  PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
   executeSql,
@@ -50,5 +51,16 @@ export const tools = {
       'acceptance rate, reply rate, last activity. Good first call to see what exists.',
     inputSchema: z.object({}),
     execute: async () => executeSql(CAMPAIGN_OVERVIEW_SQL),
+  }),
+
+  pipeline_overview: tool({
+    description:
+      'Current MANUAL CRM pipeline snapshot: how many leads sit in each stage/substatus ' +
+      'per campaign (with account name), how many are stale (>14 days in-stage), plus a ' +
+      "summary count of untriaged replies (replied but not yet in the pipeline). Use this " +
+      'for questions about calls, proposals, clients, or who needs triage — NOT the ' +
+      'invite/reply milestones.',
+    inputSchema: z.object({}),
+    execute: async () => executeSql(PIPELINE_OVERVIEW_SQL),
   }),
 }

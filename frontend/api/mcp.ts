@@ -5,6 +5,7 @@ import { createMcpHandler } from 'mcp-handler'
 import { z } from 'zod'
 import {
   CAMPAIGN_OVERVIEW_SQL,
+  PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
   executeSql,
@@ -52,6 +53,15 @@ const handler = createMcpHandler(
       'Per-campaign funnel rollup with account names: totals, acceptance rate, reply rate.',
       {},
       async () => asText(await executeSql(CAMPAIGN_OVERVIEW_SQL))
+    )
+
+    server.tool(
+      'pipeline_overview',
+      'Current manual CRM pipeline snapshot: leads per stage/substatus per campaign, ' +
+        'stale (>14d in-stage) counts, plus untriaged-replies count. For call/proposal/' +
+        'client/triage questions, not invite/reply milestones.',
+      {},
+      async () => asText(await executeSql(PIPELINE_OVERVIEW_SQL))
     )
   },
   {

@@ -176,7 +176,7 @@ export function CampaignDetail() {
           />
 
           <div className="two-col">
-            <Funnel leads={leads} />
+            <Funnel leads={leads} showPipeline />
             <CohortChart leads={leads} />
           </div>
 
@@ -239,7 +239,7 @@ function CampaignColumn({ campaign, leads }: { campaign: CampaignMetrics; leads:
           {rate(campaign.reply_rate)})
         </div>
       </div>
-      <Funnel leads={leads} />
+      <Funnel leads={leads} showPipeline />
       <CohortChart leads={leads} weeks={12} />
       <LeadAdditionsChart leads={leads} weeks={12} />
     </div>

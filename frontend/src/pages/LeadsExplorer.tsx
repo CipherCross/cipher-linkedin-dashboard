@@ -3,13 +3,16 @@ import { useSearchParams } from 'react-router-dom'
 import { Download, SearchX, X } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
+import { usePipelineActions } from '../lib/usePipelineActions'
 import { EmptyState } from '../components/EmptyState'
+import { LostReasonModal } from '../components/LostReasonModal'
 import type { Lead } from '../lib/types'
 import {
   RISK_LABEL, STAGES, downloadCsv, instanceName, riskOf, stageMeta,
   stageOf, toCsv,
 } from '../lib/leads'
 import type { RiskFlag, Stage } from '../lib/leads'
+import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
 import { num, shortDate } from '../lib/format'
 
 const PAGE_SIZE = 50
@@ -39,8 +42,10 @@ const RISK_CHIP: Record<RiskFlag, string> = {
 export function LeadsExplorer() {
   const { data } = useData()
   const { openConversation } = useConversation()
+  const { setStage, members, memberName } = usePipelineActions()
   const [params, setParams] = useSearchParams()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [pendingLost, setPendingLost] = useState<Lead | null>(null)
 
   // Sort / page / column toggle all live in the URL so the page is fully
   // shareable (as its subtitle advertises).
@@ -56,6 +61,8 @@ export function LeadsExplorer() {
   const camp = params.get('camp') ?? 'all'
   const stage = params.get('stage') ?? 'all'
   const risk = params.get('risk') ?? 'all'
+  const pipe = params.get('pipe') ?? 'all'
+  const who = params.get('who') ?? 'all'
   const q = params.get('q') ?? ''
 
   // Search is debounced: it types into local state and only commits to the URL
@@ -120,6 +127,12 @@ export function LeadsExplorer() {
       if (effCamp !== 'all' && l.campaign_id !== effCamp) return false
       if (stage !== 'all' && stageOf(l) !== (stage as Stage)) return false
       if (risk !== 'all' && riskOf(l) !== (risk as RiskFlag)) return false
+      if (pipe === 'untriaged') {
+        if (!l.replied_at || l.pipeline_stage) return false
+      } else if (pipe !== 'all' && l.pipeline_stage !== pipe) return false
+      if (who === 'unassigned') {
+        if (l.assigned_to != null) return false
+      } else if (who !== 'all' && String(l.assigned_to) !== who) return false
       if (needle) {
         const hay = `${l.full_name ?? ''} ${l.headline ?? ''} ${l.company ?? ''}`.toLowerCase()
         if (!hay.includes(needle)) return false
@@ -135,7 +148,7 @@ export function LeadsExplorer() {
       return sortAsc ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
     })
     return rows
-  }, [data, inst, effCamp, stage, risk, q, sortKey, sortAsc])
+  }, [data, inst, effCamp, stage, risk, pipe, who, q, sortKey, sortAsc])
 
   if (!data) return null
 
@@ -151,7 +164,7 @@ export function LeadsExplorer() {
   const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   const dateColumns = DATE_COLUMNS.filter((c) => !c.optional || showAdded)
-  const colSpan = 4 + dateColumns.length
+  const colSpan = 5 + dateColumns.length
 
   // One removable chip per active filter, so the current view is legible at a glance.
   const activeFilters: Array<{ id: string; label: string; onClear: () => void }> = []
@@ -171,6 +184,18 @@ export function LeadsExplorer() {
       id: 'risk',
       label: RISK_CHIP[risk as RiskFlag] ?? risk,
       onClear: () => setFilter('risk', 'all'),
+    })
+  if (pipe !== 'all')
+    activeFilters.push({
+      id: 'pipe',
+      label: `Pipeline: ${pipe === 'untriaged' ? 'Untriaged' : stageLabel(pipe)}`,
+      onClear: () => setFilter('pipe', 'all'),
+    })
+  if (who !== 'all')
+    activeFilters.push({
+      id: 'who',
+      label: `Owner: ${who === 'unassigned' ? 'Unassigned' : memberName(Number(who)) || who}`,
+      onClear: () => setFilter('who', 'all'),
     })
 
   const onSort = (key: SortKey) => {
@@ -198,6 +223,10 @@ export function LeadsExplorer() {
           instance: instanceLabel(l.instance_id),
           stage: stageOf(l),
           risk: riskLabel(l),
+          pipeline_stage: l.pipeline_stage,
+          pipeline_substatus: l.pipeline_substatus,
+          assigned_to: memberName(l.assigned_to) || null,
+          lost_reason: l.lost_reason,
           added_at: l.added_at,
           invited_at: l.invited_at,
           connected_at: l.connected_at,
@@ -263,6 +292,26 @@ export function LeadsExplorer() {
             <option value="no_reply_2w">At risk: no reply 14d+ (follow up)</option>
           </select>
         </label>
+        <label className="filter-field">
+          <span className="filter-label">Pipeline</span>
+          <select value={pipe} onChange={(e) => setFilter('pipe', e.target.value)}>
+            <option value="all">All pipeline</option>
+            <option value="untriaged">Untriaged replies</option>
+            {PIPELINE_STAGES.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="filter-field">
+          <span className="filter-label">Owner</span>
+          <select value={who} onChange={(e) => setFilter('who', e.target.value)}>
+            <option value="all">Anyone</option>
+            <option value="unassigned">Unassigned</option>
+            {members.map((m) => (
+              <option key={m.id} value={String(m.id)}>{m.name}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {activeFilters.length > 0 && (
@@ -308,6 +357,7 @@ export function LeadsExplorer() {
               <th>Headline</th>
               <th>Campaign</th>
               <th>Stage</th>
+              <th>Pipeline</th>
               {dateColumns.map((c) => (
                 <th key={c.key} className="sortable" onClick={() => onSort(c.key)}>
                   {c.label}{sortInd(c.key)}
@@ -346,6 +396,23 @@ export function LeadsExplorer() {
                 <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 <td className="muted small">{campaignName(l.campaign_id)}</td>
                 <td><StageBadge lead={l} /></td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <select
+                    className="pipe-stage-select"
+                    value={l.pipeline_stage ?? ''}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v === 'lost') setPendingLost(l)
+                      else void setStage(l, v || null)
+                    }}
+                  >
+                    <option value="">—</option>
+                    {PIPELINE_STAGES.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </select>
+                </td>
                 {dateColumns.map((c) => (
                   <td key={c.key} className="muted col-date">
                     {shortDate(l[c.key] as string | null)}
@@ -388,6 +455,18 @@ export function LeadsExplorer() {
           </div>
         )}
       </div>
+
+      {pendingLost && (
+        <LostReasonModal
+          leadName={pendingLost.full_name}
+          onCancel={() => setPendingLost(null)}
+          onConfirm={(reason) => {
+            const lead = pendingLost
+            setPendingLost(null)
+            void setStage(lead, 'lost', { lostReason: reason })
+          }}
+        />
+      )}
     </>
   )
 }

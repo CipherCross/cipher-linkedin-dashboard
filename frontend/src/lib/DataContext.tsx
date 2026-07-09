@@ -14,24 +14,72 @@ const EMPTY: DashboardData = {
   steps: [],
   briefing: null,
   prevBriefing: null,
+  teamMembers: [],
+  pipelineEvents: [],
 }
 
-const LEAD_COLUMNS =
+const LEAD_COLUMNS_BASE =
   'id,instance_id,campaign_id,profile_url,full_name,headline,company,' +
   'added_at,invited_at,connected_at,first_message_at,replied_at,last_action_at'
+// The manual-pipeline columns (migration pending on some DBs). Requesting a
+// missing column makes PostgREST 400 the whole query, so fetchAllLeads retries
+// once with the base list (pipeline fields then come back undefined/null).
+const LEAD_COLUMNS =
+  `${LEAD_COLUMNS_BASE},pipeline_stage,pipeline_substatus,lost_reason,` +
+  'pipeline_stage_changed_at,assigned_to'
+
+// True for PostgREST's "undefined column" error (Postgres SQLSTATE 42703),
+// regardless of which column is missing. supabase-js error shapes vary, so also
+// accept a message that names a missing column as a fallback.
+function isMissingColumn(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null
+  if (err?.code === '42703') return true
+  return !!err?.message && /column\s+.*\s+does not exist/i.test(err.message)
+}
 
 // PostgREST caps responses at 1000 rows; page until a short page comes back.
-async function fetchAllLeads(): Promise<Lead[]> {
+// Falls back to the pre-pipeline column list on a missing-column error so a
+// DB that hasn't run the pipeline migration still renders.
+async function fetchAllLeads(columns: string = LEAD_COLUMNS): Promise<Lead[]> {
   const page = 1000
   const all: Lead[] = []
+  try {
+    for (let from = 0; ; from += page) {
+      const { data, error } = await supabase!
+        .from('leads')
+        .select(columns)
+        .order('id')
+        .range(from, from + page - 1)
+      if (error) throw error
+      all.push(...((data ?? []) as unknown as Lead[]))
+      if (!data || data.length < page) break
+    }
+  } catch (e) {
+    // Pre-migration DB has no pipeline columns → retry once with the base list.
+    // Any OTHER error (network, RLS, …) must propagate.
+    if (columns !== LEAD_COLUMNS_BASE && isMissingColumn(e))
+      return fetchAllLeads(LEAD_COLUMNS_BASE)
+    throw e
+  }
+  return all
+}
+
+// The manual-pipeline audit log is append-only and unbounded, so it will exceed
+// PostgREST's 1000-row cap; page through it (like fetchAllLeads / inbound
+// messages) or the funnel's "ever reached" math silently truncates. A missing
+// table (migration pending) resolves to an empty list, never a failed load.
+async function fetchAllPipelineEvents(): Promise<Record<string, unknown>[]> {
+  const page = 1000
+  const all: Record<string, unknown>[] = []
   for (let from = 0; ; from += page) {
     const { data, error } = await supabase!
-      .from('leads')
-      .select(LEAD_COLUMNS)
-      .order('id')
+      .from('pipeline_events')
+      .select('*')
+      .order('occurred_at')
+      .order('id') // tiebreaker: bulk auto-advance inserts share one occurred_at
       .range(from, from + page - 1)
-    if (error) throw error
-    all.push(...((data ?? []) as unknown as Lead[]))
+    if (error) return all // missing table / query error → whatever we have (usually none)
+    all.push(...((data ?? []) as Record<string, unknown>[]))
     if (!data || data.length < page) break
   }
   return all
@@ -95,10 +143,15 @@ const Ctx = createContext<{
   data: DashboardData | null
   loading: boolean
   refetch: () => void
+  /** Merge a partial update into one lead in place (no refetch). Used by the
+   *  manual-pipeline optimistic writes so a stage/assignee change reflects
+   *  everywhere the lead is rendered. */
+  patchLead: (leadId: string, patch: Partial<Lead>) => void
 }>({
   data: null,
   loading: true,
   refetch: () => {},
+  patchLead: () => {},
 })
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -115,6 +168,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setData((prev) => (prev ? { ...prev, error: message } : { ...EMPTY, error: message }))
   }, [])
 
+  // Merge a partial update into one lead in place (optimistic pipeline writes).
+  const patchLead = useCallback((leadId: string, patch: Partial<Lead>) => {
+    setData((prev) =>
+      prev
+        ? { ...prev, leads: prev.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)) }
+        : prev,
+    )
+  }, [])
+
   const load = useCallback(async () => {
     const id = ++reqId.current
     if (!supabase) {
@@ -128,7 +190,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const since = new Date(Date.now() - 90 * 86_400_000)
           .toISOString()
           .slice(0, 10)
-        const [instances, campaigns, activity, syncRuns, messages, annotations, steps, briefing, leads] =
+        const [
+          instances, campaigns, activity, syncRuns, messages, annotations, steps,
+          briefing, teamMembers, pipelineEvents, leads,
+        ] =
           await Promise.all([
             supabase
               .from('instances')
@@ -153,6 +218,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
               .select('*')
               .order('briefing_date', { ascending: false })
               .limit(2),
+            // Manual-pipeline tables may not exist yet (migration pending). Their
+            // errors are intentionally NOT folded into the aggregate `error`
+            // below — a missing table just yields an empty list, never a failed
+            // load. team_members' .select() resolves with {data,error} (never
+            // throws); fetchAllPipelineEvents swallows its own errors to [].
+            supabase.from('team_members').select('id,name,active,created_at').order('id'),
+            fetchAllPipelineEvents(),
             fetchAllLeads(),
           ])
         if (id !== reqId.current) return
@@ -176,6 +248,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             steps: steps.data ?? [],
             briefing: briefing.data?.[0] ?? null,
             prevBriefing: briefing.data?.[1] ?? null,
+            teamMembers: teamMembers.data ?? [],
+            pipelineEvents: pipelineEvents as unknown as DashboardData['pipelineEvents'],
             leads,
           })
         }
@@ -192,7 +266,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer)
   }, [load])
 
-  return <Ctx.Provider value={{ data, loading, refetch: load }}>{children}</Ctx.Provider>
+  return (
+    <Ctx.Provider value={{ data, loading, refetch: load, patchLead }}>{children}</Ctx.Provider>
+  )
 }
 
 export const useData = () => useContext(Ctx)
