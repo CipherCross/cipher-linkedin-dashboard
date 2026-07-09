@@ -2071,6 +2071,8 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   overflow-x: auto;
   padding-bottom: 8px;
   align-items: flex-start;
+  /* Horizontal drag-scroll shouldn't chain into a browser back/forward swipe. */
+  overscroll-behavior-x: contain;
 }
 .pipe-col {
   flex: 0 0 260px;
@@ -2080,7 +2082,9 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 240px);
+  /* Fixed (not max-) height so short columns still fill the board instead of
+   * collapsing to content; the card list scrolls internally. */
+  height: calc(100vh - 240px);
 }
 .pipe-col.drag-over {
   border-color: var(--accent);
@@ -2153,7 +2157,13 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .pipe-assign-select {
   font-size: var(--text-2xs);
   padding: 2px 6px;
+  /* Base `select` rule sets the chevron at `right 10px`; keep the text box
+   * clear of it and truncate long labels instead of colliding with the arrow. */
+  padding-right: 1.75rem;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .substatus-chip { margin-top: 4px; }
 .pipe-card-controls { display: flex; gap: 6px; margin-top: 4px; }
