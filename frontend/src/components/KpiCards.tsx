@@ -24,7 +24,8 @@ interface Props {
   added?: number
   addedPrev?: number
   /** All leads (unfiltered by range); when set, renders a "Leads velocity"
-   *  tile with a per-week trend line (Overview only). */
+   *  tile with its own fixed 4/8/12-week rolling window, independent of the
+   *  page's date-range picker (Overview only). */
   velocityLeads?: Lead[]
 }
 
@@ -137,7 +138,7 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
           <div className="card kpi" key={c.key}>{body}</div>
         )
       })}
-      {velocityLeads && range && <LeadsVelocityChart leads={velocityLeads} range={range} />}
+      {velocityLeads && <LeadsVelocityChart leads={velocityLeads} />}
     </div>
   )
 }
