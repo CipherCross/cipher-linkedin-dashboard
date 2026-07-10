@@ -158,9 +158,13 @@ for external clients (Claude Desktop / Claude Code).
 
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
-`CRON_SECRET` to lock the daily `/api/classify` + `/api/briefing` crons,
-`ADMIN_SECRET` to gate `/api/config` config writes, and `SLACK_WEBHOOK_URL` to
-deliver the Morning Briefing to Slack). Locally, plain `npm run dev` does not serve
+`CRON_SECRET` to lock the daily `/api/classify` + `/api/notify-replies` +
+`/api/briefing` crons, `ADMIN_SECRET` to gate `/api/config` config writes,
+`SLACK_WEBHOOK_URL` to deliver the Morning Briefing to Slack,
+`SLACK_REPLIES_WEBHOOK_URL` to route new-reply alerts from `/api/notify-replies`
+to their own channel — falls back to `SLACK_WEBHOOK_URL` when unset — and
+`DASHBOARD_URL` to turn lead names in those alerts into dashboard deep links).
+Locally, plain `npm run dev` does not serve
 `api/` — use `vercel dev` from `frontend/` to run the functions too.
 
 ## Metrics & dashboard pages

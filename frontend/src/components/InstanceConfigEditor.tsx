@@ -19,6 +19,7 @@ const TEXT_FIELDS: { key: string; label: string; placeholder?: string }[] = [
   { key: 'account_url', label: 'Account URL', placeholder: 'https://www.linkedin.com/in/…' },
   { key: 'account_avatar', label: 'Avatar URL' },
   { key: 'lh2_db_path', label: 'LH2 db path', placeholder: 'leave empty to auto-discover' },
+  { key: 'notify_url', label: 'Notify URL', placeholder: 'https://<app>.vercel.app/api/notify-replies' },
 ]
 
 const BOOL_FIELDS: { key: string; label: string }[] = [

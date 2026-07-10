@@ -87,6 +87,9 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
 - **Remote config**: `apply_remote_config` merges `instances.config` (edited on Health page via
   `/api/config`) over local `config.yaml`; **remote wins** for allowlisted `REMOTE_CONFIG_KEYS`.
   Bootstrap keys (`supabase_url`, `supabase_service_key`, `instance_id`) are local-only.
+- **Post-sync notify ping**: after a successful push, `notify_new_replies` POSTs to the
+  `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
+  inbound replies to Slack; all failures swallowed — never breaks a sync.
 
 ### AI layer (`frontend/api/`)
 Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `frontend/api/_lib/`:
@@ -99,6 +102,10 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   coerces to schema, stores one row/day in `briefings`, posts to Slack. Written in **Ukrainian**.
 - `classify.ts` (Haiku) labels inbound reply sentiment; `coach.ts` coaches the SDR per
   conversation. Both only touch unprocessed rows → cheap/idempotent.
+- `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
+  open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
+  rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.
+  Stale rows (>14 d) are marked without posting. Daily cron GET is the lost-ping sweep.
 
 **SQL guard**: `ai_execute_sql` (migration 021) is `SECURITY DEFINER`, owned by NOLOGIN
 SELECT-only role `ai_sql_runner`, allows only `SELECT`/`WITH`, wraps query in `jsonb_agg`
@@ -122,8 +129,12 @@ Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past
   Missing → dashboard shows error banner.
 - Server-only (Vercel settings, **never** `VITE_`): `ANTHROPIC_API_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY` (optionally `SUPABASE_URL`), `CRON_SECRET` (guards GET cron paths
-  of `/api/classify` + `/api/briefing`), `ADMIN_SECRET` (guards writes to `/api/config` +
-  `/api/playbook` + `/api/import-conversation`), `SLACK_WEBHOOK_URL`.
+  of `/api/classify` + `/api/notify-replies` + `/api/briefing`), `ADMIN_SECRET` (guards writes
+  to `/api/config` + `/api/playbook` + `/api/import-conversation`), `SLACK_WEBHOOK_URL`,
+  `SLACK_REPLIES_WEBHOOK_URL` (optional; new-reply alerts channel, falls back to
+  `SLACK_WEBHOOK_URL`), `DASHBOARD_URL` (optional; deep links in reply alerts).
 
-Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC, `/api/briefing` 07:00 UTC (after
-classify, so replies are already sentiment-labelled).
+Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC, `/api/notify-replies` 06:30 UTC
+(sweep for pings lost to outages — the primary trigger is the agent's post-sync ping via the
+`notify_url` remote-config key), `/api/briefing` 07:00 UTC (after classify, so replies are
+already sentiment-labelled).

@@ -3,6 +3,7 @@
   "outputDirectory": "dist",
   "crons": [
     { "path": "/api/classify", "schedule": "0 6 * * *" },
+    { "path": "/api/notify-replies", "schedule": "30 6 * * *" },
     { "path": "/api/briefing", "schedule": "0 7 * * *" }
   ],
   "rewrites": [

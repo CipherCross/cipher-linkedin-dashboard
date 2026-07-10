@@ -35,7 +35,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.9.0"
+AGENT_VERSION = "1.10.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -229,6 +229,7 @@ REMOTE_CONFIG_KEYS = {
     "account_name", "account_url", "account_avatar",
     "auto_update", "sync_steps", "sync_messages",
     "lh2_db_path", "mapping", "local_timezone",
+    "notify_url",
 }
 
 
@@ -277,6 +278,28 @@ def apply_remote_config(cfg):
     if applied:
         print(f"remote-config: applied online overrides for {', '.join(sorted(applied))}")
     return cfg
+
+
+def notify_new_replies(cfg):
+    """Fire-and-forget ping to the dashboard's /api/notify-replies after a
+    successful push, so a new inbound reply reaches Slack within one sync cycle
+    instead of waiting for the daily cron sweep. The endpoint is open and
+    self-limiting (claims unnotified rows atomically, capped batch) — see
+    frontend/api/notify-replies.ts. Pings unconditionally when notify_url is
+    set: the no-work case is a cheap no-op, and gating on "messages extracted"
+    would strand backlog left by a previously failed ping. ANY failure is
+    swallowed — a notification problem must never break a sync; the next ping
+    (from any notebook) or the daily sweep retries the backlog."""
+    url = (cfg.get("notify_url") or "").strip()
+    if not url:
+        return
+    try:
+        # instance_id is informational only (shows who pinged in the Vercel
+        # logs) — the endpoint drains ALL instances' backlog regardless.
+        r = requests.post(url, json={"instance_id": cfg["instance_id"]}, timeout=15)
+        print(f"notify-replies: HTTP {r.status_code} {r.text[:200]}")
+    except Exception as e:
+        print(f"notify-replies ping failed ({e}) — will retry after next sync")
 
 
 def content_hash(body):
@@ -990,6 +1013,9 @@ def cmd_sync(args):
             owner, last_sync_at=dt.datetime.now(dt.timezone.utc).isoformat()))
         print(f"sync {status}: {total} rows upserted for instance {instance_id}"
               + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
+        # After the run is recorded: swallows everything internally, so it can
+        # never trip the outer except and flip a green run to status='error'.
+        notify_new_replies(cfg)
     except Exception as e:
         sb.update("sync_runs", {"id": run["id"]}, {
             "status": "error", "error": str(e)[:2000],

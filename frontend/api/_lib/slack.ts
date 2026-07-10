@@ -1,10 +1,11 @@
 // Slack delivery. Started as briefing-only, kept isolated from the generator
 // (api/briefing.ts) so another sender could be added later without touching that
 // logic — this is that extension point, now also used by api/review-digest.ts
-// for the manager weekly-review post. Both senders are fail-soft by design: a
-// missing webhook or a Slack outage never fails the caller — briefings still
-// store and show on the dashboard, and review-digest reports the failure back
-// to its caller (502) rather than throwing.
+// for the manager weekly-review post and api/notify-replies.ts for new-reply
+// alerts. All senders are fail-soft by design: a missing webhook or a Slack
+// outage never fails the caller — briefings still store and show on the
+// dashboard, review-digest and notify-replies report the failure back to their
+// callers (502) rather than throwing.
 
 interface BriefingForSlack {
   briefing_date: string
@@ -198,6 +199,95 @@ export async function postReviewDigestToSlack(
       body: JSON.stringify({
         text: `📊 Weekly review — cohort of ${digest.cohort_week}`, // notification fallback
         blocks: blocksForDigest(digest),
+      }),
+    })
+    if (!res.ok) {
+      console.error(`Slack webhook returned ${res.status}: ${(await res.text()).slice(0, 200)}`)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('Slack webhook failed:', e instanceof Error ? e.message : String(e))
+    return false
+  }
+}
+
+export interface NewReplyForSlack {
+  lead_name: string // leads.full_name, or the profile-URL slug fallback
+  headline: string | null
+  company: string | null
+  campaign: string | null // campaigns.name
+  account: string // instances.account_name ?? label ?? instance_id
+  sent_at: string // LH2 capture time — lags the real reply (see context block)
+  snippets: string[] // 1-2 bodies, pre-sliced by the caller, oldest first
+  extra_count: number // messages in this thread beyond the rendered snippets
+  link?: string // optional dashboard deep link (DASHBOARD_URL)
+}
+
+// Unlike the other senders (whose strings are AI-generated or internal), reply
+// alerts render EXTERNAL text — a lead's name, headline, and message body. Slack
+// treats <...> as live syntax (<!channel>, <@U…>, <url|text>), so unescaped
+// external content could ping the channel or spoof links.
+const mrkdwnEscape = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** Build the Slack Block Kit payload for a batch of new inbound replies. */
+function blocksForReplies(replies: NewReplyForSlack[]): Block[] {
+  const blocks: Block[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `💬 ${replies.length} new lead ${replies.length === 1 ? 'reply' : 'replies'}`.slice(0, 150),
+      },
+    },
+  ]
+
+  for (const r of replies) {
+    const leadName = mrkdwnEscape(r.lead_name)
+    const name = r.link ? `<${r.link}|${leadName}>` : `*${leadName}*`
+    const who = [r.headline, r.company].filter(Boolean).map((s) => mrkdwnEscape(s!)).join(' @ ')
+    const where = [r.campaign, r.account].filter(Boolean).join(' · ')
+    const lines = [
+      `${name}${who ? ` — ${who}` : ''}`,
+      ...(where ? [`_${mrkdwnEscape(where)}_`] : []),
+      ...r.snippets.map((s) => `> ${mrkdwnEscape(s).replace(/\n+/g, '\n> ')}`),
+      ...(r.extra_count > 0 ? [`_(+${r.extra_count} more message${r.extra_count === 1 ? '' : 's'})_`] : []),
+    ]
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: lines.join('\n').slice(0, 2900) },
+    })
+  }
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: 'Times are LH2 capture times and may lag the actual reply.',
+      },
+    ],
+  })
+
+  return blocks
+}
+
+/** POST a batch of new replies to Slack. No-op when webhookUrl is empty; never throws. */
+export async function postNewRepliesToSlack(
+  webhookUrl: string | undefined,
+  replies: NewReplyForSlack[]
+): Promise<boolean> {
+  if (!webhookUrl || !replies.length) return false
+  const names = replies.slice(0, 3).map((r) => mrkdwnEscape(r.lead_name)).join(', ')
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        // notification fallback
+        text: `💬 ${replies.length} new lead ${replies.length === 1 ? 'reply' : 'replies'} (${names}${replies.length > 3 ? ', …' : ''})`,
+        blocks: blocksForReplies(replies),
       }),
     })
     if (!res.ok) {

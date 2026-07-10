@@ -175,6 +175,9 @@ messages — actual message texts; full conversation threads, both directions
     'referral' (talk to someone else), 'auto' (out-of-office / autoresponder).
     NULL = outbound, or an inbound reply not yet classified.
   reason text (one-line rationale), classified_at timestamptz, classified_model text,
+  notified_at timestamptz — when the inbound reply was announced to Slack (or
+    deliberately skipped as stale/pre-feature); NULL = notification pending.
+    Bookkeeping for /api/notify-replies only, not a funnel signal.
   updated_at timestamptz (bumps only on a real change, e.g. sentiment gets
     classified — not touched by every sync pass; same only-on-real-change
     semantics apply to leads.updated_at and campaigns.updated_at)

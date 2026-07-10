@@ -35,6 +35,12 @@ sync_steps: true
 # to skip. Override mapping.messages below only for a non-standard LH2 schema.
 sync_messages: true
 
+# New-reply Slack alerts: after each successful sync the agent pings this
+# dashboard endpoint, which posts freshly-synced inbound replies to Slack.
+# Usually set remotely from the Health page (it's a remote-config key) rather
+# than here. Leave empty to disable the ping; a failed ping never breaks a sync.
+# notify_url: "https://<your-app>.vercel.app/api/notify-replies"
+
 # Unique per notebook. Use the same value forever so upserts stay idempotent.
 instance_id: "notebook-1"
 instance_label: "Notebook 1 — Alice"
