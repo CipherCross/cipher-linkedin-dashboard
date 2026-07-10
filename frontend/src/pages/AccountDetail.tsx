@@ -68,9 +68,9 @@ export function AccountDetail() {
     )
   }
   const campaigns = data.campaigns.filter((c) => c.instance_id === inst.id)
-  const added7d = weeklyAdded(leads, inst.id)
-  const remaining = Math.max(0, WEEKLY_ADD_LIMIT - added7d)
-  const addedFrac = added7d / WEEKLY_ADD_LIMIT
+  const addedThisWeek = weeklyAdded(leads, inst.id)
+  const remaining = Math.max(0, WEEKLY_ADD_LIMIT - addedThisWeek)
+  const addedFrac = addedThisWeek / WEEKLY_ADD_LIMIT
   const capTone = addedFrac >= 1 ? 'danger' : addedFrac >= 0.7 ? 'warning' : 'success'
 
   return (
@@ -114,9 +114,9 @@ export function AccountDetail() {
 
       <div className="card">
         <div className="account-cell" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>Added last 7 days</h2>
+          <h2 style={{ margin: 0 }}>Added this week</h2>
           <div className="small" style={{ fontWeight: 600 }}>
-            {num(added7d)} / {WEEKLY_ADD_LIMIT}
+            {num(addedThisWeek)} / {WEEKLY_ADD_LIMIT}
           </div>
         </div>
         <div

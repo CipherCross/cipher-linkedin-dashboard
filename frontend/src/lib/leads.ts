@@ -231,17 +231,17 @@ function addedDate(l: Lead): string | null {
   return earliest
 }
 
-/** How many of one account's leads were added within the rolling last 7 days
- *  (UTC, relative to now), for the 200/week capacity gauge. Uses each lead's
- *  add date (added_at ?? earliest milestone), so it degrades gracefully for
- *  rows that predate the added_at column. */
+/** How many of one account's leads were added within the current calendar week
+ *  (Mon–Sun, UTC), for the 200/week capacity gauge. Uses each lead's add date
+ *  (added_at ?? earliest milestone), so it degrades gracefully for rows that
+ *  predate the added_at column. */
 export function weeklyAdded(leads: Lead[], instanceId: string): number {
-  const cutoff = Date.now() - 7 * 86_400_000
+  const thisWeek = weekStart(new Date().toISOString())
   let count = 0
   for (const l of leads) {
     if (l.instance_id !== instanceId) continue
     const added = addedDate(l)
-    if (added && new Date(added).getTime() >= cutoff) count++
+    if (added && weekStart(added) === thisWeek) count++
   }
   return count
 }

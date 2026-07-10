@@ -84,7 +84,7 @@ export const AccountCard = memo(function AccountCard({
 
       <div
         className="account-card-cap"
-        title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used in the last 7 days`}
+        title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used this week (Mon–Sun)`}
       >
         <span className="muted small">weekly cap</span>
         <div className="account-cap-track" style={{ background: `var(--${capTone}-subtle)` }}>
