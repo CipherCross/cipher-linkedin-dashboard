@@ -223,6 +223,7 @@ STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses
   rank 1  interested             "Interested"               (no substatuses)
   rank 1  neutral                "Neutral"                  (no substatuses)
   rank 1  negative               "Negative"                 substatus: soft_no | hard_no | lost
+  rank 1  following_up           "Following Up"             (no substatuses)
   rank 2  negotiations_call      "Negotiations about Call"  (no substatuses)
   rank 3  call_booked            "Call Booked"              (no substatuses)
   rank 4  call_done              "Call Done"                substatus: proposal | later | not_a_fit
@@ -231,7 +232,13 @@ STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses
   rank 7  client                 "Client (Contracted)"      (no substatuses)
   rank 7  lost                   "Lost"                     (no substatuses; free-text lost_reason applies here)
   Higher rank = further down the sales funnel. Some ranks hold several stages
-  (interested/neutral/negative all rank 1; client/lost both rank 7).
+  (interested/neutral/negative/following_up all rank 1; client/lost both rank 7).
+  following_up = the semi-warm holding lane: the lead replied at least once, a
+  follow-up was RECORDED after their last inbound, and they have been silent
+  >= 14 days ("replied once, now ghosting our follow-ups"). pipeline_auto_advance
+  parks interested/neutral leads here automatically (pipeline_events actor='auto');
+  humans can also move leads in/out by hand, and auto never overrides a human-set
+  stage. It is a holding state, NOT funnel progress — hence the shared rank 1.
 
 sync_runs — sync agent run log
   id uuid PK, instance_id, started_at, finished_at,
@@ -265,6 +272,10 @@ ANALYSIS GUIDANCE
   rate" = positive inbound replies / total replies. Use campaign_reply_sentiment
   for per-campaign breakdowns, or join messages (direction='in') to campaigns.
   NULL sentiment on an inbound row means it hasn't been classified yet.
+  Sentiment is classified ONCE, when the reply arrives, and never re-evaluated:
+  a 'positive' label says the reply WAS positive, not that the lead is warm
+  today. Before describing any lead as currently warm/hot, apply the
+  STALE / GHOSTED rule below.
 - MANUAL-REPLY BLIND SPOT — never mistake a missing follow-up for a dropped lead.
   The LH2 agent syncs only the scripted funnel (invite → first templated message →
   the inbound reply); it CANNOT see outbound messages the SDR types by hand in
@@ -273,6 +284,8 @@ ANALYSIS GUIDANCE
   - A thread with an inbound reply but no later outbound row is NOT evidence the
     lead was dropped — usually it just hasn't been manually re-imported. Absence
     of follow-up in the data ≠ absence of follow-up in reality.
+    (Exception: when a RECORDED outbound exists after the last inbound, silence
+    is measurable — see STALE / GHOSTED leads below.)
   - Before EVER claiming "warm/positive replies aren't being followed up" (or any
     post-reply drop-off / SDR-not-responding pattern), check message source on the
     threads in question. If the "no follow-up" threads are source='sync' only
@@ -294,6 +307,29 @@ ANALYSIS GUIDANCE
     becomes visible/measurable" — NEVER "the SDR is dropping leads" or "add an
     automated follow-up sequence". Only after import can post-reply conversion
     (reply → follow-up → call) be measured honestly.
+- STALE / GHOSTED leads — the ONE sanctioned exception to the blind-spot rule
+  above, and a hard limit on the word "warm". Split silent threads by whether a
+  follow-up was RECORDED after the lead's last inbound:
+      select instance_id, profile_url,
+             max(sent_at) filter (where direction='in')  as last_in,
+             max(sent_at) filter (where direction='out') as last_out
+      from messages group by 1, 2
+  - TRUE GHOSTING (last_out > last_in AND last_in < now() - interval '30 days'):
+    a recorded follow-up demonstrably went unanswered for 30+ days. You MAY call
+    these leads stale / ghosted / in need of re-engagement — this is NOT the
+    blind spot, because the outbound after the reply IS in the data.
+  - AMBIGUOUS (no recorded outbound after last_in): the blind-spot rule applies
+    in full — do NOT call the lead ghosted, dropped, OR still warm; recommend
+    importing the thread history first.
+  - Either way, NEVER call a lead "warm"/"hot" when its last inbound is 30+ days
+    old, whatever its sentiment label says — say "replied positively N days ago,
+    silent since" instead.
+  - The 'following_up' pipeline stage is an EARLIER, broader version of this
+    signal — auto-applied at 14 silent days (not 30) with a recorded follow-up.
+    Counting following_up leads via pipeline_overview / pipeline_metrics is a
+    safe way to quantify "going quiet on recorded follow-ups" without
+    re-deriving it from threads, but call them "in follow-up / gone quiet", not
+    "ghosted" — reserve ghosted/stale for the 30-day bar above.
 - PROACTIVE IMPORT SUGGESTIONS — surface blind-spot leads without being asked.
   When the user asks about warm replies, follow-ups, post-reply drop-off, pipeline
   health, or which leads need attention, proactively list the import candidates:

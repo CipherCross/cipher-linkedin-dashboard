@@ -135,6 +135,7 @@
   --chart-cat-pink: #e87fb0;
   --chart-cat-lime: #8fd07a;
   --chart-cat-amber: #f0995a;
+  --chart-cat-yellow: #e3c554;
 }
 
 /* ---- Colour tokens: LIGHT. Same NAMES, tuned for a soft light liquid-glass
@@ -210,6 +211,7 @@
   --chart-cat-pink: #cf5c94;
   --chart-cat-lime: #5f9e3a;
   --chart-cat-amber: #cf7a24;
+  --chart-cat-yellow: #9c7c10;
 }
 
 /* ---- Light-theme cosmetic overrides: a few rules bake in a dark substrate
@@ -2077,6 +2079,11 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 0 5px; cursor: help;
 }
+.msg-delete {
+  display: inline-flex; align-items: center; border: none; background: none;
+  padding: 0; color: var(--muted); cursor: pointer;
+}
+.msg-delete:hover:not(:disabled) { color: var(--danger); }
 
 /* sentiment: show only the current badge; reveal the button row on demand */
 .msg-senti-badge {

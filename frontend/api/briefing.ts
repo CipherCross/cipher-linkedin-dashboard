@@ -167,6 +167,12 @@ HOW TO WORK
   manually imported confirms a data-completeness artifact — then the only correct action is "manually
   import these threads", never "the SDR is dropping leads". Otherwise use messages only for reply VOLUME and SENTIMENT (did a reply
   come in, and what kind), never for who-replied-last.
+  EXCEPTION — the pipeline stage 'following_up' is the ONE sanctioned way to talk about ghosted leads:
+  auto-advance only moves a lead there when a RECORDED follow-up went unanswered 14+ days, so its counts
+  are deterministic pipeline data, not thread judgment. You MAY report following_up counts/aging from
+  pipeline_metrics / pipeline_events (e.g. "N лідів у Following Up понад X днів — варто повторно
+  звернутись"). You still may NOT derive your own going-cold / awaiting-our-reply claims from message
+  threads.
 - Ground every number in real query results; never guess. Be honest about small samples and stale data.
 - RECONCILE rates before you cite them: a daily pace and a weekly/period total must be arithmetically
   consistent (a "~65/day" claim cannot sit next to "261 in the week", which is ~37/day). State the time
@@ -280,7 +286,9 @@ VERIFY (use the tools — re-run queries, do NOT trust the drafts' numbers)
   until they're manually imported (messages.source='manual'), so an "unanswered" reply usually just
   isn't re-imported — structural, not a sync-freshness lag. Strip any "awaiting our reply / going cold /
   hot replies waiting / warm replies not followed up" claim, and any "SDR is dropping leads" action; if
-  a post-reply drop-off is raised, the only correct move is "manually import these threads".
+  a post-reply drop-off is raised, the only correct move is "manually import these threads". Keep
+  (don't strip) claims sourced from the 'following_up' pipeline stage counts — that stage is
+  deterministic data (a recorded follow-up unanswered 14+ days), not a thread-derived judgment.
 - LANGUAGE & NUMBERS: keep the whole briefing in plain, everyday Ukrainian a salesperson understands at
   a glance — short simple sentences, no analytical jargon (explain any unavoidable term inline). Every
   conclusion the merged briefing keeps MUST show the numbers that justify it — count + base + % where one

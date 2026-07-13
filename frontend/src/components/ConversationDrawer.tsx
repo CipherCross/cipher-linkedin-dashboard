@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Loader2, MessagesSquare, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, MessagesSquare, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { adminPost } from '../lib/admin'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
@@ -46,6 +47,8 @@ export function ConversationDrawer({
   const [error, setError] = useState<string | null>(null)
   // The message + target sentiment currently being saved (for the inline spinner).
   const [saving, setSaving] = useState<{ id: number; to: Sentiment } | null>(null)
+  // The imported message currently being deleted (for the inline spinner).
+  const [deleting, setDeleting] = useState<number | null>(null)
   // Which inbound bubble has its sentiment button row revealed (badge clicked).
   const [openSentiId, setOpenSentiId] = useState<number | null>(null)
   const [coaching, setCoaching] = useState<Coaching | null>(null)
@@ -254,6 +257,34 @@ export function ConversationDrawer({
     }
   }
 
+  // Only source='manual' rows are deletable — sync rows are LH2 ground truth and
+  // would be resurrected by the next agent sync anyway. The endpoint recomputes
+  // milestones the import backfilled from the row, so refetch() the funnel data.
+  async function deleteMessage(msg: ThreadMsg) {
+    if (
+      !window.confirm(
+        'Delete this imported message? Reply/connect milestones derived from it will be recomputed.',
+      )
+    )
+      return
+    setDeleting(msg.id)
+    try {
+      const res = await adminPost('/api/import-conversation', {
+        action: 'delete_message',
+        id: msg.id,
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      setRows((prev) => prev?.filter((m) => m.id !== msg.id) ?? prev)
+      refetch()
+    } catch (e) {
+      // A banner at the top of a long thread scrolls off-screen — toast instead.
+      toast.error(`Couldn't delete: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
 
   return (
@@ -438,12 +469,27 @@ export function ConversationDrawer({
                 <div className="msg-meta">
                   <span className="msg-time muted small">{clockTime(m.sent_at)}</span>
                   {m.source === 'manual' && (
-                    <span
-                      className="msg-imported"
-                      title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
-                    >
-                      imported
-                    </span>
+                    <>
+                      <span
+                        className="msg-imported"
+                        title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
+                      >
+                        imported
+                      </span>
+                      <button
+                        type="button"
+                        className="msg-delete"
+                        title="Delete imported message"
+                        disabled={deleting !== null}
+                        onClick={() => deleteMessage(m)}
+                      >
+                        {deleting === m.id ? (
+                          <Loader2 size={12} className="spin" />
+                        ) : (
+                          <Trash2 size={12} />
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
                 {inbound && (

@@ -20,6 +20,9 @@ export const PIPELINE_STAGES: PipelineStage[] = [
   { id: 'interested', label: 'Interested', rank: 1, substatuses: [] },
   { id: 'neutral', label: 'Neutral', rank: 1, substatuses: [] },
   { id: 'negative', label: 'Negative', rank: 1, substatuses: ['soft_no', 'hard_no', 'lost'] },
+  // Semi-warm holding lane: replied at least once, then went silent on recorded
+  // follow-ups. Shares rank 1 — a parking spot, not deeper funnel progress.
+  { id: 'following_up', label: 'Following Up', rank: 1, substatuses: [] },
   { id: 'negotiations_call', label: 'Negotiations about Call', rank: 2, substatuses: [] },
   { id: 'call_booked', label: 'Call Booked', rank: 3, substatuses: [] },
   { id: 'call_done', label: 'Call Done', rank: 4, substatuses: ['proposal', 'later', 'not_a_fit'] },

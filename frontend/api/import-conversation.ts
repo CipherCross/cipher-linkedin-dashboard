@@ -19,6 +19,13 @@
 //
 // Guard: same as /api/config — if ADMIN_SECRET is set on the Vercel project,
 // callers must send it as an `x-admin-secret` header.
+//
+// Second action (Vercel Hobby caps this project at its current 12 function
+// files, so deletion lives here rather than in its own endpoint): a body of
+// { action: 'delete_message', id } deletes ONE manually-imported message via
+// the delete_manual_message RPC (039), which also repairs lead milestones the
+// import backfilled from that row. Sync rows are not deletable — the RPC
+// refuses them and we 404.
 import { createHash } from 'node:crypto'
 import { db } from './_lib/core.js'
 
@@ -60,6 +67,8 @@ async function handle(req: Request): Promise<Response> {
   }
 
   let payload: {
+    action?: unknown
+    id?: unknown
     instance_id?: unknown
     campaign_id?: unknown
     profile_url?: unknown
@@ -70,6 +79,8 @@ async function handle(req: Request): Promise<Response> {
   } catch {
     return json({ error: 'invalid JSON body' }, 400)
   }
+
+  if (payload.action === 'delete_message') return deleteMessage(payload.id)
 
   const { instance_id, campaign_id, profile_url } = payload
   if (typeof instance_id !== 'string' || !instance_id) {
@@ -195,6 +206,20 @@ async function handle(req: Request): Promise<Response> {
     ...(Object.keys(patch).length && !milestone_error ? { milestones: patch } : {}),
     ...(milestone_error ? { milestone_error } : {}),
   })
+}
+
+async function deleteMessage(id: unknown): Promise<Response> {
+  if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+    return json({ error: 'id (positive integer) is required' }, 400)
+  }
+  const { data, error } = await db().rpc('delete_manual_message', { p_message_id: id })
+  if (error) return json({ error: error.message }, 500)
+  const result = data as { deleted?: boolean; milestones_recomputed?: number } | null
+  if (!result?.deleted) {
+    // Unknown id or a source='sync' row — the RPC deletes neither.
+    return json({ error: 'no manual message with that id' }, 404)
+  }
+  return json({ ok: true, deleted: id, milestones_recomputed: result.milestones_recomputed ?? 0 })
 }
 
 export const POST = (req: Request) => handle(req)
