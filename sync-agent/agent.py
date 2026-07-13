@@ -35,7 +35,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.10.0"
+AGENT_VERSION = "1.11.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -229,7 +229,7 @@ REMOTE_CONFIG_KEYS = {
     "account_name", "account_url", "account_avatar",
     "auto_update", "sync_steps", "sync_messages",
     "lh2_db_path", "mapping", "local_timezone",
-    "notify_url",
+    "notify_url", "exclude_campaigns",
 }
 
 
@@ -788,6 +788,31 @@ def extract_first_messages(con, warnings=None):
     return out
 
 
+def apply_campaign_excludes(cfg, campaigns, leads, messages, steps):
+    """Drop everything belonging to LH2 campaigns listed in `exclude_campaigns`
+    (LH2 campaign ids, e.g. [4]). Archiving a campaign in LH2 does NOT remove
+    it (or its person_in_campaigns_history rows) from the SQLite DB, so a
+    campaign deleted from Supabase gets resurrected by the next sync unless it
+    is excluded here. Events need no filtering — derive_events builds them from
+    the already-filtered leads. Messages with campaign_id None are kept."""
+    raw = cfg.get("exclude_campaigns") or []
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+    excluded = {f"{cfg['instance_id']}:{x}" for x in map(str, raw)}
+    if not excluded:
+        return campaigns, leads, messages, steps
+    kept = ([c for c in campaigns if c["id"] not in excluded],
+            [l for l in leads if l["campaign_id"] not in excluded],
+            [m for m in messages if m["campaign_id"] not in excluded],
+            [s for s in steps if s["campaign_id"] not in excluded])
+    dropped = (len(campaigns) - len(kept[0]), len(leads) - len(kept[1]),
+               len(messages) - len(kept[2]), len(steps) - len(kept[3]))
+    if any(dropped):
+        print(f"exclude_campaigns: dropped {dropped[0]} campaigns, "
+              f"{dropped[1]} leads, {dropped[2]} messages, {dropped[3]} steps")
+    return kept
+
+
 def extract_local(cfg, warnings=None):
     """Read campaigns + leads (+ owner identity) from the local LH2 DB.
 
@@ -901,6 +926,9 @@ def extract_local(cfg, warnings=None):
                              lead["first_message_at"], lead["replied_at"],
                              lead["last_action_at"]) if t),
                 default=None)
+
+    campaigns, leads, messages, steps = apply_campaign_excludes(
+        cfg, campaigns, leads, messages, steps)
 
     owner = extract_owner(cfg, con, warnings)
     con.close()

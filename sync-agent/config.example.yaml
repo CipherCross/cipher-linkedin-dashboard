@@ -41,6 +41,12 @@ sync_messages: true
 # than here. Leave empty to disable the ping; a failed ping never breaks a sync.
 # notify_url: "https://<your-app>.vercel.app/api/notify-replies"
 
+# LH2 campaign ids this notebook must NEVER sync (test campaigns, etc.).
+# Archiving in LH2 is not enough — archived campaigns stay in lh.db and would
+# be re-created in Supabase on the next sync. Also settable remotely from the
+# Health page. Applies to campaigns, leads, events, steps and messages.
+# exclude_campaigns: [4]
+
 # Unique per notebook. Use the same value forever so upserts stay idempotent.
 instance_id: "notebook-1"
 instance_label: "Notebook 1 — Alice"
