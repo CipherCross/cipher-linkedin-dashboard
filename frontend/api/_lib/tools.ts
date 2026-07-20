@@ -8,8 +8,10 @@ import {
   PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
+  db,
   executeSql,
 } from './core.js'
+import { validateSearch } from './savedSearch.js'
 
 export interface ToolDef {
   name: string
@@ -72,7 +74,112 @@ export const toolDefs = {
       'invite/reply milestones.',
     inputShape: {},
   },
+
+  save_search: {
+    name: 'save_search',
+    description:
+      'Create or modify a saved sourcing search in the Search Library (saved_searches) — ' +
+      'a shared filter RECIPE for a platform (Apollo, Sales Navigator, esun, …), not an ' +
+      'executed search. Omit `id` to CREATE a new search; pass an existing `id` to MODIFY ' +
+      'it (only the fields you pass change — partial patch). To modify, first `run_sql` ' +
+      'the current row (select * from saved_searches where id = …) so you know its id and ' +
+      "current values. Confirm the details with the user before creating a new search. " +
+      'There is no delete: to retire a search, set archived:true (reversible). Returns the ' +
+      'full saved row, or an error message if validation fails or the (platform, name) ' +
+      'already exists.',
+    inputShape: {
+      id: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Omit to create; pass to modify an existing search.'),
+      name: z.string().min(1).max(120),
+      platform: z
+        .string()
+        .min(1)
+        .max(60)
+        .describe("e.g. 'Apollo', 'Sales Navigator', 'esun' — free text"),
+      description: z.string().max(2000).optional(),
+      include_keywords: z.array(z.string().max(120)).max(50).optional(),
+      exclude_keywords: z.array(z.string().max(120)).max(50).optional(),
+      boolean_query: z
+        .string()
+        .max(5000)
+        .optional()
+        .describe('Platform-syntax boolean string, e.g. ("VP Sales" OR "Head of Sales") NOT intern'),
+      filters: z
+        .record(
+          z.string(),
+          z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])
+        )
+        .optional(),
+      notes: z.string().max(2000).optional(),
+      author: z
+        .string()
+        .max(100)
+        .optional()
+        .describe('Who this search belongs to, if the user said'),
+      archived: z.boolean().optional(),
+    },
+  },
 } satisfies Record<string, ToolDef>
+
+// Insert-or-partial-patch a saved_searches row via the service-role client.
+// SHARED WRITE PATH: this is the same logic /api/playbook's save_search action runs
+// (validation via the same _lib/savedSearch module, same insert/update semantics) —
+// keep the two in sync. The AI's read-only SQL guard (ai_execute_sql) is NOT touched;
+// this write goes straight through db().
+//
+// SECURITY: /api/chat is UNAUTHENTICATED, so exposing this tool there is an open
+// write path. Accepted under the project's deferred-auth posture only because it is
+// bounded — one table, validated+capped fields, soft-archive (no hard delete). Flag
+// for the future auth pass.
+export async function executeSaveSearch(input: {
+  id?: number
+  [k: string]: unknown
+}): Promise<{ ok: true; search: unknown } | string> {
+  const { id, ...rest } = input
+  const isUpdate = id !== undefined && id !== null
+  const normalized = validateSearch(rest, !isUpdate)
+  if (typeof normalized === 'string') return `Invalid search: ${normalized}`
+
+  const supa = db()
+  if (isUpdate) {
+    if (Object.keys(normalized).length === 0) {
+      return 'Nothing to update — provide at least one field to change.'
+    }
+    const { data, error } = await supa
+      .from('saved_searches')
+      .update(normalized)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        return 'A search with that name already exists for this platform — pick a different name or update that row by its id.'
+      }
+      if ((error as { code?: string }).code === 'PGRST116') {
+        return `No saved search with id ${id}.`
+      }
+      return `Save failed: ${error.message}`
+    }
+    return { ok: true, search: data }
+  }
+
+  const { data, error } = await supa
+    .from('saved_searches')
+    .insert(normalized)
+    .select()
+    .single()
+  if (error) {
+    if ((error as { code?: string }).code === '23505') {
+      return 'A search with that name already exists for this platform — update the existing search (pass its id) instead of creating a duplicate.'
+    }
+    return `Save failed: ${error.message}`
+  }
+  return { ok: true, search: data }
+}
 
 export const tools = {
   run_sql: tool({
@@ -103,5 +210,11 @@ export const tools = {
     description: toolDefs.pipeline_overview.description,
     inputSchema: z.object(toolDefs.pipeline_overview.inputShape),
     execute: async () => executeSql(PIPELINE_OVERVIEW_SQL),
+  }),
+
+  save_search: tool({
+    description: toolDefs.save_search.description,
+    inputSchema: z.object(toolDefs.save_search.inputShape),
+    execute: async (input) => executeSaveSearch(input),
   }),
 }

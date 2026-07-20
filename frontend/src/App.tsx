@@ -14,6 +14,7 @@ const AccountDetail = lazy(() => import('./pages/AccountDetail').then((m) => ({ 
 const LeadsExplorer = lazy(() => import('./pages/LeadsExplorer').then((m) => ({ default: m.LeadsExplorer })))
 const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
 const Playbook = lazy(() => import('./pages/Playbook').then((m) => ({ default: m.Playbook })))
+const SearchLibrary = lazy(() => import('./pages/SearchLibrary').then((m) => ({ default: m.SearchLibrary })))
 const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })))
 const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })))
 const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
@@ -46,6 +47,7 @@ export default function App() {
               <Route path="replies" element={<RepliesRedirect />} />
               <Route path="review" element={<Review />} />
               <Route path="playbook" element={<Playbook />} />
+              <Route path="searches" element={<SearchLibrary />} />
               <Route path="health" element={<Health />} />
               <Route path="chat" element={<Chat />} />
               <Route path="*" element={<Navigate to="/" replace />} />

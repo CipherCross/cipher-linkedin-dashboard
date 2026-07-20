@@ -20,6 +20,7 @@ export const maxDuration = 10
 const MAX_LOST_REASON = 500
 const MAX_NOTE = 4000
 const MAX_MEMBER_NAME = 100
+const GENDERS = ['male', 'female', 'unknown'] as const
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -293,6 +294,65 @@ async function setMemberActive(supa: ReturnType<typeof db>, p: Record<string, un
   return json({ ok: true, member: data })
 }
 
+// --- set_gender ------------------------------------------------------------
+// SDR override for the inferred lead demographics (Feature 2). Unlike the other
+// actions this touches the DEMOGRAPHICS layer, not the CRM pipeline, so it writes NO
+// pipeline_events row. A concrete gender is treated as ground truth (demo_model='manual',
+// confidence 1) that the classify job never re-infers; null is UNDO — it clears every
+// demographic inference field so the next classify run re-derives them from scratch.
+
+async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
+  const leadId = p.lead_id
+  if (typeof leadId !== 'string' || !leadId) {
+    return json({ error: 'lead_id (string) is required' }, 400)
+  }
+
+  const gender = p.gender
+  if (
+    gender !== null &&
+    !(typeof gender === 'string' && (GENDERS as readonly string[]).includes(gender))
+  ) {
+    return json({ error: `gender must be null or one of ${GENDERS.join(', ')}` }, 400)
+  }
+
+  const { data: lead, error: leadErr } = await supa
+    .from('leads')
+    .select('id')
+    .eq('id', leadId)
+    .maybeSingle()
+  if (leadErr) return json({ error: leadErr.message }, 500)
+  if (!lead) return json({ error: 'unknown lead_id' }, 404)
+
+  // null => clear ALL inference fields (undo -> next classify run re-infers).
+  // concrete gender => SDR-confirmed override; leave the birth-year range as inferred.
+  const patch: Record<string, unknown> =
+    gender === null
+      ? {
+          birth_year_min: null,
+          birth_year_max: null,
+          gender: null,
+          gender_confidence: null,
+          demo_inferred_at: null,
+          demo_model: null,
+        }
+      : {
+          gender,
+          gender_confidence: 1,
+          demo_model: 'manual',
+          demo_inferred_at: nowIso(),
+        }
+
+  const { data, error } = await supa
+    .from('leads')
+    .update(patch)
+    .eq('id', leadId)
+    .select('gender,gender_confidence,demo_model,demo_inferred_at,birth_year_min,birth_year_max')
+    .single()
+  if (error) return json({ error: error.message }, 500)
+
+  return json({ ok: true, ...data })
+}
+
 async function handle(req: Request): Promise<Response> {
   const secret = process.env.ADMIN_SECRET
   if (secret && req.headers.get('x-admin-secret') !== secret) {
@@ -323,6 +383,8 @@ async function handle(req: Request): Promise<Response> {
       return addMember(supa, payload)
     case 'set_member_active':
       return setMemberActive(supa, payload)
+    case 'set_gender':
+      return setGender(supa, payload)
     default:
       return json({ error: 'unknown action' }, 400)
   }

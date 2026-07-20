@@ -80,6 +80,10 @@ export interface DailyActivity {
   cnt: number
 }
 
+/** Inferred (or SDR-confirmed) gender for a lead. `unknown` is a first-class
+ *  value — name-based inference is unreliable for many naming cultures. */
+export type Gender = 'male' | 'female' | 'unknown'
+
 export interface Lead {
   id: string
   instance_id: string
@@ -104,6 +108,43 @@ export interface Lead {
   lost_reason: string | null
   pipeline_stage_changed_at: string | null
   assigned_to: number | null
+  // --- Demographics (migration 041) + photo (migration 042) ------------------
+  // All optional: the LEAD_COLUMNS retry ladder drops these rungs on a DB that
+  // hasn't run the migrations yet, leaving them undefined. Age is arithmetic
+  // (birth-year bounds), gender is inferred (Haiku) or SDR-confirmed.
+  education_start_year?: number | null
+  first_job_start_year?: number | null
+  birth_year_min?: number | null
+  birth_year_max?: number | null
+  gender?: Gender | null
+  gender_confidence?: number | null
+  demo_inferred_at?: string | null
+  /** 'claude-haiku-4-5' = AI-inferred; 'manual' = SDR-confirmed (ground truth). */
+  demo_model?: string | null
+  /** Bucket-relative path in the public `lead-photos` Storage bucket. Display
+   *  only — never used as an inference input. */
+  photo_path?: string | null
+  photo_synced_at?: string | null
+}
+
+/** A named, shareable sourcing search (Apollo / Sales Navigator / esun / …).
+ *  Sourcers apply these filter recipes by hand — the app never executes them.
+ *  `filters` is a flat platform-specific bag (string / number / boolean /
+ *  string[] values). See migration 040 (`saved_searches`). */
+export interface SavedSearch {
+  id: number
+  name: string
+  platform: string
+  description: string | null
+  include_keywords: string[]
+  exclude_keywords: string[]
+  boolean_query: string | null
+  filters: Record<string, string | number | boolean | string[]>
+  notes: string | null
+  author: string | null
+  archived: boolean
+  created_at: string
+  updated_at: string
 }
 
 /** A person on the team who can own leads in the manual pipeline. */
@@ -261,5 +302,6 @@ export interface DashboardData {
   prevBriefing: Briefing | null
   teamMembers: TeamMember[]
   pipelineEvents: PipelineEvent[]
+  savedSearches: SavedSearch[]
   error?: string
 }

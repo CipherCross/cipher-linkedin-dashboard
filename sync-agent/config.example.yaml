@@ -35,6 +35,18 @@ sync_steps: true
 # to skip. Override mapping.messages below only for a non-standard LH2 schema.
 sync_messages: true
 
+# Lead photos (UI display ONLY — never used for any inference): after each
+# successful sync the agent mirrors each lead's LinkedIn profile photo into the
+# public `lead-photos` Storage bucket so the dashboard can show avatars. OFF by
+# default — flip it on per notebook (usually remotely, from the Health page: it's
+# a remote-config key) once the storage bucket migration is applied and you're
+# ready for the initial backfill, which spreads over several syncs (200 photos per
+# run). Every photo error is swallowed — it can NEVER break a sync. NOTE: the same
+# licdn URL expiry as above applies — the agent downloads the bytes at sync time
+# from a fresh DB read rather than storing the URL; a dead/missing avatar is
+# skipped quietly (marked done, no photo) and never retried.
+sync_photos: false
+
 # New-reply Slack alerts: after each successful sync the agent pings this
 # dashboard endpoint, which posts freshly-synced inbound replies to Slack.
 # Usually set remotely from the Health page (it's a remote-config key) rather
@@ -150,6 +162,34 @@ mapping:
   #   body: "body"
   #   sent_at: "sent_at"
   #   direction: "direction"
+
+  # Age-inference signals are BUILT IN: the agent extracts each lead's earliest
+  # education start year and earliest first-job start year straight from lh.db
+  # (person_education / person_positions, deduped to one slug per person like
+  # `leads`; implausible placeholder years — LH2 stores 1900/1970, and future-dated
+  # typos — are rejected before the MIN). No mapping needed for a standard LH2
+  # schema, and a build WITHOUT these tables just syncs with no years (fails safe to
+  # empty, sync still completes). Uncomment and adapt ONLY for a non-standard layout:
+  # each query must produce a `profile_url` (same slug format as leads) and a
+  # `start_year` column (add explicit alias keys if you name them differently). The
+  # agent takes the MIN plausible year per profile and NEVER overwrites a stored
+  # year with NULL, so these are safe to leave enabled across re-syncs.
+  # education_year:
+  #   query: |
+  #     select 'https://www.linkedin.com/in/' || pei.external_id as profile_url,
+  #            pe.start_year as start_year
+  #     from person_education pe
+  #     join (<one-slug-per-person dedup, see leads mapping>) pei
+  #       on pei.person_id = pe.person_id
+  #     where pe.start_year between 1950 and 2100
+  # first_job_year:
+  #   query: |
+  #     select 'https://www.linkedin.com/in/' || pei.external_id as profile_url,
+  #            pp.start_year as start_year
+  #     from person_positions pp
+  #     join (<one-slug-per-person dedup, see leads mapping>) pei
+  #       on pei.person_id = pp.person_id
+  #     where pp.start_year between 1950 and 2100
 
   # Optional: the logged-in account's own profile, straight from lh.db, so
   # name/photo refresh on every sync. Locate where your LH2 version stores it

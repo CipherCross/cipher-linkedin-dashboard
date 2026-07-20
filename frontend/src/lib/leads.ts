@@ -2,7 +2,7 @@
 // mirrors the agent's derive_events: invited_at / connected_at / replied_at
 // are the source of truth for funnel stages.
 import type {
-  CampaignMetrics, DailyActivity, Instance, IssueKind, IssueSeverity, Lead, Message,
+  CampaignMetrics, DailyActivity, Gender, Instance, IssueKind, IssueSeverity, Lead, Message,
   NextAction, Sentiment,
 } from './types'
 
@@ -552,4 +552,141 @@ export function rangedCampaigns(
   }
   out.sort((a, b) => b.invites_sent - a.invites_sent || a.campaign_name.localeCompare(b.campaign_name))
   return out
+}
+
+// --- Demographics + photos ----------------------------------------------
+// Age is arithmetic from inferred birth-year bounds; gender is inferred (Haiku)
+// or SDR-confirmed. Both may be absent on a pre-migration DB (LEAD_COLUMNS
+// ladder drops the rung) — every helper is null-safe. `unknown` gender and
+// unknown age are first-class values, never a failure state. All year math is
+// in UTC to match the rest of this module.
+
+/** Public URL for a lead's synced profile photo, or null when there's no photo
+ *  (or Supabase isn't configured). The `lead-photos` bucket is public (these
+ *  avatars are already public on LinkedIn), so no signing/auth is needed.
+ *  Display only — photos are never an inference input. */
+export function leadPhotoUrl(lead: Lead): string | null {
+  const path = lead.photo_path
+  if (!path) return null
+  const base = import.meta.env.VITE_SUPABASE_URL as string | undefined
+  if (!base) return null
+  return `${base}/storage/v1/object/public/lead-photos/${path}`
+}
+
+/** A lead's inferred age from the MIDPOINT of its birth-year range (current UTC
+ *  year − mid-birth-year), floored to whole years; null when either bound is
+ *  missing. Basis for both the age bucket and the campaign histogram. */
+export function ageOf(lead: Lead): number | null {
+  const lo = lead.birth_year_min
+  const hi = lead.birth_year_max
+  if (lo == null || hi == null) return null
+  return Math.floor(new Date().getUTCFullYear() - (lo + hi) / 2)
+}
+
+/** Display age range from a lead's birth-year bounds, e.g. "30–35". The OLDER
+ *  age comes from birth_year_min, the YOUNGER from birth_year_max
+ *  (age = year − birthYear). Equal bounds collapse to a single number; a null
+ *  bound → null (unknown). */
+export function ageRange(lead: Lead): string | null {
+  const lo = lead.birth_year_min
+  const hi = lead.birth_year_max
+  if (lo == null || hi == null) return null
+  const year = new Date().getUTCFullYear()
+  const ageMin = year - hi
+  const ageMax = year - lo
+  return ageMin === ageMax ? String(ageMin) : `${ageMin}–${ageMax}`
+}
+
+/** Coarse age buckets for the LeadsExplorer filter dropdown and grouped charts. */
+export type AgeBucket = 'under_25' | '25_34' | '35_44' | '45_54' | '55_plus'
+
+export const AGE_BUCKETS: Array<{ id: AgeBucket; label: string }> = [
+  { id: 'under_25', label: '<25' },
+  { id: '25_34', label: '25–34' },
+  { id: '35_44', label: '35–44' },
+  { id: '45_54', label: '45–54' },
+  { id: '55_plus', label: '55+' },
+]
+
+/** Coarse age bucket for a lead from its birth-year midpoint; null when unknown. */
+export function ageBucketOf(lead: Lead): AgeBucket | null {
+  const age = ageOf(lead)
+  if (age == null) return null
+  if (age < 25) return 'under_25'
+  if (age < 35) return '25_34'
+  if (age < 45) return '35_44'
+  if (age < 55) return '45_54'
+  return '55_plus'
+}
+
+/** Short / long gender display labels, keyed by the stored value. */
+export const GENDER_SHORT: Record<Gender, string> = { male: 'M', female: 'F', unknown: '?' }
+export const GENDER_LONG: Record<Gender, string> = {
+  male: 'Male',
+  female: 'Female',
+  unknown: 'Unknown',
+}
+
+export interface Demographics {
+  /** Gender split; `unknown` includes leads with no inferred gender yet. */
+  gender: Array<{ id: Gender; label: string; count: number }>
+  /** 5-year age buckets from birth-year midpoint, continuous across the observed
+   *  span (empty when no lead has an inferred age). */
+  ages: Array<{ label: string; count: number }>
+  /** Leads (persons) whose age is unknown — surfaced explicitly, never dropped. */
+  ageUnknown: number
+  /** Unique persons (leadKey-deduped) counted. */
+  total: number
+}
+
+const GENDER_ORDER: Gender[] = ['female', 'male', 'unknown']
+
+/** Gender split + a 5-year-bucket age histogram over a lead set, deduped by
+ *  leadKey so a person present in several campaigns of one account counts once
+ *  (memory: notebook-1:4 duplicates people across campaigns). A person's
+ *  demographics are read from the first row seen for their leadKey — all of a
+ *  person's rows carry the same synced/inferred values. */
+export function campaignDemographics(leads: Lead[]): Demographics {
+  const seen = new Set<string>()
+  const genderCount: Record<Gender, number> = { male: 0, female: 0, unknown: 0 }
+  const ages: number[] = []
+  let ageUnknown = 0
+  let total = 0
+  for (const l of leads) {
+    const k = leadKey(l.instance_id, l.profile_url)
+    if (seen.has(k)) continue
+    seen.add(k)
+    total++
+    genderCount[l.gender ?? 'unknown']++
+    const age = ageOf(l)
+    if (age == null) ageUnknown++
+    else ages.push(age)
+  }
+  return {
+    gender: GENDER_ORDER.map((id) => ({ id, label: GENDER_LONG[id], count: genderCount[id] })),
+    ages: ageHistogram5yr(ages),
+    ageUnknown,
+    total,
+  }
+}
+
+/** Continuous 5-year buckets ("25–29", "30–34", …) spanning the observed ages,
+ *  so quiet buckets in the middle render as zero instead of vanishing. */
+function ageHistogram5yr(ages: number[]): Array<{ label: string; count: number }> {
+  if (ages.length === 0) return []
+  let lo = Infinity
+  let hi = -Infinity
+  for (const a of ages) {
+    if (a < lo) lo = a
+    if (a > hi) hi = a
+  }
+  const start = Math.floor(lo / 5) * 5
+  const end = Math.floor(hi / 5) * 5
+  const buckets: Array<{ label: string; count: number }> = []
+  for (let b = start; b <= end; b += 5) buckets.push({ label: `${b}–${b + 4}`, count: 0 })
+  for (const a of ages) {
+    const idx = Math.min(buckets.length - 1, Math.floor((a - start) / 5))
+    buckets[idx].count++
+  }
+  return buckets
 }

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
-import type { DashboardData, Lead, Message } from './types'
+import type { DashboardData, Lead, Message, SavedSearch } from './types'
 
 const EMPTY: DashboardData = {
   instances: [],
@@ -16,17 +16,31 @@ const EMPTY: DashboardData = {
   prevBriefing: null,
   teamMembers: [],
   pipelineEvents: [],
+  savedSearches: [],
 }
 
 const LEAD_COLUMNS_BASE =
   'id,instance_id,campaign_id,profile_url,full_name,headline,company,' +
   'added_at,invited_at,connected_at,first_message_at,replied_at,last_action_at'
-// The manual-pipeline columns (migration pending on some DBs). Requesting a
-// missing column makes PostgREST 400 the whole query, so fetchAllLeads retries
-// once with the base list (pipeline fields then come back undefined/null).
-const LEAD_COLUMNS =
+// The manual-pipeline columns (migration pending on some DBs).
+const LEAD_COLUMNS_PIPELINE =
   `${LEAD_COLUMNS_BASE},pipeline_stage,pipeline_substatus,lost_reason,` +
   'pipeline_stage_changed_at,assigned_to'
+// Demographics (migration 041) + photo (migration 042). These ship in adjacent
+// migrations, so they share ONE rung: a DB is expected to have both or neither.
+const LEAD_COLUMNS_FULL =
+  `${LEAD_COLUMNS_PIPELINE},education_start_year,first_job_start_year,` +
+  'birth_year_min,birth_year_max,gender,gender_confidence,demo_inferred_at,' +
+  'demo_model,photo_path,photo_synced_at'
+// The widest set we ask for first.
+const LEAD_COLUMNS = LEAD_COLUMNS_FULL
+// Retry ladder, widest → narrowest. Requesting a missing column makes PostgREST
+// 400 the whole query (SQLSTATE 42703); on that error fetchAllLeads drops to the
+// NEXT rung rather than falling straight to base — so a DB that has the pipeline
+// migration but not the demographics/photo ones keeps its pipeline columns
+// instead of silently losing them. Each narrower rung's fields come back
+// undefined/null in the UI.
+const LEAD_COLUMN_LADDER = [LEAD_COLUMNS_FULL, LEAD_COLUMNS_PIPELINE, LEAD_COLUMNS_BASE]
 
 // True for PostgREST's "undefined column" error (Postgres SQLSTATE 42703),
 // regardless of which column is missing. supabase-js error shapes vary, so also
@@ -38,8 +52,9 @@ function isMissingColumn(e: unknown): boolean {
 }
 
 // PostgREST caps responses at 1000 rows; page until a short page comes back.
-// Falls back to the pre-pipeline column list on a missing-column error so a
-// DB that hasn't run the pipeline migration still renders.
+// Walks the LEAD_COLUMN_LADDER down on a missing-column error so a DB that has
+// only some of the lead migrations still renders (narrower rungs' fields come
+// back undefined/null).
 // `updatedSince` (delta refresh, migration 031) restricts to rows whose
 // updated_at moved since the cursor; a DB without that column 42703s, which the
 // caller catches to disable delta and fall back to a full fetch permanently.
@@ -59,10 +74,13 @@ async function fetchAllLeads(
       if (!data || data.length < page) break
     }
   } catch (e) {
-    // Pre-migration DB has no pipeline columns → retry once with the base list.
-    // Any OTHER error (network, RLS, missing updated_at, …) must propagate.
-    if (columns !== LEAD_COLUMNS_BASE && isMissingColumn(e))
-      return fetchAllLeads(LEAD_COLUMNS_BASE, updatedSince)
+    // Missing-column error (SQLSTATE 42703): drop to the next narrower rung of
+    // the ladder (full → pipeline → base). Only that error class triggers a
+    // step-down; any OTHER error (network, RLS, missing updated_at, …) must
+    // propagate. A custom column list not on the ladder also propagates.
+    const rung = LEAD_COLUMN_LADDER.indexOf(columns)
+    const next = rung >= 0 ? LEAD_COLUMN_LADDER[rung + 1] : undefined
+    if (next && isMissingColumn(e)) return fetchAllLeads(next, updatedSince)
     throw e
   }
   return all
@@ -192,11 +210,18 @@ const Ctx = createContext<{
    *  manual-pipeline optimistic writes so a stage/assignee change reflects
    *  everywhere the lead is rendered. */
   patchLead: (leadId: string, patch: Partial<Lead>) => void
+  /** Insert-or-replace a saved search in place after a /api/playbook save, so
+   *  the Search Library reflects the change without a full refetch. */
+  upsertSavedSearch: (search: SavedSearch) => void
+  /** Drop a saved search from local state after a hard delete. */
+  removeSavedSearch: (id: number) => void
 }>({
   data: null,
   loading: true,
   refetch: () => {},
   patchLead: () => {},
+  upsertSavedSearch: () => {},
+  removeSavedSearch: () => {},
 })
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -262,6 +287,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
+  // Insert-or-replace a saved search after a server write returns the full row.
+  // No pending-patch machinery: the write has already landed server-side, and
+  // the small tables full-refetch every cycle would re-fetch the same row.
+  const upsertSavedSearch = useCallback((search: SavedSearch) => {
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.savedSearches.filter((s) => s.id !== search.id)
+      return { ...prevData, savedSearches: [...rest, search] }
+    })
+  }, [])
+
+  const removeSavedSearch = useCallback((id: number) => {
+    setData((prevData) =>
+      prevData
+        ? { ...prevData, savedSearches: prevData.savedSearches.filter((s) => s.id !== id) }
+        : prevData,
+    )
+  }, [])
+
   // `mode` = 'full' re-downloads everything (initial load + manual refetch after a
   // write); 'delta' (the 5-min interval) fetches only rows changed since the
   // cursor and merges them, falling back to a full refetch if the DB has no
@@ -313,6 +357,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // load. team_members' .select() resolves with {data,error} (never
           // throws); fetchAllPipelineEvents swallows its own errors to [].
           supabase.from('team_members').select('id,name,active,created_at').order('id'),
+          // Search Library (migration 040) — same tolerated-error pattern: a
+          // missing table (pre-migration DB) yields [] and its error is excluded
+          // from the aggregate `error` below, so it never fails the load.
+          supabase.from('saved_searches').select('*').order('platform').order('name'),
         ])
         // Big append-heavy tables delta on an interval refresh, full otherwise.
         const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
@@ -321,7 +369,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const [small, leads, messages, pipelineEvents] = await Promise.all([
           smallP, leadsP, messagesP, eventsP,
         ])
-        const [instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers] = small
+        const [instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers, savedSearches] = small
         if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
@@ -377,6 +425,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
               briefing: stableSlice(base.briefing, briefing.data?.[0] ?? null),
               prevBriefing: stableSlice(base.prevBriefing, briefing.data?.[1] ?? null),
               teamMembers: stableSlice(base.teamMembers, teamMembers.data ?? []),
+              savedSearches: stableSlice(
+                base.savedSearches,
+                (savedSearches.data ?? []) as SavedSearch[],
+              ),
               // Already reference-stable on a no-op delta (mergeById returns the
               // prior array when the batch is empty); full fetch gets a fresh one.
               pipelineEvents: events as unknown as DashboardData['pipelineEvents'],
@@ -413,7 +465,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [load])
 
   return (
-    <Ctx.Provider value={{ data, loading, refetch, patchLead }}>{children}</Ctx.Provider>
+    <Ctx.Provider
+      value={{ data, loading, refetch, patchLead, upsertSavedSearch, removeSavedSearch }}
+    >
+      {children}
+    </Ctx.Provider>
   )
 }
 

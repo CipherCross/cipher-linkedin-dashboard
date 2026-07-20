@@ -146,6 +146,30 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   Milestones may also be backfilled from manually imported conversations
   (/api/import-conversation); a DB trigger keeps a non-NULL milestone from
   regressing to NULL when the agent re-syncs.
+  -- DEMOGRAPHICS LAYER (inferred; internal outreach analytics only). Age is a
+  -- RANGE, not a point; gender is a statistical inference until an SDR confirms it.
+  education_start_year int (university/school start year, from LH2; text signal),
+  first_job_start_year int (earliest job start year, from LH2; text signal),
+  birth_year_min int, birth_year_max int (INCLUSIVE birth-year RANGE; NULL = no age
+    signal. Render an AGE range from the current year: age ~= current_year - birth_year.
+    e.g. birth_year_min=1990, birth_year_max=1995 with current year 2026 -> "~31-36".
+    Computed by arithmetic from the two start years, no model),
+  gender text ('male'|'female'|'unknown'; NULL = not yet inferred. 'unknown' is a
+    first-class value — ambiguous, initials-only, or non-Western names the model
+    can't call reliably — NOT a failure state),
+  gender_confidence real (0..1; the model's confidence in the gender label. 1 for manual overrides),
+  demo_inferred_at timestamptz (when demographics were last computed; NULL = not yet
+    processed by the classify job),
+  demo_model text ('claude-haiku-4-5' = AI inference; 'manual' = SDR-CONFIRMED via the
+    dashboard — treat 'manual' rows as GROUND TRUTH, never re-inferred).
+  NOTE: gender/age are INFERRED for internal analytics; always describe them as
+  inferred-with-confidence unless demo_model='manual'. Name-based gender is less
+  accurate for non-Western names — prefer 'unknown' over a low-confidence guess.
+  photo_path text (bucket-relative path to the lead's avatar in Supabase Storage,
+    <instance_id>/<slug>.jpg; NULL = no photo. UI DISPLAY ONLY — never fetch for
+    inference/classification; never pass to any model),
+  photo_synced_at timestamptz (when the agent last resolved a photo; a non-NULL
+    photo_synced_at with NULL photo_path means "checked, none available")
 
 events — action log (drives daily-activity charts)
   id bigint PK, instance_id, campaign_id, profile_url,
@@ -239,6 +263,20 @@ STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses
   parks interested/neutral leads here automatically (pipeline_events actor='auto');
   humans can also move leads in/out by hand, and auto never overrides a human-set
   stage. It is a holding state, NOT funnel progress — hence the shared rank 1.
+
+saved_searches — the Search Library: shared, named sourcing-search RECIPES
+  (Apollo / Sales Navigator / esun / …) that data sourcers reproduce BY HAND on the
+  platform. These are filter SETUPS to share, NOT executed searches or query history,
+  and nothing here runs against any platform API.
+  id bigint PK, name text, platform text (free text — 'Apollo', 'Sales Navigator',
+  'esun', and others; not an enum), description text, include_keywords text[],
+  exclude_keywords text[], boolean_query text (free-form AND/OR/NOT string pasteable
+  into the platform), filters jsonb (platform-specific settings, flat key->value),
+  notes text, author text (free text; who the search belongs to), archived boolean,
+  created_at, updated_at.
+  The LIVE set is archived=false; archived=true is the soft-deleted/retired set
+  (hidden by default in the UI). Unique per (platform, lower(name)) — same name can
+  exist under different platforms but not twice within one platform.
 
 sync_runs — sync agent run log
   id uuid PK, instance_id, started_at, finished_at,

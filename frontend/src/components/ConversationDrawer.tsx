@@ -9,16 +9,16 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
 import { LeadNotesPanel } from './LeadNotesPanel'
 import { LostReasonModal } from './LostReasonModal'
-import { InitialsAvatar } from './Avatar'
+import { LeadAvatar } from './Avatar'
 import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
 import {
   ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
-  instanceName, leadKey,
+  ageRange, instanceName, leadKey,
 } from '../lib/leads'
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
 import { clockTime, dayHeading } from '../lib/format'
-import type { Coaching, Lead, Message, Sentiment } from '../lib/types'
+import type { Coaching, Gender, Lead, Message, Sentiment } from '../lib/types'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
@@ -38,9 +38,9 @@ export function ConversationDrawer({
   closing?: boolean
   onClose: () => void
 }) {
-  const { data, refetch } = useData()
+  const { data, refetch, patchLead } = useData()
   const toast = useToast()
-  const { setStage, assign, members } = usePipelineActions()
+  const { setStage, assign, members, actor } = usePipelineActions()
   const [pendingLost, setPendingLost] = useState(false)
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -49,6 +49,8 @@ export function ConversationDrawer({
   const [saving, setSaving] = useState<{ id: number; to: Sentiment } | null>(null)
   // The imported message currently being deleted (for the inline spinner).
   const [deleting, setDeleting] = useState<number | null>(null)
+  // True while a gender override is being saved (disables the select).
+  const [savingGender, setSavingGender] = useState(false)
   // Which inbound bubble has its sentiment button row revealed (badge clicked).
   const [openSentiId, setOpenSentiId] = useState<number | null>(null)
   const [coaching, setCoaching] = useState<Coaching | null>(null)
@@ -285,6 +287,60 @@ export function ConversationDrawer({
     }
   }
 
+  // Gender override → /api/pipeline set_gender. A non-null value marks the row
+  // SDR-confirmed (demo_model='manual', confidence 1); null clears the inferred
+  // demographic fields so the next classify run re-infers (undo). Optimistic via
+  // patchLead, reverting the snapshot on failure; on success the response already
+  // carries the authoritative fields (e.g. the fresh demo_inferred_at or a
+  // cleared age range), so patch those in directly instead of a full refetch.
+  async function setGender(gender: Gender | null) {
+    setSavingGender(true)
+    const snapshot: Partial<Lead> = {
+      gender: live.gender ?? null,
+      gender_confidence: live.gender_confidence ?? null,
+      demo_model: live.demo_model ?? null,
+      demo_inferred_at: live.demo_inferred_at ?? null,
+      birth_year_min: live.birth_year_min ?? null,
+      birth_year_max: live.birth_year_max ?? null,
+    }
+    patchLead(
+      lead!.id,
+      gender === null
+        ? {
+            gender: null,
+            gender_confidence: null,
+            demo_model: null,
+            demo_inferred_at: null,
+            birth_year_min: null,
+            birth_year_max: null,
+          }
+        : { gender, gender_confidence: 1, demo_model: 'manual' },
+    )
+    try {
+      const res = await adminPost('/api/pipeline', {
+        action: 'set_gender',
+        lead_id: lead!.id,
+        gender,
+        actor: actor || undefined,
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      patchLead(lead!.id, {
+        gender: (j.gender ?? null) as Gender | null,
+        gender_confidence: j.gender_confidence ?? null,
+        demo_model: j.demo_model ?? null,
+        demo_inferred_at: j.demo_inferred_at ?? null,
+        birth_year_min: j.birth_year_min ?? null,
+        birth_year_max: j.birth_year_max ?? null,
+      })
+    } catch (e) {
+      patchLead(lead!.id, snapshot) // revert
+      toast.error(`Couldn't update gender: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSavingGender(false)
+    }
+  }
+
   const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
 
   return (
@@ -300,7 +356,7 @@ export function ConversationDrawer({
       >
         <header className="conv-head">
           <div className="conv-head-top">
-            <InitialsAvatar name={name} size={40} />
+            <LeadAvatar lead={lead} size={40} />
             <div className="conv-head-id">
               <div className="conv-head-name-row">
                 <a
@@ -409,6 +465,51 @@ export function ConversationDrawer({
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="conv-demographics">
+            <span className="conv-demo-item">
+              <span className="filter-label">Age</span>
+              <span className="conv-demo-val">{ageRange(live) ?? '—'}</span>
+            </span>
+            <label className="filter-field conv-demo-gender">
+              <span className="filter-label">Gender</span>
+              <select
+                value={live.gender ?? ''}
+                disabled={savingGender}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === '') return
+                  void setGender(v === 'clear' ? null : (v as Gender))
+                }}
+              >
+                {!live.gender && (
+                  <option value="" disabled>
+                    Set gender…
+                  </option>
+                )}
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="unknown">Unknown</option>
+                {live.gender && <option value="clear">Clear override → re-infer</option>}
+              </select>
+            </label>
+            {live.gender &&
+              (live.demo_model === 'manual' ? (
+                <span className="badge" title="Confirmed by an SDR — treated as ground truth">
+                  Confirmed
+                </span>
+              ) : (
+                <span
+                  className="badge"
+                  title="Inferred by AI from name + headline — pick a value to confirm"
+                >
+                  AI
+                  {live.gender_confidence != null
+                    ? ` ·${Math.round(live.gender_confidence * 100)}%`
+                    : ''}
+                </span>
+              ))}
           </div>
         </header>
 

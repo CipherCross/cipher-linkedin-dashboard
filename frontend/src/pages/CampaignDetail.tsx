@@ -1,14 +1,18 @@
 import { useMemo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FileQuestion } from 'lucide-react'
-import { useData } from '../lib/DataContext'
-import type { CampaignMetrics, Lead } from '../lib/types'
 import {
-  daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
+  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts'
+import { useData } from '../lib/DataContext'
+import type { CampaignMetrics, Gender, Lead } from '../lib/types'
+import {
+  campaignDemographics, daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
   presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
-import { num, rate } from '../lib/format'
+import { num, pct, rate } from '../lib/format'
+import { AXIS, BAR_CURSOR, ChartEmpty, GRID, TOOLTIP } from '../components/chartTheme'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
@@ -180,6 +184,8 @@ export function CampaignDetail() {
             <CohortChart leads={leads} />
           </div>
 
+          <DemographicsSection leads={leads} />
+
           <div className="stack">
             <LeadAdditionsChart leads={leads} granularity="day" />
             <AddBatchesTable leads={leads} />
@@ -248,5 +254,106 @@ function lagList(leads: Lead[], from: keyof Lead, to: keyof Lead): number[] {
     if (d != null) out.push(d)
   }
   return out
+}
+
+// Categorical, non-stereotyped hues drawn from the theme tokens (the funnel /
+// chart palette), so gender reads as a neutral category, not blue/pink.
+const GENDER_COLOR: Record<Gender, string> = {
+  female: 'var(--purple)',
+  male: 'var(--accent)',
+  unknown: 'var(--text-muted)',
+}
+
+/** Age histogram (5-year buckets from birth-year midpoint) + gender split for
+ *  this campaign's leads, deduped by leadKey so a person in several campaigns of
+ *  one account counts once. Unknown age and unknown gender are shown explicitly,
+ *  never dropped. Self-hides when the campaign has no leads. */
+function DemographicsSection({ leads }: { leads: Lead[] }) {
+  const demo = useMemo(() => campaignDemographics(leads), [leads])
+  if (demo.total === 0) return null
+
+  const genderTotal = demo.gender.reduce((n, g) => n + g.count, 0)
+  const agedCount = demo.ages.reduce((n, b) => n + b.count, 0)
+
+  return (
+    <div className="stack">
+      <div className="two-col">
+        <div className="card chart-card">
+          <h2>Age distribution</h2>
+          {demo.ages.length === 0 ? (
+            <ChartEmpty height={240} label="No age data yet" />
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={demo.ages} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                <CartesianGrid {...GRID} vertical={false} />
+                <XAxis dataKey="label" {...AXIS} />
+                <YAxis {...AXIS} allowDecimals={false} />
+                <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} />
+                <Bar
+                  dataKey="count"
+                  name="People"
+                  fill="var(--accent)"
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={40}
+                  isAnimationActive={false}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+          <div className="muted small">
+            {num(agedCount)} with an inferred age · {num(demo.ageUnknown)} unknown ·{' '}
+            {num(demo.total)} people
+          </div>
+        </div>
+
+        <div className="card chart-card">
+          <h2>Gender split</h2>
+          {genderTotal === 0 ? (
+            <ChartEmpty height={240} label="No gender data yet" />
+          ) : (
+            <div className="gender-split">
+              <div className="gender-split-bar" role="img" aria-label="Gender split">
+                {demo.gender.map((g) =>
+                  g.count > 0 ? (
+                    <span
+                      key={g.id}
+                      className="gender-split-seg"
+                      style={{
+                        width: `${(100 * g.count) / genderTotal}%`,
+                        background: GENDER_COLOR[g.id],
+                      }}
+                      title={`${g.label}: ${g.count}`}
+                    />
+                  ) : null,
+                )}
+              </div>
+              <ul className="gender-legend small">
+                {demo.gender.map((g) => (
+                  <li key={g.id}>
+                    <span
+                      className="gender-swatch"
+                      style={{ background: GENDER_COLOR[g.id] }}
+                      aria-hidden="true"
+                    />
+                    {g.label}
+                    <span className="muted">
+                      {' '}
+                      · {num(g.count)} ({pct(g.count, genderTotal)})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="muted small demo-ethics">
+        Age and gender are statistical inferences for internal outreach analytics, shown with
+        confidence until an SDR confirms them. Name-based gender inference skews inaccurate for
+        non-Western names — “unknown” is a first-class value, not a failure. Counts are deduped
+        per person; unknowns are shown, never dropped.
+      </div>
+    </div>
+  )
 }
 

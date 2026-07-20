@@ -4,7 +4,7 @@ import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
-import { InitialsAvatar } from '../components/Avatar'
+import { InitialsAvatar, LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
 import { instanceName } from '../lib/leads'
 import {
@@ -366,7 +366,10 @@ function PipeCard({
         onOpen()
       }}
     >
-      <div className="pipe-card-name">{name}</div>
+      <div className="pipe-card-head-row">
+        <LeadAvatar lead={lead} size={26} />
+        <div className="pipe-card-name">{name}</div>
+      </div>
       {lead.company && <div className="pipe-card-sub muted small">{lead.company}</div>}
       <div className="pipe-card-camp muted small ellipsis" title={campaignName}>
         {campaignName}

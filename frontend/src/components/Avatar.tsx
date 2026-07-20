@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { Instance } from '../lib/types'
-import { instanceName } from '../lib/leads'
+import type { Instance, Lead } from '../lib/types'
+import { instanceName, leadPhotoUrl } from '../lib/leads'
 
 /** Initials-only circular avatar for entities without a photo (e.g. leads —
  *  LinkedIn contacts have no synced avatar). Neutral fill so it never competes
@@ -23,6 +23,29 @@ export function InitialsAvatar({ name, size = 32 }: { name: string; size?: numbe
     >
       {initials}
     </span>
+  )
+}
+
+/** A lead's synced profile photo (from the public `lead-photos` bucket) with an
+ *  initials fallback. The box is a fixed size on either path (photo or initials)
+ *  so a slow/broken image never shifts layout; a broken image swaps to initials
+ *  via onError. Photos are display-only — never an inference input. */
+export function LeadAvatar({ lead, size = 32 }: { lead: Lead; size?: number }) {
+  const [failed, setFailed] = useState(false)
+  const url = leadPhotoUrl(lead)
+  const name = lead.full_name || lead.profile_url
+  if (!url || failed) return <InitialsAvatar name={name} size={size} />
+  return (
+    <img
+      className="avatar"
+      src={url}
+      width={size}
+      height={size}
+      alt={name}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
   )
 }
 

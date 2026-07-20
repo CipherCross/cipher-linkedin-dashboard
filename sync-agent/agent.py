@@ -30,12 +30,13 @@ import sqlite3
 import subprocess
 import sys
 import time
+import urllib.parse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 import yaml
 
-AGENT_VERSION = "1.11.0"
+AGENT_VERSION = "1.12.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -227,7 +228,7 @@ def reexec():
 REMOTE_CONFIG_KEYS = {
     "instance_label",
     "account_name", "account_url", "account_avatar",
-    "auto_update", "sync_steps", "sync_messages",
+    "auto_update", "sync_steps", "sync_messages", "sync_photos",
     "lh2_db_path", "mapping", "local_timezone",
     "notify_url", "exclude_campaigns",
 }
@@ -302,6 +303,128 @@ def notify_new_replies(cfg):
         print(f"notify-replies ping failed ({e}) — will retry after next sync")
 
 
+# Per-run cap on photo uploads so the initial backfill (potentially thousands of
+# leads) spreads over several scheduled syncs instead of hammering one run.
+PHOTO_CAP = 200
+
+
+def sync_photos(cfg, sb, avatar_map):
+    """Mirror each lead's LinkedIn avatar into the public `lead-photos` Storage
+    bucket for UI display — display-only, NEVER used for any inference. Runs after
+    the leads push, only when config `sync_photos` is truthy. Like
+    notify_new_replies, EVERY exception is swallowed here: a photo problem must
+    never break a scheduled sync.
+
+    Signed licdn URLs expire within weeks, so we download the bytes at sync time
+    from the fresh DB read (`avatar_map`) rather than storing a soon-dead URL.
+    Per candidate (this instance's leads with photo_synced_at IS NULL, capped at
+    PHOTO_CAP):
+      - no local avatar URL, or HTTP 403/404 (expired/dead) -> stamp photo_synced_at
+        and leave photo_path NULL, so the job converges (a future --refresh-photos
+        flag can re-attempt);
+      - timeout / connection error / 5xx / upload failure -> leave the lead
+        UNTOUCHED so the next run retries it; counted as retryable;
+      - success -> upload the bytes, then PATCH photo_path + photo_synced_at.
+    """
+    try:
+        instance_id = cfg["instance_id"]
+        base = cfg["supabase_url"].rstrip("/")
+        service_key = cfg["supabase_service_key"]
+        auth = {"apikey": service_key,
+                "Authorization": f"Bearer {service_key}"}
+
+        # Candidates: unsynced leads for THIS instance. The leads unique key is
+        # (campaign_id, profile_url) — both selected for the later PATCH; profile_url
+        # also yields the slug. Capped so the backfill spreads over several runs.
+        # STABLE ORDER (newest added_at first, as classify.ts orders): together with
+        # converging on any permanent error below, this stops a stuck set from
+        # pinning the same PHOTO_CAP window every run and starving the backfill.
+        try:
+            r = requests.get(
+                f"{base}/rest/v1/leads", headers=auth,
+                params={"instance_id": f"eq.{instance_id}",
+                        "photo_synced_at": "is.null",
+                        "select": "campaign_id,profile_url",
+                        "order": "added_at.desc",
+                        "limit": PHOTO_CAP},
+                timeout=30)
+            r.raise_for_status()
+            candidates = r.json()
+        except (requests.RequestException, ValueError) as e:
+            print(f"photo sync: candidate fetch failed ({e}) — skipping this run")
+            return
+
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        uploaded = no_avatar = retryable = 0
+        for cand in candidates:
+            cid = cand.get("campaign_id")
+            purl = cand.get("profile_url")
+            if not cid or not purl:
+                continue
+            match = {"campaign_id": cid, "profile_url": purl}
+            raw_slug = slug_from_profile_url(purl)
+            sanitized = sanitize_slug(raw_slug)
+            avatar_url = avatar_map.get(raw_slug)
+
+            # Converge quietly (mark synced, leave photo_path NULL) when there is no
+            # avatar on file, OR the slug sanitizes to empty (a malformed profile_url
+            # would otherwise collapse every such lead onto "{instance_id}/.jpg") —
+            # never upload in either case.
+            if not avatar_url or not sanitized:
+                try:
+                    sb.update("leads", match, {"photo_synced_at": now})
+                    no_avatar += 1
+                except Exception:
+                    retryable += 1
+                continue
+
+            try:
+                resp = requests.get(avatar_url, timeout=10)
+            except requests.RequestException:
+                retryable += 1  # transient — retry next run, lead untouched
+                continue
+
+            if 400 <= resp.status_code < 500:
+                # ANY 4xx is permanent (expired/forbidden/gone signed URL, auth) ->
+                # converge (mark synced, no photo) so it can never pin a backfill slot.
+                try:
+                    sb.update("leads", match, {"photo_synced_at": now})
+                    no_avatar += 1
+                except Exception:
+                    retryable += 1
+                continue
+            if resp.status_code != 200 or not resp.content:
+                retryable += 1  # 5xx / unexpected — retry next run, lead untouched
+                continue
+
+            ctype = resp.headers.get("content-type", "")
+            if not ctype.startswith("image/"):
+                ctype = "image/jpeg"
+            path = f"{instance_id}/{sanitized}.jpg"
+            try:
+                up = requests.post(
+                    f"{base}/storage/v1/object/lead-photos/{path}",
+                    headers=dict(auth, **{"x-upsert": "true",
+                                          "content-type": ctype}),
+                    data=resp.content, timeout=30)
+                up.raise_for_status()
+            except requests.RequestException:
+                retryable += 1  # upload failed — retry next run, lead untouched
+                continue
+
+            try:
+                sb.update("leads", match,
+                          {"photo_path": path, "photo_synced_at": now})
+                uploaded += 1
+            except Exception:
+                retryable += 1  # storage has the object; PATCH retries next run
+
+        print(f"photo sync: {uploaded} uploaded, {no_avatar} no-avatar, "
+              f"{retryable} retryable (of {len(candidates)} candidates)")
+    except Exception as e:
+        print(f"photo sync failed ({e}) — will retry after next sync")
+
+
 def content_hash(body):
     """Stable disambiguator for a message body. Two genuinely different messages
     that happen to share one action-run timestamp (CheckForReplies records a whole
@@ -333,6 +456,32 @@ def iso(value):
         except ValueError:
             continue
     return None
+
+
+LINKEDIN_IN_PREFIX = "https://www.linkedin.com/in/"
+
+
+def slug_from_profile_url(url):
+    """Invert the leads mapping's profile_url = LINKEDIN_IN_PREFIX || external_id to
+    recover the deduped slug (external_id). Tolerates other LinkedIn URL shapes and a
+    trailing slash. The recovered slug matches the avatar map's keys, and — once
+    sanitized — the stored photo_path, so a photo always joins back to its lead."""
+    s = (url or "").strip()
+    if s.startswith(LINKEDIN_IN_PREFIX):
+        s = s[len(LINKEDIN_IN_PREFIX):]
+    else:
+        m = re.search(r"/in/([^/?#]+)", s)
+        if m:
+            s = m.group(1)
+    return s.strip("/")
+
+
+def sanitize_slug(slug):
+    """Reduce a slug to a Storage-path-safe [A-Za-z0-9_-] token (percent-decode
+    first so an encoded name collapses to its readable form, then replace anything
+    else with '_'). Deterministic, so photo_path always matches the uploaded key."""
+    decoded = urllib.parse.unquote(slug or "")
+    return re.sub(r"[^A-Za-z0-9_-]", "_", decoded)
 
 
 # ---------------------------------------------------------------- inspect
@@ -611,6 +760,53 @@ SELECT profile_url, campaign_id, body, sent_at, direction FROM (
 """
 
 
+# ------------------------ demographics signals + avatar source ---------------
+# All three below reuse the SAME one-slug-per-person dedup as leads, so their
+# results key on the SAME slug-format profile_url (years) / slug (avatars) — and
+# all fail safe to EMPTY on schema drift (a build missing these tables just syncs
+# with no years/photos). Never wired to note_warning: these are new best-effort
+# extractions, so a notebook that lacks the tables must NOT read as 'partial'.
+
+# Per-person EARLIEST education start year and EARLIEST first-job start year, for
+# deterministic birth-year inference downstream. Implausible placeholder years
+# (LH2 stores 1900/1970, and future-dated typos) are rejected IN SQL — before the
+# MIN, so a garbage row can't drag the minimum down. The upper bound (current
+# year) is a bound query parameter. A per-notebook mapping.education_year /
+# mapping.first_job_year `query:` overrides these for a non-standard LH2 layout
+# (alias profile_url + start_year); the plausibility window is re-checked in
+# Python either way. `?` is the max-year bound.
+EDU_YEAR_SQL = f"""
+SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+       MIN(pe.start_year) AS start_year
+FROM person_education pe
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = pe.person_id
+WHERE pe.start_year >= 1950 AND pe.start_year <= ?
+GROUP BY 1
+"""
+
+JOB_YEAR_SQL = f"""
+SELECT 'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+       MIN(pp.start_year) AS start_year
+FROM person_positions pp
+JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = pp.person_id
+WHERE pp.start_year >= 1950 AND pp.start_year <= ?
+GROUP BY 1
+"""
+
+# Best avatar URL per deduped slug: prefer the 800x800
+# person_original_mini_profile.avatar, fall back to the 100x100
+# person_mini_profile.avatar. LEFT JOINs tolerate a person with no mini-profile
+# row (NULL avatar). Signed licdn URLs expire within weeks, so the photo step
+# downloads the bytes at sync time from this fresh DB read.
+AVATAR_SQL = f"""
+SELECT pei.external_id AS slug,
+       COALESCE(NULLIF(pomp.avatar, ''), NULLIF(pmp.avatar, '')) AS avatar_url
+FROM {PEI_ONE_SLUG_SQL} pei
+LEFT JOIN person_original_mini_profile pomp ON pomp.person_id = pei.person_id
+LEFT JOIN person_mini_profile pmp ON pmp.person_id = pei.person_id
+"""
+
+
 def flatten_template(settings):
     """Flatten LH2's action_configs.actionSettings JSON into readable text.
     The message lives at messageTemplate.variants[0].child as a tree of nodes:
@@ -788,6 +984,104 @@ def extract_first_messages(con, warnings=None):
     return out
 
 
+def _year_map(con, section, builtin_sql, max_year, label):
+    """Build {profile_url -> earliest plausible start_year} for one age signal.
+
+    Uses a per-notebook mapping override (a `query:`/`table:` section aliasing
+    profile_url + start_year, defaulting to those column names) when present, else
+    the built-in SQL with the current-year bound. Plausibility (1950..max_year) is
+    enforced in SQL for the built-in and re-checked here so an override can't smuggle
+    a 1900/1970 placeholder through. Keeps the MIN plausible year per profile. Fails
+    safe to {} on any schema drift (print-only, never note_warning) — the sync then
+    proceeds with no year for this signal."""
+    out = {}
+    try:
+        if section and (section.get("query") or section.get("table")):
+            cursor = rows_for(con, section)
+            p_col = section.get("profile_url", "profile_url")
+            y_col = section.get("start_year", "start_year")
+            override = True
+        else:
+            cursor = con.execute(builtin_sql, (max_year,))
+            p_col = y_col = None
+            override = False
+        for row in cursor:
+            if override:
+                keys = row.keys()
+                profile = row[p_col] if p_col in keys else None
+                year = row[y_col] if y_col in keys else None
+            else:
+                profile = row["profile_url"]
+                year = row["start_year"]
+            if not profile or year is None:
+                continue
+            try:
+                y = int(year)
+            except (ValueError, TypeError):
+                continue
+            if y < 1950 or y > max_year:
+                continue
+            cur = out.get(profile)
+            if cur is None or y < cur:
+                out[profile] = y
+    except sqlite3.Error as e:
+        print(f"{label} extraction skipped ({e}) — {label} will be empty")
+        return {}
+    return out
+
+
+def extract_demographic_years(cfg, con):
+    """Per-lead earliest education / first-job start years for age inference, keyed
+    by the same slug-format profile_url the leads extraction produces (so they merge
+    by profile_url). Each signal fails safe to {} independently."""
+    mapping = cfg.get("mapping") or {}
+    max_year = dt.datetime.now(dt.timezone.utc).year
+    edu = _year_map(con, mapping.get("education_year"), EDU_YEAR_SQL, max_year,
+                    "education_year")
+    job = _year_map(con, mapping.get("first_job_year"), JOB_YEAR_SQL, max_year,
+                    "first_job_year")
+    return edu, job
+
+
+def build_avatar_map(con):
+    """{deduped slug (external_id) -> best avatar URL}. Prefers the 800x800
+    person_original_mini_profile.avatar, falls back to the 100x100
+    person_mini_profile.avatar. Fails safe to {} on schema drift (print-only) — the
+    photo step then finds no avatars and converges quietly."""
+    out = {}
+    try:
+        for row in con.execute(AVATAR_SQL):
+            slug = row["slug"]
+            url = row["avatar_url"]
+            if slug and url:
+                out[str(slug)] = str(url)
+    except sqlite3.Error as e:
+        print(f"avatar map extraction skipped ({e}) — photo sync finds no avatars")
+    return out
+
+
+def build_year_updates(leads, edu_map, job_map):
+    """Bucket leads by which start-year signals they carry so each PostgREST upsert
+    request has a UNIFORM key set (a mixed-key batch is rejected). Only non-NULL
+    years are ever emitted, so a re-sync can never clobber a stored year with NULL.
+    Returns (both, edu_only, job_only) — each a list of merge-duplicate rows on the
+    leads (campaign_id, profile_url) unique key; the row always already exists (leads
+    were just upserted) so each hits the UPDATE path and touches only these columns."""
+    both, edu_only, job_only = [], [], []
+    for lead in leads:
+        e = edu_map.get(lead["profile_url"])
+        j = job_map.get(lead["profile_url"])
+        base = {"campaign_id": lead["campaign_id"],
+                "profile_url": lead["profile_url"]}
+        if e is not None and j is not None:
+            both.append(dict(base, education_start_year=e, first_job_start_year=j))
+        elif e is not None:
+            edu_only.append(dict(base, education_start_year=e))
+        elif j is not None:
+            job_only.append(dict(base, first_job_start_year=j))
+    return both, edu_only, job_only
+
+
 def apply_campaign_excludes(cfg, campaigns, leads, messages, steps):
     """Drop everything belonging to LH2 campaigns listed in `exclude_campaigns`
     (LH2 campaign ids, e.g. [4]). Archiving a campaign in LH2 does NOT remove
@@ -930,12 +1224,21 @@ def extract_local(cfg, warnings=None):
     campaigns, leads, messages, steps = apply_campaign_excludes(
         cfg, campaigns, leads, messages, steps)
 
+    # Age-inference signals + avatar source (both new + best-effort): built here
+    # while the DB is open, fail safe to empty so a notebook whose LH2 build lacks
+    # these tables still syncs cleanly (and is NOT flagged 'partial' — these are
+    # print-only on drift, never note_warning). Returned in `demo` for the leads
+    # year-merge, the photo step, and the dry-run coverage counts.
+    edu_map, job_map = extract_demographic_years(cfg, con)
+    avatar_map = build_avatar_map(con)
+
     owner = extract_owner(cfg, con, warnings)
     con.close()
-    return campaigns, leads, messages, steps, owner
+    demo = {"edu_map": edu_map, "job_map": job_map, "avatar_map": avatar_map}
+    return campaigns, leads, messages, steps, owner, demo
 
 
-def print_dry_run(instance_id, campaigns, leads, messages, steps, owner):
+def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
     print(f"\ndry run for instance '{instance_id}' — nothing pushed\n")
     if owner:
         print("account identity: " + ", ".join(
@@ -967,6 +1270,18 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner):
             print(f"{cname:<24}{s['step_index']:>2} {label:<22}"
                   f"{s['sent_count']:>7}{s['replied_count']:>9}{rate:>8}{s['current_count']:>6}")
 
+    edu_map, job_map, avatar_map = (demo["edu_map"], demo["job_map"],
+                                    demo["avatar_map"])
+    edu_n = sum(1 for l in leads if edu_map.get(l["profile_url"]) is not None)
+    job_n = sum(1 for l in leads if job_map.get(l["profile_url"]) is not None)
+    avatar_n = sum(1 for l in leads
+                   if avatar_map.get(slug_from_profile_url(l["profile_url"])))
+    print(f"\ndemographics: {edu_n} leads with an education start year, "
+          f"{job_n} with a first-job start year "
+          "(merged into leads; a NULL year is never sent).")
+    print(f"photos: {avatar_n}/{len(leads)} leads have a local avatar URL "
+          "(nothing downloaded in a dry run; enable with sync_photos).")
+
     print(f"\n{len(campaigns)} campaigns, {len(leads)} leads, "
           f"{len(messages)} messages, {len(steps)} steps. "
           "Compare against LH2's own numbers, then run `agent.py sync`.")
@@ -987,8 +1302,8 @@ def cmd_sync(args):
 
     if args.dry_run:
         warnings = []
-        campaigns, leads, messages, steps, owner = extract_local(cfg, warnings)
-        print_dry_run(instance_id, campaigns, leads, messages, steps, owner)
+        campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
+        print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo)
         if warnings:
             print("\nWARNING: a real sync would report status 'partial' — "
                   "these sections failed and returned empty:")
@@ -1014,9 +1329,28 @@ def cmd_sync(args):
     total = 0
     warnings = []
     try:
-        campaigns, leads, messages, steps, owner = extract_local(cfg, warnings)
+        campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
         total += sb.upsert("campaigns", campaigns, on_conflict="id")
         total += sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
+        # Merge age-inference start years WITHOUT ever sending NULL (a re-sync must
+        # not clobber a stored year). Kept out of the main leads payload (which stays
+        # uniform) and pushed as separate merge-duplicate upserts bucketed by which
+        # years each row carries, so every request has a uniform key set. Each row's
+        # (campaign_id, profile_url) already exists from the leads upsert above, so
+        # merge-duplicates UPDATEs just these columns.
+        # GUARDED separately: if this agent self-updates to 1.12.0 BEFORE migration
+        # 041 adds the year columns, this upsert 400s ("column does not exist"). That
+        # must NOT abort the rest of the sync — events, messages, steps, the reply
+        # ping and photos all still run. Fail safe to a 'partial' run (visible on the
+        # Health page) and press on, exactly like the other fail-safe-to-empty
+        # sections. A year failure must never break a scheduled sync.
+        try:
+            for bucket in build_year_updates(leads, demo["edu_map"], demo["job_map"]):
+                total += sb.upsert("leads", bucket, on_conflict="campaign_id,profile_url")
+        except Exception as e:
+            note_warning(warnings, "year columns push (migration 041 applied?)", e)
+            print(f"year columns push failed (migration 041 applied?): {e} — "
+                  "continuing; run reports 'partial'")
         # events on_conflict key matches migration 035 (occurred_at dropped from the
         # key so a corrected LH2 milestone UPDATES the event instead of inserting a
         # duplicate). DEPLOY ORDER: migration 035 must be applied BEFORE this agent
@@ -1041,9 +1375,13 @@ def cmd_sync(args):
             owner, last_sync_at=dt.datetime.now(dt.timezone.utc).isoformat()))
         print(f"sync {status}: {total} rows upserted for instance {instance_id}"
               + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
-        # After the run is recorded: swallows everything internally, so it can
+        # After the run is recorded: both swallow everything internally, so they can
         # never trip the outer except and flip a green run to status='error'.
         notify_new_replies(cfg)
+        # Photo mirroring runs after the leads push, opt-in per notebook. Off by
+        # default so the first backfill is a deliberate rollout, not an ambush.
+        if cfg.get("sync_photos"):
+            sync_photos(cfg, sb, demo["avatar_map"])
     except Exception as e:
         sb.update("sync_runs", {"id": run["id"]}, {
             "status": "error", "error": str(e)[:2000],

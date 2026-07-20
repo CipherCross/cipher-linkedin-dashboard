@@ -2377,3 +2377,176 @@ td .pipe-stage-select.quiet:focus-visible {
 }
 .pipe-modal textarea { resize: vertical; }
 .pipe-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* --- Lead demographics + avatars ----------------------------------------- */
+/* LeadsExplorer lead cell: avatar beside the name/company/reply stack. */
+.lead-cell { display: flex; align-items: flex-start; gap: 9px; }
+.lead-cell-main { min-width: 0; }
+.col-age { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.col-gender { white-space: nowrap; }
+.gender-cell { font-variant-numeric: tabular-nums; }
+.gender-cell.manual { color: var(--success); font-weight: 600; }
+
+/* ConversationDrawer demographics row (age + gender editor). */
+.conv-demographics {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+.conv-demo-item { display: flex; flex-direction: column; gap: 4px; }
+.conv-demo-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+.conv-demographics .badge { margin-bottom: 4px; }
+
+/* Pipeline card: lead avatar beside the name. */
+.pipe-card-head-row { display: flex; align-items: center; gap: 8px; }
+.pipe-card-head-row .pipe-card-name { min-width: 0; }
+
+/* CampaignDetail gender split bar + legend. */
+.gender-split { display: flex; flex-direction: column; gap: 14px; padding: 8px 0; }
+.gender-split-bar {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.gender-split-seg { height: 100%; }
+.gender-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.gender-legend li { display: flex; align-items: center; gap: 7px; }
+.gender-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.demo-ethics { line-height: 1.5; }
+
+/* --- Search Library ------------------------------------------------------ */
+.search-group { margin-bottom: var(--space-8); }
+.search-group-head { margin: 0 0 12px; }
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-6);
+}
+.search-card { display: flex; flex-direction: column; gap: 10px; }
+.search-card.archived { opacity: 0.6; }
+.search-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.search-card-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.search-card-name { font-weight: 600; }
+.search-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.icon-only-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.icon-only-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
+.icon-only-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+.search-card-desc { margin: 0; color: var(--text-secondary); }
+.search-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  max-width: 100%;
+}
+.chip.include { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.chip.exclude { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.chip button {
+  display: inline-flex;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.chip button:hover { color: var(--text); }
+.search-query {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.search-query-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.search-query .btn { flex-shrink: 0; }
+.search-filters { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.search-filter-row { display: flex; gap: 8px; }
+.search-filter-row dt { min-width: 90px; flex-shrink: 0; }
+.search-filter-row dd { margin: 0; word-break: break-word; }
+.search-card-notes { margin: 0; }
+.search-card-foot { border-top: 1px solid var(--border); padding-top: 8px; margin-top: auto; }
+
+/* Platform filter chips reuse .filter-chip; add the selected state. */
+.filter-chip.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-subtle);
+}
+
+/* Search editor modal — wider + scrollable than the lost-reason modal. */
+.search-modal {
+  width: min(680px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.search-form { display: flex; flex-direction: column; gap: 12px; }
+.search-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .search-form-grid { grid-template-columns: 1fr; } }
+.search-form textarea { resize: vertical; }
+.search-form textarea.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+}
+.search-copy-inline { margin-left: 8px; }
+.chip-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+.chip-input input {
+  flex: 1;
+  min-width: 120px;
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  color: var(--text);
+}
+.chip-input input:focus { outline: none; }
+.kv-editor { display: flex; flex-direction: column; gap: 6px; }
+.kv-row { display: flex; gap: 6px; align-items: center; }
+.kv-key { flex: 0 0 40%; min-width: 0; }
+.kv-value { flex: 1; min-width: 0; }

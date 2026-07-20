@@ -9,13 +9,15 @@ import { useConversation } from '../lib/ConversationContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { EmptyState } from '../components/EmptyState'
+import { LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
-import type { CoachingDigest, Lead, Sentiment } from '../lib/types'
+import type { CoachingDigest, Gender, Lead, Sentiment } from '../lib/types'
 import {
-  RISK_LABEL, SENTIMENT_META, SENTIMENT_ORDER, STAGES, downloadCsv, instanceName,
-  latestRepliesByLead, leadKey, riskOf, stageMeta, stageOf, toCsv,
+  AGE_BUCKETS, GENDER_SHORT, RISK_LABEL, SENTIMENT_META, SENTIMENT_ORDER, STAGES, ageBucketOf,
+  ageRange, downloadCsv, instanceName, latestRepliesByLead, leadKey, riskOf, stageMeta,
+  stageOf, toCsv,
 } from '../lib/leads'
-import type { RiskFlag, Stage } from '../lib/leads'
+import type { AgeBucket, RiskFlag, Stage } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
 import { num, shortDate } from '../lib/format'
 
@@ -67,6 +69,8 @@ export function LeadsExplorer() {
   const risk = params.get('risk') ?? 'all'
   const pipe = params.get('pipe') ?? 'all'
   const who = params.get('who') ?? 'all'
+  const genderF = params.get('gender') ?? 'all'
+  const ageF = params.get('agebucket') ?? 'all'
   const q = params.get('q') ?? ''
 
   // Reply filters (folded in from the old Replies page): a sentiment bucket and
@@ -244,13 +248,17 @@ export function LeadsExplorer() {
       if (who === 'unassigned') {
         if (l.assigned_to != null) return false
       } else if (who !== 'all' && String(l.assigned_to) !== who) return false
+      // Demographic filters match only explicit values, so a pre-migration DB
+      // (gender/age undefined) matches nothing rather than everything.
+      if (genderF !== 'all' && l.gender !== genderF) return false
+      if (ageF !== 'all' && ageBucketOf(l) !== (ageF as AgeBucket)) return false
       if (needle) {
         const hay = `${l.full_name ?? ''} ${l.headline ?? ''} ${l.company ?? ''}`.toLowerCase()
         if (!hay.includes(needle)) return false
       }
       return true
     })
-  }, [data, inst, effCamp, stage, risk, pipe, who, q])
+  }, [data, inst, effCamp, stage, risk, pipe, who, genderF, ageF, q])
 
   const bucketOf = (l: Lead): Sentiment | 'unclassified' =>
     snippets.get(leadKey(l.instance_id, l.profile_url))?.sentiment ?? 'unclassified'
@@ -310,7 +318,8 @@ export function LeadsExplorer() {
   const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   const dateColumns = DATE_COLUMNS.filter((c) => !c.optional || showAdded)
-  const colSpan = 5 + dateColumns.length
+  // Lead, Headline, Campaign, Stage, Pipeline, Age, Gender + the date columns.
+  const colSpan = 7 + dateColumns.length
 
   // One removable chip per active filter, so the current view is legible at a glance.
   const activeFilters: Array<{ id: string; label: string; onClear: () => void }> = []
@@ -342,6 +351,18 @@ export function LeadsExplorer() {
       id: 'who',
       label: `Owner: ${who === 'unassigned' ? 'Unassigned' : memberName(Number(who)) || who}`,
       onClear: () => setFilter('who', 'all'),
+    })
+  if (genderF !== 'all')
+    activeFilters.push({
+      id: 'gender',
+      label: `Gender: ${genderF === 'male' ? 'Male' : genderF === 'female' ? 'Female' : 'Unknown'}`,
+      onClear: () => setFilter('gender', 'all'),
+    })
+  if (ageF !== 'all')
+    activeFilters.push({
+      id: 'agebucket',
+      label: `Age: ${AGE_BUCKETS.find((b) => b.id === ageF)?.label ?? ageF}`,
+      onClear: () => setFilter('agebucket', 'all'),
     })
   if (repliedDays > 0)
     activeFilters.push({
@@ -383,6 +404,10 @@ export function LeadsExplorer() {
           instance: instanceLabel(l.instance_id),
           stage: stageOf(l),
           risk: riskLabel(l),
+          age: ageRange(l),
+          gender: l.gender ?? null,
+          gender_confidence: l.gender_confidence ?? null,
+          demo_source: l.demo_model ?? null,
           pipeline_stage: l.pipeline_stage,
           pipeline_substatus: l.pipeline_substatus,
           assigned_to: memberName(l.assigned_to) || null,
@@ -538,6 +563,24 @@ export function LeadsExplorer() {
             <option value="90">Last 90 days</option>
           </select>
         </label>
+        <label className="filter-field">
+          <span className="filter-label">Gender</span>
+          <select value={genderF} onChange={(e) => setFilter('gender', e.target.value)}>
+            <option value="all">Any gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label className="filter-field">
+          <span className="filter-label">Age</span>
+          <select value={ageF} onChange={(e) => setFilter('agebucket', e.target.value)}>
+            <option value="all">Any age</option>
+            {AGE_BUCKETS.map((b) => (
+              <option key={b.id} value={b.id}>{b.label}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {activeFilters.length > 0 && (
@@ -633,6 +676,8 @@ export function LeadsExplorer() {
               <th>Campaign</th>
               <th>Stage</th>
               <th>Pipeline</th>
+              <th>Age</th>
+              <th>Gender</th>
               {dateColumns.map((c) => (
                 <th key={c.key} className="sortable" onClick={() => onSort(c.key)}>
                   {c.label}{sortInd(c.key)}
@@ -664,22 +709,27 @@ export function LeadsExplorer() {
                 }}
               >
                 <td>
-                  <a
-                    className="row-link"
-                    href={l.profile_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {l.full_name || l.profile_url.replace('https://www.linkedin.com/in/', '')}
-                  </a>
-                  {senti && (
-                    <span className={`badge senti ${senti.cls}`} title={reply?.reason ?? ''}>
-                      {senti.label}
-                    </span>
-                  )}
-                  {l.company && <div className="muted small">{l.company}</div>}
-                  {reply && <div className="reply-body">“{reply.body}”</div>}
+                  <div className="lead-cell">
+                    <LeadAvatar lead={l} size={30} />
+                    <div className="lead-cell-main">
+                      <a
+                        className="row-link"
+                        href={l.profile_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {l.full_name || l.profile_url.replace('https://www.linkedin.com/in/', '')}
+                      </a>
+                      {senti && (
+                        <span className={`badge senti ${senti.cls}`} title={reply?.reason ?? ''}>
+                          {senti.label}
+                        </span>
+                      )}
+                      {l.company && <div className="muted small">{l.company}</div>}
+                      {reply && <div className="reply-body">“{reply.body}”</div>}
+                    </div>
+                  </div>
                 </td>
                 <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 <td className="muted small">{campaignName(l.campaign_id)}</td>
@@ -701,6 +751,8 @@ export function LeadsExplorer() {
                     ))}
                   </select>
                 </td>
+                <td className="muted col-age">{ageRange(l) ?? '—'}</td>
+                <td className="col-gender"><GenderCell lead={l} /></td>
                 {dateColumns.map((c) => (
                   <td key={c.key} className="muted col-date">
                     {shortDate(l[c.key] as string | null)}
@@ -757,6 +809,28 @@ export function LeadsExplorer() {
         />
       )}
     </>
+  )
+}
+
+/** Gender chip: inferred rows show "F ·72%" (muted, click the ROW to confirm in
+ *  the drawer); SDR-confirmed rows show "F ✓". `unknown` is a real value ("?"),
+ *  not blank — a lead with no inference yet shows an em-dash. */
+function GenderCell({ lead }: { lead: Lead }) {
+  const g = lead.gender
+  if (!g) return <span className="muted">—</span>
+  const short = GENDER_SHORT[g as Gender]
+  if (lead.demo_model === 'manual')
+    return (
+      <span className="gender-cell manual" title="Confirmed by an SDR">
+        {short} ✓
+      </span>
+    )
+  const conf = lead.gender_confidence != null ? Math.round(lead.gender_confidence * 100) : null
+  return (
+    <span className="gender-cell muted" title="inferred by AI — click to confirm">
+      {short}
+      {conf != null ? ` ·${conf}%` : ''}
+    </span>
   )
 }
 
