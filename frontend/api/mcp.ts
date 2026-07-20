@@ -14,6 +14,7 @@
 import { createMcpHandler } from 'mcp-handler'
 import {
   CAMPAIGN_OVERVIEW_SQL,
+  HYPOTHESIS_OVERVIEW_SQL,
   PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
@@ -70,6 +71,13 @@ function registerReadOnlyTools(server: McpServer) {
     toolDefs.pipeline_overview.description,
     toolDefs.pipeline_overview.inputShape,
     async () => asText(await executeSql(PIPELINE_OVERVIEW_SQL))
+  )
+
+  server.tool(
+    toolDefs.hypothesis_overview.name,
+    toolDefs.hypothesis_overview.description,
+    toolDefs.hypothesis_overview.inputShape,
+    async () => asText(await executeSql(HYPOTHESIS_OVERVIEW_SQL))
   )
 }
 

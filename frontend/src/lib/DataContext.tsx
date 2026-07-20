@@ -1,7 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
-import type { DashboardData, Lead, Message, SavedSearch } from './types'
+import type {
+  DashboardData, Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Lead, Message,
+  SavedSearch,
+} from './types'
 
 const EMPTY: DashboardData = {
   instances: [],
@@ -17,6 +20,11 @@ const EMPTY: DashboardData = {
   teamMembers: [],
   pipelineEvents: [],
   savedSearches: [],
+  icps: [],
+  icpPersonas: [],
+  icpIndustries: [],
+  hypotheses: [],
+  hypothesisCampaigns: [],
 }
 
 const LEAD_COLUMNS_BASE =
@@ -215,6 +223,28 @@ const Ctx = createContext<{
   upsertSavedSearch: (search: SavedSearch) => void
   /** Drop a saved search from local state after a hard delete. */
   removeSavedSearch: (id: number) => void
+  /** Insert-or-replace an ICP in place after save_icp. */
+  upsertIcp: (icp: Icp) => void
+  /** Drop an ICP (and its personas/industries — DB cascades) after delete_icp. */
+  removeIcp: (id: number) => void
+  /** Insert-or-replace a buyer persona in place after save_icp_persona. */
+  upsertIcpPersona: (persona: IcpPersona) => void
+  /** Drop a buyer persona after delete_icp_persona. */
+  removeIcpPersona: (id: number) => void
+  /** Insert-or-replace a per-industry keyword refinement after save_icp_industry. */
+  upsertIcpIndustry: (industry: IcpIndustry) => void
+  /** Drop a per-industry keyword refinement after delete_icp_industry. */
+  removeIcpIndustry: (id: number) => void
+  /** Insert-or-replace a hypothesis in place after save_hypothesis. */
+  upsertHypothesis: (hyp: Hypothesis) => void
+  /** Drop a hypothesis (and its campaign assignments — DB cascades) after
+   *  delete_hypothesis. */
+  removeHypothesis: (id: number) => void
+  /** Replace a hypothesis's campaign set in local state after a successful
+   *  set_hypothesis_campaigns call (server enforces at-most-one-hypothesis;
+   *  this mirrors that by also dropping these campaign_ids from any OTHER
+   *  hypothesis's rows). */
+  assignCampaigns: (hypothesisId: number, campaignIds: string[]) => void
 }>({
   data: null,
   loading: true,
@@ -222,6 +252,15 @@ const Ctx = createContext<{
   patchLead: () => {},
   upsertSavedSearch: () => {},
   removeSavedSearch: () => {},
+  upsertIcp: () => {},
+  removeIcp: () => {},
+  upsertIcpPersona: () => {},
+  removeIcpPersona: () => {},
+  upsertIcpIndustry: () => {},
+  removeIcpIndustry: () => {},
+  upsertHypothesis: () => {},
+  removeHypothesis: () => {},
+  assignCampaigns: () => {},
 })
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -306,6 +345,106 @@ export function DataProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
+  // --- ICP + Hypothesis mutators (migration 043) — same shape as
+  // upsertSavedSearch/removeSavedSearch above: the write has already landed
+  // server-side, so these just fold the returned row into local state.
+  const upsertIcp = useCallback((icp: Icp) => {
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.icps.filter((i) => i.id !== icp.id)
+      return { ...prevData, icps: [...rest, icp] }
+    })
+  }, [])
+
+  const removeIcp = useCallback((id: number) => {
+    setData((prevData) =>
+      prevData
+        ? {
+            ...prevData,
+            icps: prevData.icps.filter((i) => i.id !== id),
+            // DB cascades on delete; mirror that locally so stale children don't
+            // linger until the next refetch.
+            icpPersonas: prevData.icpPersonas.filter((p) => p.icp_id !== id),
+            icpIndustries: prevData.icpIndustries.filter((x) => x.icp_id !== id),
+          }
+        : prevData,
+    )
+  }, [])
+
+  const upsertIcpPersona = useCallback((persona: IcpPersona) => {
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.icpPersonas.filter((p) => p.id !== persona.id)
+      return { ...prevData, icpPersonas: [...rest, persona] }
+    })
+  }, [])
+
+  const removeIcpPersona = useCallback((id: number) => {
+    setData((prevData) =>
+      prevData
+        ? { ...prevData, icpPersonas: prevData.icpPersonas.filter((p) => p.id !== id) }
+        : prevData,
+    )
+  }, [])
+
+  const upsertIcpIndustry = useCallback((industry: IcpIndustry) => {
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.icpIndustries.filter((x) => x.id !== industry.id)
+      return { ...prevData, icpIndustries: [...rest, industry] }
+    })
+  }, [])
+
+  const removeIcpIndustry = useCallback((id: number) => {
+    setData((prevData) =>
+      prevData
+        ? { ...prevData, icpIndustries: prevData.icpIndustries.filter((x) => x.id !== id) }
+        : prevData,
+    )
+  }, [])
+
+  const upsertHypothesis = useCallback((hyp: Hypothesis) => {
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.hypotheses.filter((h) => h.id !== hyp.id)
+      return { ...prevData, hypotheses: [...rest, hyp] }
+    })
+  }, [])
+
+  const removeHypothesis = useCallback((id: number) => {
+    setData((prevData) =>
+      prevData
+        ? {
+            ...prevData,
+            hypotheses: prevData.hypotheses.filter((h) => h.id !== id),
+            hypothesisCampaigns: prevData.hypothesisCampaigns.filter((hc) => hc.hypothesis_id !== id),
+          }
+        : prevData,
+    )
+  }, [])
+
+  const assignCampaigns = useCallback((hypothesisId: number, campaignIds: string[]) => {
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const idSet = new Set(campaignIds)
+      // Drop this hypothesis's old assignments not in the new set, AND release
+      // these campaign_ids from whichever hypothesis currently holds them
+      // (mirrors the server's set_hypothesis_campaigns RPC).
+      const kept = prevData.hypothesisCampaigns.filter((hc) => {
+        if (hc.hypothesis_id === hypothesisId) return idSet.has(hc.campaign_id)
+        return !idSet.has(hc.campaign_id)
+      })
+      const now = new Date().toISOString()
+      const existing = new Set(
+        kept.filter((hc) => hc.hypothesis_id === hypothesisId).map((hc) => hc.campaign_id),
+      )
+      const added = campaignIds
+        .filter((cid) => !existing.has(cid))
+        .map((cid) => ({ hypothesis_id: hypothesisId, campaign_id: cid, created_at: now }))
+      return { ...prevData, hypothesisCampaigns: [...kept, ...added] }
+    })
+  }, [])
+
   // `mode` = 'full' re-downloads everything (initial load + manual refetch after a
   // write); 'delta' (the 5-min interval) fetches only rows changed since the
   // cursor and merges them, falling back to a full refetch if the DB has no
@@ -361,6 +500,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // missing table (pre-migration DB) yields [] and its error is excluded
           // from the aggregate `error` below, so it never fails the load.
           supabase.from('saved_searches').select('*').order('platform').order('name'),
+          // ICP + Hypothesis layer (migration 043) — same tolerated-error pattern.
+          supabase.from('icps').select('*').order('name'),
+          supabase.from('icp_personas').select('*').order('icp_id').order('sort'),
+          supabase.from('icp_industries').select('*').order('icp_id').order('name'),
+          supabase.from('hypotheses').select('*').order('name'),
+          supabase.from('hypothesis_campaigns').select('*'),
         ])
         // Big append-heavy tables delta on an interval refresh, full otherwise.
         const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
@@ -369,7 +514,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const [small, leads, messages, pipelineEvents] = await Promise.all([
           smallP, leadsP, messagesP, eventsP,
         ])
-        const [instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers, savedSearches] = small
+        const [
+          instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers,
+          savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
+        ] = small
         if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
@@ -429,6 +577,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 base.savedSearches,
                 (savedSearches.data ?? []) as SavedSearch[],
               ),
+              icps: stableSlice(base.icps, (icps.data ?? []) as Icp[]),
+              icpPersonas: stableSlice(base.icpPersonas, (icpPersonas.data ?? []) as IcpPersona[]),
+              icpIndustries: stableSlice(base.icpIndustries, (icpIndustries.data ?? []) as IcpIndustry[]),
+              hypotheses: stableSlice(base.hypotheses, (hypotheses.data ?? []) as Hypothesis[]),
+              hypothesisCampaigns: stableSlice(
+                base.hypothesisCampaigns,
+                (hypothesisCampaigns.data ?? []) as HypothesisCampaign[],
+              ),
               // Already reference-stable on a no-op delta (mergeById returns the
               // prior array when the batch is empty); full fetch gets a fresh one.
               pipelineEvents: events as unknown as DashboardData['pipelineEvents'],
@@ -466,7 +622,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ data, loading, refetch, patchLead, upsertSavedSearch, removeSavedSearch }}
+      value={{
+        data, loading, refetch, patchLead, upsertSavedSearch, removeSavedSearch,
+        upsertIcp, removeIcp, upsertIcpPersona, removeIcpPersona,
+        upsertIcpIndustry, removeIcpIndustry, upsertHypothesis, removeHypothesis,
+        assignCampaigns,
+      }}
     >
       {children}
     </Ctx.Provider>

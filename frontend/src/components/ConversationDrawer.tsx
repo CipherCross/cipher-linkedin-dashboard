@@ -173,6 +173,7 @@ export function ConversationDrawer({
           body: JSON.stringify({
             instance_id: lead.instance_id,
             profile_url: lead.profile_url,
+            campaign_id: lead.campaign_id,
             force,
           }),
         })

@@ -143,8 +143,93 @@ export interface SavedSearch {
   notes: string | null
   author: string | null
   archived: boolean
+  /** Which hypothesis this search recipe executes for (migration 043); null =
+   *  unassigned. The EXECUTION side of an ICP's keywords — IcpIndustry below is
+   *  the DEFINITION side. */
+  hypothesis_id?: number | null
   created_at: string
   updated_at: string
+}
+
+// --- ICP + Hypothesis layer (see migration 043) ------------------------------
+
+/** Ideal Customer Profile — fully structured, no Markdown body. Seed: "Web 2 Mob". */
+export interface Icp {
+  id: number
+  name: string
+  airtable_url: string | null
+  main_product: string | null
+  core_sphere: string | null
+  secondary_sphere: string | null
+  product_stage: string | null
+  monetization: string | null
+  features_note: string | null
+  purchase_triggers: string[]
+  features: string[]
+  company_countries: string[]
+  company_headcount: string | null
+  company_age: string | null
+  apollo_industries: string[]
+  funding: string | null
+  dev_team_availability: string | null
+  dev_team_location: string | null
+  /** ICP-wide keyword lists — DISTINCT scope from IcpIndustry's per-industry
+   *  lists below; the UI shows both, never auto-merged (decision 9). */
+  include_keywords: string[]
+  exclude_keywords: string[]
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** A buyer persona attached to one ICP. `kind` is free text (seed:
+ *  management/product/technical), not an enum — more can be added in the editor. */
+export interface IcpPersona {
+  id: number
+  icp_id: number
+  kind: string
+  job_titles: string[]
+  age_range: string | null
+  location: string | null
+  background: string | null
+  profile_status: string | null
+  connections_note: string | null
+  followers_note: string | null
+  sort: number
+  created_at: string
+  updated_at: string
+}
+
+/** Per-industry keyword REFINEMENT on one ICP — the definition side of "both"
+ *  (decision 3); saved_searches.hypothesis_id below is the execution side. */
+export interface IcpIndustry {
+  id: number
+  icp_id: number
+  name: string
+  include_keywords: string[]
+  exclude_keywords: string[]
+  created_at: string
+  updated_at: string
+}
+
+/** A named, testable go-to-market hypothesis: groups campaigns under one ICP
+ *  for stats. `icp_id` is nullable — a hypothesis can be created unassigned. */
+export interface Hypothesis {
+  id: number
+  name: string
+  icp_id: number | null
+  description: string | null
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** hypothesis_campaigns join row: a campaign belongs to AT MOST ONE hypothesis
+ *  (unique on campaign_id) — the agent never writes to this table. */
+export interface HypothesisCampaign {
+  hypothesis_id: number
+  campaign_id: string
+  created_at: string
 }
 
 /** A person on the team who can own leads in the manual pipeline. */
@@ -303,5 +388,10 @@ export interface DashboardData {
   teamMembers: TeamMember[]
   pipelineEvents: PipelineEvent[]
   savedSearches: SavedSearch[]
+  icps: Icp[]
+  icpPersonas: IcpPersona[]
+  icpIndustries: IcpIndustry[]
+  hypotheses: Hypothesis[]
+  hypothesisCampaigns: HypothesisCampaign[]
   error?: string
 }

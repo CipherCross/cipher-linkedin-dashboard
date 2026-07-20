@@ -2,8 +2,8 @@
 // mirrors the agent's derive_events: invited_at / connected_at / replied_at
 // are the source of truth for funnel stages.
 import type {
-  CampaignMetrics, DailyActivity, Gender, Instance, IssueKind, IssueSeverity, Lead, Message,
-  NextAction, Sentiment,
+  CampaignMetrics, DailyActivity, Gender, Hypothesis, HypothesisCampaign, Instance, IssueKind,
+  IssueSeverity, Lead, Message, NextAction, Sentiment,
 } from './types'
 
 /** Display name for an instance: real LinkedIn account name when synced,
@@ -304,6 +304,10 @@ export function presetRanges(now: Date = new Date()): DateRange[] {
   ]
 }
 
+/** The open-ended range covering everything — the default when a hypothesis
+ *  funnel is shown without an explicit date filter. */
+export const ALL_TIME_RANGE: DateRange = { id: 'all', label: 'All time', from: null, to: null }
+
 /** The equal-length window immediately before `r`, for range-over-range deltas.
  *  Null when `r` has an open end — an all-time range has no comparable prior
  *  period. Purely date arithmetic; it doesn't touch funnel semantics. */
@@ -552,6 +556,81 @@ export function rangedCampaigns(
   }
   out.sort((a, b) => b.invites_sent - a.invites_sent || a.campaign_name.localeCompare(b.campaign_name))
   return out
+}
+
+// --- Hypothesis rollups (see migration 043) -----------------------------
+// A hypothesis's stats span MULTIPLE campaigns, so the same person can appear
+// more than once (cross-campaign person duplication is a known hazard — see
+// messenger-campaign-person-dupes / invite-count-leads-dedup memories). Every
+// aggregate below dedupes by leadKey before counting.
+
+/** One synthetic Lead per person (leadKey), merging milestone timestamps across
+ *  all of their rows into the EARLIEST non-null occurrence of each — so a person
+ *  invited via one campaign and only messaged via another still shows one honest
+ *  funnel, instead of either double-counting them or silently dropping a
+ *  milestone that happened on a row that wasn't picked. Feeds straight into
+ *  rangeTotals. Non-milestone display fields (full_name, headline, …) come from
+ *  whichever row is seen first — arbitrary, display-only. */
+function dedupeByPerson(leads: Lead[]): Lead[] {
+  const earliest = (a: string | null, b: string | null) =>
+    a == null ? b : b == null ? a : a < b ? a : b
+  const byKey = new Map<string, Lead>()
+  for (const l of leads) {
+    const k = leadKey(l.instance_id, l.profile_url)
+    const prev = byKey.get(k)
+    if (!prev) {
+      byKey.set(k, l)
+      continue
+    }
+    byKey.set(k, {
+      ...prev,
+      added_at: earliest(prev.added_at, l.added_at),
+      invited_at: earliest(prev.invited_at, l.invited_at),
+      connected_at: earliest(prev.connected_at, l.connected_at),
+      first_message_at: earliest(prev.first_message_at, l.first_message_at),
+      replied_at: earliest(prev.replied_at, l.replied_at),
+    })
+  }
+  return [...byKey.values()]
+}
+
+/** The campaign_ids currently assigned to one hypothesis. */
+function campaignIdsOf(hyp: Hypothesis, hypCampaigns: HypothesisCampaign[]): Set<string> {
+  return new Set(
+    hypCampaigns.filter((hc) => hc.hypothesis_id === hyp.id).map((hc) => hc.campaign_id),
+  )
+}
+
+/** Funnel totals for one hypothesis, deduped by leadKey across its campaigns
+ *  (decision 6) — a person present in two of the hypothesis's campaigns counts
+ *  once, at their earliest milestone per stage. Defaults to ALL_TIME_RANGE. */
+export function hypothesisTotals(
+  hyp: Hypothesis,
+  hypCampaigns: HypothesisCampaign[],
+  leads: Lead[],
+  range: DateRange = ALL_TIME_RANGE,
+  latest?: Map<string, ReplyInfo>,
+): Totals {
+  const ids = campaignIdsOf(hyp, hypCampaigns)
+  const scoped = leads.filter((l) => ids.has(l.campaign_id))
+  return rangeTotals(dedupeByPerson(scoped), range, latest)
+}
+
+/** Per-campaign breakdown for one hypothesis (which of its campaigns drive
+ *  results) — NOT deduped: each campaign reports its own leads, and one person
+ *  can legitimately count in more than one row here even though the hypothesis
+ *  TOTAL above counts them once. */
+export function hypothesisCampaignBreakdown(
+  hyp: Hypothesis,
+  hypCampaigns: HypothesisCampaign[],
+  leads: Lead[],
+  base: CampaignMetrics[],
+  range: DateRange = ALL_TIME_RANGE,
+): CampaignMetrics[] {
+  const ids = campaignIdsOf(hyp, hypCampaigns)
+  const scoped = leads.filter((l) => ids.has(l.campaign_id))
+  const scopedBase = base.filter((c) => ids.has(c.campaign_id))
+  return rangedCampaigns(scoped, scopedBase, range)
 }
 
 // --- Demographics + photos ----------------------------------------------

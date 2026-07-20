@@ -43,6 +43,49 @@ export async function executeSql(query: string): Promise<SqlResult> {
   return { rows, rowCount: all.length, truncated: rows.length < all.length }
 }
 
+/** Compact, cheap "ICP + hypothesis roster" for the chat copilot's always-on system
+ *  prompt (names + a one-line summary each) so it's ICP-aware without a tool call;
+ *  depth (personas, full keyword lists, per-hypothesis funnel) is left to run_sql /
+ *  hypothesis_overview on demand. Flat selects joined in JS (matches the rest of this
+ *  codebase's style — no PostgREST relationship embedding). Empty string when neither
+ *  table has any live (non-archived) rows yet, so a blank ICP layer adds nothing to
+ *  the prompt. */
+export async function loadIcpRoster(): Promise<string> {
+  const [{ data: icps }, { data: hyps }] = await Promise.all([
+    db()
+      .from('icps')
+      .select('id,name,main_product,core_sphere')
+      .eq('archived', false)
+      .order('name'),
+    db()
+      .from('hypotheses')
+      .select('name,icp_id,description')
+      .eq('archived', false)
+      .order('name'),
+  ])
+  const icpRows = (icps ?? []) as { id: number; name: string; main_product: string | null; core_sphere: string | null }[]
+  const hypRows = (hyps ?? []) as { name: string; icp_id: number | null; description: string | null }[]
+  if (icpRows.length === 0 && hypRows.length === 0) return ''
+
+  const icpNameById = new Map(icpRows.map((i) => [i.id, i.name]))
+  const icpLines = icpRows.map((i) => {
+    const bits = [i.main_product, i.core_sphere].filter(Boolean)
+    return `- "${i.name}"${bits.length ? `: ${bits.join(' — ')}` : ''}`
+  })
+  const hypLines = hypRows.map((h) => {
+    const icpName = h.icp_id != null ? icpNameById.get(h.icp_id) : null
+    const scope = icpName ? ` (ICP: "${icpName}")` : ' (no ICP assigned)'
+    return `- "${h.name}"${scope}${h.description ? `: ${h.description}` : ''}`
+  })
+
+  return [
+    icpLines.length ? `ICPs (Ideal Customer Profiles):\n${icpLines.join('\n')}` : '',
+    hypLines.length ? `Hypotheses:\n${hypLines.join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 // Per-campaign invite queue: who is still WAITING for an invite (not yet invited,
 // not excluded), how many of those sit in warm-up steps before InvitePerson, and how
 // recently leads were added. This is the ground truth for interpreting a zero-invite
@@ -273,10 +316,50 @@ saved_searches — the Search Library: shared, named sourcing-search RECIPES
   exclude_keywords text[], boolean_query text (free-form AND/OR/NOT string pasteable
   into the platform), filters jsonb (platform-specific settings, flat key->value),
   notes text, author text (free text; who the search belongs to), archived boolean,
-  created_at, updated_at.
+  hypothesis_id bigint -> hypotheses (nullable; which hypothesis this search recipe
+  executes for — the EXECUTION side of an ICP's keywords, vs icp_industries which is
+  the DEFINITION side), created_at, updated_at.
   The LIVE set is archived=false; archived=true is the soft-deleted/retired set
   (hidden by default in the UI). Unique per (platform, lower(name)) — same name can
   exist under different platforms but not twice within one platform.
+
+icps — Ideal Customer Profile definitions (migration 043), fully structured (no
+  Markdown body). Editable via the /icp page; the AI never writes these.
+  id bigint PK, name text (unique), airtable_url text,
+  main_product/core_sphere/secondary_sphere/product_stage/monetization text,
+  features_note text, purchase_triggers text[], features text[],
+  company_countries text[], company_headcount text, company_age text,
+  apollo_industries text[], funding text, dev_team_availability text,
+  dev_team_location text, include_keywords text[] (ICP-wide), exclude_keywords
+  text[] (ICP-wide), archived boolean, created_at, updated_at.
+  A hypothesis (below) points at one icps row; one ICP can back many
+  hypotheses.
+
+icp_personas — buyer personas per ICP (seed: management/product/technical;
+  kind is free text, not an enum — more can be added in the editor)
+  id bigint PK, icp_id -> icps, kind text, job_titles text[], age_range text,
+  location text, background text, profile_status text, connections_note text,
+  followers_note text, sort int (display order), created_at, updated_at
+
+icp_industries — DEFINITION side of per-industry keyword refinements (an ICP's
+  Apollo industries, each with its OWN include/exclude keyword list, DISTINCT
+  from icps.include_keywords/exclude_keywords above — there is no auto-merge
+  between the ICP-wide lists and a per-industry list; treat them as separate
+  scopes unless a question explicitly asks for their union)
+  id bigint PK, icp_id -> icps, name text, include_keywords text[] (default
+  empty — starts blank, filled in by the team), exclude_keywords text[],
+  created_at, updated_at
+
+hypotheses — a named, testable go-to-market hypothesis: groups campaigns under
+  one ICP for stats (migration 043). Editable via the /hypotheses page.
+  id bigint PK, name text (unique), icp_id -> icps (nullable — a hypothesis can
+  be unassigned), description text, archived boolean, created_at, updated_at
+
+hypothesis_campaigns — join table: which campaigns execute a hypothesis. A
+  campaign belongs to AT MOST ONE hypothesis (unique on campaign_id). This is a
+  SEPARATE table from campaigns — the sync agent never writes to it and never
+  sees hypothesis assignments, so a re-sync can't clobber them.
+  hypothesis_id -> hypotheses, campaign_id -> campaigns, created_at
 
 sync_runs — sync agent run log
   id uuid PK, instance_id, started_at, finished_at,
@@ -459,6 +542,17 @@ ${INVITE_QUEUE_SQL}
   Empty queue → the campaign ran out of people to invite; the correct action is
   "add new leads to <campaign>", never "reactivate". Ignore campaigns with
   has_invite_step = false — they never send invites (scraping/analysis-only).
+- HYPOTHESIS FUNNEL — a hypothesis's stats roll up hypothesis_campaigns -> campaigns
+  -> leads. The SAME PERSON can appear in more than one of a hypothesis's campaigns
+  (known hazard, see messenger-campaign-person-dupes precedent) — always DEDUPE BY
+  PERSON (instance_id, profile_url) before counting, taking the EARLIEST non-null
+  milestone across their rows (min(invited_at) etc., ignoring nulls) so a person
+  invited via one campaign and only messaged via another still shows one honest
+  funnel. Use the hypothesis_overview tool for the ready-made rollup, or replicate its
+  dedupe (HYPOTHESIS_OVERVIEW_SQL below) in a custom run_sql query — never sum
+  campaign_metrics rows for a hypothesis's campaigns directly, that double-counts
+  shared people. The usual replies-lag-invites / cohort-maturity caveats apply
+  identically to hypothesis-level rates.
 - MANUAL CRM PIPELINE vs the LH2 funnel — keep them separate. Questions about
   calls, negotiations, proposals, or won/lost CLIENTS are about the manual
   pipeline: answer them from leads.pipeline_stage / pipeline_substatus /
@@ -537,6 +631,55 @@ select
   count(*) as accepted_n
 from leads
 where connected_at is not null and invited_at > now() - interval '90 days'
+`.trim()
+
+// Per-hypothesis rollup: ICP name, #campaigns, and the funnel — invited/connected/
+// replied + rates — deduped by PERSON (instance_id, profile_url) across the
+// hypothesis's campaigns, taking the earliest non-null milestone per person (see the
+// HYPOTHESIS FUNNEL guidance in SCHEMA_DOC above). campaign_counts and person_agg are
+// aggregated in SEPARATE CTEs before the final join specifically so joining hypotheses
+// to both at once can't cross-multiply campaigns x people into an inflated count.
+export const HYPOTHESIS_OVERVIEW_SQL = `
+with campaign_counts as (
+  select hypothesis_id, count(*) as campaigns
+  from hypothesis_campaigns
+  group by 1
+),
+person_leads as (
+  select hc.hypothesis_id, l.instance_id, l.profile_url,
+         min(l.invited_at)   as invited_at,
+         min(l.connected_at) as connected_at,
+         min(l.replied_at)   as replied_at
+  from leads l
+  join hypothesis_campaigns hc on hc.campaign_id = l.campaign_id
+  group by hc.hypothesis_id, l.instance_id, l.profile_url
+),
+person_agg as (
+  select hypothesis_id,
+         count(*)             as leads,
+         count(invited_at)    as invited,
+         count(connected_at)  as connected,
+         count(replied_at)    as replied
+  from person_leads
+  group by 1
+)
+select
+  h.id as hypothesis_id,
+  h.name as hypothesis,
+  i.name as icp,
+  coalesce(cc.campaigns, 0) as campaigns,
+  coalesce(pa.leads, 0)     as leads,
+  coalesce(pa.invited, 0)   as invited,
+  coalesce(pa.connected, 0) as connected,
+  coalesce(pa.replied, 0)   as replied,
+  round(100.0 * pa.connected / nullif(pa.invited, 0), 1)   as connect_rate,
+  round(100.0 * pa.replied / nullif(pa.connected, 0), 1)   as reply_rate
+from hypotheses h
+left join icps i on i.id = h.icp_id
+left join campaign_counts cc on cc.hypothesis_id = h.id
+left join person_agg pa on pa.hypothesis_id = h.id
+where h.archived = false
+order by pa.leads desc nulls last
 `.trim()
 
 export const CAMPAIGN_OVERVIEW_SQL = `

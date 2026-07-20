@@ -1,11 +1,11 @@
 import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
-import { SCHEMA_DOC } from './_lib/core.js'
+import { SCHEMA_DOC, loadIcpRoster } from './_lib/core.js'
 import { tools } from './_lib/tools.js'
 
 export const maxDuration = 300
 
-const SYSTEM = `You are the analytics copilot for a LinkedIn outreach dashboard. You have
+const SYSTEM_BASE = `You are the analytics copilot for a LinkedIn outreach dashboard. You have
 read-only SQL access to the team's Supabase Postgres database through tools.
 
 ${SCHEMA_DOC}
@@ -31,6 +31,15 @@ HOW TO WORK
 
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json()
+
+  // Always-on ICP/hypothesis awareness (cheap: names + one-liners), so the copilot
+  // doesn't need a tool call just to know what ICPs/hypotheses exist. Fetched per
+  // request rather than baked into the module-level constant so a freshly-created
+  // ICP shows up immediately, not just after the next cold start.
+  const roster = await loadIcpRoster()
+  const SYSTEM = roster
+    ? `${SYSTEM_BASE}\n\n${roster}\n\nUse hypothesis_overview (or run_sql) for the funnel/keywords/personas behind any of these.`
+    : SYSTEM_BASE
 
   const result = streamText({
     model: anthropic('claude-opus-4-8'),

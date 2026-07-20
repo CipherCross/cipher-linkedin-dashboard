@@ -114,17 +114,70 @@ const json = (body: unknown, status = 200) =>
 
 type Sb = ReturnType<typeof db>
 
-/** Inject the global playbook (Markdown) into the system prompt, or note its
- *  absence so the coach stays generic until one is written. */
-function systemFor(playbook: string): string {
-  if (!playbook) {
-    return (
-      SYSTEM_BASE +
-      `\n\nNo playbook is configured — keep product claims generic and note in "summary" that ` +
+/** Inject the global playbook (Markdown) + this conversation's ICP (if its campaign
+ *  is assigned to a hypothesis) into the system prompt. Either piece is optional —
+ *  the coach stays generic where one or both are unconfigured. */
+function systemFor(playbook: string, icpText: string): string {
+  let sys = SYSTEM_BASE
+  sys += playbook
+    ? `\n\nPLAYBOOK — ground every suggestion in this:\n${playbook}`
+    : `\n\nNo playbook is configured — keep product claims generic and note in "summary" that ` +
       `writing a playbook (the dashboard's Playbook page) will sharpen the coaching.`
-    )
+  if (icpText) sys += `\n\nICP — this conversation's target profile:\n${icpText}`
+  return sys
+}
+
+/** This conversation's ICP, resolved campaign -> hypothesis -> ICP (migration 043).
+ *  Returns '' when the campaign isn't assigned to a hypothesis, the hypothesis has no
+ *  ICP, or campaign_id wasn't provided — coaching stays generic in all those cases.
+ *  Compact by design (personas + purchase triggers, not the full keyword lists —
+ *  those are sourcing-recipe data, not coaching-relevant). */
+async function loadIcpForCampaign(sb: Sb, campaign_id: string | null | undefined): Promise<string> {
+  if (!campaign_id) return ''
+  const { data: hc } = await sb
+    .from('hypothesis_campaigns')
+    .select('hypothesis_id')
+    .eq('campaign_id', campaign_id)
+    .maybeSingle()
+  if (!hc) return ''
+
+  const { data: hyp } = await sb
+    .from('hypotheses')
+    .select('name,icp_id')
+    .eq('id', (hc as { hypothesis_id: number }).hypothesis_id)
+    .maybeSingle()
+  const icpId = (hyp as { name: string; icp_id: number | null } | null)?.icp_id
+  if (!icpId) return ''
+
+  const [{ data: icp }, { data: personas }] = await Promise.all([
+    sb
+      .from('icps')
+      .select('name,main_product,core_sphere,secondary_sphere,purchase_triggers')
+      .eq('id', icpId)
+      .maybeSingle(),
+    sb
+      .from('icp_personas')
+      .select('kind,job_titles,background')
+      .eq('icp_id', icpId)
+      .order('sort'),
+  ])
+  if (!icp) return ''
+  const i = icp as {
+    name: string
+    main_product: string | null
+    core_sphere: string | null
+    secondary_sphere: string | null
+    purchase_triggers: string[] | null
   }
-  return SYSTEM_BASE + `\n\nPLAYBOOK — ground every suggestion in this:\n` + playbook
+  const lines = [`ICP "${i.name}" (hypothesis "${(hyp as { name: string }).name}")`]
+  const context = [i.main_product, i.core_sphere, i.secondary_sphere].filter(Boolean)
+  if (context.length) lines.push(`Product/sphere: ${context.join(' — ')}`)
+  if (i.purchase_triggers?.length) lines.push(`Why they buy: ${i.purchase_triggers.join('; ')}`)
+  for (const p of (personas ?? []) as { kind: string; job_titles: string[]; background: string | null }[]) {
+    const titles = p.job_titles?.length ? p.job_titles.slice(0, 6).join(', ') : ''
+    lines.push(`Buyer persona (${p.kind}): ${titles}${p.background ? ` — ${p.background}` : ''}`)
+  }
+  return lines.join('\n')
 }
 
 function renderThread(thread: Msg[]): string {
@@ -206,7 +259,8 @@ async function coachConversation(
   instance_id: string,
   profile_url: string,
   playbook: string,
-  force: boolean
+  force: boolean,
+  campaign_id?: string | null,
 ): Promise<CoachingOut | null> {
   const thread = await loadThread(sb, instance_id, profile_url)
   if (!thread.length) return null
@@ -224,10 +278,11 @@ async function coachConversation(
     }
   }
 
+  const icpText = await loadIcpForCampaign(sb, campaign_id)
   const { object } = await generateObject({
     model: anthropic(CONV_MODEL),
     schema: convSchema,
-    system: systemFor(playbook),
+    system: systemFor(playbook, icpText),
     prompt: renderThread(thread),
   })
 
@@ -347,7 +402,13 @@ async function digest(sb: Sb, instance_id: string): Promise<Response> {
 }
 
 async function handle(req: Request): Promise<Response> {
-  let body: { instance_id?: unknown; profile_url?: unknown; mode?: unknown; force?: unknown }
+  let body: {
+    instance_id?: unknown
+    profile_url?: unknown
+    mode?: unknown
+    force?: unknown
+    campaign_id?: unknown
+  }
   try {
     body = await req.json()
   } catch {
@@ -369,9 +430,12 @@ async function handle(req: Request): Promise<Response> {
   if (typeof profile_url !== 'string' || !profile_url) {
     return json({ error: 'profile_url (string) is required' }, 400)
   }
+  // Optional: this lead's campaign, so coaching can be grounded in its ICP (if the
+  // campaign is assigned to a hypothesis) — see loadIcpForCampaign.
+  const campaign_id = typeof body.campaign_id === 'string' ? body.campaign_id : null
 
   const playbook = await loadPlaybook(sb)
-  const out = await coachConversation(sb, instance_id, profile_url, playbook, body.force === true)
+  const out = await coachConversation(sb, instance_id, profile_url, playbook, body.force === true, campaign_id)
   if (!out) return json({ error: 'no messages in this conversation' }, 404)
   return json(out)
 }

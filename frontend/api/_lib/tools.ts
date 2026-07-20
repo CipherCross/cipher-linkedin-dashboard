@@ -5,6 +5,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import {
   CAMPAIGN_OVERVIEW_SQL,
+  HYPOTHESIS_OVERVIEW_SQL,
   PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
   WEEKLY_FUNNEL_SQL,
@@ -72,6 +73,18 @@ export const toolDefs = {
       "summary count of untriaged replies (replied but not yet in the pipeline). Use this " +
       'for questions about calls, proposals, clients, or who needs triage — NOT the ' +
       'invite/reply milestones.',
+    inputShape: {},
+  },
+
+  hypothesis_overview: {
+    name: 'hypothesis_overview',
+    description:
+      'Per-hypothesis rollup: ICP name, #campaigns, and the funnel (invited, connected, ' +
+      'replied, connect_rate, reply_rate) — DEDUPED by person across the hypothesis\'s ' +
+      'campaigns (a shared person across two campaigns of one hypothesis counts once, ' +
+      'taking their earliest milestone). The right first call for "which hypothesis is ' +
+      'winning" or "how is ICP X performing" questions; use run_sql for deeper drilldowns ' +
+      '(per-campaign breakdown, cohorts, keyword lists) once you know which hypothesis.',
     inputShape: {},
   },
 
@@ -210,6 +223,12 @@ export const tools = {
     description: toolDefs.pipeline_overview.description,
     inputSchema: z.object(toolDefs.pipeline_overview.inputShape),
     execute: async () => executeSql(PIPELINE_OVERVIEW_SQL),
+  }),
+
+  hypothesis_overview: tool({
+    description: toolDefs.hypothesis_overview.description,
+    inputSchema: z.object(toolDefs.hypothesis_overview.inputShape),
+    execute: async () => executeSql(HYPOTHESIS_OVERVIEW_SQL),
   }),
 
   save_search: tool({

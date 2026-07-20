@@ -2550,3 +2550,34 @@ td .pipe-stage-select.quiet:focus-visible {
 .kv-row { display: flex; gap: 6px; align-items: center; }
 .kv-key { flex: 0 0 40%; min-width: 0; }
 .kv-value { flex: 1; min-width: 0; }
+
+/* --- ICP editor: a persona / industry sub-form nested inside the ICP modal — */
+.icp-subentity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface-2);
+}
+.icp-subentity-head { display: flex; align-items: center; gap: 8px; }
+.icp-subentity-title { flex: 1; min-width: 0; font-weight: 600; }
+
+/* --- Hypothesis editor: scrollable checkbox list (campaigns / searches) --- */
+.icp-checklist {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+.icp-checklist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.icp-checklist-row:last-child { border-bottom: none; }
+.icp-checklist-row span:nth-child(2) { flex: 1; min-width: 0; }
