@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, FlaskConical, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import {
+  Archive, ArchiveRestore, ExternalLink, FlaskConical, Pencil, Plus, Trash2, X,
+} from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { adminPost } from '../lib/admin'
+import { CopyButton } from '../components/CopyButton'
 import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
@@ -15,7 +18,7 @@ import {
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import type {
-  CampaignMetrics, Hypothesis, HypothesisCampaign, Instance, Lead, SavedSearch,
+  CampaignMetrics, Hypothesis, HypothesisCampaign, Icp, Instance, Lead, SavedSearch,
 } from '../lib/types'
 
 interface HypDraft {
@@ -61,6 +64,7 @@ export function Hypotheses() {
   const latest = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
 
   const icpNameById = useMemo(() => new Map(icps.map((i) => [i.id, i.name])), [icps])
+  const icpById = useMemo(() => new Map(icps.map((i) => [i.id, i])), [icps])
 
   const visible = useMemo(
     () => hypotheses.filter((h) => showArchived || !h.archived),
@@ -227,7 +231,7 @@ export function Hypotheses() {
                     className="row-clickable"
                     tabIndex={0}
                     role="button"
-                    aria-label={`Show ${r.hyp.name} funnel`}
+                    aria-label={`Open ${r.hyp.name}`}
                     style={{ background: selectedId === r.hyp.id ? 'var(--surface-3)' : undefined }}
                     onClick={() => select(selectedId === r.hyp.id ? null : r.hyp.id)}
                     onKeyDown={(e) => {
@@ -273,13 +277,21 @@ export function Hypotheses() {
       )}
 
       {selected && (
-        <HypothesisDetail
+        <HypothesisViewer
+          key={selected.id}
           hyp={selected}
           hypCampaigns={hypCampaigns}
           campaigns={campaigns}
           leads={leads}
           latest={latest}
-          icpName={selected.icp_id != null ? icpNameById.get(selected.icp_id) ?? null : null}
+          instances={data?.instances ?? []}
+          icp={selected.icp_id != null ? icpById.get(selected.icp_id) ?? null : null}
+          searches={savedSearches.filter((s) => s.hypothesis_id === selected.id)}
+          onClose={() => select(null)}
+          onEdit={() => {
+            select(null)
+            setEditing(selected)
+          }}
         />
       )}
 
@@ -313,17 +325,41 @@ export function Hypotheses() {
   )
 }
 
-// --- Detail: funnel + per-campaign breakdown for one hypothesis -------------
+// --- Read-only viewer: all linked data for one hypothesis -------------------
 
-function HypothesisDetail({
-  hyp, hypCampaigns, campaigns, leads, latest, icpName,
+function hypToText(
+  hyp: Hypothesis,
+  icpName: string | null,
+  breakdown: CampaignMetrics[],
+  searches: SavedSearch[],
+): string {
+  const lines: string[] = [hyp.name]
+  if (icpName) lines.push(`ICP: ${icpName}`)
+  if (hyp.description) lines.push(`Description: ${hyp.description}`)
+  if (breakdown.length) {
+    lines.push('', 'Campaigns:')
+    for (const c of breakdown) lines.push(`  ${c.campaign_name}`)
+  }
+  if (searches.length) {
+    lines.push('', 'Searches:')
+    for (const s of searches) lines.push(`  ${s.name} (${s.platform})`)
+  }
+  return lines.join('\n')
+}
+
+function HypothesisViewer({
+  hyp, hypCampaigns, campaigns, leads, latest, instances, icp, searches, onClose, onEdit,
 }: {
   hyp: Hypothesis
   hypCampaigns: HypothesisCampaign[]
   campaigns: CampaignMetrics[]
   leads: Lead[]
   latest: ReturnType<typeof latestRepliesByLead>
-  icpName: string | null
+  instances: Instance[]
+  icp: Icp | null
+  searches: SavedSearch[]
+  onClose: () => void
+  onEdit: () => void
 }) {
   const RANGES = useMemo(() => presetRanges(), [])
   const [range, setRange] = useState<DateRange>(ALL_TIME_RANGE)
@@ -349,53 +385,163 @@ function HypothesisDetail({
     () => hypothesisCampaignBreakdown(hyp, hypCampaigns, leads, campaigns, range),
     [hyp, hypCampaigns, leads, campaigns, range],
   )
+  const instanceOfCampaign = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of campaigns) {
+      m.set(c.campaign_id, instanceName(instances.find((i) => i.id === c.instance_id), c.instance_id))
+    }
+    return m
+  }, [campaigns, instances])
 
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>{hyp.name}{icpName ? <span className="muted"> · {icpName}</span> : ''}</h2>
-        <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
-      </div>
-      {hyp.description && <p className="muted small">{hyp.description}</p>}
-
-      <KpiCards totals={totals} prev={prevTotals} />
-      <Funnel leads={scopedLeads} />
-
-      <h3 className="search-group-head">Per-campaign breakdown</h3>
-      {breakdown.length === 0 ? (
-        <p className="muted small">No campaigns assigned to this hypothesis yet.</p>
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Campaign</th>
-                <th className="num">Invites</th>
-                <th className="num">Accepted</th>
-                <th className="num">Replies</th>
-                <th className="num">Accept %</th>
-                <th className="num">Reply %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {breakdown.map((c) => (
-                <tr key={c.campaign_id}>
-                  <td>{c.campaign_name}</td>
-                  <td className="num">{num(c.invites_sent)}</td>
-                  <td className="num">{num(c.accepted)}</td>
-                  <td className="num">{num(c.replies)}</td>
-                  <td className="num">{c.acceptance_rate == null ? '—' : c.acceptance_rate.toFixed(1) + '%'}</td>
-                  <td className="num">{c.reply_rate == null ? '—' : c.reply_rate.toFixed(1) + '%'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="pipe-modal-overlay" onClick={onClose}>
+      <div
+        className="pipe-modal search-modal hyp-view-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Hypothesis ${hyp.name}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="pipe-modal-head">
+          <span className="icp-view-heading">
+            {hyp.name}
+            {hyp.archived && <span className="badge">Archived</span>}
+          </span>
+          <div className="icp-view-head-actions">
+            <button className="btn ghost sm" onClick={onEdit}>
+              <Pencil size={13} /> Edit
+            </button>
+            <CopyButton
+              text={hypToText(hyp, icp?.name ?? null, breakdown, searches)}
+              title="Copy all fields"
+            />
+            <button className="conv-close" onClick={onClose} aria-label="Close">
+              <X size={16} />
+            </button>
+          </div>
         </div>
-      )}
-      <p className="muted small" style={{ marginTop: 8 }}>
-        Replies lag invites by days to weeks — treat the most recent invite cohorts' rates as
-        still maturing, not a verdict on this hypothesis.
-      </p>
+
+        <div className="search-form">
+          <div className="filter-field icp-view-field">
+            <span className="filter-label">ICP</span>
+            <div className="icp-view-value">
+              {icp ? (
+                <Link to="/icp" className="icp-view-link" onClick={onClose}>
+                  {icp.name}
+                  <ExternalLink size={12} />
+                </Link>
+              ) : (
+                <span className="muted">Unassigned</span>
+              )}
+              {icp && <CopyButton text={icp.name} title="Copy ICP name" />}
+            </div>
+          </div>
+
+          {hyp.description && (
+            <div className="filter-field icp-view-field">
+              <div className="icp-view-value">
+                <span className="filter-label">Description</span>
+                <CopyButton text={hyp.description} title="Copy description" />
+              </div>
+              <span>{hyp.description}</span>
+            </div>
+          )}
+
+          <div className="card-head" style={{ marginTop: 4 }}>
+            <h3 className="search-group-head" style={{ margin: 0 }}>Results</h3>
+            <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
+          </div>
+          <KpiCards totals={totals} prev={prevTotals} />
+          <Funnel leads={scopedLeads} />
+
+          <h3 className="search-group-head">Per-campaign breakdown</h3>
+          {breakdown.length === 0 ? (
+            <p className="muted small">No campaigns assigned to this hypothesis yet.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Campaign</th>
+                    <th>Account</th>
+                    <th className="num">Invites</th>
+                    <th className="num">Accepted</th>
+                    <th className="num">Replies</th>
+                    <th className="num">Accept %</th>
+                    <th className="num">Reply %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {breakdown.map((c) => (
+                    <tr key={c.campaign_id}>
+                      <td>
+                        <Link to={`/campaign/${encodeURIComponent(c.campaign_id)}`} onClick={onClose}>
+                          {c.campaign_name}
+                        </Link>
+                      </td>
+                      <td className="muted">{instanceOfCampaign.get(c.campaign_id) ?? '—'}</td>
+                      <td className="num">{num(c.invites_sent)}</td>
+                      <td className="num">{num(c.accepted)}</td>
+                      <td className="num">{num(c.replies)}</td>
+                      <td className="num">{c.acceptance_rate == null ? '—' : c.acceptance_rate.toFixed(1) + '%'}</td>
+                      <td className="num">{c.reply_rate == null ? '—' : c.reply_rate.toFixed(1) + '%'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="icp-view-value">
+            <h3 className="search-group-head" style={{ margin: 0 }}>
+              Linked searches{searches.length ? ` (${searches.length})` : ''}
+            </h3>
+            {searches.length > 0 && (
+              <CopyButton
+                text={searches.map((s) => `${s.name} (${s.platform})`).join('\n')}
+                title="Copy searches"
+              />
+            )}
+          </div>
+          {searches.length === 0 ? (
+            <p className="muted small">No saved searches attached to this hypothesis.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Search</th>
+                    <th>Platform</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {searches.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <Link to="/searches" onClick={onClose}>{s.name}</Link>
+                      </td>
+                      <td className="muted">{s.platform}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Deduped by person across this hypothesis's campaigns — a shared lead counts once.
+            Replies lag invites by days to weeks; treat the most recent invite cohorts' rates as
+            still maturing, not a verdict on this hypothesis.
+          </p>
+        </div>
+
+        <div className="pipe-modal-actions">
+          <button className="btn ghost sm" onClick={onClose}>Close</button>
+          <button className="btn accent sm" onClick={onEdit}>
+            <Pencil size={13} /> Edit hypothesis
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

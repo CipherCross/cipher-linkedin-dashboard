@@ -327,16 +327,46 @@ h2 { margin: 0 0 12px; font-size: var(--text-base); color: var(--text); font-wei
 
 .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
-select, .range-group button {
-  background: var(--panel);
+/* ---- Form controls -------------------------------------------------------
+ * ONE shared box for every text input, textarea and select, so a field looks
+ * identical wherever it lives (filter bar, modal, config panel, or a bare
+ * <textarea>). Wrapped in :where() → zero specificity, so the handful of
+ * intentional per-context overrides further down (chat composer, playbook /
+ * import editors, borderless chip input) still win, while any *un*styled
+ * control picks up this base instead of falling back to the raw native look
+ * (2px inset border, square corners). Inputs sit on --surface-2 per the
+ * palette token intent. Checkbox / radio / range / file / color keep native
+ * rendering — only text-entry controls are normalised here. */
+:where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='submit']):not([type='button']),
+  textarea,
+  select,
+  .range-group button
+) {
+  background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 7px 12px;
   font-size: var(--text-sm);
-  cursor: pointer;
+  font-family: inherit;
   transition: border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+    box-shadow var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+:where(textarea) { line-height: 1.5; resize: vertical; }
+select, .range-group button { cursor: pointer; }
+
+/* Shared focus ring — same accent border + soft halo on every control, so
+ * keyboard and click focus read the same across the app. High specificity so
+ * it wins over any per-context :focus above. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
 /* strip the OS-default control and draw our own muted chevron */
@@ -706,17 +736,27 @@ tr:last-child td { border-bottom: none; }
   gap: 2px;
   margin: 0;
   flex-wrap: nowrap;
+  /* Safety net: with 10 links the nav can get tight inside the capped 1280px
+   * bar. min-width:0 lets it shrink and, in the worst case, scroll internally
+   * rather than pushing the sync chip off the right edge. Scrollbar hidden —
+   * the icon-only breakpoints below are the primary crowding response. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.topnav::-webkit-scrollbar { display: none; }
 .navlink {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  flex-shrink: 0;
   color: var(--text-muted);
   text-decoration: none;
-  padding: 7px 11px;
+  padding: 7px 9px;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 500;
+  white-space: nowrap;
   transition: color 0.14s ease, background 0.14s ease, transform 0.12s ease;
 }
 .navlink-icon { flex-shrink: 0; }
@@ -780,11 +820,17 @@ tr:last-child td { border-bottom: none; }
 }
 .theme-toggle:hover { border-color: var(--border-strong); color: var(--text); }
 
-/* Collapse nav labels + brand name to icons on narrow screens (no wrapping) */
-@media (max-width: 820px) {
-  .appbar-inner { gap: 4px; padding: 10px 14px; }
+/* Icon-only nav once the 10 links no longer comfortably fit the label layout.
+ * The content column caps at 1280px, so full labels only fit on wide viewports;
+ * below that, collapse the nav to icons (brand name + sync-chip label stay). */
+@media (max-width: 1240px) {
   .navlink { padding: 8px; }
   .navlink-label { display: none; }
+}
+
+/* Collapse brand name + chip label too on genuinely narrow screens */
+@media (max-width: 820px) {
+  .appbar-inner { gap: 4px; padding: 10px 14px; }
   .brand-name { display: none; }
   .brand { margin-right: 4px; }
   .sync-chip-label { display: none; }
@@ -1043,16 +1089,8 @@ tr:last-child td { border-bottom: none; }
   font-size: var(--text-2xs); font-weight: 600; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: var(--tracking-caps);
 }
-.filter-bar input[type='search'] {
-  width: 100%;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
-  font-size: var(--text-sm);
-}
-.filter-bar input[type='search']:focus { border-color: var(--accent); }
+/* box comes from the form-control base; only the fill width is context-specific */
+.filter-bar input[type='search'] { width: 100%; }
 .filter-field select { max-width: 220px; }
 
 /* active-filter chip row + clear-all */
@@ -1139,6 +1177,19 @@ tr:last-child td { border-bottom: none; }
 }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); color: var(--text); }
 .btn.sm { padding: 4px 10px; font-size: var(--text-xs); }
+
+/* Shared keyboard focus ring — same accent halo the form controls use, so
+ * every interactive chrome element (button, icon button, segmented item,
+ * select trigger) reads as one system. */
+.btn:focus-visible,
+.btn-accent:focus-visible,
+.icon-only-btn:focus-visible,
+.icon-btn:focus-visible,
+.segmented-item:focus-visible,
+.drp-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
 
 .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .sortable:hover { color: var(--text); }
@@ -1455,13 +1506,9 @@ tr:last-child td { border-bottom: none; }
 .config-field { display: flex; flex-direction: column; gap: 3px; }
 .config-field span.config-label,
 .config-raw span.config-label { color: var(--muted); font-size: var(--text-2xs); }
-.config-field input, .config-field select, .config-raw textarea {
-  background: var(--panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 5px 8px; font-size: var(--text-sm);
-}
+/* box inherits the form-control base; config panel only needs the mono raw view */
 .config-raw { display: flex; flex-direction: column; gap: 3px; }
-.config-raw textarea { font-family: var(--font-mono); resize: vertical; }
+.config-raw textarea { font-family: var(--font-mono); }
 .config-view {
   margin: 8px 0 0; padding: 10px;
   border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg);
@@ -1816,9 +1863,7 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .import-block-head .grow { flex: 1; min-width: 0; }
 .import-block input[type='datetime-local'] {
   align-self: flex-start;
-  background: var(--panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 3px 8px; font-size: var(--text-xs);
+  padding: 5px 10px; font-size: var(--text-xs);
 }
 .import-dir {
   background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -2560,7 +2605,41 @@ td .pipe-stage-select.quiet:focus-visible {
   background: var(--surface-2);
 }
 .icp-subentity-head { display: flex; align-items: center; gap: 8px; }
-.icp-subentity-title { flex: 1; min-width: 0; font-weight: 600; }
+.icp-subentity-title { flex: 1; min-width: 0; font-weight: 600; word-break: break-word; }
+
+/* --- ICP read-only viewer ------------------------------------------------- */
+/* Cards on the ICP grid open the read-only viewer on click. */
+.search-card.clickable { cursor: pointer; }
+.search-card.clickable:hover { border-color: var(--border-strong); }
+.search-card.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icp-view-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.icp-view-head-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.icp-view-field { gap: 3px; }
+/* label + copy button on one row, value below (or beside for scalars) */
+.icp-view-value { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.icp-view-value > span { min-width: 0; word-break: break-word; white-space: pre-wrap; }
+.icp-view-link {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  word-break: break-all;
+  color: var(--accent);
+}
+.icp-view-link:hover { text-decoration: underline; }
+.icp-view-link svg { flex-shrink: 0; }
+.icp-view-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Copy button: same footprint as .icon-only-btn but sized for inline use. */
+.icp-copy-btn { flex-shrink: 0; }
+
+/* Hypothesis viewer holds funnel + KPI cards + tables — wider than the ICP modal. */
+.hyp-view-modal { width: min(880px, 100%); }
 
 /* --- Hypothesis editor: scrollable checkbox list (campaigns / searches) --- */
 .icp-checklist {

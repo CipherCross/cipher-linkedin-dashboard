@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Archive, ArchiveRestore, Pencil, Plus, Target, Trash2, X } from 'lucide-react'
+import {
+  Archive, ArchiveRestore, ExternalLink, Pencil, Plus, Target, Trash2, X,
+} from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { adminPost } from '../lib/admin'
 import { ChipInput } from '../components/ChipInput'
+import { CopyButton } from '../components/CopyButton'
 import { EmptyState } from '../components/EmptyState'
 import type { Icp, IcpIndustry, IcpPersona } from '../lib/types'
 
@@ -128,11 +131,17 @@ export function Icp() {
   const toast = useToast()
   const [showArchived, setShowArchived] = useState(false)
   const [editing, setEditing] = useState<Icp | 'new' | null>(null)
+  const [viewingId, setViewingId] = useState<number | null>(null)
 
   const icps = data?.icps ?? []
   const personas = data?.icpPersonas ?? []
   const industries = data?.icpIndustries ?? []
   const hypotheses = data?.hypotheses ?? []
+
+  // Derive the viewed ICP from live data (not a click-time snapshot) so an edit
+  // elsewhere / the 5-min refetch keeps the open viewer consistent, and it
+  // self-closes if the ICP is deleted.
+  const viewing = viewingId != null ? icps.find((i) => i.id === viewingId) ?? null : null
 
   const visible = useMemo(
     () => icps.filter((i) => showArchived || !i.archived).sort((a, b) => a.name.localeCompare(b.name)),
@@ -228,12 +237,27 @@ export function Icp() {
               personaCount={personas.filter((p) => p.icp_id === icp.id).length}
               industryCount={industries.filter((x) => x.icp_id === icp.id).length}
               hypothesisCount={hypotheses.filter((h) => h.icp_id === icp.id).length}
+              onView={() => setViewingId(icp.id)}
               onEdit={() => setEditing(icp)}
               onArchive={() => setArchived(icp, !icp.archived)}
               onDelete={() => del(icp)}
             />
           ))}
         </div>
+      )}
+
+      {viewing && (
+        <IcpViewer
+          icp={viewing}
+          personas={personas.filter((p) => p.icp_id === viewing.id)}
+          industries={industries.filter((x) => x.icp_id === viewing.id)}
+          hypothesisCount={hypotheses.filter((h) => h.icp_id === viewing.id).length}
+          onClose={() => setViewingId(null)}
+          onEdit={() => {
+            setEditing(viewing)
+            setViewingId(null)
+          }}
+        />
       )}
 
       {editing && (
@@ -261,6 +285,7 @@ function IcpCard({
   personaCount,
   industryCount,
   hypothesisCount,
+  onView,
   onEdit,
   onArchive,
   onDelete,
@@ -269,19 +294,31 @@ function IcpCard({
   personaCount: number
   industryCount: number
   hypothesisCount: number
+  onView: () => void
   onEdit: () => void
   onArchive: () => void
   onDelete: () => void
 }) {
   const context = [icp.main_product, icp.core_sphere].filter(Boolean)
   return (
-    <article className={`card search-card${icp.archived ? ' archived' : ''}`}>
+    <article
+      className={`card search-card clickable${icp.archived ? ' archived' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={onView}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onView()
+        }
+      }}
+    >
       <div className="search-card-head">
         <div className="search-card-title">
           <span className="search-card-name">{icp.name}</span>
           {icp.archived && <span className="badge">Archived</span>}
         </div>
-        <div className="search-card-actions">
+        <div className="search-card-actions" onClick={(e) => e.stopPropagation()}>
           <button className="icon-only-btn" title="Edit" onClick={onEdit}>
             <Pencil size={14} />
           </button>
@@ -304,6 +341,267 @@ function IcpCard({
         {hypothesisCount === 1 ? '' : 'es'}
       </div>
     </article>
+  )
+}
+
+// --- Read-only viewer -------------------------------------------------------
+
+// A labelled scalar value with a copy button. Renders nothing when empty so the
+// viewer only shows fields that are actually filled in.
+function ViewField({
+  label,
+  value,
+  link,
+}: {
+  label: string
+  value: string | null | undefined
+  link?: boolean
+}) {
+  if (!value || !value.trim()) return null
+  return (
+    <div className="filter-field icp-view-field">
+      <span className="filter-label">{label}</span>
+      <div className="icp-view-value">
+        {link ? (
+          <a href={value} target="_blank" rel="noreferrer" className="icp-view-link">
+            {value}
+            <ExternalLink size={12} />
+          </a>
+        ) : (
+          <span>{value}</span>
+        )}
+        <CopyButton text={value} title={`Copy ${label.toLowerCase()}`} />
+      </div>
+    </div>
+  )
+}
+
+// A labelled string-array shown as read-only chips, copyable as a comma list.
+function ViewChips({
+  label,
+  values,
+  variant,
+}: {
+  label: string
+  values: string[]
+  variant?: 'include' | 'exclude'
+}) {
+  if (!values || values.length === 0) return null
+  return (
+    <div className="filter-field icp-view-field">
+      <div className="icp-view-value">
+        <span className="filter-label">{label}</span>
+        <CopyButton text={values.join(', ')} title={`Copy ${label.toLowerCase()}`} />
+      </div>
+      <div className="icp-view-chips">
+        {values.map((v) => (
+          <span className={`chip${variant ? ` ${variant}` : ''}`} key={v}>
+            {variant === 'exclude' ? '−' : ''}
+            {v}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Plaintext dump of the whole ICP for the header "Copy all" button.
+function icpToText(icp: Icp, personas: IcpPersona[], industries: IcpIndustry[]): string {
+  const lines: string[] = []
+  const field = (label: string, value: string | null | undefined) => {
+    if (value && value.trim()) lines.push(`${label}: ${value.trim()}`)
+  }
+  const list = (label: string, values: string[]) => {
+    if (values && values.length) lines.push(`${label}: ${values.join(', ')}`)
+  }
+  lines.push(icp.name)
+  field('Airtable URL', icp.airtable_url)
+  field('Main product', icp.main_product)
+  field('Product stage', icp.product_stage)
+  field('Core sphere', icp.core_sphere)
+  field('Secondary sphere', icp.secondary_sphere)
+  field('Monetization', icp.monetization)
+  field('Funding', icp.funding)
+  field('Features note', icp.features_note)
+  list('Features', icp.features)
+  list('Purchase triggers', icp.purchase_triggers)
+  list('Countries', icp.company_countries)
+  field('Headcount', icp.company_headcount)
+  field('Company age', icp.company_age)
+  field('Dev team availability', icp.dev_team_availability)
+  field('Dev team location', icp.dev_team_location)
+  list('Apollo industries', icp.apollo_industries)
+  list('Include keywords', icp.include_keywords)
+  list('Exclude keywords', icp.exclude_keywords)
+  for (const p of personas) {
+    lines.push('', `Persona — ${p.kind}`)
+    list('  Job titles', p.job_titles)
+    field('  Age range', p.age_range)
+    field('  Location', p.location)
+    field('  Connections', p.connections_note)
+    field('  Followers', p.followers_note)
+    field('  Background', p.background)
+    field('  Profile status', p.profile_status)
+  }
+  for (const x of industries) {
+    lines.push('', `Industry — ${x.name}`)
+    list('  Include keywords', x.include_keywords)
+    list('  Exclude keywords', x.exclude_keywords)
+  }
+  return lines.join('\n')
+}
+
+function IcpViewer({
+  icp,
+  personas,
+  industries,
+  hypothesisCount,
+  onClose,
+  onEdit,
+}: {
+  icp: Icp
+  personas: IcpPersona[]
+  industries: IcpIndustry[]
+  hypothesisCount: number
+  onClose: () => void
+  onEdit: () => void
+}) {
+  const hasProduct =
+    icp.main_product || icp.product_stage || icp.core_sphere || icp.secondary_sphere ||
+    icp.monetization || icp.funding || icp.features_note ||
+    icp.features.length || icp.purchase_triggers.length
+  const hasCompany =
+    icp.company_countries.length || icp.company_headcount || icp.company_age ||
+    icp.dev_team_availability || icp.dev_team_location || icp.apollo_industries.length
+  const hasKeywords = icp.include_keywords.length || icp.exclude_keywords.length
+
+  return (
+    <div className="pipe-modal-overlay" onClick={onClose}>
+      <div
+        className="pipe-modal search-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`ICP ${icp.name}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="pipe-modal-head">
+          <span className="icp-view-heading">
+            {icp.name}
+            {icp.archived && <span className="badge">Archived</span>}
+          </span>
+          <div className="icp-view-head-actions">
+            <button className="btn ghost sm" onClick={onEdit}>
+              <Pencil size={13} /> Edit
+            </button>
+            <CopyButton text={icpToText(icp, personas, industries)} title="Copy all fields" />
+            <button className="conv-close" onClick={onClose} aria-label="Close">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="search-form">
+          <div className="muted small">
+            {personas.length} persona{personas.length === 1 ? '' : 's'} · {industries.length} industr
+            {industries.length === 1 ? 'y' : 'ies'} · {hypothesisCount} hypothesis
+            {hypothesisCount === 1 ? '' : 'es'}
+          </div>
+
+          <ViewField label="Airtable URL" value={icp.airtable_url} link />
+
+          {hasProduct ? (
+            <>
+              <h3 className="search-group-head">Product context</h3>
+              <div className="search-form-grid">
+                <ViewField label="Main product" value={icp.main_product} />
+                <ViewField label="Product stage" value={icp.product_stage} />
+                <ViewField label="Core sphere" value={icp.core_sphere} />
+                <ViewField label="Secondary sphere" value={icp.secondary_sphere} />
+                <ViewField label="Monetization" value={icp.monetization} />
+                <ViewField label="Funding" value={icp.funding} />
+              </div>
+              <ViewField label="Features note" value={icp.features_note} />
+              <ViewChips label="Features" values={icp.features} />
+              <ViewChips label="Purchase triggers" values={icp.purchase_triggers} />
+            </>
+          ) : null}
+
+          {hasCompany ? (
+            <>
+              <h3 className="search-group-head">Company criteria</h3>
+              <ViewChips label="Countries" values={icp.company_countries} />
+              <div className="search-form-grid">
+                <ViewField label="Headcount" value={icp.company_headcount} />
+                <ViewField label="Company age" value={icp.company_age} />
+                <ViewField label="Dev team availability" value={icp.dev_team_availability} />
+                <ViewField label="Dev team location" value={icp.dev_team_location} />
+              </div>
+              <ViewChips label="Apollo industries" values={icp.apollo_industries} />
+            </>
+          ) : null}
+
+          {hasKeywords ? (
+            <>
+              <h3 className="search-group-head">ICP-wide keywords</h3>
+              <ViewChips label="Include keywords" values={icp.include_keywords} variant="include" />
+              <ViewChips label="Exclude keywords" values={icp.exclude_keywords} variant="exclude" />
+            </>
+          ) : null}
+
+          {personas.length > 0 && (
+            <>
+              <h3 className="search-group-head">Buyer personas</h3>
+              <div className="kv-editor">
+                {personas.map((p) => (
+                  <div className="card icp-subentity" key={p.id}>
+                    <div className="icp-subentity-head">
+                      <span className="icp-subentity-title">{p.kind}</span>
+                      <CopyButton
+                        text={`Persona — ${p.kind}`}
+                        title="Copy persona name"
+                      />
+                    </div>
+                    <ViewChips label="Job titles" values={p.job_titles} />
+                    <div className="search-form-grid">
+                      <ViewField label="Age range" value={p.age_range} />
+                      <ViewField label="Location" value={p.location} />
+                      <ViewField label="Connections" value={p.connections_note} />
+                      <ViewField label="Followers" value={p.followers_note} />
+                    </div>
+                    <ViewField label="Background" value={p.background} />
+                    <ViewField label="LinkedIn profile status" value={p.profile_status} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {industries.length > 0 && (
+            <>
+              <h3 className="search-group-head">Industries</h3>
+              <div className="kv-editor">
+                {industries.map((x) => (
+                  <div className="card icp-subentity" key={x.id}>
+                    <div className="icp-subentity-head">
+                      <span className="icp-subentity-title">{x.name}</span>
+                    </div>
+                    <ViewChips label="Include keywords" values={x.include_keywords} variant="include" />
+                    <ViewChips label="Exclude keywords" values={x.exclude_keywords} variant="exclude" />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="pipe-modal-actions">
+          <button className="btn ghost sm" onClick={onClose}>Close</button>
+          <button className="btn accent sm" onClick={onEdit}>
+            <Pencil size={13} /> Edit ICP
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
