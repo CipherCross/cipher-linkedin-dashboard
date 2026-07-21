@@ -16,6 +16,8 @@ import {
   Moon,
   Menu,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -71,6 +73,17 @@ export function Layout() {
   // Mobile off-canvas drawer state. On desktop the sidebar is always visible and
   // this is ignored; on narrow viewports the hamburger toggles it.
   const [navOpen, setNavOpen] = useState(false)
+  // Desktop collapse state: shrinks the rail to an icon-only strip. Persisted so
+  // the choice survives reloads. Ignored on mobile, where the drawer takes over.
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem('sidebar-collapsed') === '1',
+  )
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      const next = !c
+      localStorage.setItem('sidebar-collapsed', next ? '1' : '0')
+      return next
+    })
 
   // Reset scroll on every navigation. Separate from the title effect below,
   // which also depends on `data` — the periodic refetch must not yank the
@@ -103,7 +116,7 @@ export function Layout() {
   }, [location.pathname, data])
 
   return (
-    <div className="app">
+    <div className={`app${collapsed ? ' nav-collapsed' : ''}`}>
       {/* Tier-2 "liquid glass" displacement filter. Referenced from styles.css
           via `backdrop-filter: url(#liquid-glass)` — a Chromium-only path gated
           behind @supports, so Safari/Firefox never reach it. Rendered once,
@@ -166,7 +179,12 @@ export function Layout() {
         aria-hidden="true"
       />
 
-      <Sidebar data={data} open={navOpen} />
+      <Sidebar
+        data={data}
+        open={navOpen}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapsed}
+      />
 
       <div className="content">
         <div className="page" id="main-content">
@@ -197,7 +215,17 @@ export function Layout() {
  *  every account with its campaigns nested beneath — for jumping straight to any
  *  detail page. On desktop it's a sticky always-on column; on mobile it becomes
  *  an off-canvas drawer driven by `open`. */
-function Sidebar({ data, open }: { data: DashboardData | null; open: boolean }) {
+function Sidebar({
+  data,
+  open,
+  collapsed,
+  onToggleCollapse,
+}: {
+  data: DashboardData | null
+  open: boolean
+  collapsed: boolean
+  onToggleCollapse: () => void
+}) {
   const location = useLocation()
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -263,10 +291,22 @@ function Sidebar({ data, open }: { data: DashboardData | null; open: boolean }) 
   return (
     <aside className={`sidebar${open ? ' open' : ''}`} aria-label="Primary">
       <div className="sidebar-inner">
-        <Link to="/" className="brand" aria-label="Outreach Deck — home">
-          <Logo size={26} className="brand-mark" />
-          <span className="brand-name">Outreach Deck</span>
-        </Link>
+        <div className="side-head">
+          <Link to="/" className="brand" aria-label="Outreach Deck — home">
+            <Logo size={26} className="brand-mark" />
+            <span className="brand-name">Outreach Deck</span>
+          </Link>
+          <button
+            type="button"
+            className="side-collapse"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        </div>
 
         <nav className="side-nav" aria-label="Pages">
           {LINKS.map(({ to, label, icon: Icon, end }) => (
@@ -275,6 +315,7 @@ function Sidebar({ data, open }: { data: DashboardData | null; open: boolean }) 
               to={to}
               end={end}
               className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
+              title={collapsed ? label : undefined}
             >
               <Icon size={16} className="navlink-icon" aria-hidden="true" />
               <span className="navlink-label">{label}</span>

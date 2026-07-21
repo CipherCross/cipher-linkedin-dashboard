@@ -696,6 +696,7 @@ tr:last-child td { border-bottom: none; }
 /* --sidebar-w is the rail width; the Pipeline full-bleed math reads it to stay
  * aligned to the content area (it drops to 0 in the mobile drawer breakpoint). */
 .app { display: flex; align-items: flex-start; --sidebar-w: 264px; }
+.app.nav-collapsed { --sidebar-w: 68px; }
 .content { flex: 1; min-width: 0; }
 
 .sidebar {
@@ -709,7 +710,34 @@ tr:last-child td { border-bottom: none; }
   flex-direction: column;
   background: color-mix(in srgb, var(--bg) 55%, var(--surface-1));
   border-right: 1px solid var(--border);
+  transition: width 0.2s var(--ease-out);
 }
+
+/* Brand + collapse toggle share the top row; the toggle sits at the right edge
+ * and pushes to the center when the rail collapses to icons. */
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 4px 12px;
+}
+.side-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+.side-collapse:hover { color: var(--text); background: var(--surface-2); }
 .sidebar-inner {
   flex: 1;
   min-height: 0;
@@ -718,7 +746,8 @@ tr:last-child td { border-bottom: none; }
   gap: 4px;
   padding: 14px 12px;
 }
-.sidebar .brand { margin: 2px 6px 12px; }
+.sidebar .brand { margin: 0; min-width: 0; }
+.sidebar .brand-name { overflow: hidden; text-overflow: ellipsis; }
 .brand {
   display: inline-flex;
   align-items: center;
@@ -864,6 +893,23 @@ tr:last-child td { border-bottom: none; }
   border-top: 1px solid var(--border);
 }
 
+/* --- Collapsed rail (desktop) -------------------------------------------- */
+/* Icon-only strip: hide every text label and the accounts tree, and center the
+ * nav icons. --sidebar-w already shrank to 68px on .app.nav-collapsed, so the
+ * content area and full-bleed math follow automatically. */
+.nav-collapsed .brand-name,
+.nav-collapsed .navlink-label,
+.nav-collapsed .side-scroll,
+.nav-collapsed .sync-chip-label {
+  display: none;
+}
+.nav-collapsed .side-head { flex-direction: column; gap: 6px; margin-inline: 0; }
+.nav-collapsed .brand { margin: 0; }
+.nav-collapsed .side-collapse { margin-left: 0; }
+.nav-collapsed .navlink { justify-content: center; padding-inline: 0; }
+.nav-collapsed .side-footer { flex-direction: column; gap: 6px; padding-inline: 0; }
+.nav-collapsed .sync-chip { margin-left: 0; padding: 8px; }
+
 /* Mobile bar + drawer chrome — only rendered/visible below 900px (see media
  * query at the end of this section). Hidden by default on desktop. */
 .mobile-topbar { display: none; }
@@ -977,6 +1023,16 @@ tr:last-child td { border-bottom: none; }
   }
   .sidebar.open { transform: none; }
   .side-footer { display: none; }
+
+  /* The drawer is always full-width on mobile — the desktop collapse state must
+   * not leak in (it would hide labels/tree). Force the expanded layout and drop
+   * the collapse control, which has no meaning here. */
+  .app.nav-collapsed { --sidebar-w: 0px; }
+  .nav-collapsed .brand-name,
+  .nav-collapsed .navlink-label,
+  .nav-collapsed .side-scroll { display: revert; }
+  .nav-collapsed .navlink { justify-content: flex-start; padding-inline: 10px; }
+  .side-collapse { display: none; }
 
   .nav-backdrop.show {
     display: block;
