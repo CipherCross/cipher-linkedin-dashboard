@@ -101,7 +101,6 @@ export type NormalizedIcp = Record<string, unknown> & {
   funding?: string | null
   dev_team_availability?: string | null
   dev_team_location?: string | null
-  include_keywords?: string[]
   exclude_keywords?: string[]
   archived?: boolean
 }
@@ -126,7 +125,6 @@ const ICP_ARRAY_FIELDS: Array<{ key: keyof NormalizedIcp; maxItems: number }> = 
   { key: 'features', maxItems: ICP_CAPS.FEATURES },
   { key: 'company_countries', maxItems: ICP_CAPS.COUNTRIES },
   { key: 'apollo_industries', maxItems: ICP_CAPS.INDUSTRIES },
-  { key: 'include_keywords', maxItems: ICP_CAPS.KEYWORDS },
   { key: 'exclude_keywords', maxItems: ICP_CAPS.KEYWORDS },
 ]
 
@@ -244,7 +242,6 @@ export type NormalizedIndustry = Record<string, unknown> & {
   icp_id?: number
   name?: string
   include_keywords?: string[]
-  exclude_keywords?: string[]
 }
 
 /** Validate + normalize a per-industry keyword-refinement payload. `requireCore`
@@ -275,12 +272,12 @@ export function validateIndustry(input: unknown, requireCore: boolean): Normaliz
     out.name = trimmed
   }
 
-  for (const key of ['include_keywords', 'exclude_keywords'] as const) {
-    const v = src[key]
-    if (v === undefined) continue
-    const arr = normalizeStringArray(v, key, INDUSTRY_CAPS.KEYWORD_LEN, INDUSTRY_CAPS.KEYWORDS)
+  if (src.include_keywords !== undefined) {
+    const arr = normalizeStringArray(
+      src.include_keywords, 'include_keywords', INDUSTRY_CAPS.KEYWORD_LEN, INDUSTRY_CAPS.KEYWORDS,
+    )
     if (typeof arr === 'string') return arr
-    out[key] = arr
+    out.include_keywords = arr
   }
 
   return out as NormalizedIndustry

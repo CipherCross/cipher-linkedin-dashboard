@@ -2738,6 +2738,16 @@ td .pipe-stage-select.quiet:focus-visible {
   padding: 0;
 }
 .chip button:hover { color: var(--text); }
+.chip-toggle {
+  cursor: pointer;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.chip-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
 .search-query {
   display: flex;
   align-items: flex-start;

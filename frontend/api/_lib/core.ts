@@ -330,8 +330,9 @@ icps — Ideal Customer Profile definitions (migration 043), fully structured (n
   features_note text, purchase_triggers text[], features text[],
   company_countries text[], company_headcount text, company_age text,
   apollo_industries text[], funding text, dev_team_availability text,
-  dev_team_location text, include_keywords text[] (ICP-wide), exclude_keywords
-  text[] (ICP-wide), archived boolean, created_at, updated_at.
+  dev_team_location text, exclude_keywords text[] (the one ICP-wide exclude
+  list; include keywords live per sub-industry on icp_industries below),
+  archived boolean, created_at, updated_at.
   A hypothesis (below) points at one icps row; one ICP can back many
   hypotheses.
 
@@ -341,14 +342,12 @@ icp_personas — buyer personas per ICP (seed: management/product/technical;
   location text, background text, profile_status text, connections_note text,
   followers_note text, sort int (display order), created_at, updated_at
 
-icp_industries — DEFINITION side of per-industry keyword refinements (an ICP's
-  Apollo industries, each with its OWN include/exclude keyword list, DISTINCT
-  from icps.include_keywords/exclude_keywords above — there is no auto-merge
-  between the ICP-wide lists and a per-industry list; treat them as separate
-  scopes unless a question explicitly asks for their union)
+icp_industries — DEFINITION side of per-sub-industry INCLUDE keywords (an ICP's
+  Apollo industries, each with its OWN include keyword list). Exclude keywords
+  are ICP-wide only (icps.exclude_keywords above); this table holds includes
+  only — the two scopes never overlap.
   id bigint PK, icp_id -> icps, name text, include_keywords text[] (default
-  empty — starts blank, filled in by the team), exclude_keywords text[],
-  created_at, updated_at
+  empty — starts blank, filled in by the team), created_at, updated_at
 
 hypotheses — a named, testable go-to-market hypothesis: groups campaigns under
   one ICP for stats (migration 043). Editable via the /hypotheses page.

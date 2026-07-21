@@ -173,9 +173,8 @@ export interface Icp {
   funding: string | null
   dev_team_availability: string | null
   dev_team_location: string | null
-  /** ICP-wide keyword lists — DISTINCT scope from IcpIndustry's per-industry
-   *  lists below; the UI shows both, never auto-merged (decision 9). */
-  include_keywords: string[]
+  /** The one ICP-wide exclude list. Include keywords live per-industry on
+   *  IcpIndustry below — the two scopes never overlap (migration 044). */
   exclude_keywords: string[]
   archived: boolean
   created_at: string
@@ -200,14 +199,14 @@ export interface IcpPersona {
   updated_at: string
 }
 
-/** Per-industry keyword REFINEMENT on one ICP — the definition side of "both"
- *  (decision 3); saved_searches.hypothesis_id below is the execution side. */
+/** Per-sub-industry INCLUDE keyword list on one ICP. Exclude keywords are
+ *  ICP-wide (see Icp.exclude_keywords); this scope holds includes only
+ *  (migration 044). saved_searches.hypothesis_id below is the execution side. */
 export interface IcpIndustry {
   id: number
   icp_id: number
   name: string
   include_keywords: string[]
-  exclude_keywords: string[]
   created_at: string
   updated_at: string
 }

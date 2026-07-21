@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  Archive, ArchiveRestore, ExternalLink, Pencil, Plus, Target, Trash2, X,
+  Archive, ArchiveRestore, ChevronDown, ChevronUp, ExternalLink, Pencil, Plus, Target, Trash2, X,
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
@@ -31,7 +31,6 @@ interface IndustryDraft {
   id?: number
   name: string
   include_keywords: string[]
-  exclude_keywords: string[]
 }
 
 interface IcpDraft {
@@ -53,7 +52,6 @@ interface IcpDraft {
   funding: string
   dev_team_availability: string
   dev_team_location: string
-  include_keywords: string[]
   exclude_keywords: string[]
   archived: boolean
   personas: PersonaDraft[]
@@ -84,7 +82,6 @@ function industryToDraft(x: IcpIndustry): IndustryDraft {
     id: x.id,
     name: x.name,
     include_keywords: x.include_keywords ?? [],
-    exclude_keywords: x.exclude_keywords ?? [],
   }
 }
 
@@ -94,7 +91,7 @@ function toDraft(icp: Icp | null, personas: IcpPersona[], industries: IcpIndustr
       name: '', airtable_url: '', main_product: '', core_sphere: '', secondary_sphere: '',
       product_stage: '', monetization: '', features_note: '', purchase_triggers: [], features: [],
       company_countries: [], company_headcount: '', company_age: '', apollo_industries: [],
-      funding: '', dev_team_availability: '', dev_team_location: '', include_keywords: [],
+      funding: '', dev_team_availability: '', dev_team_location: '',
       exclude_keywords: [], archived: false, personas: [], industries: [],
     }
   }
@@ -117,7 +114,6 @@ function toDraft(icp: Icp | null, personas: IcpPersona[], industries: IcpIndustr
     funding: icp.funding ?? '',
     dev_team_availability: icp.dev_team_availability ?? '',
     dev_team_location: icp.dev_team_location ?? '',
-    include_keywords: icp.include_keywords ?? [],
     exclude_keywords: icp.exclude_keywords ?? [],
     archived: icp.archived,
     personas: personas.map(personaToDraft),
@@ -377,6 +373,11 @@ function ViewField({
 }
 
 // A labelled string-array shown as read-only chips, copyable as a comma list.
+// Long keyword lists (the ICP-wide exclude list runs into the dozens) are
+// collapsed to the first COLLAPSED_CHIPS by default; a chevron toggle reveals
+// the rest inline so the viewer isn't dominated by one field.
+const COLLAPSED_CHIPS = 12
+
 function ViewChips({
   label,
   values,
@@ -386,20 +387,43 @@ function ViewChips({
   values: string[]
   variant?: 'include' | 'exclude'
 }) {
+  const [expanded, setExpanded] = useState(false)
   if (!values || values.length === 0) return null
+  const collapsible = values.length > COLLAPSED_CHIPS
+  const shown = collapsible && !expanded ? values.slice(0, COLLAPSED_CHIPS) : values
+  const hidden = values.length - shown.length
   return (
     <div className="filter-field icp-view-field">
       <div className="icp-view-value">
         <span className="filter-label">{label}</span>
+        {collapsible && <span className="muted small">{values.length}</span>}
         <CopyButton text={values.join(', ')} title={`Copy ${label.toLowerCase()}`} />
       </div>
       <div className="icp-view-chips">
-        {values.map((v) => (
+        {shown.map((v) => (
           <span className={`chip${variant ? ` ${variant}` : ''}`} key={v}>
             {variant === 'exclude' ? '−' : ''}
             {v}
           </span>
         ))}
+        {collapsible && (
+          <button
+            type="button"
+            className="chip chip-toggle"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((e) => !e)}
+          >
+            {expanded ? (
+              <>
+                Show less <ChevronUp size={12} />
+              </>
+            ) : (
+              <>
+                +{hidden} more <ChevronDown size={12} />
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -431,7 +455,6 @@ function icpToText(icp: Icp, personas: IcpPersona[], industries: IcpIndustry[]):
   field('Dev team availability', icp.dev_team_availability)
   field('Dev team location', icp.dev_team_location)
   list('Apollo industries', icp.apollo_industries)
-  list('Include keywords', icp.include_keywords)
   list('Exclude keywords', icp.exclude_keywords)
   for (const p of personas) {
     lines.push('', `Persona — ${p.kind}`)
@@ -446,7 +469,6 @@ function icpToText(icp: Icp, personas: IcpPersona[], industries: IcpIndustry[]):
   for (const x of industries) {
     lines.push('', `Industry — ${x.name}`)
     list('  Include keywords', x.include_keywords)
-    list('  Exclude keywords', x.exclude_keywords)
   }
   return lines.join('\n')
 }
@@ -473,7 +495,7 @@ function IcpViewer({
   const hasCompany =
     icp.company_countries.length || icp.company_headcount || icp.company_age ||
     icp.dev_team_availability || icp.dev_team_location || icp.apollo_industries.length
-  const hasKeywords = icp.include_keywords.length || icp.exclude_keywords.length
+  const hasKeywords = icp.exclude_keywords.length
 
   return (
     <div className="pipe-modal-overlay" onClick={onClose}>
@@ -542,8 +564,7 @@ function IcpViewer({
 
           {hasKeywords ? (
             <>
-              <h3 className="search-group-head">ICP-wide keywords</h3>
-              <ViewChips label="Include keywords" values={icp.include_keywords} variant="include" />
+              <h3 className="search-group-head">ICP-wide exclude keywords</h3>
               <ViewChips label="Exclude keywords" values={icp.exclude_keywords} variant="exclude" />
             </>
           ) : null}
@@ -586,7 +607,6 @@ function IcpViewer({
                       <span className="icp-subentity-title">{x.name}</span>
                     </div>
                     <ViewChips label="Include keywords" values={x.include_keywords} variant="include" />
-                    <ViewChips label="Exclude keywords" values={x.exclude_keywords} variant="exclude" />
                   </div>
                 ))}
               </div>
@@ -675,7 +695,6 @@ function IcpEditor({
         funding: draft.funding.trim() || null,
         dev_team_availability: draft.dev_team_availability.trim() || null,
         dev_team_location: draft.dev_team_location.trim() || null,
-        include_keywords: draft.include_keywords,
         exclude_keywords: draft.exclude_keywords,
         archived: draft.archived,
       }
@@ -729,7 +748,6 @@ function IcpEditor({
           icp_id: savedIcp.id,
           name: x.name.trim(),
           include_keywords: x.include_keywords,
-          exclude_keywords: x.exclude_keywords,
         }
         const r = await adminPost('/api/playbook', { action: 'save_icp_industry', industry: payload })
         const rj = await r.json().catch(() => ({}))
@@ -868,19 +886,10 @@ function IcpEditor({
             />
           </label>
 
-          <h3 className="search-group-head">ICP-wide keywords</h3>
+          <h3 className="search-group-head">ICP-wide exclude keywords</h3>
           <div className="muted small">
-            Distinct from each industry's own keywords below — the two are never merged.
+            One exclude list for the whole ICP. Include keywords are set per sub-industry below.
           </div>
-          <label className="filter-field">
-            <span className="filter-label">Include keywords</span>
-            <ChipInput
-              values={draft.include_keywords}
-              variant="include"
-              onChange={(v) => set('include_keywords', v)}
-              placeholder="Type a keyword, press Enter"
-            />
-          </label>
           <label className="filter-field">
             <span className="filter-label">Exclude keywords</span>
             <ChipInput
@@ -975,7 +984,7 @@ function IcpEditor({
 
           <h3 className="search-group-head">Industries</h3>
           <div className="muted small">
-            Per-industry keyword refinements — start empty; not merged with the ICP-wide list above.
+            Set include keywords per sub-industry — start empty. The ICP-wide exclude list above applies to all.
           </div>
           <div className="kv-editor">
             {draft.industries.map((x) => (
@@ -1005,15 +1014,6 @@ function IcpEditor({
                     placeholder="Type a keyword, press Enter"
                   />
                 </label>
-                <label className="filter-field">
-                  <span className="filter-label">Exclude keywords</span>
-                  <ChipInput
-                    values={x.exclude_keywords}
-                    variant="exclude"
-                    onChange={(v) => setIndustry(x._key, { exclude_keywords: v })}
-                    placeholder="Type a keyword, press Enter"
-                  />
-                </label>
               </div>
             ))}
             <button
@@ -1022,7 +1022,7 @@ function IcpEditor({
               onClick={() =>
                 set('industries', [
                   ...draft.industries,
-                  { _key: nextKey(), name: '', include_keywords: [], exclude_keywords: [] },
+                  { _key: nextKey(), name: '', include_keywords: [] },
                 ])
               }
             >
