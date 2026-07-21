@@ -36,7 +36,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.12.0"
+AGENT_VERSION = "1.12.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -1066,12 +1066,20 @@ def build_year_updates(leads, edu_map, job_map):
     years are ever emitted, so a re-sync can never clobber a stored year with NULL.
     Returns (both, edu_only, job_only) — each a list of merge-duplicate rows on the
     leads (campaign_id, profile_url) unique key; the row always already exists (leads
-    were just upserted) so each hits the UPDATE path and touches only these columns."""
+    were just upserted) so each hits the UPDATE path and touches only these columns.
+
+    instance_id is included even though the row already exists: PostgREST's
+    merge-duplicates emits INSERT ... ON CONFLICT DO UPDATE, and Postgres validates
+    the candidate insert tuple's NOT NULL constraints BEFORE routing the conflict to
+    the UPDATE branch. Omitting the NOT NULL instance_id makes every batch 400 with a
+    not-null violation (which is exactly what happened in agent 1.12.0). It's set to
+    the lead's own instance_id, so the UPDATE branch is a no-op for that column."""
     both, edu_only, job_only = [], [], []
     for lead in leads:
         e = edu_map.get(lead["profile_url"])
         j = job_map.get(lead["profile_url"])
-        base = {"campaign_id": lead["campaign_id"],
+        base = {"instance_id": lead["instance_id"],
+                "campaign_id": lead["campaign_id"],
                 "profile_url": lead["profile_url"]}
         if e is not None and j is not None:
             both.append(dict(base, education_start_year=e, first_job_start_year=j))
@@ -1338,12 +1346,15 @@ def cmd_sync(args):
         # years each row carries, so every request has a uniform key set. Each row's
         # (campaign_id, profile_url) already exists from the leads upsert above, so
         # merge-duplicates UPDATEs just these columns.
-        # GUARDED separately: if this agent self-updates to 1.12.0 BEFORE migration
-        # 041 adds the year columns, this upsert 400s ("column does not exist"). That
-        # must NOT abort the rest of the sync — events, messages, steps, the reply
-        # ping and photos all still run. Fail safe to a 'partial' run (visible on the
-        # Health page) and press on, exactly like the other fail-safe-to-empty
-        # sections. A year failure must never break a scheduled sync.
+        # GUARDED separately so a year failure never aborts the rest of the sync —
+        # events, messages, steps, the reply ping and photos all still run. Fail safe
+        # to a 'partial' run (visible on the Health page) and press on, exactly like
+        # the other fail-safe-to-empty sections. Two ways this can 400: (a) this agent
+        # self-updates ahead of migration 041, so the year columns don't exist yet;
+        # (b) the payload omits a NOT NULL leads column — merge-duplicates validates
+        # the candidate insert tuple before routing the conflict to UPDATE, so a
+        # missing instance_id 400s even though the row exists (the 1.12.0 bug, fixed
+        # in build_year_updates). A year failure must never break a scheduled sync.
         try:
             for bucket in build_year_updates(leads, demo["edu_map"], demo["job_map"]):
                 total += sb.upsert("leads", bucket, on_conflict="campaign_id,profile_url")
