@@ -10,6 +10,7 @@ export function CompanyResolutionModal({
   onSelect,
   onSkip,
   onClose,
+  subjectLabel = 'lead',
 }: {
   sourceCompany: string
   affectedRows: number
@@ -17,6 +18,7 @@ export function CompanyResolutionModal({
   onSelect: (company: AirtableCompany) => void
   onSkip: () => void
   onClose: () => void
+  subjectLabel?: 'lead' | 'company'
 }) {
   const [query, setQuery] = useState(sourceCompany)
   const [results, setResults] = useState<AirtableCompany[]>(suggestions)
@@ -74,7 +76,8 @@ export function CompanyResolutionModal({
             <div className="muted small">
               Apollo company: <strong>{sourceCompany || 'Unnamed company'}</strong>
               {' · '}
-              {affectedRows} lead{affectedRows === 1 ? '' : 's'}
+              {affectedRows}{' '}
+              {affectedRows === 1 ? subjectLabel : subjectLabel === 'company' ? 'companies' : 'leads'}
             </div>
           </div>
           <button className="conv-close" onClick={onClose} aria-label="Close company picker">
@@ -101,7 +104,9 @@ export function CompanyResolutionModal({
             <div className="csv-company-empty">
               <Building2 size={24} aria-hidden="true" />
               <div>No matching Companies found.</div>
-              <div className="muted small">Try the company’s domain or LinkedIn URL, or skip these leads.</div>
+              <div className="muted small">
+                Try the company’s domain or LinkedIn URL, or skip {affectedRows === 1 ? `this ${subjectLabel}` : `these ${subjectLabel === 'company' ? 'companies' : 'leads'}`}.
+              </div>
             </div>
           )}
           {!busy &&
@@ -127,7 +132,7 @@ export function CompanyResolutionModal({
         <div className="pipe-modal-actions">
           <button className="btn ghost sm" onClick={onClose}>Cancel</button>
           <button className="btn danger sm" onClick={onSkip}>
-            Skip {affectedRows === 1 ? 'this lead' : `all ${affectedRows} leads`}
+            Skip {affectedRows === 1 ? `this ${subjectLabel}` : `all ${affectedRows} ${subjectLabel === 'company' ? 'companies' : 'leads'}`}
           </button>
         </div>
       </div>

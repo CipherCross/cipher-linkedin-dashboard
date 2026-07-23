@@ -1,6 +1,7 @@
 // Shared import dispatcher. Vercel Hobby caps this project at 12 top-level
-// functions, so conversation history and Airtable Contact CSV imports share one
+// functions, so conversation history and Airtable CSV imports share one
 // route while retaining separate validation and authorization rules.
+import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
 
@@ -12,6 +13,11 @@ const CONTACT_ACTIONS = new Set([
   'contact_preview',
   'company_search',
   'contact_commit',
+])
+const COMPANY_ACTIONS = new Set([
+  'company_metadata',
+  'company_preview',
+  'company_commit',
 ])
 const CONVERSATION_ACTIONS = new Set(['conversation_import', 'delete_message'])
 
@@ -46,6 +52,12 @@ async function handle(req: Request): Promise<Response> {
     // Deliberately open for the approved MVP. The Airtable handler is still a
     // fixed, size-limited allowlist and never accepts caller-supplied field IDs.
     return handleContactImport(action, payload)
+  }
+
+  if (COMPANY_ACTIONS.has(action)) {
+    // Company writes use the same deliberately open MVP posture and a separate
+    // fixed field allowlist. Callers cannot choose Airtable fields or tables.
+    return handleCompanyImport(action, payload)
   }
 
   if (CONVERSATION_ACTIONS.has(action)) {

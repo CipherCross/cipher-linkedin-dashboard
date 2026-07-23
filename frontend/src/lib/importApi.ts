@@ -1,4 +1,4 @@
-import type { ContactImportRow } from './csvImport'
+import type { CompanyImportRow, ContactImportRow } from './csvImport'
 
 export interface ImportMetadata {
   source: 'apollo'
@@ -52,11 +52,50 @@ export interface CommitResponse {
   counts: { created: number; duplicate: number; failed: number }
 }
 
+export type CompanyPreviewStatus = 'ready' | 'duplicate' | 'invalid' | 'company_action'
+
+export interface CompanyPreviewRowResult {
+  rowNumber: number
+  status: CompanyPreviewStatus
+  reason?: string
+  company?: AirtableCompany
+  matchMethod?: 'linkedin' | 'domain' | 'name'
+  suggestions?: AirtableCompany[]
+  canCreate?: boolean
+}
+
+export interface CompanyPreviewResponse {
+  results: CompanyPreviewRowResult[]
+  counts: Record<string, number>
+}
+
+export interface CompanyCommitInputRow extends CompanyImportRow {
+  allowNameDuplicate: boolean
+}
+
+export interface CompanyCommitRowResult {
+  rowNumber: number
+  status: 'created' | 'duplicate' | 'failed'
+  companyId?: string
+  error?: string
+}
+
+export interface CompanyCommitResponse {
+  results: CompanyCommitRowResult[]
+  counts: { created: number; duplicate: number; failed: number }
+}
+
+const MAX_IMPORT_BODY_BYTES = 3_800_000
+
 async function importPost<T>(body: Record<string, unknown>): Promise<T> {
+  const serialized = JSON.stringify(body)
+  if (new TextEncoder().encode(serialized).byteLength > MAX_IMPORT_BODY_BYTES) {
+    throw new Error('This import is too large to send safely. Split the CSV into smaller files and try again.')
+  }
   const response = await fetch('/api/import', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: serialized,
   })
   let payload: { error?: string } & Partial<T>
   try {
@@ -89,4 +128,19 @@ export function commitContacts(
   rows: CommitInputRow[],
 ): Promise<CommitResponse> {
   return importPost<CommitResponse>({ action: 'contact_commit', addedBy, rows })
+}
+
+export function fetchCompanyImportMetadata(): Promise<ImportMetadata> {
+  return importPost<ImportMetadata>({ action: 'company_metadata' })
+}
+
+export function previewCompanies(rows: CompanyImportRow[]): Promise<CompanyPreviewResponse> {
+  return importPost<CompanyPreviewResponse>({ action: 'company_preview', rows })
+}
+
+export function commitCompanies(
+  addedBy: string,
+  rows: CompanyCommitInputRow[],
+): Promise<CompanyCommitResponse> {
+  return importPost<CompanyCommitResponse>({ action: 'company_commit', addedBy, rows })
 }

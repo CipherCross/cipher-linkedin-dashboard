@@ -3414,6 +3414,30 @@ td .pipe-stage-select.quiet:focus-visible {
 }
 
 .csv-page-header { align-items: center; }
+.csv-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.csv-import-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+.csv-import-type-card {
+  min-height: 180px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+.csv-import-type-card:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+  transform: translateY(-1px);
+}
+.csv-import-type-card > svg { flex: 0 0 auto; color: var(--accent); }
+.csv-import-type-card > span { display: flex; flex-direction: column; gap: 8px; }
+.csv-import-type-card strong { font-size: var(--text-lg); }
+.csv-import-type-card small { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
 .csv-import-steps {
   list-style: none;
   margin: 0 0 var(--space-8);
@@ -3714,11 +3738,14 @@ td .pipe-stage-select.quiet:focus-visible {
 .csv-result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 @media (max-width: 700px) {
+  .csv-import-type-grid { grid-template-columns: 1fr; }
+  .csv-header-actions { width: 100%; }
   .csv-import-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .csv-map-row { grid-template-columns: 1fr; gap: 5px; }
   .csv-map-row > span:nth-child(2) { display: none; }
   .csv-company-action-row { grid-template-columns: 20px minmax(0, 1fr); }
-  .csv-company-action-row > .btn { grid-column: 2; width: fit-content; }
+  .csv-company-action-row > .btn,
+  .csv-company-action-row > .csv-row-actions { grid-column: 2; width: fit-content; flex-wrap: wrap; }
   .csv-import-footer { align-items: flex-start; flex-direction: column; }
   .csv-import-footer .btn { width: 100%; }
   .csv-result-hero { flex-direction: column; }

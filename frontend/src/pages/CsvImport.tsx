@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Building2,
   CheckCircle2,
   Download,
   FileSpreadsheet,
@@ -10,9 +11,11 @@ import {
   Search,
   SkipForward,
   Upload,
+  Users,
   XCircle,
 } from 'lucide-react'
 import { CompanyResolutionModal } from '../components/CompanyResolutionModal'
+import { CompanyCsvImport } from './CompanyCsvImport'
 import { useToast } from '../lib/ToastContext'
 import {
   buildContactRows,
@@ -92,6 +95,40 @@ function reasonLabel(reason?: string): string {
 }
 
 export function CsvImport() {
+  const [kind, setKind] = useState<'contacts' | 'companies' | null>(null)
+  if (kind === 'contacts') return <ContactCsvImport onChangeType={() => setKind(null)} />
+  if (kind === 'companies') return <CompanyCsvImport onChangeType={() => setKind(null)} />
+  return (
+    <>
+      <header className="csv-page-header">
+        <div>
+          <h1>CSV Import</h1>
+          <div className="muted small">
+            Choose what your Apollo export contains. Each import writes directly to the matching Airtable table.
+          </div>
+        </div>
+      </header>
+      <section className="csv-import-type-grid" aria-label="Choose import type">
+        <button className="card csv-import-type-card" onClick={() => setKind('contacts')}>
+          <Users size={28} aria-hidden="true" />
+          <span>
+            <strong>Leads / Contacts</strong>
+            <small>Import Apollo people and connect them to existing Companies.</small>
+          </span>
+        </button>
+        <button className="card csv-import-type-card" onClick={() => setKind('companies')}>
+          <Building2 size={28} aria-hidden="true" />
+          <span>
+            <strong>Companies</strong>
+            <small>Import Apollo accounts as new Companies, skipping existing records.</small>
+          </span>
+        </button>
+      </section>
+    </>
+  )
+}
+
+function ContactCsvImport({ onChangeType }: { onChangeType: () => void }) {
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [metadata, setMetadata] = useState<ImportMetadata | null>(null)
@@ -397,11 +434,16 @@ export function CsvImport() {
             and add new records to Contacts.
           </div>
         </div>
-        {(document || preview || outcomes) && (
-          <button className="btn sm" onClick={reset} disabled={commitBusy}>
-            <RotateCcw size={14} /> Start over
+        <div className="csv-header-actions">
+          <button className="btn ghost sm" onClick={onChangeType} disabled={commitBusy}>
+            Change import type
           </button>
-        )}
+          {(document || preview || outcomes) && (
+            <button className="btn sm" onClick={reset} disabled={commitBusy}>
+              <RotateCcw size={14} /> Start over
+            </button>
+          )}
+        </div>
       </header>
 
       <input

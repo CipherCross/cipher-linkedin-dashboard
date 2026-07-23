@@ -136,7 +136,7 @@ outbound windowed to 90 days.
   of `/api/classify` + `/api/notify-replies` + `/api/briefing`), `ADMIN_SECRET` (guards writes
   to `/api/config` + `/api/playbook` + `/api/import` conversation actions),
   `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (server-only Airtable access for Apollo CSV Contact
-  imports; restrict the PAT to the target base and schema-read/record read-write scopes),
+  and Company imports; restrict the PAT to the target base and schema-read/record read-write scopes),
   `SLACK_WEBHOOK_URL`,
   `SLACK_REPLIES_WEBHOOK_URL` (optional; new-reply alerts channel, falls back to
   `SLACK_WEBHOOK_URL`), `DASHBOARD_URL` (optional; deep links in reply alerts).

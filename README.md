@@ -169,7 +169,7 @@ Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `SLACK_REPLIES_WEBHOOK_URL` to route new-reply alerts from `/api/notify-replies`
 to their own channel — falls back to `SLACK_WEBHOOK_URL` when unset — and
 `DASHBOARD_URL` to turn lead names in those alerts into dashboard deep links,
-plus `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` for the Apollo CSV Contact importer).
+plus `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` for the Apollo CSV Contact and Company importers).
 Restrict the Airtable personal access token to the Web 2 Mob base with only
 schema-read and record read/write scopes. The token is server-only and must
 never use a `VITE_` prefix.

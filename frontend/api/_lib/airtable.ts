@@ -1,4 +1,4 @@
-// Narrow Airtable Web API adapter for the Apollo Contact importer. This is
+// Narrow Airtable Web API adapter for the Apollo Contact and Company importers. This is
 // deliberately not a generic proxy: callers cannot choose a base, table, or
 // field. Stable Airtable IDs keep harmless display-name changes from breaking
 // writes, while schema validation in contactImport.ts fails closed if a field is
@@ -9,8 +9,17 @@ export const AIRTABLE_IDS = {
   contactsTable: 'tbl87CQnAjpKigu7i',
   companies: {
     name: 'fldxi1YhTYAOPaWSR',
+    mailingName: 'fld2lNvsLo7MV6IMt',
     website: 'fldQxdTVpDHxJRETw',
     linkedin: 'fld0JvyDrKHUhoWHF',
+    country: 'fldHe49wbgS40WHz5',
+    foundedYear: 'fldPOYh7FRnyDwqiI',
+    employees: 'fldHDIqyh9WEWkcjX',
+    industry: 'fldoSQBNXOcapI0Eq',
+    keywords: 'fldeb7TLWVT9cStYH',
+    description: 'fldvtC5bj1UAv4d8u',
+    approveStatus: 'flddoWKMzEJeWtawn',
+    addedBy: 'fld1EGZGzOsuj4qkP',
   },
   contacts: {
     personaLinkedin: 'fldK74NyJu8IyzF3p',
