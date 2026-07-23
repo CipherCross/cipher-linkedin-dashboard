@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import type {
-  DashboardData, Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Lead, Message,
-  SavedSearch,
+  ConversationLatestMessage, DashboardData, FollowUpState, Hypothesis, HypothesisCampaign,
+  Icp, IcpIndustry, IcpPersona, Lead, Message, SavedSearch,
 } from './types'
 
 const EMPTY: DashboardData = {
@@ -19,6 +19,9 @@ const EMPTY: DashboardData = {
   prevBriefing: null,
   teamMembers: [],
   pipelineEvents: [],
+  followUpStates: [],
+  latestConversationMessages: [],
+  followUpsAvailable: false,
   savedSearches: [],
   icps: [],
   icpPersonas: [],
@@ -116,6 +119,53 @@ async function fetchAllPipelineEvents(occurredSince?: string): Promise<Record<st
     if (!data || data.length < page) break
   }
   return all
+}
+
+function isMissingRelation(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null
+  if (err?.code === '42P01' || err?.code === 'PGRST205') return true
+  return !!err?.message && /(relation|table|view).*(does not exist|not found)/i.test(err.message)
+}
+
+/** Follow-up state and its authoritative latest-message projection are both
+ *  conversation-scoped and can exceed PostgREST's 1,000-row cap. A pre-046
+ *  database is an explicit unavailable state, not an empty queue. */
+async function fetchFollowUpData(): Promise<{
+  states: FollowUpState[]
+  latest: ConversationLatestMessage[]
+  available: boolean
+}> {
+  const page = 1000
+  const states: FollowUpState[] = []
+  const latest: ConversationLatestMessage[] = []
+  try {
+    for (let from = 0; ; from += page) {
+      const { data, error } = await supabase!
+        .from('conversation_follow_up_state')
+        .select('*')
+        .order('instance_id')
+        .order('profile_url')
+        .range(from, from + page - 1)
+      if (error) throw error
+      states.push(...((data ?? []) as unknown as FollowUpState[]))
+      if (!data || data.length < page) break
+    }
+    for (let from = 0; ; from += page) {
+      const { data, error } = await supabase!
+        .from('conversation_latest_message')
+        .select('*')
+        .order('instance_id')
+        .order('profile_url')
+        .range(from, from + page - 1)
+      if (error) throw error
+      latest.push(...((data ?? []) as unknown as ConversationLatestMessage[]))
+      if (!data || data.length < page) break
+    }
+    return { states, latest, available: true }
+  } catch (e) {
+    if (isMissingRelation(e)) return { states: [], latest: [], available: false }
+    throw e
+  }
 }
 
 const MESSAGE_COLUMNS_BASE =
@@ -218,6 +268,9 @@ const Ctx = createContext<{
    *  manual-pipeline optimistic writes so a stage/assignee change reflects
    *  everywhere the lead is rendered. */
   patchLead: (leadId: string, patch: Partial<Lead>) => void
+  /** Optimistically replace/remove one conversation-scoped follow-up state.
+   *  Pending values survive an in-flight five-minute refresh. */
+  patchFollowUpState: (key: string, state: FollowUpState | null) => void
   /** Insert-or-replace a saved search in place after a /api/playbook save, so
    *  the Search Library reflects the change without a full refetch. */
   upsertSavedSearch: (search: SavedSearch) => void
@@ -250,6 +303,7 @@ const Ctx = createContext<{
   loading: true,
   refetch: () => {},
   patchLead: () => {},
+  patchFollowUpState: () => {},
   upsertSavedSearch: () => {},
   removeSavedSearch: () => {},
   upsertIcp: () => {},
@@ -278,6 +332,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Optimistic pipeline patches still awaiting server confirmation, kept so a
   // load() already in flight can't revert them (re-applied after every commit).
   const pendingPatches = useRef<Map<string, { patch: Partial<Lead>; at: number }>>(new Map())
+  const pendingFollowUps = useRef<
+    Map<string, { state: FollowUpState | null; at: number }>
+  >(new Map())
 
   // Surface an error without wiping on-screen data: keep the last successful
   // load and only stamp the error field. First-load failures (prev === null)
@@ -324,6 +381,47 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ? { ...prevData, leads: prevData.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)) }
         : prevData,
     )
+  }, [])
+
+  const followUpKey = (instanceId: string, profileUrl: string) =>
+    `${instanceId}|${profileUrl}`
+
+  const applyPendingFollowUps = useCallback((rows: FollowUpState[]): FollowUpState[] => {
+    const pending = pendingFollowUps.current
+    if (pending.size === 0) return rows
+    const now = Date.now()
+    for (const [key, p] of pending) if (now - p.at > 30_000) pending.delete(key)
+    if (pending.size === 0) return rows
+
+    const byKey = new Map(rows.map((r) => [followUpKey(r.instance_id, r.profile_url), r]))
+    for (const [key, p] of pending) {
+      const fetched = byKey.get(key)
+      if (p.state === null) {
+        if (!fetched) pending.delete(key)
+        else byKey.delete(key)
+        continue
+      }
+      if (fetched && fetched.revision >= p.state.revision) {
+        pending.delete(key)
+        continue
+      }
+      byKey.set(key, p.state)
+    }
+    return [...byKey.values()]
+  }, [])
+
+  const patchFollowUpState = useCallback((key: string, state: FollowUpState | null) => {
+    pendingFollowUps.current.set(key, { state, at: Date.now() })
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.followUpStates.filter(
+        (row) => followUpKey(row.instance_id, row.profile_url) !== key,
+      )
+      return {
+        ...prevData,
+        followUpStates: state ? [...rest, state] : rest,
+      }
+    })
   }, [])
 
   // Insert-or-replace a saved search after a server write returns the full row.
@@ -511,8 +609,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
         const messagesP = delta ? fetchMessages(since, MESSAGE_COLUMNS, cursor!) : fetchMessages(since)
         const eventsP = delta ? fetchAllPipelineEvents(cursor!) : fetchAllPipelineEvents()
-        const [small, leads, messages, pipelineEvents] = await Promise.all([
-          smallP, leadsP, messagesP, eventsP,
+        const followUpsP = fetchFollowUpData()
+        const [small, leads, messages, pipelineEvents, followUps] = await Promise.all([
+          smallP, leadsP, messagesP, eventsP, followUpsP,
         ])
         const [
           instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers,
@@ -588,6 +687,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
               // Already reference-stable on a no-op delta (mergeById returns the
               // prior array when the batch is empty); full fetch gets a fresh one.
               pipelineEvents: events as unknown as DashboardData['pipelineEvents'],
+              followUpStates: applyPendingFollowUps(followUps.states),
+              latestConversationMessages: stableSlice(
+                base.latestConversationMessages,
+                followUps.latest,
+              ),
+              followUpsAvailable: followUps.available,
               leads: nextLeads,
             }
           })
@@ -606,7 +711,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           showError(e instanceof Error ? e.message : String(e))
       }
       if (id === reqId.current) setLoading(false)
-  }, [showError, applyPending])
+  }, [showError, applyPending, applyPendingFollowUps])
 
   // Manual refetch (post-write) always forces a full fetch — a delta could miss
   // a row the caller just changed if updated_at ordering/skew raced the commit.
@@ -623,7 +728,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        data, loading, refetch, patchLead, upsertSavedSearch, removeSavedSearch,
+        data, loading, refetch, patchLead, patchFollowUpState,
+        upsertSavedSearch, removeSavedSearch,
         upsertIcp, removeIcp, upsertIcpPersona, removeIcpPersona,
         upsertIcpIndustry, removeIcpIndustry, upsertHypothesis, removeHypothesis,
         assignCampaigns,

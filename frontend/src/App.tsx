@@ -13,6 +13,7 @@ const CampaignDetail = lazy(() => import('./pages/CampaignDetail').then((m) => (
 const AccountDetail = lazy(() => import('./pages/AccountDetail').then((m) => ({ default: m.AccountDetail })))
 const LeadsExplorer = lazy(() => import('./pages/LeadsExplorer').then((m) => ({ default: m.LeadsExplorer })))
 const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
+const FollowUps = lazy(() => import('./pages/FollowUps').then((m) => ({ default: m.FollowUps })))
 const Playbook = lazy(() => import('./pages/Playbook').then((m) => ({ default: m.Playbook })))
 const SearchLibrary = lazy(() => import('./pages/SearchLibrary').then((m) => ({ default: m.SearchLibrary })))
 const Icp = lazy(() => import('./pages/Icp').then((m) => ({ default: m.Icp })))
@@ -45,6 +46,7 @@ export default function App() {
               <Route path="account/:id" element={<AccountDetail />} />
               <Route path="leads" element={<LeadsExplorer />} />
               <Route path="pipeline" element={<Pipeline />} />
+              <Route path="follow-ups" element={<FollowUps />} />
               {/* Replies folded into Leads — deep links land on replied leads. */}
               <Route path="replies" element={<RepliesRedirect />} />
               <Route path="review" element={<Review />} />

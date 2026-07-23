@@ -249,6 +249,40 @@ messages — actual message texts; full conversation threads, both directions
     classified — not touched by every sync pass; same only-on-real-change
     semantics apply to leads.updated_at and campaigns.updated_at)
 
+conversation_follow_up_state — current follow-up task projection, ONE row per
+  LinkedIn conversation (instance_id + profile_url), shared across every campaign
+  lead row for that exact account/profile pair. This is deliberately separate from
+  leads.pipeline_stage='following_up': the pipeline stage is CRM classification,
+  while this table is the SDR's dated work queue.
+  instance_id + profile_url composite PK,
+  next_follow_up_date date (DATE-ONLY business date; interpreted using
+    Europe/Madrid for overdue/today boundaries; NULL = no active task),
+  owner_id bigint -> team_members.id (explicit follow-up owner; do not infer it
+    from leads.assigned_to), revision bigint (optimistic-concurrency version),
+  last_event_id -> follow_up_events, last_mutation_id uuid,
+  created_at/updated_at timestamptz, updated_by text, archived_at timestamptz.
+  Active tasks have next_follow_up_date IS NOT NULL AND archived_at IS NULL.
+  If the last matching lead is deleted, any active task is system-canceled and
+  this projection is archived; its audit history remains until instance deletion.
+
+follow_up_events — append-only audit history for conversation-scoped follow-ups.
+  id bigint PK, instance_id, profile_url, mutation_id uuid, event_ordinal smallint,
+  event_kind text ('scheduled'|'rescheduled'|'reassigned'|'completed'|'skipped'|
+    'canceled'), previous_due_date/new_due_date date,
+  previous_owner_id/new_owner_id -> team_members,
+  previous_owner_name/new_owner_name text (immutable display snapshots),
+  state_revision bigint, actor text, reason text, occurred_at timestamptz.
+  A completed or skipped task followed immediately by a new task is represented
+  by two rows sharing mutation_id/state_revision, ordered by event_ordinal.
+  reason is mandatory for 'skipped'. These events are work-management history,
+  NOT LinkedIn message evidence, NOT pipeline history, and NOT funnel milestones.
+
+conversation_latest_message — security-invoker view with the newest non-empty
+  message for each exact (instance_id, profile_url) conversation, regardless of
+  campaign. Columns: instance_id, profile_url, message_id, direction, body,
+  sent_at, source. Use this for follow-up worklist/card context instead of guessing
+  from DataContext's intentionally 90-day-windowed outbound message fetch.
+
 campaign_steps — the FULL campaign sequence per campaign with aggregates,
   including WARM-UP steps that run before the invite (profile visits, post
   likes, follows, endorsements...), not just messaging steps.

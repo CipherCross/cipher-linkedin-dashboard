@@ -20,18 +20,34 @@ import {
 import type { AgeBucket, RiskFlag, Stage } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
 import { num, shortDate } from '../lib/format'
+import {
+  activeFollowUp,
+  followUpBucket,
+  followUpDueLabel,
+  followUpKey,
+  followUpStateMap,
+} from '../lib/followUps'
 
 const PAGE_SIZE = 50
 
-type SortKey = 'full_name' | 'added_at' | 'invited_at' | 'connected_at' | 'replied_at' | 'last_action_at'
+type SortKey =
+  | 'full_name'
+  | 'added_at'
+  | 'invited_at'
+  | 'connected_at'
+  | 'replied_at'
+  | 'last_action_at'
+  | 'next_follow_up_date'
+type LeadDateSortKey = Exclude<SortKey, 'next_follow_up_date' | 'full_name'>
 
 const SORT_KEYS: SortKey[] = [
   'full_name', 'added_at', 'invited_at', 'connected_at', 'replied_at', 'last_action_at',
+  'next_follow_up_date',
 ]
 
 // The date/milestone columns. `added_at` is opt-in (deploy-pending on most
 // notebooks, so it's mostly em-dashes today) — toggled on from the table toolbar.
-const DATE_COLUMNS: Array<{ key: SortKey; label: string; optional?: boolean }> = [
+const DATE_COLUMNS: Array<{ key: LeadDateSortKey; label: string; optional?: boolean }> = [
   { key: 'added_at', label: 'Added', optional: true },
   { key: 'invited_at', label: 'Invited' },
   { key: 'connected_at', label: 'Accepted' },
@@ -71,6 +87,7 @@ export function LeadsExplorer() {
   const who = params.get('who') ?? 'all'
   const genderF = params.get('gender') ?? 'all'
   const ageF = params.get('agebucket') ?? 'all'
+  const followF = params.get('follow') ?? 'all'
   const q = params.get('q') ?? ''
 
   // Reply filters (folded in from the old Replies page): a sentiment bucket and
@@ -152,6 +169,10 @@ export function LeadsExplorer() {
   // Latest inbound reply (body + classification) per lead — powers the sentiment
   // buckets/counts and the per-row snippet shown in reply mode.
   const snippets = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
+  const followUps = useMemo(
+    () => followUpStateMap(data?.followUpStates ?? []),
+    [data?.followUpStates],
+  )
 
   // «Classify new replies» — moved here from the Replies page; same endpoint and
   // refetch behaviour so freshly-labelled replies flow into the buckets.
@@ -252,13 +273,17 @@ export function LeadsExplorer() {
       // (gender/age undefined) matches nothing rather than everything.
       if (genderF !== 'all' && l.gender !== genderF) return false
       if (ageF !== 'all' && ageBucketOf(l) !== (ageF as AgeBucket)) return false
+      if (followF !== 'all') {
+        const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
+        if (followUpBucket(followState) !== followF) return false
+      }
       if (needle) {
         const hay = `${l.full_name ?? ''} ${l.headline ?? ''} ${l.company ?? ''}`.toLowerCase()
         if (!hay.includes(needle)) return false
       }
       return true
     })
-  }, [data, inst, effCamp, stage, risk, pipe, who, genderF, ageF, q])
+  }, [data, inst, effCamp, stage, risk, pipe, who, genderF, ageF, followF, followUps, q])
 
   const bucketOf = (l: Lead): Sentiment | 'unclassified' =>
     snippets.get(leadKey(l.instance_id, l.profile_url))?.sentiment ?? 'unclassified'
@@ -293,8 +318,12 @@ export function LeadsExplorer() {
       return true
     })
     rows.sort((a, b) => {
-      const av = a[sortKey] ?? ''
-      const bv = b[sortKey] ?? ''
+      const av = sortKey === 'next_follow_up_date'
+        ? followUps.get(followUpKey(a.instance_id, a.profile_url))?.next_follow_up_date ?? ''
+        : a[sortKey] ?? ''
+      const bv = sortKey === 'next_follow_up_date'
+        ? followUps.get(followUpKey(b.instance_id, b.profile_url))?.next_follow_up_date ?? ''
+        : b[sortKey] ?? ''
       if (av === bv) return 0
       if (av === '') return 1 // nulls last regardless of direction
       if (bv === '') return -1
@@ -302,7 +331,7 @@ export function LeadsExplorer() {
     })
     return rows
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseFiltered, repliedDays, sent, snippets, sortKey, sortAsc])
+  }, [baseFiltered, repliedDays, sent, snippets, sortKey, sortAsc, followUps])
 
   if (!data) return null
 
@@ -319,7 +348,7 @@ export function LeadsExplorer() {
 
   const dateColumns = DATE_COLUMNS.filter((c) => !c.optional || showAdded)
   // Lead, Headline, Campaign, Stage, Pipeline, Age, Gender + the date columns.
-  const colSpan = 7 + dateColumns.length
+  const colSpan = 8 + dateColumns.length
 
   // One removable chip per active filter, so the current view is legible at a glance.
   const activeFilters: Array<{ id: string; label: string; onClear: () => void }> = []
@@ -363,6 +392,12 @@ export function LeadsExplorer() {
       id: 'agebucket',
       label: `Age: ${AGE_BUCKETS.find((b) => b.id === ageF)?.label ?? ageF}`,
       onClear: () => setFilter('agebucket', 'all'),
+    })
+  if (followF !== 'all')
+    activeFilters.push({
+      id: 'follow',
+      label: `Follow-up: ${followF}`,
+      onClear: () => setFilter('follow', 'all'),
     })
   if (repliedDays > 0)
     activeFilters.push({
@@ -417,6 +452,8 @@ export function LeadsExplorer() {
           connected_at: l.connected_at,
           replied_at: l.replied_at,
           last_action_at: l.last_action_at,
+          next_follow_up_date:
+            followUps.get(followUpKey(l.instance_id, l.profile_url))?.next_follow_up_date ?? null,
         })),
       ),
     )
@@ -552,6 +589,16 @@ export function LeadsExplorer() {
           </select>
         </label>
         <label className="filter-field">
+          <span className="filter-label">Follow-up</span>
+          <select value={followF} onChange={(e) => setFilter('follow', e.target.value)}>
+            <option value="all">Any follow-up</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Today</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="unscheduled">Unscheduled</option>
+          </select>
+        </label>
+        <label className="filter-field">
           <span className="filter-label">Replied</span>
           <select
             value={repliedDays ? String(repliedDays) : 'all'}
@@ -678,6 +725,9 @@ export function LeadsExplorer() {
               <th>Pipeline</th>
               <th>Age</th>
               <th>Gender</th>
+              <th className="sortable" onClick={() => onSort('next_follow_up_date')}>
+                Next follow-up{sortInd('next_follow_up_date')}
+              </th>
               {dateColumns.map((c) => (
                 <th key={c.key} className="sortable" onClick={() => onSort(c.key)}>
                   {c.label}{sortInd(c.key)}
@@ -753,6 +803,18 @@ export function LeadsExplorer() {
                 </td>
                 <td className="muted col-age">{ageRange(l) ?? '—'}</td>
                 <td className="col-gender"><GenderCell lead={l} /></td>
+                <td className="col-follow-up">
+                  {(() => {
+                    const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
+                    return activeFollowUp(followState) ? (
+                      <span className={`follow-due ${followUpBucket(followState)}`}>
+                        {followUpDueLabel(followState)}
+                      </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )
+                  })()}
+                </td>
                 {dateColumns.map((c) => (
                   <td key={c.key} className="muted col-date">
                     {shortDate(l[c.key] as string | null)}

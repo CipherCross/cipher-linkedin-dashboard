@@ -266,6 +266,70 @@ export interface PipelineEvent {
   occurred_at: string
 }
 
+export type FollowUpEventKind =
+  | 'scheduled'
+  | 'rescheduled'
+  | 'reassigned'
+  | 'completed'
+  | 'skipped'
+  | 'canceled'
+
+/** Current projection for one LinkedIn conversation (instance + profile URL).
+ *  A non-null next_follow_up_date with no archived_at is an active task. */
+export interface FollowUpState {
+  instance_id: string
+  profile_url: string
+  next_follow_up_date: string | null
+  owner_id: number | null
+  revision: number
+  last_event_id: number | null
+  last_mutation_id: string | null
+  created_at: string
+  updated_at: string
+  updated_by: string
+  archived_at: string | null
+}
+
+/** Append-only follow-up audit event. Owner names are snapshots so history
+ *  remains readable after a team member is removed. */
+export interface FollowUpEvent {
+  id: number
+  instance_id: string
+  profile_url: string
+  mutation_id: string
+  event_ordinal: number
+  request_fingerprint: string
+  event_kind: FollowUpEventKind
+  previous_due_date: string | null
+  new_due_date: string | null
+  previous_owner_id: number | null
+  new_owner_id: number | null
+  previous_owner_name: string | null
+  new_owner_name: string | null
+  state_revision: number
+  actor: string
+  reason: string | null
+  occurred_at: string
+}
+
+/** Read-optimized newest non-empty message for one conversation. */
+export interface ConversationLatestMessage {
+  instance_id: string
+  profile_url: string
+  message_id: number
+  direction: string
+  body: string
+  sent_at: string
+  source: string | null
+}
+
+export interface FollowUpMutationResult {
+  state: FollowUpState
+  events: FollowUpEvent[]
+  replayed: boolean
+  mutation_revision: number
+}
+
 export interface SyncRun {
   id: string
   instance_id: string
@@ -386,6 +450,9 @@ export interface DashboardData {
   prevBriefing: Briefing | null
   teamMembers: TeamMember[]
   pipelineEvents: PipelineEvent[]
+  followUpStates: FollowUpState[]
+  latestConversationMessages: ConversationLatestMessage[]
+  followUpsAvailable: boolean
   savedSearches: SavedSearch[]
   icps: Icp[]
   icpPersonas: IcpPersona[]

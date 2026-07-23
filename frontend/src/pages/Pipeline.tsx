@@ -10,8 +10,17 @@ import { instanceName } from '../lib/leads'
 import {
   PIPELINE_STAGES, daysInStage, stageColor, substatusLabel,
 } from '../lib/pipeline'
-import { num } from '../lib/format'
-import type { Lead } from '../lib/types'
+import { num, shortDate } from '../lib/format'
+import {
+  activeFollowUp,
+  followUpBucket,
+  followUpDueLabel,
+  followUpKey,
+  followUpStateMap,
+  latestConversationMessageMap,
+  messageSnippet,
+} from '../lib/followUps'
+import type { ConversationLatestMessage, FollowUpState, Lead } from '../lib/types'
 
 // Intake lane: replies that haven't been triaged into the pipeline yet.
 const INTAKE = 'untriaged'
@@ -94,6 +103,14 @@ export function Pipeline() {
       byId.get(s.id)!.sort(sortByTs((l) => l.pipeline_stage_changed_at))
     return byId
   }, [filtered])
+  const followUps = useMemo(
+    () => followUpStateMap(data?.followUpStates ?? []),
+    [data?.followUpStates],
+  )
+  const latestMessages = useMemo(
+    () => latestConversationMessageMap(data?.latestConversationMessages ?? []),
+    [data?.latestConversationMessages],
+  )
 
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [pendingLost, setPendingLost] = useState<Lead | null>(null)
@@ -274,7 +291,16 @@ export function Pipeline() {
                     columnId={col.id}
                     substatuses={col.sub}
                     campaignName={campaignName(l.campaign_id)}
+                    accountName={instanceName(
+                      data.instances.find((instance) => instance.id === l.instance_id),
+                      l.instance_id,
+                    )}
                     assigneeName={memberName(l.assigned_to)}
+                    followUp={followUps.get(followUpKey(l.instance_id, l.profile_url))}
+                    followUpOwnerName={memberName(
+                      followUps.get(followUpKey(l.instance_id, l.profile_url))?.owner_id,
+                    )}
+                    latestMessage={latestMessages.get(followUpKey(l.instance_id, l.profile_url))}
                     members={activeMembers.length ? activeMembers : members}
                     onOpen={() => openConversation(l)}
                     onDragStart={(e) => {
@@ -321,7 +347,11 @@ function PipeCard({
   columnId,
   substatuses,
   campaignName,
+  accountName,
   assigneeName,
+  followUp,
+  followUpOwnerName,
+  latestMessage,
   members,
   onOpen,
   onDragStart,
@@ -335,7 +365,11 @@ function PipeCard({
   columnId: string
   substatuses: string[]
   campaignName: string
+  accountName: string
   assigneeName: string
+  followUp?: FollowUpState
+  followUpOwnerName: string
+  latestMessage?: ConversationLatestMessage
   members: { id: number; name: string }[]
   onOpen: () => void
   onDragStart: (e: React.DragEvent) => void
@@ -361,79 +395,119 @@ function PipeCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       style={{ borderLeftColor: stageColor(isIntake ? null : columnId) }}
-      onClick={() => {
-        if (draggingRef.current) return
-        onOpen()
-      }}
     >
-      <div className="pipe-card-head-row">
-        <LeadAvatar lead={lead} size={26} />
-        <div className="pipe-card-name">{name}</div>
-      </div>
-      {lead.company && <div className="pipe-card-sub muted small">{lead.company}</div>}
-      <div className="pipe-card-camp muted small ellipsis" title={campaignName}>
-        {campaignName}
+      <button
+        type="button"
+        className="pipe-card-open"
+        draggable={false}
+        onClick={() => {
+          if (draggingRef.current) return
+          onOpen()
+        }}
+      >
+        <span className="pipe-card-head-row">
+          <LeadAvatar lead={lead} size={28} />
+          <span className="pipe-card-identity">
+            <span className="pipe-card-name">{name}</span>
+            <span className="pipe-card-sub muted small">
+              {[lead.company, lead.headline].filter(Boolean).join(' · ') || '—'}
+            </span>
+          </span>
+        </span>
+        {activeFollowUp(followUp) && (
+          <span className={`pipe-follow-due ${followUpBucket(followUp)}`}>
+            {followUpDueLabel(followUp)}
+            {followUpOwnerName && followUp?.owner_id !== lead.assigned_to
+              ? ` · ${followUpOwnerName}`
+              : ''}
+          </span>
+        )}
+        {latestMessage && (
+          <span className="pipe-card-message">
+            <span className={`pipe-msg-dir ${latestMessage.direction}`}>
+              {latestMessage.direction === 'in' ? 'Them' : 'Us'}
+            </span>
+            <span className="ellipsis">{messageSnippet(latestMessage.body, 74)}</span>
+            <span className="pipe-msg-date">{shortDate(latestMessage.sent_at)}</span>
+          </span>
+        )}
+        <span
+          className="pipe-card-camp muted small ellipsis"
+          title={`${campaignName} · ${accountName}`}
+        >
+          {campaignName} · {accountName}
+        </span>
+      </button>
+
+      <div className="pipe-card-foot">
+        {assigneeName && (
+          <span className="assignee-chip" title={`Lead owner: ${assigneeName}`}>
+            <InitialsAvatar name={assigneeName} size={20} />
+          </span>
+        )}
+        <span className="muted small ellipsis">{substatusLabel(lead.pipeline_substatus ?? '') || ''}</span>
+        {days != null && (
+          <span className="pipe-days muted small" title="Days in this stage">
+            {days}d
+          </span>
+        )}
       </div>
 
-      {(assigneeName || days != null) && (
-        <div className="pipe-card-foot">
-          {assigneeName && (
-            <span className="assignee-chip" title={assigneeName}>
-              <InitialsAvatar name={assigneeName} size={20} />
-            </span>
+      <details
+        className="pipe-card-manage"
+        draggable={false}
+        onMouseDown={stopControl}
+        onDragStart={stopControl}
+        onClick={stopControl}
+      >
+        <summary>Manage lead</summary>
+        <div className="pipe-card-controls">
+          {substatuses.length > 0 && (
+            <select
+              className="substatus-chip"
+              aria-label="Pipeline substatus"
+              value={lead.pipeline_substatus ?? ''}
+              draggable={false}
+              onMouseDown={stopControl}
+              onClick={stopControl}
+              onChange={(e) => onSubstatus(e.target.value || null)}
+            >
+              <option value="">Substatus…</option>
+              {substatuses.map((s) => (
+                <option key={s} value={s}>{substatusLabel(s)}</option>
+              ))}
+            </select>
           )}
-          {days != null && (
-            <span className="pipe-days muted small" title="Days in this stage">
-              {days}d
-            </span>
-          )}
+          <select
+            className="pipe-stage-select"
+            aria-label="Pipeline stage"
+            value={isIntake ? '' : currentStage}
+            draggable={false}
+            onMouseDown={stopControl}
+            onClick={stopControl}
+            onChange={(e) => onStage(e.target.value)}
+          >
+            {isIntake && <option value="">Move to…</option>}
+            {PIPELINE_STAGES.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <select
+            className="pipe-assign-select"
+            aria-label="Lead owner"
+            value={String(lead.assigned_to ?? '')}
+            draggable={false}
+            onMouseDown={stopControl}
+            onClick={stopControl}
+            onChange={(e) => onAssign(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Unassigned</option>
+            {members.map((m) => (
+              <option key={m.id} value={String(m.id)}>{m.name}</option>
+            ))}
+          </select>
         </div>
-      )}
-
-      {substatuses.length > 0 && (
-        <select
-          className="substatus-chip"
-          value={lead.pipeline_substatus ?? ''}
-          draggable={false}
-          onMouseDown={stopControl}
-          onClick={stopControl}
-          onChange={(e) => onSubstatus(e.target.value || null)}
-        >
-          <option value="">Substatus…</option>
-          {substatuses.map((s) => (
-            <option key={s} value={s}>{substatusLabel(s)}</option>
-          ))}
-        </select>
-      )}
-
-      <div className="pipe-card-controls">
-        <select
-          className="pipe-stage-select"
-          value={isIntake ? '' : currentStage}
-          draggable={false}
-          onMouseDown={stopControl}
-          onClick={stopControl}
-          onChange={(e) => onStage(e.target.value)}
-        >
-          {isIntake && <option value="">Move to…</option>}
-          {PIPELINE_STAGES.map((s) => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
-        </select>
-        <select
-          className="pipe-assign-select"
-          value={String(lead.assigned_to ?? '')}
-          draggable={false}
-          onMouseDown={stopControl}
-          onClick={stopControl}
-          onChange={(e) => onAssign(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">Unassigned</option>
-          {members.map((m) => (
-            <option key={m.id} value={String(m.id)}>{m.name}</option>
-          ))}
-        </select>
-      </div>
+      </details>
     </article>
   )
 }

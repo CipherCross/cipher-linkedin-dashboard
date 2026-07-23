@@ -27,7 +27,7 @@ interface Block {
   outOfOrder: boolean
 }
 
-interface SaveResult {
+export interface SaveResult {
   inserted: number
   skipped: number
   milestones?: Record<string, string>
@@ -65,7 +65,7 @@ export function ImportHistoryPanel({
   lead: Lead
   accountName: string | null
   existing: ExistingMsg[] | null
-  onImported: () => void
+  onImported: (result: SaveResult) => void
   onClose: () => void
 }) {
   const toast = useToast()
@@ -194,7 +194,7 @@ export function ImportHistoryPanel({
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
       const saved = j as SaveResult
       setResult(saved)
-      onImported()
+      onImported(saved)
       toast.success(
         `Imported ${saved.inserted} message${saved.inserted === 1 ? '' : 's'}` +
           (saved.skipped ? ` · ${saved.skipped} skipped` : ''),

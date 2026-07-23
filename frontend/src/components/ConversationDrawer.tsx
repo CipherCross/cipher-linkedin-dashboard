@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Loader2, MessagesSquare, Trash2, X } from 'lucide-react'
+import { CalendarCheck2, ChevronDown, ChevronRight, Loader2, MessagesSquare, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { adminPost } from '../lib/admin'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
+import { FollowUpPanel } from './FollowUpPanel'
 import { LeadNotesPanel } from './LeadNotesPanel'
 import { LostReasonModal } from './LostReasonModal'
 import { LeadAvatar } from './Avatar'
@@ -16,8 +17,15 @@ import {
   ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
   ageRange, instanceName, leadKey,
 } from '../lib/leads'
+import {
+  activeFollowUp,
+  followUpDueLabel,
+  followUpKey,
+  followUpStateMap,
+} from '../lib/followUps'
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
 import { clockTime, dayHeading } from '../lib/format'
+import type { ConversationMode } from '../lib/ConversationContext'
 import type { Coaching, Gender, Lead, Message, Sentiment } from '../lib/types'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
@@ -31,10 +39,12 @@ type ThreadMsg = Pick<
  *  first. Inbound replies can be reclassified in place. */
 export function ConversationDrawer({
   lead,
+  initialMode = 'thread',
   closing,
   onClose,
 }: {
   lead: Lead | null
+  initialMode?: ConversationMode
   closing?: boolean
   onClose: () => void
 }) {
@@ -58,6 +68,10 @@ export function ConversationDrawer({
   const [coachError, setCoachError] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [followUpOpen, setFollowUpOpen] = useState(initialMode === 'follow_up')
+  const [followUpReturnAction, setFollowUpReturnAction] = useState<
+    'complete' | 'skip' | undefined
+  >()
   const drawerRef = useRef<HTMLDivElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
@@ -101,8 +115,13 @@ export function ConversationDrawer({
     return () => document.removeEventListener('keydown', onKey)
   }, [lead, onClose])
 
-  // Switching leads always starts on the thread view, not a stale import panel.
-  useEffect(() => setImportOpen(false), [lead])
+  // Switching leads (or opening one from the worklist) resets the transient
+  // workflow and honors the caller's requested destination.
+  useEffect(() => {
+    setImportOpen(false)
+    setFollowUpOpen(initialMode === 'follow_up')
+    setFollowUpReturnAction(undefined)
+  }, [lead, initialMode])
 
   // Lock the background from scrolling while the drawer is open (restore on close).
   useEffect(() => {
@@ -117,10 +136,10 @@ export function ConversationDrawer({
   // The thread renders oldest-first; triage users click a recent reply, so open
   // at the newest message. Re-runs after an import bumps reloadKey.
   useEffect(() => {
-    if (!rows || importOpen) return
+    if (!rows || importOpen || followUpOpen) return
     const el = threadRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [rows, reloadKey, importOpen])
+  }, [rows, reloadKey, importOpen, followUpOpen])
 
   // Fetch the full thread whenever the active lead changes (or an import lands).
   useEffect(() => {
@@ -208,6 +227,9 @@ export function ConversationDrawer({
   // the live row from context for those controls.
   const live = data?.leads.find((x) => x.id === lead.id) ?? lead
   const liveStage = stageById(live.pipeline_stage)
+  const followUpState = followUpStateMap(data?.followUpStates ?? []).get(
+    followUpKey(lead.instance_id, lead.profile_url),
+  )
 
   const campaignName =
     data?.campaigns.find((c) => c.campaign_id === lead.campaign_id)?.campaign_name ??
@@ -409,7 +431,7 @@ export function ConversationDrawer({
             {/* Hidden while the empty state shows — that state carries its own
                 Import-history CTA, and two identical links one viewport apart
                 read as clutter. */}
-            {!importOpen && !(rows && rows.length === 0) && (
+            {!importOpen && !followUpOpen && !(rows && rows.length === 0) && (
               <button
                 className="link-btn conv-import-btn"
                 onClick={() => setImportOpen(true)}
@@ -417,6 +439,21 @@ export function ConversationDrawer({
                 title="Paste a conversation copied from LinkedIn"
               >
                 Import history
+              </button>
+            )}
+            {data?.followUpsAvailable && (
+              <button
+                className={`conv-follow-btn ${activeFollowUp(followUpState) ? 'active' : ''}`}
+                onClick={() => {
+                  setImportOpen(false)
+                  setFollowUpReturnAction(undefined)
+                  setFollowUpOpen((open) => !open)
+                }}
+              >
+                <CalendarCheck2 size={13} />
+                {activeFollowUp(followUpState)
+                  ? followUpDueLabel(followUpState)
+                  : 'Schedule follow-up'}
               </button>
             )}
           </div>
@@ -531,7 +568,26 @@ export function ConversationDrawer({
           />
         )}
 
-        {!importOpen && (
+        {!importOpen && followUpOpen && (
+          <FollowUpPanel
+            lead={live}
+            initialAction={followUpReturnAction}
+            onBack={() => {
+              setFollowUpOpen(false)
+              setFollowUpReturnAction(undefined)
+            }}
+            onImport={(returnTo) => {
+              setFollowUpReturnAction(returnTo)
+              setImportOpen(true)
+            }}
+            onCompleted={() => {
+              setFollowUpOpen(false)
+              setFollowUpReturnAction(undefined)
+            }}
+          />
+        )}
+
+        {!importOpen && !followUpOpen && (
         <>
         <div className="conv-thread" ref={threadRef}>
           {loading && (

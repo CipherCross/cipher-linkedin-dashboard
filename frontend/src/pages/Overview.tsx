@@ -13,6 +13,7 @@ import { Funnel } from '../components/Funnel'
 import { AccountCard } from '../components/AccountCard'
 import { BriefingCard } from '../components/BriefingCard'
 import { ImportCalloutCard } from '../components/ImportCalloutCard'
+import { FollowUpCalloutCard } from '../components/FollowUpCalloutCard'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { EmptyState } from '../components/EmptyState'
 
@@ -116,6 +117,8 @@ export function Overview() {
       />
 
       <BriefingCard />
+
+      <FollowUpCalloutCard />
 
       <ImportCalloutCard />
 

@@ -20,7 +20,16 @@ export const maxDuration = 10
 const MAX_LOST_REASON = 500
 const MAX_NOTE = 4000
 const MAX_MEMBER_NAME = 100
+const MAX_FOLLOW_UP_REASON = 1000
 const GENDERS = ['male', 'female', 'unknown'] as const
+const FOLLOW_UP_ACTIONS = {
+  schedule_follow_up: 'schedule',
+  reschedule_follow_up: 'reschedule',
+  reassign_follow_up: 'reassign',
+  complete_follow_up: 'complete',
+  skip_follow_up: 'skip',
+  cancel_follow_up: 'cancel',
+} as const
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -50,7 +59,7 @@ async function setStage(supa: ReturnType<typeof db>, p: Record<string, unknown>)
     if (typeof substatus !== 'string') {
       return json({ error: 'substatus must be a string' }, 400)
     }
-    if (stage === null || !stageAllowsSubstatus(stage, substatus)) {
+    if (stage === null || typeof stage !== 'string' || !stageAllowsSubstatus(stage, substatus)) {
       return json({ error: `substatus '${substatus}' is not allowed for stage '${stage ?? 'null'}'` }, 400)
     }
   }
@@ -353,6 +362,133 @@ async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>
   return json({ ok: true, ...data })
 }
 
+// --- conversation follow-ups -----------------------------------------------
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function validDateOnly(value: string): boolean {
+  if (!DATE_ONLY.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const d = new Date(Date.UTC(year, month - 1, day))
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() === month - 1 &&
+    d.getUTCDate() === day
+  )
+}
+
+async function followUp(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  action: keyof typeof FOLLOW_UP_ACTIONS,
+) {
+  const instanceId = typeof p.instance_id === 'string' ? p.instance_id.trim() : ''
+  const profileUrl = typeof p.profile_url === 'string' ? p.profile_url.trim() : ''
+  const actor = typeof p.actor === 'string' ? p.actor.trim() : ''
+  const expectedRevision = p.expected_revision
+  const mutationId = typeof p.mutation_id === 'string' ? p.mutation_id.trim() : ''
+  const ownerId = p.owner_id
+  const nextDate = p.next_follow_up_date
+  const reason = typeof p.reason === 'string' ? p.reason.trim() : p.reason
+
+  if (!instanceId || !profileUrl) {
+    return json({ error: 'instance_id and profile_url are required' }, 400)
+  }
+  if (!actor || actor.length > 120) {
+    return json({ error: 'actor must be a non-empty string (max 120 chars)' }, 400)
+  }
+  if (
+    typeof expectedRevision !== 'number' ||
+    !Number.isInteger(expectedRevision) ||
+    expectedRevision < 0
+  ) {
+    return json({ error: 'expected_revision must be a non-negative integer' }, 400)
+  }
+  if (!UUID.test(mutationId)) {
+    return json({ error: 'mutation_id must be a UUID' }, 400)
+  }
+  if (
+    ownerId !== undefined &&
+    ownerId !== null &&
+    (typeof ownerId !== 'number' || !Number.isInteger(ownerId) || ownerId <= 0)
+  ) {
+    return json({ error: 'owner_id must be a positive integer or null' }, 400)
+  }
+  if (
+    nextDate !== undefined &&
+    nextDate !== null &&
+    (typeof nextDate !== 'string' || !validDateOnly(nextDate))
+  ) {
+    return json({ error: 'next_follow_up_date must be a valid YYYY-MM-DD date or null' }, 400)
+  }
+  if (
+    reason !== undefined &&
+    reason !== null &&
+    (typeof reason !== 'string' || !reason || reason.length > MAX_FOLLOW_UP_REASON)
+  ) {
+    return json({
+      error: `reason must be a non-empty string (max ${MAX_FOLLOW_UP_REASON} chars) or null`,
+    }, 400)
+  }
+
+  const dbAction = FOLLOW_UP_ACTIONS[action]
+  if (dbAction === 'schedule' && (ownerId == null || nextDate == null)) {
+    return json({ error: 'owner_id and next_follow_up_date are required' }, 400)
+  }
+  if (dbAction === 'reschedule' && nextDate == null) {
+    return json({ error: 'next_follow_up_date is required' }, 400)
+  }
+  if (dbAction === 'reassign' && ownerId == null) {
+    return json({ error: 'owner_id is required' }, 400)
+  }
+  if (dbAction === 'skip' && !reason) {
+    return json({ error: 'reason is required when skipping' }, 400)
+  }
+  if (
+    (dbAction === 'complete' || dbAction === 'skip') &&
+    ((ownerId == null) !== (nextDate == null))
+  ) {
+    return json({ error: 'next owner and date must be supplied together' }, 400)
+  }
+  if (dbAction === 'cancel' && (ownerId != null || nextDate != null)) {
+    return json({ error: 'cancel does not accept owner_id or next_follow_up_date' }, 400)
+  }
+
+  const { data, error } = await supa.rpc('apply_follow_up_action', {
+    p_action: dbAction,
+    p_instance_id: instanceId,
+    p_profile_url: profileUrl,
+    p_actor: actor,
+    p_expected_revision: expectedRevision,
+    p_mutation_id: mutationId,
+    p_owner_id: ownerId ?? null,
+    p_next_follow_up_date: nextDate ?? null,
+    p_reason: reason ?? null,
+  })
+
+  if (error) {
+    const code = (error as { code?: string }).code
+    if (code === 'P0002') return json({ error: 'unknown conversation' }, 404)
+    if (code === '40001' || /FOLLOW_UP_CONFLICT/i.test(error.message)) {
+      const { data: state } = await supa
+        .from('conversation_follow_up_state')
+        .select('*')
+        .eq('instance_id', instanceId)
+        .eq('profile_url', profileUrl)
+        .maybeSingle()
+      return json({ error: error.message.replace(/^FOLLOW_UP_CONFLICT:\s*/i, ''), state }, 409)
+    }
+    if (code === '22023') return json({ error: error.message }, 400)
+    if (code === 'PGRST202' || /apply_follow_up_action/i.test(error.message)) {
+      return json({ error: 'Follow-ups database migration is not available yet.' }, 503)
+    }
+    return json({ error: error.message }, 500)
+  }
+
+  return json({ ok: true, ...(data as Record<string, unknown>) })
+}
+
 async function handle(req: Request): Promise<Response> {
   const secret = process.env.ADMIN_SECRET
   if (secret && req.headers.get('x-admin-secret') !== secret) {
@@ -385,6 +521,13 @@ async function handle(req: Request): Promise<Response> {
       return setMemberActive(supa, payload)
     case 'set_gender':
       return setGender(supa, payload)
+    case 'schedule_follow_up':
+    case 'reschedule_follow_up':
+    case 'reassign_follow_up':
+    case 'complete_follow_up':
+    case 'skip_follow_up':
+    case 'cancel_follow_up':
+      return followUp(supa, payload, payload.action)
     default:
       return json({ error: 'unknown action' }, 400)
   }

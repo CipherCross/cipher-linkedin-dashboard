@@ -4,7 +4,11 @@ import { useLocation } from 'react-router-dom'
 import { ConversationDrawer } from '../components/ConversationDrawer'
 import type { Lead } from './types'
 
-const Ctx = createContext<{ openConversation: (lead: Lead) => void }>({
+export type ConversationMode = 'thread' | 'follow_up'
+
+const Ctx = createContext<{
+  openConversation: (lead: Lead, options?: { mode?: ConversationMode }) => void
+}>({
   openConversation: () => {},
 })
 
@@ -16,6 +20,7 @@ const CLOSE_MS = 160
  *  router Links and refetch dashboard data after a reclassification. */
 export function ConversationProvider({ children }: { children: ReactNode }) {
   const [lead, setLead] = useState<Lead | null>(null)
+  const [mode, setMode] = useState<ConversationMode>('thread')
   // Kept mounted through the close animation, then unmounted after CLOSE_MS.
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -27,9 +32,10 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const openConversation = useCallback((l: Lead) => {
+  const openConversation = useCallback((l: Lead, options?: { mode?: ConversationMode }) => {
     clearTimer()
     setClosing(false)
+    setMode(options?.mode ?? 'thread')
     setLead(l)
   }, [])
 
@@ -38,6 +44,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     clearTimer()
     closeTimer.current = setTimeout(() => {
       setLead(null)
+      setMode('thread')
       setClosing(false)
       closeTimer.current = undefined
     }, CLOSE_MS)
@@ -58,7 +65,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ openConversation }}>
       {children}
-      <ConversationDrawer lead={lead} closing={closing} onClose={close} />
+      <ConversationDrawer lead={lead} initialMode={mode} closing={closing} onClose={close} />
     </Ctx.Provider>
   )
 }
