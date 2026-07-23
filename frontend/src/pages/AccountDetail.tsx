@@ -4,7 +4,7 @@ import { FileQuestion } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
   WEEKLY_ADD_LIMIT, instanceName, latestRepliesByLead, leadsToActivity, presetRanges,
-  previousRange, rangeFromParam, rangeTotals, rangeToParam, weeklyAdded,
+  previousRange, rangeFromParam, rangeTotals, rangeToParam, replyIntentMetrics, weeklyAdded,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { ago, num } from '../lib/format'
@@ -50,9 +50,21 @@ export function AccountDetail() {
     return {
       totals: rangeTotals(leads, range, latest),
       prevTotals: prev ? rangeTotals(leads, prev, latest) : undefined,
+      intent: data
+        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
+            instanceId: id,
+            intentRows: data.conversationReplyIntents,
+          })
+        : undefined,
+      intentPrev: data && prev
+        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, prev, {
+            instanceId: id,
+            intentRows: data.conversationReplyIntents,
+          })
+        : undefined,
       activity: leadsToActivity(leads),
     }
-  }, [leads, range, latest])
+  }, [data, id, leads, range, latest])
 
   if (!data) return null
   const inst = data.instances.find((i) => i.id === id)
@@ -109,7 +121,8 @@ export function AccountDetail() {
         activity={kpis.activity}
         range={range}
         flowLabel={range.label}
-        positive={kpis.totals.positive}
+        intent={kpis.intent}
+        intentPrev={kpis.intentPrev}
       />
 
       <div className="card">

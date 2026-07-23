@@ -8,7 +8,7 @@ import { useData } from '../lib/DataContext'
 import type { CampaignMetrics, Gender, Lead } from '../lib/types'
 import {
   campaignDemographics, daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
-  presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam,
+  presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam, replyIntentMetrics,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import { num, pct, rate } from '../lib/format'
@@ -61,9 +61,21 @@ export function CampaignDetail() {
     return {
       totals: rangeTotals(leads, range, latest),
       prevTotals: prev ? rangeTotals(leads, prev, latest) : undefined,
+      intent: data && id
+        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
+            campaignId: id,
+            intentRows: data.conversationReplyIntents,
+          })
+        : undefined,
+      intentPrev: data && id && prev
+        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, prev, {
+            campaignId: id,
+            intentRows: data.conversationReplyIntents,
+          })
+        : undefined,
       activity: leadsToActivity(leads),
     }
-  }, [leads, range, latest])
+  }, [data, id, leads, range, latest])
 
   const compareIds = useMemo(() => {
     const raw = params.get('cmp')
@@ -176,7 +188,8 @@ export function CampaignDetail() {
             activity={kpis.activity}
             range={range}
             flowLabel={range.label}
-            positive={kpis.totals.positive}
+            intent={kpis.intent}
+            intentPrev={kpis.intentPrev}
           />
 
           <div className="two-col">
@@ -356,4 +369,3 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
     </div>
   )
 }
-

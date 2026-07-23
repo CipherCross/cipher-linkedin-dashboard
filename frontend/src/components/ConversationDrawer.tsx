@@ -14,7 +14,8 @@ import { LeadAvatar } from './Avatar'
 import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
 import {
-  ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META, SENTIMENT_ORDER, SEVERITY_CLS,
+  INTENT_META, INTENT_ORDER, ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META,
+  SENTIMENT_ORDER, SEVERITY_CLS,
   ageRange, instanceName, leadKey,
 } from '../lib/leads'
 import {
@@ -26,13 +27,15 @@ import {
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
 import { clockTime, dayHeading } from '../lib/format'
 import type { ConversationMode } from '../lib/ConversationContext'
-import type { Coaching, Gender, Lead, Message, Sentiment } from '../lib/types'
+import type { Coaching, Gender, Lead, Message, ReplyIntent, Sentiment } from '../lib/types'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
 type ThreadMsg = Pick<
   Message,
-  'id' | 'direction' | 'body' | 'sent_at' | 'sentiment' | 'reason' | 'classified_model' | 'source'
+  | 'id' | 'direction' | 'body' | 'sent_at' | 'sentiment' | 'reason'
+  | 'classified_model' | 'source' | 'intent_level' | 'intent_reason'
+  | 'intent_classified_model'
 >
 
 /** Slide-in panel showing one lead's full conversation, both directions, oldest
@@ -56,13 +59,18 @@ export function ConversationDrawer({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The message + target sentiment currently being saved (for the inline spinner).
-  const [saving, setSaving] = useState<{ id: number; to: Sentiment } | null>(null)
+  const [saving, setSaving] = useState<{
+    id: number
+    kind: 'sentiment' | 'intent'
+    to: Sentiment | ReplyIntent | null
+  } | null>(null)
   // The imported message currently being deleted (for the inline spinner).
   const [deleting, setDeleting] = useState<number | null>(null)
   // True while a gender override is being saved (disables the select).
   const [savingGender, setSavingGender] = useState(false)
   // Which inbound bubble has its sentiment button row revealed (badge clicked).
   const [openSentiId, setOpenSentiId] = useState<number | null>(null)
+  const [openIntentId, setOpenIntentId] = useState<number | null>(null)
   const [coaching, setCoaching] = useState<Coaching | null>(null)
   const [coachLoading, setCoachLoading] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
@@ -158,15 +166,35 @@ export function ConversationDrawer({
         setLoading(false)
         return
       }
-      const { data: msgs, error: err } = await supabase
+      let result = await supabase
         .from('messages')
-        .select('id,direction,body,sent_at,sentiment,reason,classified_model,source')
+        .select(
+          'id,direction,body,sent_at,sentiment,reason,classified_model,source,' +
+          'intent_level,intent_reason,intent_classified_model',
+        )
         .eq('instance_id', lead.instance_id)
         .eq('profile_url', lead.profile_url)
         .order('sent_at', { ascending: true })
+      if (result.error?.code === '42703') {
+        result = await supabase
+          .from('messages')
+          .select('id,direction,body,sent_at,sentiment,reason,classified_model,source')
+          .eq('instance_id', lead.instance_id)
+          .eq('profile_url', lead.profile_url)
+          .order('sent_at', { ascending: true }) as typeof result
+      }
+      if (result.error?.code === '42703') {
+        result = await supabase
+          .from('messages')
+          .select('id,direction,body,sent_at,sentiment,reason,classified_model')
+          .eq('instance_id', lead.instance_id)
+          .eq('profile_url', lead.profile_url)
+          .order('sent_at', { ascending: true }) as typeof result
+      }
+      const { data: msgs, error: err } = result
       if (cancelled) return
       if (err) setError(err.message)
-      else setRows((msgs ?? []) as ThreadMsg[])
+      else setRows((msgs ?? []) as unknown as ThreadMsg[])
       setLoading(false)
     })()
     return () => {
@@ -246,6 +274,9 @@ export function ConversationDrawer({
   const statusMeta = latestInbound?.sentiment
     ? SENTIMENT_META[latestInbound.sentiment]
     : null
+  const latestIntentMeta = latestInbound?.intent_level
+    ? INTENT_META[latestInbound.intent_level]
+    : null
 
   // Compare the live thread to what the coaching was generated against, so we can
   // nudge for a Regenerate when new messages have arrived since.
@@ -257,7 +288,7 @@ export function ConversationDrawer({
 
   async function reclassify(msg: ThreadMsg, sentiment: Sentiment) {
     if (msg.sentiment === sentiment) return
-    setSaving({ id: msg.id, to: sentiment })
+    setSaving({ id: msg.id, kind: 'sentiment', to: sentiment })
     try {
       const res = await fetch('/api/reclassify', {
         method: 'POST',
@@ -277,6 +308,34 @@ export function ConversationDrawer({
     } catch (e) {
       // A banner at the top of a long thread scrolls off-screen — toast instead.
       toast.error(`Couldn't reclassify: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function reclassifyIntent(msg: ThreadMsg, intent: ReplyIntent | null) {
+    if ((msg.intent_level ?? null) === intent) return
+    setSaving({ id: msg.id, kind: 'intent', to: intent })
+    try {
+      const res = await fetch('/api/reclassify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: msg.id, intent_level: intent }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      setRows(
+        (prev) =>
+          prev?.map((m) =>
+            m.id === msg.id
+              ? { ...m, intent_level: intent, intent_classified_model: 'manual' }
+              : m,
+          ) ?? prev,
+      )
+      setOpenIntentId(null)
+      refetch()
+    } catch (e) {
+      toast.error(`Couldn't set intent: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSaving(null)
     }
@@ -427,6 +486,14 @@ export function ConversationDrawer({
               </span>
             ) : (
               <span className="badge">No reply yet</span>
+            )}
+            {latestIntentMeta && (
+              <span
+                className={`badge senti ${latestIntentMeta.cls}`}
+                title={latestInbound?.intent_reason ?? 'Commercial intent on latest reply'}
+              >
+                {latestIntentMeta.short} · {latestIntentMeta.label}
+              </span>
             )}
             {/* Hidden while the empty state shows — that state carries its own
                 Import-history CTA, and two identical links one viewport apart
@@ -612,6 +679,7 @@ export function ConversationDrawer({
           {rows?.map((m, idx) => {
             const inbound = m.direction === 'in'
             const meta = inbound && m.sentiment ? SENTIMENT_META[m.sentiment] : null
+            const intentMeta = inbound && m.intent_level ? INTENT_META[m.intent_level] : null
             const prev = idx > 0 ? rows[idx - 1] : null
             const newDay =
               !prev || new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString()
@@ -669,7 +737,8 @@ export function ConversationDrawer({
                     </button>
                     <div className="msg-senti-btns">
                       {SENTIMENT_ORDER.map((s) => {
-                        const savingThis = saving?.id === m.id && saving.to === s
+                        const savingThis =
+                          saving?.id === m.id && saving.kind === 'sentiment' && saving.to === s
                         return (
                           <button
                             key={s}
@@ -684,6 +753,51 @@ export function ConversationDrawer({
                           </button>
                         )
                       })}
+                    </div>
+                  </div>
+                )}
+                {inbound && (
+                  <div className={`msg-reclassify ${openIntentId === m.id ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      className={`msg-senti-badge badge senti ${intentMeta ? intentMeta.cls : ''}`}
+                      title={intentMeta ? (m.intent_reason ?? 'Click to change intent') : 'Set P1–P3 intent'}
+                      onClick={() => setOpenIntentId(openIntentId === m.id ? null : m.id)}
+                    >
+                      {intentMeta ? (
+                        <>
+                          {intentMeta.short} · {intentMeta.label}
+                          {m.intent_classified_model === 'manual' ? ' ✓' : ''}
+                        </>
+                      ) : (
+                        'No intent'
+                      )}
+                    </button>
+                    <div className="msg-senti-btns">
+                      {INTENT_ORDER.map((level) => {
+                        const savingThis =
+                          saving?.id === m.id && saving.kind === 'intent' && saving.to === level
+                        return (
+                          <button
+                            key={level}
+                            className={`senti ${INTENT_META[level].cls} ${
+                              m.intent_level === level ? 'active' : ''
+                            }`}
+                            disabled={saving?.id === m.id}
+                            onClick={() => reclassifyIntent(m, level)}
+                          >
+                            {savingThis && <Loader2 size={11} className="spin" />}
+                            {INTENT_META[level].short} · {INTENT_META[level].label}
+                          </button>
+                        )
+                      })}
+                      <button
+                        className={`senti auto ${!m.intent_level ? 'active' : ''}`}
+                        disabled={saving?.id === m.id}
+                        onClick={() => reclassifyIntent(m, null)}
+                      >
+                        No intent
+                      </button>
                     </div>
                   </div>
                 )}

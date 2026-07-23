@@ -24,7 +24,7 @@ const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Rev
 const CsvImport = lazy(() => import('./pages/CsvImport').then((m) => ({ default: m.CsvImport })))
 
 /** Replies folded into Leads, but old deep links carried a `sentiment` query
- *  param (positive/curious/neutral/negative/later/other/unclassified) — forward
+ *  param (positive/neutral/negative/objection/referral/auto/unclassified) — forward
  *  it as-is to /leads, defaulting to `any` when absent. */
 function RepliesRedirect() {
   const [params] = useSearchParams()

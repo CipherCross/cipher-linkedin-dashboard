@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom'
-import { MessageSquare, Send, ThumbsUp, UserCheck, UserPlus, Users } from 'lucide-react'
+import {
+  CalendarCheck, MessageSquare, Send, Sparkles, UserCheck, UserPlus, UserRoundX, Users,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CampaignMetrics, DailyActivity, Lead } from '../lib/types'
-import type { DateRange, Totals } from '../lib/leads'
+import type { DateRange, ReplyIntentMetrics, Totals } from '../lib/leads'
 import { rangeToParam } from '../lib/leads'
 import { num, pct } from '../lib/format'
 import { Sparkline } from './Sparkline'
@@ -18,8 +20,9 @@ interface Props {
   /** Sparkline span (matches the active range). */
   range?: DateRange
   flowLabel?: string
-  /** When set, appends a "Positive" card (count + share of replies). */
-  positive?: number
+  /** P1–P3 intent and chronology-aware P3 outcome metrics. */
+  intent?: ReplyIntentMetrics
+  intentPrev?: ReplyIntentMetrics
   /** Leads added within the range; renders a clickable "Leads added" card. */
   added?: number
   addedPrev?: number
@@ -46,7 +49,10 @@ interface Card {
   to?: string
 }
 
-export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLabel, positive, added, addedPrev, velocityLeads }: Props) {
+export function KpiCards({
+  campaigns = [], totals, prev, activity, range, flowLabel, intent, intentPrev,
+  added, addedPrev, velocityLeads,
+}: Props) {
   const invites = totals ? totals.invites : sum(campaigns, (c) => c.invites_sent)
   const accepted = totals ? totals.accepted : sum(campaigns, (c) => c.accepted)
   const replies = totals ? totals.replies : sum(campaigns, (c) => c.replies)
@@ -90,12 +96,35 @@ export function KpiCards({ campaigns = [], totals, prev, activity, range, flowLa
       cur: replies, prevCount: prev?.replies, maturing: true,
     },
   )
-  if (positive !== undefined)
-    cards.push({
-      key: 'positive', label: 'Positive', value: positive, icon: ThumbsUp,
-      sub: replies > 0 ? pct(positive, replies) + ' of replies' : rangeSub,
-      cur: positive, prevCount: prev?.positive, maturing: true,
-    })
+  if (intent) {
+    cards.push(
+      {
+        key: 'p1', label: 'P1 · Polite', value: intent.p1, icon: Sparkles,
+        sub: 'polite positive', cur: intent.p1, prevCount: intentPrev?.p1, maturing: true,
+      },
+      {
+        key: 'p2', label: 'P2 · Problem', value: intent.p2, icon: MessageSquare,
+        sub: 'substantive interest', cur: intent.p2, prevCount: intentPrev?.p2, maturing: true,
+      },
+      {
+        key: 'p3', label: 'P3 · Buying intent', value: intent.p3, icon: UserCheck,
+        sub: 'first reached P3', cur: intent.p3, prevCount: intentPrev?.p3, maturing: true,
+      },
+      {
+        key: 'p3-booked', label: 'P3 → Booked', value: intent.p3Booked, icon: CalendarCheck,
+        sub:
+          intent.matureP3BookingRate == null
+            ? 'no mature P3 cohort yet'
+            : `${intent.matureP3BookingRate.toFixed(1)}% of P3 aged 14d+`,
+        maturing: true,
+      },
+      {
+        key: 'p3-ghosted', label: 'P3 ghosted', value: intent.p3Ghosted, icon: UserRoundX,
+        sub: intent.p3 > 0 ? `${pct(intent.p3Ghosted, intent.p3)} of P3 · 30d silence` : '30d silence after follow-up',
+        maturing: true,
+      },
+    )
+  }
 
   const showSpark = !!(activity && range)
 

@@ -3,9 +3,11 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import type { Message } from '../lib/types'
-import { SENTIMENT_META } from '../lib/leads'
-import { TREND_BUCKETS, sentimentTrend } from '../lib/review'
-import type { TrendBucket } from '../lib/review'
+import { INTENT_META, SENTIMENT_META } from '../lib/leads'
+import {
+  INTENT_TREND_BUCKETS, TREND_BUCKETS, intentTrend, sentimentTrend,
+} from '../lib/review'
+import type { IntentTrendBucket, TrendBucket } from '../lib/review'
 import { AXIS, BAR_CURSOR, ChartEmpty, GRID, TOOLTIP, dateTick, legendText } from './chartTheme'
 
 // Bucket → the `.senti.*` colour it wears everywhere else, so a sentiment is the
@@ -30,7 +32,24 @@ const BUCKET_LABEL: Record<TrendBucket, string> = {
   unclassified: 'Unclassified',
 }
 
+const INTENT_COLOR: Record<IntentTrendBucket, string> = {
+  p1: 'var(--info)',
+  p2: 'var(--warning)',
+  p3: 'var(--success)',
+  no_intent: 'var(--text-muted)',
+  unclassified: 'var(--border-strong)',
+}
+
+const INTENT_LABEL: Record<IntentTrendBucket, string> = {
+  p1: `${INTENT_META.p1.short} · ${INTENT_META.p1.label}`,
+  p2: `${INTENT_META.p2.short} · ${INTENT_META.p2.label}`,
+  p3: `${INTENT_META.p3.short} · ${INTENT_META.p3.label}`,
+  no_intent: 'No intent',
+  unclassified: 'Unclassified',
+}
+
 type Mode = 'counts' | 'share'
+type Dimension = 'sentiment' | 'intent'
 
 /** Weekly stacked bars of inbound-reply sentiment, with a counts / share (100%-
  *  stacked) toggle. Scoped to the page's account filter. */
@@ -38,18 +57,38 @@ export function SentimentTrendChart({
   messages, instanceId, weeks,
 }: { messages: Message[]; instanceId?: string; weeks: number }) {
   const [mode, setMode] = useState<Mode>('counts')
+  const [dimension, setDimension] = useState<Dimension>('intent')
 
   const chartData = useMemo(() => {
-    const trend = sentimentTrend(messages, { instanceId, weeks })
+    const trend =
+      dimension === 'intent'
+        ? intentTrend(messages, { instanceId, weeks })
+        : sentimentTrend(messages, { instanceId, weeks })
     return trend.map((w) => ({ week: w.week, total: w.total, ...w.counts }))
-  }, [messages, instanceId, weeks])
+  }, [messages, instanceId, weeks, dimension])
+  const buckets: readonly string[] =
+    dimension === 'intent' ? INTENT_TREND_BUCKETS : TREND_BUCKETS
 
   const hasData = chartData.some((d) => d.total > 0)
 
   return (
     <div className="card chart-card">
       <div className="card-head">
-        <h2>Reply sentiment trend</h2>
+        <h2>Reply classification trend</h2>
+        <div className="segmented" role="tablist" aria-label="Classification dimension">
+          <button
+            className={`segmented-item ${dimension === 'intent' ? 'active' : ''}`}
+            onClick={() => setDimension('intent')}
+          >
+            P1–P3 intent
+          </button>
+          <button
+            className={`segmented-item ${dimension === 'sentiment' ? 'active' : ''}`}
+            onClick={() => setDimension('sentiment')}
+          >
+            Sentiment
+          </button>
+        </div>
         <div className="segmented" role="tablist" aria-label="Scale">
           <button
             className={`segmented-item ${mode === 'counts' ? 'active' : ''}`}
@@ -90,13 +129,21 @@ export function SentimentTrendChart({
             />
             <Tooltip {...TOOLTIP} labelFormatter={dateTick} cursor={BAR_CURSOR} />
             <Legend formatter={legendText} />
-            {TREND_BUCKETS.map((b) => (
+            {buckets.map((b) => (
               <Bar
                 key={b}
                 dataKey={b}
-                name={BUCKET_LABEL[b]}
+                name={
+                  dimension === 'intent'
+                    ? INTENT_LABEL[b as IntentTrendBucket]
+                    : BUCKET_LABEL[b as TrendBucket]
+                }
                 stackId="s"
-                fill={BUCKET_COLOR[b]}
+                fill={
+                  dimension === 'intent'
+                    ? INTENT_COLOR[b as IntentTrendBucket]
+                    : BUCKET_COLOR[b as TrendBucket]
+                }
                 maxBarSize={34}
                 isAnimationActive={false}
               />

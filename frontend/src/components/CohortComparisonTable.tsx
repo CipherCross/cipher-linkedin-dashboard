@@ -15,7 +15,7 @@ const METRICS: Array<{ id: Metric; label: string }> = [
   { id: 'invites', label: 'Invites' },
   { id: 'accept', label: 'Accept %' },
   { id: 'reply', label: 'Reply %' },
-  { id: 'positive', label: 'Positive share' },
+  { id: 'positive', label: 'P3 share' },
 ]
 
 const rateOf = (cell: CohortCell, metric: Metric): number | null => {
@@ -26,7 +26,7 @@ const rateOf = (cell: CohortCell, metric: Metric): number | null => {
 }
 
 /** A rate cohort is "matured" for the toggled metric on its own lag: acceptance
- *  matures first, reply / positive later. */
+ *  matures first, reply / P3 later. */
 const isMatured = (cell: CohortCell, metric: Metric): boolean =>
   metric === 'accept' ? cell.acceptMatured : cell.replyMatured
 

@@ -1,12 +1,12 @@
 // Reply classifier. Reads unclassified inbound replies from Supabase, sends
 // each one (with its conversation thread for context) to Claude, and writes
-// back a sentiment label + one-line reason. Reuses the same Anthropic key and
+// back independent sentiment + commercial-intent labels. Reuses the same Anthropic key and
 // service-role Supabase client as /api/chat — nothing runs on the notebooks.
 //
 // Triggers:
 //   GET  — the daily Vercel cron (guarded by CRON_SECRET).
-//   POST — the "Classify new replies" button on the Replies page. No secret:
-//          the work is self-limiting (only sentiment IS NULL, capped batch,
+//   POST — the "Classify replies" button on the Leads page. No secret:
+//          the work is self-limiting (only unclassified/current-taxonomy backlog,
 //          cheap Haiku), so repeated clicks are safe and converge to a no-op.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
@@ -24,6 +24,8 @@ const SENTIMENTS = [
   'referral',
   'auto',
 ] as const
+const INTENTS = ['p1', 'p2', 'p3'] as const
+const INTENT_TAXONOMY_VERSION = 'p123-v1'
 
 const BATCH = 60 // max replies classified per invocation
 const GROUP = 10 // replies per model call
@@ -31,11 +33,11 @@ const CTX_MSGS = 8 // thread messages of context per reply
 const BODY_CAP = 600 // chars per message shown to the model
 
 const SYSTEM = `You classify the latest inbound reply in a LinkedIn outreach
-conversation into exactly one label. We sent the OUT messages; the lead sent the
-IN messages. Judge only the reply marked ">>> REPLY TO CLASSIFY", using the
-thread for context.
+conversation on TWO INDEPENDENT dimensions: sentiment and commercial intent.
+We sent the OUT messages; the lead sent the IN messages. Judge only the reply
+marked ">>> REPLY TO CLASSIFY", using the thread for context.
 
-LABELS:
+SENTIMENT:
 - positive: genuinely interested — wants to talk, asks for a call/info, says yes.
 - neutral: polite acknowledgement or soft defer ("thanks", "not right now,
   maybe later", "circle back in Q3") with no clear yes or no.
@@ -48,7 +50,33 @@ LABELS:
 - auto: an automated message (out-of-office, autoresponder, "I'm on leave"),
   not a deliberate human reply.
 
-Give a terse reason (max ~12 words). Return exactly one result per reply, with
+COMMERCIAL INTENT (independent of sentiment):
+- p1: polite positive acknowledgement or encouragement, but no substantive
+  exploration and no concrete commercial next step ("great ideas, thanks").
+- p2: discusses the relevant problem, context, constraints, or asks a substantive
+  qualifying question, but does not request/accept a concrete buying step.
+- p3: requests or accepts a call, scheduling, proposal, pricing/process/timeline
+  needed to proceed, or is ready for a concrete commercial next step.
+- null: no positive commercial signal (negative, auto, irrelevant, or purely neutral).
+
+Use the HIGHEST supported intent: p3 > p2 > p1. Sentiment stays independent:
+"too expensive, but let's book a call" is objection + p3. A pricing/process
+question that is needed to proceed is p3; generic pushback with no next-step
+readiness is objection + p2. "Send details" is p3 only when it is a concrete
+next step, not a dismissive brush-off. A referral stays referral and may carry
+intent only when the sender also expresses their own commercial interest.
+
+BOUNDARY EXAMPLES:
+- "Great ideas, thanks" => neutral + p1.
+- "We have this problem too; how do you handle legacy integrations?" => objection + p2.
+- "What does it cost?" with no readiness/context => objection + p2.
+- "Send pricing and your earliest start date so we can choose" => positive + p3.
+- "Interesting, let's find 20 minutes next week" => positive + p3.
+- "Too expensive, but book a call and walk me through options" => objection + p3.
+- "Not now, circle back in Q4" => neutral + null.
+- "Talk to our CTO instead" => referral + null.
+
+Give terse reasons (max ~12 words each). Return exactly one result per reply, with
 "ref" set to that reply's [reply N] number.`
 
 // --- demographics phase (Feature 2) ---------------------------------------
@@ -80,6 +108,8 @@ interface Reply {
   profile_url: string
   body: string | null
   sent_at: string
+  sentiment: (typeof SENTIMENTS)[number] | null
+  classified_model: string | null
 }
 
 interface Msg {
@@ -136,9 +166,10 @@ async function handle(req: Request): Promise<Response> {
 
   const { data: replies, error } = await sb
     .from('messages')
-    .select('id,instance_id,profile_url,body,sent_at')
+    .select('id,instance_id,profile_url,body,sent_at,sentiment,classified_model')
     .eq('direction', 'in')
-    .is('sentiment', null)
+    .or('sentiment.is.null,sentiment.neq.auto')
+    .or(`intent_taxonomy_version.is.null,intent_taxonomy_version.neq.${INTENT_TAXONOMY_VERSION}`)
     .not('body', 'is', null)
     .order('sent_at', { ascending: false })
     .limit(BATCH)
@@ -199,7 +230,9 @@ async function handle(req: Request): Promise<Response> {
           z.object({
             ref: z.number().int(),
             sentiment: z.enum(SENTIMENTS),
-            reason: z.string(),
+            sentiment_reason: z.string(),
+            intent_level: z.enum(INTENTS).nullable(),
+            intent_reason: z.string(),
           })
         ),
       }),
@@ -218,13 +251,26 @@ async function handle(req: Request): Promise<Response> {
         usedRefs.add(r.ref)
         const reply = group[r.ref]
         if (!reply) return
+        // Human sentiment corrections are ground truth. Historical manual rows
+        // still receive an AI intent level, but their sentiment is never overwritten.
+        const sentimentPatch =
+          reply.classified_model === 'manual'
+            ? {}
+            : {
+                sentiment: r.sentiment,
+                reason: r.sentiment_reason.slice(0, 300),
+                classified_at: now,
+                classified_model: MODEL,
+              }
         const { error: upErr } = await sb
           .from('messages')
           .update({
-            sentiment: r.sentiment,
-            reason: r.reason.slice(0, 300),
-            classified_at: now,
-            classified_model: MODEL,
+            ...sentimentPatch,
+            intent_level: r.intent_level,
+            intent_reason: r.intent_reason.slice(0, 300),
+            intent_classified_at: now,
+            intent_classified_model: MODEL,
+            intent_taxonomy_version: INTENT_TAXONOMY_VERSION,
           })
           .eq('id', reply.id)
         if (!upErr) classified++
@@ -236,7 +282,8 @@ async function handle(req: Request): Promise<Response> {
     .from('messages')
     .select('id', { count: 'exact', head: true })
     .eq('direction', 'in')
-    .is('sentiment', null)
+    .or('sentiment.is.null,sentiment.neq.auto')
+    .or(`intent_taxonomy_version.is.null,intent_taxonomy_version.neq.${INTENT_TAXONOMY_VERSION}`)
     .not('body', 'is', null)
 
   // Freshly-classified replies may unblock automatic pipeline advancement.

@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance, Lead } from '../lib/types'
-import type { DateRange } from '../lib/leads'
+import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
 import type { ReplyInfo } from '../lib/leads'
 import {
   WEEKLY_ADD_LIMIT, accountStats, instanceName, leadsToActivity, rangedCampaigns, weeklyAdded,
@@ -21,12 +21,14 @@ export const AccountCard = memo(function AccountCard({
   campaignsMeta,
   range,
   latest,
+  intent,
 }: {
   inst: Instance
   leads: Lead[]
   campaignsMeta: CampaignMetrics[]
   range: DateRange
   latest?: Map<string, ReplyInfo>
+  intent?: ReplyIntentMetrics
 }) {
   const last = inst.last_sync_at ? new Date(inst.last_sync_at).getTime() : 0
   const fresh = Date.now() - last < STALE_HOURS * 3_600_000
@@ -79,7 +81,7 @@ export const AccountCard = memo(function AccountCard({
         <Stat value={num(stats.invites)} label="invites" />
         <Stat value={stats.acceptPct} label="accept" />
         <Stat value={stats.replyPct} label="reply" />
-        <Stat value={num(stats.positive)} label="positive" />
+        <Stat value={num(intent?.p3 ?? 0)} label="P3 intent" />
       </div>
 
       <div

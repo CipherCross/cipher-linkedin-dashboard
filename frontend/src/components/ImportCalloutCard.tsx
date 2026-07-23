@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { History } from 'lucide-react'
 import { useData } from '../lib/DataContext'
-import { blindSpotLeads, instanceName, SENTIMENT_META } from '../lib/leads'
+import { blindSpotLeads, instanceName, INTENT_META, SENTIMENT_META } from '../lib/leads'
 import { useConversation } from '../lib/ConversationContext'
 
 // Show only the top few candidates; the rest collapse into a "+ ще N" note so the
@@ -12,8 +12,8 @@ const MAX_VISIBLE = 6
 const dateUk = (ts: string) =>
   new Date(ts).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
 
-/** A data-completeness nudge on the Overview page: warm replies (positive /
- *  objection / referral) whose thread has no manually-imported history, so what
+/** A data-completeness nudge on the Overview page: P2/P3 and other actionable
+ *  replies whose thread has no manually-imported history, so what
  *  happened after the reply is invisible. Clicking a row opens the shared
  *  conversation drawer, which holds the "Import history" flow. All copy in
  *  Ukrainian, matching BriefingCard. Renders nothing when there are no
@@ -55,6 +55,7 @@ export function ImportCalloutCard() {
       <div className="import-callout-list">
         {visible.map(({ lead, reply }) => {
           const meta = reply.sentiment ? SENTIMENT_META[reply.sentiment] : null
+          const intentMeta = reply.highest_intent ? INTENT_META[reply.highest_intent] : null
           const name =
             lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
           const account = instanceName(
@@ -80,6 +81,11 @@ export function ImportCalloutCard() {
                 {meta && (
                   <span className={`badge senti ${meta.cls}`} title={reply.reason ?? ''}>
                     {meta.label}
+                  </span>
+                )}
+                {intentMeta && (
+                  <span className={`badge senti ${intentMeta.cls}`} title="Найвищий рівень наміру">
+                    {intentMeta.short} · {intentMeta.label}
                   </span>
                 )}
               </div>

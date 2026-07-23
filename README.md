@@ -136,10 +136,15 @@ for external clients (Claude Desktop / Claude Code).
   (Streamable HTTP) with `run_sql`, `get_schema`, `weekly_funnel`,
   `campaign_overview`.
 - `frontend/api/classify.ts` — reply classifier (`claude-haiku-4-5`): labels
-  each inbound reply `positive` / `neutral` / `negative` / `objection` /
-  `referral` / `auto` with a one-line reason, writing back to `messages`. Runs
-  daily via the `vercel.json` cron and on demand from the Replies page button.
-  Only touches rows where `sentiment is null`, so it's cheap and idempotent.
+  each inbound reply on two independent dimensions: sentiment (`positive` /
+  `neutral` / `negative` / `objection` / `referral` / `auto`) and commercial
+  intent (`P1` polite positive / `P2` problem interest / `P3` buying intent).
+  The taxonomy version is stored even when intent is null, making the historical
+  backfill resumable and idempotent. Manual sentiment corrections are preserved.
+  Runs daily via the `vercel.json` cron and on demand from the Leads page.
+- Booking conversion uses unique conversations booked strictly after first P3;
+  the mature rate excludes P3 cohorts newer than 14 days. P3 ghosting requires
+  a recorded post-P3 outbound, no later booking/reply, and 30 days of silence.
 
 - `frontend/api/config.ts` — notebook config writer (service-role). Persists the
   per-instance override blob edited on the Health page; the sync agent merges it
@@ -150,7 +155,7 @@ for external clients (Claude Desktop / Claude Code).
   own, then structures the result and stores one row per day in `briefings`
   (`008`-style read-only RLS; see `016_briefings.sql`). Runs daily at **07:00 UTC**
   via the `vercel.json` cron — after the 06:00 `classify` cron, so replies are
-  sentiment-labelled first — and on demand from the **Refresh briefing** button on
+  sentiment/intent-labelled first — and on demand from the **Refresh briefing** button on
   the Overview card. If `SLACK_WEBHOOK_URL` is set it also posts the briefing to
   Slack (Block Kit); without it the briefing still stores and shows on the dashboard.
   The GET (cron) path is guarded by `CRON_SECRET`; the manual POST is open and
@@ -192,11 +197,13 @@ same figures); the deeper analysis is computed client-side from the raw
 - **Leads** — filterable/sortable explorer (instance, campaign, stage, text
   search), at-risk flags (invite pending 14d+, accepted but no reply 14d+),
   CSV export; filters live in the URL so views are shareable.
-- **Replies** — newest-first follow-up worklist with profile links, the reply
-  text, and its classified **decision** (positive / objection / neutral /
-  referral / negative / auto) as a colored badge plus filter chips with counts.
-  A "Classify new replies" button (and the daily cron) labels any unclassified
-  replies. The full conversation thread (both directions) is synced built-in by
+- **Replies in Leads** — newest-first follow-up worklist with profile links,
+  reply text, independent sentiment badges, and durable P1/P2/P3 intent badges
+  and filters. P3 means concrete buying intent; P3→Booked and P3 ghosting use
+  recorded conversation/pipeline chronology rather than all positive sentiment.
+  A "Classify replies" button (and the daily cron) drains new replies and any
+  historical rows missing the current taxonomy. The full conversation thread is
+  synced built-in by
   the agent (`sync_messages`, default on) — which makes message contents
   anon-readable until Auth is on.
 - **Health** — sync-run history and per-instance freshness, plus a per-notebook

@@ -59,7 +59,7 @@ const ANGLES: { label: string; lens: string }[] = [
     label: 'growth-first',
     lens:
       `INVESTIGATE WITH A GROWTH-FIRST LENS: hunt for what is WORKING and where to LEAN IN — accounts and ` +
-      `campaigns with rising acceptance/reply rates, strong positive sentiment, headroom under the invite ` +
+      `campaigns with rising acceptance/reply rates, strong P2/P3 intent, headroom under the invite ` +
       `limit, message steps that outperform. Lead with the biggest opportunities.`,
   },
 ]
@@ -114,6 +114,15 @@ const SEED_QUERIES: { label: string; sql: string }[] = [
           where m.direction = 'in' and m.sent_at > now() - interval '14 days'
           group by 1, 2 order by 3 desc`,
   },
+  {
+    label: 'Commercial reply intent in the last 14 days by account (P1/P2/P3)',
+    sql: `select coalesce(i.account_name, i.label, m.instance_id) as account,
+                 coalesce(m.intent_level, 'none') as intent_level, count(*) as replies
+          from messages m join instances i on i.id = m.instance_id
+          where m.direction = 'in' and m.sent_at > now() - interval '14 days'
+            and m.intent_taxonomy_version = 'p123-v1'
+          group by 1, 2 order by 3 desc`,
+  },
 ]
 
 const BRIEFING_SYSTEM = `You are the morning analyst for a LinkedIn outreach team. You have read-only SQL
@@ -165,14 +174,17 @@ HOW TO WORK
   source='manual') as manual_n, count(*) filter (where source='sync') as sync_n from messages group by
   profile_url: a "no follow-up" set that is sync-only (manual_n=0) vs a "followed-up" set that is
   manually imported confirms a data-completeness artifact — then the only correct action is "manually
-  import these threads", never "the SDR is dropping leads". Otherwise use messages only for reply VOLUME and SENTIMENT (did a reply
-  come in, and what kind), never for who-replied-last.
-  EXCEPTION — the pipeline stage 'following_up' is the ONE sanctioned way to talk about ghosted leads:
+  import these threads", never "the SDR is dropping leads". Otherwise use messages for reply VOLUME,
+  SENTIMENT, and P1/P2/P3 INTENT, never for who-replied-last.
+  EXCEPTIONS — there are exactly two sanctioned chronology-backed silence signals:
+  (1) P3 ghosting: first P3 exists, a RECORDED outbound follows it, no later call_booked exists,
+  and no subsequent inbound arrives for 30+ days. This may be called "P3 ghosted".
+  (2) the pipeline stage 'following_up':
   auto-advance only moves a lead there when a RECORDED follow-up went unanswered 14+ days, so its counts
   are deterministic pipeline data, not thread judgment. You MAY report following_up counts/aging from
   pipeline_metrics / pipeline_events (e.g. "N лідів у Following Up понад X днів — варто повторно
   звернутись"). You still may NOT derive your own going-cold / awaiting-our-reply claims from message
-  threads.
+  threads outside those exact rules.
 - Ground every number in real query results; never guess. Be honest about small samples and stale data.
 - RECONCILE rates before you cite them: a daily pace and a weekly/period total must be arithmetically
   consistent (a "~65/day" claim cannot sit next to "261 in the week", which is ~37/day). State the time

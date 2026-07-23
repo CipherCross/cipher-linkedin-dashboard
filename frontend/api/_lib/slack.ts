@@ -151,14 +151,14 @@ function blocksForDigest(d: ReviewDigestForSlack): Block[] {
   const t = d.totals
   const acceptPct = t.invites > 0 ? `${((100 * t.accepted) / t.invites).toFixed(1)}%` : '—'
   const replyPct = t.invites > 0 ? `${((100 * t.replied) / t.invites).toFixed(1)}%` : '—'
-  const positivePct = t.replied > 0 ? `${((100 * t.positive) / t.replied).toFixed(1)}%` : '—'
+  const p3Pct = t.replied > 0 ? `${((100 * t.positive) / t.replied).toFixed(1)}%` : '—'
   blocks.push({
     type: 'section',
     text: {
       type: 'mrkdwn',
       text:
         `*Totals* — Invites: ${t.invites} · Accepted: ${t.accepted} (${acceptPct}) · ` +
-        `Replied: ${t.replied} (${replyPct}) · Positive: ${t.positive} (${positivePct})`,
+        `Replied: ${t.replied} (${replyPct}) · P3 intent: ${t.positive} (${p3Pct})`,
     },
   })
 
@@ -170,7 +170,7 @@ function blocksForDigest(d: ReviewDigestForSlack): Block[] {
           `*${r.campaign}* — ${r.account}: ${r.invites} inv, ` +
           `${pct(r.accept_rate)} accept${deltaArrow(r.d_accept)}, ` +
           `${pct(r.reply_rate)} reply${deltaArrow(r.d_reply)}, ` +
-          `${pct(r.positive_share)} positive`
+          `${pct(r.positive_share)} P3`
       )
       .join('\n')
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })

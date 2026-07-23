@@ -2,8 +2,9 @@
 // mirrors the agent's derive_events: invited_at / connected_at / replied_at
 // are the source of truth for funnel stages.
 import type {
-  CampaignMetrics, DailyActivity, Gender, Hypothesis, HypothesisCampaign, Instance, IssueKind,
-  IssueSeverity, Lead, Message, NextAction, Sentiment,
+  CampaignMetrics, ConversationReplyIntent, DailyActivity, Gender, Hypothesis,
+  HypothesisCampaign, Instance, IssueKind, IssueSeverity, Lead, Message, NextAction,
+  PipelineEvent, ReplyIntent, Sentiment,
 } from './types'
 
 /** Display name for an instance: real LinkedIn account name when synced,
@@ -38,6 +39,15 @@ export const SENTIMENT_ORDER: Sentiment[] = [
   'negative',
   'auto',
 ]
+
+/** Commercial-intent display metadata. Intent is independent of sentiment. */
+export const INTENT_META: Record<ReplyIntent, { label: string; short: string; cls: string }> = {
+  p1: { label: 'Polite positive', short: 'P1', cls: 'p1' },
+  p2: { label: 'Problem interest', short: 'P2', cls: 'p2' },
+  p3: { label: 'Buying intent', short: 'P3', cls: 'p3' },
+}
+
+export const INTENT_ORDER: ReplyIntent[] = ['p3', 'p2', 'p1']
 
 /** Coaching next-action display metadata. `cls` reuses the `.senti.*` colours so
  *  the action badge matches the rest of the UI: attention=obj, good=pos, etc. */
@@ -75,6 +85,10 @@ export interface ReplyInfo {
   body: string
   sentiment: Sentiment | null
   reason: string | null
+  intent_level: ReplyIntent | null
+  intent_reason: string | null
+  /** Highest intent ever reached in this conversation (durable). */
+  highest_intent: ReplyIntent | null
   sent_at: string
 }
 
@@ -87,7 +101,43 @@ export function latestRepliesByLead(messages: Message[]): Map<string, ReplyInfo>
     if (m.direction !== 'in' || !m.body) continue
     const k = leadKey(m.instance_id, m.profile_url)
     if (!map.has(k))
-      map.set(k, { body: m.body, sentiment: m.sentiment, reason: m.reason, sent_at: m.sent_at })
+      map.set(k, {
+        body: m.body,
+        sentiment: m.sentiment,
+        reason: m.reason,
+        intent_level: m.intent_level ?? null,
+        intent_reason: m.intent_reason ?? null,
+        highest_intent: null,
+        sent_at: m.sent_at,
+      })
+  }
+  for (const [k, intent] of highestIntentByLead(messages)) {
+    const row = map.get(k)
+    if (row) row.highest_intent = intent.highest
+  }
+  return map
+}
+
+export interface ConversationIntentInfo {
+  highest: ReplyIntent
+  first_at: string
+}
+
+/** Highest intent ever reached per conversation; unlike latest reply, this is
+ * durable and therefore safe for P3 worklists and filters. */
+export function highestIntentByLead(messages: Message[]): Map<string, ConversationIntentInfo> {
+  const map = new Map<string, ConversationIntentInfo>()
+  for (const m of messages) {
+    if (m.direction !== 'in' || !m.intent_level) continue
+    const k = leadKey(m.instance_id, m.profile_url)
+    const prev = map.get(k)
+    if (
+      !prev ||
+      INTENT_RANK[m.intent_level] > INTENT_RANK[prev.highest] ||
+      (m.intent_level === prev.highest && m.sent_at < prev.first_at)
+    ) {
+      map.set(k, { highest: m.intent_level, first_at: m.sent_at })
+    }
   }
   return map
 }
@@ -370,6 +420,171 @@ export function tsInRange(ts: string | null, r: DateRange): boolean {
   return true
 }
 
+const INTENT_RANK: Record<ReplyIntent, number> = { p1: 1, p2: 2, p3: 3 }
+const DAY_MS = 86_400_000
+
+export interface ReplyIntentMetrics {
+  /** Conversations first reaching each level inside the selected range. */
+  p1: number
+  p2: number
+  p3: number
+  /** Recorded call bookings whose timestamp is strictly after first P3. */
+  p3Booked: number
+  p3BookingRate: number | null
+  /** P3 cohorts at least 14 days old and their post-P3 bookings. */
+  matureP3: number
+  matureP3Booked: number
+  matureP3BookingRate: number | null
+  /** P3 + post-P3 outbound + 30d silence + no later booking. */
+  p3Ghosted: number
+  p3GhostingRate: number | null
+}
+
+interface FirstIntent {
+  at: string
+  campaignId: string | null
+}
+
+/**
+ * Conversation-scoped P1/P2/P3 outcomes. The first intent timestamp is durable:
+ * later lower-intent messages never erase P3. Campaign attribution is fixed to
+ * the campaign carried by the first message at that level.
+ */
+export function replyIntentMetrics(
+  leads: Lead[],
+  messages: Message[],
+  pipelineEvents: PipelineEvent[],
+  range: DateRange,
+  opts: {
+    instanceId?: string
+    campaignId?: string
+    now?: Date
+    intentRows?: ConversationReplyIntent[]
+  } = {},
+): ReplyIntentMetrics {
+  const first = new Map<string, Partial<Record<ReplyIntent, FirstIntent>>>()
+  for (const m of messages) {
+    if (m.direction !== 'in' || !m.intent_level) continue
+    const k = leadKey(m.instance_id, m.profile_url)
+    const levels = first.get(k) ?? {}
+    const prev = levels[m.intent_level]
+    if (!prev || m.sent_at < prev.at) {
+      levels[m.intent_level] = { at: m.sent_at, campaignId: m.campaign_id }
+      first.set(k, levels)
+    }
+  }
+  // The view sees the complete thread and is authoritative when available.
+  for (const row of opts.intentRows ?? []) {
+    const k = leadKey(row.instance_id, row.profile_url)
+    const levels = first.get(k) ?? {}
+    if (row.first_p3_at) {
+      levels.p3 = {
+        at: row.first_p3_at,
+        campaignId: row.first_p3_campaign_id,
+      }
+    }
+    first.set(k, levels)
+  }
+  const intentRowByKey = new Map(
+    (opts.intentRows ?? []).map((row) => [leadKey(row.instance_id, row.profile_url), row]),
+  )
+
+  const inScope = (key: string, hit: FirstIntent) => {
+    const sep = key.indexOf('|')
+    const instanceId = key.slice(0, sep)
+    if (opts.instanceId && instanceId !== opts.instanceId) return false
+    if (opts.campaignId && hit.campaignId !== opts.campaignId) return false
+    return tsInRange(hit.at, range)
+  }
+
+  const cohorts: Record<ReplyIntent, Map<string, FirstIntent>> = {
+    p1: new Map(),
+    p2: new Map(),
+    p3: new Map(),
+  }
+  for (const [k, levels] of first) {
+    for (const level of Object.keys(INTENT_RANK) as ReplyIntent[]) {
+      const hit = levels[level]
+      if (hit && inScope(k, hit)) cohorts[level].set(k, hit)
+    }
+  }
+
+  const leadById = new Map(leads.map((l) => [l.id, l]))
+  const bookingTimes = new Map<string, string[]>()
+  const rememberBooking = (k: string, at: string | null) => {
+    if (!at) return
+    const rows = bookingTimes.get(k)
+    if (rows) rows.push(at)
+    else bookingTimes.set(k, [at])
+  }
+  for (const e of pipelineEvents) {
+    if (e.kind !== 'stage' || e.to_stage !== 'call_booked') continue
+    const l = leadById.get(e.lead_id)
+    if (l) rememberBooking(leadKey(l.instance_id, l.profile_url), e.occurred_at)
+  }
+  // Compatibility for rows staged before pipeline_events existed.
+  for (const l of leads) {
+    if (l.pipeline_stage === 'call_booked')
+      rememberBooking(leadKey(l.instance_id, l.profile_url), l.pipeline_stage_changed_at)
+  }
+
+  const threadMessages = new Map<string, Message[]>()
+  for (const m of messages) {
+    const k = leadKey(m.instance_id, m.profile_url)
+    const arr = threadMessages.get(k)
+    if (arr) arr.push(m)
+    else threadMessages.set(k, [m])
+  }
+
+  const now = opts.now ?? new Date()
+  const matureCutoff = now.getTime() - 14 * DAY_MS
+  const ghostCutoff = now.getTime() - 30 * DAY_MS
+  let p3Booked = 0
+  let matureP3 = 0
+  let matureP3Booked = 0
+  let p3Ghosted = 0
+
+  for (const [k, p3] of cohorts.p3) {
+    const bookedAfterP3 = (bookingTimes.get(k) ?? []).some((at) => at > p3.at)
+    if (bookedAfterP3) p3Booked++
+    if (Date.parse(p3.at) <= matureCutoff) {
+      matureP3++
+      if (bookedAfterP3) matureP3Booked++
+    }
+
+    if (bookedAfterP3) continue
+    const thread = threadMessages.get(k) ?? []
+    const projection = intentRowByKey.get(k)
+    let lastOutboundAfterP3: string | null = projection?.last_out_after_p3_at ?? null
+    if (!projection) {
+      for (const m of thread) {
+        if (m.direction === 'out' && m.sent_at > p3.at && (!lastOutboundAfterP3 || m.sent_at > lastOutboundAfterP3))
+          lastOutboundAfterP3 = m.sent_at
+      }
+    }
+    if (!lastOutboundAfterP3 || Date.parse(lastOutboundAfterP3) > ghostCutoff) continue
+    const repliedAfterFollowUp = projection
+      ? !!projection.last_in_after_p3_at && projection.last_in_after_p3_at > lastOutboundAfterP3
+      : thread.some((m) => m.direction === 'in' && m.sent_at > lastOutboundAfterP3!)
+    if (!repliedAfterFollowUp) p3Ghosted++
+  }
+
+  const p3 = cohorts.p3.size
+  const pctOrNull = (n: number, d: number) => (d > 0 ? (100 * n) / d : null)
+  return {
+    p1: cohorts.p1.size,
+    p2: cohorts.p2.size,
+    p3,
+    p3Booked,
+    p3BookingRate: pctOrNull(p3Booked, p3),
+    matureP3,
+    matureP3Booked,
+    matureP3BookingRate: pctOrNull(matureP3Booked, matureP3),
+    p3Ghosted,
+    p3GhostingRate: pctOrNull(p3Ghosted, p3),
+  }
+}
+
 export interface Totals {
   leads: number
   invites: number
@@ -448,9 +663,7 @@ export function accountStats(
   }
 }
 
-/** Warm-reply sentiments worth chasing: the latest inbound is a real opening
- *  (positive/objection/referral), not a dead end or automated bounce. */
-const WARM_SENTIMENTS: Sentiment[] = ['positive', 'objection', 'referral']
+const WARM_SENTIMENTS: Sentiment[] = ['objection', 'referral']
 
 /** A warm-reply lead whose thread has no manually-imported messages, so what
  *  happened after the reply is invisible — an "import history" candidate. */
@@ -459,12 +672,12 @@ export interface BlindSpotLead {
   reply: ReplyInfo
 }
 
-/** Leads whose LATEST inbound reply is warm (positive/objection/referral) but
+/** Leads whose conversation reached P2/P3 (or has a referral/objection) but
  *  whose thread (by leadKey) carries ZERO manually-imported messages
  *  (messages.source === 'manual', counted across both directions). LH2 stops
  *  capturing once the SDR takes the thread over by hand, so these warm threads
  *  are sync-only — their post-reply state is unknown until the SDR imports the
- *  history. Sorted by follow-up priority (positive > objection > referral), then
+ *  history. Sorted by follow-up priority (P3 > P2 > objection > referral), then
  *  newest reply first. Reuses latestRepliesByLead (`messages` must be sorted
  *  desc, as DataContext fetches them). */
 export function blindSpotLeads(leads: Lead[], messages: Message[]): BlindSpotLead[] {
@@ -473,18 +686,32 @@ export function blindSpotLeads(leads: Lead[], messages: Message[]): BlindSpotLea
   for (const m of messages) {
     if (m.source === 'manual') manualKeys.add(leadKey(m.instance_id, m.profile_url))
   }
-  const priority = (s: Sentiment) => WARM_SENTIMENTS.indexOf(s)
+  const priority = (r: ReplyInfo) => {
+    if (r.highest_intent === 'p3') return 0
+    if (r.highest_intent === 'p2') return 1
+    if (r.sentiment === 'objection') return 2
+    if (r.sentiment === 'referral') return 3
+    // Migration-lag compatibility before the historical intent backfill drains.
+    if (!r.highest_intent && r.sentiment === 'positive') return 4
+    return 99
+  }
   const out: BlindSpotLead[] = []
   for (const l of leads) {
     const k = leadKey(l.instance_id, l.profile_url)
     const reply = latest.get(k)
-    if (!reply?.sentiment || !WARM_SENTIMENTS.includes(reply.sentiment)) continue
+    if (!reply) continue
+    const warm =
+      reply.highest_intent === 'p2' ||
+      reply.highest_intent === 'p3' ||
+      (!!reply.sentiment && WARM_SENTIMENTS.includes(reply.sentiment)) ||
+      (!reply.highest_intent && reply.sentiment === 'positive')
+    if (!warm) continue
     if (manualKeys.has(k)) continue
     out.push({ lead: l, reply })
   }
   out.sort(
     (a, b) =>
-      priority(a.reply.sentiment!) - priority(b.reply.sentiment!) ||
+      priority(a.reply) - priority(b.reply) ||
       b.reply.sent_at.localeCompare(a.reply.sent_at),
   )
   return out

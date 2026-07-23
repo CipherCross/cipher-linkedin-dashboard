@@ -100,8 +100,11 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   (streaming copilot) and `mcp.ts` (`/api/mcp`) expose the **same** ops — keep them in sync.
 - `briefing.ts` — Morning Briefing: same agentic SQL loop as chat to investigate, second model
   coerces to schema, stores one row/day in `briefings`, posts to Slack. Written in **Ukrainian**.
-- `classify.ts` (Haiku) labels inbound reply sentiment; `coach.ts` coaches the SDR per
-  conversation. Both only touch unprocessed rows → cheap/idempotent.
+- `classify.ts` (Haiku) labels independent sentiment plus reply intent (`p1` polite
+  positive, `p2` problem interest, `p3` buying intent). `intent_taxonomy_version`
+  makes historical backfills resumable; manual sentiment is preserved. P3 is a
+  durable conversation milestone and is the denominator for post-P3 booking
+  conversion. Intent never auto-advances CRM stages. `coach.ts` coaches the SDR.
 - `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
   open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
   rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.
@@ -116,7 +119,8 @@ React 18 + Vite + React Router (`HashRouter`), Recharts, `react-markdown`. `Data
 fetches everything once + every 5 min via anon client, provides `useData()`. Pages in
 `src/pages/`, presentational pieces in `src/components/`, metric logic in `src/lib/leads.ts`.
 Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past PostgREST's
-1000-row cap, since sentiment counts sit beside all-time totals); outbound windowed to 90 days.
+1000-row cap, since sentiment/intent and durable P3 counts sit beside all-time totals);
+outbound windowed to 90 days.
 
 ### Security posture
 - Read-only-open: anon key + RLS `using (true)`. Authenticated-only is deferred — **do not flag
@@ -140,4 +144,4 @@ Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past
 Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC, `/api/notify-replies` 06:30 UTC
 (sweep for pings lost to outages — the primary trigger is the agent's post-sync ping via the
 `notify_url` remote-config key), `/api/briefing` 07:00 UTC (after classify, so replies are
-already sentiment-labelled).
+already sentiment/intent-labelled).

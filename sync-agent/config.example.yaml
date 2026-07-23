@@ -30,7 +30,7 @@ sync_steps: true
 # Conversation history: the agent automatically extracts the full message thread
 # per lead — both the messages we sent and the replies we received — straight
 # from lh.db (built-in query, no mapping needed). Powers the Replies feed and
-# the server-side reply classifier (positive/negative/objection/...). PRIVACY:
+# the server-side sentiment + P1/P2/P3 intent classifier. PRIVACY:
 # message bodies become anon-readable in Supabase until Auth is on. Set to false
 # to skip. Override mapping.messages below only for a non-standard LH2 schema.
 sync_messages: true

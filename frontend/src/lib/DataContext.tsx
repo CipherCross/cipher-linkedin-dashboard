@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import type {
-  ConversationLatestMessage, DashboardData, FollowUpState, Hypothesis, HypothesisCampaign,
-  Icp, IcpIndustry, IcpPersona, Lead, Message, SavedSearch,
+  ConversationLatestMessage, ConversationReplyIntent, DashboardData, FollowUpState,
+  Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Lead, Message, SavedSearch,
 } from './types'
 
 const EMPTY: DashboardData = {
@@ -13,6 +13,7 @@ const EMPTY: DashboardData = {
   leads: [],
   syncRuns: [],
   messages: [],
+  conversationReplyIntents: [],
   annotations: [],
   steps: [],
   briefing: null,
@@ -169,20 +170,24 @@ async function fetchFollowUpData(): Promise<{
 }
 
 const MESSAGE_COLUMNS_BASE =
-  'id,instance_id,campaign_id,profile_url,direction,body,sent_at,sentiment,reason,classified_at'
+  'id,instance_id,campaign_id,profile_url,direction,body,sent_at,sentiment,reason,classified_at,classified_model'
 // `source` (migration 026: 'sync' | 'manual') may not exist on the live DB yet.
-// Requesting a missing column makes PostgREST 400 the whole query, so fetchMessages
-// retries once without it (see below) — pre-migration DBs keep loading, and the
-// import callout simply renders nothing.
-const MESSAGE_COLUMNS = `${MESSAGE_COLUMNS_BASE},source`
+const MESSAGE_COLUMNS_SOURCE = `${MESSAGE_COLUMNS_BASE},source`
+// Intent columns arrive in migration 047. Keep a retry ladder so the frontend
+// can be deployed before the additive migration without taking the dashboard
+// down; intent metrics simply remain empty until the schema lands.
+const MESSAGE_COLUMNS =
+  `${MESSAGE_COLUMNS_SOURCE},intent_level,intent_reason,intent_classified_at,` +
+  'intent_classified_model,intent_taxonomy_version'
+const MESSAGE_COLUMN_LADDER = [MESSAGE_COLUMNS, MESSAGE_COLUMNS_SOURCE, MESSAGE_COLUMNS_BASE]
 
 // True only for PostgREST's "undefined column" error (Postgres SQLSTATE 42703),
 // i.e. the `source` column doesn't exist yet. supabase-js error shapes vary, so
 // also accept a message that names the missing column as a fallback.
-function isMissingSourceColumn(e: unknown): boolean {
+function isMissingMessageColumn(e: unknown): boolean {
   const err = e as { code?: string; message?: string } | null
   if (err?.code === '42703') return true
-  return !!err?.message && /column\s+.*source.*\s+does not exist/i.test(err.message)
+  return !!err?.message && /column\s+.*\s+does not exist/i.test(err.message)
 }
 
 // Inbound replies drive sentiment / positive-reply counts shown beside ALL-TIME
@@ -224,13 +229,12 @@ async function fetchMessages(
     await pageThrough(() =>
       withUpdated(supabase!.from('messages').select(columns).eq('direction', 'out').gte('sent_at', since)))
   } catch (e) {
-    // Pre-migration DB has no `source` column → PostgREST 400 with code 42703
-    // ("undefined column"). Retry once with the base columns so the dashboard
-    // still loads (partial `all` is discarded by the retry). Any OTHER error
-    // (network, timeout, RLS, missing updated_at, …) must propagate — falling
-    // back on those would silently hide the callout and mask a real failure.
-    if (columns !== MESSAGE_COLUMNS_BASE && isMissingSourceColumn(e))
-      return fetchMessages(since, MESSAGE_COLUMNS_BASE, updatedSince)
+    // Step down only for a genuinely missing column. A partial page is discarded
+    // by the retry; network/RLS errors still propagate.
+    const rung = MESSAGE_COLUMN_LADDER.indexOf(columns)
+    const next = rung >= 0 ? MESSAGE_COLUMN_LADDER[rung + 1] : undefined
+    if (next && isMissingMessageColumn(e))
+      return fetchMessages(since, next, updatedSince)
     throw e
   }
   all.sort((a, b) => (a.sent_at < b.sent_at ? 1 : a.sent_at > b.sent_at ? -1 : 0))
@@ -604,6 +608,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           supabase.from('icp_industries').select('*').order('icp_id').order('name'),
           supabase.from('hypotheses').select('*').order('name'),
           supabase.from('hypothesis_campaigns').select('*'),
+          // Full-thread projection needed for exact P3 ghosting even though the
+          // global message cache intentionally windows outbound rows to 90 days.
+          supabase.from('conversation_reply_intent').select('*'),
         ])
         // Big append-heavy tables delta on an interval refresh, full otherwise.
         const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
@@ -616,6 +623,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const [
           instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers,
           savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
+          conversationReplyIntents,
         ] = small
         if (id !== reqId.current) return
         const error =
@@ -667,6 +675,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
               activity: stableSlice(base.activity, activity.data ?? []),
               syncRuns: stableSlice(base.syncRuns, syncRuns.data ?? []),
               messages: nextMessages,
+              conversationReplyIntents: stableSlice(
+                base.conversationReplyIntents,
+                (conversationReplyIntents.data ?? []) as ConversationReplyIntent[],
+              ),
               annotations: stableSlice(base.annotations, annotations.data ?? []),
               steps: stableSlice(base.steps, steps.data ?? []),
               briefing: stableSlice(base.briefing, briefing.data?.[0] ?? null),

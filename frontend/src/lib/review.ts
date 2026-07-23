@@ -4,8 +4,8 @@
 // comparisons, the sentiment trend, and the CSV / Slack digest payloads.
 //
 // Funnel semantics are borrowed wholesale from leads.ts (invited_at → connected_at
-// → replied_at milestones; positive = replied lead whose LATEST inbound reply is
-// 'positive', so positive ≤ replied always holds). The cohort-maturity model mirrors
+// → replied_at milestones; the legacy `positive` accumulator now represents a
+// durable "ever reached P3" count, so it is not erased by a later lower-intent reply.
 // ACCEPT_LAG_SQL in frontend/api/_lib/core.ts: a cohort's rate can't be trusted until
 // enough of its invites have had the CHANCE to accept / reply.
 import type { CampaignMetrics, Instance, Lead, Message } from './types'
@@ -72,7 +72,7 @@ export function replyLagP90(leads: Lead[]): number | null {
 export interface MaturityInfo {
   /** Full weeks after its Monday a cohort must age before its ACCEPT rate is trusted. */
   acceptWeeks: number
-  /** …before its REPLY / positive rates are trusted (always ≥ acceptWeeks in practice). */
+  /** …before its REPLY / P3 rates are trusted (always ≥ acceptWeeks in practice). */
   replyWeeks: number
   /** Observed p90 lags (days) that drove the thresholds; null when unobservable. */
   p90Accept: number | null
@@ -150,9 +150,9 @@ const emptyCell = (week: string): CohortCell => ({
 })
 
 /** Per campaign, bucket leads by the week their invite went out over the last
- *  `weeks` weeks; count invites / accepted / replied / positive per cohort.
- *  Positive uses the latest-reply-per-lead sentiment (same as rangeTotals), so
- *  positive ≤ replied. Maturity flags come from the observed lag on `leads`. */
+ *  `weeks` weeks; count invites / accepted / replied / P3 per cohort.
+ *  The internal `positive` field is retained for digest wire compatibility but
+ *  counts durable highest_intent=P3. */
 export function cohortRows(
   leads: Lead[],
   campaigns: CampaignMetrics[],
@@ -198,7 +198,7 @@ export function cohortRows(
     if (l.connected_at) cell.accepted++
     if (l.replied_at) {
       cell.replied++
-      if (latestReplies.get(leadKey(l.instance_id, l.profile_url))?.sentiment === 'positive')
+      if (latestReplies.get(leadKey(l.instance_id, l.profile_url))?.highest_intent === 'p3')
         cell.positive++
     }
   }
@@ -233,7 +233,7 @@ export interface PooledRates {
 
 /** Pooled funnel rates for one campaign's leads over the last `weeks` weeks,
  *  counting only cohorts old enough to trust: accept rate over accept-matured
- *  cohorts, reply / positive over reply-matured cohorts. Big cohorts dominate
+ *  cohorts, reply / P3 share over reply-matured cohorts. Big cohorts dominate
  *  (Σ ÷ Σ), the honest copy-comparison figure. */
 export function pooledMaturedRates(
   leads: Lead[],
@@ -260,7 +260,7 @@ export function pooledMaturedRates(
       if (l.connected_at) accR++
       if (l.replied_at) {
         repR++
-        if (latestReplies.get(leadKey(l.instance_id, l.profile_url))?.sentiment === 'positive')
+        if (latestReplies.get(leadKey(l.instance_id, l.profile_url))?.highest_intent === 'p3')
           posR++
       }
     }
@@ -319,6 +319,43 @@ export function sentimentTrend(
   return weekList.map((w) => rows.get(w)!)
 }
 
+export const INTENT_TREND_BUCKETS = ['p1', 'p2', 'p3', 'no_intent', 'unclassified'] as const
+export type IntentTrendBucket = (typeof INTENT_TREND_BUCKETS)[number]
+
+export interface IntentWeek {
+  week: string
+  counts: Record<IntentTrendBucket, number>
+  total: number
+}
+
+/** Separate P1–P3 trend; never mixes intent levels into sentiment buckets. */
+export function intentTrend(
+  messages: Message[],
+  opts: { instanceId?: string; campaignId?: string; weeks: number },
+): IntentWeek[] {
+  const weekList = lastWeeks(opts.weeks)
+  const rows = new Map<string, IntentWeek>()
+  for (const week of weekList) {
+    rows.set(week, {
+      week,
+      counts: Object.fromEntries(INTENT_TREND_BUCKETS.map((b) => [b, 0])) as Record<IntentTrendBucket, number>,
+      total: 0,
+    })
+  }
+  for (const m of messages) {
+    if (m.direction !== 'in') continue
+    if (opts.instanceId && m.instance_id !== opts.instanceId) continue
+    if (opts.campaignId && m.campaign_id !== opts.campaignId) continue
+    const row = rows.get(weekStart(m.sent_at))
+    if (!row) continue
+    const bucket: IntentTrendBucket =
+      m.intent_level ?? (m.intent_taxonomy_version ? 'no_intent' : 'unclassified')
+    row.counts[bucket]++
+    row.total++
+  }
+  return weekList.map((w) => rows.get(w)!)
+}
+
 // --- CSV export ------------------------------------------------------------
 
 /** Long-format CSV: one row per (campaign, cohort week) that had invites. Rates
@@ -343,8 +380,8 @@ export function reviewCsvRows(
         accept_rate: cellAcceptRate(cell),
         replied: cell.replied,
         reply_rate: cellReplyRate(cell),
-        positive: cell.positive,
-        positive_share: cellPositiveShare(cell),
+        p3_intent: cell.positive,
+        p3_share: cellPositiveShare(cell),
         matured: cellFullyMatured(cell) ? 'yes' : 'no',
       })
     }

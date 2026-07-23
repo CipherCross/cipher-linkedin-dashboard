@@ -20,6 +20,9 @@ export type Sentiment =
   | 'referral'
   | 'auto'
 
+/** Commercial intent is deliberately separate from sentiment. */
+export type ReplyIntent = 'p1' | 'p2' | 'p3'
+
 export interface Message {
   id: number
   instance_id: string
@@ -32,9 +35,27 @@ export interface Message {
   reason: string | null
   classified_at: string | null
   classified_model?: string | null
+  intent_level?: ReplyIntent | null
+  intent_reason?: string | null
+  intent_classified_at?: string | null
+  intent_classified_model?: string | null
+  intent_taxonomy_version?: string | null
   /** 'sync' = written by the LH2 agent (sent_at is the action-run time);
    *  'manual' = pasted by the SDR via Import history (real message time). */
   source?: string | null
+}
+
+/** Durable, view-backed intent milestones and exact full-thread chronology. */
+export interface ConversationReplyIntent {
+  instance_id: string
+  profile_url: string
+  highest_intent: ReplyIntent
+  first_p1_at: string | null
+  first_p2_at: string | null
+  first_p3_at: string | null
+  first_p3_campaign_id: string | null
+  last_out_after_p3_at: string | null
+  last_in_after_p3_at: string | null
 }
 
 export interface Annotation {
@@ -444,6 +465,7 @@ export interface DashboardData {
   leads: Lead[]
   syncRuns: SyncRun[]
   messages: Message[]
+  conversationReplyIntents: ConversationReplyIntent[]
   annotations: Annotation[]
   steps: CampaignStep[]
   briefing: Briefing | null

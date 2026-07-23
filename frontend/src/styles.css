@@ -1553,6 +1553,9 @@ tr:last-child td { border-bottom: none; }
 .senti.ref { color: var(--purple); background: var(--purple-subtle); border-color: var(--purple-border); }
 .senti.neg { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
 .senti.auto { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.senti.p1 { color: var(--info); background: var(--info-subtle); border-color: var(--info-border); }
+.senti.p2 { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
+.senti.p3 { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
 
 /* leads explorer */
 .filter-bar {

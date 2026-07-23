@@ -1,0 +1,74 @@
+[
+  {
+    "id": "p1-thanks",
+    "reply": "Классные идеи, спасибо!",
+    "sentiment": "neutral",
+    "intent_level": "p1"
+  },
+  {
+    "id": "p1-encouragement",
+    "reply": "Sounds useful — appreciate you sharing this.",
+    "sentiment": "positive",
+    "intent_level": "p1"
+  },
+  {
+    "id": "p2-problem-context",
+    "reply": "We do struggle with keeping the iOS and Android releases aligned. How do you normally structure that work?",
+    "sentiment": "objection",
+    "intent_level": "p2"
+  },
+  {
+    "id": "p2-qualifying",
+    "reply": "Does this work with an existing React Native codebase, or only greenfield products?",
+    "sentiment": "objection",
+    "intent_level": "p2"
+  },
+  {
+    "id": "p3-call",
+    "reply": "Yes, let's discuss it. Are you free Thursday afternoon?",
+    "sentiment": "positive",
+    "intent_level": "p3"
+  },
+  {
+    "id": "p3-proposal",
+    "reply": "Please send a proposal with timeline and the team you would assign.",
+    "sentiment": "positive",
+    "intent_level": "p3"
+  },
+  {
+    "id": "p3-objection",
+    "reply": "That sounds expensive, but let's book 20 minutes and see if the scope can work.",
+    "sentiment": "objection",
+    "intent_level": "p3"
+  },
+  {
+    "id": "p3-process",
+    "reply": "What would the onboarding process and earliest start date look like if we move forward?",
+    "sentiment": "positive",
+    "intent_level": "p3"
+  },
+  {
+    "id": "none-defer",
+    "reply": "Thanks, not a priority right now. Maybe circle back next year.",
+    "sentiment": "neutral",
+    "intent_level": null
+  },
+  {
+    "id": "none-negative",
+    "reply": "No thanks, please remove me from your list.",
+    "sentiment": "negative",
+    "intent_level": null
+  },
+  {
+    "id": "none-auto",
+    "reply": "I am out of office until 18 August and will respond when I return.",
+    "sentiment": "auto",
+    "intent_level": null
+  },
+  {
+    "id": "referral-only",
+    "reply": "I'm not responsible for this. Speak to our CTO, Alex.",
+    "sentiment": "referral",
+    "intent_level": null
+  }
+]

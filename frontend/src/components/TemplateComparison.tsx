@@ -136,7 +136,7 @@ function TemplateColumn({
   const stats: Array<{ label: string; value: string; n: number; denom: string }> = [
     { label: 'Accept %', value: rate(pooled.acceptRate), n: pooled.invites, denom: 'invites' },
     { label: 'Reply %', value: rate(pooled.replyRate), n: pooled.accepted, denom: 'accepted' },
-    { label: 'Positive share', value: rate(pooled.positiveShare), n: pooled.replied, denom: 'replies' },
+    { label: 'P3 share', value: rate(pooled.positiveShare), n: pooled.replied, denom: 'replies' },
   ]
 
   return (

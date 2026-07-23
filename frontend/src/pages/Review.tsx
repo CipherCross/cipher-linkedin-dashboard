@@ -4,9 +4,10 @@ import { ClipboardCheck, Loader2, Send } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import {
-  instanceName, latestRepliesByLead, presetRanges, rangeFromParam, rangeToParam, rangedCampaigns,
+  instanceName, lastWeeks, latestRepliesByLead, presetRanges, rangeFromParam,
+  rangeToParam, rangedCampaigns, replyIntentMetrics,
 } from '../lib/leads'
-import type { DateRange } from '../lib/leads'
+import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
 import { adminPost } from '../lib/admin'
 import { EmptyState } from '../components/EmptyState'
 import { CohortComparisonTable } from '../components/CohortComparisonTable'
@@ -17,6 +18,7 @@ import { DateRangePicker } from '../components/DateRangePicker'
 import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
+import { num } from '../lib/format'
 
 const WEEK_OPTIONS = [8, 12, 16]
 const DEFAULT_WEEKS = 12
@@ -72,6 +74,20 @@ export function Review() {
     () => cohortRows(leads, campaigns, latest, weeks),
     [leads, campaigns, latest, weeks],
   )
+  const intentOutcomes = useMemo(() => {
+    if (!data) return null
+    const from = lastWeeks(weeks)[0] ?? null
+    const intentRange: DateRange = {
+      id: 'review-intent',
+      label: `Last ${weeks} weeks`,
+      from,
+      to: new Date().toISOString().slice(0, 10),
+    }
+    return replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, intentRange, {
+      instanceId: inst === 'all' ? undefined : inst,
+      intentRows: data.conversationReplyIntents,
+    })
+  }, [data, inst, weeks])
 
   const rangedAdded = useMemo(
     () => (data ? rangedCampaigns(leads, campaigns, range) : []),
@@ -129,6 +145,7 @@ export function Review() {
         </div>
       ) : (
         <div className="stack">
+          {intentOutcomes && <P3OutcomeSummary metrics={intentOutcomes} weeks={weeks} />}
           <CohortComparisonTable data={cohortData} instances={data.instances} />
           <TemplateComparison
             campaigns={campaigns}
@@ -169,7 +186,7 @@ function ReviewHeader({
       <div>
         <h1>Manager Review</h1>
         <div className="muted small">
-          Cohort-matured funnel, reply sentiment and template comparison for the
+          Cohort-matured funnel, P1–P3 intent and template comparison for the
           weekly review. Rates for cohorts too fresh to judge are held back.
         </div>
       </div>
@@ -196,6 +213,43 @@ function ReviewHeader({
         )}
       </div>
     </header>
+  )
+}
+
+function P3OutcomeSummary({
+  metrics,
+  weeks,
+}: {
+  metrics: ReplyIntentMetrics
+  weeks: number
+}) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>P3 outcomes · last {weeks} weeks</h2>
+        <span className="muted small">unique conversations · first P3 attribution</span>
+      </div>
+      <div className="tmpl-stat-grid">
+        <div className="tmpl-stat-cell">
+          <div className="tmpl-stat-val">{num(metrics.p3)}</div>
+          <div className="muted small">Reached P3</div>
+        </div>
+        <div className="tmpl-stat-cell">
+          <div className="tmpl-stat-val">
+            {metrics.matureP3BookingRate == null ? '—' : `${metrics.matureP3BookingRate.toFixed(1)}%`}
+          </div>
+          <div className="muted small">P3 → booked</div>
+          <div className="muted tmpl-stat-n">
+            {num(metrics.matureP3Booked)} / {num(metrics.matureP3)} P3 aged 14d+
+          </div>
+        </div>
+        <div className="tmpl-stat-cell">
+          <div className="tmpl-stat-val">{num(metrics.p3Ghosted)}</div>
+          <div className="muted small">P3 ghosted</div>
+          <div className="muted tmpl-stat-n">follow-up recorded · 30d silence</div>
+        </div>
+      </div>
+    </div>
   )
 }
 

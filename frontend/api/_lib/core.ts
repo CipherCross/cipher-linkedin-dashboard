@@ -242,6 +242,14 @@ messages — actual message texts; full conversation threads, both directions
     'referral' (talk to someone else), 'auto' (out-of-office / autoresponder).
     NULL = outbound, or an inbound reply not yet classified.
   reason text (one-line rationale), classified_at timestamptz, classified_model text,
+  intent_level text — independent commercial intent on inbound replies:
+    'p1' polite positive acknowledgement; 'p2' substantive problem interest or
+    qualifying questions; 'p3' concrete buying intent (call/scheduling/proposal/
+    pricing/process/timeline needed to proceed). NULL means either no commercial
+    intent or not yet evaluated; use intent_taxonomy_version to distinguish them.
+    Mixed signals retain both dimensions: an objection may also be P3.
+  intent_reason text, intent_classified_at timestamptz,
+  intent_classified_model text, intent_taxonomy_version text ('p123-v1' current),
   notified_at timestamptz — when the inbound reply was announced to Slack (or
     deliberately skipped as stale/pre-feature); NULL = notification pending.
     Bookkeeping for /api/notify-replies only, not a funnel signal.
@@ -414,6 +422,16 @@ daily_activity — events bucketed per day:
 campaign_reply_sentiment — inbound reply sentiment counts per campaign:
   campaign_id, sentiment, cnt (only classified inbound replies)
 
+campaign_reply_intent — inbound P1/P2/P3 message counts per campaign:
+  campaign_id, intent_level, cnt
+
+conversation_reply_intent — durable conversation intent (instance_id + profile_url):
+  highest_intent, first_p1_at, first_p2_at, first_p3_at,
+  first_p3_campaign_id, last_out_after_p3_at, last_in_after_p3_at. Use
+  first_p3_at/campaign for P3 cohorts and attribution; the last-in/out projection
+  sees the complete thread (unlike the browser's 90-day outbound display cache).
+  A later lower-intent reply never erases P3.
+
 pipeline_metrics — current manual-CRM stage distribution per campaign:
   campaign_id, instance_id, pipeline_stage, pipeline_substatus, leads (count in
   that stage/substatus), oldest_in_stage timestamptz (min pipeline_stage_changed_at),
@@ -421,15 +439,27 @@ pipeline_metrics — current manual-CRM stage distribution per campaign:
   non-NULL pipeline_stage (i.e. already triaged).
 
 ANALYSIS GUIDANCE
-- Reply QUALITY, not just count: messages.sentiment classifies each inbound
-  reply (positive/neutral/negative/objection/referral/auto). "Positive reply
-  rate" = positive inbound replies / total replies. Use campaign_reply_sentiment
-  for per-campaign breakdowns, or join messages (direction='in') to campaigns.
+- Reply QUALITY and INTENT are separate. messages.sentiment describes reply tone/
+  type (positive/neutral/negative/objection/referral/auto); messages.intent_level
+  measures commercial progression (P1/P2/P3). Do NOT use all sentiment='positive'
+  replies as buying intent or as the booking denominator.
+  - P1: polite positive; P2: substantive problem interest; P3: concrete buying intent.
+  - Highest signal wins for intent (P3 > P2 > P1), independently of sentiment.
+  - Booking conversion = unique conversations with recorded call_booked strictly
+    AFTER first_p3_at / unique conversations ever reaching P3.
+  - Mature booking conversion excludes P3 cohorts newer than 14 days from the
+    denominator. Attribute the cohort to first_p3_campaign_id.
+  - P3 ghosting requires: P3 reached, a RECORDED outbound after P3, no later
+    call_booked, and no subsequent inbound reply for 30+ days.
+  Use conversation_reply_intent for durable milestones and pipeline_events
+  (to_stage='call_booked') for booking chronology.
+  Use campaign_reply_sentiment only for sentiment breakdowns and
+  campaign_reply_intent only for message-level intent counts.
   NULL sentiment on an inbound row means it hasn't been classified yet.
-  Sentiment is classified ONCE, when the reply arrives, and never re-evaluated:
-  a 'positive' label says the reply WAS positive, not that the lead is warm
-  today. Before describing any lead as currently warm/hot, apply the
-  STALE / GHOSTED rule below.
+  intent_taxonomy_version IS NULL means intent has not been evaluated; a NULL
+  intent_level with version='p123-v1' is a classified "no intent" result.
+  A label says what the reply expressed then, not that the lead is warm today.
+  Before describing any lead as currently warm/hot, apply the STALE/GHOSTED rule.
 - MANUAL-REPLY BLIND SPOT — never mistake a missing follow-up for a dropped lead.
   The LH2 agent syncs only the scripted funnel (invite → first templated message →
   the inbound reply); it CANNOT see outbound messages the SDR types by hand in
@@ -487,22 +517,21 @@ ANALYSIS GUIDANCE
 - PROACTIVE IMPORT SUGGESTIONS — surface blind-spot leads without being asked.
   When the user asks about warm replies, follow-ups, post-reply drop-off, pipeline
   health, or which leads need attention, proactively list the import candidates:
-  leads with a valuable inbound reply (priority positive > objection > referral,
+  leads with a valuable inbound reply (priority P3 > P2 > referral/objection,
   most recent first) whose thread is sync-only (zero source='manual' rows), because
   their post-reply state is unknown. Use:
       with inbound as (
         select instance_id, profile_url,
                max(sent_at) filter (where direction='in') as last_reply_at,
-               (array_agg(sentiment order by array_position(
-                   array['positive','objection','referral'], sentiment))
-                 filter (where direction='in'
-                         and sentiment in ('positive','objection','referral')))[1] as best_sentiment,
+               max(intent_level) filter (where direction='in') as best_intent,
+               (array_agg(sentiment order by sent_at desc)
+                 filter (where direction='in'))[1] as latest_sentiment,
                count(*) filter (where source='manual') as manual_msgs
         from messages
         group by 1, 2
       )
       select coalesce(i.account_name, i.label, ib.instance_id) as account,
-             l.full_name, l.company, ib.best_sentiment,
+             l.full_name, l.company, ib.best_intent, ib.latest_sentiment,
              ib.last_reply_at::date as replied_on, ib.profile_url
       from inbound ib
       join instances i on i.id = ib.instance_id
@@ -513,8 +542,8 @@ ANALYSIS GUIDANCE
         order by instance_id, profile_url, updated_at desc nulls last
       ) l on l.instance_id = ib.instance_id and l.profile_url = ib.profile_url
       where ib.manual_msgs = 0            -- never hand-imported -> post-reply state unknown
-        and ib.best_sentiment is not null -- had a valuable reply worth pursuing
-      order by array_position(array['positive','objection','referral'], ib.best_sentiment),
+        and (ib.best_intent in ('p2','p3') or ib.latest_sentiment in ('objection','referral'))
+      order by array_position(array['p3','p2'], ib.best_intent),
                ib.last_reply_at desc
   - Frame this as a data-completeness action, not a performance problem: "these
     warm threads are sync-only, so we're blind to what happened after the reply —

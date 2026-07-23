@@ -11,11 +11,11 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { EmptyState } from '../components/EmptyState'
 import { LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
-import type { CoachingDigest, Gender, Lead, Sentiment } from '../lib/types'
+import type { CoachingDigest, Gender, Lead, ReplyIntent, Sentiment } from '../lib/types'
 import {
-  AGE_BUCKETS, GENDER_SHORT, RISK_LABEL, SENTIMENT_META, SENTIMENT_ORDER, STAGES, ageBucketOf,
-  ageRange, downloadCsv, instanceName, latestRepliesByLead, leadKey, riskOf, stageMeta,
-  stageOf, toCsv,
+  AGE_BUCKETS, GENDER_SHORT, INTENT_META, INTENT_ORDER, RISK_LABEL, SENTIMENT_META,
+  SENTIMENT_ORDER, STAGES, ageBucketOf, ageRange, downloadCsv, highestIntentByLead,
+  instanceName, latestRepliesByLead, leadKey, riskOf, stageMeta, stageOf, toCsv,
 } from '../lib/leads'
 import type { AgeBucket, RiskFlag, Stage } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
@@ -94,11 +94,16 @@ export function LeadsExplorer() {
   // a "replied within N days" window, both URL-persisted like the rest.
   const sentRaw = params.get('sentiment')
   const sent: SentFilter | null = isSentFilter(sentRaw) ? sentRaw : null
+  const intentRaw = params.get('intent')
+  const intent: ReplyIntent | 'none' | null =
+    intentRaw === 'none' || INTENT_ORDER.includes(intentRaw as ReplyIntent)
+      ? (intentRaw as ReplyIntent | 'none')
+      : null
   const repliedRaw = params.get('replied')
   const repliedDays = REPLIED_DAYS.has(repliedRaw ?? '') ? Number(repliedRaw) : 0
   // Reply-mode = either reply filter is engaged; it flips on the snippet/badge in
   // rows and defaults the sort to newest reply first (the old Replies ordering).
-  const replyActive = sent != null || repliedDays > 0
+  const replyActive = sent != null || intent != null || repliedDays > 0
 
   // Sort / page / column toggle all live in the URL so the page is fully
   // shareable (as its subtitle advertises).
@@ -169,12 +174,13 @@ export function LeadsExplorer() {
   // Latest inbound reply (body + classification) per lead — powers the sentiment
   // buckets/counts and the per-row snippet shown in reply mode.
   const snippets = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
+  const conversationIntents = useMemo(() => highestIntentByLead(data?.messages ?? []), [data])
   const followUps = useMemo(
     () => followUpStateMap(data?.followUpStates ?? []),
     [data?.followUpStates],
   )
 
-  // «Classify new replies» — moved here from the Replies page; same endpoint and
+  // «Classify replies» — moved here from the Replies page; same endpoint and
   // refetch behaviour so freshly-labelled replies flow into the buckets.
   const [classifying, setClassifying] = useState(false)
   async function classify() {
@@ -315,6 +321,10 @@ export function LeadsExplorer() {
         if (!l.replied_at) return false
         if (sent !== 'any' && bucketOf(l) !== sent) return false
       }
+      if (intent) {
+        const level = conversationIntents.get(leadKey(l.instance_id, l.profile_url))?.highest
+        if (intent === 'none' ? !!level : level !== intent) return false
+      }
       return true
     })
     rows.sort((a, b) => {
@@ -331,7 +341,7 @@ export function LeadsExplorer() {
     })
     return rows
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseFiltered, repliedDays, sent, snippets, sortKey, sortAsc, followUps])
+  }, [baseFiltered, repliedDays, sent, intent, snippets, conversationIntents, sortKey, sortAsc, followUps])
 
   if (!data) return null
 
@@ -413,6 +423,12 @@ export function LeadsExplorer() {
       }`,
       onClear: () => setSentiment(null),
     })
+  if (intent)
+    activeFilters.push({
+      id: 'intent',
+      label: `Intent: ${intent === 'none' ? 'none' : `${INTENT_META[intent].short} · ${INTENT_META[intent].label}`}`,
+      onClear: () => setFilter('intent', 'all'),
+    })
 
   const onSort = (key: SortKey) => {
     const nextAsc = key === sortKey ? !sortAsc : key === 'full_name'
@@ -454,6 +470,8 @@ export function LeadsExplorer() {
           last_action_at: l.last_action_at,
           next_follow_up_date:
             followUps.get(followUpKey(l.instance_id, l.profile_url))?.next_follow_up_date ?? null,
+          reply_intent:
+            conversationIntents.get(leadKey(l.instance_id, l.profile_url))?.highest ?? null,
         })),
       ),
     )
@@ -611,6 +629,18 @@ export function LeadsExplorer() {
           </select>
         </label>
         <label className="filter-field">
+          <span className="filter-label">Intent reached</span>
+          <select value={intent ?? 'all'} onChange={(e) => setFilter('intent', e.target.value)}>
+            <option value="all">Any intent</option>
+            {INTENT_ORDER.map((level) => (
+              <option key={level} value={level}>
+                {INTENT_META[level].short} · {INTENT_META[level].label}
+              </option>
+            ))}
+            <option value="none">No P1–P3 intent</option>
+          </select>
+        </label>
+        <label className="filter-field">
           <span className="filter-label">Gender</span>
           <select value={genderF} onChange={(e) => setFilter('gender', e.target.value)}>
             <option value="all">Any gender</option>
@@ -705,7 +735,7 @@ export function LeadsExplorer() {
             </label>
             <button className="btn sm" onClick={classify} disabled={classifying}>
               {classifying ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
-              {classifying ? 'Classifying…' : 'Classify new replies'}
+              {classifying ? 'Classifying…' : 'Classify replies'}
             </button>
             <button className="btn sm" onClick={exportCsv} disabled={filtered.length === 0}>
               <Download size={14} /> Export CSV
@@ -743,6 +773,10 @@ export function LeadsExplorer() {
                 ? snippets.get(leadKey(l.instance_id, l.profile_url))
                 : undefined
               const senti = reply?.sentiment ? SENTIMENT_META[reply.sentiment] : null
+              const reachedIntent = conversationIntents.get(
+                leadKey(l.instance_id, l.profile_url),
+              )?.highest
+              const intentMeta = reachedIntent ? INTENT_META[reachedIntent] : null
               return (
               <tr
                 key={l.id}
@@ -774,6 +808,11 @@ export function LeadsExplorer() {
                       {senti && (
                         <span className={`badge senti ${senti.cls}`} title={reply?.reason ?? ''}>
                           {senti.label}
+                        </span>
+                      )}
+                      {intentMeta && (
+                        <span className={`badge senti ${intentMeta.cls}`} title="Highest intent ever reached">
+                          {intentMeta.short} · {intentMeta.label}
                         </span>
                       )}
                       {l.company && <div className="muted small">{l.company}</div>}

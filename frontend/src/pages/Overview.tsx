@@ -4,7 +4,7 @@ import { Users } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
   latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeFromParam,
-  rangeToParam, rangeTotals, tsInRange,
+  rangeToParam, rangeTotals, replyIntentMetrics, tsInRange,
 } from '../lib/leads'
 import type { DateRange } from '../lib/leads'
 import type { Lead } from '../lib/types'
@@ -72,6 +72,27 @@ export function Overview() {
   }, [data?.instances, leadsByInstance])
 
   const latest = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data?.messages])
+  const intentByInstance = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof replyIntentMetrics>>()
+    if (!data) return map
+    for (const inst of data.instances) {
+      map.set(
+        inst.id,
+        replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
+          instanceId: inst.id,
+          intentRows: data.conversationReplyIntents,
+        }),
+      )
+    }
+    return map
+  }, [
+    data?.instances,
+    data?.leads,
+    data?.messages,
+    data?.pipelineEvents,
+    data?.conversationReplyIntents,
+    range,
+  ])
 
   // KPI / funnel aggregates (not consumed by AccountCard).
   const kpis = useMemo(() => {
@@ -80,13 +101,28 @@ export function Overview() {
     return {
       totals: rangeTotals(data.leads, range, latest),
       prevTotals: prevRange ? rangeTotals(data.leads, prevRange, latest) : undefined,
+      intent: replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
+        intentRows: data.conversationReplyIntents,
+      }),
+      intentPrev: prevRange
+        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, prevRange, {
+            intentRows: data.conversationReplyIntents,
+          })
+        : undefined,
       added: data.leads.filter((l) => tsInRange(l.added_at, range)).length,
       addedPrev: prevRange
         ? data.leads.filter((l) => tsInRange(l.added_at, prevRange)).length
         : undefined,
       activity: leadsToActivity(data.leads),
     }
-  }, [data?.leads, range, latest])
+  }, [
+    data?.leads,
+    data?.messages,
+    data?.pipelineEvents,
+    data?.conversationReplyIntents,
+    range,
+    latest,
+  ])
 
   if (!data || !kpis) return null
 
@@ -110,7 +146,8 @@ export function Overview() {
         activity={kpis.activity}
         range={range}
         flowLabel={range.label}
-        positive={kpis.totals.positive}
+        intent={kpis.intent}
+        intentPrev={kpis.intentPrev}
         added={kpis.added}
         addedPrev={kpis.addedPrev}
         velocityLeads={data.leads}
@@ -142,6 +179,7 @@ export function Overview() {
               campaignsMeta={data.campaigns}
               range={range}
               latest={latest}
+              intent={intentByInstance.get(inst.id)}
             />
           ))}
         </div>
