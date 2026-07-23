@@ -35,20 +35,48 @@ import { Logo } from './Logo'
 import { PageSkeleton } from './Skeleton'
 import { ErrorBoundary } from './ErrorBoundary'
 
-const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/leads', label: 'Leads', icon: Users },
-  { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
-  { to: '/follow-ups', label: 'Follow-ups', icon: CalendarCheck2 },
-  { to: '/review', label: 'Review', icon: ClipboardCheck },
-  { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet },
-  { to: '/playbook', label: 'Playbook', icon: BookOpen },
-  { to: '/searches', label: 'Searches', icon: Search },
-  { to: '/icp', label: 'ICPs', icon: Target },
-  { to: '/hypotheses', label: 'Hypotheses', icon: FlaskConical },
-  { to: '/health', label: 'Health', icon: Activity },
-  { to: '/chat', label: 'Chat', icon: Sparkles },
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean }
+
+const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = [
+  {
+    label: 'Daily work',
+    emphasis: true,
+    links: [
+      { to: '/follow-ups', label: 'Follow-ups', icon: CalendarCheck2 },
+      { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
+      { to: '/leads', label: 'Leads', icon: Users },
+      { to: '/chat', label: 'Chat', icon: Sparkles },
+    ],
+  },
+  {
+    label: 'Insights & strategy',
+    links: [
+      { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+      { to: '/review', label: 'Review', icon: ClipboardCheck },
+      { to: '/playbook', label: 'Playbook', icon: BookOpen },
+      { to: '/searches', label: 'Searches', icon: Search },
+      { to: '/icp', label: 'ICPs', icon: Target },
+      { to: '/hypotheses', label: 'Hypotheses', icon: FlaskConical },
+    ],
+  },
+  {
+    label: 'System',
+    links: [
+      { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet },
+      { to: '/health', label: 'Health', icon: Activity },
+    ],
+  },
 ]
+
+const LINKS = NAV_SECTIONS.flatMap((section) => section.links)
+
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem('sidebar-collapsed') === '1'
+  } catch {
+    return false
+  }
+}
 
 // Which loading skeleton best matches the route the user landed on (deep links
 // can open any page first). Keeps the first paint shaped like the real page.
@@ -79,13 +107,15 @@ export function Layout() {
   const [navOpen, setNavOpen] = useState(false)
   // Desktop collapse state: shrinks the rail to an icon-only strip. Persisted so
   // the choice survives reloads. Ignored on mobile, where the drawer takes over.
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem('sidebar-collapsed') === '1',
-  )
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
   const toggleCollapsed = () =>
     setCollapsed((c) => {
       const next = !c
-      localStorage.setItem('sidebar-collapsed', next ? '1' : '0')
+      try {
+        localStorage.setItem('sidebar-collapsed', next ? '1' : '0')
+      } catch {
+        // Restricted storage must not make the application shell unusable.
+      }
       return next
     })
 
@@ -306,90 +336,134 @@ function Sidebar({
             onClick={onToggleCollapse}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            <span className="side-tooltip" aria-hidden="true">
+              {collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            </span>
           </button>
         </div>
 
         <nav className="side-nav" aria-label="Pages">
-          {LINKS.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
-              title={collapsed ? label : undefined}
+          {NAV_SECTIONS.map((section) => (
+            <div
+              className={`nav-section${section.emphasis ? ' primary' : ''}`}
+              key={section.label}
             >
-              <Icon size={16} className="navlink-icon" aria-hidden="true" />
-              <span className="navlink-label">{label}</span>
-            </NavLink>
+              <div className="nav-section-title">{section.label}</div>
+              <div className="nav-section-links">
+                {section.links.map(({ to, label, icon: Icon, end }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
+                    aria-label={collapsed ? label : undefined}
+                  >
+                    <Icon size={17} className="navlink-icon" aria-hidden="true" />
+                    <span className="navlink-label">{label}</span>
+                    <span className="side-tooltip" aria-hidden="true">{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
-        <div className="side-scroll">
-          <div className="side-section-head">Accounts &amp; campaigns</div>
+        <nav className="side-scroll" aria-label="Accounts and campaigns">
+          <div className="side-section-heading">
+            <div>
+              <span className="side-section-eyebrow">Workspace</span>
+              <span className="side-section-head">Accounts &amp; campaigns</span>
+            </div>
+            {data && (
+              <span className="side-section-count" aria-label={`${data.instances.length} accounts`}>
+                {data.instances.length}
+              </span>
+            )}
+          </div>
           {data && data.instances.length > 3 && (
-            <input
-              className="side-filter"
-              type="search"
-              placeholder="Filter…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              aria-label="Filter accounts and campaigns"
-            />
+            <div className="side-filter-wrap">
+              <Search size={14} aria-hidden="true" />
+              <input
+                className="side-filter"
+                type="search"
+                placeholder="Find account or campaign"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                aria-label="Filter accounts and campaigns"
+              />
+            </div>
           )}
 
-          {visibleGroups.map(({ inst, campaigns }) => {
-            const isOpen = !!q || expanded.has(inst.id)
-            const fresh = inst.last_sync_at
-              ? Date.now() - new Date(inst.last_sync_at).getTime() < 24 * 3_600_000
-              : false
-            return (
-              <div className="side-group" key={inst.id}>
-                <div className="side-acct-row">
-                  <button
-                    type="button"
-                    className={`side-acct-toggle${isOpen ? ' open' : ''}`}
-                    onClick={() => toggle(inst.id)}
-                    aria-label={isOpen ? 'Collapse campaigns' : 'Expand campaigns'}
-                    aria-expanded={isOpen}
-                    disabled={!!q}
-                  >
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                  <NavLink
-                    to={`/account/${encodeURIComponent(inst.id)}`}
-                    className={({ isActive }) => (isActive ? 'side-acct active' : 'side-acct')}
-                  >
-                    <Avatar inst={inst} size={22} />
-                    <span className="side-acct-name">{instanceName(inst)}</span>
-                    <span className={`side-dot ${fresh ? 'ok' : 'stale'}`} aria-hidden="true" />
-                  </NavLink>
-                </div>
-                {isOpen &&
-                  campaigns.map((c) => (
-                    <NavLink
-                      key={c.campaign_id}
-                      to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
-                      className={({ isActive }) =>
-                        isActive ? 'side-campaign active' : 'side-campaign'
-                      }
-                      title={c.campaign_name}
+          <ul className="side-groups">
+            {visibleGroups.map(({ inst, campaigns }) => {
+              const isOpen = !!q || expanded.has(inst.id)
+              const accountName = instanceName(inst)
+              const level = freshnessLevel(inst.last_sync_at)
+              const freshness = inst.last_sync_at
+                ? `${level === 'ok' ? 'Healthy' : level === 'warn' ? 'Sync aging' : 'Sync stale'}, synced ${ago(inst.last_sync_at)}`
+                : 'Sync stale, never synced'
+              const campaignListId = `sidebar-campaigns-${encodeURIComponent(inst.id)}`
+              return (
+                <li className="side-group" key={inst.id}>
+                  <div className="side-acct-row">
+                    <button
+                      type="button"
+                      className={`side-acct-toggle${isOpen ? ' open' : ''}`}
+                      onClick={() => toggle(inst.id)}
+                      aria-label={`${isOpen ? 'Collapse' : 'Expand'} campaigns for ${accountName}`}
+                      aria-expanded={isOpen}
+                      aria-controls={campaignListId}
+                      disabled={!!q}
                     >
-                      {c.campaign_name}
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                    <NavLink
+                      to={`/account/${encodeURIComponent(inst.id)}`}
+                      className={({ isActive }) => (isActive ? 'side-acct active' : 'side-acct')}
+                    >
+                      <span className="side-acct-avatar" aria-hidden="true">
+                        <Avatar inst={inst} size={24} />
+                      </span>
+                      <span className="side-acct-copy">
+                        <span className="side-acct-name">{accountName}</span>
+                        <span className="side-acct-meta">
+                          {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
+                        </span>
+                      </span>
+                      <span className={`side-dot ${level}`} aria-hidden="true" />
+                      <span className="sr-only">{freshness}</span>
                     </NavLink>
-                  ))}
-                {isOpen && campaigns.length === 0 && (
-                  <div className="side-empty">No campaigns</div>
-                )}
-              </div>
-            )
-          })}
+                  </div>
+                  {isOpen && (
+                    <ul className="side-campaigns" id={campaignListId}>
+                      {campaigns.map((c) => (
+                        <li key={c.campaign_id}>
+                          <NavLink
+                            to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
+                            className={({ isActive }) =>
+                              isActive ? 'side-campaign active' : 'side-campaign'
+                            }
+                            title={c.campaign_name}
+                          >
+                            <span>{c.campaign_name}</span>
+                          </NavLink>
+                        </li>
+                      ))}
+                      {campaigns.length === 0 && (
+                        <li className="side-empty">No campaigns</li>
+                      )}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
           {data && visibleGroups.length === 0 && (
             <div className="side-empty">{q ? 'No matches' : 'No accounts synced'}</div>
           )}
-        </div>
+        </nav>
 
         <div className="side-footer">
           <ThemeToggle />
@@ -468,6 +542,7 @@ function ThemeToggle() {
       ) : (
         <Moon size={16} aria-hidden="true" />
       )}
+      <span className="side-tooltip" aria-hidden="true">Switch to {next} theme</span>
     </button>
   )
 }
@@ -479,9 +554,11 @@ function SyncChip({ instances }: { instances: Instance[] }) {
       to="/health"
       className={`sync-chip ${level}`}
       title="Data freshness — open Sync health"
+      aria-label={`${label} — open Sync health`}
     >
       <span className="sync-dot" aria-hidden="true" />
       <span className="sync-chip-label">{label}</span>
+      <span className="side-tooltip" aria-hidden="true">{label} — open Sync health</span>
     </Link>
   )
 }
