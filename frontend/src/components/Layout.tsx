@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  FileSpreadsheet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useData } from '../lib/DataContext'
@@ -40,6 +41,7 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { to: '/follow-ups', label: 'Follow-ups', icon: CalendarCheck2 },
   { to: '/review', label: 'Review', icon: ClipboardCheck },
+  { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet },
   { to: '/playbook', label: 'Playbook', icon: BookOpen },
   { to: '/searches', label: 'Searches', icon: Search },
   { to: '/icp', label: 'ICPs', icon: Target },
@@ -51,7 +53,7 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
 // Which loading skeleton best matches the route the user landed on (deep links
 // can open any page first). Keeps the first paint shaped like the real page.
 function skeletonVariant(pathname: string): 'overview' | 'table' | 'list' | 'simple' {
-  if (pathname.startsWith('/leads') || pathname.startsWith('/health') || pathname.startsWith('/review') || pathname.startsWith('/pipeline') || pathname.startsWith('/follow-ups')) return 'table'
+  if (pathname.startsWith('/leads') || pathname.startsWith('/health') || pathname.startsWith('/review') || pathname.startsWith('/csv-import') || pathname.startsWith('/pipeline') || pathname.startsWith('/follow-ups')) return 'table'
   if (
     pathname.startsWith('/playbook') || pathname.startsWith('/chat') ||
     pathname.startsWith('/searches') || pathname.startsWith('/icp') ||

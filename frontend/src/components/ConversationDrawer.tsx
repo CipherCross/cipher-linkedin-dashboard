@@ -294,7 +294,7 @@ export function ConversationDrawer({
       return
     setDeleting(msg.id)
     try {
-      const res = await adminPost('/api/import-conversation', {
+      const res = await adminPost('/api/import', {
         action: 'delete_message',
         id: msg.id,
       })

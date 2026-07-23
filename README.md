@@ -163,7 +163,11 @@ Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `SLACK_WEBHOOK_URL` to deliver the Morning Briefing to Slack,
 `SLACK_REPLIES_WEBHOOK_URL` to route new-reply alerts from `/api/notify-replies`
 to their own channel — falls back to `SLACK_WEBHOOK_URL` when unset — and
-`DASHBOARD_URL` to turn lead names in those alerts into dashboard deep links).
+`DASHBOARD_URL` to turn lead names in those alerts into dashboard deep links,
+plus `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` for the Apollo CSV Contact importer).
+Restrict the Airtable personal access token to the Web 2 Mob base with only
+schema-read and record read/write scopes. The token is server-only and must
+never use a `VITE_` prefix.
 Locally, plain `npm run dev` does not serve
 `api/` — use `vercel dev` from `frontend/` to run the functions too.
 
@@ -198,6 +202,11 @@ same figures); the deeper analysis is computed client-side from the raw
 - **Health** — sync-run history and per-instance freshness, plus a per-notebook
   **Configure** editor that writes the online config overrides (see "Configuring
   notebooks online").
+- **CSV Import** — Apollo people CSV upload with fixed field mapping, duplicate
+  detection, existing-company matching/manual selection, and batched creation in
+  Airtable Contacts. Requires the SDR to choose `Added by`; it never creates a
+  Company or updates an existing Contact. The MVP accepts up to 500 rows / 5 MB
+  and keeps results only for the current browser session.
 
 Extras: run `agent.py annotate "Switched to template B" [--date YYYY-MM-DD]
 [--campaign ID]` from any machine with a config.yaml to drop a purple marker

@@ -21,6 +21,7 @@ const Hypotheses = lazy(() => import('./pages/Hypotheses').then((m) => ({ defaul
 const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })))
 const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })))
 const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
+const CsvImport = lazy(() => import('./pages/CsvImport').then((m) => ({ default: m.CsvImport })))
 
 /** Replies folded into Leads, but old deep links carried a `sentiment` query
  *  param (positive/curious/neutral/negative/later/other/unclassified) — forward
@@ -50,6 +51,7 @@ export default function App() {
               {/* Replies folded into Leads — deep links land on replied leads. */}
               <Route path="replies" element={<RepliesRedirect />} />
               <Route path="review" element={<Review />} />
+              <Route path="csv-import" element={<CsvImport />} />
               <Route path="playbook" element={<Playbook />} />
               <Route path="searches" element={<SearchLibrary />} />
               <Route path="icp" element={<Icp />} />

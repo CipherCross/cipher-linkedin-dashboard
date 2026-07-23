@@ -8,7 +8,7 @@
 // Every stage/assignment change also appends a pipeline_events row so time-in-stage
 // can be reconstructed from the gaps between events. The events insert happens after
 // the lead row is already committed, so a failed insert is reported as `event_error`
-// with a 200 (mirrors milestone_error in /api/import-conversation).
+// with a 200 (mirrors milestone_error in /api/import's conversation action).
 //
 // Guard: same as /api/config — if ADMIN_SECRET is set on the Vercel project, callers
 // must send it as an `x-admin-secret` header; if unset, the endpoint is open.

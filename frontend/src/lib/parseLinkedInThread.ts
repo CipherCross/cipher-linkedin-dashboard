@@ -195,7 +195,7 @@ export function parseLinkedInThread(raw: string, now: Date = new Date()): ParseR
 /** Dedup identity of a message body: whitespace- and case-insensitive. Used to
  *  match pasted blocks against already-stored rows (the DB unique key can't —
  *  synced rows carry LH2 run-time timestamps, pasted rows carry real ones).
- *  Keep in sync with the copy in api/import-conversation.ts. */
+ *  Keep in sync with the copy in api/_lib/conversationImport.ts. */
 export function normalizeForDedup(body: string): string {
   return body.replace(/\r/g, '').trim().replace(/\s+/g, ' ').toLowerCase()
 }

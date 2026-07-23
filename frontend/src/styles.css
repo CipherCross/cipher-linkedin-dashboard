@@ -3126,3 +3126,327 @@ td .pipe-stage-select.quiet:focus-visible {
   .follow-item-message > .muted:last-child { display: none; }
   .follow-import-nudge { align-items: flex-start; flex-direction: column; }
 }
+
+/* --- Apollo CSV Contact import ------------------------------------------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.csv-page-header { align-items: center; }
+.csv-import-steps {
+  list-style: none;
+  margin: 0 0 var(--space-8);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.csv-import-steps li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--surface-1);
+}
+.csv-import-steps li > span {
+  width: 23px;
+  height: 23px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-variant-numeric: tabular-nums;
+}
+.csv-import-steps li.active {
+  color: var(--text);
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+}
+.csv-import-steps li.active > span {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.csv-import-steps li.done { color: var(--success); }
+.csv-import-steps li.done > span {
+  border-color: var(--success-border);
+  background: var(--success-subtle);
+}
+
+.csv-error-banner,
+.csv-inline-error,
+.csv-warning-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  background: var(--danger-subtle);
+  color: var(--danger);
+  padding: 9px 12px;
+  font-size: var(--text-sm);
+}
+.csv-error-banner { margin-bottom: var(--space-7); }
+.csv-error-banner > span { flex: 1; }
+.csv-warning-line {
+  border-color: var(--warning-border);
+  background: var(--warning-subtle);
+  color: var(--warning);
+  margin-bottom: 8px;
+}
+.csv-inline-error { justify-content: space-between; }
+
+.csv-setup-card,
+.csv-upload-card,
+.csv-mapping-card,
+.csv-company-actions,
+.csv-preview-card,
+.csv-result-hero { margin-bottom: var(--space-7); }
+.csv-setup-card h2,
+.csv-mapping-card h2,
+.csv-company-actions h2,
+.csv-preview-card h2,
+.csv-result-hero h2 { margin-bottom: 4px; }
+.csv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 360px;
+  margin-top: 12px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.csv-field strong,
+.csv-map-row strong { color: var(--danger); }
+.csv-loading-line { display: inline-flex; align-items: center; gap: 7px; padding-top: 10px; }
+
+.csv-upload-card {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  border-style: dashed;
+}
+.csv-upload-card > svg { color: var(--accent); }
+.csv-upload-card h2 { margin: 0; }
+.csv-upload-card p { max-width: 600px; margin: 0 0 4px; line-height: 1.55; }
+.csv-upload-card.disabled { opacity: 0.68; }
+
+.csv-mapping-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 14px 0;
+}
+.csv-map-row {
+  display: grid;
+  grid-template-columns: minmax(150px, .8fr) 24px minmax(220px, 1.2fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.csv-map-row:last-child { border-bottom: 0; }
+.csv-map-row > span:nth-child(2) { text-align: center; color: var(--text-muted); }
+.csv-map-row select { width: 100%; }
+.csv-map-row.locked { background: var(--surface-2); color: var(--text-secondary); }
+.csv-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.csv-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: var(--space-7);
+}
+.csv-summary-card {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 3px solid var(--info);
+}
+.csv-summary-card strong { font-size: var(--text-xl); font-variant-numeric: tabular-nums; }
+.csv-summary-card.success { border-left-color: var(--success); }
+.csv-summary-card.warning { border-left-color: var(--warning); }
+.csv-summary-card.danger { border-left-color: var(--danger); }
+.csv-summary-card.muted { border-left-color: var(--text-muted); color: var(--text); }
+
+.csv-company-action-list { display: flex; flex-direction: column; }
+.csv-company-action-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.csv-company-action-row:last-child { border-bottom: 0; }
+.csv-company-action-row > svg { color: var(--warning); }
+.csv-company-action-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.csv-resolution {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+}
+.csv-resolution.success { color: var(--success); background: var(--success-subtle); }
+.csv-resolution.skipped { color: var(--text-muted); background: var(--surface-2); }
+
+.csv-table-scroll { max-height: 560px; }
+.csv-preview-table { min-width: 1040px; }
+.csv-preview-table td { vertical-align: top; }
+.csv-row-skipped { opacity: .55; }
+.csv-inline-input { width: min(330px, 36vw); }
+.csv-link-cell {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+.csv-company-linked { display: inline-flex; align-items: center; gap: 5px; }
+.csv-status.ready,
+.csv-status.created { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
+.csv-status.company_action { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
+.csv-status.invalid,
+.csv-status.failed { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
+.csv-status.duplicate,
+.csv-status.skipped { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); }
+.csv-status-detail { max-width: 190px; margin-top: 3px; font-size: var(--text-2xs); line-height: 1.35; }
+.csv-row-actions { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+.csv-import-footer {
+  position: sticky;
+  bottom: 14px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--glass-tint-strong);
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  box-shadow: var(--glass-rim), var(--shadow-md);
+}
+
+.csv-company-modal { width: min(720px, 100%); max-height: min(760px, calc(100vh - 40px)); }
+.csv-company-modal .pipe-modal-head { align-items: flex-start; }
+.csv-company-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.csv-company-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.csv-company-search input {
+  flex: 1;
+  border: 0;
+  padding-left: 0;
+  background: transparent;
+  box-shadow: none !important;
+}
+.csv-company-results {
+  min-height: 180px;
+  max-height: 440px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.csv-company-empty {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+}
+.csv-company-empty svg { color: var(--text-muted); }
+.csv-company-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.csv-company-option:hover { border-color: var(--accent-border); background: var(--surface-3); }
+.csv-company-option > svg { color: var(--accent); }
+.csv-company-option-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.csv-company-option-main .small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.csv-company-pick { color: var(--accent); font-size: var(--text-xs); font-weight: 600; }
+.btn.danger { color: var(--danger); border-color: var(--danger-border); }
+.btn.danger:hover:not(:disabled) { background: var(--danger-subtle); border-color: var(--danger); }
+
+.csv-result-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 22px;
+}
+.csv-result-icon { color: var(--success); flex: 0 0 auto; }
+.csv-result-hero p { margin: 4px 0 14px; }
+.csv-result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 700px) {
+  .csv-import-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .csv-map-row { grid-template-columns: 1fr; gap: 5px; }
+  .csv-map-row > span:nth-child(2) { display: none; }
+  .csv-company-action-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .csv-company-action-row > .btn { grid-column: 2; width: fit-content; }
+  .csv-import-footer { align-items: flex-start; flex-direction: column; }
+  .csv-import-footer .btn { width: 100%; }
+  .csv-result-hero { flex-direction: column; }
+}

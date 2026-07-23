@@ -4,7 +4,7 @@
 //
 // Keep in sync with frontend/src/lib/pipeline.ts (api/ and src/ are separate TS
 // roots — no cross-imports; mirror any change by hand, same as the
-// api/import-conversation.ts <-> src/lib/parseLinkedInThread.ts pair).
+// api/_lib/conversationImport.ts <-> src/lib/parseLinkedInThread.ts pair).
 
 export interface PipelineStage {
   id: string

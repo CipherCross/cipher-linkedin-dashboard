@@ -187,7 +187,7 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   campaign": date_trunc('week', added_at), count(*) grouped by campaign_id.
   NULL added_at = unknown add date, not "never added".
   Milestones may also be backfilled from manually imported conversations
-  (/api/import-conversation); a DB trigger keeps a non-NULL milestone from
+  (/api/import, conversation_import action); a DB trigger keeps a non-NULL milestone from
   regressing to NULL when the agent re-syncs.
   -- DEMOGRAPHICS LAYER (inferred; internal outreach analytics only). Age is a
   -- RANGE, not a point; gender is a statistical inference until an SDR confirms it.

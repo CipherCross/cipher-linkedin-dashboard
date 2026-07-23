@@ -52,7 +52,7 @@ Downstream derivations of the SAME funnel — **change funnel semantics in all t
 
 **Import history**: LH2 stops capturing a thread once the SDR takes it over by hand.
 ConversationDrawer flow: paste thread → `src/lib/parseLinkedInThread.ts` → preview/edit
-→ `/api/import-conversation` writes `messages` with `source='manual'` and backfills NULL
+→ `/api/import` (`conversation_import`) writes `messages` with `source='manual'` and backfills NULL
 milestones. Manual rows carry real message times, agent rows carry LH2 action-run times —
 **dedup by normalized body + direction, never the messages unique key**. Trigger
 `leads_keep_milestones` (migration 026) stops re-sync regressing a non-NULL milestone to NULL.
@@ -130,7 +130,10 @@ Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past
 - Server-only (Vercel settings, **never** `VITE_`): `ANTHROPIC_API_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY` (optionally `SUPABASE_URL`), `CRON_SECRET` (guards GET cron paths
   of `/api/classify` + `/api/notify-replies` + `/api/briefing`), `ADMIN_SECRET` (guards writes
-  to `/api/config` + `/api/playbook` + `/api/import-conversation`), `SLACK_WEBHOOK_URL`,
+  to `/api/config` + `/api/playbook` + `/api/import` conversation actions),
+  `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (server-only Airtable access for Apollo CSV Contact
+  imports; restrict the PAT to the target base and schema-read/record read-write scopes),
+  `SLACK_WEBHOOK_URL`,
   `SLACK_REPLIES_WEBHOOK_URL` (optional; new-reply alerts channel, falls back to
   `SLACK_WEBHOOK_URL`), `DASHBOARD_URL` (optional; deep links in reply alerts).
 

@@ -7,7 +7,8 @@ import type { Lead } from '../lib/types'
 // Paste → preview → save flow for a LinkedIn thread copied with the mouse.
 // Rendered inside the ConversationDrawer in place of the thread, so the lead
 // identity (instance / campaign / profile) is already fixed. Saved rows go
-// through /api/import-conversation (ADMIN_SECRET-guarded, service-role write).
+// through /api/import (ADMIN_SECRET-guarded conversation_import action,
+// service-role write).
 
 /** The already-stored thread rows the dup check runs against — the drawer
  *  passes its fetched messages. */
@@ -178,7 +179,8 @@ export function ImportHistoryPanel({
     setSaving(true)
     setError(null)
     try {
-      const res = await adminPost('/api/import-conversation', {
+      const res = await adminPost('/api/import', {
+        action: 'conversation_import',
         instance_id: lead.instance_id,
         campaign_id: lead.campaign_id,
         profile_url: lead.profile_url,

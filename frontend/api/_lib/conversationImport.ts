@@ -17,19 +17,16 @@
 // 026's leads_keep_milestones trigger keeps the agent's next sync from
 // clobbering these back to NULL.
 //
-// Guard: same as /api/config — if ADMIN_SECRET is set on the Vercel project,
-// callers must send it as an `x-admin-secret` header.
+// Guard: applied by the shared /api/import dispatcher before this helper runs.
 //
 // Second action (Vercel Hobby caps this project at its current 12 function
-// files, so deletion lives here rather than in its own endpoint): a body of
+// files, so deletion shares the import dispatcher rather than its own endpoint): a body of
 // { action: 'delete_message', id } deletes ONE manually-imported message via
 // the delete_manual_message RPC (039), which also repairs lead milestones the
 // import backfilled from that row. Sync rows are not deletable — the RPC
 // refuses them and we 404.
 import { createHash } from 'node:crypto'
-import { db } from './_lib/core.js'
-
-export const maxDuration = 10
+import { db } from './core.js'
 
 const MAX_MESSAGES = 500
 const MAX_BODY_CHARS = 5000
@@ -60,28 +57,14 @@ const minIso = (msgs: ImportMessage[], direction: 'in' | 'out'): string | null =
   return times.length ? times.reduce((a, b) => (a < b ? a : b)) : null
 }
 
-async function handle(req: Request): Promise<Response> {
-  const secret = process.env.ADMIN_SECRET
-  if (secret && req.headers.get('x-admin-secret') !== secret) {
-    return json({ error: 'unauthorized' }, 401)
-  }
-
-  let payload: {
+export async function handleConversationImport(payload: {
     action?: unknown
     id?: unknown
     instance_id?: unknown
     campaign_id?: unknown
     profile_url?: unknown
     messages?: unknown
-  }
-  try {
-    payload = await req.json()
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400)
-  }
-
-  if (payload.action === 'delete_message') return deleteMessage(payload.id)
-
+  }): Promise<Response> {
   const { instance_id, campaign_id, profile_url } = payload
   if (typeof instance_id !== 'string' || !instance_id) {
     return json({ error: 'instance_id (string) is required' }, 400)
@@ -221,5 +204,3 @@ async function deleteMessage(id: unknown): Promise<Response> {
   }
   return json({ ok: true, deleted: id, milestones_recomputed: result.milestones_recomputed ?? 0 })
 }
-
-export const POST = (req: Request) => handle(req)
