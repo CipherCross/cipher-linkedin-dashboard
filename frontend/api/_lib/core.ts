@@ -191,20 +191,31 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   regressing to NULL when the agent re-syncs.
   -- DEMOGRAPHICS LAYER (inferred; internal outreach analytics only). Age is a
   -- RANGE, not a point; gender is a statistical inference until an SDR confirms it.
-  education_start_year int (university/school start year, from LH2; text signal),
-  first_job_start_year int (earliest job start year, from LH2; text signal),
+  education_start_year int (earliest school/education start year from LH2),
+  first_job_start_year int (earliest job start year from LH2),
   birth_year_min int, birth_year_max int (INCLUSIVE birth-year RANGE; NULL = no age
     signal. Render an AGE range from the current year: age ~= current_year - birth_year.
     e.g. birth_year_min=1990, birth_year_max=1995 with current year 2026 -> "~31-36".
-    Computed by arithmetic from the two start years, no model),
+    Migration 048 computes it synchronously whenever either source year changes:
+    education assumes start age 16..21, first job assumes 17..27, and when both
+    exist their birth-year ranges must overlap. Contradictory inputs yield NULL),
+  age_inferred_at timestamptz (when the database last evaluated the age signals;
+    NULL when neither signal exists),
+  age_method_version text (currently 'career-signals-v2'),
+  age_source text ('education'|'first_job'|'combined'|'conflict'; conflict means
+    the source ranges did not overlap or failed sanity checks, so age remains NULL),
   gender text ('male'|'female'|'unknown'; NULL = not yet inferred. 'unknown' is a
     first-class value — ambiguous, initials-only, or non-Western names the model
     can't call reliably — NOT a failure state),
   gender_confidence real (0..1; the model's confidence in the gender label. 1 for manual overrides),
-  demo_inferred_at timestamptz (when demographics were last computed; NULL = not yet
-    processed by the classify job),
-  demo_model text ('claude-haiku-4-5' = AI inference; 'manual' = SDR-CONFIRMED via the
-    dashboard — treat 'manual' rows as GROUND TRUTH, never re-inferred).
+  gender_inferred_at timestamptz (when name/headline gender inference completed;
+    NULL = pending),
+  gender_model_version text (prompt/taxonomy version; NULL for manual overrides),
+  demo_inferred_at timestamptz (LEGACY combined stamp, now mirrors gender lifecycle
+    for clients deployed before migration 048),
+  demo_model text ('claude-haiku-4-5' = AI inference; 'manual' = SDR-reviewed
+    override via the dashboard. Manual prevents re-inference but is not evidence
+    of the person's self-identified gender).
   NOTE: gender/age are INFERRED for internal analytics; always describe them as
   inferred-with-confidence unless demo_model='manual'. Name-based gender is less
   accurate for non-Western names — prefer 'unknown' over a low-confidence guess.
@@ -213,6 +224,16 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
     inference/classification; never pass to any model),
   photo_synced_at timestamptz (when the agent last resolved a photo; a non-NULL
     photo_synced_at with NULL photo_path means "checked, none available")
+
+lead_gender_reviews -- append-only audit of explicit human gender review:
+  id bigint, lead_id uuid|null, instance_id text, profile_url text,
+  action text ('set'|'clear'),
+  predicted_gender text|null, predicted_confidence real|null,
+  predicted_model text|null, predicted_version text|null,
+  reviewed_gender text|null, reviewer text|null, reviewed_at timestamptz.
+  Use SET rows where predicted_gender and reviewed_gender are both non-NULL to
+  evaluate model precision and confidence calibration. A review is still a human
+  judgment, not proof of a person's self-identified gender.
 
 events — action log (drives daily-activity charts)
   id bigint PK, instance_id, campaign_id, profile_url,

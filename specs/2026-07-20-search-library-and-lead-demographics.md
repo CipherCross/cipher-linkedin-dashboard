@@ -1,5 +1,12 @@
 # Search Library (shared sourcing searches) + Lead Demographics (age/gender) + Lead Photos
 
+> **Lifecycle correction (2026-07-24):** migration 048 supersedes this
+> document's original shared `demo_inferred_at` lifecycle and narrow age formula.
+> Age is now database-derived whenever source years change, using the intersection
+> of broad education/first-job ranges; gender has an independent, versioned stamp
+> and fair per-account backlog. The original sections below remain as the historical
+> design record for migrations 041/042.
+
 ## Goal
 
 Three additions to the dashboard:
@@ -288,7 +295,8 @@ alter table leads
 
 No view changes: campaign charts compute client-side from leads (matches how
 `leads.ts` already derives range metrics). `SCHEMA_DOC` documents the columns +
-"demo_model='manual' means SDR-confirmed; treat as ground truth".
+"demo_model='manual' means an SDR-reviewed override; migration 048 later clarified
+that this prevents re-inference but does not prove self-identified gender".
 
 **Sync agent**: new built-in fail-safe queries (the `STEP_*_SQL` pattern — empty
 result on schema drift, never an exception) producing per-lead

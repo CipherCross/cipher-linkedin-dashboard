@@ -101,7 +101,7 @@ export interface DailyActivity {
   cnt: number
 }
 
-/** Inferred (or SDR-confirmed) gender for a lead. `unknown` is a first-class
+/** Inferred (or SDR-reviewed) gender for a lead. `unknown` is a first-class
  *  value — name-based inference is unreliable for many naming cultures. */
 export type Gender = 'male' | 'female' | 'unknown'
 
@@ -129,18 +129,24 @@ export interface Lead {
   lost_reason: string | null
   pipeline_stage_changed_at: string | null
   assigned_to: number | null
-  // --- Demographics (migration 041) + photo (migration 042) ------------------
+  // --- Demographics (migrations 041/048) + photo (migration 042) --------------
   // All optional: the LEAD_COLUMNS retry ladder drops these rungs on a DB that
   // hasn't run the migrations yet, leaving them undefined. Age is arithmetic
-  // (birth-year bounds), gender is inferred (Haiku) or SDR-confirmed.
+  // (birth-year bounds), gender is inferred (Haiku) or SDR-reviewed.
   education_start_year?: number | null
   first_job_start_year?: number | null
   birth_year_min?: number | null
   birth_year_max?: number | null
+  age_inferred_at?: string | null
+  age_method_version?: string | null
+  age_source?: 'education' | 'first_job' | 'combined' | 'conflict' | null
   gender?: Gender | null
   gender_confidence?: number | null
+  gender_inferred_at?: string | null
+  gender_model_version?: string | null
+  /** Legacy combined stamp retained for clients deployed before migration 048. */
   demo_inferred_at?: string | null
-  /** 'claude-haiku-4-5' = AI-inferred; 'manual' = SDR-confirmed (ground truth). */
+  /** 'claude-haiku-4-5' = AI-inferred; 'manual' = SDR-reviewed override. */
   demo_model?: string | null
   /** Bucket-relative path in the public `lead-photos` Storage bucket. Display
    *  only — never used as an inference input. */

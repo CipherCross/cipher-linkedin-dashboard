@@ -38,21 +38,32 @@ const LEAD_COLUMNS_BASE =
 const LEAD_COLUMNS_PIPELINE =
   `${LEAD_COLUMNS_BASE},pipeline_stage,pipeline_substatus,lost_reason,` +
   'pipeline_stage_changed_at,assigned_to'
-// Demographics (migration 041) + photo (migration 042). These ship in adjacent
-// migrations, so they share ONE rung: a DB is expected to have both or neither.
+// Demographics lifecycle v2 (migration 048). Keep the old 041/042 rung beneath it
+// so frontend/API rollout can safely precede the new migration.
+const LEAD_COLUMNS_DEMO_V2 =
+  `${LEAD_COLUMNS_PIPELINE},education_start_year,first_job_start_year,` +
+  'birth_year_min,birth_year_max,age_inferred_at,age_method_version,age_source,' +
+  'gender,gender_confidence,gender_inferred_at,gender_model_version,demo_inferred_at,' +
+  'demo_model,photo_path,photo_synced_at'
+// Demographics (migration 041) + photo (migration 042).
 const LEAD_COLUMNS_FULL =
   `${LEAD_COLUMNS_PIPELINE},education_start_year,first_job_start_year,` +
   'birth_year_min,birth_year_max,gender,gender_confidence,demo_inferred_at,' +
   'demo_model,photo_path,photo_synced_at'
 // The widest set we ask for first.
-const LEAD_COLUMNS = LEAD_COLUMNS_FULL
+const LEAD_COLUMNS = LEAD_COLUMNS_DEMO_V2
 // Retry ladder, widest → narrowest. Requesting a missing column makes PostgREST
 // 400 the whole query (SQLSTATE 42703); on that error fetchAllLeads drops to the
 // NEXT rung rather than falling straight to base — so a DB that has the pipeline
 // migration but not the demographics/photo ones keeps its pipeline columns
 // instead of silently losing them. Each narrower rung's fields come back
 // undefined/null in the UI.
-const LEAD_COLUMN_LADDER = [LEAD_COLUMNS_FULL, LEAD_COLUMNS_PIPELINE, LEAD_COLUMNS_BASE]
+const LEAD_COLUMN_LADDER = [
+  LEAD_COLUMNS_DEMO_V2,
+  LEAD_COLUMNS_FULL,
+  LEAD_COLUMNS_PIPELINE,
+  LEAD_COLUMNS_BASE,
+]
 
 // True for PostgREST's "undefined column" error (Postgres SQLSTATE 42703),
 // regardless of which column is missing. supabase-js error shapes vary, so also

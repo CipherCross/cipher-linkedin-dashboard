@@ -81,12 +81,12 @@ Give terse reasons (max ~12 words each). Return exactly one result per reply, wi
 
 // --- demographics phase (Feature 2) ---------------------------------------
 // A SECOND phase that runs after sentiment (both GET and POST, and even when the
-// sentiment batch was empty). Fills an inferred birth-year RANGE (pure arithmetic)
-// and gender (Haiku) for leads never processed before. Best-effort; see runDemographics.
+// sentiment batch was empty). Migration 048 derives age synchronously when notebook
+// year signals change; this phase now owns only name/headline gender inference.
 const GENDERS = ['male', 'female', 'unknown'] as const
 const DEMO_BATCH = 100 // leads processed per invocation
 const DEMO_GROUP = 25 // leads per gender model call
-const BIRTH_YEAR_FLOOR = 1930 // sanity floor for a computed birth year
+const GENDER_VERSION = 'name-headline-v1'
 
 const GENDER_SYSTEM = `You infer the likely GENDER of a person from their name and
 professional headline, for internal outreach analytics only. For each person return
@@ -163,6 +163,17 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const sb = db()
+
+  // Dedicated mode lets an operator drain the gender backlog without first spending
+  // the invocation budget on reply classification. It stays on this endpoint to
+  // preserve the Vercel function-count constraint.
+  if (new URL(req.url).searchParams.get('mode') === 'demographics') {
+    return json({
+      classified: 0,
+      remaining: 0,
+      demographics: await runDemographics(sb),
+    })
+  }
 
   const { data: replies, error } = await sb
     .from('messages')
@@ -321,134 +332,184 @@ async function autoAdvancePipeline(sb: ReturnType<typeof db>): Promise<number | 
 
 interface DemoLead {
   id: string
+  instance_id: string
+  profile_url: string
   full_name: string | null
   headline: string | null
-  education_start_year: number | null
-  first_job_start_year: number | null
 }
 
-/** Deterministic birth-year RANGE from the two start-year signals — NO model.
- *  education start -> [start-19, start-18]; else first job -> [start-23, start-21];
- *  any bound outside [1930, currentYear-15] -> both null (garbage / implausible). */
-function birthYearRange(
-  edu: number | null,
-  firstJob: number | null,
-  currentYear: number
-): { min: number | null; max: number | null } {
-  let min: number | null = null
-  let max: number | null = null
-  if (edu != null) {
-    min = edu - 19
-    max = edu - 18
-  } else if (firstJob != null) {
-    min = firstJob - 23
-    max = firstJob - 21
-  }
-  if (min == null || max == null) return { min: null, max: null }
-  const ceil = currentYear - 15
-  if (min < BIRTH_YEAR_FLOOR || max < BIRTH_YEAR_FLOOR || min > ceil || max > ceil) {
-    return { min: null, max: null }
-  }
-  return { min, max }
+interface DemographicsRun {
+  processed: number
+  failed: number
+  remaining: number | null
+  lifecycle: 'v2' | 'legacy' | 'unavailable'
 }
 
 /**
- * Demographics second phase: fill inferred birth-year range + gender for leads never
- * processed (demo_inferred_at IS NULL), oldest added first, capped at DEMO_BATCH.
- * Age is pure arithmetic; only gender uses the model (Haiku, groups of DEMO_GROUP).
+ * Select a fair gender batch from the split lifecycle introduced by migration 048.
+ * Every account contributes candidates before round-robin selection, so one older
+ * notebook cannot monopolize the global oldest-first window.
  *
- * Idempotent + convergent: the demo_inferred_at IS NULL filter means re-runs and the
- * daily cron never re-touch processed rows, and manual overrides (demo_model='manual',
- * demo_inferred_at set) are never re-inferred. Leads with no name AND no year signal
- * are still stamped (gender 'unknown', confidence 0) so the job drains to a no-op.
+ * Returns null only when the v2 columns are absent, allowing a rolling deployment
+ * to fall back to migration 041's legacy combined stamp.
+ */
+async function selectGenderBatchV2(
+  sb: ReturnType<typeof db>
+): Promise<DemoLead[] | null> {
+  const { data: instances, error: instanceError } = await sb
+    .from('instances')
+    .select('id')
+    .order('id')
+  if (instanceError) throw instanceError
+
+  const buckets: DemoLead[][] = []
+  for (const instance of (instances ?? []) as Array<{ id: string }>) {
+    const { data, error } = await sb
+      .from('leads')
+      .select('id,instance_id,profile_url,full_name,headline')
+      .eq('instance_id', instance.id)
+      .or('demo_model.is.null,demo_model.neq.manual')
+      .or(
+        `gender_inferred_at.is.null,gender_model_version.is.null,` +
+          `gender_model_version.neq.${GENDER_VERSION}`
+      )
+      .order('added_at', { ascending: true })
+      .limit(DEMO_BATCH)
+    if (error) {
+      if (error.code === '42703' || /column\s+.*\s+does not exist/i.test(error.message)) {
+        return null
+      }
+      throw error
+    }
+    buckets.push((data ?? []) as DemoLead[])
+  }
+
+  const selected: DemoLead[] = []
+  const seenPeople = new Set<string>()
+  for (let offset = 0; selected.length < DEMO_BATCH; offset++) {
+    let found = false
+    for (const bucket of buckets) {
+      const lead = bucket[offset]
+      if (!lead) continue
+      found = true
+      const personKey = `${lead.instance_id}|${lead.profile_url}`
+      if (seenPeople.has(personKey)) continue
+      seenPeople.add(personKey)
+      selected.push(lead)
+      if (selected.length === DEMO_BATCH) break
+    }
+    if (!found) break
+  }
+  return selected
+}
+
+async function selectGenderBatchLegacy(sb: ReturnType<typeof db>): Promise<DemoLead[]> {
+  const { data, error } = await sb
+    .from('leads')
+    .select('id,instance_id,profile_url,full_name,headline')
+    .is('demo_inferred_at', null)
+    .order('added_at', { ascending: true })
+    .limit(DEMO_BATCH)
+  if (error) throw error
+  return (data ?? []) as DemoLead[]
+}
+
+async function countGenderBacklog(
+  sb: ReturnType<typeof db>,
+  lifecycle: 'v2' | 'legacy'
+): Promise<number | null> {
+  let query = sb.from('leads').select('id', { count: 'exact', head: true })
+  if (lifecycle === 'v2') {
+    query = query
+      .or('demo_model.is.null,demo_model.neq.manual')
+      .or(
+        `gender_inferred_at.is.null,gender_model_version.is.null,` +
+          `gender_model_version.neq.${GENDER_VERSION}`
+      )
+  } else {
+    query = query.is('demo_inferred_at', null)
+  }
+  const { count, error } = await query
+  if (error) {
+    console.warn('gender backlog count failed:', error.message)
+    return null
+  }
+  return count ?? 0
+}
+
+/**
+ * Gender inference phase, capped at DEMO_BATCH and grouped by DEMO_GROUP.
  *
- * Best-effort: every failure is swallowed (returns 0 / the count so far) so a missing
- * migration 041 or a model outage never breaks the classify response. A group whose
- * model call throws still gets its deterministic age written, but its gender +
- * demo_inferred_at stay NULL so only gender retries next run.
+ * Idempotent + versioned: manual rows are excluded; completed rows are selected again
+ * only after their name/headline changes (the migration resets their stamp) or this
+ * code intentionally bumps GENDER_VERSION.
+ *
+ * Best-effort: failures never break reply classification. The response makes partial
+ * progress and the remaining backlog visible instead of silently returning a number.
  *
  * HARD NO-PHOTOS RULE: the select list is explicit TEXT columns only — never
  * photo_path, never `select *` — because photo data must not reach any model.
  */
-async function runDemographics(sb: ReturnType<typeof db>): Promise<number> {
-  let stamped = 0
+async function runDemographics(sb: ReturnType<typeof db>): Promise<DemographicsRun> {
+  let processed = 0
+  let failed = 0
+  let lifecycle: 'v2' | 'legacy' = 'v2'
   try {
-    const { data, error } = await sb
-      .from('leads')
-      // Explicit text columns ONLY — no photo_path, no `select *` (no photos to models).
-      .select('id,full_name,headline,education_start_year,first_job_start_year')
-      .is('demo_inferred_at', null)
-      .order('added_at', { ascending: true })
-      .limit(DEMO_BATCH)
-    if (error) {
-      console.warn('demographics phase skipped:', error.message)
-      return 0
+    let leads = await selectGenderBatchV2(sb)
+    if (leads === null) {
+      lifecycle = 'legacy'
+      leads = await selectGenderBatchLegacy(sb)
     }
-    const leads = (data ?? []) as DemoLead[]
-    if (!leads.length) return 0
+    if (!leads.length) {
+      return {
+        processed: 0,
+        failed: 0,
+        remaining: await countGenderBacklog(sb, lifecycle),
+        lifecycle,
+      }
+    }
 
     const now = new Date().toISOString()
-    const currentYear = new Date().getUTCFullYear()
 
-    // Age range is independent of gender inference — compute it for every lead up front.
-    const ages = new Map<string, { min: number | null; max: number | null }>()
-    for (const l of leads) {
-      ages.set(l.id, birthYearRange(l.education_start_year, l.first_job_start_year, currentYear))
-    }
-
-    // Full stamp for a fully-processed lead: age + gender + demo_inferred_at, so the
-    // idempotency filter never picks it up again.
     const writeDemo = async (
-      id: string,
+      lead: DemoLead,
       gender: (typeof GENDERS)[number],
       confidence: number
     ) => {
-      const age = ages.get(id) ?? { min: null, max: null }
+      const lifecyclePatch =
+        lifecycle === 'v2'
+          ? {
+              gender_inferred_at: now,
+              gender_model_version: GENDER_VERSION,
+            }
+          : {}
       const { error: upErr } = await sb
         .from('leads')
         .update({
-          birth_year_min: age.min,
-          birth_year_max: age.max,
           gender,
           gender_confidence: confidence,
+          ...lifecyclePatch,
+          // Legacy compatibility for clients deployed before migration 048.
           demo_inferred_at: now,
           demo_model: MODEL,
         })
-        .eq('id', id)
-      if (!upErr) stamped++
-    }
-
-    // Age-only write used when gender inference fails for a group: age is deterministic
-    // and independent of gender (spec: "written regardless of what gender inference does"),
-    // so persist it now but DELIBERATELY leave gender/demo_inferred_at NULL so the next
-    // run retries gender. Skipped when there's no age signal (nothing to persist yet); a
-    // retried lead just re-writes the same age (harmless — touch_updated_at no-ops it).
-    const writeAgeOnly = async (id: string) => {
-      const age = ages.get(id)
-      if (!age || age.min == null) return
-      await sb
-        .from('leads')
-        .update({ birth_year_min: age.min, birth_year_max: age.max })
-        .eq('id', id)
+        // A person may exist in several campaigns on the same account. Persist one
+        // evaluation across every row so charts and manual review cannot diverge.
+        .eq('instance_id', lead.instance_id)
+        .eq('profile_url', lead.profile_url)
+      if (upErr) failed++
+      else processed++
     }
 
     // Leads with no usable name skip the model entirely — stamp 'unknown' directly.
-    // NOTE: demo_model is set to MODEL ('claude-haiku-4-5') even though no model ran on
-    // these — the convention is only 'manual' vs everything-else (an AI-provenance flag);
-    // the frontend/set_gender path distinguishes those two, not the specific model id.
     const named: DemoLead[] = []
     const nameless: DemoLead[] = []
     for (const l of leads) {
       if (l.full_name && l.full_name.trim()) named.push(l)
       else nameless.push(l)
     }
-    await Promise.all(nameless.map((l) => writeDemo(l.id, 'unknown', 0)))
+    await Promise.all(nameless.map((l) => writeDemo(l, 'unknown', 0)))
 
-    // Oldest-first + DEMO_BATCH cap means a group of 25 whose gender call
-    // deterministically fails (e.g. a persistent model/content issue) sits at the front
-    // of the window and can re-occupy a run's model budget until it succeeds — the same
-    // accepted tradeoff as the sentiment classifier's oldest-first batch. Age is still
-    // persisted for those leads each time, so only gender is delayed.
     for (const group of chunk(named, DEMO_GROUP)) {
       const prompt = group
         .map(
@@ -463,23 +524,23 @@ async function runDemographics(sb: ReturnType<typeof db>): Promise<number> {
         const { object } = await generateObject({
           model: anthropic(MODEL),
           schema: z.object({
-            results: z.array(
-              z.object({
-                ref: z.number().int(),
-                gender: z.enum(GENDERS),
-                confidence: z.number().min(0).max(1),
-              })
-            ),
+            results: z
+              .array(
+                z.object({
+                  ref: z.number().int(),
+                  gender: z.enum(GENDERS),
+                  confidence: z.number().min(0).max(1),
+                })
+              )
+              .length(group.length),
           }),
           system: GENDER_SYSTEM,
           prompt,
         })
         results = object.results
       } catch (e) {
-        // Model failure for this group: still persist the deterministic age, but leave
-        // gender + demo_inferred_at NULL so gender retries next run.
         console.warn('gender inference failed for a group:', e)
-        await Promise.all(group.map((l) => writeAgeOnly(l.id)))
+        failed += group.length
         continue
       }
 
@@ -494,15 +555,25 @@ async function runDemographics(sb: ReturnType<typeof db>): Promise<number> {
           const lead = group[r.ref]
           if (!lead) return
           const confidence = Math.min(1, Math.max(0, r.confidence))
-          await writeDemo(lead.id, r.gender, confidence)
+          await writeDemo(lead, r.gender, confidence)
         })
       )
     }
 
-    return stamped
+    return {
+      processed,
+      failed,
+      remaining: await countGenderBacklog(sb, lifecycle),
+      lifecycle,
+    }
   } catch (e) {
     console.warn('demographics phase threw:', e)
-    return stamped
+    return {
+      processed,
+      failed,
+      remaining: null,
+      lifecycle: 'unavailable',
+    }
   }
 }
 

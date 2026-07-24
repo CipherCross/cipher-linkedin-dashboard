@@ -862,7 +862,7 @@ export function hypothesisCampaignBreakdown(
 
 // --- Demographics + photos ----------------------------------------------
 // Age is arithmetic from inferred birth-year bounds; gender is inferred (Haiku)
-// or SDR-confirmed. Both may be absent on a pre-migration DB (LEAD_COLUMNS
+// or SDR-reviewed. Both may be absent on a pre-migration DB (LEAD_COLUMNS
 // ladder drops the rung) — every helper is null-safe. `unknown` gender and
 // unknown age are first-class values, never a failure state. All year math is
 // in UTC to match the rest of this module.
@@ -934,8 +934,8 @@ export const GENDER_LONG: Record<Gender, string> = {
 }
 
 export interface Demographics {
-  /** Gender split; `unknown` includes leads with no inferred gender yet. */
-  gender: Array<{ id: Gender; label: string; count: number }>
+  /** Gender split. Pending and evaluated-as-unknown are deliberately separate. */
+  gender: Array<{ id: Gender | 'pending'; label: string; count: number }>
   /** 5-year age buckets from birth-year midpoint, continuous across the observed
    *  span (empty when no lead has an inferred age). */
   ages: Array<{ label: string; count: number }>
@@ -945,7 +945,7 @@ export interface Demographics {
   total: number
 }
 
-const GENDER_ORDER: Gender[] = ['female', 'male', 'unknown']
+const GENDER_ORDER: Array<Gender | 'pending'> = ['female', 'male', 'unknown', 'pending']
 
 /** Gender split + a 5-year-bucket age histogram over a lead set, deduped by
  *  leadKey so a person present in several campaigns of one account counts once
@@ -954,7 +954,12 @@ const GENDER_ORDER: Gender[] = ['female', 'male', 'unknown']
  *  person's rows carry the same synced/inferred values. */
 export function campaignDemographics(leads: Lead[]): Demographics {
   const seen = new Set<string>()
-  const genderCount: Record<Gender, number> = { male: 0, female: 0, unknown: 0 }
+  const genderCount: Record<Gender | 'pending', number> = {
+    male: 0,
+    female: 0,
+    unknown: 0,
+    pending: 0,
+  }
   const ages: number[] = []
   let ageUnknown = 0
   let total = 0
@@ -963,13 +968,17 @@ export function campaignDemographics(leads: Lead[]): Demographics {
     if (seen.has(k)) continue
     seen.add(k)
     total++
-    genderCount[l.gender ?? 'unknown']++
+    genderCount[l.gender ?? 'pending']++
     const age = ageOf(l)
     if (age == null) ageUnknown++
     else ages.push(age)
   }
   return {
-    gender: GENDER_ORDER.map((id) => ({ id, label: GENDER_LONG[id], count: genderCount[id] })),
+    gender: GENDER_ORDER.map((id) => ({
+      id,
+      label: id === 'pending' ? 'Pending evaluation' : GENDER_LONG[id],
+      count: genderCount[id],
+    })),
     ages: ageHistogram5yr(ages),
     ageUnknown,
     total,

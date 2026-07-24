@@ -370,20 +370,20 @@ export function ConversationDrawer({
   }
 
   // Gender override → /api/pipeline set_gender. A non-null value marks the row
-  // SDR-confirmed (demo_model='manual', confidence 1); null clears the inferred
-  // demographic fields so the next classify run re-infers (undo). Optimistic via
+  // SDR-reviewed (demo_model='manual', confidence 1); null clears only the gender
+  // lifecycle so the next classify run re-infers it. Age remains independent.
+  // Optimistic via
   // patchLead, reverting the snapshot on failure; on success the response already
-  // carries the authoritative fields (e.g. the fresh demo_inferred_at or a
-  // cleared age range), so patch those in directly instead of a full refetch.
+  // carries the authoritative fields, so patch those directly instead of refetching.
   async function setGender(gender: Gender | null) {
     setSavingGender(true)
     const snapshot: Partial<Lead> = {
       gender: live.gender ?? null,
       gender_confidence: live.gender_confidence ?? null,
+      gender_inferred_at: live.gender_inferred_at ?? null,
+      gender_model_version: live.gender_model_version ?? null,
       demo_model: live.demo_model ?? null,
       demo_inferred_at: live.demo_inferred_at ?? null,
-      birth_year_min: live.birth_year_min ?? null,
-      birth_year_max: live.birth_year_max ?? null,
     }
     patchLead(
       lead!.id,
@@ -391,12 +391,18 @@ export function ConversationDrawer({
         ? {
             gender: null,
             gender_confidence: null,
+            gender_inferred_at: null,
+            gender_model_version: null,
             demo_model: null,
             demo_inferred_at: null,
-            birth_year_min: null,
-            birth_year_max: null,
           }
-        : { gender, gender_confidence: 1, demo_model: 'manual' },
+        : {
+            gender,
+            gender_confidence: 1,
+            gender_inferred_at: new Date().toISOString(),
+            gender_model_version: null,
+            demo_model: 'manual',
+          },
     )
     try {
       const res = await adminPost('/api/pipeline', {
@@ -410,11 +416,14 @@ export function ConversationDrawer({
       patchLead(lead!.id, {
         gender: (j.gender ?? null) as Gender | null,
         gender_confidence: j.gender_confidence ?? null,
+        gender_inferred_at: j.gender_inferred_at ?? null,
+        gender_model_version: j.gender_model_version ?? null,
         demo_model: j.demo_model ?? null,
         demo_inferred_at: j.demo_inferred_at ?? null,
-        birth_year_min: j.birth_year_min ?? null,
-        birth_year_max: j.birth_year_max ?? null,
       })
+      // The API applies a confirmation to every campaign row for this account/profile.
+      // Refresh so duplicates elsewhere in the explorer receive the same value.
+      refetch()
     } catch (e) {
       patchLead(lead!.id, snapshot) // revert
       toast.error(`Couldn't update gender: ${e instanceof Error ? e.message : String(e)}`)
@@ -601,8 +610,8 @@ export function ConversationDrawer({
             </label>
             {live.gender &&
               (live.demo_model === 'manual' ? (
-                <span className="badge" title="Confirmed by an SDR — treated as ground truth">
-                  Confirmed
+                <span className="badge" title="Reviewed by an SDR — manual override">
+                  Reviewed
                 </span>
               ) : (
                 <span

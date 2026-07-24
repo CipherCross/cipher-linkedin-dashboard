@@ -104,7 +104,9 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   positive, `p2` problem interest, `p3` buying intent). `intent_taxonomy_version`
   makes historical backfills resumable; manual sentiment is preserved. P3 is a
   durable conversation milestone and is the denominator for post-P3 booking
-  conversion. Intent never auto-advances CRM stages. `coach.ts` coaches the SDR.
+  conversion. Intent never auto-advances CRM stages. Its demographics phase owns
+  versioned name/headline gender inference; age is derived separately by migration
+  048 whenever synced education/job years change. `coach.ts` coaches the SDR.
 - `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
   open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
   rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.

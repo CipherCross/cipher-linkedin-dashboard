@@ -306,9 +306,11 @@ async function setMemberActive(supa: ReturnType<typeof db>, p: Record<string, un
 // --- set_gender ------------------------------------------------------------
 // SDR override for the inferred lead demographics (Feature 2). Unlike the other
 // actions this touches the DEMOGRAPHICS layer, not the CRM pipeline, so it writes NO
-// pipeline_events row. A concrete gender is treated as ground truth (demo_model='manual',
-// confidence 1) that the classify job never re-infers; null is UNDO — it clears every
-// demographic inference field so the next classify run re-derives them from scratch.
+// pipeline_events row. A concrete gender becomes an SDR-reviewed override
+// (demo_model='manual', confidence 1) that the classify job never re-infers; null
+// is UNDO for gender only. "Manual" records provenance, not self-identification.
+// Age has an independent lifecycle (migration 048) and must not disappear when an
+// SDR clears a gender override.
 
 async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
   const leadId = p.lead_id
@@ -326,19 +328,18 @@ async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>
 
   const { data: lead, error: leadErr } = await supa
     .from('leads')
-    .select('id')
+    .select(
+      'id,instance_id,profile_url,gender,gender_confidence,demo_model,gender_model_version'
+    )
     .eq('id', leadId)
     .maybeSingle()
   if (leadErr) return json({ error: leadErr.message }, 500)
   if (!lead) return json({ error: 'unknown lead_id' }, 404)
 
-  // null => clear ALL inference fields (undo -> next classify run re-infers).
-  // concrete gender => SDR-confirmed override; leave the birth-year range as inferred.
-  const patch: Record<string, unknown> =
+  // Legacy fields remain populated for clients deployed before migration 048.
+  const legacyPatch: Record<string, unknown> =
     gender === null
       ? {
-          birth_year_min: null,
-          birth_year_max: null,
           gender: null,
           gender_confidence: null,
           demo_inferred_at: null,
@@ -351,15 +352,66 @@ async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>
           demo_inferred_at: nowIso(),
         }
 
-  const { data, error } = await supa
+  const lifecyclePatch: Record<string, unknown> =
+    gender === null
+      ? { gender_inferred_at: null, gender_model_version: null }
+      : { gender_inferred_at: nowIso(), gender_model_version: null }
+
+  const v2Result = await supa
     .from('leads')
-    .update(patch)
-    .eq('id', leadId)
-    .select('gender,gender_confidence,demo_model,demo_inferred_at,birth_year_min,birth_year_max')
-    .single()
+    .update({ ...legacyPatch, ...lifecyclePatch })
+    .eq('instance_id', lead.instance_id)
+    .eq('profile_url', lead.profile_url)
+    .select(
+      'id,gender,gender_confidence,gender_inferred_at,gender_model_version,' +
+        'demo_model,demo_inferred_at,birth_year_min,birth_year_max'
+    )
+  let data = ((v2Result.data ?? []) as unknown as Array<Record<string, unknown>>)
+    .find((row) => row.id === leadId) ?? null
+  let error = v2Result.error
+
+  // Rolling-deploy fallback: migration 041 supports the override but lacks the
+  // split lifecycle columns. The first UPDATE fails atomically, so retrying the
+  // legacy patch cannot double-write.
+  if (error && (error.code === '42703' || /column\s+.*\s+does not exist/i.test(error.message))) {
+    const legacyResult = await supa
+      .from('leads')
+      .update(legacyPatch)
+      .eq('instance_id', lead.instance_id)
+      .eq('profile_url', lead.profile_url)
+      .select(
+        'id,gender,gender_confidence,demo_model,demo_inferred_at,' +
+          'birth_year_min,birth_year_max'
+      )
+    data = ((legacyResult.data ?? []) as unknown as Array<Record<string, unknown>>)
+      .find((row) => row.id === leadId) ?? null
+    error = legacyResult.error
+  }
   if (error) return json({ error: error.message }, 500)
 
-  return json({ ok: true, ...data })
+  // Best-effort audit: preserve the model output that the human just reviewed so
+  // precision/coverage/calibration can be measured later. A rolling deployment
+  // without migration 048 still completes the override and reports review_error.
+  const reviewer =
+    typeof p.actor === 'string' && p.actor.trim() ? p.actor.trim().slice(0, 120) : null
+  const { error: reviewErr } = await supa.from('lead_gender_reviews').insert({
+    lead_id: lead.id,
+    instance_id: lead.instance_id,
+    profile_url: lead.profile_url,
+    action: gender === null ? 'clear' : 'set',
+    predicted_gender: lead.demo_model === 'manual' ? null : lead.gender,
+    predicted_confidence: lead.demo_model === 'manual' ? null : lead.gender_confidence,
+    predicted_model: lead.demo_model === 'manual' ? null : lead.demo_model,
+    predicted_version: lead.demo_model === 'manual' ? null : lead.gender_model_version,
+    reviewed_gender: gender,
+    reviewer,
+  })
+
+  return json({
+    ok: true,
+    ...(data ?? {}),
+    ...(reviewErr ? { review_error: reviewErr.message } : {}),
+  })
 }
 
 // --- conversation follow-ups -----------------------------------------------

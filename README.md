@@ -141,6 +141,12 @@ for external clients (Claude Desktop / Claude Code).
   intent (`P1` polite positive / `P2` problem interest / `P3` buying intent).
   The taxonomy version is stored even when intent is null, making the historical
   backfill resumable and idempotent. Manual sentiment corrections are preserved.
+  Its second phase evaluates name/headline gender in fair per-account batches;
+  migration 048 derives age independently whenever synced education/job years
+  change. The API reports demographic processed/failed/remaining counts, and
+  `?mode=demographics` drains that backlog without spending time on replies.
+  Manual gender actions append the prior prediction and correction to
+  `lead_gender_reviews`, so accuracy and confidence calibration can be evaluated.
   Runs daily via the `vercel.json` cron and on demand from the Leads page.
 - Booking conversion uses unique conversations booked strictly after first P3;
   the mature rate excludes P3 cohorts newer than 14 days. P3 ghosting requires

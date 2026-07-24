@@ -183,21 +183,48 @@ export function LeadsExplorer() {
   // «Classify replies» — moved here from the Replies page; same endpoint and
   // refetch behaviour so freshly-labelled replies flow into the buckets.
   const [classifying, setClassifying] = useState(false)
+  const [updatingDemographics, setUpdatingDemographics] = useState(false)
+
+  const demographicsSummary = (value: unknown): string => {
+    if (!value || typeof value !== 'object') return ''
+    const d = value as { processed?: number; failed?: number; remaining?: number | null }
+    const bits = [`${d.processed ?? 0} demographics processed`]
+    if (d.failed) bits.push(`${d.failed} failed`)
+    if (d.remaining != null) bits.push(`${d.remaining} remaining`)
+    return bits.join(', ')
+  }
+
   async function classify() {
     setClassifying(true)
     try {
       const res = await fetch('/api/classify', { method: 'POST' })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      toast.success(
+      const replies =
         `Classified ${j.classified} repl${j.classified === 1 ? 'y' : 'ies'}` +
-          (j.remaining ? `, ${j.remaining} still queued` : ' — all caught up'),
-      )
+        (j.remaining ? `, ${j.remaining} still queued` : ' — all caught up')
+      const demographics = demographicsSummary(j.demographics)
+      toast.success(demographics ? `${replies} · ${demographics}` : replies)
       refetch()
     } catch (e) {
       toast.error(`Couldn't classify: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setClassifying(false)
+    }
+  }
+
+  async function updateDemographics() {
+    setUpdatingDemographics(true)
+    try {
+      const res = await fetch('/api/classify?mode=demographics', { method: 'POST' })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      toast.success(demographicsSummary(j.demographics) || 'Demographics are up to date')
+      refetch()
+    } catch (e) {
+      toast.error(`Couldn't update demographics: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setUpdatingDemographics(false)
     }
   }
 
@@ -275,9 +302,9 @@ export function LeadsExplorer() {
       if (who === 'unassigned') {
         if (l.assigned_to != null) return false
       } else if (who !== 'all' && String(l.assigned_to) !== who) return false
-      // Demographic filters match only explicit values, so a pre-migration DB
-      // (gender/age undefined) matches nothing rather than everything.
-      if (genderF !== 'all' && l.gender !== genderF) return false
+      if (genderF === 'pending') {
+        if (l.gender != null) return false
+      } else if (genderF !== 'all' && l.gender !== genderF) return false
       if (ageF !== 'all' && ageBucketOf(l) !== (ageF as AgeBucket)) return false
       if (followF !== 'all') {
         const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
@@ -394,7 +421,16 @@ export function LeadsExplorer() {
   if (genderF !== 'all')
     activeFilters.push({
       id: 'gender',
-      label: `Gender: ${genderF === 'male' ? 'Male' : genderF === 'female' ? 'Female' : 'Unknown'}`,
+      label:
+        `Gender: ${
+          genderF === 'male'
+            ? 'Male'
+            : genderF === 'female'
+              ? 'Female'
+              : genderF === 'pending'
+                ? 'Pending'
+                : 'Unknown'
+        }`,
       onClear: () => setFilter('gender', 'all'),
     })
   if (ageF !== 'all')
@@ -456,6 +492,8 @@ export function LeadsExplorer() {
           stage: stageOf(l),
           risk: riskLabel(l),
           age: ageRange(l),
+          age_source: l.age_source ?? null,
+          age_method: l.age_method_version ?? null,
           gender: l.gender ?? null,
           gender_confidence: l.gender_confidence ?? null,
           demo_source: l.demo_model ?? null,
@@ -647,6 +685,7 @@ export function LeadsExplorer() {
             <option value="male">Male</option>
             <option value="female">Female</option>
             <option value="unknown">Unknown</option>
+            <option value="pending">Pending evaluation</option>
           </select>
         </label>
         <label className="filter-field">
@@ -736,6 +775,17 @@ export function LeadsExplorer() {
             <button className="btn sm" onClick={classify} disabled={classifying}>
               {classifying ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
               {classifying ? 'Classifying…' : 'Classify replies'}
+            </button>
+            <button
+              className="btn sm"
+              onClick={updateDemographics}
+              disabled={updatingDemographics}
+              title="Process the next fair batch of name-based gender evaluations"
+            >
+              {updatingDemographics
+                ? <Loader2 size={14} className="spin" />
+                : <Sparkles size={14} />}
+              {updatingDemographics ? 'Updating…' : 'Update demographics'}
             </button>
             <button className="btn sm" onClick={exportCsv} disabled={filtered.length === 0}>
               <Download size={14} /> Export CSV
@@ -913,8 +963,8 @@ export function LeadsExplorer() {
   )
 }
 
-/** Gender chip: inferred rows show "F ·72%" (muted, click the ROW to confirm in
- *  the drawer); SDR-confirmed rows show "F ✓". `unknown` is a real value ("?"),
+/** Gender chip: inferred rows show "F ·72%" (muted, click the ROW to review in
+ *  the drawer); SDR-reviewed rows show "F ✓". `unknown` is a real value ("?"),
  *  not blank — a lead with no inference yet shows an em-dash. */
 function GenderCell({ lead }: { lead: Lead }) {
   const g = lead.gender
@@ -922,7 +972,7 @@ function GenderCell({ lead }: { lead: Lead }) {
   const short = GENDER_SHORT[g as Gender]
   if (lead.demo_model === 'manual')
     return (
-      <span className="gender-cell manual" title="Confirmed by an SDR">
+      <span className="gender-cell manual" title="Reviewed by an SDR">
         {short} ✓
       </span>
     )

@@ -271,10 +271,11 @@ function lagList(leads: Lead[], from: keyof Lead, to: keyof Lead): number[] {
 
 // Categorical, non-stereotyped hues drawn from the theme tokens (the funnel /
 // chart palette), so gender reads as a neutral category, not blue/pink.
-const GENDER_COLOR: Record<Gender, string> = {
+const GENDER_COLOR: Record<Gender | 'pending', string> = {
   female: 'var(--purple)',
   male: 'var(--accent)',
   unknown: 'var(--text-muted)',
+  pending: 'var(--border)',
 }
 
 /** Age histogram (5-year buckets from birth-year midpoint) + gender split for
@@ -361,10 +362,9 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
         </div>
       </div>
       <div className="muted small demo-ethics">
-        Age and gender are statistical inferences for internal outreach analytics, shown with
-        confidence until an SDR confirms them. Name-based gender inference skews inaccurate for
-        non-Western names — “unknown” is a first-class value, not a failure. Counts are deduped
-        per person; unknowns are shown, never dropped.
+        Age is a career-history estimate; contradictory education/job signals remain unknown.
+        Gender is inferred from name and headline until an SDR confirms it. “Pending evaluation”
+        and an evaluated “unknown” are separate; neither is dropped from the totals.
       </div>
     </div>
   )
