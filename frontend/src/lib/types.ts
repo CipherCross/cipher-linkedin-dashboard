@@ -82,6 +82,10 @@ export interface CampaignMetrics {
   campaign_name: string
   instance_id: string
   status: string
+  /** Team-provided operational background used by AI briefings. This is
+   *  attributed context, not measured campaign telemetry. */
+  briefing_context?: string | null
+  briefing_context_updated_at?: string | null
   total_leads: number
   invites_sent: number
   accepted: number
@@ -418,52 +422,6 @@ export interface CoachingDigest {
   model: string | null
 }
 
-// --- Morning Briefing (see /api/briefing) ------------------------------------
-
-export interface BriefingSection {
-  title: string
-  body: string
-}
-
-export interface BriefingAction {
-  text: string
-  priority: 'high' | 'med' | 'low'
-}
-
-export interface BriefingRisk {
-  kind: string
-  severity: 'low' | 'med' | 'high'
-  text: string
-}
-
-/** A day-over-day delta vs the previous briefing (what changed / progressed). */
-export interface BriefingChange {
-  text: string
-  trend?: 'up' | 'down' | 'flat' | 'new' | 'resolved'
-}
-
-/** One headline number in the briefing's key-metrics strip. */
-export interface BriefingMetric {
-  label: string
-  value: string
-  note?: string
-}
-
-/** One daily AI-generated pipeline digest (briefings table). */
-export interface Briefing {
-  id: string
-  briefing_date: string
-  headline: string | null
-  summary: string | null
-  changes: BriefingChange[]
-  sections: BriefingSection[]
-  actions: BriefingAction[]
-  risks: BriefingRisk[]
-  metrics?: BriefingMetric[]
-  model: string | null
-  created_at: string
-}
-
 export interface DashboardData {
   instances: Instance[]
   campaigns: CampaignMetrics[]
@@ -474,8 +432,6 @@ export interface DashboardData {
   conversationReplyIntents: ConversationReplyIntent[]
   annotations: Annotation[]
   steps: CampaignStep[]
-  briefing: Briefing | null
-  prevBriefing: Briefing | null
   teamMembers: TeamMember[]
   pipelineEvents: PipelineEvent[]
   followUpStates: FollowUpState[]

@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { FileQuestion } from 'lucide-react'
+import { FileQuestion, Save } from 'lucide-react'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { useData } from '../lib/DataContext'
+import { useToast } from '../lib/ToastContext'
+import { adminPost } from '../lib/admin'
 import type { CampaignMetrics, Gender, Lead } from '../lib/types'
 import {
   campaignDemographics, daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
@@ -153,6 +155,8 @@ export function CampaignDetail() {
         </div>
       </header>
 
+      <CampaignBriefingContext campaign={campaign} />
+
       {compareIds.length > 0 ? (
         <>
           <div className="cmp-chips">
@@ -235,6 +239,79 @@ export function CampaignDetail() {
         </>
       )}
     </>
+  )
+}
+
+function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
+  const { patchCampaign } = useData()
+  const toast = useToast()
+  const [value, setValue] = useState(campaign.briefing_context ?? '')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setValue(campaign.briefing_context ?? '')
+  }, [campaign.campaign_id, campaign.briefing_context])
+
+  const dirty = value.trim() !== (campaign.briefing_context ?? '').trim()
+
+  const save = async () => {
+    if (!dirty || saving) return
+    setSaving(true)
+    try {
+      const res = await adminPost('/api/campaign-context', {
+        campaign_id: campaign.campaign_id,
+        briefing_context: value,
+      })
+      const result = await res.json().catch(() => ({}))
+      if (res.status === 401) {
+        toast.error('Wrong admin secret.')
+        return
+      }
+      if (!res.ok) {
+        toast.error(`Couldn't save briefing context: ${result.error ?? res.status}`)
+        return
+      }
+      patchCampaign(campaign.campaign_id, {
+        briefing_context: result.briefing_context ?? null,
+        briefing_context_updated_at: result.briefing_context_updated_at ?? null,
+      })
+      setValue(result.briefing_context ?? '')
+      toast.success('Briefing context saved.')
+    } catch (e) {
+      toast.error(`Couldn't save briefing context: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="card campaign-briefing-context">
+      <div>
+        <h2>Briefing context</h2>
+        <p className="muted small">
+          Give the AI facts that metrics cannot show: lead source, re-engagement strategy,
+          account overlap, exclusions, or a temporary experiment. Don&apos;t include secrets
+          or personal data.
+        </p>
+      </div>
+      <textarea
+        rows={4}
+        maxLength={4000}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Example: This campaign re-engages older leads who did not accept from Mykyta's main profile. Compare it as a second-touch audience, not a fresh outbound campaign."
+      />
+      <div className="campaign-briefing-context-foot">
+        <span className="muted small">
+          {campaign.briefing_context_updated_at
+            ? `Updated ${new Date(campaign.briefing_context_updated_at).toLocaleString()}`
+            : 'No team context saved yet.'}
+        </span>
+        <button className="btn accent sm" disabled={!dirty || saving} onClick={() => void save()}>
+          <Save size={14} /> {saving ? 'Saving…' : 'Save context'}
+        </button>
+      </div>
+    </section>
   )
 }
 

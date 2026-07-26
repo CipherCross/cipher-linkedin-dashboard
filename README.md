@@ -156,22 +156,29 @@ for external clients (Claude Desktop / Claude Code).
   per-instance override blob edited on the Health page; the sync agent merges it
   over its local `config.yaml` on the next run. See "Configuring notebooks online".
 
-- `frontend/api/briefing.ts` — the **Morning Briefing**. Reuses the same agentic SQL
-  loop as `/api/chat` (same `_lib/tools.ts`) to investigate the whole pipeline on its
-  own, then structures the result and stores one row per day in `briefings`
-  (`008`-style read-only RLS; see `016_briefings.sql`). Runs daily at **07:00 UTC**
-  via the `vercel.json` cron — after the 06:00 `classify` cron, so replies are
-  sentiment/intent-labelled first — and on demand from the **Refresh briefing** button on
-  the Overview card. If `SLACK_WEBHOOK_URL` is set it also posts the briefing to
-  Slack (Block Kit); without it the briefing still stores and shows on the dashboard.
-  The GET (cron) path is guarded by `CRON_SECRET`; the manual POST is open and
-  idempotent (upsert on the date).
+- `frontend/api/briefing.ts` — two **Slack-only LinkedIn briefings**, both written
+  in concise, natural Ukrainian with `claude-opus-5`. A short operational note runs
+  Monday–Friday at **07:30 UTC**; a longer review of the completed Monday–Sunday
+  period runs Monday at **07:00 UTC**. Daily and weekly rows/jobs are keyed
+  independently, so Monday's two posts cannot overwrite each other. The generator
+  preloads team-written campaign context, linked hypothesis/search context, and
+  recent annotations before interpreting results; causal explanations are
+  attributed to that context rather than inferred from rates. Briefings persist for
+  continuity and retries but have no dashboard card. GET crons are guarded by
+  `CRON_SECRET`; the admin-guarded POST recovery path regenerates without reposting
+  to Slack.
+- `frontend/api/campaign-context.ts` — `ADMIN_SECRET`-guarded writer for the
+  **Briefing context** editor on Campaign Detail. Use it for durable facts metrics
+  cannot show, such as re-engagement batches, cross-account overlap, audience
+  exclusions, or temporary experiments. It is internal strategy text under the
+  project's existing read-open posture; never store secrets or personal data there.
 
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
-`CRON_SECRET` to lock the daily `/api/classify` + `/api/notify-replies` +
-`/api/briefing` crons, `ADMIN_SECRET` to gate `/api/config` config writes,
-`SLACK_WEBHOOK_URL` to deliver the Morning Briefing to Slack,
+`CRON_SECRET` to lock the scheduled `/api/classify` + `/api/notify-replies` +
+briefing crons, `ADMIN_SECRET` to gate `/api/config`, campaign-context,
+playbook/import, and manual briefing writes, `SLACK_WEBHOOK_URL` to deliver the
+weekday and weekly briefings to Slack,
 `SLACK_REPLIES_WEBHOOK_URL` to route new-reply alerts from `/api/notify-replies`
 to their own channel — falls back to `SLACK_WEBHOOK_URL` when unset — and
 `DASHBOARD_URL` to turn lead names in those alerts into dashboard deep links,
@@ -188,15 +195,14 @@ Topline numbers come from the `campaign_metrics` view (so any client gets the
 same figures); the deeper analysis is computed client-side from the raw
 `leads` table:
 
-- **Overview** — the **Morning Briefing** card (today's AI digest: headline,
-  what changed, risks, and the 3 actions to take — see `/api/briefing`), KPIs
-  (invites / accepted / acceptance rate / replies / reply rate), daily activity
-  chart, instance health, campaign table.
+- **Overview** — KPIs (invites / accepted / acceptance rate / replies / reply
+  rate), daily activity chart, instance health, campaign table. AI briefings are
+  delivered only in Slack.
 - **Campaign detail** (click a campaign) — funnel with pending-invite count,
   weekly invite cohorts (acceptance by send week), invite→accept and
   accept→reply time histograms, campaign-scoped activity, performance by
   audience segment (headline keywords) and top companies, plus side-by-side
-  campaign comparison.
+  campaign comparison and the team-editable context supplied to AI briefings.
 - **Accounts** — per-instance comparison (invites 7d, pending, rates), and a
   per-account detail page with a warm-up/limit tracker (weekly invites vs
   LinkedIn's ~100–200/wk safe zone) and a day×hour response heatmap.

@@ -16,7 +16,7 @@ const dateUk = (ts: string) =>
  *  replies whose thread has no manually-imported history, so what
  *  happened after the reply is invisible. Clicking a row opens the shared
  *  conversation drawer, which holds the "Import history" flow. All copy in
- *  Ukrainian, matching BriefingCard. Renders nothing when there are no
+ *  Ukrainian, matching the team's Slack briefings. Renders nothing when there are no
  *  candidates — or when `messages.source` is unavailable (pre-migration DB,
  *  where fetchMessages stripped the column and every thread looks sync-only). */
 export function ImportCalloutCard() {

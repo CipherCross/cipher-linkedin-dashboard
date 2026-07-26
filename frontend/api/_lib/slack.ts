@@ -3,19 +3,21 @@
 // logic — this is that extension point, now also used by api/review-digest.ts
 // for the manager weekly-review post and api/notify-replies.ts for new-reply
 // alerts. All senders are fail-soft by design: a missing webhook or a Slack
-// outage never fails the caller — briefings still store and show on the
-// dashboard, review-digest and notify-replies report the failure back to their
-// callers (502) rather than throwing.
+// outage never fails the caller — briefings still store for continuity;
+// review-digest and notify-replies report the failure back to their callers
+// (502) rather than throwing.
 
-interface BriefingForSlack {
+export interface BriefingForSlack {
   briefing_date: string
+  briefing_kind: 'daily' | 'weekly'
+  period_start: string
+  period_end: string
   headline: string | null
   summary: string | null
   changes: { text: string; trend?: string }[]
+  sections: { title: string; body: string }[]
   actions: { text: string; priority?: string }[]
   risks: { kind?: string; severity?: string; text: string }[]
-  // Optional structured key-metrics strip (added later; guard for absence on old rows).
-  metrics?: { label: string; value: string; note?: string }[]
   model: string | null
 }
 
@@ -23,7 +25,7 @@ type Block = Record<string, unknown>
 
 const SEV_EMOJI: Record<string, string> = { high: '🔴', med: '🟠', low: '🟡' }
 
-// Day-over-day deltas. Trend → glyph (matches the dashboard card's TREND_ICON).
+// Change direction → a compact glyph.
 const TREND_EMOJI: Record<string, string> = {
   up: '▲',
   down: '▼',
@@ -32,21 +34,14 @@ const TREND_EMOJI: Record<string, string> = {
   resolved: '✓',
 }
 
-/** Ukrainian plural for "ризик" (1 ризик / 2-4 ризики / 5+ ризиків). */
-function risksUk(n: number): string {
-  const mod10 = n % 10
-  const mod100 = n % 100
-  if (mod10 === 1 && mod100 !== 11) return `${n} ризик`
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ризики`
-  return `${n} ризиків`
-}
-
 /** Build the Slack Block Kit payload for one briefing. */
-function blocksFor(b: BriefingForSlack): Block[] {
+export function blocksForBriefing(b: BriefingForSlack): Block[] {
+  const weekly = b.briefing_kind === 'weekly'
+  const fallback = weekly ? 'Щотижневий LinkedIn-брифінг' : 'Короткий LinkedIn-брифінг'
   const blocks: Block[] = [
     {
       type: 'header',
-      text: { type: 'plain_text', text: `📣 ${b.headline || 'Щоденний брифінг'}`.slice(0, 150) },
+      text: { type: 'plain_text', text: `📣 ${b.headline || fallback}`.slice(0, 150) },
     },
   ]
 
@@ -54,39 +49,37 @@ function blocksFor(b: BriefingForSlack): Block[] {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: b.summary.slice(0, 2900) } })
   }
 
-  // Key-metrics strip: a 2-column fields grid (Slack caps a section at 10 fields).
-  const metrics = (b.metrics ?? []).slice(0, 8)
-  if (metrics.length) {
-    blocks.push({
-      type: 'section',
-      fields: metrics.map((m) => ({
-        type: 'mrkdwn',
-        text: `*${m.value}*\n${m.label}`.slice(0, 2000),
-      })),
-    })
-  }
-
-  const changes = (b.changes ?? []).slice(0, 6)
+  const changes = (b.changes ?? []).slice(0, weekly ? 5 : 3)
   if (changes.length) {
     const text =
-      '*Зміни з учора*\n' +
+      `*${weekly ? 'Що змінилося за тиждень' : 'Що змінилося'}*\n` +
       changes.map((c) => `${TREND_EMOJI[c.trend ?? ''] ?? '•'} ${c.text}`).join('\n')
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })
   }
 
-  const actions = (b.actions ?? []).slice(0, 5)
+  for (const section of (b.sections ?? []).slice(0, weekly ? 3 : 1)) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${section.title}*\n${section.body}`.slice(0, 2900),
+      },
+    })
+  }
+
+  const actions = (b.actions ?? []).slice(0, weekly ? 3 : 2)
   if (actions.length) {
     blocks.push({ type: 'divider' })
     const text =
-      '*Дії на сьогодні*\n' +
+      '*Що робимо далі*\n' +
       actions.map((a, i) => `${i + 1}. ${a.text}`).join('\n')
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })
   }
 
-  const risks = (b.risks ?? []).slice(0, 6)
+  const risks = (b.risks ?? []).slice(0, weekly ? 3 : 2)
   if (risks.length) {
     const text =
-      '*Ризики*\n' +
+      '*На що звернути увагу*\n' +
       risks.map((r) => `${SEV_EMOJI[r.severity ?? ''] ?? '•'} ${r.text}`).join('\n')
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 2900) } })
   }
@@ -96,7 +89,10 @@ function blocksFor(b: BriefingForSlack): Block[] {
     elements: [
       {
         type: 'mrkdwn',
-        text: `${b.briefing_date} · ${risksUk(risks.length)} · ${b.model ?? 'ai'}`,
+        text:
+          `${
+            weekly ? `${b.period_start}–${b.period_end}` : b.briefing_date
+          } · ${weekly ? 'weekly' : 'daily'} · ${b.model ?? 'ai'}`,
       },
     ],
   })
@@ -308,12 +304,16 @@ export async function postBriefingToSlack(
 ): Promise<boolean> {
   if (!webhookUrl) return false
   try {
+    const fallback =
+      briefing.briefing_kind === 'weekly'
+        ? 'Щотижневий LinkedIn-брифінг'
+        : 'Короткий LinkedIn-брифінг'
     const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        text: `📣 ${briefing.headline || 'Щоденний брифінг'}`, // notification fallback
-        blocks: blocksFor(briefing),
+        text: `📣 ${briefing.headline || fallback}`, // notification fallback
+        blocks: blocksForBriefing(briefing),
       }),
     })
     if (!res.ok) {

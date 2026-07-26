@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { CircleAlert, CircleCheck, Info, X } from 'lucide-react'
 
 // Tiny dependency-free toast system: one context, one fixed viewport. Write
-// actions (playbook/config save, import, briefing, classify) call useToast()
+// actions (playbook/config/context save, import, classify) call useToast()
 // instead of swapping inline status text. Success/info auto-dismiss; errors are
 // sticky (manual dismiss) so a failure isn't missed after the user looks away.
 

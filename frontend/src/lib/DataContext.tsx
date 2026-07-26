@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import type {
-  ConversationLatestMessage, ConversationReplyIntent, DashboardData, FollowUpState,
+  CampaignMetrics, ConversationLatestMessage, ConversationReplyIntent, DashboardData, FollowUpState,
   Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Lead, Message, SavedSearch,
 } from './types'
 
@@ -16,8 +16,6 @@ const EMPTY: DashboardData = {
   conversationReplyIntents: [],
   annotations: [],
   steps: [],
-  briefing: null,
-  prevBriefing: null,
   teamMembers: [],
   pipelineEvents: [],
   followUpStates: [],
@@ -283,6 +281,8 @@ const Ctx = createContext<{
    *  manual-pipeline optimistic writes so a stage/assignee change reflects
    *  everywhere the lead is rendered. */
   patchLead: (leadId: string, patch: Partial<Lead>) => void
+  /** Fold a completed campaign-context save into the campaign_metrics slice. */
+  patchCampaign: (campaignId: string, patch: Partial<CampaignMetrics>) => void
   /** Optimistically replace/remove one conversation-scoped follow-up state.
    *  Pending values survive an in-flight five-minute refresh. */
   patchFollowUpState: (key: string, state: FollowUpState | null) => void
@@ -318,6 +318,7 @@ const Ctx = createContext<{
   loading: true,
   refetch: () => {},
   patchLead: () => {},
+  patchCampaign: () => {},
   patchFollowUpState: () => {},
   upsertSavedSearch: () => {},
   removeSavedSearch: () => {},
@@ -394,6 +395,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setData((prevData) =>
       prevData
         ? { ...prevData, leads: prevData.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)) }
+        : prevData,
+    )
+  }, [])
+
+  const patchCampaign = useCallback((campaignId: string, patch: Partial<CampaignMetrics>) => {
+    setData((prevData) =>
+      prevData
+        ? {
+            ...prevData,
+            campaigns: prevData.campaigns.map((campaign) =>
+              campaign.campaign_id === campaignId ? { ...campaign, ...patch } : campaign,
+            ),
+          }
         : prevData,
     )
   }, [])
@@ -598,11 +612,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             .select('*')
             .order('campaign_id')
             .order('step_index'),
-          supabase
-            .from('briefings')
-            .select('*')
-            .order('briefing_date', { ascending: false })
-            .limit(2),
           // Manual-pipeline tables may not exist yet (migration pending). Their
           // errors are intentionally NOT folded into the aggregate `error`
           // below — a missing table just yields an empty list, never a failed
@@ -632,15 +641,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           smallP, leadsP, messagesP, eventsP, followUpsP,
         ])
         const [
-          instances, campaigns, activity, syncRuns, annotations, steps, briefing, teamMembers,
+          instances, campaigns, activity, syncRuns, annotations, steps, teamMembers,
           savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
           conversationReplyIntents,
         ] = small
         if (id !== reqId.current) return
         const error =
           instances.error ?? campaigns.error ?? activity.error ??
-          syncRuns.error ?? annotations.error ?? steps.error ??
-          briefing.error
+          syncRuns.error ?? annotations.error ?? steps.error
         if (error) {
           // Query-level failure: keep prior data, just flag the error.
           showError(error.message)
@@ -692,8 +700,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
               ),
               annotations: stableSlice(base.annotations, annotations.data ?? []),
               steps: stableSlice(base.steps, steps.data ?? []),
-              briefing: stableSlice(base.briefing, briefing.data?.[0] ?? null),
-              prevBriefing: stableSlice(base.prevBriefing, briefing.data?.[1] ?? null),
               teamMembers: stableSlice(base.teamMembers, teamMembers.data ?? []),
               savedSearches: stableSlice(
                 base.savedSearches,
@@ -751,7 +757,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        data, loading, refetch, patchLead, patchFollowUpState,
+        data, loading, refetch, patchLead, patchCampaign, patchFollowUpState,
         upsertSavedSearch, removeSavedSearch,
         upsertIcp, removeIcp, upsertIcpPersona, removeIcpPersona,
         upsertIcpIndustry, removeIcpIndustry, upsertHypothesis, removeHypothesis,

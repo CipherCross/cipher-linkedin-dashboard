@@ -11,7 +11,6 @@ import type { Lead } from '../lib/types'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { AccountCard } from '../components/AccountCard'
-import { BriefingCard } from '../components/BriefingCard'
 import { ImportCalloutCard } from '../components/ImportCalloutCard'
 import { FollowUpCalloutCard } from '../components/FollowUpCalloutCard'
 import { DateRangePicker } from '../components/DateRangePicker'
@@ -152,8 +151,6 @@ export function Overview() {
         addedPrev={kpis.addedPrev}
         velocityLeads={data.leads}
       />
-
-      <BriefingCard />
 
       <FollowUpCalloutCard />
 

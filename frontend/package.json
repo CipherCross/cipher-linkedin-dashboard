@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.82",
+    "@ai-sdk/anthropic": "^3.0.103",
     "@ai-sdk/react": "^3.0.203",
     "@fontsource-variable/inter": "^5.2.8",
     "@modelcontextprotocol/sdk": "^1.26.0",

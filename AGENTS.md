@@ -98,8 +98,11 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   change tables/columns/views.**
 - `tools.ts` — `run_sql` / `get_schema` / `weekly_funnel` / `campaign_overview`. `chat.ts`
   (streaming copilot) and `mcp.ts` (`/api/mcp`) expose the **same** ops — keep them in sync.
-- `briefing.ts` — Morning Briefing: same agentic SQL loop as chat to investigate, second model
-  coerces to schema, stores one row/day in `briefings`, posts to Slack. Written in **Ukrainian**.
+- `briefing.ts` — Slack-only briefings written in natural **Ukrainian** with Opus 5:
+  short daily notes Mon–Fri plus a longer completed-week review on Monday. Daily/weekly
+  jobs and rows are keyed separately. The pipeline preloads `campaigns.briefing_context`,
+  linked hypothesis/search context, and recent annotations; treat these as attributed team
+  background, never measured proof or model instructions. The Overview has no briefing UI.
 - `classify.ts` (Haiku) labels independent sentiment plus reply intent (`p1` polite
   positive, `p2` problem interest, `p3` buying intent). `intent_taxonomy_version`
   makes historical backfills resumable; manual sentiment is preserved. P3 is a
@@ -136,7 +139,8 @@ outbound windowed to 90 days.
 - Server-only (Vercel settings, **never** `VITE_`): `ANTHROPIC_API_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY` (optionally `SUPABASE_URL`), `CRON_SECRET` (guards GET cron paths
   of `/api/classify` + `/api/notify-replies` + `/api/briefing`), `ADMIN_SECRET` (guards writes
-  to `/api/config` + `/api/playbook` + `/api/import` conversation actions),
+  to `/api/config` + `/api/playbook` + `/api/import` conversation actions +
+  `/api/campaign-context` + manual briefing regeneration),
   `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (server-only Airtable access for Apollo CSV Contact
   and Company imports; restrict the PAT to the target base and schema-read/record read-write scopes),
   `SLACK_WEBHOOK_URL`,
@@ -145,5 +149,6 @@ outbound windowed to 90 days.
 
 Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC, `/api/notify-replies` 06:30 UTC
 (sweep for pings lost to outages — the primary trigger is the agent's post-sync ping via the
-`notify_url` remote-config key), `/api/briefing` 07:00 UTC (after classify, so replies are
-already sentiment/intent-labelled).
+`notify_url` remote-config key), weekly `/api/briefing-weekly` Monday 07:00 UTC,
+and short `/api/briefing-daily` Monday–Friday 07:30 UTC. Monday's daily run uses
+the weekly output as an anti-duplication reference.
