@@ -55,7 +55,7 @@ Refactor the briefing generator around a shared pipeline with kind-specific conf
 
 Both paths will share deterministic guardrails for cohort framing, source attribution, invite warm-up, manual-message incompleteness, and unsupported causal claims. Context will be rendered as clearly delimited data; text inside it must never be treated as instructions to the model.
 
-Add a small admin-guarded campaign-context endpoint and an editor on Campaign Detail. Saving updates the campaign row and refreshes or optimistically patches the campaign data shown in the page. The context editor will explain that the text is supplied to AI briefings and should capture durable facts such as lead source, re-engagement strategy, account overlap, exclusions, or a temporary experiment.
+Add an admin-guarded `save_campaign_context` action to the existing Playbook endpoint and an editor on Campaign Detail. Reusing that endpoint keeps the deployment within Vercel Hobby's 12-function limit. Saving updates the campaign row and refreshes or optimistically patches the campaign data shown in the page. The context editor will explain that the text is supplied to AI briefings and should capture durable facts such as lead source, re-engagement strategy, account overlap, exclusions, or a temporary experiment.
 
 Make Slack rendering kind-aware. Daily and weekly posts receive distinct fallback titles, section labels, reporting periods, and metadata. Empty sections are omitted. The Monday daily prompt will be given the just-generated weekly content as an anti-duplication reference, but it will compare its metrics only with the preceding daily briefing.
 
@@ -69,7 +69,7 @@ Remove the SPA briefing surface completely: delete the Overview card, stop query
    - Update `SCHEMA_DOC` so the AI knows the new fields and their trust level.
 
 2. **Campaign context editor — M**
-   - Add an `ADMIN_SECRET`-guarded API that validates the campaign ID and a bounded plain-text context value.
+   - Add an `ADMIN_SECRET`-guarded Playbook action that validates the campaign ID and a bounded plain-text context value without adding another Serverless Function.
    - Add a simple context editor to Campaign Detail with save/error/success behavior and a short explanation of what belongs there.
    - Update campaign types and client data refresh/optimistic state so saved context appears immediately.
 
@@ -102,7 +102,7 @@ Remove the SPA briefing surface completely: delete the Overview card, stop query
 - `frontend/api/briefing.ts`
 - `frontend/api/_lib/slack.ts`
 - `frontend/api/_lib/core.ts`
-- New `frontend/api/campaign-context.ts`
+- `frontend/api/playbook.ts`
 - New briefing helper/test modules under `frontend/api/_lib/` as needed
 - `frontend/vercel.json`
 - `frontend/package.json`

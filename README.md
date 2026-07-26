@@ -167,11 +167,13 @@ for external clients (Claude Desktop / Claude Code).
   continuity and retries but have no dashboard card. GET crons are guarded by
   `CRON_SECRET`; the admin-guarded POST recovery path regenerates without reposting
   to Slack.
-- `frontend/api/campaign-context.ts` — `ADMIN_SECRET`-guarded writer for the
-  **Briefing context** editor on Campaign Detail. Use it for durable facts metrics
-  cannot show, such as re-engagement batches, cross-account overlap, audience
-  exclusions, or temporary experiments. It is internal strategy text under the
-  project's existing read-open posture; never store secrets or personal data there.
+- `frontend/api/playbook.ts` also handles the `ADMIN_SECRET`-guarded
+  **Briefing context** editor on Campaign Detail. The write is folded into this
+  existing endpoint to stay within Vercel Hobby's 12-function limit. Use the field
+  for durable facts metrics cannot show, such as re-engagement batches,
+  cross-account overlap, audience exclusions, or temporary experiments. It is
+  internal strategy text under the project's existing read-open posture; never
+  store secrets or personal data there.
 
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
 `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,

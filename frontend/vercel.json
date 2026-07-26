@@ -4,8 +4,8 @@
   "crons": [
     { "path": "/api/classify", "schedule": "0 6 * * *" },
     { "path": "/api/notify-replies", "schedule": "30 6 * * *" },
-    { "path": "/api/briefing-weekly", "schedule": "0 7 * * 1" },
-    { "path": "/api/briefing-daily", "schedule": "30 7 * * 1-5" }
+    { "path": "/api/briefing?kind=weekly", "schedule": "0 7 * * 1" },
+    { "path": "/api/briefing?kind=daily", "schedule": "30 7 * * 1-5" }
   ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }

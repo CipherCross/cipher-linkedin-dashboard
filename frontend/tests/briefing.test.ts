@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   briefingPeriod,
@@ -46,13 +46,20 @@ describe('briefing cadence and period keys', () => {
       readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'),
     ) as { crons: { path: string; schedule: string }[] }
     expect(config.crons).toContainEqual({
-      path: '/api/briefing-weekly',
+      path: '/api/briefing?kind=weekly',
       schedule: '0 7 * * 1',
     })
     expect(config.crons).toContainEqual({
-      path: '/api/briefing-daily',
+      path: '/api/briefing?kind=daily',
       schedule: '30 7 * * 1-5',
     })
+  })
+
+  it('stays within the Vercel Hobby serverless-function limit', () => {
+    const functions = readdirSync(new URL('../api/', import.meta.url), {
+      withFileTypes: true,
+    }).filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+    expect(functions).toHaveLength(12)
   })
 })
 

@@ -258,7 +258,8 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
     if (!dirty || saving) return
     setSaving(true)
     try {
-      const res = await adminPost('/api/campaign-context', {
+      const res = await adminPost('/api/playbook', {
+        action: 'save_campaign_context',
         campaign_id: campaign.campaign_id,
         briefing_context: value,
       })

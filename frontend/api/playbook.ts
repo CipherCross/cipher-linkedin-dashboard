@@ -1,9 +1,9 @@
-// Playbook writer + Search Library writer + ICP/Hypothesis writer.
+// Playbook writer + Search Library writer + ICP/Hypothesis/campaign-context writer.
 //
 // Historically this endpoint persisted only the single global Markdown playbook that
 // grounds the AI conversation coach (/api/coach). It now also owns the Search Library
 // (saved_searches) writes and the ICP/Hypothesis layer (migration 043) via an `action`
-// dispatch — folded in here rather than a new file because frontend/api is at the
+// dispatch — folded in here rather than new files because frontend/api is at the
 // Vercel Hobby 12-function cap. Reads for all of these happen through the anon key
 // (the pages); only these WRITES need the service-role key, reused from
 // /api/_lib/core.ts.
@@ -13,7 +13,8 @@
 // Library; action:'save_icp' | 'delete_icp' | 'save_icp_persona' | 'delete_icp_persona' |
 // 'save_icp_industry' | 'delete_icp_industry' | 'save_hypothesis' | 'delete_hypothesis' |
 // 'set_hypothesis_campaigns' | 'assign_search' hits the ICP/Hypothesis layer (see
-// _lib/icp.ts). All paths share the same guard.
+// _lib/icp.ts); action:'save_campaign_context' updates the team background supplied
+// to AI briefings. All paths share the same guard.
 //
 // Guard: mirrors /api/config — if ADMIN_SECRET is set on the Vercel project, callers
 // must send it as an `x-admin-secret` header; if unset, the endpoint is open
@@ -33,6 +34,7 @@ export const maxDuration = 10
 // Generous cap — a playbook is prose, not a payload, but bound it so a runaway
 // paste can't bloat every coach prompt (which embeds the whole document).
 const MAX_CONTENT_BYTES = 100_000
+const MAX_CAMPAIGN_CONTEXT_CHARS = 4_000
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -280,6 +282,46 @@ async function assignSearch(
   return json({ ok: true, search: data })
 }
 
+async function saveCampaignContext(
+  supa: ReturnType<typeof db>,
+  payload: Record<string, unknown>,
+): Promise<Response> {
+  const campaignId = payload.campaign_id
+  const rawContext = payload.briefing_context
+  if (typeof campaignId !== 'string' || !campaignId) {
+    return json({ error: 'campaign_id (string) is required' }, 400)
+  }
+  if (typeof rawContext !== 'string') {
+    return json({ error: 'briefing_context (string) is required' }, 400)
+  }
+  const context = rawContext.trim()
+  if (context.length > MAX_CAMPAIGN_CONTEXT_CHARS) {
+    return json(
+      { error: `briefing_context must be at most ${MAX_CAMPAIGN_CONTEXT_CHARS} characters` },
+      413,
+    )
+  }
+
+  const updatedAt = new Date().toISOString()
+  const { data, error } = await supa
+    .from('campaigns')
+    .update({
+      briefing_context: context || null,
+      briefing_context_updated_at: updatedAt,
+    })
+    .eq('id', campaignId)
+    .select('id,briefing_context,briefing_context_updated_at')
+  if (error) return json({ error: error.message }, 500)
+  if (!data?.length) return json({ error: 'unknown campaign_id' }, 404)
+
+  return json({
+    ok: true,
+    campaign_id: data[0].id,
+    briefing_context: data[0].briefing_context,
+    briefing_context_updated_at: data[0].briefing_context_updated_at,
+  })
+}
+
 async function handle(req: Request): Promise<Response> {
   const secret = process.env.ADMIN_SECRET
   if (secret && req.headers.get('x-admin-secret') !== secret) {
@@ -332,6 +374,8 @@ async function handle(req: Request): Promise<Response> {
         return setHypothesisCampaigns(supa, payload)
       case 'assign_search':
         return assignSearch(supa, payload)
+      case 'save_campaign_context':
+        return saveCampaignContext(supa, payload)
       default:
         return json({ error: 'unknown action' }, 400)
     }
