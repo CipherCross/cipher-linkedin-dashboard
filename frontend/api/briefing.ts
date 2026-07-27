@@ -365,6 +365,9 @@ ${SCHEMA_DOC}
 CHECK
 - Re-run the queries behind every material number. Fix or remove unsupported figures.
 - Enforce cohort maturity and reply/accept lag. Cut fresh-cohort quality judgments.
+- A successful query marked "zero matching rows" is evidence of zero rows in that
+  scope, not evidence that the source is unavailable. Only an explicit
+  "(query failed: ...)" marker means the source could not be checked.
 - Treat team context as attributed background, never as measured proof. Cut any causal diagnosis
   that lacks explicit context or evidence. Never rank unlike campaigns as if they are comparable.
 - Cut runtime-state guesses, unsupported follow-up claims, team-completed-action claims, and advice
@@ -468,7 +471,11 @@ async function renderSeed(
         try {
           const { rows, rowCount, truncated } = await executeSql(sql)
           const note = truncated ? ` (showing ${rows.length} of ${rowCount})` : ''
-          return `### ${label}${note}\n${JSON.stringify(rows)}`
+          const resultNote =
+            rowCount === 0
+              ? '\nQUERY SUCCEEDED: zero matching rows. This is an observed zero, not unavailable data.'
+              : ''
+          return `### ${label}${note}${resultNote}\n${JSON.stringify(rows)}`
         } catch (error) {
           return `### ${label}\n(query failed: ${
             error instanceof Error ? error.message : String(error)

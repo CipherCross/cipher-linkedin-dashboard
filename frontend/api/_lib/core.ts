@@ -337,12 +337,10 @@ annotations — manual notes pinned to dates (e.g. "changed template on X")
   note text, noted_at date, created_at
 
 team_members — the SDRs who own leads in the manual CRM pipeline
-  id bigint PK, name text (unique), active bool (default true; inactive members
-  can't be newly assigned), created_at,
-  auth_user_id uuid unique -> auth.users (NULL = assignment-only teammate with
-  no dashboard login), email text (case-insensitively unique when present),
-  role text ('member'|'admin'; server-controlled application authorization).
-  Authenticated identity is the source for new CRM actor/author audit text.
+  AI-READABLE COLUMNS: id bigint PK, name text (unique), active bool (default
+  true; inactive members can't be newly assigned), created_at.
+  Authentication identity/access columns exist but are deliberately unavailable
+  to the AI SQL role. Do not select * from team_members.
   leads.assigned_to references this table.
 
 lead_notes — free-text notes pinned to a single lead in the pipeline board
@@ -716,10 +714,10 @@ limit 16
 // now (e.g. a holiday slowdown), not that a campaign got worse.
 export const ACCEPT_LAG_SQL = `
 select
-  round(percentile_cont(0.5) within group (
-    order by extract(epoch from (connected_at - invited_at)) / 86400), 1) as median_days_to_accept,
-  round(percentile_cont(0.9) within group (
-    order by extract(epoch from (connected_at - invited_at)) / 86400), 1) as p90_days_to_accept,
+  round((percentile_cont(0.5) within group (
+    order by extract(epoch from (connected_at - invited_at)) / 86400))::numeric, 1) as median_days_to_accept,
+  round((percentile_cont(0.9) within group (
+    order by extract(epoch from (connected_at - invited_at)) / 86400))::numeric, 1) as p90_days_to_accept,
   count(*) as accepted_n
 from leads
 where connected_at is not null and invited_at > now() - interval '90 days'
