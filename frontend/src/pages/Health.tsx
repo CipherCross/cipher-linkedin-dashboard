@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Activity } from 'lucide-react'
+import { Activity, Megaphone } from 'lucide-react'
 import { useData } from '../lib/DataContext'
+import { useAuth } from '../lib/AuthContext'
+import { authPost } from '../lib/api'
 import { instanceName } from '../lib/leads'
 import { InstancePanel } from '../components/InstancePanel'
 import { EmptyState } from '../components/EmptyState'
@@ -8,10 +10,40 @@ import { ago } from '../lib/format'
 
 export function Health() {
   const { data } = useData()
+  const { isAdmin } = useAuth()
+  const [briefingStatus, setBriefingStatus] = useState<
+    'idle' | 'running' | 'done' | 'error'
+  >('idle')
+  const [briefingMessage, setBriefingMessage] = useState('')
   if (!data) return null
 
   const label = (id: string) =>
     instanceName(data.instances.find((i) => i.id === id), id)
+
+  const rerunWeeklyBriefing = async () => {
+    setBriefingStatus('running')
+    setBriefingMessage('Generating the briefing from current data…')
+    try {
+      const response = await authPost('/api/briefing?kind=weekly', {
+        full: true,
+        send_slack: true,
+      })
+      const result = await response.json() as {
+        status?: string
+        error?: string
+      }
+      if (!response.ok || result.status !== 'done') {
+        throw new Error(result.error || 'The briefing did not finish.')
+      }
+      setBriefingStatus('done')
+      setBriefingMessage('Posted to Slack.')
+    } catch (error) {
+      setBriefingStatus('error')
+      setBriefingMessage(
+        error instanceof Error ? error.message : 'Could not generate the briefing.',
+      )
+    }
+  }
 
   return (
     <>
@@ -24,6 +56,40 @@ export function Health() {
           </div>
         </div>
       </header>
+
+      {isAdmin && (
+        <div className="card briefing-rerun">
+          <div className="briefing-rerun-copy">
+            <Megaphone size={20} aria-hidden="true" />
+            <div>
+              <h2>Monday briefing</h2>
+              <div className="muted small">
+                Regenerate the completed-week review from current data and post it once to Slack.
+              </div>
+            </div>
+          </div>
+          <div className="briefing-rerun-action">
+            {briefingMessage && (
+              <span
+                className={`small ${
+                  briefingStatus === 'error' ? 'text-danger' : 'muted'
+                }`}
+                role={briefingStatus === 'error' ? 'alert' : 'status'}
+              >
+                {briefingMessage}
+              </span>
+            )}
+            <button
+              className="btn accent"
+              type="button"
+              disabled={briefingStatus === 'running'}
+              onClick={() => void rerunWeeklyBriefing()}
+            >
+              {briefingStatus === 'running' ? 'Generating…' : 'Regenerate and post'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="main-grid health-grid">
         <div className="card health-runs">

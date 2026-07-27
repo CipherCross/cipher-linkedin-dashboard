@@ -978,6 +978,25 @@ function parseKind(req: Request): BriefingKind | null {
   return value === 'daily' || value === 'weekly' ? value : null
 }
 
+async function runToCompletion(
+  kind: BriefingKind,
+  now: Date,
+  allowRestart: boolean,
+  sendSlack: boolean,
+): Promise<TickResult> {
+  const deadline = Date.now() + 280_000
+  let result = await advanceBriefingJob(kind, allowRestart, sendSlack, now)
+  while (
+    result.status !== 'done' &&
+    result.status !== 'error' &&
+    result.progressed &&
+    Date.now() < deadline
+  ) {
+    result = await advanceBriefingJob(kind, false, sendSlack, now)
+  }
+  return result
+}
+
 export async function handleBriefing(
   req: Request,
   forcedKind?: BriefingKind,
@@ -1000,17 +1019,17 @@ export async function handleBriefing(
 
   try {
     if (req.method === 'GET') {
-      const deadline = Date.now() + 280_000
-      let result = await advanceBriefingJob(kind, false, true, now)
-      while (
-        result.status !== 'done' &&
-        result.status !== 'error' &&
-        result.progressed &&
-        Date.now() < deadline
-      ) {
-        result = await advanceBriefingJob(kind, false, true, now)
-      }
-      return json(result)
+      return json(await runToCompletion(kind, now, false, true))
+    }
+
+    const options = await req.json().catch(() => null) as {
+      full?: unknown
+      send_slack?: unknown
+    } | null
+    if (options?.full === true) {
+      return json(
+        await runToCompletion(kind, now, true, options.send_slack === true),
+      )
     }
 
     // Internal recovery path: one stage per call, idempotent by kind/period,
