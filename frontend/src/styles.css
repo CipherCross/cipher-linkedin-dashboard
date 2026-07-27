@@ -771,7 +771,16 @@ tr:last-child td { border-bottom: none; }
 
 /* Fixed routes are grouped by task frequency. Section labels are deliberately
  * quiet: they improve scanning without competing with the current page. */
-.side-nav { display: flex; flex-direction: column; gap: 8px; }
+.side-nav {
+  display: flex;
+  min-height: 0;
+  flex-shrink: 1;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
 .nav-section { min-width: 0; }
 .nav-section + .nav-section {
   padding-top: 8px;
@@ -789,7 +798,32 @@ tr:last-child td { border-bottom: none; }
   overflow: hidden;
 }
 .nav-section.primary .nav-section-title { color: var(--text-secondary); }
+.nav-section-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+}
+.nav-section-trigger:hover {
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  color: var(--text-secondary);
+}
+.nav-section-trigger .nav-section-title { flex: 1; color: inherit; }
+.nav-section-trigger > svg {
+  flex-shrink: 0;
+  margin: 0 8px 5px 0;
+  transition: transform 0.15s ease;
+}
+.nav-section-trigger.open > svg { transform: rotate(90deg); }
 .nav-section-links { display: flex; flex-direction: column; gap: 2px; }
+.nav-section-links.collapsed { display: none; }
 .navlink {
   position: relative;
   display: flex;
@@ -837,16 +871,22 @@ tr:last-child td { border-bottom: none; }
 .navlink.active::before { background: var(--accent); }
 .navlink.active .navlink-icon { color: var(--accent); }
 
-/* Scrollable lower region: filter + the accounts→campaigns tree. Grows to fill
- * the rail and scrolls internally so long campaign lists never push the footer
- * off-screen. */
+/* Reserved account workspace: the heading and filter stay fixed while only the
+ * account→campaign tree scrolls, so short windows still expose useful rows. */
 .side-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  min-height: 220px;
+  flex: 1 0 clamp(220px, 35vh, 360px);
+  flex-direction: column;
+  overflow: hidden;
   margin-top: 12px;
   padding: 12px 2px 4px;
   border-top: 1px solid var(--border);
+}
+.side-groups-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
@@ -1129,6 +1169,13 @@ tr:last-child td { border-bottom: none; }
 .nav-collapsed .navlink::before { top: 8px; bottom: 8px; }
 .nav-collapsed .side-footer { flex-direction: column; gap: 6px; padding-inline: 0; }
 .nav-collapsed .sync-chip { margin-left: 0; padding: 8px; }
+
+@media (min-width: 901px) {
+  /* The compact rail has no room for accordion controls, so it always exposes
+   * every page as an icon regardless of the expanded sidebar's accordion state. */
+  .nav-collapsed .nav-section-trigger { display: none; }
+  .nav-collapsed .nav-section-links.collapsed { display: flex; }
+}
 
 /* Compact-rail labels: mouse and keyboard users get the same deliberate
  * tooltip, while aria-label keeps every icon named for assistive technology. */

@@ -130,6 +130,12 @@ Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past
 1000-row cap, since sentiment/intent and durable P3 counts sit beside all-time totals);
 outbound windowed to 90 days.
 
+### Visual verification
+For frontend and UI work, Codex may automatically open and visibly display the local app
+in the in-app browser for visual QA without asking first. This permission covers local
+preview navigation, responsive viewport checks, screenshots, and read-only interaction;
+it does not authorize entering credentials or making data-changing actions.
+
 ### Security posture
 - Invite-only Supabase email/password Auth. An Auth user must be linked through
   `team_members.auth_user_id` and active. All active users can read the full

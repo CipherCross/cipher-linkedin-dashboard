@@ -39,8 +39,14 @@ import { PageSkeleton } from './Skeleton'
 import { ErrorBoundary } from './ErrorBoundary'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; admin?: boolean }
+type NavSection = {
+  label: string
+  emphasis?: boolean
+  collapsible?: boolean
+  links: NavItem[]
+}
 
-const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = [
+const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Daily work',
     emphasis: true,
@@ -53,6 +59,7 @@ const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = 
   },
   {
     label: 'Insights & strategy',
+    collapsible: true,
     links: [
       { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
       { to: '/review', label: 'Review', icon: ClipboardCheck },
@@ -64,6 +71,7 @@ const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = 
   },
   {
     label: 'System',
+    collapsible: true,
     links: [
       { to: '/team', label: 'Team', icon: UserCog },
       { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet, admin: true },
@@ -73,6 +81,12 @@ const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = 
 ]
 
 const LINKS = NAV_SECTIONS.flatMap((section) => section.links)
+
+function navItemMatches(pathname: string, item: NavItem) {
+  return item.end
+    ? pathname === item.to
+    : pathname === item.to || pathname.startsWith(`${item.to}/`)
+}
 
 function readSidebarCollapsed() {
   try {
@@ -97,9 +111,7 @@ function skeletonVariant(pathname: string): 'overview' | 'table' | 'list' | 'sim
 // Human page name for the current route, derived from the same nav config that
 // drives the links. Unlisted routes (campaign/account detail) fall back to null.
 function pageName(pathname: string): string | null {
-  const link = LINKS.find((l) =>
-    l.end ? pathname === l.to : pathname === l.to || pathname.startsWith(`${l.to}/`),
-  )
+  const link = LINKS.find((item) => navItemMatches(pathname, item))
   return link ? link.label : null
 }
 
@@ -268,6 +280,22 @@ function Sidebar({
   const location = useLocation()
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const activePageSection = useMemo(
+    () => NAV_SECTIONS.find(
+      (section) => section.collapsible &&
+        section.links.some((item) => navItemMatches(location.pathname, item)),
+    )?.label ?? null,
+    [location.pathname],
+  )
+  const [openPageSection, setOpenPageSection] = useState<string | null>(
+    () => activePageSection,
+  )
+
+  // Secondary page groups behave as an accordion, but navigating to a page
+  // always reveals the group that owns it.
+  useEffect(() => {
+    if (activePageSection) setOpenPageSection(activePageSection)
+  }, [activePageSection])
 
   // The account whose detail page — or one of whose campaigns — is currently
   // open. Used to auto-reveal the relevant group so the active item is visible.
@@ -284,7 +312,9 @@ function Sidebar({
 
   useEffect(() => {
     if (!activeInstance) return
-    setExpanded((prev) => (prev.has(activeInstance) ? prev : new Set(prev).add(activeInstance)))
+    setExpanded((prev) =>
+      prev.size === 1 && prev.has(activeInstance) ? prev : new Set([activeInstance]),
+    )
   }, [activeInstance])
 
   // Each account paired with its campaigns (sorted by name), in account order.
@@ -322,9 +352,8 @@ function Sidebar({
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
+      // Keep browsing compact: at most one account exposes its campaigns.
+      return prev.has(id) ? new Set() : new Set([id])
     })
 
   return (
@@ -350,29 +379,51 @@ function Sidebar({
         </div>
 
         <nav className="side-nav" aria-label="Pages">
-          {NAV_SECTIONS.map((section) => (
-            <div
-              className={`nav-section${section.emphasis ? ' primary' : ''}`}
-              key={section.label}
-            >
-              <div className="nav-section-title">{section.label}</div>
-              <div className="nav-section-links">
-                {section.links.filter((link) => !link.admin || isAdmin).map(({ to, label, icon: Icon, end }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={end}
-                    className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
-                    aria-label={collapsed ? label : undefined}
+          {NAV_SECTIONS.map((section, index) => {
+            const isOpen = !section.collapsible || openPageSection === section.label
+            const linksId = `nav-section-links-${index}`
+            return (
+              <div
+                className={`nav-section${section.emphasis ? ' primary' : ''}`}
+                key={section.label}
+              >
+                {section.collapsible ? (
+                  <button
+                    type="button"
+                    className={`nav-section-trigger${isOpen ? ' open' : ''}`}
+                    onClick={() => setOpenPageSection(
+                      (current) => current === section.label ? null : section.label,
+                    )}
+                    aria-expanded={isOpen}
+                    aria-controls={linksId}
                   >
-                    <Icon size={17} className="navlink-icon" aria-hidden="true" />
-                    <span className="navlink-label">{label}</span>
-                    <span className="side-tooltip" aria-hidden="true">{label}</span>
-                  </NavLink>
-                ))}
+                    <span className="nav-section-title">{section.label}</span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div className="nav-section-title">{section.label}</div>
+                )}
+                <div
+                  className={`nav-section-links${isOpen ? '' : ' collapsed'}`}
+                  id={linksId}
+                >
+                  {section.links.filter((link) => !link.admin || isAdmin).map(({ to, label, icon: Icon, end }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={end}
+                      className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
+                      aria-label={collapsed ? label : undefined}
+                    >
+                      <Icon size={17} className="navlink-icon" aria-hidden="true" />
+                      <span className="navlink-label">{label}</span>
+                      <span className="side-tooltip" aria-hidden="true">{label}</span>
+                    </NavLink>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </nav>
 
         <nav className="side-scroll" aria-label="Accounts and campaigns">
@@ -401,73 +452,75 @@ function Sidebar({
             </div>
           )}
 
-          <ul className="side-groups">
-            {visibleGroups.map(({ inst, campaigns }) => {
-              const isOpen = !!q || expanded.has(inst.id)
-              const accountName = instanceName(inst)
-              const level = freshnessLevel(inst.last_sync_at)
-              const freshness = inst.last_sync_at
-                ? `${level === 'ok' ? 'Healthy' : level === 'warn' ? 'Sync aging' : 'Sync stale'}, synced ${ago(inst.last_sync_at)}`
-                : 'Sync stale, never synced'
-              const campaignListId = `sidebar-campaigns-${encodeURIComponent(inst.id)}`
-              return (
-                <li className="side-group" key={inst.id}>
-                  <div className="side-acct-row">
-                    <button
-                      type="button"
-                      className={`side-acct-toggle${isOpen ? ' open' : ''}`}
-                      onClick={() => toggle(inst.id)}
-                      aria-label={`${isOpen ? 'Collapse' : 'Expand'} campaigns for ${accountName}`}
-                      aria-expanded={isOpen}
-                      aria-controls={campaignListId}
-                      disabled={!!q}
-                    >
-                      <ChevronRight size={15} aria-hidden="true" />
-                    </button>
-                    <NavLink
-                      to={`/account/${encodeURIComponent(inst.id)}`}
-                      className={({ isActive }) => (isActive ? 'side-acct active' : 'side-acct')}
-                    >
-                      <span className="side-acct-avatar" aria-hidden="true">
-                        <Avatar inst={inst} size={24} />
-                      </span>
-                      <span className="side-acct-copy">
-                        <span className="side-acct-name">{accountName}</span>
-                        <span className="side-acct-meta">
-                          {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
+          <div className="side-groups-scroll">
+            <ul className="side-groups">
+              {visibleGroups.map(({ inst, campaigns }) => {
+                const isOpen = !!q || expanded.has(inst.id)
+                const accountName = instanceName(inst)
+                const level = freshnessLevel(inst.last_sync_at)
+                const freshness = inst.last_sync_at
+                  ? `${level === 'ok' ? 'Healthy' : level === 'warn' ? 'Sync aging' : 'Sync stale'}, synced ${ago(inst.last_sync_at)}`
+                  : 'Sync stale, never synced'
+                const campaignListId = `sidebar-campaigns-${encodeURIComponent(inst.id)}`
+                return (
+                  <li className="side-group" key={inst.id}>
+                    <div className="side-acct-row">
+                      <button
+                        type="button"
+                        className={`side-acct-toggle${isOpen ? ' open' : ''}`}
+                        onClick={() => toggle(inst.id)}
+                        aria-label={`${isOpen ? 'Collapse' : 'Expand'} campaigns for ${accountName}`}
+                        aria-expanded={isOpen}
+                        aria-controls={campaignListId}
+                        disabled={!!q}
+                      >
+                        <ChevronRight size={15} aria-hidden="true" />
+                      </button>
+                      <NavLink
+                        to={`/account/${encodeURIComponent(inst.id)}`}
+                        className={({ isActive }) => (isActive ? 'side-acct active' : 'side-acct')}
+                      >
+                        <span className="side-acct-avatar" aria-hidden="true">
+                          <Avatar inst={inst} size={24} />
                         </span>
-                      </span>
-                      <span className={`side-dot ${level}`} aria-hidden="true" />
-                      <span className="sr-only">{freshness}</span>
-                    </NavLink>
-                  </div>
-                  {isOpen && (
-                    <ul className="side-campaigns" id={campaignListId}>
-                      {campaigns.map((c) => (
-                        <li key={c.campaign_id}>
-                          <NavLink
-                            to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
-                            className={({ isActive }) =>
-                              isActive ? 'side-campaign active' : 'side-campaign'
-                            }
-                            title={c.campaign_name}
-                          >
-                            <span>{c.campaign_name}</span>
-                          </NavLink>
-                        </li>
-                      ))}
-                      {campaigns.length === 0 && (
-                        <li className="side-empty">No campaigns</li>
-                      )}
-                    </ul>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-          {data && visibleGroups.length === 0 && (
-            <div className="side-empty">{q ? 'No matches' : 'No accounts synced'}</div>
-          )}
+                        <span className="side-acct-copy">
+                          <span className="side-acct-name">{accountName}</span>
+                          <span className="side-acct-meta">
+                            {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
+                          </span>
+                        </span>
+                        <span className={`side-dot ${level}`} aria-hidden="true" />
+                        <span className="sr-only">{freshness}</span>
+                      </NavLink>
+                    </div>
+                    {isOpen && (
+                      <ul className="side-campaigns" id={campaignListId}>
+                        {campaigns.map((c) => (
+                          <li key={c.campaign_id}>
+                            <NavLink
+                              to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
+                              className={({ isActive }) =>
+                                isActive ? 'side-campaign active' : 'side-campaign'
+                              }
+                              title={c.campaign_name}
+                            >
+                              <span>{c.campaign_name}</span>
+                            </NavLink>
+                          </li>
+                        ))}
+                        {campaigns.length === 0 && (
+                          <li className="side-empty">No campaigns</li>
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+            {data && visibleGroups.length === 0 && (
+              <div className="side-empty">{q ? 'No matches' : 'No accounts synced'}</div>
+            )}
+          </div>
         </nav>
 
         <div className="side-footer">
