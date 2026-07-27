@@ -330,26 +330,19 @@ const dayStr = (d: Date) => d.toISOString().slice(0, 10)
 /** Prebuilt ranges relative to `now` (defaults to today). */
 export function presetRanges(now: Date = new Date()): DateRange[] {
   const today = dayStr(now)
-  const pad = (n: number) => String(n).padStart(2, '0')
   const shift = (base: string, n: number) => {
     const d = new Date(`${base}T00:00:00Z`)
     d.setUTCDate(d.getUTCDate() + n)
     return dayStr(d)
   }
-  const thisWeek = weekStart(now.toISOString())
-  const y = now.getUTCFullYear()
-  const mo = now.getUTCMonth()
-  const monthStart = (yr: number, m: number) => `${yr}-${pad(m + 1)}-01`
-  const monthEnd = (yr: number, m: number) => dayStr(new Date(Date.UTC(yr, m + 1, 0)))
-  const prevY = mo === 0 ? y - 1 : y
-  const prevM = mo === 0 ? 11 : mo - 1
   return [
-    { id: 'today', label: 'Today', from: today, to: today },
-    { id: 'this_week', label: 'This week', from: thisWeek, to: today },
-    { id: 'last_week', label: 'Last week', from: shift(thisWeek, -7), to: shift(thisWeek, -1) },
-    { id: 'this_month', label: 'This month', from: monthStart(y, mo), to: today },
-    { id: 'last_month', label: 'Last month', from: monthStart(prevY, prevM), to: monthEnd(prevY, prevM) },
-    { id: '3_months', label: '3 months', from: shift(today, -89), to: today },
+    { id: '7_days', label: 'Past 7 days', from: shift(today, -6), to: today },
+    { id: '14_days', label: 'Past 14 days', from: shift(today, -13), to: today },
+    { id: '30_days', label: 'Past 30 days', from: shift(today, -29), to: today },
+    { id: '2_months', label: 'Past 2 months', from: shift(today, -59), to: today },
+    { id: '3_months', label: 'Past 3 months', from: shift(today, -89), to: today },
+    { id: '6_months', label: 'Past 6 months', from: shift(today, -179), to: today },
+    { id: '12_months', label: 'Past 12 months', from: shift(today, -364), to: today },
     { id: 'all', label: 'All time', from: null, to: null },
   ]
 }
