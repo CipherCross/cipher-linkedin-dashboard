@@ -36,7 +36,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.12.1"
+AGENT_VERSION = "1.12.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
