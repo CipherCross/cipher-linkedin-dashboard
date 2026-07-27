@@ -268,6 +268,9 @@ export interface TeamMember {
   name: string
   active: boolean
   created_at: string
+  auth_user_id: string | null
+  email: string | null
+  role: 'member' | 'admin'
 }
 
 /** A free-text note attached to one lead's pipeline card. */

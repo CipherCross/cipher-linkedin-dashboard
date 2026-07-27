@@ -8,7 +8,7 @@ campaign metrics.
 ```
 notebook 1 ─┐  sync-agent (cron)
 notebook 2 ─┼──────────────────────▶  Supabase (Postgres + REST + RLS)
-notebook 3 ─┘   service-role key            │ anon key, read-only
+notebook 3 ─┘   service-role key            │ user JWT + authenticated RLS
                                             ▼
                                    frontend (React + Vite)
                           KPIs · funnel per campaign · daily activity
@@ -94,14 +94,15 @@ service-role key can read the bucket — the anon key gets a 4xx.
 #### Configuring notebooks online (no SSH)
 
 After the first sync you rarely need to touch a notebook's `config.yaml` again.
-Only the three **bootstrap** keys (`supabase_url`, `supabase_service_key`,
-`instance_id`) must live locally; everything else — the label, the displayed
+The three **bootstrap** keys (`supabase_url`, `supabase_service_key`,
+`instance_id`) and the optional machine credential `notify_secret` must live
+locally; operational settings — the label, the displayed
 LinkedIn account (`account_*`), the `sync_*` toggles, `lh2_db_path`, even the LH2
 `mapping` SQL — can be edited from the dashboard's **Health** page (Accounts
 panel → **Configure**). Those overrides are stored in `instances.config`; the
 agent fetches and merges them over the local file on every sync and **remote
-wins**, so changes apply on the next run (≤30 min). Set `ADMIN_SECRET` on Vercel
-to require a secret for saves. Recovery: a bad online value only breaks that one
+wins**, so changes apply on the next run (≤30 min). Saving requires a signed-in
+dashboard admin. Recovery: a bad online value only breaks that one
 notebook's sync (the error shows on Health), and `ignore_remote_config: true` in
 its local `config.yaml` pins it to the file, ignoring the online overrides.
 
@@ -115,10 +116,11 @@ npm run dev             # local
 npm run build           # production bundle in dist/
 ```
 
-Without `.env` the dashboard shows an error banner and no data — both
-variables are required. Deploy `dist/` anywhere static (Vercel, Netlify,
-Cloudflare Pages); the anon key is safe to expose because RLS only allows
-reads.
+Without `.env` the dashboard shows an error screen — both variables are
+required. The browser key is safe to expose; invite-only Supabase Auth plus RLS
+restrict dashboard reads to active `team_members`. Before deployment, follow
+[the auth rollout runbook](docs/auth-rollout.md). Deploy `dist/` anywhere static
+(Vercel, Netlify, Cloudflare Pages).
 
 ### 4. AI chat + MCP layer
 
@@ -165,21 +167,23 @@ for external clients (Claude Desktop / Claude Code).
   recent annotations before interpreting results; causal explanations are
   attributed to that context rather than inferred from rates. Briefings persist for
   continuity and retries but have no dashboard card. GET crons are guarded by
-  `CRON_SECRET`; the admin-guarded POST recovery path regenerates without reposting
+  `CRON_SECRET`; the admin-role POST recovery path regenerates without reposting
   to Slack.
-- `frontend/api/playbook.ts` also handles the `ADMIN_SECRET`-guarded
+- `frontend/api/playbook.ts` also handles the admin-role
   **Briefing context** editor on Campaign Detail. The write is folded into this
   existing endpoint to stay within Vercel Hobby's 12-function limit. Use the field
   for durable facts metrics cannot show, such as re-engagement batches,
   cross-account overlap, audience exclusions, or temporary experiments. It is
-  internal strategy text under the project's existing read-open posture; never
+  internal strategy text visible to authenticated teammates; never
   store secrets or personal data there.
 
 Set **server-only** env vars on the Vercel project (no `VITE_` prefix):
-`ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`,
-`CRON_SECRET` to lock the scheduled `/api/classify` + `/api/notify-replies` +
-briefing crons, `ADMIN_SECRET` to gate `/api/config`, campaign-context,
-playbook/import, and manual briefing writes, `SLACK_WEBHOOK_URL` to deliver the
+`ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (and
+optionally `SUPABASE_URL`; it falls back to `VITE_SUPABASE_URL`),
+required `CRON_SECRET` for scheduled `/api/classify` + `/api/notify-replies` +
+briefing jobs, required `NOTIFY_SECRET` matching each notebook's local
+`notify_secret`, required `MCP_SECRET` for every MCP tool,
+`SLACK_WEBHOOK_URL` to deliver the
 weekday and weekly briefings to Slack,
 `SLACK_REPLIES_WEBHOOK_URL` to route new-reply alerts from `/api/notify-replies`
 to their own channel — falls back to `SLACK_WEBHOOK_URL` when unset — and
@@ -243,10 +247,11 @@ avatar URLs are signed and expire, so a DB-sourced URL stays fresh).
 
 - The `service_role` key lives only in `sync-agent/config.yaml` on the
   notebooks (gitignored). It bypasses RLS, which is how the agent writes.
-- The dashboard is currently readable by anyone holding the anon key + URL.
-  To lock it to your team: enable Supabase Auth, change each RLS policy from
-  `using (true)` to `using (auth.role() = 'authenticated')`, and add a login
-  screen (supabase-js `signInWithPassword` or magic link).
+- The dashboard uses invite-only Supabase email/password Auth. An Auth user
+  must be linked to an active `team_members` row; admin role checks protect
+  sensitive APIs in addition to authenticated RLS.
+- Cron, notebook notification, and MCP callers use separate fail-closed machine
+  credentials. Lead photos remain intentionally public.
 
 ## Alternative approaches considered
 

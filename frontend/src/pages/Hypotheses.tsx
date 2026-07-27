@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import { CopyButton } from '../components/CopyButton'
 import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
@@ -132,12 +132,12 @@ export function Hypotheses() {
 
   const setArchived = async (hyp: Hypothesis, archived: boolean) => {
     try {
-      const res = await adminPost('/api/playbook', {
+      const res = await authPost('/api/playbook', {
         action: 'save_hypothesis',
         hypothesis: { id: hyp.id, archived },
       })
       const j = await res.json().catch(() => ({}))
-      if (res.status === 401) return toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) return toast.error('Admin access required.')
       if (!res.ok) return toast.error(`Couldn't update: ${j.error ?? res.status}`)
       upsertHypothesis(j.hypothesis)
       toast.success(archived ? 'Hypothesis archived.' : 'Hypothesis restored.')
@@ -149,9 +149,9 @@ export function Hypotheses() {
   const del = async (hyp: Hypothesis) => {
     if (!window.confirm(`Delete "${hyp.name}"? This can't be undone.`)) return
     try {
-      const res = await adminPost('/api/playbook', { action: 'delete_hypothesis', id: hyp.id })
+      const res = await authPost('/api/playbook', { action: 'delete_hypothesis', id: hyp.id })
       const j = await res.json().catch(() => ({}))
-      if (res.status === 401) return toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) return toast.error('Admin access required.')
       if (!res.ok) return toast.error(`Couldn't delete: ${j.error ?? res.status}`)
       removeHypothesis(hyp.id)
       if (selectedId === hyp.id) select(null)
@@ -609,14 +609,14 @@ function HypothesisEditor({
         description: draft.description.trim() || null,
         archived: draft.archived,
       }
-      const res = await adminPost('/api/playbook', { action: 'save_hypothesis', hypothesis: hypPayload })
+      const res = await authPost('/api/playbook', { action: 'save_hypothesis', hypothesis: hypPayload })
       const j = await res.json().catch(() => ({}))
       if (res.status === 409) return setError('A hypothesis with this name already exists.')
-      if (res.status === 401) return setError('Admin secret is required (or was wrong) to save.')
+      if (res.status === 401 || res.status === 403) return setError('Admin access is required to save.')
       if (!res.ok) return setError(j.error ?? `Save failed (${res.status}).`)
       const savedHyp = j.hypothesis as Hypothesis
 
-      const cRes = await adminPost('/api/playbook', {
+      const cRes = await authPost('/api/playbook', {
         action: 'set_hypothesis_campaigns',
         hypothesis_id: savedHyp.id,
         campaign_ids: draft.campaignIds,
@@ -633,7 +633,7 @@ function HypothesisEditor({
         const wasIn = originalSearchIds.has(sid)
         const nowIn = nextSearchIds.has(sid)
         if (wasIn === nowIn) continue
-        const sRes = await adminPost('/api/playbook', {
+        const sRes = await authPost('/api/playbook', {
           action: 'assign_search',
           search_id: sid,
           hypothesis_id: nowIn ? savedHyp.id : null,

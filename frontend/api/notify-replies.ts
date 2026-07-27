@@ -4,9 +4,7 @@
 //
 // Triggers:
 //   POST — the sync-agent pings after every successful push (see agent.py's
-//          notify_new_replies). No secret: the work is self-limiting (only
-//          unnotified rows, capped batch, race-safe claim), so repeated calls
-//          are safe and converge to a no-op — same rationale as /api/classify.
+//          notify_new_replies) with the dedicated NOTIFY_SECRET bearer token.
 //   GET  — a daily Vercel cron sweep (guarded by CRON_SECRET) that catches
 //          backlog left by pings lost to Slack/Vercel outages.
 //
@@ -24,6 +22,7 @@
 // dashboard.
 import { db } from './_lib/core.js'
 import { postNewRepliesToSlack, type NewReplyForSlack } from './_lib/slack.js'
+import { guardMachine } from './_lib/auth.js'
 
 export const maxDuration = 30
 
@@ -55,12 +54,12 @@ const slugOf = (profile_url: string) =>
   profile_url.replace(/\/+$/, '').split('/').pop() || profile_url
 
 async function handle(req: Request): Promise<Response> {
-  // Cron path is guarded; the agent's POST path is intentionally open (see top).
   if (req.method === 'GET') {
-    const secret = process.env.CRON_SECRET
-    if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-      return json({ error: 'unauthorized' }, 401)
-    }
+    const denied = await guardMachine(req, 'CRON_SECRET')
+    if (denied) return denied
+  } else {
+    const denied = await guardMachine(req, 'NOTIFY_SECRET')
+    if (denied) return denied
   }
 
   const sb = db()

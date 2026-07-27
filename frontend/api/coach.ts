@@ -11,13 +11,13 @@
 //   { instance_id, profile_url, force }   → ignore the cache and recompute
 //   { instance_id, mode: 'digest' }       → roll up recurring patterns (Mode B)
 //
-// No secret: the work is self-limiting — Mode A short-circuits on an unchanged
-// thread (last_msg_marker), Mode B is bounded and manual — so it's safe to leave
-// open like /api/classify.
+// Requires an active dashboard member. Mode A short-circuits on an unchanged
+// thread (last_msg_marker); Mode B is bounded and manual.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { db } from './_lib/core.js'
+import { guardMember } from './_lib/auth.js'
 
 export const maxDuration = 300
 
@@ -402,6 +402,9 @@ async function digest(sb: Sb, instance_id: string): Promise<Response> {
 }
 
 async function handle(req: Request): Promise<Response> {
+  const auth = await guardMember(req)
+  if (auth.response) return auth.response
+
   let body: {
     instance_id?: unknown
     profile_url?: unknown

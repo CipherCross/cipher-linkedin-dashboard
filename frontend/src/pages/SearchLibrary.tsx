@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ChipInput } from '../components/ChipInput'
 import { EmptyState } from '../components/EmptyState'
@@ -157,12 +157,12 @@ export function SearchLibrary() {
   // Archive / unarchive is a partial save (id + archived only).
   const setArchived = async (s: SavedSearch, archived: boolean) => {
     try {
-      const res = await adminPost('/api/playbook', {
+      const res = await authPost('/api/playbook', {
         action: 'save_search',
         search: { id: s.id, archived },
       })
       const j = await res.json().catch(() => ({}))
-      if (res.status === 401) return toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) return toast.error('Admin access required.')
       if (!res.ok) return toast.error(`Couldn't update: ${j.error ?? res.status}`)
       upsertSavedSearch(j.search)
       toast.success(archived ? 'Search archived.' : 'Search restored.')
@@ -174,9 +174,9 @@ export function SearchLibrary() {
   const del = async (s: SavedSearch) => {
     if (!window.confirm(`Delete “${s.name}”? This can't be undone.`)) return
     try {
-      const res = await adminPost('/api/playbook', { action: 'delete_search', id: s.id })
+      const res = await authPost('/api/playbook', { action: 'delete_search', id: s.id })
       const j = await res.json().catch(() => ({}))
-      if (res.status === 401) return toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) return toast.error('Admin access required.')
       if (!res.ok) return toast.error(`Couldn't delete: ${j.error ?? res.status}`)
       removeSavedSearch(s.id)
       toast.success('Search deleted.')
@@ -450,13 +450,13 @@ function SearchEditor({
     setSaving(true)
     setError(null)
     try {
-      const res = await adminPost('/api/playbook', { action: 'save_search', search: payload })
+      const res = await authPost('/api/playbook', { action: 'save_search', search: payload })
       const j = await res.json().catch(() => ({}))
       if (res.status === 409) {
         setError('A search with this name already exists on this platform.')
         return
       }
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         setError('Admin secret is required (or was wrong) to save.')
         return
       }

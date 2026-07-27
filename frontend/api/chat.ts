@@ -2,6 +2,7 @@ import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 
 import { anthropic } from '@ai-sdk/anthropic'
 import { SCHEMA_DOC, loadIcpRoster } from './_lib/core.js'
 import { tools } from './_lib/tools.js'
+import { guardMember } from './_lib/auth.js'
 
 export const maxDuration = 300
 
@@ -30,6 +31,9 @@ HOW TO WORK
 - Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
 export async function POST(req: Request) {
+  const auth = await guardMember(req)
+  if (auth.response) return auth.response
+
   const { messages }: { messages: UIMessage[] } = await req.json()
 
   // Always-on ICP/hypothesis awareness (cheap: names + one-liners), so the copilot

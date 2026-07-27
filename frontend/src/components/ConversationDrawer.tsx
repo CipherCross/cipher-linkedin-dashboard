@@ -2,7 +2,9 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarCheck2, ChevronDown, ChevronRight, Loader2, MessagesSquare, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
+import { authFetch } from '../lib/api'
+import { useAuth } from '../lib/AuthContext'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
@@ -51,9 +53,10 @@ export function ConversationDrawer({
   closing?: boolean
   onClose: () => void
 }) {
+  const { isAdmin } = useAuth()
   const { data, refetch, patchLead } = useData()
   const toast = useToast()
-  const { setStage, assign, members, actor } = usePipelineActions()
+  const { setStage, assign, members } = usePipelineActions()
   const [pendingLost, setPendingLost] = useState(false)
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -214,7 +217,7 @@ export function ConversationDrawer({
       setCoachError(null)
       if (force) setCoaching(null)
       try {
-        const res = await fetch('/api/coach', {
+        const res = await authFetch('/api/coach', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -290,7 +293,7 @@ export function ConversationDrawer({
     if (msg.sentiment === sentiment) return
     setSaving({ id: msg.id, kind: 'sentiment', to: sentiment })
     try {
-      const res = await fetch('/api/reclassify', {
+      const res = await authFetch('/api/reclassify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: msg.id, sentiment }),
@@ -317,7 +320,7 @@ export function ConversationDrawer({
     if ((msg.intent_level ?? null) === intent) return
     setSaving({ id: msg.id, kind: 'intent', to: intent })
     try {
-      const res = await fetch('/api/reclassify', {
+      const res = await authFetch('/api/reclassify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: msg.id, intent_level: intent }),
@@ -353,7 +356,7 @@ export function ConversationDrawer({
       return
     setDeleting(msg.id)
     try {
-      const res = await adminPost('/api/import', {
+      const res = await authPost('/api/import', {
         action: 'delete_message',
         id: msg.id,
       })
@@ -405,11 +408,10 @@ export function ConversationDrawer({
           },
     )
     try {
-      const res = await adminPost('/api/pipeline', {
+      const res = await authPost('/api/pipeline', {
         action: 'set_gender',
         lead_id: lead!.id,
         gender,
-        actor: actor || undefined,
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
@@ -590,7 +592,7 @@ export function ConversationDrawer({
               <span className="filter-label">Gender</span>
               <select
                 value={live.gender ?? ''}
-                disabled={savingGender}
+                disabled={savingGender || !isAdmin}
                 onChange={(e) => {
                   const v = e.target.value
                   if (v === '') return
@@ -733,6 +735,7 @@ export function ConversationDrawer({
                       type="button"
                       className={`msg-senti-badge badge senti ${meta ? meta.cls : ''}`}
                       title={meta ? (m.reason ?? 'Click to reclassify') : 'Set sentiment'}
+                      disabled={!isAdmin}
                       onClick={() => setOpenSentiId(openSentiId === m.id ? null : m.id)}
                     >
                       {meta ? (
@@ -771,6 +774,7 @@ export function ConversationDrawer({
                       type="button"
                       className={`msg-senti-badge badge senti ${intentMeta ? intentMeta.cls : ''}`}
                       title={intentMeta ? (m.intent_reason ?? 'Click to change intent') : 'Set P1–P3 intent'}
+                      disabled={!isAdmin}
                       onClick={() => setOpenIntentId(openIntentId === m.id ? null : m.id)}
                     >
                       {intentMeta ? (

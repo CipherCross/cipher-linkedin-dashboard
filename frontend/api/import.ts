@@ -4,6 +4,7 @@
 import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
+import { guardAdmin } from './_lib/auth.js'
 
 export const maxDuration = 60
 
@@ -31,6 +32,9 @@ const json = (body: unknown, status = 200) =>
   })
 
 async function handle(req: Request): Promise<Response> {
+  const auth = await guardAdmin(req)
+  if (auth.response) return auth.response
+
   const contentLength = Number(req.headers.get('content-length') ?? 0)
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
     return json({ error: 'request body is too large' }, 413)
@@ -49,22 +53,14 @@ async function handle(req: Request): Promise<Response> {
 
   const action = typeof payload.action === 'string' ? payload.action : ''
   if (CONTACT_ACTIONS.has(action)) {
-    // Deliberately open for the approved MVP. The Airtable handler is still a
-    // fixed, size-limited allowlist and never accepts caller-supplied field IDs.
     return handleContactImport(action, payload)
   }
 
   if (COMPANY_ACTIONS.has(action)) {
-    // Company writes use the same deliberately open MVP posture and a separate
-    // fixed field allowlist. Callers cannot choose Airtable fields or tables.
     return handleCompanyImport(action, payload)
   }
 
   if (CONVERSATION_ACTIONS.has(action)) {
-    const secret = process.env.ADMIN_SECRET
-    if (secret && req.headers.get('x-admin-secret') !== secret) {
-      return json({ error: 'unauthorized' }, 401)
-    }
     return handleConversationImport(payload)
   }
 

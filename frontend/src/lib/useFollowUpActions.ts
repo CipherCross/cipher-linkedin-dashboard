@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { adminPost } from './admin'
+import { authPost } from './api'
 import { useData } from './DataContext'
 import { followUpKey, followUpStateMap } from './followUps'
 import { useToast } from './ToastContext'
@@ -88,7 +88,7 @@ function optimisticState(
 
 export function useFollowUpActions() {
   const { data, patchFollowUpState, refetch } = useData()
-  const { actor, setActor, members } = usePipelineActions()
+  const { actor, members } = usePipelineActions()
   const toast = useToast()
   const states = useMemo(
     () => followUpStateMap(data?.followUpStates ?? []),
@@ -104,8 +104,6 @@ export function useFollowUpActions() {
       nextDate,
       reason,
     }: MutationOptions): Promise<FollowUpMutationResult> => {
-      const cleanActor = actor.trim()
-      if (!cleanActor) throw new Error('Pick “Who am I” before updating a follow-up.')
       const key = followUpKey(lead.instance_id, lead.profile_url)
       const current = suppliedState === undefined ? states.get(key) ?? null : suppliedState
       const snapshot = current
@@ -115,16 +113,15 @@ export function useFollowUpActions() {
         action,
         ownerId,
         nextDate,
-        cleanActor,
+        actor,
       )
       patchFollowUpState(key, optimistic)
 
       try {
-        const res = await adminPost('/api/pipeline', {
+        const res = await authPost('/api/pipeline', {
           action,
           instance_id: lead.instance_id,
           profile_url: lead.profile_url,
-          actor: cleanActor,
           expected_revision: current?.revision ?? 0,
           mutation_id: crypto.randomUUID(),
           owner_id: ownerId ?? null,
@@ -161,7 +158,6 @@ export function useFollowUpActions() {
 
   return {
     actor,
-    setActor,
     members,
     states,
     schedule: (lead: Lead, ownerId: number, nextDate: string) =>

@@ -3,7 +3,8 @@ import type { Instance } from '../lib/types'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { instanceName } from '../lib/leads'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
+import { useAuth } from '../lib/AuthContext'
 
 // Per-instance config editor for the Health page. Writes the `config` override
 // blob via /api/config; the sync agent merges it over the notebook's local
@@ -46,6 +47,7 @@ function initBool(cfg: Record<string, unknown>) {
 }
 
 export function InstanceConfigEditor({ inst }: { inst: Instance }) {
+  const { isAdmin } = useAuth()
   const { refetch } = useData()
   const toast = useToast()
   const cfg = (inst.config ?? {}) as Record<string, unknown>
@@ -165,10 +167,10 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     setBusy(true)
     setMsg(null)
     try {
-      const res = await adminPost('/api/config', { instance_id: inst.id, config })
+      const res = await authPost('/api/config', { instance_id: inst.id, config })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
+        toast.error(res.status === 401 || res.status === 403 ? 'Admin access required.' : `Save failed: ${out.error ?? res.status}`)
       } else {
         toast.success(`${instanceName(inst)} config saved — applies on the next sync (≤30 min).`)
         setDirty(false) // saved state is the new baseline; allow re-seeding from props
@@ -190,8 +192,13 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     const hasConfig = cfg && Object.keys(cfg).length > 0
     return (
       <div className="config-toggle">
-        <button className="link-btn" onClick={() => setOpen(true)}>
-          Configure
+        <button
+          className="link-btn"
+          onClick={() => setOpen(true)}
+          disabled={!isAdmin}
+          title={isAdmin ? 'Edit remote config' : 'Admin access required'}
+        >
+          {isAdmin ? 'Configure' : 'Admin only'}
         </button>
         {' · '}
         <button className="link-btn" onClick={() => setViewRaw((v) => !v)}>

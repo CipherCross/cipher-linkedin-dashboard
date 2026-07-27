@@ -8,6 +8,8 @@ import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
+import { authFetch } from '../lib/api'
+import { useAuth } from '../lib/AuthContext'
 import { EmptyState } from '../components/EmptyState'
 import { LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
@@ -71,6 +73,7 @@ const isSentFilter = (v: string | null): v is SentFilter =>
 const REPLIED_DAYS = new Set(['7', '30', '90'])
 
 export function LeadsExplorer() {
+  const { isAdmin } = useAuth()
   const { data, refetch } = useData()
   const { openConversation } = useConversation()
   const { setStage, members, memberName } = usePipelineActions()
@@ -197,7 +200,7 @@ export function LeadsExplorer() {
   async function classify() {
     setClassifying(true)
     try {
-      const res = await fetch('/api/classify', { method: 'POST' })
+      const res = await authFetch('/api/classify', { method: 'POST' })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
       const replies =
@@ -216,7 +219,7 @@ export function LeadsExplorer() {
   async function updateDemographics() {
     setUpdatingDemographics(true)
     try {
-      const res = await fetch('/api/classify?mode=demographics', { method: 'POST' })
+      const res = await authFetch('/api/classify?mode=demographics', { method: 'POST' })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
       toast.success(demographicsSummary(j.demographics) || 'Demographics are up to date')
@@ -253,7 +256,7 @@ export function LeadsExplorer() {
     setDigestBusy(instance_id)
     setDigestErr(null)
     try {
-      const res = await fetch('/api/coach', {
+      const res = await authFetch('/api/coach', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ instance_id, mode: 'digest' }),
@@ -772,21 +775,25 @@ export function LeadsExplorer() {
               />
               Added date
             </label>
-            <button className="btn sm" onClick={classify} disabled={classifying}>
-              {classifying ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
-              {classifying ? 'Classifying…' : 'Classify replies'}
-            </button>
-            <button
-              className="btn sm"
-              onClick={updateDemographics}
-              disabled={updatingDemographics}
-              title="Process the next fair batch of name-based gender evaluations"
-            >
-              {updatingDemographics
-                ? <Loader2 size={14} className="spin" />
-                : <Sparkles size={14} />}
-              {updatingDemographics ? 'Updating…' : 'Update demographics'}
-            </button>
+            {isAdmin && (
+              <>
+                <button className="btn sm" onClick={classify} disabled={classifying}>
+                  {classifying ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
+                  {classifying ? 'Classifying…' : 'Classify replies'}
+                </button>
+                <button
+                  className="btn sm"
+                  onClick={updateDemographics}
+                  disabled={updatingDemographics}
+                  title="Process the next fair batch of name-based gender evaluations"
+                >
+                  {updatingDemographics
+                    ? <Loader2 size={14} className="spin" />
+                    : <Sparkles size={14} />}
+                  {updatingDemographics ? 'Updating…' : 'Update demographics'}
+                </button>
+              </>
+            )}
             <button className="btn sm" onClick={exportCsv} disabled={filtered.length === 0}>
               <Download size={14} /> Export CSV
             </button>

@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { supabase } from '../lib/supabase'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import { useToast } from '../lib/ToastContext'
 import { shortDate } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
+import { useAuth } from '../lib/AuthContext'
 
 // The single global playbook: one Markdown document that grounds the AI
 // conversation coach (/api/coach) for every account. Read here with the anon
-// key; saved through /api/playbook (service-role + admin secret). See migration
+// key; saved through /api/playbook (service-role + admin role). See migration
 // 022_playbook — this replaces the old per-instance structured playbook.
 
 const PLACEHOLDER = `# Playbook
@@ -35,6 +36,7 @@ e.g. a 15-minute call.
 - Stack multiple asks in one message`
 
 export function Playbook() {
+  const { isAdmin } = useAuth()
   const toast = useToast()
   const [content, setContent] = useState('')
   const [savedAt, setSavedAt] = useState<string | null>(null)
@@ -90,10 +92,10 @@ export function Playbook() {
   async function save() {
     setBusy(true)
     try {
-      const res = await adminPost('/api/playbook', { content })
+      const res = await authPost('/api/playbook', { content })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(res.status === 401 ? 'Wrong admin secret.' : `Save failed: ${out.error ?? res.status}`)
+        toast.error(res.status === 401 || res.status === 403 ? 'Admin access required.' : `Save failed: ${out.error ?? res.status}`)
       } else {
         setSavedAt(new Date().toISOString())
         setDirty(false)
@@ -125,7 +127,8 @@ export function Playbook() {
           <button
             className="btn-accent icon-btn"
             onClick={save}
-            disabled={busy || !loaded || !dirty || loadError != null}
+            disabled={!isAdmin || busy || !loaded || !dirty || loadError != null}
+            title={isAdmin ? undefined : 'Admin access required'}
           >
             {dirty && !busy && <span className="unsaved-dot" />}
             {busy ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
@@ -164,7 +167,7 @@ export function Playbook() {
                 value={content}
                 spellCheck={false}
                 placeholder={PLACEHOLDER}
-                disabled={loadError != null}
+                disabled={loadError != null || !isAdmin}
                 onChange={(e) => {
                   setDirty(true)
                   setContent(e.target.value)

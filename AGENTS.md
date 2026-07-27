@@ -86,10 +86,12 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   break a scheduled sync.
 - **Remote config**: `apply_remote_config` merges `instances.config` (edited on Health page via
   `/api/config`) over local `config.yaml`; **remote wins** for allowlisted `REMOTE_CONFIG_KEYS`.
-  Bootstrap keys (`supabase_url`, `supabase_service_key`, `instance_id`) are local-only.
+  Bootstrap keys (`supabase_url`, `supabase_service_key`, `instance_id`) and
+  the machine credential `notify_secret` are local-only.
 - **Post-sync notify ping**: after a successful push, `notify_new_replies` POSTs to the
   `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
-  inbound replies to Slack; all failures swallowed — never breaks a sync.
+  inbound replies to Slack. It authenticates with local-only `notify_secret`; all failures
+  are swallowed and never break a sync.
 
 ### AI layer (`frontend/api/`)
 Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `frontend/api/_lib/`:
@@ -120,27 +122,32 @@ SELECT-only role `ai_sql_runner`, allows only `SELECT`/`WITH`, wraps query in `j
 subquery, 10s timeout, service-role-only. **Don't loosen this to add a write path.**
 
 ### Frontend
-React 18 + Vite + React Router (`HashRouter`), Recharts, `react-markdown`. `DataContext.tsx`
-fetches everything once + every 5 min via anon client, provides `useData()`. Pages in
+React 18 + Vite + React Router (`HashRouter`), Recharts, `react-markdown`. `AuthContext.tsx`
+gates startup and links the Supabase session to `team_members`; only then does `DataContext.tsx`
+fetch everything once + every 5 min via the signed-in client. Pages in
 `src/pages/`, presentational pieces in `src/components/`, metric logic in `src/lib/leads.ts`.
 Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past PostgREST's
 1000-row cap, since sentiment/intent and durable P3 counts sit beside all-time totals);
 outbound windowed to 90 days.
 
 ### Security posture
-- Read-only-open: anon key + RLS `using (true)`. Authenticated-only is deferred — **do not flag
-  missing auth on AI/api endpoints as a bug**; tracked separately.
-- `service_role` key lives only in notebooks' `config.yaml` (gitignored) and Vercel server env;
-  it bypasses RLS — that's how all writes happen.
+- Invite-only Supabase email/password Auth. An Auth user must be linked through
+  `team_members.auth_user_id` and active. All active users can read the full
+  dashboard; `team_members.role='admin'` gates sensitive API actions.
+- Browser API calls use the user's bearer JWT. Cron, sync notification, and MCP
+  use separate fail-closed `CRON_SECRET`, `NOTIFY_SECRET`, and `MCP_SECRET`.
+- `service_role` lives only in notebooks' `config.yaml` (gitignored) and Vercel
+  server env; it bypasses RLS, so Vercel handlers must authorize before `db()`.
+- `lead-photos` remains intentionally public; the self-update `agent` bucket is private.
 
 ## Environment variables
 - Browser (`VITE_`-prefixed, safe to expose): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
   Missing → dashboard shows error banner.
 - Server-only (Vercel settings, **never** `VITE_`): `ANTHROPIC_API_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY` (optionally `SUPABASE_URL`), `CRON_SECRET` (guards GET cron paths
-  of `/api/classify` + `/api/notify-replies` + `/api/briefing`), `ADMIN_SECRET` (guards writes
-  to `/api/config` + `/api/playbook` (including campaign briefing context) +
-  `/api/import` conversation actions + manual briefing regeneration),
+  of `/api/classify` + `/api/notify-replies` + `/api/briefing`),
+  `SUPABASE_ANON_KEY` (server JWT verification), `NOTIFY_SECRET` (sync-agent ping),
+  `MCP_SECRET` (all MCP tools),
   `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (server-only Airtable access for Apollo CSV Contact
   and Company imports; restrict the PAT to the target base and schema-read/record read-write scopes),
   `SLACK_WEBHOOK_URL`,

@@ -1,6 +1,7 @@
-import { lazy } from 'react'
+import { lazy, type ReactNode } from 'react'
 import { HashRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { DataProvider } from './lib/DataContext'
+import { AuthGate, AuthProvider, useAuth } from './lib/AuthContext'
 import { ToastProvider } from './lib/ToastContext'
 import { ThemeProvider } from './lib/ThemeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -22,6 +23,7 @@ const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Hea
 const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })))
 const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
 const CsvImport = lazy(() => import('./pages/CsvImport').then((m) => ({ default: m.CsvImport })))
+const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 
 /** Replies folded into Leads, but old deep links carried a `sentiment` query
  *  param (positive/neutral/negative/objection/referral/auto/unclassified) — forward
@@ -32,38 +34,54 @@ function RepliesRedirect() {
   return <Navigate to={`/leads?sentiment=${encodeURIComponent(sentiment)}`} replace />
 }
 
+function AdminOnly({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth()
+  if (isAdmin) return <>{children}</>
+  return (
+    <div className="card access-denied">
+      <h1>Admin access required</h1>
+      <p className="muted">Your account can view dashboard data but cannot run imports.</p>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <ErrorBoundary variant="screen">
       <ThemeProvider>
-      <DataProvider>
-        <ToastProvider>
-        <HashRouter>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<Overview />} />
-              <Route path="campaign/:id" element={<CampaignDetail />} />
-              <Route path="accounts" element={<Navigate to="/" replace />} />
-              <Route path="account/:id" element={<AccountDetail />} />
-              <Route path="leads" element={<LeadsExplorer />} />
-              <Route path="pipeline" element={<Pipeline />} />
-              <Route path="follow-ups" element={<FollowUps />} />
-              {/* Replies folded into Leads — deep links land on replied leads. */}
-              <Route path="replies" element={<RepliesRedirect />} />
-              <Route path="review" element={<Review />} />
-              <Route path="csv-import" element={<CsvImport />} />
-              <Route path="playbook" element={<Playbook />} />
-              <Route path="searches" element={<SearchLibrary />} />
-              <Route path="icp" element={<Icp />} />
-              <Route path="hypotheses" element={<Hypotheses />} />
-              <Route path="health" element={<Health />} />
-              <Route path="chat" element={<Chat />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </HashRouter>
-        </ToastProvider>
-      </DataProvider>
+        <AuthProvider>
+          <AuthGate>
+            <DataProvider>
+              <ToastProvider>
+                <HashRouter>
+                  <Routes>
+                    <Route element={<Layout />}>
+                      <Route index element={<Overview />} />
+                      <Route path="campaign/:id" element={<CampaignDetail />} />
+                      <Route path="accounts" element={<Navigate to="/" replace />} />
+                      <Route path="account/:id" element={<AccountDetail />} />
+                      <Route path="leads" element={<LeadsExplorer />} />
+                      <Route path="pipeline" element={<Pipeline />} />
+                      <Route path="follow-ups" element={<FollowUps />} />
+                      {/* Replies folded into Leads — deep links land on replied leads. */}
+                      <Route path="replies" element={<RepliesRedirect />} />
+                      <Route path="review" element={<Review />} />
+                      <Route path="csv-import" element={<AdminOnly><CsvImport /></AdminOnly>} />
+                      <Route path="playbook" element={<Playbook />} />
+                      <Route path="searches" element={<SearchLibrary />} />
+                      <Route path="icp" element={<Icp />} />
+                      <Route path="hypotheses" element={<Hypotheses />} />
+                      <Route path="health" element={<Health />} />
+                      <Route path="team" element={<Team />} />
+                      <Route path="chat" element={<Chat />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Route>
+                  </Routes>
+                </HashRouter>
+              </ToastProvider>
+            </DataProvider>
+          </AuthGate>
+        </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
   )

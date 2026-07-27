@@ -284,9 +284,9 @@ def apply_remote_config(cfg):
 def notify_new_replies(cfg):
     """Fire-and-forget ping to the dashboard's /api/notify-replies after a
     successful push, so a new inbound reply reaches Slack within one sync cycle
-    instead of waiting for the daily cron sweep. The endpoint is open and
-    self-limiting (claims unnotified rows atomically, capped batch) — see
-    frontend/api/notify-replies.ts. Pings unconditionally when notify_url is
+    instead of waiting for the daily cron sweep. The endpoint requires the
+    local-only notify_secret bearer credential; unlike notify_url, that secret
+    is never accepted from remote config. Pings unconditionally when both are
     set: the no-work case is a cheap no-op, and gating on "messages extracted"
     would strand backlog left by a previously failed ping. ANY failure is
     swallowed — a notification problem must never break a sync; the next ping
@@ -294,10 +294,19 @@ def notify_new_replies(cfg):
     url = (cfg.get("notify_url") or "").strip()
     if not url:
         return
+    secret = (cfg.get("notify_secret") or "").strip()
+    if not secret:
+        print("notify-replies: notify_secret is missing — ping skipped")
+        return
     try:
         # instance_id is informational only (shows who pinged in the Vercel
         # logs) — the endpoint drains ALL instances' backlog regardless.
-        r = requests.post(url, json={"instance_id": cfg["instance_id"]}, timeout=15)
+        r = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {secret}"},
+            json={"instance_id": cfg["instance_id"]},
+            timeout=15,
+        )
         print(f"notify-replies: HTTP {r.status_code} {r.text[:200]}")
     except Exception as e:
         print(f"notify-replies ping failed ({e}) — will retry after next sync")

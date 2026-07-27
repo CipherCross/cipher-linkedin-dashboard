@@ -50,8 +50,11 @@ sync_photos: false
 # New-reply Slack alerts: after each successful sync the agent pings this
 # dashboard endpoint, which posts freshly-synced inbound replies to Slack.
 # Usually set remotely from the Health page (it's a remote-config key) rather
-# than here. Leave empty to disable the ping; a failed ping never breaks a sync.
+# than here. notify_secret is LOCAL-ONLY and must match Vercel's NOTIFY_SECRET;
+# never put it in the remote instance config. Leave either empty to disable the
+# ping; a failed ping never breaks a sync.
 # notify_url: "https://<your-app>.vercel.app/api/notify-replies"
+# notify_secret: "generate-a-long-random-secret"
 
 # LH2 campaign ids this notebook must NEVER sync (test campaigns, etc.).
 # Archiving in LH2 is not enough — archived campaigns stay in lh.db and would

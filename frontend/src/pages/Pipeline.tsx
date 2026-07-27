@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
-import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { InitialsAvatar, LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
@@ -28,9 +27,7 @@ const INTAKE = 'untriaged'
 export function Pipeline() {
   const { data } = useData()
   const { openConversation } = useConversation()
-  const toast = useToast()
-  const { setStage, assign, actor, setActor, members, addMember, memberName } =
-    usePipelineActions()
+  const { setStage, assign, actor, members, memberName } = usePipelineActions()
   const [params, setParams] = useSearchParams()
 
   const inst = params.get('inst') ?? 'all'
@@ -117,9 +114,6 @@ export function Pipeline() {
   // Distinguish a drag-drop from a click so the card click doesn't fire mid-drag.
   const draggingId = useRef<string | null>(null)
 
-  const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState('')
-
   if (!data) return null
 
   const campaignName = (id: string) =>
@@ -142,19 +136,6 @@ export function Pipeline() {
     void setStage(lead, colId)
   }
 
-  const submitMember = async () => {
-    const name = newName.trim()
-    if (!name) return
-    try {
-      await addMember(name)
-      setActor(name)
-      setNewName('')
-      setAdding(false)
-    } catch (e) {
-      toast.error(`Couldn't add member: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
   const boardColumns: Array<{ id: string; label: string; color: string; sub: string[] }> = [
     { id: INTAKE, label: 'Untriaged replies', color: 'var(--warning)', sub: [] },
     ...PIPELINE_STAGES.map((s) => ({
@@ -175,43 +156,9 @@ export function Pipeline() {
           </div>
         </div>
         <div className="controls">
-          <label className="filter-field">
-            <span className="filter-label">Who am I</span>
-            {adding ? (
-              <span className="pipe-add-member">
-                <input
-                  autoFocus
-                  value={newName}
-                  placeholder="Name"
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void submitMember()
-                    if (e.key === 'Escape') {
-                      setAdding(false)
-                      setNewName('')
-                    }
-                  }}
-                />
-                <button className="btn accent sm" onClick={() => void submitMember()}>
-                  Add
-                </button>
-              </span>
-            ) : (
-              <select
-                value={actor}
-                onChange={(e) => {
-                  if (e.target.value === '__add__') setAdding(true)
-                  else setActor(e.target.value)
-                }}
-              >
-                <option value="">— pick —</option>
-                {activeMembers.map((m) => (
-                  <option key={m.id} value={m.name}>{m.name}</option>
-                ))}
-                <option value="__add__">＋ Add member…</option>
-              </select>
-            )}
-          </label>
+          <div className="identity-chip" title="Audit identity comes from your login">
+            Working as <strong>{actor}</strong>
+          </div>
         </div>
       </header>
 

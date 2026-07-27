@@ -338,7 +338,11 @@ annotations — manual notes pinned to dates (e.g. "changed template on X")
 
 team_members — the SDRs who own leads in the manual CRM pipeline
   id bigint PK, name text (unique), active bool (default true; inactive members
-  can't be newly assigned), created_at
+  can't be newly assigned), created_at,
+  auth_user_id uuid unique -> auth.users (NULL = assignment-only teammate with
+  no dashboard login), email text (case-insensitively unique when present),
+  role text ('member'|'admin'; server-controlled application authorization).
+  Authenticated identity is the source for new CRM actor/author audit text.
   leads.assigned_to references this table.
 
 lead_notes — free-text notes pinned to a single lead in the pipeline board

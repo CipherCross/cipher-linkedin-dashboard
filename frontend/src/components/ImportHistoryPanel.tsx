@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import { useToast } from '../lib/ToastContext'
 import { normalizeForDedup, parseLinkedInThread } from '../lib/parseLinkedInThread'
 import type { Lead } from '../lib/types'
@@ -7,7 +7,7 @@ import type { Lead } from '../lib/types'
 // Paste → preview → save flow for a LinkedIn thread copied with the mouse.
 // Rendered inside the ConversationDrawer in place of the thread, so the lead
 // identity (instance / campaign / profile) is already fixed. Saved rows go
-// through /api/import (ADMIN_SECRET-guarded conversation_import action,
+// through /api/import (admin-role conversation_import action,
 // service-role write).
 
 /** The already-stored thread rows the dup check runs against — the drawer
@@ -179,7 +179,7 @@ export function ImportHistoryPanel({
     setSaving(true)
     setError(null)
     try {
-      const res = await adminPost('/api/import', {
+      const res = await authPost('/api/import', {
         action: 'conversation_import',
         instance_id: lead.instance_id,
         campaign_id: lead.campaign_id,

@@ -207,15 +207,9 @@ export function FollowUpPanel({
         <span className="follow-panel-title"><CalendarCheck2 size={16} /> Follow-up</span>
       </div>
 
-      <label className="filter-field">
-        <span className="filter-label">Who am I</span>
-        <select value={actions.actor} onChange={(event) => actions.setActor(event.target.value)}>
-          <option value="">— pick —</option>
-          {activeMembers.map((member) => (
-            <option key={member.id} value={member.name}>{member.name}</option>
-          ))}
-        </select>
-      </label>
+      <div className="identity-chip compact" title="Audit identity comes from your login">
+        Working as <strong>{actions.actor}</strong>
+      </div>
 
       <section className={`follow-current ${active ? 'active' : 'inactive'}`}>
         {active && state ? (

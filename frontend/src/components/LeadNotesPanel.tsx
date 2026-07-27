@@ -7,7 +7,7 @@ import { ago } from '../lib/format'
 import type { Lead, LeadNote } from '../lib/types'
 
 /** Collapsible per-lead notes, styled after the drawer's AI-coach panel. Notes
- *  are fetched on first expand (anon client), newest first; add/delete are
+ *  are fetched on first expand (authenticated client), newest first; add/delete are
  *  optimistic and revert on failure. */
 export function LeadNotesPanel({ lead }: { lead: Lead }) {
   const toast = useToast()

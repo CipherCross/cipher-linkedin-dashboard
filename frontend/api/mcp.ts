@@ -4,13 +4,8 @@
 // Tool names/descriptions/input shapes come from _lib/tools.ts's `toolDefs`
 // so the two surfaces (chat's AI-SDK tools and this MCP server) can't drift.
 //
-// READ/WRITE SPLIT (deliberate): createMcpHandler registers its tools ONCE, inside
-// the construction callback — there is no per-request hook to add or drop a tool. So
-// we build TWO handlers at module scope: `readOnlyHandler` (the analytics tools only)
-// and `adminHandler` (those + the write tool save_search). The exported GET/POST/DELETE
-// pick between them per request from the bearer token. Unlike the HTTP write endpoints
-// (which stay OPEN when ADMIN_SECRET is unset), MCP is FAIL-CLOSED: an unset/empty
-// ADMIN_SECRET always yields the read-only handler — never an open write path.
+// The whole MCP surface is machine-authenticated because every tool reads through
+// service-role-backed SQL. MCP clients cannot inherit the SPA's user session.
 import { createMcpHandler } from 'mcp-handler'
 import {
   CAMPAIGN_OVERVIEW_SQL,
@@ -21,6 +16,7 @@ import {
   executeSql,
 } from './_lib/core.js'
 import { executeSaveSearch, toolDefs } from './_lib/tools.js'
+import { guardMachine } from './_lib/auth.js'
 
 function asText(value: unknown) {
   return {
@@ -90,13 +86,6 @@ const handlerOptions = {
   verboseLogs: false,
 }
 
-// Both handlers built ONCE at module scope (see the read/write-split note above).
-const readOnlyHandler = createMcpHandler(
-  (server) => registerReadOnlyTools(server),
-  serverOptions,
-  handlerOptions
-)
-
 const adminHandler = createMcpHandler(
   (server) => {
     registerReadOnlyTools(server)
@@ -112,21 +101,14 @@ const adminHandler = createMcpHandler(
   handlerOptions
 )
 
-// Fail-closed gating: serve the write-capable handler ONLY when a non-empty
-// ADMIN_SECRET is configured AND the caller presents it as a bearer token. Any other
-// case — no header, wrong token, or (critically) ADMIN_SECRET unset/empty — falls
-// through to the read-only handler, so an unconfigured project can never expose the
-// write tool over MCP.
-function pickHandler(req: Request) {
-  const secret = process.env.ADMIN_SECRET
-  if (secret && req.headers.get('authorization') === `Bearer ${secret}`) {
-    return adminHandler
-  }
-  return readOnlyHandler
+async function authenticatedHandler(req: Request) {
+  const denied = await guardMachine(req, 'MCP_SECRET')
+  if (denied) return denied
+  return adminHandler(req)
 }
 
-const GET = (req: Request) => pickHandler(req)(req)
-const POST = (req: Request) => pickHandler(req)(req)
-const DELETE = (req: Request) => pickHandler(req)(req)
+const GET = (req: Request) => authenticatedHandler(req)
+const POST = (req: Request) => authenticatedHandler(req)
+const DELETE = (req: Request) => authenticatedHandler(req)
 
 export { GET, POST, DELETE }

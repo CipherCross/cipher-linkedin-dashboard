@@ -32,6 +32,7 @@ import {
   TEAM_CONTEXT_RULES,
 } from './_lib/briefing.js'
 import type { BriefingKind, BriefingPeriod, StructuredBriefing } from './_lib/briefing.js'
+import { guardAdmin, guardMachine } from './_lib/auth.js'
 
 export const maxDuration = 300
 
@@ -978,15 +979,11 @@ export async function handleBriefing(
   if (!kind) return json({ error: 'kind must be daily or weekly' }, 400)
 
   if (req.method === 'GET') {
-    const secret = process.env.CRON_SECRET
-    if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-      return json({ error: 'unauthorized' }, 401)
-    }
+    const denied = await guardMachine(req, 'CRON_SECRET')
+    if (denied) return denied
   } else {
-    const secret = process.env.ADMIN_SECRET
-    if (secret && req.headers.get('x-admin-secret') !== secret) {
-      return json({ error: 'unauthorized' }, 401)
-    }
+    const auth = await guardAdmin(req)
+    if (auth.response) return auth.response
   }
 
   const now = new Date()

@@ -4,9 +4,10 @@
 // distinguishable from the AI batch classifier (/api/classify). Same
 // service-role Supabase client as the rest of the AI layer.
 //
-// POST only, intentionally open like /api/classify's manual path: the write is
-// a single row scoped to one inbound message and is idempotent.
+// POST only and admin-guarded. The write is a single row scoped to one inbound
+// message and is idempotent.
 import { db } from './_lib/core.js'
+import { guardAdmin } from './_lib/auth.js'
 
 const SENTIMENTS = [
   'positive',
@@ -29,6 +30,9 @@ const json = (body: unknown, status = 200) =>
   })
 
 async function handle(req: Request): Promise<Response> {
+  const auth = await guardAdmin(req)
+  if (auth.response) return auth.response
+
   let payload: {
     id?: unknown
     sentiment?: unknown

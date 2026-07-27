@@ -10,10 +10,11 @@
 // the lead row is already committed, so a failed insert is reported as `event_error`
 // with a 200 (mirrors milestone_error in /api/import's conversation action).
 //
-// Guard: same as /api/config — if ADMIN_SECRET is set on the Vercel project, callers
-// must send it as an `x-admin-secret` header; if unset, the endpoint is open.
+// Ordinary CRM actions require an active member; demographics and team access
+// management require an admin. Audit identity comes from the verified JWT.
 import { db } from './_lib/core.js'
 import { PIPELINE_STAGE_IDS, stageAllowsSubstatus } from './_lib/pipeline.js'
+import { guardMember, type AppPrincipal } from './_lib/auth.js'
 
 export const maxDuration = 10
 
@@ -41,7 +42,11 @@ const nowIso = () => new Date().toISOString()
 
 // --- set_stage -------------------------------------------------------------
 
-async function setStage(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
+async function setStage(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  actor: string,
+) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
     return json({ error: 'lead_id (string) is required' }, 400)
@@ -74,8 +79,6 @@ async function setStage(supa: ReturnType<typeof db>, p: Record<string, unknown>)
       return json({ error: "lost_reason is only allowed when stage='lost'" }, 400)
     }
   }
-
-  const actor = typeof p.actor === 'string' && p.actor.trim() ? p.actor.trim() : 'unknown'
 
   // Resolve the target values. When the lead leaves the pipeline (stage=null),
   // substatus / lost_reason / changed_at all clear too.
@@ -151,7 +154,11 @@ async function setStage(supa: ReturnType<typeof db>, p: Record<string, unknown>)
 
 // --- assign ----------------------------------------------------------------
 
-async function assign(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
+async function assign(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  actor: string,
+) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
     return json({ error: 'lead_id (string) is required' }, 400)
@@ -161,8 +168,6 @@ async function assign(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
   if (memberId !== null && (typeof memberId !== 'number' || !Number.isInteger(memberId))) {
     return json({ error: 'member_id must be an integer or null' }, 400)
   }
-  const actor = typeof p.actor === 'string' && p.actor.trim() ? p.actor.trim() : 'unknown'
-
   // Resolve the new assignee (name for the event) and reject unknown/inactive.
   let newName: string | null = null
   if (memberId !== null) {
@@ -219,7 +224,11 @@ async function assign(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
 
 // --- add_note / delete_note ------------------------------------------------
 
-async function addNote(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
+async function addNote(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  author: string,
+) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
     return json({ error: 'lead_id (string) is required' }, 400)
@@ -228,8 +237,6 @@ async function addNote(supa: ReturnType<typeof db>, p: Record<string, unknown>) 
   if (!body || body.length > MAX_NOTE) {
     return json({ error: `body must be a non-empty string (max ${MAX_NOTE} chars)` }, 400)
   }
-  const author = typeof p.author === 'string' && p.author.trim() ? p.author.trim() : null
-
   const { data: lead, error: leadErr } = await supa
     .from('leads')
     .select('id')
@@ -267,15 +274,32 @@ async function addMember(supa: ReturnType<typeof db>, p: Record<string, unknown>
   if (!name || name.length > MAX_MEMBER_NAME) {
     return json({ error: `name must be a non-empty string (max ${MAX_MEMBER_NAME} chars)` }, 400)
   }
-  // Re-adding an existing name reactivates that member (name is unique).
-  const { data, error } = await supa
+  // Assignment-only teammate. Login access is created explicitly by invite_member.
+  const { data: existing, error: lookupError } = await supa
     .from('team_members')
-    .upsert({ name, active: true }, { onConflict: 'name' })
-    .select()
-    .single()
-  if (error) return json({ error: error.message }, 500)
+    .select('*')
+    .eq('name', name)
+    .maybeSingle()
+  if (lookupError) return json({ error: lookupError.message }, 500)
+  if (existing?.auth_user_id) {
+    return json({ error: 'that teammate has a login; manage access from the Team page' }, 409)
+  }
 
-  return json({ ok: true, member: data })
+  const result = existing
+    ? await supa
+        .from('team_members')
+        .update({ active: true })
+        .eq('id', existing.id)
+        .select()
+        .single()
+    : await supa
+        .from('team_members')
+        .insert({ name, active: true, role: 'member' })
+        .select()
+        .single()
+  if (result.error) return json({ error: result.error.message }, 409)
+
+  return json({ ok: true, member: result.data })
 }
 
 async function setMemberActive(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
@@ -286,21 +310,222 @@ async function setMemberActive(supa: ReturnType<typeof db>, p: Record<string, un
   if (typeof p.active !== 'boolean') {
     return json({ error: 'active must be a boolean' }, 400)
   }
-  const { data, error } = await supa
+  const { data: current, error: currentError } = await supa
     .from('team_members')
-    .update({ active: p.active })
+    .select('id,name,active,role,auth_user_id,email')
     .eq('id', memberId)
-    .select('id,name,active')
-    .single()
-  // .single() errors (PGRST116) when no row matched — surface as a 404.
-  if (error) {
-    if ((error as { code?: string }).code === 'PGRST116') {
-      return json({ error: 'unknown member_id' }, 404)
-    }
-    return json({ error: error.message }, 500)
+    .maybeSingle()
+  if (currentError) return json({ error: currentError.message }, 500)
+  if (!current) return json({ error: 'unknown member_id' }, 404)
+
+  return updateMember(supa, {
+    member_id: memberId,
+    name: current.name,
+    role: current.role,
+    active: p.active,
+  })
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function normalizedEmail(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+async function findAuthUserByEmail(supa: ReturnType<typeof db>, email: string) {
+  let page = 1
+  while (page <= 10) {
+    const { data, error } = await supa.auth.admin.listUsers({ page, perPage: 100 })
+    if (error) return { user: null, error }
+    const user = data.users.find((candidate) => candidate.email?.toLowerCase() === email)
+    if (user) return { user, error: null }
+    if (data.users.length < 100) break
+    page += 1
+  }
+  return { user: null, error: null }
+}
+
+async function inviteMember(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  redirectTo: string,
+) {
+  const name = typeof p.name === 'string' ? p.name.trim() : ''
+  const email = normalizedEmail(p.email)
+  const role = p.role === 'admin' ? 'admin' : p.role === 'member' ? 'member' : null
+  const existingId = p.member_id
+
+  if (!name || name.length > MAX_MEMBER_NAME) {
+    return json({ error: `name must be a non-empty string (max ${MAX_MEMBER_NAME} chars)` }, 400)
+  }
+  if (!EMAIL.test(email)) return json({ error: 'a valid email is required' }, 400)
+  if (!role) return json({ error: 'role must be member or admin' }, 400)
+  if (
+    existingId !== undefined &&
+    (typeof existingId !== 'number' || !Number.isInteger(existingId) || existingId <= 0)
+  ) {
+    return json({ error: 'member_id must be a positive integer' }, 400)
   }
 
-  return json({ ok: true, member: data })
+  let member: Record<string, unknown> | null = null
+  if (typeof existingId === 'number') {
+    const { data, error } = await supa
+      .from('team_members')
+      .select('*')
+      .eq('id', existingId)
+      .maybeSingle()
+    if (error) return json({ error: error.message }, 500)
+    if (!data) return json({ error: 'unknown member_id' }, 404)
+    if (data.auth_user_id) {
+      return json({ error: 'that teammate already has a login; use Edit instead' }, 409)
+    }
+    const { data: updated, error: updateError } = await supa
+      .from('team_members')
+      .update({ name, email, role, active: true })
+      .eq('id', existingId)
+      .select()
+      .single()
+    if (updateError) return json({ error: updateError.message }, 409)
+    member = updated as Record<string, unknown>
+  } else {
+    const { data: existingByEmail, error: lookupError } = await supa
+      .from('team_members')
+      .select('*')
+      .ilike('email', email)
+      .maybeSingle()
+    if (lookupError) return json({ error: lookupError.message }, 500)
+    if (existingByEmail) {
+      if (existingByEmail.auth_user_id) {
+        return json({ error: 'that email is already linked to a teammate' }, 409)
+      }
+      const { data: updated, error: updateError } = await supa
+        .from('team_members')
+        .update({ name, role, active: true, email })
+        .eq('id', existingByEmail.id)
+        .select()
+        .single()
+      if (updateError) return json({ error: updateError.message }, 409)
+      member = updated as Record<string, unknown>
+    } else {
+      const { data: created, error: createError } = await supa
+        .from('team_members')
+        .insert({ name, email, role, active: true })
+        .select()
+        .single()
+      if (createError) return json({ error: createError.message }, 409)
+      member = created as Record<string, unknown>
+    }
+  }
+
+  const authLookup = await findAuthUserByEmail(supa, email)
+  if (authLookup.error) {
+    return json(
+      { error: `Team row saved, but Auth lookup failed: ${authLookup.error.message}`, member },
+      502,
+    )
+  }
+
+  let authUser = authLookup.user
+  let invited = false
+  if (!authUser) {
+    const { data, error } = await supa.auth.admin.inviteUserByEmail(email, {
+      data: { name },
+      redirectTo,
+    })
+    if (error || !data.user) {
+      return json(
+        {
+          error: `Team row saved, but invitation failed: ${error?.message ?? 'unknown error'}`,
+          member,
+        },
+        502,
+      )
+    }
+    authUser = data.user
+    invited = true
+  }
+
+  const { data: linked, error: linkError } = await supa
+    .from('team_members')
+    .update({ auth_user_id: authUser.id, email })
+    .eq('id', Number(member.id))
+    .select()
+    .single()
+  if (linkError) {
+    return json(
+      { error: `Auth user exists, but linking failed: ${linkError.message}`, member },
+      409,
+    )
+  }
+
+  return json({ ok: true, invited, member: linked })
+}
+
+async function updateMember(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+) {
+  const memberId = p.member_id
+  const name = typeof p.name === 'string' ? p.name.trim() : ''
+  const role = p.role
+  const active = p.active
+  if (typeof memberId !== 'number' || !Number.isInteger(memberId) || memberId <= 0) {
+    return json({ error: 'member_id must be a positive integer' }, 400)
+  }
+  if (!name || name.length > MAX_MEMBER_NAME) {
+    return json({ error: `name must be a non-empty string (max ${MAX_MEMBER_NAME} chars)` }, 400)
+  }
+  if (role !== 'member' && role !== 'admin') {
+    return json({ error: 'role must be member or admin' }, 400)
+  }
+  if (typeof active !== 'boolean') {
+    return json({ error: 'active must be a boolean' }, 400)
+  }
+
+  const { data: current, error: currentError } = await supa
+    .from('team_members')
+    .select('id,name,email,role,active,auth_user_id')
+    .eq('id', memberId)
+    .maybeSingle()
+  if (currentError) return json({ error: currentError.message }, 500)
+  if (!current) return json({ error: 'unknown member_id' }, 404)
+
+  // Unban before reopening database access.
+  if (active && !current.active && current.auth_user_id) {
+    const { error } = await supa.auth.admin.updateUserById(current.auth_user_id, {
+      ban_duration: 'none',
+    })
+    if (error) return json({ error: `Could not reactivate Auth user: ${error.message}` }, 502)
+  }
+
+  const { data: rpcData, error: rpcError } = await supa.rpc('admin_update_team_member', {
+    p_member_id: memberId,
+    p_name: name,
+    p_role: role,
+    p_active: active,
+  })
+  if (rpcError) {
+    const status = rpcError.code === 'P0002' ? 404 : rpcError.code === '23514' ? 409 : 400
+    return json({ error: rpcError.message }, status)
+  }
+
+  // Close live membership first; even if banning fails, RLS/API guards deny it.
+  if (!active && current.active && current.auth_user_id) {
+    const { error } = await supa.auth.admin.updateUserById(current.auth_user_id, {
+      ban_duration: '876000h',
+    })
+    if (error) {
+      return json(
+        {
+          error: `Dashboard access was disabled, but Auth banning failed: ${error.message}`,
+          member: rpcData,
+        },
+        502,
+      )
+    }
+  }
+
+  return json({ ok: true, member: rpcData })
 }
 
 // --- set_gender ------------------------------------------------------------
@@ -312,7 +537,11 @@ async function setMemberActive(supa: ReturnType<typeof db>, p: Record<string, un
 // Age has an independent lifecycle (migration 048) and must not disappear when an
 // SDR clears a gender override.
 
-async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
+async function setGender(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  reviewer: string,
+) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
     return json({ error: 'lead_id (string) is required' }, 400)
@@ -392,8 +621,6 @@ async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>
   // Best-effort audit: preserve the model output that the human just reviewed so
   // precision/coverage/calibration can be measured later. A rolling deployment
   // without migration 048 still completes the override and reports review_error.
-  const reviewer =
-    typeof p.actor === 'string' && p.actor.trim() ? p.actor.trim().slice(0, 120) : null
   const { error: reviewErr } = await supa.from('lead_gender_reviews').insert({
     lead_id: lead.id,
     instance_id: lead.instance_id,
@@ -404,7 +631,7 @@ async function setGender(supa: ReturnType<typeof db>, p: Record<string, unknown>
     predicted_model: lead.demo_model === 'manual' ? null : lead.demo_model,
     predicted_version: lead.demo_model === 'manual' ? null : lead.gender_model_version,
     reviewed_gender: gender,
-    reviewer,
+    reviewer: reviewer.slice(0, 120),
   })
 
   return json({
@@ -434,10 +661,10 @@ async function followUp(
   supa: ReturnType<typeof db>,
   p: Record<string, unknown>,
   action: keyof typeof FOLLOW_UP_ACTIONS,
+  actor: string,
 ) {
   const instanceId = typeof p.instance_id === 'string' ? p.instance_id.trim() : ''
   const profileUrl = typeof p.profile_url === 'string' ? p.profile_url.trim() : ''
-  const actor = typeof p.actor === 'string' ? p.actor.trim() : ''
   const expectedRevision = p.expected_revision
   const mutationId = typeof p.mutation_id === 'string' ? p.mutation_id.trim() : ''
   const ownerId = p.owner_id
@@ -446,9 +673,6 @@ async function followUp(
 
   if (!instanceId || !profileUrl) {
     return json({ error: 'instance_id and profile_url are required' }, 400)
-  }
-  if (!actor || actor.length > 120) {
-    return json({ error: 'actor must be a non-empty string (max 120 chars)' }, 400)
   }
   if (
     typeof expectedRevision !== 'number' ||
@@ -542,10 +766,9 @@ async function followUp(
 }
 
 async function handle(req: Request): Promise<Response> {
-  const secret = process.env.ADMIN_SECRET
-  if (secret && req.headers.get('x-admin-secret') !== secret) {
-    return json({ error: 'unauthorized' }, 401)
-  }
+  const auth = await guardMember(req)
+  if (auth.response) return auth.response
+  const principal: AppPrincipal = auth.principal
 
   let payload: Record<string, unknown>
   try {
@@ -557,29 +780,50 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: 'body must be an object' }, 400)
   }
 
+  const adminActions = new Set([
+    'add_member',
+    'set_member_active',
+    'invite_member',
+    'update_member',
+    'set_gender',
+  ])
+  if (
+    typeof payload.action === 'string' &&
+    adminActions.has(payload.action) &&
+    principal.member.role !== 'admin'
+  ) {
+    return json({ error: 'Admin access required' }, 403)
+  }
+
   const supa = db()
   switch (payload.action) {
     case 'set_stage':
-      return setStage(supa, payload)
+      return setStage(supa, payload, principal.member.name)
     case 'assign':
-      return assign(supa, payload)
+      return assign(supa, payload, principal.member.name)
     case 'add_note':
-      return addNote(supa, payload)
+      return addNote(supa, payload, principal.member.name)
     case 'delete_note':
       return deleteNote(supa, payload)
     case 'add_member':
       return addMember(supa, payload)
     case 'set_member_active':
       return setMemberActive(supa, payload)
+    case 'invite_member': {
+      const redirectTo = process.env.DASHBOARD_URL || `${new URL(req.url).origin}/`
+      return inviteMember(supa, payload, redirectTo)
+    }
+    case 'update_member':
+      return updateMember(supa, payload)
     case 'set_gender':
-      return setGender(supa, payload)
+      return setGender(supa, payload, principal.member.name)
     case 'schedule_follow_up':
     case 'reschedule_follow_up':
     case 'reassign_follow_up':
     case 'complete_follow_up':
     case 'skip_follow_up':
     case 'cancel_follow_up':
-      return followUp(supa, payload, payload.action)
+      return followUp(supa, payload, payload.action, principal.member.name)
     default:
       return json({ error: 'unknown action' }, 400)
   }

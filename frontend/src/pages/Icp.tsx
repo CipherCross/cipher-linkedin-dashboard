@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import { ChipInput } from '../components/ChipInput'
 import { CopyButton } from '../components/CopyButton'
 import { EmptyState } from '../components/EmptyState'
@@ -147,9 +147,9 @@ export function Icp() {
 
   const setArchived = async (icp: Icp, archived: boolean) => {
     try {
-      const res = await adminPost('/api/playbook', { action: 'save_icp', icp: { id: icp.id, archived } })
+      const res = await authPost('/api/playbook', { action: 'save_icp', icp: { id: icp.id, archived } })
       const j = await res.json().catch(() => ({}))
-      if (res.status === 401) return toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) return toast.error('Admin access required.')
       if (!res.ok) return toast.error(`Couldn't update: ${j.error ?? res.status}`)
       upsertIcp(j.icp)
       toast.success(archived ? 'ICP archived.' : 'ICP restored.')
@@ -165,9 +165,9 @@ export function Icp() {
       : ''
     if (!window.confirm(`Delete "${icp.name}"? This can't be undone.${warn}`)) return
     try {
-      const res = await adminPost('/api/playbook', { action: 'delete_icp', id: icp.id })
+      const res = await authPost('/api/playbook', { action: 'delete_icp', id: icp.id })
       const j = await res.json().catch(() => ({}))
-      if (res.status === 401) return toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) return toast.error('Admin access required.')
       if (!res.ok) return toast.error(`Couldn't delete: ${j.error ?? res.status}`)
       removeIcp(icp.id)
       toast.success('ICP deleted.')
@@ -698,10 +698,10 @@ function IcpEditor({
         exclude_keywords: draft.exclude_keywords,
         archived: draft.archived,
       }
-      const res = await adminPost('/api/playbook', { action: 'save_icp', icp: icpPayload })
+      const res = await authPost('/api/playbook', { action: 'save_icp', icp: icpPayload })
       const j = await res.json().catch(() => ({}))
       if (res.status === 409) return setError('An ICP with this name already exists.')
-      if (res.status === 401) return setError('Admin secret is required (or was wrong) to save.')
+      if (res.status === 401 || res.status === 403) return setError('Admin access is required to save.')
       if (!res.ok) return setError(j.error ?? `Save failed (${res.status}).`)
       const savedIcp = j.icp as Icp
 
@@ -710,7 +710,7 @@ function IcpEditor({
       const keptPersonaIds = new Set(draft.personas.filter((p) => p.id).map((p) => p.id))
       for (const original of personas) {
         if (!keptPersonaIds.has(original.id)) {
-          const r = await adminPost('/api/playbook', { action: 'delete_icp_persona', id: original.id })
+          const r = await authPost('/api/playbook', { action: 'delete_icp_persona', id: original.id })
           if (r.ok) removeIcpPersona(original.id)
         }
       }
@@ -728,7 +728,7 @@ function IcpEditor({
           connections_note: p.connections_note.trim() || null,
           followers_note: p.followers_note.trim() || null,
         }
-        const r = await adminPost('/api/playbook', { action: 'save_icp_persona', persona: payload })
+        const r = await authPost('/api/playbook', { action: 'save_icp_persona', persona: payload })
         const rj = await r.json().catch(() => ({}))
         if (r.ok) upsertIcpPersona(rj.persona)
       }
@@ -737,7 +737,7 @@ function IcpEditor({
       const keptIndustryIds = new Set(draft.industries.filter((x) => x.id).map((x) => x.id))
       for (const original of industries) {
         if (!keptIndustryIds.has(original.id)) {
-          const r = await adminPost('/api/playbook', { action: 'delete_icp_industry', id: original.id })
+          const r = await authPost('/api/playbook', { action: 'delete_icp_industry', id: original.id })
           if (r.ok) removeIcpIndustry(original.id)
         }
       }
@@ -749,7 +749,7 @@ function IcpEditor({
           name: x.name.trim(),
           include_keywords: x.include_keywords,
         }
-        const r = await adminPost('/api/playbook', { action: 'save_icp_industry', industry: payload })
+        const r = await authPost('/api/playbook', { action: 'save_icp_industry', industry: payload })
         const rj = await r.json().catch(() => ({}))
         if (r.ok) upsertIcpIndustry(rj.industry)
       }

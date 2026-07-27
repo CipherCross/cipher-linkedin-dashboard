@@ -4,10 +4,9 @@
 // via _lib/slack.ts. Kept defensive on shape/size since a malformed body would
 // otherwise post garbage straight to the team channel.
 //
-// Guard: same as /api/config and /api/playbook — if ADMIN_SECRET is set on the
-// Vercel project, callers must send it as an `x-admin-secret` header; if unset,
-// the endpoint is open (acceptable only because this is an internal tool).
+// Posting to Slack requires a verified application admin.
 import { postReviewDigestToSlack, type ReviewDigestRow } from './_lib/slack.js'
+import { guardAdmin } from './_lib/auth.js'
 
 export const maxDuration = 10
 
@@ -30,10 +29,8 @@ const nonNegInt = (v: unknown): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= 0
 
 async function handle(req: Request): Promise<Response> {
-  const secret = process.env.ADMIN_SECRET
-  if (secret && req.headers.get('x-admin-secret') !== secret) {
-    return json({ error: 'unauthorized' }, 401)
-  }
+  const auth = await guardAdmin(req)
+  if (auth.response) return auth.response
 
   const raw = await req.text()
   if (Buffer.byteLength(raw, 'utf8') > MAX_BODY_BYTES) {

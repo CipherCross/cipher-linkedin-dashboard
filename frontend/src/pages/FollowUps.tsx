@@ -29,7 +29,7 @@ const GROUPS: Array<{ id: Exclude<FollowUpBucket, 'unscheduled'>; label: string 
 export function FollowUps() {
   const { data } = useData()
   const { openConversation } = useConversation()
-  const { actor, setActor, members } = useFollowUpActions()
+  const { actor, members } = useFollowUpActions()
   const [params, setParams] = useSearchParams()
   const [query, setQuery] = useState(params.get('q') ?? '')
 
@@ -49,7 +49,7 @@ export function FollowUps() {
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params)
-    // With no owner parameter the queue defaults to the selected "Who am I".
+    // With no owner parameter the queue defaults to the authenticated teammate.
     // Preserve an explicit `owner=all` so the user can actually override that
     // default and inspect the whole team's work.
     if (key === 'owner' && value === 'all') next.set(key, value)
@@ -117,15 +117,9 @@ export function FollowUps() {
             One daily queue per LinkedIn conversation · Europe/Madrid business dates
           </div>
         </div>
-        <label className="filter-field">
-          <span className="filter-label">Who am I</span>
-          <select value={actor} onChange={(event) => setActor(event.target.value)}>
-            <option value="">— pick —</option>
-            {members.filter((member) => member.active).map((member) => (
-              <option key={member.id} value={member.name}>{member.name}</option>
-            ))}
-          </select>
-        </label>
+        <div className="identity-chip" title="Audit identity comes from your login">
+          Working as <strong>{actor}</strong>
+        </div>
       </header>
 
       {!data.followUpsAvailable ? (

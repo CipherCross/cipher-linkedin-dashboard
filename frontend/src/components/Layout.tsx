@@ -21,6 +21,8 @@ import {
   PanelLeftOpen,
   X,
   FileSpreadsheet,
+  LogOut,
+  UserCog,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useData } from '../lib/DataContext'
@@ -30,12 +32,13 @@ import type { DashboardData, Instance } from '../lib/types'
 import { instanceName } from '../lib/leads'
 import { ago } from '../lib/format'
 import { freshnessLevel } from '../lib/freshness'
+import { useAuth } from '../lib/AuthContext'
 import { Avatar } from './Avatar'
 import { Logo } from './Logo'
 import { PageSkeleton } from './Skeleton'
 import { ErrorBoundary } from './ErrorBoundary'
 
-type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean }
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; admin?: boolean }
 
 const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = [
   {
@@ -62,7 +65,8 @@ const NAV_SECTIONS: { label: string; emphasis?: boolean; links: NavItem[] }[] = 
   {
     label: 'System',
     links: [
-      { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet },
+      { to: '/team', label: 'Team', icon: UserCog },
+      { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet, admin: true },
       { to: '/health', label: 'Health', icon: Activity },
     ],
   },
@@ -260,6 +264,7 @@ function Sidebar({
   collapsed: boolean
   onToggleCollapse: () => void
 }) {
+  const { member, isAdmin, signOut } = useAuth()
   const location = useLocation()
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -352,7 +357,7 @@ function Sidebar({
             >
               <div className="nav-section-title">{section.label}</div>
               <div className="nav-section-links">
-                {section.links.map(({ to, label, icon: Icon, end }) => (
+                {section.links.filter((link) => !link.admin || isAdmin).map(({ to, label, icon: Icon, end }) => (
                   <NavLink
                     key={to}
                     to={to}
@@ -466,6 +471,24 @@ function Sidebar({
         </nav>
 
         <div className="side-footer">
+          <div className="side-user">
+            <span className="side-user-avatar" aria-hidden="true">
+              {member?.name.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="side-user-copy">
+              <strong>{member?.name}</strong>
+              <span>{member?.role}</span>
+            </span>
+            <button
+              className="icon-btn"
+              type="button"
+              title="Sign out"
+              aria-label="Sign out"
+              onClick={() => void signOut()}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
           <ThemeToggle />
           {data && <SyncChip instances={data.instances} />}
         </div>

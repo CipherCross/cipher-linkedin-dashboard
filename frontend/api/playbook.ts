@@ -4,8 +4,8 @@
 // grounds the AI conversation coach (/api/coach). It now also owns the Search Library
 // (saved_searches) writes and the ICP/Hypothesis layer (migration 043) via an `action`
 // dispatch — folded in here rather than new files because frontend/api is at the
-// Vercel Hobby 12-function cap. Reads for all of these happen through the anon key
-// (the pages); only these WRITES need the service-role key, reused from
+// Vercel Hobby 12-function cap. Reads happen through authenticated RLS; these
+// WRITES need the service-role key, reused from
 // /api/_lib/core.ts.
 //
 // Back-compatible: a POST with NO `action` key is the legacy playbook save
@@ -16,10 +16,9 @@
 // _lib/icp.ts); action:'save_campaign_context' updates the team background supplied
 // to AI briefings. All paths share the same guard.
 //
-// Guard: mirrors /api/config — if ADMIN_SECRET is set on the Vercel project, callers
-// must send it as an `x-admin-secret` header; if unset, the endpoint is open
-// (acceptable only because this is an internal tool).
+// Every path requires a verified application admin.
 import { db } from './_lib/core.js'
+import { guardAdmin } from './_lib/auth.js'
 import { validateSearch } from './_lib/savedSearch.js'
 import {
   validateCampaignIds,
@@ -323,10 +322,8 @@ async function saveCampaignContext(
 }
 
 async function handle(req: Request): Promise<Response> {
-  const secret = process.env.ADMIN_SECRET
-  if (secret && req.headers.get('x-admin-secret') !== secret) {
-    return json({ error: 'unauthorized' }, 401)
-  }
+  const auth = await guardAdmin(req)
+  if (auth.response) return auth.response
 
   let payload: Record<string, unknown>
   try {

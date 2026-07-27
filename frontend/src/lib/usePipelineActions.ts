@@ -1,20 +1,16 @@
-// Optimistic mutations for the manual CRM pipeline, plus the SDR's "who am I"
-// identity. Every write patches the shared lead in place first (so the board /
+// Optimistic mutations for the manual CRM pipeline. Authenticated identity is
+// authoritative on the server. Every write patches the shared lead in place first (so the board /
 // drawer / leads table all update instantly), then POSTs to /api/pipeline; a
 // failure reverts and surfaces via the app-wide toast.
-import { useCallback, useEffect, useState } from 'react'
-import { adminPost } from './admin'
+import { useCallback } from 'react'
+import { authPost } from './api'
+import { useAuth } from './AuthContext'
 import { useData } from './DataContext'
 import { useToast } from './ToastContext'
 import type { Lead, LeadNote, TeamMember } from './types'
 
-const ACTOR_KEY = 'pipelineActor'
-// Broadcast actor changes so every hook instance (board header, drawer, notes)
-// stays in sync without a shared context.
-const ACTOR_EVENT = 'pipelineActor'
-
 async function post(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await adminPost('/api/pipeline', body)
+  const res = await authPost('/api/pipeline', body)
   let j: Record<string, unknown> = {}
   try {
     j = await res.json()
@@ -31,27 +27,9 @@ async function post(body: Record<string, unknown>): Promise<Record<string, unkno
  *  can revert their own local optimistic state. */
 export function usePipelineActions() {
   const { data, patchLead, refetch } = useData()
+  const { member, isAdmin } = useAuth()
   const toast = useToast()
-
-  const [actor, setActorState] = useState<string>(
-    () => localStorage.getItem(ACTOR_KEY) ?? '',
-  )
-
-  // Keep every hook instance's actor in sync.
-  useEffect(() => {
-    const onEvent = (e: Event) => {
-      const detail = (e as CustomEvent<string>).detail
-      setActorState(detail ?? localStorage.getItem(ACTOR_KEY) ?? '')
-    }
-    window.addEventListener(ACTOR_EVENT, onEvent)
-    return () => window.removeEventListener(ACTOR_EVENT, onEvent)
-  }, [])
-
-  const setActor = useCallback((name: string) => {
-    localStorage.setItem(ACTOR_KEY, name)
-    setActorState(name)
-    window.dispatchEvent(new CustomEvent(ACTOR_EVENT, { detail: name }))
-  }, [])
+  const actor = member?.name ?? ''
 
   const members: TeamMember[] = data?.teamMembers ?? []
   const memberName = useCallback(
@@ -85,7 +63,6 @@ export function usePipelineActions() {
           stage,
           substatus: opts?.substatus ?? null,
           lost_reason: opts?.lostReason ?? null,
-          actor,
         })
         // Reconcile with the server's authoritative values. The API returns only
         // the fields it actually changed: a no-op sends {changed:false} with
@@ -115,7 +92,7 @@ export function usePipelineActions() {
         toast.error(`Couldn't move lead: ${e instanceof Error ? e.message : String(e)}`)
       }
     },
-    [actor, patchLead, toast],
+    [patchLead, toast],
   )
 
   const assign = useCallback(
@@ -123,7 +100,7 @@ export function usePipelineActions() {
       const snapshot: Partial<Lead> = { assigned_to: lead.assigned_to }
       patchLead(lead.id, { assigned_to: memberId })
       try {
-        const j = await post({ action: 'assign', lead_id: lead.id, member_id: memberId, actor })
+        const j = await post({ action: 'assign', lead_id: lead.id, member_id: memberId })
         if (j.event_error)
           toast.error(`Assigned, but history log failed: ${String(j.event_error)}`)
       } catch (e) {
@@ -131,16 +108,16 @@ export function usePipelineActions() {
         toast.error(`Couldn't assign lead: ${e instanceof Error ? e.message : String(e)}`)
       }
     },
-    [actor, patchLead, toast],
+    [patchLead, toast],
   )
 
   const addNote = useCallback(
     async (leadId: string, body: string): Promise<LeadNote> => {
-      const j = await post({ action: 'add_note', lead_id: leadId, body, author: actor })
+      const j = await post({ action: 'add_note', lead_id: leadId, body })
       // Accept either a bare row or a { note } envelope.
       return ((j.note as LeadNote) ?? (j as unknown as LeadNote))
     },
-    [actor],
+    [],
   )
 
   const deleteNote = useCallback(async (noteId: number) => {
@@ -167,7 +144,7 @@ export function usePipelineActions() {
 
   return {
     actor,
-    setActor,
+    isAdmin,
     members,
     memberName,
     setStage,

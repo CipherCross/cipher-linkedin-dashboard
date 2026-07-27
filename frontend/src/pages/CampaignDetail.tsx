@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import type { CampaignMetrics, Gender, Lead } from '../lib/types'
 import {
   campaignDemographics, daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
@@ -258,14 +258,14 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
     if (!dirty || saving) return
     setSaving(true)
     try {
-      const res = await adminPost('/api/playbook', {
+      const res = await authPost('/api/playbook', {
         action: 'save_campaign_context',
         campaign_id: campaign.campaign_id,
         briefing_context: value,
       })
       const result = await res.json().catch(() => ({}))
-      if (res.status === 401) {
-        toast.error('Wrong admin secret.')
+      if (res.status === 401 || res.status === 403) {
+        toast.error('Admin access required.')
         return
       }
       if (!res.ok) {

@@ -8,7 +8,7 @@ import {
   rangeToParam, rangedCampaigns, replyIntentMetrics,
 } from '../lib/leads'
 import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
-import { adminPost } from '../lib/admin'
+import { authPost } from '../lib/api'
 import { EmptyState } from '../components/EmptyState'
 import { CohortComparisonTable } from '../components/CohortComparisonTable'
 import { TemplateComparison } from '../components/TemplateComparison'
@@ -261,7 +261,7 @@ function SendToSlackButton({ digest }: { digest: DigestPayload | null }) {
     if (!digest) return
     setBusy(true)
     try {
-      const res = await adminPost('/api/review-digest', digest)
+      const res = await authPost('/api/review-digest', digest)
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || `HTTP ${res.status}`)

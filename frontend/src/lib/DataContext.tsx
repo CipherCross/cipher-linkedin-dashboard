@@ -617,7 +617,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // below — a missing table just yields an empty list, never a failed
           // load. team_members' .select() resolves with {data,error} (never
           // throws); fetchAllPipelineEvents swallows its own errors to [].
-          supabase.from('team_members').select('id,name,active,created_at').order('id'),
+          supabase
+            .from('team_members')
+            .select('id,name,active,created_at,auth_user_id,email,role')
+            .order('id'),
           // Search Library (migration 040) — same tolerated-error pattern: a
           // missing table (pre-migration DB) yields [] and its error is excluded
           // from the aggregate `error` below, so it never fails the load.

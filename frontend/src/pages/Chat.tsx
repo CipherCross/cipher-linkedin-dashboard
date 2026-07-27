@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useChat } from '@ai-sdk/react'
-import type { UIMessage } from 'ai'
+import { DefaultChatTransport, type UIMessage } from 'ai'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   ArrowDown, Check, ChevronDown, ChevronRight, Copy, Database, Loader2, Plus, RotateCw,
   Send, Sparkles, Square, X,
 } from 'lucide-react'
+import { authFetch } from '../lib/api'
 
 const SUGGESTIONS = [
   'Why did the recent spike in invites not produce the same reply count as a month ago?',
@@ -182,8 +183,10 @@ function Message({ m }: { m: UIMessage }) {
 
 export function Chat() {
   const [initialMessages] = useState(loadStored)
+  const [transport] = useState(() => new DefaultChatTransport({ fetch: authFetch }))
   const { messages, sendMessage, status, error, stop, regenerate, setMessages } = useChat({
     messages: initialMessages,
+    transport,
   })
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)

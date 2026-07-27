@@ -5,13 +5,12 @@
 //
 // Triggers:
 //   GET  — the daily Vercel cron (guarded by CRON_SECRET).
-//   POST — the "Classify replies" button on the Leads page. No secret:
-//          the work is self-limiting (only unclassified/current-taxonomy backlog,
-//          cheap Haiku), so repeated clicks are safe and converge to a no-op.
+//   POST — the admin-only "Classify replies" button on the Leads page.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { db } from './_lib/core.js'
+import { guardAdmin, guardMachine } from './_lib/auth.js'
 
 export const maxDuration = 300
 
@@ -154,12 +153,12 @@ function renderReply(ref: number, reply: Reply, thread: Msg[]): string {
 }
 
 async function handle(req: Request): Promise<Response> {
-  // Cron path is guarded; the manual POST path is intentionally open (see top).
   if (req.method === 'GET') {
-    const secret = process.env.CRON_SECRET
-    if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-      return json({ error: 'unauthorized' }, 401)
-    }
+    const denied = await guardMachine(req, 'CRON_SECRET')
+    if (denied) return denied
+  } else {
+    const auth = await guardAdmin(req)
+    if (auth.response) return auth.response
   }
 
   const sb = db()

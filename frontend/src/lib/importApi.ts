@@ -1,4 +1,5 @@
 import type { CompanyImportRow, ContactImportRow } from './csvImport'
+import { authFetch } from './api'
 
 export interface ImportMetadata {
   source: 'apollo'
@@ -92,7 +93,7 @@ async function importPost<T>(body: Record<string, unknown>): Promise<T> {
   if (new TextEncoder().encode(serialized).byteLength > MAX_IMPORT_BODY_BYTES) {
     throw new Error('This import is too large to send safely. Split the CSV into smaller files and try again.')
   }
-  const response = await fetch('/api/import', {
+  const response = await authFetch('/api/import', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: serialized,
