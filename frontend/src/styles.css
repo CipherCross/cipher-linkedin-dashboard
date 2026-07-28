@@ -2151,6 +2151,12 @@ tr.row-clickable:focus-visible,
 }
 .conv-close:hover { color: var(--text); }
 .conv-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.conv-account {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted); text-decoration: none;
+}
+.conv-account .avatar { flex: 0 0 auto; }
+.conv-account[href]:hover { color: var(--text); }
 .conv-import-btn { margin-left: auto; }
 .conv-error { margin: 10px 16px 0; }
 
@@ -2664,11 +2670,17 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 0 5px; cursor: help;
 }
-.msg-delete {
+.msg-delete, .msg-edit {
   display: inline-flex; align-items: center; border: none; background: none;
   padding: 0; color: var(--muted); cursor: pointer;
 }
+.msg-edit:hover:not(:disabled) { color: var(--text); }
 .msg-delete:hover:not(:disabled) { color: var(--danger); }
+.msg-edit-textarea {
+  display: block; width: min(340px, 65vw); min-height: 72px; resize: vertical;
+  color: inherit; background: transparent; border: 1px solid currentColor;
+  border-radius: var(--radius-sm); padding: 7px 8px; font: inherit;
+}
 
 /* sentiment: show only the current badge; reveal the button row on demand */
 .msg-senti-badge {

@@ -1,6 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarCheck2, ChevronDown, ChevronRight, Loader2, MessagesSquare, Trash2, X } from 'lucide-react'
+import {
+  CalendarCheck2, Check, ChevronDown, ChevronRight, Loader2, MessagesSquare,
+  Pencil, Trash2, X,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { authPost } from '../lib/api'
 import { authFetch } from '../lib/api'
@@ -12,7 +15,7 @@ import { ImportHistoryPanel } from './ImportHistoryPanel'
 import { FollowUpPanel } from './FollowUpPanel'
 import { LeadNotesPanel } from './LeadNotesPanel'
 import { LostReasonModal } from './LostReasonModal'
-import { LeadAvatar } from './Avatar'
+import { Avatar, LeadAvatar } from './Avatar'
 import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
 import {
@@ -69,6 +72,8 @@ export function ConversationDrawer({
   } | null>(null)
   // The imported message currently being deleted (for the inline spinner).
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [editing, setEditing] = useState<{ id: number; body: string } | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
   // True while a gender override is being saved (disables the select).
   const [savingGender, setSavingGender] = useState(false)
   // Which inbound bubble has its sentiment button row revealed (badge clicked).
@@ -132,6 +137,8 @@ export function ConversationDrawer({
     setImportOpen(false)
     setFollowUpOpen(initialMode === 'follow_up')
     setFollowUpReturnAction(undefined)
+    setEditing(null)
+    setSavingEdit(false)
   }, [lead, initialMode])
 
   // Lock the background from scrolling while the drawer is open (restore on close).
@@ -265,8 +272,9 @@ export function ConversationDrawer({
   const campaignName =
     data?.campaigns.find((c) => c.campaign_id === lead.campaign_id)?.campaign_name ??
     lead.campaign_id
+  const outreachAccount = data?.instances.find((i) => i.id === lead.instance_id)
   const accountLabel = instanceName(
-    data?.instances.find((i) => i.id === lead.instance_id),
+    outreachAccount,
     lead.instance_id,
   )
 
@@ -369,6 +377,34 @@ export function ConversationDrawer({
       toast.error(`Couldn't delete: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setDeleting(null)
+    }
+  }
+
+  async function editMessage(msg: ThreadMsg) {
+    if (!editing || editing.id !== msg.id) return
+    const body = editing.body.trim()
+    if (!body || body === (msg.body ?? '').trim()) {
+      setEditing(null)
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const res = await authPost('/api/import', {
+        action: 'edit_message',
+        id: msg.id,
+        body,
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+      setRows(
+        (prev) => prev?.map((m) => (m.id === msg.id ? { ...m, body: j.body ?? body } : m)) ?? prev,
+      )
+      setEditing(null)
+      refetch()
+    } catch (e) {
+      toast.error(`Couldn't edit: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -487,7 +523,21 @@ export function ConversationDrawer({
             >
               {campaignName}
             </Link>
-            <span className="muted small">· {accountLabel}</span>
+            {outreachAccount ? (
+              <a
+                className="conv-account muted small"
+                href={outreachAccount.account_url ?? undefined}
+                target={outreachAccount.account_url ? '_blank' : undefined}
+                rel={outreachAccount.account_url ? 'noreferrer' : undefined}
+                title={`Outreach account: ${accountLabel}`}
+                onClick={outreachAccount.account_url ? undefined : (e) => e.preventDefault()}
+              >
+                <Avatar key={outreachAccount.id} inst={outreachAccount} size={22} />
+                <span>{accountLabel}</span>
+              </a>
+            ) : (
+              <span className="muted small">· {accountLabel}</span>
+            )}
             {statusMeta ? (
               <span
                 className={`badge senti ${statusMeta.cls}`}
@@ -701,7 +751,21 @@ export function ConversationDrawer({
               )}
               <div className={`msg ${inbound ? 'in' : 'out'}`}>
                 <div className="msg-bubble">
-                  {m.body || <span className="muted">(empty)</span>}
+                  {editing?.id === m.id ? (
+                    <textarea
+                      className="msg-edit-textarea"
+                      value={editing.body}
+                      maxLength={5000}
+                      autoFocus
+                      onChange={(e) => setEditing({ id: m.id, body: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setEditing(null)
+                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void editMessage(m)
+                      }}
+                    />
+                  ) : (
+                    m.body || <span className="muted">(empty)</span>
+                  )}
                 </div>
                 <div className="msg-meta">
                   <span className="msg-time muted small">{clockTime(m.sent_at)}</span>
@@ -713,11 +777,43 @@ export function ConversationDrawer({
                       >
                         imported
                       </span>
+                      {editing?.id === m.id ? (
+                        <>
+                          <button
+                            type="button"
+                            className="msg-edit"
+                            title="Save message"
+                            disabled={savingEdit || !editing.body.trim()}
+                            onClick={() => void editMessage(m)}
+                          >
+                            {savingEdit ? <Loader2 size={12} className="spin" /> : <Check size={12} />}
+                          </button>
+                          <button
+                            type="button"
+                            className="msg-edit"
+                            title="Cancel editing"
+                            disabled={savingEdit}
+                            onClick={() => setEditing(null)}
+                          >
+                            <X size={12} />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="msg-edit"
+                          title="Edit imported message"
+                          disabled={deleting !== null || savingEdit || editing !== null}
+                          onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="msg-delete"
                         title="Delete imported message"
-                        disabled={deleting !== null}
+                        disabled={deleting !== null || savingEdit || editing !== null}
                         onClick={() => deleteMessage(m)}
                       >
                         {deleting === m.id ? (

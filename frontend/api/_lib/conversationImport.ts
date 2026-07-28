@@ -19,9 +19,10 @@
 //
 // Guard: applied by the shared /api/import dispatcher before this helper runs.
 //
-// Second action (Vercel Hobby caps this project at its current 12 function
-// files, so deletion shares the import dispatcher rather than its own endpoint): a body of
-// { action: 'delete_message', id } deletes ONE manually-imported message via
+// Extra actions (Vercel Hobby caps this project at its current 12 function
+// files, so editing/deletion share the import dispatcher): edit_message updates
+// the body of ONE manually-imported message; { action: 'delete_message', id }
+// deletes one via
 // the delete_manual_message RPC (039), which also repairs lead milestones the
 // import backfilled from that row. Sync rows are not deletable — the RPC
 // refuses them and we 404.
@@ -60,11 +61,21 @@ const minIso = (msgs: ImportMessage[], direction: 'in' | 'out'): string | null =
 export async function handleConversationImport(payload: {
     action?: unknown
     id?: unknown
+    body?: unknown
     instance_id?: unknown
     campaign_id?: unknown
     profile_url?: unknown
     messages?: unknown
   }): Promise<Response> {
+  // Deleting a single imported row intentionally needs only its message id.
+  // Dispatch it before validating the full conversation-import payload.
+  if (payload.action === 'delete_message') {
+    return deleteMessage(payload.id)
+  }
+  if (payload.action === 'edit_message') {
+    return editMessage(payload.id, payload.body)
+  }
+
   const { instance_id, campaign_id, profile_url } = payload
   if (typeof instance_id !== 'string' || !instance_id) {
     return json({ error: 'instance_id (string) is required' }, 400)
@@ -203,4 +214,25 @@ async function deleteMessage(id: unknown): Promise<Response> {
     return json({ error: 'no manual message with that id' }, 404)
   }
   return json({ ok: true, deleted: id, milestones_recomputed: result.milestones_recomputed ?? 0 })
+}
+
+async function editMessage(id: unknown, body: unknown): Promise<Response> {
+  if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+    return json({ error: 'id (positive integer) is required' }, 400)
+  }
+  if (typeof body !== 'string' || !body.trim() || body.length > MAX_BODY_CHARS) {
+    return json({ error: `body must be a non-empty string (max ${MAX_BODY_CHARS} chars)` }, 400)
+  }
+
+  const nextBody = body.trim()
+  const { data, error } = await db()
+    .from('messages')
+    .update({ body: nextBody, content_hash: md5(nextBody) })
+    .eq('id', id)
+    .eq('source', 'manual')
+    .select('id')
+    .maybeSingle()
+  if (error) return json({ error: error.message }, 500)
+  if (!data) return json({ error: 'no manual message with that id' }, 404)
+  return json({ ok: true, edited: id, body: nextBody })
 }

@@ -20,7 +20,11 @@ const COMPANY_ACTIONS = new Set([
   'company_preview',
   'company_commit',
 ])
-const CONVERSATION_ACTIONS = new Set(['conversation_import', 'delete_message'])
+const CONVERSATION_ACTIONS = new Set([
+  'conversation_import',
+  'delete_message',
+  'edit_message',
+])
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
