@@ -37,14 +37,15 @@ sync_messages: true
 
 # Lead photos (UI display ONLY — never used for any inference): after each
 # successful sync the agent mirrors each lead's LinkedIn profile photo into the
-# public `lead-photos` Storage bucket so the dashboard can show avatars. OFF by
-# default — flip it on per notebook (usually remotely, from the Health page: it's
-# a remote-config key) once the storage bucket migration is applied and you're
-# ready for the initial backfill, which spreads over several syncs (200 photos per
-# run). Every photo error is swallowed — it can NEVER break a sync. NOTE: the same
-# licdn URL expiry as above applies — the agent downloads the bytes at sync time
-# from a fresh DB read rather than storing the URL; a dead/missing avatar is
-# skipped quietly (marked done, no photo) and never retried.
+# private `lead-photos` Storage bucket so the authenticated dashboard can show
+# avatars through short-lived signed URLs. OFF by default — flip it on per
+# notebook (usually remotely, from the Health page: it's a remote-config key)
+# once migration 054 is applied and you're ready for the initial backfill, which
+# spreads over several syncs (200 photos per run). Every photo error is swallowed
+# — it can NEVER break a sync. NOTE: the same licdn URL expiry as above applies —
+# the agent downloads the bytes at sync time from a fresh DB read rather than
+# storing the URL; a dead/missing avatar is skipped quietly (marked done, no
+# photo) and never retried.
 sync_photos: false
 
 # New-reply Slack alerts: after each successful sync the agent pings this

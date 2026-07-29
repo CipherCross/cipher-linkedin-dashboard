@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "baseline_version": "053",
+  "baseline_file": "../tenant-baseline/v053/053_tenant_baseline.sql",
+  "shared_delta_directory": "../migrations",
+  "minimum_shared_delta_version": "054",
+  "forbid_repository_root_db_push_for_tenants": true,
+  "internal_seed_paths": []
+}

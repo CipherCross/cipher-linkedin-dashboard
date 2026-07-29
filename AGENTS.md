@@ -144,7 +144,8 @@ it does not authorize entering credentials or making data-changing actions.
   use separate fail-closed `CRON_SECRET`, `NOTIFY_SECRET`, and `MCP_SECRET`.
 - `service_role` lives only in notebooks' `config.yaml` (gitignored) and Vercel
   server env; it bypasses RLS, so Vercel handlers must authorize before `db()`.
-- `lead-photos` remains intentionally public; the self-update `agent` bucket is private.
+- `lead-photos` is private; active authenticated members receive short-lived
+  signed URLs through Storage RLS. The self-update `agent` bucket is also private.
 
 ## Environment variables
 - Browser (`VITE_`-prefixed, safe to expose): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.

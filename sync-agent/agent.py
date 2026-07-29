@@ -318,9 +318,10 @@ PHOTO_CAP = 200
 
 
 def sync_photos(cfg, sb, avatar_map):
-    """Mirror each lead's LinkedIn avatar into the public `lead-photos` Storage
-    bucket for UI display — display-only, NEVER used for any inference. Runs after
-    the leads push, only when config `sync_photos` is truthy. Like
+    """Mirror each lead's LinkedIn avatar into the private `lead-photos` Storage
+    bucket for authenticated/signed UI display — display-only, NEVER used for
+    any inference. Runs after the leads push, only when config `sync_photos` is
+    truthy. Like
     notify_new_replies, EVERY exception is swallowed here: a photo problem must
     never break a scheduled sync.
 

@@ -860,18 +860,6 @@ export function hypothesisCampaignBreakdown(
 // unknown age are first-class values, never a failure state. All year math is
 // in UTC to match the rest of this module.
 
-/** Public URL for a lead's synced profile photo, or null when there's no photo
- *  (or Supabase isn't configured). The `lead-photos` bucket is public (these
- *  avatars are already public on LinkedIn), so no signing/auth is needed.
- *  Display only — photos are never an inference input. */
-export function leadPhotoUrl(lead: Lead): string | null {
-  const path = lead.photo_path
-  if (!path) return null
-  const base = import.meta.env.VITE_SUPABASE_URL as string | undefined
-  if (!base) return null
-  return `${base}/storage/v1/object/public/lead-photos/${path}`
-}
-
 /** A lead's inferred age from the MIDPOINT of its birth-year range (current UTC
  *  year − mid-birth-year), floored to whole years; null when either bound is
  *  missing. Basis for both the age bucket and the campaign histogram. */

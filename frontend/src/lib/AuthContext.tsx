@@ -11,6 +11,7 @@ import {
 } from 'react'
 import type { EmailOtpType, Session, User } from '@supabase/supabase-js'
 import { Logo } from '../components/Logo'
+import { leadPhotoUrls } from './leadPhotos'
 import { supabase } from './supabase'
 import type { TeamMember } from './types'
 
@@ -98,7 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionUserId.current !== nextSession.user.id
     sessionUserId.current = nextSession?.user.id ?? null
     setSession(nextSession)
-    if (!nextSession || changedUser) setMember(null)
+    if (!nextSession || changedUser) {
+      setMember(null)
+      leadPhotoUrls.clear()
+    }
     setError(null)
 
     if (!nextSession || !supabase) {
@@ -109,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: claimsData, error: claimsError } =
       await supabase.auth.getClaims(nextSession.access_token)
     if (claimsError || claimsData?.claims?.sub !== nextSession.user.id) {
+      leadPhotoUrls.clear()
       await supabase.auth.signOut({ scope: 'local' })
       if (!mounted.current) return
       setSession(null)
@@ -121,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       needsPasswordUser.current === nextSession.user.id ||
       passwordFlag() === nextSession.user.id
     ) {
+      leadPhotoUrls.clear()
       setMember(null)
       setStatus('setting_password')
       return
@@ -134,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!mounted.current) return
     if (memberError) {
+      leadPhotoUrls.clear()
       setMember(null)
       setStatus('unauthorized')
       setError(`Could not verify team access: ${memberError.message}`)
@@ -144,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data.active !== true ||
       (data.role !== 'member' && data.role !== 'admin')
     ) {
+      leadPhotoUrls.clear()
       setMember(null)
       setStatus('unauthorized')
       return

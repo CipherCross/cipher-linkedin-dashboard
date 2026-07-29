@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "artifact": "tenant-schema-baseline",
+  "artifact_version": "v053",
+  "cutover_migration_version": "053",
+  "source_revision": "5adb6f6c7127b1be6da0c6edf6e31c90cf9199c9",
+  "provider_postgres_version": "17.6.1.127",
+  "source_catalog": {
+    "migration_range": "001-053",
+    "sha256": "3acf60b2abc36eb9e701c0e92256ac32596986ee284df77117dcd0310227ff4b"
+  },
+  "files": [
+    {
+      "path": "053_tenant_baseline.sql",
+      "bytes": 124568,
+      "sha256": "4598326891ceccdd9e2c3f2ea2cfe3d4b75d5696d4178735749bd5709529379d"
+    }
+  ],
+  "related_internal_seed": {
+    "path": "../../seeds/internal/web2mob.sql",
+    "bytes": 24978,
+    "sha256": "f7a3462b33feb17f958c450243b88820ee0ed50c3d469203d2d90581129a7429"
+  },
+  "initial_business_data": "empty",
+  "storage": {
+    "lead-photos": "private",
+    "agent": "absent"
+  },
+  "immutable": true
+}

@@ -131,7 +131,8 @@ Immediately verify:
 - An active member can load all dashboard data.
 - An inactive or unlinked Auth user receives no rows and cannot use APIs.
 - The service role can still sync/write.
-- `lead-photos` remains public and the `agent` bucket remains private.
+- `lead-photos` is private after migration 054 and the dashboard uses
+  active-member-gated short-lived signed URLs. The `agent` bucket remains private.
 
 If a critical browser read was omitted, roll back migration 051's policy/grant
 changes only. Keep migration 050 and the auth-aware app deployed; they are

@@ -152,8 +152,8 @@ export interface Lead {
   demo_inferred_at?: string | null
   /** 'claude-haiku-4-5' = AI-inferred; 'manual' = SDR-reviewed override. */
   demo_model?: string | null
-  /** Bucket-relative path in the public `lead-photos` Storage bucket. Display
-   *  only — never used as an inference input. */
+  /** Bucket-relative path in the private `lead-photos` Storage bucket. Display
+   * only through authenticated/signed delivery; never an inference input. */
   photo_path?: string | null
   photo_synced_at?: string | null
 }
