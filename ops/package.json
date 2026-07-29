@@ -1,0 +1,26 @@
+{
+  "name": "@lh2/platform-ops",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "lh2-ops": "dist/src/cli/main.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "postbuild": "chmod 755 dist/src/cli/main.js",
+    "test": "npm run build && node --no-warnings --test dist/test/*.test.js",
+    "ops": "npm run build --silent && node --no-warnings dist/src/cli/main.js"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "typescript": "^5.5.3"
+  }
+}

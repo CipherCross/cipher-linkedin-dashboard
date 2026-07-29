@@ -6,3 +6,11 @@ __pycache__/
 .venv/
 .DS_Store
 .vercel
+ops/*.db
+ops/*.db-*
+ops/*.sqlite
+ops/*.sqlite-*
+ops/exports/
+ops/logs/
+ops/backups/
+ops/*.lh2backup
