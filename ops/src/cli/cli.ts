@@ -5,9 +5,7 @@ import {
   mkdirSync,
   readFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { dirname, resolve } from "node:path";
 
 import { OpsError, assertOps } from "../core/errors.js";
 import { Redactor, safeJson } from "../core/redaction.js";
@@ -22,6 +20,10 @@ import {
   type SecretStore,
 } from "../secrets/types.js";
 import { Registry } from "../state/registry.js";
+import {
+  defaultRegistryPath,
+  readRegistryOwnerUuid,
+} from "../state/location.js";
 
 export interface CliDependencies {
   readonly stdout?: ((value: string) => void) | undefined;
@@ -31,16 +33,6 @@ export interface CliDependencies {
     | ((redactor: Redactor) => SecretStore)
     | undefined;
   readonly redactor?: Redactor | undefined;
-}
-
-export function defaultRegistryPath(): string {
-  return join(
-    homedir(),
-    "Library",
-    "Application Support",
-    "LH2 Platform Ops",
-    "registry.sqlite",
-  );
 }
 
 export async function runCli(
@@ -297,20 +289,6 @@ function secretLocator(parsed: ParsedArgs): {
     name: requiredOption(parsed, "name"),
     ...(tenantSlug === undefined ? {} : { tenantSlug }),
   };
-}
-
-function readRegistryOwnerUuid(path: string): string {
-  assertOps(existsSync(path), "cli_usage", "Registry does not exist");
-  const database = new DatabaseSync(path, { readOnly: true });
-  try {
-    const row = database
-      .prepare("SELECT owner_uuid FROM registry_meta WHERE singleton_id = 1")
-      .get() as { owner_uuid?: unknown } | undefined;
-    assertOps(typeof row?.owner_uuid === "string", "backup_invalid", "Registry owner is missing");
-    return row.owner_uuid;
-  } finally {
-    database.close();
-  }
 }
 
 function readJson(path: string): unknown {

@@ -51,6 +51,11 @@ export interface OperationRecord {
   readonly planDigest: string;
   readonly idempotencyKey: string;
   readonly state: OperationState;
+  readonly errorCode: string | null;
+  readonly redactedErrorSummary: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly completedAt: string | null;
 }
 
 export interface StepRecord {
@@ -59,6 +64,7 @@ export interface StepRecord {
   readonly state: StepState;
   readonly attempt: number;
   readonly providerRequestId: string | null;
+  readonly redactedError: string | null;
 }
 
 export interface ResourceReference {
@@ -75,6 +81,22 @@ export interface ResourceReference {
 export interface TenantReference {
   readonly tenantId: string;
   readonly slug: string;
+}
+
+export interface TenantRecord extends TenantReference {
+  readonly companyName: string;
+  readonly workspaceClass: "internal" | "disposable" | "external";
+  readonly desiredLifecycle: TenantLifecycle;
+  readonly observedLifecycle: TenantLifecycle;
+  readonly releaseChannel: "internal" | "canary" | "stable";
+  readonly regionId: string;
+  readonly supabaseTierId: string;
+  readonly supabaseComputeId: string;
+  readonly vercelTierId: string;
+  readonly backupProfileId: string;
+  readonly cronSlot: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
 export interface SecretReference {
@@ -625,6 +647,44 @@ export class Registry {
     };
   }
 
+  listTenants(filters: {
+    readonly lifecycle?: TenantLifecycle;
+    readonly workspaceClass?: TenantRecord["workspaceClass"];
+  } = {}): readonly TenantRecord[] {
+    const conditions: string[] = [];
+    const parameters: SQLInputValue[] = [];
+    if (filters.lifecycle !== undefined) {
+      conditions.push("observed_lifecycle = ?");
+      parameters.push(filters.lifecycle);
+    }
+    if (filters.workspaceClass !== undefined) {
+      conditions.push("workspace_class = ?");
+      parameters.push(filters.workspaceClass);
+    }
+    const where =
+      conditions.length === 0 ? "" : ` WHERE ${conditions.join(" AND ")}`;
+    return this.#database
+      .prepare(`SELECT * FROM tenants${where} ORDER BY slug`)
+      .all(...parameters)
+      .map((row) => this.#tenantRecord(row));
+  }
+
+  getTenant(slug: string): TenantRecord | undefined {
+    const row = this.#selectOne("SELECT * FROM tenants WHERE slug = ?", slug);
+    return row === undefined ? undefined : this.#tenantRecord(row);
+  }
+
+  listResourceReferences(tenantId: string): readonly ResourceReference[] {
+    return this.#database
+      .prepare(
+        `SELECT * FROM resource_refs
+         WHERE tenant_id = ?
+         ORDER BY provider_kind, resource_kind`,
+      )
+      .all(tenantId)
+      .map((row) => this.#resourceReference(row));
+  }
+
   saveSecretReference(
     input: Omit<SecretReference, "version" | "rotatedAt">,
     actor = "owner-cli",
@@ -736,6 +796,8 @@ export class Registry {
         attempt: Number(row.attempt),
         providerRequestId:
           row.provider_request_id === null ? null : String(row.provider_request_id),
+        redactedError:
+          row.redacted_error === null ? null : String(row.redacted_error),
       }));
   }
 
@@ -770,16 +832,7 @@ export class Registry {
       resourceKind,
     );
     if (row === undefined) return undefined;
-    return {
-      tenantId: String(row.tenant_id),
-      providerKind: String(row.provider_kind) as ResourceReference["providerKind"],
-      resourceKind: String(row.resource_kind),
-      providerOwnerId: String(row.provider_owner_id),
-      resourceId: String(row.resource_id),
-      deterministicName: String(row.deterministic_name),
-      ownershipMarkerDigest: String(row.ownership_marker_digest),
-      observedLifecycle: String(row.observed_lifecycle),
-    };
+    return this.#resourceReference(row);
   }
 
   verifyAuditChain(): void {
@@ -1064,6 +1117,48 @@ export class Registry {
       planDigest: String(row.plan_digest),
       idempotencyKey: String(row.idempotency_key),
       state: String(row.state) as OperationState,
+      errorCode: row.error_code === null ? null : String(row.error_code),
+      redactedErrorSummary:
+        row.redacted_error_summary === null
+          ? null
+          : String(row.redacted_error_summary),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+      completedAt:
+        row.completed_at === null ? null : String(row.completed_at),
+    };
+  }
+
+  #tenantRecord(row: Row): TenantRecord {
+    return {
+      tenantId: String(row.tenant_id),
+      slug: String(row.slug),
+      companyName: String(row.company_name),
+      workspaceClass: String(row.workspace_class) as TenantRecord["workspaceClass"],
+      desiredLifecycle: String(row.desired_lifecycle) as TenantLifecycle,
+      observedLifecycle: String(row.observed_lifecycle) as TenantLifecycle,
+      releaseChannel: String(row.release_channel) as TenantRecord["releaseChannel"],
+      regionId: String(row.region_id),
+      supabaseTierId: String(row.supabase_tier_id),
+      supabaseComputeId: String(row.supabase_compute_id),
+      vercelTierId: String(row.vercel_tier_id),
+      backupProfileId: String(row.backup_profile_id),
+      cronSlot: Number(row.cron_slot),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  #resourceReference(row: Row): ResourceReference {
+    return {
+      tenantId: String(row.tenant_id),
+      providerKind: String(row.provider_kind) as ResourceReference["providerKind"],
+      resourceKind: String(row.resource_kind),
+      providerOwnerId: String(row.provider_owner_id),
+      resourceId: String(row.resource_id),
+      deterministicName: String(row.deterministic_name),
+      ownershipMarkerDigest: String(row.ownership_marker_digest),
+      observedLifecycle: String(row.observed_lifecycle),
     };
   }
 

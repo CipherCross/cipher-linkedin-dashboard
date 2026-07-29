@@ -22,7 +22,11 @@ P3-B adds:
 - a thin `lh2-ops` CLI over the same registry, secret, recovery, and operation
   core.
 
-There is deliberately no live provider adapter or MCP server yet.
+P4-A adds an owner-only local STDIO MCP adapter over the same registry and
+plan/apply core. It publishes a closed 17-tool allowlist with strict input/output
+schemas, server instructions, write/destructive annotations, redacted results,
+and a tool-contract digest. Live provider adapters remain deliberately absent
+until P4-B.
 
 Requires Node.js 22.5 or newer because it uses the built-in `node:sqlite` API.
 
@@ -55,3 +59,28 @@ and reads without terminal echo. The CLI has no secret-read command.
 
 For recovery and token rotation, follow
 [`docs/platform-ops/keychain-and-registry-recovery.md`](../docs/platform-ops/keychain-and-registry-recovery.md).
+
+## Owner MCP
+
+The built entrypoint is:
+
+```text
+dist/src/mcp/main.js
+```
+
+It accepts only an optional fixed startup argument:
+
+```bash
+node dist/src/mcp/main.js --registry "/absolute/path/registry.sqlite"
+```
+
+STDOUT is reserved for MCP protocol messages. Errors are redacted and written to
+STDERR. The server has no HTTP transport, remote listener, environment forwarding,
+secret read, raw command/query/request, provider delete, migration repair, or down
+migration surface.
+
+Follow
+[`docs/platform-ops/local-owner-mcp.md`](../docs/platform-ops/local-owner-mcp.md)
+for the user-global Codex allowlist and approval policy. Provider-dependent tools
+fail closed until their operations-core capability is implemented in P4-B or its
+later owning phase.
