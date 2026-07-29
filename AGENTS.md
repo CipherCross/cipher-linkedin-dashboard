@@ -181,3 +181,10 @@ secret commands for tenant lifecycle work. Unknown region/tier/price/backup/rele
 catalog entries block planning. Physical provider deletion, down migrations, and
 repository-root `supabase db push` against a tenant are manual break-glass-only
 actions and must never be exposed through the owner MCP or fallback CLI.
+
+## Commit discipline
+
+At the end of every completed implementation session, create one or more logical
+Git commits unless the user explicitly asks not to commit. Keep unrelated changes
+in separate commits, preserve pre-existing user edits, run the relevant checks
+before committing, and report the commit hashes in the handoff.
