@@ -1,5 +1,10 @@
 import { OpsError, assertOps } from "../core/errors.js";
-import type { ApplyRequest, ProviderSnapshot } from "../core/types.js";
+import type { DisposableOnboardingCore } from "../core/onboarding-core.js";
+import type {
+  ApplyRequest,
+  OperationState,
+  ProviderSnapshot,
+} from "../core/types.js";
 import type { Registry, TenantRecord } from "../state/registry.js";
 import {
   MCP_TOOL_CONTRACT_DIGEST,
@@ -19,13 +24,16 @@ export interface OwnerOperationsAdapter {
 export class RegistryOwnerOperationsAdapter implements OwnerOperationsAdapter {
   readonly #registry: Registry;
   readonly #observedSnapshots: () => readonly ProviderSnapshot[];
+  readonly #onboarding: DisposableOnboardingCore | undefined;
 
   constructor(
     registry: Registry,
     observedSnapshots: () => readonly ProviderSnapshot[] = () => [],
+    onboarding?: DisposableOnboardingCore,
   ) {
     this.#registry = registry;
     this.#observedSnapshots = observedSnapshots;
+    this.#onboarding = onboarding;
   }
 
   async call(toolName: OwnerToolName, input: unknown): Promise<unknown> {
@@ -108,9 +116,97 @@ export class RegistryOwnerOperationsAdapter implements OwnerOperationsAdapter {
             ) ?? null,
         };
       }
+      case "tenant_preflight": {
+        const onboarding = this.#requireOnboarding(toolName);
+        const parsed = ownerToolSchemas.tenant_preflight.input.parse(input);
+        const report = await onboarding.preflight(parsed);
+        return {
+          meta: this.#meta(),
+          status: report.status,
+          provider_snapshot_valid_until: report.snapshotValidUntil,
+          prerequisites: report.prerequisites.map((candidate) => ({
+            prerequisite_id: candidate.prerequisiteId,
+            status: candidate.status,
+            summary: candidate.summary,
+          })),
+          blockers: report.blockers.map((candidate) => ({
+            code: candidate.code,
+            summary: candidate.summary,
+            remediation: candidate.remediation,
+          })),
+        };
+      }
+      case "tenant_plan_onboarding": {
+        const onboarding = this.#requireOnboarding(toolName);
+        const parsed =
+          ownerToolSchemas.tenant_plan_onboarding.input.parse(input);
+        const result = await onboarding.planOnboarding(parsed);
+        const spec = result.envelope.spec as Record<
+          string,
+          Record<string, unknown>
+        >;
+        const resources = spec.resources!;
+        const versions = spec.versions!;
+        const cost = spec.cost!;
+        const effects = spec.effects as unknown as readonly Record<
+          string,
+          unknown
+        >[];
+        return {
+          meta: this.#meta(),
+          plan: {
+            plan_id: result.envelope.plan_id,
+            plan_digest: result.envelope.plan_digest,
+            generated_at: result.envelope.generated_at,
+            expires_at: result.envelope.expires_at,
+            expected_registry_version:
+              result.envelope.expected_registry_version,
+            state: result.envelope.state,
+            effects: effects.map((effect) => ({
+              ordinal: Number(effect.ordinal),
+              effect_kind: String(effect.kind),
+              action: String(effect.action),
+              target: String(effect.resource_ref),
+            })),
+            prerequisites: result.preflight.prerequisites.map((candidate) => ({
+              prerequisite_id: candidate.prerequisiteId,
+              status: candidate.status,
+              summary: candidate.summary,
+            })),
+            blockers: result.preflight.blockers.map((candidate) => ({
+              code: candidate.code,
+              summary: candidate.summary,
+              remediation: candidate.remediation,
+            })),
+            tenant_slug: parsed.tenant_slug,
+            production_hostname: String(resources.production_hostname),
+            supabase_project_name: String(
+              resources.supabase_project_name,
+            ),
+            vercel_project_name: String(resources.vercel_project_name),
+            source_git_sha: String(versions.source_git_sha),
+            baseline_version: 53,
+            migration_versions:
+              versions.migration_versions as unknown as readonly number[],
+            recurring_cost_low_minor: Number(cost.recurring_low_minor),
+            recurring_cost_high_minor: Number(cost.recurring_high_minor),
+            currency: String(cost.currency),
+          },
+        };
+      }
       case "tenant_apply_onboarding": {
         const parsed =
           ownerToolSchemas.tenant_apply_onboarding.input.parse(input);
+        if (this.#onboarding !== undefined) {
+          return this.#advance(
+            await this.#onboarding.applyOrResume(
+              this.#applyRequest(
+                parsed.authorization,
+                "tenant_onboarding",
+              ),
+            ),
+          );
+        }
         return this.#startOrResume({
           ...this.#applyRequest(
             parsed.authorization,
@@ -121,6 +217,17 @@ export class RegistryOwnerOperationsAdapter implements OwnerOperationsAdapter {
       case "tenant_resume_operation": {
         const parsed =
           ownerToolSchemas.tenant_resume_operation.input.parse(input);
+        if (this.#onboarding !== undefined) {
+          return this.#advance(
+            await this.#onboarding.applyOrResume({
+              ...this.#applyRequest(
+                parsed.authorization,
+                "tenant_onboarding",
+              ),
+              operation_id: parsed.operation_id,
+            }),
+          );
+        }
         return this.#startOrResume({
           ...this.#applyRequest(
             parsed.authorization,
@@ -129,8 +236,6 @@ export class RegistryOwnerOperationsAdapter implements OwnerOperationsAdapter {
           operation_id: parsed.operation_id,
         });
       }
-      case "tenant_preflight":
-      case "tenant_plan_onboarding":
       case "tenant_drift":
       case "release_plan":
       case "tenant_prepare_offboarding":
@@ -146,6 +251,31 @@ export class RegistryOwnerOperationsAdapter implements OwnerOperationsAdapter {
           `${toolName} is unavailable in P4-A; its approved operations-core capability is not installed`,
         );
     }
+  }
+
+  #advance(result: {
+    readonly operationId: string;
+    readonly state: OperationState;
+    readonly resumed: boolean;
+  }): unknown {
+    return {
+      meta: this.#meta(),
+      operation_id: result.operationId,
+      state: result.state,
+      resumed: result.resumed,
+      next_action:
+        result.state === "succeeded" ? "tenant_get" : "operation_get",
+    };
+  }
+
+  #requireOnboarding(toolName: OwnerToolName): DisposableOnboardingCore {
+    if (this.#onboarding === undefined) {
+      throw new OpsError(
+        "unsupported_contract",
+        `${toolName} is unavailable until an explicit P4-B disposable provider runtime is installed`,
+      );
+    }
+    return this.#onboarding;
   }
 
   #startOrResume(request: ApplyRequest): unknown {

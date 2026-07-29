@@ -148,7 +148,7 @@ const mutationAuthorizationSchema = z.strictObject({
   idempotency_key: idempotencyKey,
 });
 
-const onboardingBusinessInputsSchema = z.strictObject({
+export const onboardingBusinessInputsSchema = z.strictObject({
   company_name: z.string().trim().min(1).max(160),
   tenant_slug: slug,
   workspace_class: workspaceClassSchema,
@@ -172,6 +172,9 @@ const onboardingBusinessInputsSchema = z.strictObject({
     maximum_duration_hours: z.number().int().min(1).max(168),
   }),
 });
+export type OnboardingBusinessInputs = z.infer<
+  typeof onboardingBusinessInputsSchema
+>;
 
 const releaseBusinessInputsSchema = z.strictObject({
   release_id: id,

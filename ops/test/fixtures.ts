@@ -5,6 +5,8 @@ import {
   sha256Digest,
   type ApplyRequest,
   type CatalogSnapshot,
+  type DisposableOnboardingProfile,
+  type OnboardingBusinessInputs,
   type OnboardingExecutionContext,
   type PlanEnvelope,
   type ProviderSnapshot,
@@ -140,6 +142,66 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
 
 export function catalogResolver(): InMemoryCatalogResolver {
   return new InMemoryCatalogResolver(makeCatalogs());
+}
+
+export function disposableBusinessInputs(
+  slug = "disposable-lab",
+): OnboardingBusinessInputs {
+  return {
+    company_name: "Disposable Lab",
+    tenant_slug: slug,
+    workspace_class: "disposable",
+    admin_email: "admin@disposable.example",
+    expected_instances: 1,
+    release_channel: "canary",
+    residency_policy_id: "eu-policy",
+    supabase_region_id: "eu-west",
+    supabase_tier_id: "supabase-pro",
+    supabase_compute_id: "supabase-small",
+    vercel_tier_id: "vercel-pro",
+    backup_profile_id: "standard-daily",
+    pricing_catalog_id: "pricing-1",
+    retention_policy_id: "retention-standard",
+    subprocessor_profile_id: "standard-processors",
+    smtp_profile_id: "smtp-standard",
+    smtp_secret_labels: [
+      `lh2-platform/tenant/${slug}/smtp.username`,
+      `lh2-platform/tenant/${slug}/smtp.password`,
+    ],
+    integration_secret_labels: [],
+    support_access_policy: {
+      initial_state: "disabled",
+      maximum_duration_hours: 24,
+    },
+  };
+}
+
+export function disposableProfile(): DisposableOnboardingProfile {
+  const source = makeOnboardingPlan().spec as Record<string, unknown>;
+  return {
+    platformDomain: "example.com",
+    supabaseOrganizationId: "sb-org-1",
+    vercelTeamId: "vc-team-1",
+    sourceGitSha: "b".repeat(40),
+    applicationVersion: "app-1",
+    compatibilityEntryId: "release-compat-1",
+    agentReleaseId: "agent-1",
+    ingestProtocolId: "ingest-1",
+    templateSetId: "templates-1",
+    senderDomain: "example.com",
+    fromIdentity: "hello@example.com",
+    serverlessFunctionCount: 12,
+    scheduledJobCount: 4,
+    requiredCronSlots: 1,
+    baselineVersion: 53,
+    migrationVersions: [54],
+    targetSchemaVersion: 54,
+    catalogs: makeCatalogs(),
+    cost: asJsonValue(source.cost),
+    capabilityBudgets: asJsonValue(source.capability_budgets),
+    recovery: asJsonValue(source.recovery),
+    smokeTestIds: smokeTests,
+  };
 }
 
 function catalogRefs(): readonly object[] {
@@ -537,6 +599,9 @@ export function executionContext(
     siteUrl: String(auth.site_url),
     redirectUrls: auth.redirect_urls as unknown as readonly string[],
     smtpProfileId: String(auth.smtp_profile_id),
+    senderDomain: String(auth.sender_domain),
+    fromIdentity: String(auth.from_identity),
+    templateSetId: String(auth.template_set_id),
     smtpSecretLabels: auth.smtp_secret_labels as unknown as readonly string[],
     integrationSecretLabels:
       inputs.integration_secret_labels as unknown as readonly string[],

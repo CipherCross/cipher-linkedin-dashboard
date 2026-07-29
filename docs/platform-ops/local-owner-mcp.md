@@ -126,18 +126,20 @@ repair/down, or provider-delete commands as a fallback for tenant lifecycle
 operations. Physical deletion remains a separate manual break-glass procedure
 outside the MCP and operations core.
 
-## P4-A capability boundary
+## P4-B capability boundary
 
-P4-A registers and validates the complete owner tool contract, but it does not add
-the live Supabase, Vercel, Auth, SMTP, domain, release, enrollment, support, or
-suspension adapters assigned to later phases.
+P4-B keeps the complete P4-A owner tool contract unchanged and adds strict
+Supabase, Vercel, Auth, SMTP, domain, and source-revision adapter libraries plus
+disposable onboarding preflight/plan/apply/resume. The adapters accept only
+closed typed requests and responses.
 
 The local registry-backed tools (`tenant_list`, `tenant_get`, `operation_get`) work
-now. The onboarding apply/resume path delegates to the existing registry core and
-therefore fails closed unless current provider snapshots are supplied by an
-approved core capability. Other provider-dependent tools return
-`unsupported_contract` until P4-B or their later owning phase implements the
-corresponding operations-core capability. No P4-A fallback performs an external
+without provider access. The built STDIO entrypoint deliberately has no provider
+runtime or credentials and therefore returns `unsupported_contract` for
+preflight/plan; P4-C must explicitly compose reviewed provider SDK ports before
+any end-to-end disposable provisioning. Tests compose deterministic in-memory
+ports with the same fixed MCP schemas. Release, enrollment, support, suspension,
+and other later-phase tools remain unavailable. There is no fallback external
 effect.
 
 ## Acceptance check
@@ -148,11 +150,15 @@ After restarting Codex:
 2. Call `tenant_list {}` and compare server version and tool-contract digest with
    the accepted handoff.
 3. Confirm an unknown input property is rejected.
-4. Confirm a provider-dependent P4-B call fails with `unsupported_contract`.
+4. Confirm packaged `tenant_preflight` fails with `unsupported_contract` until
+   the reviewed P4-C runtime is installed.
 5. Confirm a mutating call produces a Codex approval prompt.
 6. Confirm `machine_revoke`, `support_access_disable`, and `tenant_suspend` are
    shown as destructive and require an explicit prompt.
 
 The automated `ops/test/mcp.test.ts` suite performs the schema, metadata,
 annotation, allowlist, digest, idempotency, no-provider, and real STDIO handshake
-checks without reading a production Keychain item or calling a live provider.
+checks. `ops/test/p4b.test.ts` additionally covers deterministic provider
+snapshots/plans, strict adapter output validation, MCP onboarding wiring, and
+failure/resume after every provider effect. Neither suite reads a production
+Keychain item or calls a live provider.

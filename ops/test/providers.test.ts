@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  FakeOnboardingProviderBundle,
   FakeSupabaseProvider,
-  FakeVercelProvider,
   OnboardingExecutor,
   OpsError,
   Registry,
@@ -73,15 +73,16 @@ test("outcome-unknown create reconciles by deterministic identity without duplic
       observedSnapshots(),
       TEST_NOW,
     );
-    const supabase = new FakeSupabaseProvider([
-      {
-        method: "createOrAdoptProject",
-        call: 1,
-        timing: "outcome_unknown",
-      },
-    ]);
-    const vercel = new FakeVercelProvider();
-    const executor = new OnboardingExecutor(registry, supabase, vercel);
+    const providers = new FakeOnboardingProviderBundle({
+      supabase: [
+        {
+          method: "createOrAdoptProject",
+          call: 1,
+          timing: "outcome_unknown",
+        },
+      ],
+    });
+    const executor = new OnboardingExecutor(registry, providers);
     let context = executionContext(plan, started.operationId, started.fencingToken);
 
     assert.equal((await executor.executeNext(context)).ordinal, 1);
@@ -89,7 +90,7 @@ test("outcome-unknown create reconciles by deterministic identity without duplic
       executor.executeNext(context),
       (error: unknown) => error instanceof OpsError && error.code === "outcome_unknown",
     );
-    assert.equal(supabase.projectCount, 1);
+    assert.equal(providers.supabase.projectCount, 1);
     assert.equal(registry.countResourceReferences(TENANT_UUID), 0);
     assert.equal(registry.getOperation(started.operationId)?.state, "failed");
     assert.equal(registry.getTenantLifecycle(TENANT_UUID), "quarantined");
@@ -107,7 +108,7 @@ test("outcome-unknown create reconciles by deterministic identity without duplic
     assert.equal(resumed.fencingToken, 2);
     context = executionContext(plan, resumed.operationId, resumed.fencingToken);
     assert.equal((await executor.executeNext(context)).ordinal, 2);
-    assert.equal(supabase.projectCount, 1, "retry must adopt, not create a second project");
+    assert.equal(providers.supabase.projectCount, 1, "retry must adopt, not create a second project");
     assert.equal(registry.countResourceReferences(TENANT_UUID), 1);
 
     assert.throws(
@@ -138,27 +139,29 @@ test("full fake onboarding finishes in order and invites admin only after smoke 
       observedSnapshots(),
       TEST_NOW,
     );
-    const supabase = new FakeSupabaseProvider();
-    const vercel = new FakeVercelProvider();
-    let executor = new OnboardingExecutor(registry, supabase, vercel);
+    const providers = new FakeOnboardingProviderBundle();
+    let executor = new OnboardingExecutor(registry, providers);
     const context = executionContext(plan, started.operationId, started.fencingToken);
 
     for (let ordinal = 1; ordinal <= 13; ordinal += 1) {
       const result = await executor.executeNext(context);
       assert.equal(result.ordinal, ordinal);
       if (ordinal === 9) {
-        executor = new OnboardingExecutor(registry, supabase, vercel);
+        executor = new OnboardingExecutor(registry, providers);
       }
       if (ordinal < 12) {
-        assert.equal(supabase.callCount("inviteCompanyAdmin"), 0);
+        assert.equal(
+          providers.auth.callCount("createCompanyAdminAndInvite"),
+          0,
+        );
       }
     }
 
     assert.equal(registry.getOperation(started.operationId)?.state, "succeeded");
     assert.equal(registry.getTenantLifecycle(TENANT_UUID), "active");
-    assert.equal(supabase.projectCount, 1);
-    assert.equal(vercel.projectCount, 1);
-    assert.equal(supabase.callCount("inviteCompanyAdmin"), 1);
+    assert.equal(providers.supabase.projectCount, 1);
+    assert.equal(providers.vercel.projectCount, 1);
+    assert.equal(providers.auth.callCount("createCompanyAdminAndInvite"), 1);
     assert.equal(registry.countResourceReferences(TENANT_UUID), 4);
     assert.ok(
       registry.listSteps(started.operationId).every((step) => step.state === "succeeded"),

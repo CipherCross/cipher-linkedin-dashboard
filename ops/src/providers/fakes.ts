@@ -2,16 +2,31 @@ import { createHash } from "node:crypto";
 
 import { OpsError } from "../core/errors.js";
 import type {
-  AuthStorageRequest,
+  AuthConfigurationRequest,
+  AuthInspectionRequest,
+  AuthProvider,
   BuildRequest,
   BuildResult,
+  CompanyAdminRequest,
   DeploymentResult,
+  DomainBindingRequest,
+  DomainInspectionRequest,
+  DomainProvider,
+  OnboardingProviders,
+  PrivateStorageRequest,
   ProductionEnvironmentRequest,
   ProviderActionResult,
   ProviderResource,
+  SmtpConfigurationRequest,
+  SmtpInspectionRequest,
+  SmtpProvider,
+  SourceRepositoryInspectionRequest,
+  SourceRepositoryProvider,
+  SupabaseInspectionRequest,
   SupabaseProjectRequest,
   SupabaseProvider,
   TenantSchemaRequest,
+  VercelInspectionRequest,
   VercelProjectRequest,
   VercelProvider,
 } from "./interfaces.js";
@@ -24,9 +39,10 @@ export interface FailureRule {
   readonly timing: FailureTiming;
 }
 
-class FakeProviderBase {
+export class FakeProviderBase {
   readonly #calls = new Map<string, number>();
   readonly #rules: readonly FailureRule[];
+  readonly #effects = new Map<string, unknown>();
 
   constructor(rules: readonly FailureRule[] = []) {
     this.#rules = rules;
@@ -34,6 +50,12 @@ class FakeProviderBase {
 
   callCount(method: string): number {
     return this.#calls.get(method) ?? 0;
+  }
+
+  effectCount(method: string): number {
+    return [...this.#effects.keys()].filter((key) =>
+      key.startsWith(`${method}:`),
+    ).length;
   }
 
   protected async effect<T>(method: string, apply: () => T): Promise<T> {
@@ -64,6 +86,21 @@ class FakeProviderBase {
     }
     return result;
   }
+
+  protected async idempotentEffect<T>(
+    method: string,
+    key: string,
+    apply: () => T,
+  ): Promise<T> {
+    return this.effect(method, () => {
+      const cacheKey = `${method}:${key}`;
+      const existing = this.#effects.get(cacheKey);
+      if (existing !== undefined) return existing as T;
+      const result = apply();
+      this.#effects.set(cacheKey, result);
+      return result;
+    });
+  }
 }
 
 function stableId(prefix: string, value: string): string {
@@ -79,6 +116,24 @@ export class FakeSupabaseProvider extends FakeProviderBase implements SupabasePr
 
   get projectCount(): number {
     return this.#projects.size;
+  }
+
+  async inspect(request: SupabaseInspectionRequest) {
+    const existing = this.#projects.get(
+      `${request.organizationId}:${request.deterministicName}`,
+    );
+    return this.effect("inspect", () => ({
+      organizationAccessible: true,
+      deterministicNameAvailable: existing === undefined,
+      existingResourceOwned:
+        existing?.ownershipMarkerDigest === request.ownership.digest,
+      regionAvailable: true,
+      tierAvailable: true,
+      computeAvailable: true,
+      backupCompatible: true,
+      authConfigurationSupported: true,
+      validUntil: "2030-01-01T00:30:00.000Z",
+    }));
   }
 
   async createOrAdoptProject(
@@ -111,41 +166,28 @@ export class FakeSupabaseProvider extends FakeProviderBase implements SupabasePr
   }
 
   async waitUntilReady(_projectId: string): Promise<ProviderActionResult> {
-    return this.action("waitUntilReady");
+    return this.action("waitUntilReady", _projectId);
   }
 
-  async applySchema(_request: TenantSchemaRequest): Promise<ProviderActionResult> {
-    return this.action("applySchema");
+  async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> {
+    return this.action("applySchema", JSON.stringify(request));
   }
 
-  async configurePrivateStorageAuthSmtp(
-    _request: AuthStorageRequest,
+  async configurePrivateStorage(
+    request: PrivateStorageRequest,
   ): Promise<ProviderActionResult> {
-    return this.action("configurePrivateStorageAuthSmtp");
-  }
-
-  async createDisabledSupportMembership(
-    _projectId: string,
-  ): Promise<ProviderActionResult> {
-    return this.action("createDisabledSupportMembership");
+    return this.action("configurePrivateStorage", JSON.stringify(request));
   }
 
   async runSmokeTests(
-    _projectId: string,
-    _smokeTestIds: readonly string[],
+    projectId: string,
+    smokeTestIds: readonly string[],
   ): Promise<ProviderActionResult> {
-    return this.action("runSmokeTests");
+    return this.action("runSmokeTests", `${projectId}:${smokeTestIds.join(",")}`);
   }
 
-  async inviteCompanyAdmin(
-    _projectId: string,
-    _adminEmail: string,
-  ): Promise<ProviderActionResult> {
-    return this.action("inviteCompanyAdmin");
-  }
-
-  private async action(method: string): Promise<ProviderActionResult> {
-    return this.effect(method, () => ({
+  protected async action(method: string, key: string): Promise<ProviderActionResult> {
+    return this.idempotentEffect(method, key, () => ({
       providerRequestId: requestId(method, this.callCount(method)),
     }));
   }
@@ -156,6 +198,24 @@ export class FakeVercelProvider extends FakeProviderBase implements VercelProvid
 
   get projectCount(): number {
     return this.#projects.size;
+  }
+
+  async inspect(request: VercelInspectionRequest) {
+    const existing = this.#projects.get(
+      `${request.teamId}:${request.deterministicName}`,
+    );
+    return this.effect("inspect", () => ({
+      teamAccessible: true,
+      deterministicNameAvailable: existing === undefined,
+      existingResourceOwned:
+        existing?.ownershipMarkerDigest === request.ownership.digest,
+      tierAvailable: true,
+      functionCapacityAvailable: true,
+      cronCapacityAvailable: true,
+      productionOnlyEnvironmentSupported: true,
+      gitAutoPromotionCanBeDisabled: true,
+      validUntil: "2030-01-01T00:30:00.000Z",
+    }));
   }
 
   async createOrAdoptProject(request: VercelProjectRequest): Promise<ProviderResource> {
@@ -186,20 +246,16 @@ export class FakeVercelProvider extends FakeProviderBase implements VercelProvid
   }
 
   async configureProductionEnvironment(
-    _request: ProductionEnvironmentRequest,
+    request: ProductionEnvironmentRequest,
   ): Promise<ProviderActionResult> {
-    return this.action("configureProductionEnvironment");
-  }
-
-  async bindProductionDomain(
-    _projectId: string,
-    _hostname: string,
-  ): Promise<ProviderActionResult> {
-    return this.action("bindProductionDomain");
+    return this.action(
+      "configureProductionEnvironment",
+      JSON.stringify(request),
+    );
   }
 
   async buildTenant(request: BuildRequest): Promise<BuildResult> {
-    return this.effect("buildTenant", () => ({
+    return this.idempotentEffect("buildTenant", JSON.stringify(request), () => ({
       providerRequestId: requestId("buildTenant", this.callCount("buildTenant")),
       buildId: stableId("build", `${request.projectId}:${request.sourceGitSha}`),
       sourceGitSha: request.sourceGitSha,
@@ -210,22 +266,176 @@ export class FakeVercelProvider extends FakeProviderBase implements VercelProvid
     projectId: string,
     buildId: string,
   ): Promise<DeploymentResult> {
-    return this.effect("deployAndPromote", () => ({
+    return this.idempotentEffect("deployAndPromote", `${projectId}:${buildId}`, () => ({
       providerRequestId: requestId("deployAndPromote", this.callCount("deployAndPromote")),
       deploymentId: stableId("deployment", `${projectId}:${buildId}`),
     }));
   }
 
   async runSmokeTests(
-    _projectId: string,
-    _smokeTestIds: readonly string[],
+    projectId: string,
+    smokeTestIds: readonly string[],
   ): Promise<ProviderActionResult> {
-    return this.action("runSmokeTests");
+    return this.action("runSmokeTests", `${projectId}:${smokeTestIds.join(",")}`);
   }
 
-  private async action(method: string): Promise<ProviderActionResult> {
-    return this.effect(method, () => ({
+  private async action(method: string, key: string): Promise<ProviderActionResult> {
+    return this.idempotentEffect(method, key, () => ({
       providerRequestId: requestId(method, this.callCount(method)),
     }));
+  }
+}
+
+export class FakeAuthProvider extends FakeProviderBase implements AuthProvider {
+  async inspect(_request: AuthInspectionRequest) {
+    return this.effect("inspect", () => ({
+      templateSetApproved: true,
+      productionUrlsValid: true,
+      inviteFlowSupported: true,
+      releaseCompatible: true,
+      validUntil: "2030-01-01T00:30:00.000Z",
+    }));
+  }
+
+  async configure(
+    request: AuthConfigurationRequest,
+  ): Promise<ProviderActionResult> {
+    return this.action("configure", JSON.stringify(request));
+  }
+
+  async createDisabledSupportMembership(
+    projectId: string,
+  ): Promise<ProviderActionResult> {
+    return this.action("createDisabledSupportMembership", projectId);
+  }
+
+  async createCompanyAdminAndInvite(
+    request: CompanyAdminRequest,
+  ): Promise<ProviderActionResult> {
+    return this.action(
+      "createCompanyAdminAndInvite",
+      `${request.projectId}:${request.adminEmail.toLowerCase()}`,
+    );
+  }
+
+  async runSmokeTests(
+    projectId: string,
+    smokeTestIds: readonly string[],
+  ): Promise<ProviderActionResult> {
+    return this.action("runSmokeTests", `${projectId}:${smokeTestIds.join(",")}`);
+  }
+
+  private async action(method: string, key: string): Promise<ProviderActionResult> {
+    return this.idempotentEffect(method, key, () => ({
+      providerRequestId: requestId(method, this.callCount(method)),
+    }));
+  }
+}
+
+export class FakeSmtpProvider extends FakeProviderBase implements SmtpProvider {
+  async inspect(_request: SmtpInspectionRequest) {
+    return this.effect("inspect", () => ({
+      providerAccessible: true,
+      customSmtp: true,
+      senderIdentityVerified: true,
+      credentialsAvailable: true,
+      validUntil: "2030-01-01T00:30:00.000Z",
+    }));
+  }
+
+  async configure(
+    request: SmtpConfigurationRequest,
+  ): Promise<ProviderActionResult> {
+    return this.action("configure", JSON.stringify(request));
+  }
+
+  async runSmokeTests(
+    projectId: string,
+    smokeTestIds: readonly string[],
+  ): Promise<ProviderActionResult> {
+    return this.action("runSmokeTests", `${projectId}:${smokeTestIds.join(",")}`);
+  }
+
+  private async action(method: string, key: string): Promise<ProviderActionResult> {
+    return this.idempotentEffect(method, key, () => ({
+      providerRequestId: requestId(method, this.callCount(method)),
+    }));
+  }
+}
+
+export class FakeDomainProvider extends FakeProviderBase implements DomainProvider {
+  readonly #bindings = new Set<string>();
+
+  async inspect(request: DomainInspectionRequest) {
+    const existing = this.#bindings.has(request.hostname);
+    return this.effect("inspect", () => ({
+      zoneOwned: true,
+      hostnameAvailable: !existing,
+      existingBindingOwned: existing,
+      senderDomainVerified: true,
+      legalReviewApproved: true,
+      validUntil: "2030-01-01T00:30:00.000Z",
+    }));
+  }
+
+  async bindProductionDomain(
+    request: DomainBindingRequest,
+  ): Promise<ProviderActionResult> {
+    return this.idempotentEffect(
+      "bindProductionDomain",
+      `${request.projectId}:${request.hostname}`,
+      () => {
+        this.#bindings.add(request.hostname);
+        return {
+          providerRequestId: requestId(
+            "bindProductionDomain",
+            this.callCount("bindProductionDomain"),
+          ),
+        };
+      },
+    );
+  }
+}
+
+export class FakeSourceRepositoryProvider
+  extends FakeProviderBase
+  implements SourceRepositoryProvider
+{
+  async inspect(_request: SourceRepositoryInspectionRequest) {
+    return this.effect("inspect", () => ({
+      revisionPresent: true,
+      releaseCompatible: true,
+      artifactPinned: true,
+      validUntil: "2030-01-01T00:30:00.000Z",
+    }));
+  }
+}
+
+export class FakeOnboardingProviderBundle implements OnboardingProviders {
+  readonly supabase: FakeSupabaseProvider;
+  readonly vercel: FakeVercelProvider;
+  readonly auth: FakeAuthProvider;
+  readonly smtp: FakeSmtpProvider;
+  readonly domain: FakeDomainProvider;
+  readonly sourceRepository: FakeSourceRepositoryProvider;
+
+  constructor(
+    rules: {
+      readonly supabase?: readonly FailureRule[];
+      readonly vercel?: readonly FailureRule[];
+      readonly auth?: readonly FailureRule[];
+      readonly smtp?: readonly FailureRule[];
+      readonly domain?: readonly FailureRule[];
+      readonly sourceRepository?: readonly FailureRule[];
+    } = {},
+  ) {
+    this.supabase = new FakeSupabaseProvider(rules.supabase);
+    this.vercel = new FakeVercelProvider(rules.vercel);
+    this.auth = new FakeAuthProvider(rules.auth);
+    this.smtp = new FakeSmtpProvider(rules.smtp);
+    this.domain = new FakeDomainProvider(rules.domain);
+    this.sourceRepository = new FakeSourceRepositoryProvider(
+      rules.sourceRepository,
+    );
   }
 }

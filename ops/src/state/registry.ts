@@ -164,6 +164,42 @@ export class Registry {
     return Number(this.#meta().registry_version);
   }
 
+  getPlan(planId: string): PlanEnvelope | undefined {
+    const row = this.#selectOne(
+      "SELECT envelope_json, state FROM plans WHERE plan_id = ?",
+      planId,
+    );
+    if (row === undefined) return undefined;
+    const envelope = JSON.parse(String(row.envelope_json)) as PlanEnvelope;
+    return {
+      ...envelope,
+      state: String(row.state) as PlanEnvelope["state"],
+    };
+  }
+
+  findReusablePlan(
+    kind: PlanEnvelope["plan_kind"],
+    digest: string,
+    now = new Date(),
+  ): PlanEnvelope | undefined {
+    const row = this.#selectOne(
+      `SELECT envelope_json, state FROM plans
+       WHERE kind = ? AND digest = ? AND expected_registry_version = ?
+         AND state IN ('valid', 'blocked') AND expires_at > ?
+       ORDER BY generated_at DESC LIMIT 1`,
+      kind,
+      digest,
+      this.registryVersion,
+      now.toISOString(),
+    );
+    if (row === undefined) return undefined;
+    const envelope = JSON.parse(String(row.envelope_json)) as PlanEnvelope;
+    return {
+      ...envelope,
+      state: String(row.state) as PlanEnvelope["state"],
+    };
+  }
+
   get backupMetadata(): BackupMetadata {
     const meta = this.#meta();
     return {
@@ -887,10 +923,9 @@ export class Registry {
   }
 
   #getPlan(planId: string): PlanEnvelope {
-    const row = this.#selectOne("SELECT envelope_json, state FROM plans WHERE plan_id = ?", planId);
-    assertOps(row, "invalid_plan", `Unknown plan ${planId}`);
-    const envelope = JSON.parse(String(row.envelope_json)) as PlanEnvelope;
-    return { ...envelope, state: String(row.state) as PlanEnvelope["state"] };
+    const plan = this.getPlan(planId);
+    assertOps(plan, "invalid_plan", `Unknown plan ${planId}`);
+    return plan;
   }
 
   #validateRequestAgainstPlan(

@@ -5,6 +5,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  FakeAuthProvider,
+  FakeDomainProvider,
+  FakeSmtpProvider,
+  FakeSourceRepositoryProvider,
   FakeSupabaseProvider,
   FakeVercelProvider,
   MacOsKeychainSecretStore,
@@ -105,8 +109,14 @@ test("canary values are removed from provider error and success paths", async ()
       );
       const executor = new OnboardingExecutor(
         registry,
-        supabase,
-        new FakeVercelProvider(),
+        {
+          supabase,
+          vercel: new FakeVercelProvider(),
+          auth: new FakeAuthProvider(),
+          smtp: new FakeSmtpProvider(),
+          domain: new FakeDomainProvider(),
+          sourceRepository: new FakeSourceRepositoryProvider(),
+        },
         redactor,
       );
       const context = executionContext(

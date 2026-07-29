@@ -25,8 +25,16 @@ P3-B adds:
 P4-A adds an owner-only local STDIO MCP adapter over the same registry and
 plan/apply core. It publishes a closed 17-tool allowlist with strict input/output
 schemas, server instructions, write/destructive annotations, redacted results,
-and a tool-contract digest. Live provider adapters remain deliberately absent
-until P4-B.
+and a tool-contract digest.
+
+P4-B adds strict Supabase, Vercel, Auth, SMTP, domain, and source-revision
+adapters over narrow typed control-plane ports. It also adds read-only provider
+preflight/snapshots, deterministic disposable-tenant dry-run planning, and a
+one-step-at-a-time resumable onboarding core wired to the existing MCP schemas.
+The package does not install a live provider runtime: the built MCP entrypoint
+continues to fail closed until P4-C explicitly composes reviewed provider SDK
+ports and credentials. P4-B tests use deterministic in-memory ports only and
+never create an external tenant.
 
 Requires Node.js 22.5 or newer because it uses the built-in `node:sqlite` API.
 
@@ -82,5 +90,6 @@ migration surface.
 Follow
 [`docs/platform-ops/local-owner-mcp.md`](../docs/platform-ops/local-owner-mcp.md)
 for the user-global Codex allowlist and approval policy. Provider-dependent tools
-fail closed until their operations-core capability is implemented in P4-B or its
-later owning phase.
+without an explicitly composed runtime fail closed. The P4-B library binds
+`tenant_preflight`, `tenant_plan_onboarding`, `tenant_apply_onboarding`, and
+`tenant_resume_operation` to the fixed P4-A schemas without adding tools.

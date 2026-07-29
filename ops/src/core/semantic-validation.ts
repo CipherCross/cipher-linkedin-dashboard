@@ -458,6 +458,12 @@ export function validateProviderSnapshots(
       "provider_snapshot_drift",
       `Provider snapshot expired for ${provider}`,
     );
+    assertOps(
+      instant(current.valid_until, `${provider}.valid_until`) >=
+        instant(plan.expires_at, "plan.expires_at"),
+      "provider_snapshot_drift",
+      `Current provider snapshot for ${provider} expires before the plan`,
+    );
   }
 }
 
