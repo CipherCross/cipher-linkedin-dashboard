@@ -167,3 +167,17 @@ Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC, `/api/notify-replies`
 and short `/api/briefing?kind=daily` Monday–Friday 07:30 UTC. Both schedules reuse
 the same function to remain within the Vercel Hobby cap. Monday's daily run uses
 the weekly output as an anti-duplication reference.
+
+## Platform tenant operations contract
+
+Future owner operations must follow
+`docs/platform-ops/operations-contract-v1.md` and its strict JSON Schemas. The
+required flow is `preflight → plan → owner approval → apply/resume → verify`.
+Planning is read-only; apply requires the exact unexpired plan digest, expected
+registry version, and a caller-stable idempotency key.
+
+Do not bypass the operations core with raw provider, SQL, shell, HTTP, DNS, env, or
+secret commands for tenant lifecycle work. Unknown region/tier/price/backup/release
+catalog entries block planning. Physical provider deletion, down migrations, and
+repository-root `supabase db push` against a tenant are manual break-glass-only
+actions and must never be exposed through the owner MCP or fallback CLI.

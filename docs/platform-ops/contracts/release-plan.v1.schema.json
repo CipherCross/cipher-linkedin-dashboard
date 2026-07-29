@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.lh2-platform.invalid/contracts/release-plan.v1.schema.json",
+  "title": "Platform release plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "plan_schema_version",
+    "plan_kind",
+    "plan_id",
+    "plan_digest",
+    "generated_at",
+    "expires_at",
+    "expected_registry_version",
+    "state",
+    "spec",
+    "blockers"
+  ],
+  "properties": {
+    "contract_version": { "const": "p2.v1" },
+    "plan_schema_version": { "const": 1 },
+    "plan_kind": { "const": "release" },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^pln_[a-z0-9]{20,64}$"
+    },
+    "plan_digest": { "$ref": "#/$defs/digest" },
+    "generated_at": { "$ref": "#/$defs/timestamp" },
+    "expires_at": { "$ref": "#/$defs/timestamp" },
+    "expected_registry_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "state": { "enum": ["valid", "blocked"] },
+    "spec": { "$ref": "#/$defs/spec" },
+    "blockers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blocker" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "state": { "const": "valid" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "blockers": { "type": "array", "maxItems": 0 }
+        }
+      },
+      "else": {
+        "properties": {
+          "blockers": { "type": "array", "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{1,79}$"
+    },
+    "versionTuple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "application",
+        "agent",
+        "launcher",
+        "ingest_protocol"
+      ],
+      "properties": {
+        "schema": {
+          "type": "integer",
+          "minimum": 53
+        },
+        "application": { "$ref": "#/$defs/identifier" },
+        "agent": { "$ref": "#/$defs/identifier" },
+        "launcher": { "$ref": "#/$defs/identifier" },
+        "ingest_protocol": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_id",
+        "bundle_digest",
+        "source_git_sha",
+        "baseline_version",
+        "migration_versions",
+        "compatibility_entry_id",
+        "deployment_config_digest",
+        "release_notes_digest",
+        "verification_checklist_id",
+        "canary_tenant_id",
+        "canary_gate",
+        "targets",
+        "ordered_phases",
+        "estimated_incremental_cost_minor",
+        "currency"
+      ],
+      "properties": {
+        "release_id": { "$ref": "#/$defs/identifier" },
+        "bundle_digest": { "$ref": "#/$defs/digest" },
+        "source_git_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "baseline_version": { "const": 53 },
+        "migration_versions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 54
+          }
+        },
+        "compatibility_entry_id": { "$ref": "#/$defs/identifier" },
+        "deployment_config_digest": { "$ref": "#/$defs/digest" },
+        "release_notes_digest": { "$ref": "#/$defs/digest" },
+        "verification_checklist_id": { "$ref": "#/$defs/identifier" },
+        "canary_tenant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "canary_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required_state",
+            "maximum_critical_drift",
+            "maximum_heartbeat_age_minutes",
+            "maximum_cron_age_hours",
+            "maximum_backup_age_hours",
+            "verification_window_minutes",
+            "on_failure"
+          ],
+          "properties": {
+            "required_state": { "const": "active" },
+            "maximum_critical_drift": { "const": 0 },
+            "maximum_heartbeat_age_minutes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maximum_cron_age_hours": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maximum_backup_age_hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            },
+            "verification_window_minutes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "on_failure": { "const": "block_fanout" }
+          }
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/target" }
+        },
+        "ordered_phases": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "expand_migrations" },
+            { "const": "internal_workspace" },
+            { "const": "canary_workspace" },
+            { "const": "canary_agent_and_verification" },
+            { "const": "tenant_migrations" },
+            { "const": "tenant_builds_and_deployments" },
+            { "const": "stable_agent_rollout" }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+        },
+        "estimated_incremental_cost_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "tenant_slug",
+        "workspace_class",
+        "release_channel",
+        "observed",
+        "target",
+        "eligibility",
+        "build_input_digest",
+        "expected_effects"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_slug": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+        },
+        "workspace_class": {
+          "enum": ["internal", "disposable", "external"]
+        },
+        "release_channel": {
+          "enum": ["internal", "canary", "stable"]
+        },
+        "observed": { "$ref": "#/$defs/versionTuple" },
+        "target": { "$ref": "#/$defs/versionTuple" },
+        "eligibility": {
+          "enum": ["eligible", "blocked", "already_current"]
+        },
+        "build_input_digest": { "$ref": "#/$defs/digest" },
+        "expected_effects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "apply_migrations",
+              "build_tenant",
+              "deploy",
+              "promote",
+              "rollout_agent",
+              "verify"
+            ]
+          }
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "code", "message", "remediation"],
+      "properties": {
+        "tenant_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "remediation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    }
+  }
+}

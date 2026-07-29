@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.lh2-platform.invalid/contracts/apply-request.v1.schema.json",
+  "title": "Platform operations apply request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "operation_kind",
+    "plan_id",
+    "plan_digest",
+    "expected_registry_version",
+    "idempotency_key"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "p2.v1"
+    },
+    "operation_kind": {
+      "enum": [
+        "tenant_onboarding",
+        "release"
+      ]
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^pln_[a-z0-9]{20,64}$"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "expected_registry_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._~-]+$"
+    },
+    "operation_id": {
+      "type": "string",
+      "pattern": "^op_[a-z0-9]{20,64}$",
+      "description": "Present only when resuming the operation created by this plan and idempotency key."
+    }
+  }
+}

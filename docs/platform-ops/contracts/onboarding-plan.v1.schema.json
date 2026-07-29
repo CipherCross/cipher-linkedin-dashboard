@@ -1,0 +1,900 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.lh2-platform.invalid/contracts/onboarding-plan.v1.schema.json",
+  "title": "Tenant onboarding plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "plan_schema_version",
+    "plan_kind",
+    "plan_id",
+    "plan_digest",
+    "generated_at",
+    "expires_at",
+    "expected_registry_version",
+    "state",
+    "spec",
+    "prerequisites",
+    "blockers"
+  ],
+  "properties": {
+    "contract_version": { "const": "p2.v1" },
+    "plan_schema_version": { "const": 1 },
+    "plan_kind": { "const": "tenant_onboarding" },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^pln_[a-z0-9]{20,64}$"
+    },
+    "plan_digest": { "$ref": "#/$defs/digest" },
+    "generated_at": { "$ref": "#/$defs/timestamp" },
+    "expires_at": { "$ref": "#/$defs/timestamp" },
+    "expected_registry_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "state": {
+      "enum": ["valid", "blocked"]
+    },
+    "spec": { "$ref": "#/$defs/spec" },
+    "prerequisites": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/prerequisite" },
+      "allOf": [
+        { "contains": { "properties": { "kind": { "const": "provider_access" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "domain" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "region_residency" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "tier_capacity" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "smtp_dns" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "backup_coverage" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "release_compatibility" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "legal_review" } }, "required": ["kind"] } },
+        { "contains": { "properties": { "kind": { "const": "pricing" } }, "required": ["kind"] } }
+      ]
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blocker" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "state": { "const": "valid" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "blockers": { "type": "array", "maxItems": 0 },
+          "prerequisites": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                { "$ref": "#/$defs/prerequisite" },
+                {
+                  "properties": { "status": { "const": "passed" } }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "blockers": { "type": "array", "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "catalogRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "version", "digest"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "regions",
+            "provider_tiers",
+            "pricing",
+            "backup_profiles",
+            "release_compatibility",
+            "capabilities",
+            "subprocessors"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputs",
+        "catalogs",
+        "provider_snapshots",
+        "resources",
+        "versions",
+        "environment_policy",
+        "auth_smtp",
+        "effects",
+        "cost",
+        "capability_budgets",
+        "recovery",
+        "smoke_tests"
+      ],
+      "properties": {
+        "inputs": { "$ref": "#/$defs/inputs" },
+        "catalogs": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/catalogRef" },
+          "allOf": [
+            { "contains": { "properties": { "kind": { "const": "regions" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "provider_tiers" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "pricing" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "backup_profiles" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "release_compatibility" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "capabilities" } }, "required": ["kind"] }, "minContains": 1 },
+            { "contains": { "properties": { "kind": { "const": "subprocessors" } }, "required": ["kind"] }, "minContains": 1 }
+          ]
+        },
+        "provider_snapshots": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/providerSnapshot" },
+          "allOf": [
+            { "contains": { "properties": { "provider": { "const": "supabase" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "vercel" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "dns" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "smtp" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "source_repository" } }, "required": ["provider"] } }
+          ]
+        },
+        "resources": { "$ref": "#/$defs/resources" },
+        "versions": { "$ref": "#/$defs/versions" },
+        "environment_policy": { "$ref": "#/$defs/environmentPolicy" },
+        "auth_smtp": { "$ref": "#/$defs/authSmtp" },
+        "effects": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "prefixItems": [
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 1 }, "kind": { "const": "reserve_tenant" }, "action": { "const": "reserve" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 2 }, "kind": { "const": "supabase_project" }, "action": { "const": "create_or_adopt" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 3 }, "kind": { "const": "tenant_schema" }, "action": { "const": "apply" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 4 }, "kind": { "const": "storage_auth_smtp" }, "action": { "const": "configure" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 5 }, "kind": { "const": "platform_support" }, "action": { "const": "configure" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 6 }, "kind": { "const": "vercel_project" }, "action": { "const": "create_or_adopt" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 7 }, "kind": { "const": "production_env" }, "action": { "const": "configure" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 8 }, "kind": { "const": "domain_binding" }, "action": { "const": "configure" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 9 }, "kind": { "const": "tenant_build" }, "action": { "const": "build" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 10 }, "kind": { "const": "production_deployment" }, "action": { "const": "deploy_and_promote" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 11 }, "kind": { "const": "smoke_suite" }, "action": { "const": "verify" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 12 }, "kind": { "const": "company_admin" }, "action": { "const": "invite" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 13 }, "kind": { "const": "finalize_tenant" }, "action": { "const": "finalize" } } }] }
+          ]
+        },
+        "cost": { "$ref": "#/$defs/cost" },
+        "capability_budgets": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capabilityBudget" },
+          "allOf": [
+            { "contains": { "properties": { "capability": { "const": "ai.classification" } }, "required": ["capability"] } },
+            { "contains": { "properties": { "capability": { "const": "ai.coaching" } }, "required": ["capability"] } },
+            { "contains": { "properties": { "capability": { "const": "ai.briefing.daily" } }, "required": ["capability"] } },
+            { "contains": { "properties": { "capability": { "const": "ai.briefing.weekly" } }, "required": ["capability"] } },
+            { "contains": { "properties": { "capability": { "const": "slack.reply_alerts" } }, "required": ["capability"] } },
+            { "contains": { "properties": { "capability": { "const": "slack.briefings" } }, "required": ["capability"] } },
+            { "contains": { "properties": { "capability": { "const": "airtable.imports" } }, "required": ["capability"] } }
+          ]
+        },
+        "recovery": { "$ref": "#/$defs/recovery" },
+        "smoke_tests": {
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/smokeTest" },
+          "allOf": [
+            { "contains": { "properties": { "id": { "const": "schema_ledger" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "auth_anonymous_denied" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "auth_inactive_denied" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "auth_member_allowed" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "rls_role_boundaries" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "private_storage_delivery" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "api_health" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "cron_configuration" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "preview_isolation" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "smtp_delivery" } }, "required": ["id"] } },
+            { "contains": { "properties": { "id": { "const": "runtime_project_ref" } }, "required": ["id"] } }
+          ]
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "company_name",
+        "tenant_slug",
+        "workspace_class",
+        "admin_email",
+        "expected_instances",
+        "release_channel",
+        "residency_policy_id",
+        "supabase_region_id",
+        "supabase_tier_id",
+        "supabase_compute_id",
+        "vercel_tier_id",
+        "backup_profile_id",
+        "pricing_catalog_id",
+        "retention_policy_id",
+        "subprocessor_profile_id",
+        "smtp_profile_id",
+        "smtp_secret_labels",
+        "integration_secret_labels",
+        "support_access"
+      ],
+      "properties": {
+        "company_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "tenant_slug": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+        },
+        "workspace_class": {
+          "enum": ["internal", "disposable", "external"]
+        },
+        "admin_email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "expected_instances": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "release_channel": {
+          "enum": ["internal", "canary", "stable"]
+        },
+        "residency_policy_id": { "$ref": "#/$defs/catalogEntryId" },
+        "supabase_region_id": { "$ref": "#/$defs/catalogEntryId" },
+        "supabase_tier_id": { "$ref": "#/$defs/catalogEntryId" },
+        "supabase_compute_id": { "$ref": "#/$defs/catalogEntryId" },
+        "vercel_tier_id": { "$ref": "#/$defs/catalogEntryId" },
+        "backup_profile_id": { "$ref": "#/$defs/catalogEntryId" },
+        "pricing_catalog_id": { "$ref": "#/$defs/catalogEntryId" },
+        "retention_policy_id": { "$ref": "#/$defs/catalogEntryId" },
+        "subprocessor_profile_id": { "$ref": "#/$defs/catalogEntryId" },
+        "smtp_profile_id": { "$ref": "#/$defs/catalogEntryId" },
+        "smtp_secret_labels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/keychainLabel" }
+        },
+        "integration_secret_labels": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/keychainLabel" }
+        },
+        "support_access": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["initial_state", "maximum_duration_hours"],
+          "properties": {
+            "initial_state": { "const": "disabled" },
+            "maximum_duration_hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 168
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "workspace_class": { "const": "internal" } },
+            "required": ["workspace_class"]
+          },
+          "then": {
+            "properties": { "release_channel": { "const": "internal" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "workspace_class": { "const": "disposable" } },
+            "required": ["workspace_class"]
+          },
+          "then": {
+            "properties": { "release_channel": { "const": "canary" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "workspace_class": { "const": "external" } },
+            "required": ["workspace_class"]
+          },
+          "then": {
+            "properties": { "release_channel": { "const": "stable" } }
+          }
+        }
+      ]
+    },
+    "catalogEntryId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{1,79}$"
+    },
+    "keychainLabel": {
+      "type": "string",
+      "pattern": "^lh2-platform/(platform|tenant/[a-z][a-z0-9-]{1,30}[a-z0-9])/[a-z][a-z0-9._-]{1,63}$"
+    },
+    "providerSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "snapshot_id",
+        "observed_at",
+        "valid_until",
+        "digest"
+      ],
+      "properties": {
+        "provider": {
+          "enum": ["supabase", "vercel", "dns", "smtp", "source_repository"]
+        },
+        "snapshot_id": {
+          "type": "string",
+          "pattern": "^snap_[a-z0-9]{12,64}$"
+        },
+        "observed_at": { "$ref": "#/$defs/timestamp" },
+        "valid_until": { "$ref": "#/$defs/timestamp" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "supabase_organization_id",
+        "supabase_project_name",
+        "vercel_team_id",
+        "vercel_project_name",
+        "production_hostname",
+        "cron_slot",
+        "tags"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "supabase_organization_id": { "$ref": "#/$defs/providerId" },
+        "supabase_project_name": { "$ref": "#/$defs/resourceName" },
+        "vercel_team_id": { "$ref": "#/$defs/providerId" },
+        "vercel_project_name": { "$ref": "#/$defs/resourceName" },
+        "production_hostname": {
+          "type": "string",
+          "format": "hostname",
+          "maxLength": 253
+        },
+        "cron_slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "managed-by",
+            "tenant-slug",
+            "workspace-class",
+            "contract-version",
+            "registry-owner-id"
+          ],
+          "properties": {
+            "managed-by": { "const": "lh2-platform-ops" },
+            "tenant-slug": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,30}[a-z0-9]$"
+            },
+            "workspace-class": {
+              "enum": ["internal", "disposable", "external"]
+            },
+            "contract-version": { "const": "p2.v1" },
+            "registry-owner-id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      }
+    },
+    "providerId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{2,128}$"
+    },
+    "resourceName": {
+      "type": "string",
+      "pattern": "^lh2-(internal|disposable|external)-[a-z][a-z0-9-]{1,30}[a-z0-9]$",
+      "maxLength": 80
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_git_sha",
+        "baseline_version",
+        "migration_versions",
+        "target_schema_version",
+        "application_version",
+        "agent_release_id",
+        "ingest_protocol_id",
+        "compatibility_entry_id"
+      ],
+      "properties": {
+        "source_git_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "baseline_version": { "const": 53 },
+        "migration_versions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 54
+          }
+        },
+        "target_schema_version": {
+          "type": "integer",
+          "minimum": 54
+        },
+        "application_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "agent_release_id": { "$ref": "#/$defs/catalogEntryId" },
+        "ingest_protocol_id": { "$ref": "#/$defs/catalogEntryId" },
+        "compatibility_entry_id": { "$ref": "#/$defs/catalogEntryId" }
+      }
+    },
+    "environmentPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_auto_promotion",
+        "external_previews",
+        "production_secret_scope",
+        "preview_secret_names",
+        "public_build_value_names"
+      ],
+      "properties": {
+        "git_auto_promotion": { "const": false },
+        "external_previews": { "const": false },
+        "production_secret_scope": { "const": "production_only" },
+        "preview_secret_names": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "public_build_value_names": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
+          }
+        }
+      }
+    },
+    "authSmtp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "site_url",
+        "redirect_urls",
+        "smtp_profile_id",
+        "sender_domain",
+        "from_identity",
+        "template_set_id",
+        "smtp_secret_labels"
+      ],
+      "properties": {
+        "site_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "redirect_urls": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          }
+        },
+        "smtp_profile_id": { "$ref": "#/$defs/catalogEntryId" },
+        "sender_domain": {
+          "type": "string",
+          "format": "hostname"
+        },
+        "from_identity": {
+          "type": "string",
+          "format": "email"
+        },
+        "template_set_id": { "$ref": "#/$defs/catalogEntryId" },
+        "smtp_secret_labels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/keychainLabel" }
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "kind",
+        "action",
+        "resource_ref",
+        "billable",
+        "reconcile_strategy"
+      ],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        },
+        "kind": {
+          "enum": [
+            "reserve_tenant",
+            "supabase_project",
+            "tenant_schema",
+            "storage_auth_smtp",
+            "platform_support",
+            "vercel_project",
+            "production_env",
+            "domain_binding",
+            "tenant_build",
+            "production_deployment",
+            "smoke_suite",
+            "company_admin",
+            "finalize_tenant"
+          ]
+        },
+        "action": {
+          "enum": [
+            "reserve",
+            "create_or_adopt",
+            "apply",
+            "configure",
+            "build",
+            "deploy_and_promote",
+            "verify",
+            "invite",
+            "finalize"
+          ]
+        },
+        "resource_ref": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._/-]{1,127}$"
+        },
+        "billable": { "type": "boolean" },
+        "reconcile_strategy": {
+          "enum": [
+            "registry_only",
+            "deterministic_name_and_owner_marker",
+            "version_ledger",
+            "provider_request_id",
+            "verification_result"
+          ]
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currency",
+        "tax_included",
+        "billing_period",
+        "recurring_low_minor",
+        "recurring_high_minor",
+        "usage_ceiling_minor",
+        "one_time_minor",
+        "components",
+        "pricing_catalog_version"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "tax_included": { "type": "boolean" },
+        "billing_period": { "const": "monthly" },
+        "recurring_low_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recurring_high_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usage_ceiling_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "one_time_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/costComponent" }
+        },
+        "pricing_catalog_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "costComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "sku_id",
+        "quantity",
+        "unit",
+        "low_minor",
+        "high_minor",
+        "assumption"
+      ],
+      "properties": {
+        "provider": {
+          "enum": ["supabase", "vercel", "smtp", "anthropic", "slack", "airtable", "dns", "platform"]
+        },
+        "sku_id": { "$ref": "#/$defs/catalogEntryId" },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unit": {
+          "enum": ["tenant_month", "seat_month", "request", "token", "email", "gigabyte_month", "domain_year", "one_time"]
+        },
+        "low_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assumption": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    },
+    "capabilityBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "enabled",
+        "unit",
+        "period",
+        "soft_limit",
+        "hard_limit",
+        "overage_action"
+      ],
+      "properties": {
+        "capability": {
+          "enum": [
+            "ai.classification",
+            "ai.coaching",
+            "ai.briefing.daily",
+            "ai.briefing.weekly",
+            "slack.reply_alerts",
+            "slack.briefings",
+            "airtable.imports"
+          ]
+        },
+        "enabled": { "type": "boolean" },
+        "unit": {
+          "enum": ["requests", "tokens", "messages", "imports", "runs"]
+        },
+        "period": { "const": "calendar_month" },
+        "soft_limit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hard_limit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overage_action": {
+          "enum": ["pause_and_alert", "queue_and_alert", "disable_and_alert"]
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "rpo_hours",
+        "rto_business_hours",
+        "business_timezone",
+        "provider_backup_interval_hours",
+        "encrypted_export_interval_hours",
+        "restore_drill_interval_days",
+        "coverage",
+        "retention_policy_id"
+      ],
+      "properties": {
+        "profile_id": { "$ref": "#/$defs/catalogEntryId" },
+        "rpo_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "rto_business_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "business_timezone": {
+          "type": "string",
+          "pattern": "^[A-Za-z_]+/[A-Za-z0-9_+-]+$"
+        },
+        "provider_backup_interval_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "encrypted_export_interval_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 168
+        },
+        "restore_drill_interval_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 92
+        },
+        "coverage": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 5,
+          "items": {
+            "enum": [
+              "database_schema_data",
+              "auth_configuration_identities",
+              "storage_metadata",
+              "private_storage_objects_or_reconstruction",
+              "deployment_configuration_metadata"
+            ]
+          }
+        },
+        "retention_policy_id": { "$ref": "#/$defs/catalogEntryId" }
+      }
+    },
+    "smokeTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "required", "before_admin_invite"],
+      "properties": {
+        "id": {
+          "enum": [
+            "schema_ledger",
+            "auth_anonymous_denied",
+            "auth_inactive_denied",
+            "auth_member_allowed",
+            "rls_role_boundaries",
+            "private_storage_delivery",
+            "api_health",
+            "cron_configuration",
+            "preview_isolation",
+            "smtp_delivery",
+            "runtime_project_ref"
+          ]
+        },
+        "required": { "const": true },
+        "before_admin_invite": { "const": true }
+      }
+    },
+    "prerequisite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "kind", "status", "evidence_ref"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+        },
+        "kind": {
+          "enum": [
+            "provider_access",
+            "domain",
+            "region_residency",
+            "tier_capacity",
+            "smtp_dns",
+            "backup_coverage",
+            "release_compatibility",
+            "legal_review",
+            "pricing"
+          ]
+        },
+        "status": {
+          "enum": ["passed", "blocker", "manual"]
+        },
+        "evidence_ref": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._:/-]{1,159}$"
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "remediation"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "remediation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    }
+  }
+}
