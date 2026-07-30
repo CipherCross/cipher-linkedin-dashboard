@@ -30,17 +30,20 @@ export class DisposableOnboardingCore {
   readonly #providers: OnboardingProviders;
   readonly #planner: DisposableOnboardingPlanner;
   readonly #clock: () => Date;
+  readonly #requireRegistryBackup: boolean;
 
   constructor(
     registry: Registry,
     providers: OnboardingProviders,
     planner: DisposableOnboardingPlanner,
     clock: () => Date = () => new Date(),
+    requireRegistryBackup = false,
   ) {
     this.#registry = registry;
     this.#providers = providers;
     this.#planner = planner;
     this.#clock = clock;
+    this.#requireRegistryBackup = requireRegistryBackup;
   }
 
   preflight(inputs: unknown): Promise<DisposablePreflightReport> {
@@ -56,6 +59,14 @@ export class DisposableOnboardingCore {
   }
 
   async applyOrResume(request: ApplyRequest): Promise<AdvanceOnboardingResult> {
+    if (this.#requireRegistryBackup) {
+      const backup = this.#registry.backupMetadata;
+      assertOps(
+        backup.digest !== null && backup.createdAt !== null,
+        "backup_invalid",
+        "A verified encrypted registry backup is required before P4-C apply",
+      );
+    }
     const plan = this.#registry.getPlan(request.plan_id);
     assertOps(plan, "invalid_plan", "Unknown onboarding plan");
     this.#assertDisposable(plan);

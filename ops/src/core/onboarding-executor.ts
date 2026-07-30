@@ -301,13 +301,13 @@ export class OnboardingExecutor {
       }
       case 7:
         assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
+        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
         return (
           await this.#providerCall("vercel.configureProductionEnvironment", () => this.#providers.vercel.configureProductionEnvironment({
             projectId: vercelProject.resourceId,
-            secretLabels: [
-              ...context.smtpSecretLabels,
-              ...context.integrationSecretLabels,
-            ],
+            tenantSlug: context.tenantSlug,
+            supabaseProjectId: supabaseProject.resourceId,
+            secretLabels: context.integrationSecretLabels,
             publicBuildValueNames: context.publicBuildValueNames,
             scope: "production_only",
           }))
@@ -325,8 +325,11 @@ export class OnboardingExecutor {
         ).providerRequestId;
       case 9: {
         assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
+        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
         const build = await this.#providerCall("vercel.buildTenant", () => this.#providers.vercel.buildTenant({
           projectId: vercelProject.resourceId,
+          supabaseProjectId: supabaseProject.resourceId,
+          productionHostname: context.productionHostname,
           sourceGitSha: context.sourceGitSha,
           publicBuildValueNames: context.publicBuildValueNames,
         }));
@@ -384,26 +387,45 @@ export class OnboardingExecutor {
         await this.#providerCall("supabase.runSmokeTests", () =>
           this.#providers.supabase.runSmokeTests(
             supabaseProject.resourceId,
-            context.smokeTestIds,
+            context.smokeTestIds.filter((id) =>
+              [
+                "schema_ledger",
+                "rls_role_boundaries",
+                "private_storage_delivery",
+              ].includes(id),
+            ),
           ),
         );
         await this.#providerCall("auth.runSmokeTests", () =>
           this.#providers.auth.runSmokeTests(
             supabaseProject.resourceId,
-            context.smokeTestIds,
+            context.smokeTestIds.filter((id) =>
+              [
+                "auth_anonymous_denied",
+                "auth_inactive_denied",
+                "auth_member_allowed",
+              ].includes(id),
+            ),
           ),
         );
         await this.#providerCall("smtp.runSmokeTests", () =>
           this.#providers.smtp.runSmokeTests(
             supabaseProject.resourceId,
-            context.smokeTestIds,
+            context.smokeTestIds.filter((id) => id === "smtp_delivery"),
           ),
         );
         return (
           await this.#providerCall("vercel.runSmokeTests", () =>
             this.#providers.vercel.runSmokeTests(
               vercelProject.resourceId,
-              context.smokeTestIds,
+              context.smokeTestIds.filter((id) =>
+                [
+                  "api_health",
+                  "cron_configuration",
+                  "preview_isolation",
+                  "runtime_project_ref",
+                ].includes(id),
+              ),
             ),
           )
         ).providerRequestId;

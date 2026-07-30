@@ -179,6 +179,7 @@ export function disposableBusinessInputs(
 export function disposableProfile(): DisposableOnboardingProfile {
   const source = makeOnboardingPlan().spec as Record<string, unknown>;
   return {
+    allowedTenantSlug: "disposable-lab",
     platformDomain: "example.com",
     supabaseOrganizationId: "sb-org-1",
     vercelTeamId: "vc-team-1",

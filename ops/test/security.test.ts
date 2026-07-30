@@ -78,20 +78,27 @@ test("macOS Keychain adapter never places secret values in process arguments", a
   const redactor = new Redactor();
   const runner = new RecordingRunner();
   const store = new MacOsKeychainSecretStore(redactor, runner);
+  const storedCanary = `v1_${Buffer.from(CANARY, "utf8").toString("base64url")}`;
   const labels = {
     service: "lh2-platform" as const,
     account: "platform/supabase.management_token",
   };
 
+  runner.result = { exitCode: 0, stdout: `${storedCanary}\n`, stderr: "" };
   await store.set(labels, CANARY);
-  assert.equal(runner.calls.length, 1);
-  assert.equal(runner.calls[0]!.args.at(-1), "-w");
+  assert.equal(runner.calls.length, 2);
+  assert.equal(runner.calls[0]!.executable, "/usr/bin/security");
+  assert.deepEqual(runner.calls[0]!.args, ["-q", "-i"]);
   assert.equal(runner.calls[0]!.args.join(" ").includes(CANARY), false);
-  assert.equal(runner.calls[0]!.stdin, `${CANARY}\n`);
-
-  runner.result = { exitCode: 0, stdout: `${CANARY}\n`, stderr: "" };
-  assert.equal(await store.get(labels), CANARY);
+  assert.equal(runner.calls[0]!.args.join(" ").includes(storedCanary), false);
+  assert.equal(runner.calls[0]!.stdin!.includes(CANARY), false);
+  assert.equal(runner.calls[0]!.stdin!.includes(storedCanary), true);
   assert.equal(runner.calls[1]!.args.join(" ").includes(CANARY), false);
+  assert.equal(runner.calls[1]!.args.join(" ").includes(storedCanary), false);
+
+  assert.equal(await store.get(labels), CANARY);
+  assert.equal(runner.calls[2]!.args.join(" ").includes(CANARY), false);
+  assert.equal(runner.calls[2]!.args.join(" ").includes(storedCanary), false);
 });
 
 test("canary values are removed from provider error and success paths", async () => {

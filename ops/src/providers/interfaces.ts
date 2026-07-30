@@ -75,6 +75,8 @@ export interface SmtpConfigurationRequest {
 
 export interface ProductionEnvironmentRequest {
   readonly projectId: string;
+  readonly tenantSlug: string;
+  readonly supabaseProjectId: string;
   readonly secretLabels: readonly string[];
   readonly publicBuildValueNames: readonly (
     | "VITE_SUPABASE_URL"
@@ -91,6 +93,8 @@ export interface DomainBindingRequest {
 
 export interface BuildRequest {
   readonly projectId: string;
+  readonly supabaseProjectId: string;
+  readonly productionHostname: string;
   readonly sourceGitSha: string;
   readonly publicBuildValueNames: readonly (
     | "VITE_SUPABASE_URL"

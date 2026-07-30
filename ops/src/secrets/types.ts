@@ -1,5 +1,9 @@
+import { OpsError } from "../core/errors.js";
+
 export const PLATFORM_SECRET_NAMES = [
   "registry.backup_passphrase",
+  "smtp.password",
+  "smtp.username",
   "supabase.management_token",
   "vercel.team_token",
 ] as const;
@@ -66,4 +70,3 @@ export function labelsForSecret(locator: SecretLocator): KeychainLabels {
     account: `tenant/${locator.tenantSlug}/${locator.name}`,
   };
 }
-import { OpsError } from "../core/errors.js";

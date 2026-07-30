@@ -1,6 +1,6 @@
 # Local owner MCP setup
 
-Status: **P4-A local-only setup**
+Status: **P4-C local-only setup; live provisioning deferred**
 
 The owner operations MCP is a local STDIO process. It does not listen on a
 network port, does not ship with tenant deployments, and does not accept
@@ -52,6 +52,7 @@ args = [
   "<ABSOLUTE_TRUSTED_RELEASE>/ops/dist/src/mcp/main.js",
   "--registry",
   "<ABSOLUTE_REGISTRY_PATH>",
+  "--p4c",
 ]
 enabled = true
 required = true
@@ -126,21 +127,37 @@ repair/down, or provider-delete commands as a fallback for tenant lifecycle
 operations. Physical deletion remains a separate manual break-glass procedure
 outside the MCP and operations core.
 
-## P4-B capability boundary
+## P4-C disposable runtime boundary
 
 P4-B keeps the complete P4-A owner tool contract unchanged and adds strict
 Supabase, Vercel, Auth, SMTP, domain, and source-revision adapter libraries plus
 disposable onboarding preflight/plan/apply/resume. The adapters accept only
 closed typed requests and responses.
 
-The local registry-backed tools (`tenant_list`, `tenant_get`, `operation_get`) work
-without provider access. The built STDIO entrypoint deliberately has no provider
-runtime or credentials and therefore returns `unsupported_contract` for
-preflight/plan; P4-C must explicitly compose reviewed provider SDK ports before
-any end-to-end disposable provisioning. Tests compose deterministic in-memory
-ports with the same fixed MCP schemas. Release, enrollment, support, suspension,
-and other later-phase tools remain unavailable. There is no fallback external
-effect.
+The local registry-backed tools (`tenant_list`, `tenant_get`, `operation_get`)
+work without provider access. The built STDIO entrypoint remains fail-closed by
+default. Passing the fixed `--p4c` startup selector composes reviewed SDK-backed
+ports for only `p4c-lab`, its pinned provider owners, domains, catalogs, schema
+artifacts, release SHA, environment names, disabled integrations, and smoke
+suite. It reads credentials only from closed macOS Keychain labels.
+
+P4-C does not add an MCP tool, change a schema, or accept a provider payload.
+Release, enrollment, external-company, support-enable, suspension, deletion,
+migration repair/down, raw provider, and other later-phase effects remain
+unavailable. There is no fallback external effect.
+
+Live provisioning is currently `blocked/incomplete`, not accepted. The
+2026-07-30 read-only preflight passed provider access, domain, region/residency,
+SMTP/DNS, release compatibility, legal review, and pricing, but correctly
+blocked tier capacity and backup coverage because the reviewed Supabase
+organization is not on Pro and the owner has deferred that recurring cost. No
+tenant resource or admin invitation was created. Resume conditions and the
+mandatory `preflight → plan → owner approval → apply/resume → verify` sequence
+are recorded in
+[p4-c-deferred-provisioning-plan.md](p4-c-deferred-provisioning-plan.md).
+The locally completed implementation scope and remaining live gate are recorded
+separately in
+[P4-C-pre-provisioning-checkpoint.md](../implementation-handoffs/P4-C-pre-provisioning-checkpoint.md).
 
 ## Acceptance check
 
@@ -150,8 +167,8 @@ After restarting Codex:
 2. Call `tenant_list {}` and compare server version and tool-contract digest with
    the accepted handoff.
 3. Confirm an unknown input property is rejected.
-4. Confirm packaged `tenant_preflight` fails with `unsupported_contract` until
-   the reviewed P4-C runtime is installed.
+4. Confirm packaged `tenant_preflight` fails with `unsupported_contract`
+   without `--p4c`, and performs only read-only inspection with `--p4c`.
 5. Confirm a mutating call produces a Codex approval prompt.
 6. Confirm `machine_revoke`, `support_access_disable`, and `tenant_suspend` are
    shown as destructive and require an explicit prompt.
@@ -161,4 +178,6 @@ annotation, allowlist, digest, idempotency, no-provider, and real STDIO handshak
 checks. `ops/test/p4b.test.ts` additionally covers deterministic provider
 snapshots/plans, strict adapter output validation, MCP onboarding wiring, and
 failure/resume after every provider effect. Neither suite reads a production
-Keychain item or calls a live provider.
+Keychain item or calls a live provider. `ops/test/p4c.test.ts` checks the closed
+SDK surface, single-disposable scope, Production-only/disabled-integration plan,
+complete smoke ownership, and invite-after-smoke ordering.

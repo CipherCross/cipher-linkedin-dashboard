@@ -9,8 +9,9 @@ provider fakes.
 P3-B adds:
 
 - a macOS Keychain adapter whose secret-write process arguments contain labels
-  only; the value is supplied to the final `security -w` prompt over standard
-  input;
+  only; the value is supplied through the system `security` command's
+  interactive input using a versioned base64url envelope and verified
+  immediately after storage;
 - a closed secret-name catalog and deterministic
   `lh2-platform/{platform|tenant/...}` Keychain labels;
 - interactive no-echo secret bootstrap with label/version-only registry and
@@ -31,10 +32,19 @@ P4-B adds strict Supabase, Vercel, Auth, SMTP, domain, and source-revision
 adapters over narrow typed control-plane ports. It also adds read-only provider
 preflight/snapshots, deterministic disposable-tenant dry-run planning, and a
 one-step-at-a-time resumable onboarding core wired to the existing MCP schemas.
-The package does not install a live provider runtime: the built MCP entrypoint
-continues to fail closed until P4-C explicitly composes reviewed provider SDK
-ports and credentials. P4-B tests use deterministic in-memory ports only and
-never create an external tenant.
+P4-C adds the explicitly selected `--p4c` runtime. It composes reviewed
+Supabase Management, Supabase JS, Vercel, SMTP, and local Git SDK-backed ports
+for exactly one disposable tenant, `p4c-lab`. The runtime pins the provider
+owners, domains, region/tier/compute/backup catalog, immutable v053 baseline,
+054 delta, source SHA, Production-only environment names, disabled integration
+budgets, and complete smoke ownership. The default MCP startup remains
+fail-closed unless `--p4c` is present.
+
+The local P4-C implementation is checkpointed, but live provisioning is
+currently `blocked/incomplete`; it is not P4-C acceptance. See
+[`P4-C-pre-provisioning-checkpoint.md`](../docs/implementation-handoffs/P4-C-pre-provisioning-checkpoint.md)
+and
+[`p4-c-deferred-provisioning-plan.md`](../docs/platform-ops/p4-c-deferred-provisioning-plan.md).
 
 Requires Node.js 22.5 or newer because it uses the built-in `node:sqlite` API.
 
@@ -52,7 +62,12 @@ npm run ops -- registry init
 npm run ops -- registry status
 npm run ops -- secrets set --scope platform --name registry.backup_passphrase
 npm run ops -- secrets set --scope platform --name supabase.management_token
+npm run ops -- secrets set --scope platform --name vercel.team_token
+npm run ops -- secrets set --scope platform --name smtp.username
+npm run ops -- secrets set --scope platform --name smtp.password
 npm run ops -- registry backup --output ./backups/registry.lh2backup
+npm run ops -- tenant preflight
+npm run ops -- tenant plan
 ```
 
 The default registry lives at:
@@ -76,10 +91,10 @@ The built entrypoint is:
 dist/src/mcp/main.js
 ```
 
-It accepts only an optional fixed startup argument:
+It accepts an optional registry path and the explicit P4-C runtime selector:
 
 ```bash
-node dist/src/mcp/main.js --registry "/absolute/path/registry.sqlite"
+node dist/src/mcp/main.js --registry "/absolute/path/registry.sqlite" --p4c
 ```
 
 STDOUT is reserved for MCP protocol messages. Errors are redacted and written to
@@ -90,6 +105,8 @@ migration surface.
 Follow
 [`docs/platform-ops/local-owner-mcp.md`](../docs/platform-ops/local-owner-mcp.md)
 for the user-global Codex allowlist and approval policy. Provider-dependent tools
-without an explicitly composed runtime fail closed. The P4-B library binds
+without `--p4c` fail closed. The P4-B library binds
 `tenant_preflight`, `tenant_plan_onboarding`, `tenant_apply_onboarding`, and
-`tenant_resume_operation` to the fixed P4-A schemas without adding tools.
+`tenant_resume_operation` to the fixed P4-A schemas without adding tools. P4-C
+uses those same tools and schemas; it does not widen the 17-tool MCP allowlist or
+its contract digest.

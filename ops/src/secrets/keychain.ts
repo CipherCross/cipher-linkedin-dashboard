@@ -69,8 +69,11 @@ export class MacOsKeychainSecretStore implements SecretStore {
   async set(labels: KeychainLabels, value: string): Promise<void> {
     validateLabels(labels);
     validateSecretValue(value);
+    const storedValue = encodeStoredSecret(value);
     this.#redactor.registerSecret(value);
+    this.#redactor.registerSecret(storedValue);
     const result = await this.#run(
+      ["-q", "-i"],
       [
         "add-generic-password",
         "-U",
@@ -79,8 +82,8 @@ export class MacOsKeychainSecretStore implements SecretStore {
         "-s",
         labels.service,
         "-w",
-      ],
-      `${value}\n`,
+        storedValue,
+      ].join(" ") + "\n",
     );
     if (result.exitCode !== 0) {
       throw new OpsError(
@@ -88,6 +91,13 @@ export class MacOsKeychainSecretStore implements SecretStore {
         this.#redactor.redactString(
           result.stderr.trim() || "macOS Keychain rejected the secret",
         ),
+      );
+    }
+    const verified = await this.get(labels);
+    if (verified !== value) {
+      throw new OpsError(
+        "secret_store_error",
+        "macOS Keychain did not preserve the supplied secret value",
       );
     }
   }
@@ -110,7 +120,8 @@ export class MacOsKeychainSecretStore implements SecretStore {
         ),
       );
     }
-    const value = result.stdout.replace(/\r?\n$/, "");
+    const storedValue = result.stdout.replace(/[\r\n]+$/, "");
+    const value = decodeStoredSecret(storedValue);
     validateSecretValue(value);
     this.#redactor.registerSecret(value);
     return value;
@@ -128,12 +139,36 @@ export class MacOsKeychainSecretStore implements SecretStore {
     return result.exitCode === 0;
   }
 
-  async #run(args: readonly string[], stdin?: string): Promise<CommandResult> {
+  async #run(
+    args: readonly string[],
+    stdin?: string,
+    executable = this.#executable,
+  ): Promise<CommandResult> {
     try {
-      return await this.#runner.run(this.#executable, args, stdin);
+      return await this.#runner.run(executable, args, stdin);
     } catch (error) {
       throw this.#redactor.sanitizeError(error);
     }
+  }
+}
+
+function encodeStoredSecret(value: string): string {
+  return `v1_${Buffer.from(value, "utf8").toString("base64url")}`;
+}
+
+function decodeStoredSecret(value: string): string {
+  if (!value.startsWith("v1_")) return value;
+  if (!/^v1_[A-Za-z0-9_-]+$/.test(value)) {
+    throw new OpsError("secret_invalid", "Stored secret encoding is invalid");
+  }
+  try {
+    const decoded = Buffer.from(value.slice(3), "base64url").toString("utf8");
+    if (encodeStoredSecret(decoded) !== value) {
+      throw new Error("non-canonical base64url");
+    }
+    return decoded;
+  } catch {
+    throw new OpsError("secret_invalid", "Stored secret encoding is invalid");
   }
 }
 
@@ -145,10 +180,16 @@ function validateLabels(labels: KeychainLabels): void {
 }
 
 function validateSecretValue(value: string): void {
-  if (value.length === 0 || value.includes("\0") || /[\r\n]/.test(value)) {
+  if (value.length === 0) {
+    throw new OpsError("secret_invalid", "Secret is empty");
+  }
+  if (value.includes("\0")) {
+    throw new OpsError("secret_invalid", "Secret contains a NUL character");
+  }
+  if (/[\r\n]/.test(value)) {
     throw new OpsError(
       "secret_invalid",
-      "Secret must be a non-empty single-line value",
+      "Secret contains an embedded line break",
     );
   }
 }

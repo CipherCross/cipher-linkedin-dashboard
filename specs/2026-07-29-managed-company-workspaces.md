@@ -697,7 +697,7 @@ spec, один ограниченный session brief и handoff предыду�
 | `P3-B` | 3 | Keychain, no-echo secrets CLI, redaction, registry recovery и CLI adapter | Canary secrets отсутствуют во всех output/error paths; recovery rehearsal проходит |
 | `P4-A` | 4 | STDIO MCP server, tool schemas, instructions и approval policy | Read-only/write/destructive annotations и allowlist проверены |
 | `P4-B` | 4 | Supabase/Vercel/Auth/SMTP/domain provider adapters и onboarding state machine | Dry-run plan детерминирован, failure injection не создает дубликаты |
-| `P4-C` | 4 | End-to-end disposable tenant provisioning | Baseline, build, domain, Auth, support/admin invite и smoke suite проходят |
+| `P4-C` | 4 | End-to-end disposable tenant provisioning — **blocked/incomplete, provisioning deferred 2026-07-30**; resume по [deferred plan](../docs/platform-ops/p4-c-deferred-provisioning-plan.md) после доступности Supabase Pro или другой уже оплаченной reviewed organization | Baseline, build, domain, Auth, support/admin invite и smoke suite проходят |
 | `P5-A` | 5 | DB migrations и единый `/api/agent.ts`: auth, protocol, batches, rate limits | API contract/idempotency/security/size tests проходят |
 | `P5-B` | 5 | Python agent transport, OS credential reference, notify flow и canary | Internal/disposable sync совпадает с LH2 и не использует service-role |
 | `P6-A` | 6 | Launcher trust core: manifest, keys, A/B slots, watchdog, rollback | Broken artifact автоматически откатывается на last-known-good |
@@ -716,6 +716,18 @@ spec, один ограниченный session brief и handoff предыду�
 → P9-C<n>` — рекомендуемый критический путь. `P6-B` и `P6-C` можно вести
 параллельно только после стабильного `P6-A`; остальные sessions последовательны,
 потому что меняют общие contracts или внешнюю инфраструктуру.
+
+Текущий статус на 2026-07-30: `P4-C` остается активной
+`blocked/incomplete`-границей. Read-only preflight прошел для provider access,
+domain, region/residency, SMTP/DNS, release compatibility, legal review и
+pricing, но заблокировал `tier_capacity` и `backup_coverage`, поскольку owner не
+может пока оплатить обязательный Supabase Pro. Tenant, deployment и admin invite
+не создавались. Нельзя переходить к `P5-A` или `P7-A`, подменять Pro/7-day daily
+backups бесплатным профилем или считать P4-C принятой. Условия и точный порядок
+возобновления зафиксированы в
+[`p4-c-deferred-provisioning-plan.md`](../docs/platform-ops/p4-c-deferred-provisioning-plan.md),
+а завершенный локальный scope и незакрытый live gate — в
+[`P4-C-pre-provisioning-checkpoint.md`](../docs/implementation-handoffs/P4-C-pre-provisioning-checkpoint.md).
 
 Новая сессия особенно обязательна:
 

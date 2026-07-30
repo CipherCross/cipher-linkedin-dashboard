@@ -1,6 +1,6 @@
 {
   "name": "@lh2/platform-ops",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -18,13 +18,19 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
+    "@supabase/supabase-js": "^2.111.0",
+    "@vercel/sdk": "^1.28.12",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
+    "isomorphic-git": "^1.40.0",
+    "nodemailer": "^9.0.3",
+    "supabase-management-js": "^2.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^25.0.0",
+    "@types/nodemailer": "^8.0.1",
     "typescript": "^5.5.3"
   }
 }

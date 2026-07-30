@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { Redactor, safeJson } from "../core/redaction.js";
+import { createP4COwnerOperations } from "../runtime/p4c-runtime.js";
 import { RegistryOwnerOperationsAdapter } from "./adapter.js";
 import { createOwnerMcpServer } from "./server.js";
 import {
@@ -13,24 +15,44 @@ import {
 } from "../state/location.js";
 import { Registry } from "../state/registry.js";
 
-function registryPath(argv: readonly string[]): string {
-  if (argv.length === 0) return defaultRegistryPath();
-  if (argv.length === 2 && argv[0] === "--registry" && argv[1] !== undefined) {
-    return resolve(argv[1]);
+function argumentsForRuntime(argv: readonly string[]): {
+  readonly registryPath: string;
+  readonly p4c: boolean;
+} {
+  let path = defaultRegistryPath();
+  let p4c = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === "--p4c") {
+      p4c = true;
+      continue;
+    }
+    if (argv[index] === "--registry" && argv[index + 1] !== undefined) {
+      path = resolve(argv[index + 1]!);
+      index += 1;
+      continue;
+    }
+    throw new Error("Usage: lh2-owner-mcp [--registry PATH] [--p4c]");
   }
-  throw new Error("Usage: lh2-owner-mcp [--registry PATH]");
+  return { registryPath: path, p4c };
 }
 
 const redactor = new Redactor();
 
 try {
-  const path = registryPath(process.argv.slice(2));
+  const runtime = argumentsForRuntime(process.argv.slice(2));
+  const path = runtime.registryPath;
   const registry = new Registry(
     path,
     readRegistryOwnerUuid(path),
     redactor,
   );
-  const operations = new RegistryOwnerOperationsAdapter(registry);
+  const operations = runtime.p4c
+    ? await createP4COwnerOperations(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../../.."),
+        registry,
+        redactor,
+      )
+    : new RegistryOwnerOperationsAdapter(registry);
   const handle = serveStdio(
     () => createOwnerMcpServer(operations, redactor),
     {

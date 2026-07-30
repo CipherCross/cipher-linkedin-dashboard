@@ -27,6 +27,7 @@ export const PREFLIGHT_KINDS = [
 export type PreflightKind = (typeof PREFLIGHT_KINDS)[number];
 
 export interface DisposableOnboardingProfile {
+  readonly allowedTenantSlug: string;
   readonly platformDomain: string;
   readonly supabaseOrganizationId: string;
   readonly vercelTeamId: string;
@@ -319,7 +320,8 @@ export class ProviderPreflightService {
     const { supabase, vercel, auth, smtp, domain, sourceRepository } = observations;
     const disposableScope =
       inputs.workspace_class === "disposable" &&
-      inputs.release_channel === "canary";
+      inputs.release_channel === "canary" &&
+      inputs.tenant_slug === this.#profile.allowedTenantSlug;
     const checks: Record<PreflightKind, boolean> = {
       provider_access:
         validSnapshots &&

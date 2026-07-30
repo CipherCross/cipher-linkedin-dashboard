@@ -6,11 +6,18 @@ import {
   readFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { OpsError, assertOps } from "../core/errors.js";
 import { Redactor, safeJson } from "../core/redaction.js";
 import type { ApplyRequest, ProviderSnapshot } from "../core/types.js";
+import { MCP_TOOL_CONTRACT_DIGEST } from "../mcp/policy.js";
+import { SERVER_VERSION } from "../mcp/schemas.js";
 import { RegistryBackupService } from "../recovery/backup.js";
+import {
+  createP4COwnerOperations,
+  p4cBusinessInputs,
+} from "../runtime/p4c-runtime.js";
 import { MacOsKeychainSecretStore } from "../secrets/keychain.js";
 import { readSecretNoEcho } from "../secrets/no-echo.js";
 import { SecretBootstrapService } from "../secrets/service.js";
@@ -209,6 +216,98 @@ export async function runCli(
           emit(stdout, redactor, result);
           return 0;
         }
+        case "tenant:preflight":
+        case "tenant:plan": {
+          assertOnly(parsed, ["registry", "owner-id"]);
+          const operations = await createP4COwnerOperations(
+            repositoryRoot(),
+            registry,
+            redactor,
+            makeSecretStore(redactor),
+          );
+          const toolName =
+            parsed.command === "tenant:preflight"
+              ? "tenant_preflight"
+              : "tenant_plan_onboarding";
+          emit(
+            stdout,
+            redactor,
+            await operations.call(toolName, p4cBusinessInputs()),
+          );
+          return 0;
+        }
+        case "tenant:apply":
+        case "tenant:resume": {
+          assertOnly(parsed, [
+            "registry",
+            "owner-id",
+            "plan-id",
+            "plan-digest",
+            "expected-registry-version",
+            "idempotency-key",
+            "operation-id",
+          ]);
+          const expectedRegistryVersion = Number(
+            requiredOption(parsed, "expected-registry-version"),
+          );
+          assertOps(
+            Number.isSafeInteger(expectedRegistryVersion) &&
+              expectedRegistryVersion >= 0,
+            "cli_usage",
+            "--expected-registry-version must be a non-negative integer",
+          );
+          const authorization = {
+            server_version: SERVER_VERSION,
+            tool_contract_digest: MCP_TOOL_CONTRACT_DIGEST,
+            plan_id: requiredOption(parsed, "plan-id"),
+            plan_digest: requiredOption(parsed, "plan-digest"),
+            expected_registry_version: expectedRegistryVersion,
+            idempotency_key: requiredOption(parsed, "idempotency-key"),
+          };
+          const operations = await createP4COwnerOperations(
+            repositoryRoot(),
+            registry,
+            redactor,
+            makeSecretStore(redactor),
+          );
+          const input =
+            parsed.command === "tenant:apply"
+              ? { authorization }
+              : {
+                  authorization,
+                  operation_id: requiredOption(parsed, "operation-id"),
+                };
+          emit(
+            stdout,
+            redactor,
+            await operations.call(
+              parsed.command === "tenant:apply"
+                ? "tenant_apply_onboarding"
+                : "tenant_resume_operation",
+              input,
+            ),
+          );
+          return 0;
+        }
+        case "tenant:verify": {
+          assertOnly(parsed, ["registry", "owner-id", "operation-id"]);
+          const operationId = requiredOption(parsed, "operation-id");
+          const operations = await createP4COwnerOperations(
+            repositoryRoot(),
+            registry,
+            redactor,
+            makeSecretStore(redactor),
+          );
+          emit(stdout, redactor, {
+            operation: await operations.call("operation_get", {
+              operation_id: operationId,
+            }),
+            tenant: await operations.call("tenant_get", {
+              tenant_slug: "p4c-lab",
+            }),
+          });
+          return 0;
+        }
         default:
           throw new OpsError("cli_usage", "Unsupported command");
       }
@@ -329,7 +428,16 @@ function usage(): string {
     "lh2-ops secrets check --scope platform|tenant --name NAME [--tenant SLUG]",
     "lh2-ops operation get --id OPERATION_ID [--registry PATH]",
     "lh2-ops operation start --request FILE [--snapshots FILE] [--registry PATH]",
+    "lh2-ops tenant preflight [--registry PATH]",
+    "lh2-ops tenant plan [--registry PATH]",
+    "lh2-ops tenant apply --plan-id ID --plan-digest SHA256 --expected-registry-version N --idempotency-key KEY",
+    "lh2-ops tenant resume --operation-id ID --plan-id ID --plan-digest SHA256 --expected-registry-version N --idempotency-key KEY",
+    "lh2-ops tenant verify --operation-id ID [--registry PATH]",
     "",
     "Secret values are accepted only through an interactive no-echo prompt.",
   ].join("\n");
+}
+
+function repositoryRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 }
