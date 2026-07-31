@@ -1,0 +1,151 @@
+{
+  "format_version": 1,
+  "inventory": "docs/platform-ops/tenant-schema-inventory-v053.json",
+  "scope": "dependencies that must be removed, isolated or explicitly replaced before a portable tenant baseline can be applied",
+  "dependencies": [
+    {
+      "id": "managed-schemas",
+      "provider": "Supabase",
+      "file": "supabase/tenant-baseline/v053/README.md:10-12",
+      "object": "public, auth, storage, supabase_migrations schemas",
+      "purpose": "The baseline assumes these provider-managed schemas already exist before the artifact is applied.",
+      "migration_risk": "high: a clean PostgreSQL baseline cannot retain implicit provider schemas; each schema must be replaced by an application-owned schema, an object-storage adapter boundary, or a provider-neutral migration ledger.",
+      "replacement_owner": "S05, S06, S08, S19"
+    },
+    {
+      "id": "auth-users-foreign-key",
+      "provider": "Supabase Auth",
+      "file": "supabase/tenant-baseline/v053/053_tenant_baseline.sql:2817",
+      "object": "public.team_members.auth_user_id -> auth.users(id) ON DELETE SET NULL",
+      "purpose": "Associates a dashboard membership with a Supabase Auth user subject.",
+      "migration_risk": "high: preserving the provider subject in the canonical membership model would lock business data to Supabase Auth; the FK must become an application-owned user/mapping boundary while preserving nullable membership semantics.",
+      "replacement_owner": "S06, S16-S18"
+    },
+    {
+      "id": "auth-uid",
+      "provider": "Supabase Auth",
+      "file": "supabase/tenant-baseline/v053/053_tenant_baseline.sql:672,691",
+      "object": "auth.uid() in public.is_active_team_member() and public.is_app_admin()",
+      "purpose": "Maps the current Supabase request subject to an active team member and admin predicate used by RLS policies.",
+      "migration_risk": "high: replacing the function without an equivalent request-scoped actor context could allow anonymous, inactive or cross-user access; the non-owner and non-BYPASSRLS intent must remain explicit.",
+      "replacement_owner": "S06, S07, S11, S17"
+    },
+    {
+      "id": "supabase-roles",
+      "provider": "Supabase",
+      "file": "supabase/tenant-baseline/v053/053_tenant_baseline.sql:2824-3430,3747-3789",
+      "object": "anon, authenticated, service_role",
+      "purpose": "Provider request roles define table RLS, public/anonymous denial, authenticated member reads, and service-only function execution.",
+      "migration_risk": "critical: blindly replacing service_role with a database owner would bypass RLS and violate the server-owned API contract; the new runtime must use an authenticated application API and a non-owner, non-BYPASSRLS database role.",
+      "replacement_owner": "S06, S07, S11-S15, S17"
+    },
+    {
+      "id": "provider-owner-and-default-acl",
+      "provider": "Supabase PostgreSQL",
+      "file": "supabase/tenant-baseline/v053/053_tenant_baseline.sql:61-76,3747-3751",
+      "object": "postgres object ownership and Supabase-managed default ACL behavior",
+      "purpose": "The dump restores objects owned by postgres and then reasserts grants because provider default ACLs are not preserved by the dump.",
+      "migration_risk": "high: a portable apply must separate migration-owner, runtime and application roles; replaying provider ACL assumptions can silently grant future tables or make RLS ineffective.",
+      "replacement_owner": "S05-S08, S11"
+    },
+    {
+      "id": "storage-buckets",
+      "provider": "Supabase Storage",
+      "file": "supabase/tenant-baseline/v053/053_tenant_baseline.sql:3793-3799",
+      "object": "storage.buckets row for lead-photos",
+      "purpose": "The only provider metadata DML in v053 provisions a private lead-photo bucket and intentionally omits the internal agent bucket.",
+      "migration_risk": "high: PostgreSQL DML cannot provision the selected object-storage provider; moving only the bucket row would lose bytes, signed access policy, key isolation and checksum evidence.",
+      "replacement_owner": "S19-S20"
+    },
+    {
+      "id": "storage-objects-and-policies",
+      "provider": "Supabase Storage",
+      "file": "supabase/tests/private_lead_photos_access.sql:3-64; supabase/tests/tenant_baseline_assertions.sql:391-425",
+      "object": "storage.objects and its authenticated/anonymous access policies",
+      "purpose": "Clean-room verification exercises active-member photo reads, rejects inactive and anonymous reads, and checks that the agent bucket is absent.",
+      "migration_risk": "critical: Storage objects and policy evaluation are outside a portable PostgreSQL business baseline; omitting this dependency can expose private photos or orphan object keys during cutover.",
+      "replacement_owner": "S19-S20"
+    },
+    {
+      "id": "supabase-migration-ledger",
+      "provider": "Supabase",
+      "file": "supabase/tenant-migrations/materialize.sh; supabase/tenant-migrations/README.md; supabase/tests/tenant_baseline_assertions.sql:429-437",
+      "object": "supabase_migrations.schema_migrations",
+      "purpose": "Tenant runners record v053 as the first applied version and then consume only shared 054+ deltas.",
+      "migration_risk": "high: treating the historical Supabase ledger as a portable catalog would replay 001-052 or mark a partially applied tenant as complete; S08 needs a provider-neutral ledger and two clean applies.",
+      "replacement_owner": "S08"
+    },
+    {
+      "id": "postgrest",
+      "provider": "Supabase PostgREST",
+      "file": "sync-agent/agent.py:96,1074-1081,1379; frontend/src/lib/DataContext.tsx:53",
+      "object": "REST exposure of public tables/views/RPCs with PostgREST pagination and merge-duplicates semantics",
+      "purpose": "The browser and sync agent use the public schema through REST; the current code relies on the 1000-row cap, allowlisted table access, and upsert conflict behavior.",
+      "migration_risk": "critical: direct browser/database and privileged REST transport cannot remain in the Neon design; an API replacement must preserve pagination, UTC filtering, idempotency and authorization without exposing database credentials.",
+      "replacement_owner": "S11-S15, S21-S23"
+    },
+    {
+      "id": "supabase-auth-runtime",
+      "provider": "Supabase Auth",
+      "file": "frontend/src/lib/supabase.ts; frontend/src/lib/AuthContext.tsx; frontend/api/_lib/auth.ts",
+      "object": "Supabase Auth client, access-token claims, sessions, password reset and admin user operations",
+      "purpose": "Provides the current browser/session lifecycle and maps Auth subjects to team_members rows.",
+      "migration_risk": "critical: sessions and password hashes are not portable cutover data; replacing the SDK without invite/reset/disable/CSRF/session-revocation tests can leave stale access or break all four users.",
+      "replacement_owner": "S16-S18"
+    },
+    {
+      "id": "supabase-storage-runtime",
+      "provider": "Supabase Storage",
+      "file": "frontend/src/lib/leadPhotos.ts; ops/src/providers/p4c-sdk.ts:360-424",
+      "object": "Storage bucket provisioning, uploads and signed download URLs",
+      "purpose": "The application and operations adapter provision lead-photos and render private photo objects through Supabase APIs.",
+      "migration_risk": "high: changing only the URL or bucket name is insufficient; server-side signing, missing/forbidden-key behavior, object manifests and agent-artifact separation must be proven.",
+      "replacement_owner": "S19-S20, S25"
+    },
+    {
+      "id": "service-role-transport",
+      "provider": "Supabase",
+      "file": "sync-agent/config.example.yaml:14-15; sync-agent/agent.py; frontend/api/_lib/core.ts",
+      "object": "Supabase service_role key and service-role REST/RPC transport",
+      "purpose": "The sync agent and server handlers currently perform privileged upserts, RPCs, Auth admin calls and Storage operations through the Supabase service role.",
+      "migration_risk": "critical: copying service_role into Neon or a machine config would create a tenant-wide owner credential; the replacement must be server-owned and machine-scoped with replay, revoke and transaction tests.",
+      "replacement_owner": "S11, S15, S21-S23"
+    },
+    {
+      "id": "source-extension-catalog",
+      "provider": "PostgreSQL source catalog",
+      "file": "docs/platform-ops/neon-migration-source-measurements.md:132-142",
+      "object": "pgcrypto 1.3, plpgsql 1.0, pg_stat_statements 1.11, uuid-ossp 1.1, supabase_vault 0.3.1",
+      "purpose": "Records the installed source extensions separately from the one extension declared by the schema-only v053 artifact.",
+      "migration_risk": "medium: restoring the whole source extension set would import operational and Supabase-only state; the portable baseline must require only pgcrypto and verify the remaining extensions explicitly before clean-room acceptance.",
+      "replacement_owner": "S04, S08"
+    },
+    {
+      "id": "pgcrypto",
+      "provider": "PostgreSQL extension (currently source-provisioned)",
+      "file": "supabase/tenant-baseline/v053/053_tenant_baseline.sql:14",
+      "object": "CREATE EXTENSION IF NOT EXISTS pgcrypto",
+      "purpose": "Supplies gen_random_uuid() defaults used by UUID business keys and mutation identifiers.",
+      "migration_risk": "medium: this extension is portable in principle but its availability, version, ownership and grants must be checked on the selected Neon PostgreSQL version; a missing extension breaks clean apply.",
+      "replacement_owner": "S04, S05, S08"
+    },
+    {
+      "id": "supabase-vault-negative-check",
+      "provider": "Supabase Vault",
+      "file": "docs/platform-ops/neon-provider-decisions.md:90-101,209-212",
+      "object": "supabase_vault",
+      "purpose": "Records the explicit requirement that the selected portable baseline must not depend on the Supabase-only vault extension.",
+      "migration_risk": "medium: an undeclared vault reference would have no accepted Neon replacement and could fail schema apply or leak a hidden secret dependency; the inventory must keep proving absence.",
+      "replacement_owner": "S04, S08"
+    },
+    {
+      "id": "realtime-negative-check",
+      "provider": "Supabase Realtime",
+      "file": "specs/2026-07-30-neon-migration-and-multitenancy.md:61",
+      "object": "Supabase Realtime publication/replication surface",
+      "purpose": "The current application does not use Realtime; this is recorded so a future schema/runtime review does not invent a replacement dependency.",
+      "migration_risk": "none for the current baseline; any later subscription requirement would be a separately scoped provider-port decision and must not be smuggled into S04.",
+      "replacement_owner": "none"
+    }
+  ]
+}
