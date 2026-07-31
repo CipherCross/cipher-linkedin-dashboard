@@ -1,24 +1,32 @@
 # P4-C deferred disposable provisioning plan
 
-Status: **blocked/incomplete — provisioning intentionally deferred**
+Status: **archived/superseded for future provisioning — retained only as a P4-C checkpoint record**
 
 Recorded: **2026-07-30**
 
 ## Decision
 
+**Supersession note (2026-07-31):** the owner accepted the provider-neutral
+Neon migration G0 in
+[`specs/2026-07-30-neon-migration-and-multitenancy.md`](../../specs/2026-07-30-neon-migration-and-multitenancy.md).
+This Supabase-specific deferred plan must not be resumed or applied. Commit
+`c8a9d5f35694dd6e8f7f35643967c8ed9808ced5` remains an immutable archival
+checkpoint only; the replacement decision matrix is
+[`neon-provider-decisions.md`](./neon-provider-decisions.md).
+
 End-to-end provisioning of the single reviewed disposable tenant `p4c-lab` is
 deferred until the owner can fund the required Supabase Pro organization plan
 or supplies another already-paid, reviewed Supabase organization.
 
-This is not P4-C acceptance. P4-C remains the active session boundary; P5 and P7
-must not start from this state.
+This was not P4-C acceptance. The historical P4-C boundary is superseded for
+future provisioning; neither this plan nor its historical resume flow authorizes
+work. P5 and P7 must not start from this state.
 
-The owner is separately considering a replacement for Supabase. Evaluation or
-migration to another database/backend provider is outside this checkpoint and
-must be specified in a separate session. If that work changes the approved
-backend contract, do not resume this Supabase-specific runtime: replace or
-supersede this plan and re-run the required architecture, security, cost,
-recovery, baseline, Auth, Storage, and provider-port reviews first.
+The owner has accepted the provider-neutral Neon replacement in the separate
+N0/S02 session named above. This checkpoint's prerequisite is therefore met:
+do not resume this Supabase-specific runtime. The replacement path must retain
+its own architecture, security, cost, recovery, baseline, Auth, Storage and
+provider-port reviews.
 
 ## Blocking evidence
 
@@ -63,9 +71,11 @@ The locally implemented P4-C SDK runtime is unaccepted work in progress. Do not
 write `docs/implementation-handoffs/P4-C.md` or label the implementation
 complete until the live acceptance gate below passes.
 
-## Resume prerequisites
+## Historical resume prerequisites — not current authorization
 
-Resume only when all of the following are true:
+These former prerequisites are retained for audit context only. Do not resume
+this Supabase-specific plan; use the Neon migration master spec and accepted G0
+instead.
 
 1. The owner explicitly confirms that the recurring Supabase cost is affordable.
 2. Either the exact reviewed organization `dzfikwgcfdbgxpejzfnk` is upgraded to
@@ -82,9 +92,10 @@ Resume only when all of the following are true:
    identity, and exact one-tenant scope remain unchanged or receive a new
    review.
 
-## Required resume flow
+## Historical required resume flow — not current authorization
 
-Continue the same P4-C boundary in this exact order:
+The following former flow is retained for audit context only and must not be
+executed:
 
 1. Run a fresh read-only `preflight`.
 2. Require all nine prerequisites to pass.

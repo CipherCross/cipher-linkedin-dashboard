@@ -129,6 +129,41 @@ Supabase описывает себя как набор Postgres, Auth, PostgREST
 - **Неопределенность размера:** фактические размеры database и Storage нужно
   снять до выбора cutover window. Для текущего разрешенного downtime default —
   dump/restore; решение меняется только по результатам rehearsal.
+- **N0 checkpoint:** неизменяемый Supabase P4-C runtime checkpoint —
+  `c8a9d5f35694dd6e8f7f35643967c8ed9808ced5`, локальный annotated tag
+  `supabase-p4c-checkpoint-c8a9d5f`. Это только архив/reference; новый
+  Supabase-specific provisioning path не возобновляется.
+- **Neon tier:** временный initial adapter — Neon Free. Это осознанный
+  cost-first выбор для двух измеренных небольших БД, а не production SLA;
+  upgrade до Launch рассматривается только после измерения capacity, recovery
+  или support blocker. Neon Data API, managed Neon Auth и Neon Storage не
+  выбираются.
+- **Neon region:** AWS Europe (Frankfurt), выбранный по latency/cost preference,
+  без добавления несуществующего residency requirement.
+- **Recovery objectives:** RPO не более 24 часов для полного recovery surface,
+  RTO не более 8 business hours и maintenance window до 90 минут. Free-tier
+  restore history не заменяет portable export/object/identity recovery evidence.
+- **Identity:** self-hosted Better Auth — initial `IdentityProvider` adapter;
+  это application-hosted MIT component, не managed Auth service. Канонические
+  users/memberships остаются application-owned. S16/G3 обязан подтвердить или
+  заменить candidate security spike.
+- **Object storage:** Cloudflare R2 Standard — initial
+  `ObjectStorageProvider` adapter: private bucket per tenant и отдельно
+  scoped bucket для agent artifacts. Object bytes не хранятся в PostgreSQL;
+  AWS S3 остается portable fallback. S19/S20 обязаны доказать isolation,
+  signed access и copy/reconciliation.
+- **G0:** принят владельцем 2026-07-31. Полная матрица доказательств,
+  alternatives, security/cost assumptions и review triggers находится в
+  [`neon-provider-decisions.md`](../docs/platform-ops/neon-provider-decisions.md).
+
+## N0 session status
+
+- **S01 — complete:** source measurements recorded in
+  `docs/platform-ops/neon-migration-source-measurements.md`, commit `794875d`.
+- **S02 — complete:** S01 fast-forward integrated into `main`; the P4-C archive
+  tag and G0 decisions above were recorded on the S02 documentation branch.
+- **S03:** not started. It may start only from the accepted G0 boundary and owns
+  only `DataStore` contracts, fakes and tests.
 
 ## Approach
 
