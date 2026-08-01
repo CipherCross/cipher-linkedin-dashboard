@@ -24,6 +24,7 @@ const sorted = (values) => [...values].sort();
 const names = (values) => values.map((value) => value.name ?? value);
 const matchAll = (pattern) => [...baseline.matchAll(pattern)];
 const equalArrays = (actual, expected) => JSON.stringify(sorted(actual)) === JSON.stringify(sorted(expected));
+const compact = (value) => value.replace(/\s+/g, " ").trim();
 
 const actualBaselineSha = createHash("sha256").update(baseline).digest("hex");
 const actualBaselineBytes = Buffer.byteLength(baseline);
@@ -59,26 +60,48 @@ const functionMatches = matchAll(/^CREATE FUNCTION public\.([a-z0-9_]+)\(/gm).ma
 assert(functionMatches.length === inventory.counts.functions, `function count mismatch: ${functionMatches.length}`);
 assert(equalArrays(functionMatches, inventory.functions.map((entry) => entry.signature.split("(")[0])), "function names do not match the baseline");
 for (const functionEntry of inventory.functions) {
-  assert(baseline.includes(`CREATE FUNCTION public.${functionEntry.signature.split("(")[0]}(`), `function ${functionEntry.signature} is absent from the baseline`);
+  const name = functionEntry.signature.split("(")[0];
+  const start = baseline.indexOf(`CREATE FUNCTION public.${name}(`);
+  const end = baseline.indexOf(`\nALTER FUNCTION public.${name}(`, start);
+  const definition = start >= 0 && end > start ? baseline.slice(start, end) : "";
+  assert(start >= 0, `function ${functionEntry.signature} is absent from the baseline`);
+  assert(definition.includes(`LANGUAGE ${functionEntry.language}`), `function ${functionEntry.signature} language mismatch`);
+  assert(definition.includes("SECURITY DEFINER") === functionEntry.security_definer, `function ${functionEntry.signature} security-definer semantics mismatch`);
+  if (functionEntry.search_path === null) {
+    assert(!definition.includes("SET search_path"), `function ${functionEntry.signature} unexpectedly sets search_path`);
+  } else {
+    assert(definition.includes(`SET search_path TO '${functionEntry.search_path}'`), `function ${functionEntry.signature} search_path mismatch`);
+  }
+  assert(new RegExp(`\\nALTER FUNCTION public\\.${name}\\([^\\n]*\\) OWNER TO ${functionEntry.owner};`).test(baseline), `function ${functionEntry.signature} owner mismatch`);
+  const grantedTo = [...baseline.matchAll(new RegExp(`(?:GRANT (?:ALL|EXECUTE) ON FUNCTION public\\.${name}\\([^;]*?\\)\\s+TO\\s+([^;]+);)`, "gi"))]
+    .flatMap((match) => match[1].split(","))
+    .map((role) => role.trim().toLowerCase())
+    .filter((role) => /^[a-z_]+$/.test(role));
+  assert(equalArrays([...new Set(grantedTo)], functionEntry.execute_to.map((role) => role.toLowerCase())), `function ${functionEntry.signature} execute ACL mismatch`);
 }
 
-const triggerMatches = matchAll(/^CREATE TRIGGER ([a-z0-9_]+).*? ON public\.([a-z0-9_]+).*?EXECUTE FUNCTION public\.([a-z0-9_]+)\(/gm).map((match) => ({
+const triggerMatches = matchAll(/^CREATE TRIGGER ([a-z0-9_]+) (BEFORE|AFTER) (.*?) ON public\.([a-z0-9_]+).*?EXECUTE FUNCTION public\.([a-z0-9_]+)\(/gm).map((match) => ({
   name: match[1],
-  table: match[2],
-  function: `${match[3]}()`,
+  timing: match[2],
+  events: match[3],
+  table: match[4],
+  function: `${match[5]}()`,
 }));
 assert(triggerMatches.length === inventory.counts.triggers, `trigger count mismatch: ${triggerMatches.length}`);
 assert(equalArrays(triggerMatches.map((trigger) => trigger.name), names(inventory.triggers)), "trigger names do not match the baseline");
 for (const trigger of inventory.triggers) {
   const actual = triggerMatches.find((candidate) => candidate.name === trigger.name);
   assert(actual?.table === trigger.table, `trigger ${trigger.name} table mismatch`);
+  assert(actual?.timing === trigger.timing, `trigger ${trigger.name} timing mismatch`);
+  for (const event of trigger.events) assert(compact(actual?.events ?? "").includes(compact(event)), `trigger ${trigger.name} event mismatch: ${event}`);
   assert(actual?.function === trigger.function, `trigger ${trigger.name} function mismatch`);
 }
 
-const indexMatches = matchAll(/^CREATE (UNIQUE )?INDEX ([a-z0-9_]+) ON public\.([a-z0-9_]+) USING btree \(/gm).map((match) => ({
+const indexMatches = matchAll(/^CREATE (UNIQUE )?INDEX ([a-z0-9_]+) ON public\.([a-z0-9_]+) USING btree \(([^\n]+)$/gm).map((match) => ({
   name: match[2],
   table: match[3],
   unique: Boolean(match[1]),
+  definition: match[0],
 }));
 assert(indexMatches.length === inventory.counts.explicit_indexes, `explicit index count mismatch: ${indexMatches.length}`);
 assert(equalArrays(indexMatches.map((index) => index.name), names(inventory.indexes)), "explicit index names do not match the baseline");
@@ -86,6 +109,11 @@ for (const index of inventory.indexes) {
   const actual = indexMatches.find((candidate) => candidate.name === index.name);
   assert(actual?.table === index.table, `index ${index.name} table mismatch`);
   assert(actual?.unique === index.unique, `index ${index.name} uniqueness mismatch`);
+  const definition = compact(actual?.definition ?? "").replace(/::text/g, "");
+  assert(definition.includes(compact(index.expression)), `index ${index.name} expression mismatch`);
+  if (index.predicate) {
+    for (const term of index.predicate.split(" AND ")) assert(definition.includes(compact(term)), `index ${index.name} predicate mismatch: ${term}`);
+  }
 }
 
 const inlineChecks = matchAll(/^\s+CONSTRAINT ([a-z0-9_]+) CHECK/gm).map((match) => match[1]);
@@ -139,6 +167,7 @@ const requiredDependencyIds = [
   "supabase-roles",
   "storage-buckets",
   "storage-objects-and-policies",
+  "agent-artifact-storage",
   "supabase-migration-ledger",
   "postgrest",
   "supabase-auth-runtime",
@@ -149,6 +178,11 @@ const requiredDependencyIds = [
 ];
 const dependenciesById = new Map(dependencyInventory.dependencies.map((dependency) => [dependency.id, dependency]));
 for (const id of requiredDependencyIds) assert(dependenciesById.has(id), `required dependency is missing: ${id}`);
+const agentArtifactDependency = dependenciesById.get("agent-artifact-storage");
+assert(agentArtifactDependency?.provider === "Supabase Storage", "agent-artifact dependency provider mismatch");
+assert(agentArtifactDependency?.object.includes("agent") && agentArtifactDependency?.object.includes("agent.py"), "agent-artifact dependency object semantics are weak");
+assert(agentArtifactDependency?.file.includes("sync-agent/config.example.yaml") && agentArtifactDependency?.file.includes("sync-agent/deploy.sh"), "agent-artifact dependency lacks config and release evidence");
+assert(agentArtifactDependency?.replacement_owner.includes("S23"), "agent-artifact dependency owner is not pinned to S23");
 for (const dependency of dependencyInventory.dependencies) {
   assert(typeof dependency.file === "string" && dependency.file.length > 0, `dependency ${dependency.id} lacks file evidence`);
   assert(typeof dependency.object === "string" && dependency.object.length > 0, `dependency ${dependency.id} lacks object evidence`);

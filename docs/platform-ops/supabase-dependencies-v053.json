@@ -67,6 +67,15 @@
       "replacement_owner": "S19-S20"
     },
     {
+      "id": "agent-artifact-storage",
+      "provider": "Supabase Storage",
+      "file": "sync-agent/config.example.yaml:17-20; sync-agent/deploy.sh:2-5,17-18; sync-agent/agent.py:162-214",
+      "object": "private storage bucket agent and the published agent.py release artifact",
+      "purpose": "The notebooks self-update by reading the agent.py release artifact from the separate private agent bucket; this is distinct from tenant lead-photo objects and the bucket is intentionally absent from the tenant baseline.",
+      "migration_risk": "critical: omitting the release artifact would strand scheduled notebooks or tempt a shared service-role credential on client machines; replacement must preserve private artifact isolation, immutable release hashes, rollback and machine-scoped delivery.",
+      "replacement_owner": "S19-S20, S23"
+    },
+    {
       "id": "supabase-migration-ledger",
       "provider": "Supabase",
       "file": "supabase/tenant-migrations/materialize.sh; supabase/tenant-migrations/README.md; supabase/tests/tenant_baseline_assertions.sql:429-437",

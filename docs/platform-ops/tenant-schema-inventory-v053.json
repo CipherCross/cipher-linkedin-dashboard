@@ -86,7 +86,7 @@
     { "signature": "admin_update_team_member(bigint,text,text,boolean)", "owner": "postgres", "language": "plpgsql", "security_definer": true, "search_path": "", "execute_to": ["service_role"] },
     { "signature": "ai_execute_sql(text)", "owner": "ai_sql_runner", "language": "plpgsql", "security_definer": true, "search_path": "public", "execute_to": ["service_role"] },
     { "signature": "apply_follow_up_action(text,text,text,text,bigint,uuid,bigint,date,text)", "owner": "postgres", "language": "plpgsql", "security_definer": true, "search_path": "public", "execute_to": ["service_role"] },
-    { "signature": "archive_follow_up_after_last_lead()", "owner": "postgres", "language": "plpgsql", "security_definer": true, "search_path": "public", "execute_to": [] },
+    { "signature": "archive_follow_up_after_last_lead()", "owner": "postgres", "language": "plpgsql", "security_definer": true, "search_path": "public", "execute_to": ["service_role"] },
     { "signature": "delete_manual_message(bigint)", "owner": "postgres", "language": "plpgsql", "security_definer": true, "search_path": "public", "execute_to": ["service_role"] },
     { "signature": "is_active_team_member()", "owner": "postgres", "language": "sql", "security_definer": true, "search_path": "", "execute_to": ["authenticated", "service_role"] },
     { "signature": "is_app_admin()", "owner": "postgres", "language": "sql", "security_definer": true, "search_path": "", "execute_to": ["authenticated", "service_role"] },

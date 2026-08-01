@@ -1,31 +1,12 @@
 \set ON_ERROR_STOP on
 
--- Seed fixtures as the migration owner. Runtime roles cannot mutate identity
--- or membership rows directly; the server-owned identity API owns that path.
-INSERT INTO public.users (id, active)
-VALUES
-  ('00000000-0000-0000-0000-000000000001', true),
-  ('00000000-0000-0000-0000-000000000002', true),
-  ('00000000-0000-0000-0000-000000000003', false);
+-- The clean-room invokes this file as the separate app_runtime principal.
+-- Identity fixtures are seeded by app_migration in a different connection;
+-- no owner role is used to prove an authorization result here.
 
-INSERT INTO public.team_members (name, active, email, role, user_id)
-VALUES
-  ('Active One', true, 'active-one@example.test', 'member', '00000000-0000-0000-0000-000000000001'),
-  ('Active Two', true, 'active-two@example.test', 'admin', '00000000-0000-0000-0000-000000000002'),
-  ('Inactive Three', false, 'inactive-three@example.test', 'member', '00000000-0000-0000-0000-000000000003');
-
-INSERT INTO public.user_identities (user_id, provider, provider_subject)
-VALUES
-  ('00000000-0000-0000-0000-000000000001', 'fixture', 'subject-one'),
-  ('00000000-0000-0000-0000-000000000002', 'fixture', 'subject-two'),
-  ('00000000-0000-0000-0000-000000000003', 'fixture', 'subject-three');
-
-INSERT INTO public.playbook (id, content) VALUES (true, 'shared fixture');
-
--- A valid active actor can read the shared workspace and its own identity
--- boundary, and can perform business DML through the runtime role.
+-- A valid active user actor can read shared business data and its own
+-- canonical identity boundary, and can perform shared-workspace DML.
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SET LOCAL app.actor_id = '00000000-0000-0000-0000-000000000001';
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 1 THEN 1 ELSE 0 END AS active_shared_read;
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.users) = 1
@@ -33,70 +14,114 @@ SELECT 1 / CASE WHEN (SELECT count(*) FROM public.users) = 1
                      AND (SELECT count(*) FROM public.team_members) = 1
                 THEN 1 ELSE 0 END AS active_identity_boundary_read;
 INSERT INTO public.annotations (note, noted_at) VALUES ('active actor fixture', CURRENT_DATE);
+UPDATE public.annotations SET note = 'active actor fixture updated' WHERE note = 'active actor fixture';
+SELECT 1 / CASE WHEN (SELECT count(*) FROM public.annotations WHERE note = 'active actor fixture updated') = 1 THEN 1 ELSE 0 END AS active_update_allowed;
+DELETE FROM public.annotations WHERE note = 'active actor fixture updated';
+SELECT 1 / CASE WHEN (SELECT count(*) FROM public.annotations WHERE note = 'active actor fixture updated') = 0 THEN 1 ELSE 0 END AS active_delete_allowed;
 ROLLBACK;
 
--- A second active member also reads shared business data but only its own
--- canonical identity, provider mapping and membership row.
+-- A second active user is allowed the shared workspace but not another
+-- user's canonical identity rows. This is the cross-user DML denial.
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SET LOCAL app.actor_id = '00000000-0000-0000-0000-000000000002';
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 1 THEN 1 ELSE 0 END AS second_active_shared_read;
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.users) = 1
                      AND (SELECT count(*) FROM public.user_identities) = 1
                      AND (SELECT count(*) FROM public.team_members) = 1
                 THEN 1 ELSE 0 END AS second_identity_boundary_read;
+DO $$
+BEGIN
+  BEGIN
+    UPDATE public.team_members SET name = 'must not change' WHERE user_id = '00000000-0000-0000-0000-000000000001';
+    RAISE EXCEPTION 'cross-user team_members update unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.user_identities (user_id, provider, provider_subject)
+    VALUES ('00000000-0000-0000-0000-000000000001', 'cross-user', 'must-not-write');
+    RAISE EXCEPTION 'cross-user identity insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END
+$$;
 ROLLBACK;
 
--- Missing, malformed, and unknown actors all fail closed without an unsafe
--- text-to-UUID cast escaping the policy expression.
+-- Missing, malformed, unknown and inactive actors all deny both visibility and
+-- business DML. Each expected RLS error is caught so the following case runs.
 BEGIN;
-SET LOCAL ROLE app_runtime;
 RESET app.actor_id;
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 0
                      AND (SELECT count(*) FROM public.users) = 0
-                     AND (SELECT count(*) FROM public.user_identities) = 0
                 THEN 1 ELSE 0 END AS missing_actor_denied;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.annotations (note, noted_at) VALUES ('missing actor must fail', CURRENT_DATE);
+    RAISE EXCEPTION 'missing actor insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END
+$$;
 ROLLBACK;
 
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SET LOCAL app.actor_id = 'not-a-uuid';
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 0
                      AND (SELECT count(*) FROM public.users) = 0
                 THEN 1 ELSE 0 END AS malformed_actor_denied;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.annotations (note, noted_at) VALUES ('malformed actor must fail', CURRENT_DATE);
+    RAISE EXCEPTION 'malformed actor insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END
+$$;
 ROLLBACK;
 
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SET LOCAL app.actor_id = '00000000-0000-0000-0000-000000000099';
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 0
                      AND (SELECT count(*) FROM public.users) = 0
                 THEN 1 ELSE 0 END AS unknown_actor_denied;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.annotations (note, noted_at) VALUES ('unknown actor must fail', CURRENT_DATE);
+    RAISE EXCEPTION 'unknown actor insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END
+$$;
 ROLLBACK;
 
--- The inactive canonical user and inactive membership cannot see shared or
--- identity data.
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SET LOCAL app.actor_id = '00000000-0000-0000-0000-000000000003';
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 0
                      AND (SELECT count(*) FROM public.users) = 0
                      AND (SELECT count(*) FROM public.user_identities) = 0
                      AND (SELECT count(*) FROM public.team_members) = 0
                 THEN 1 ELSE 0 END AS inactive_actor_denied;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO public.annotations (note, noted_at) VALUES ('inactive actor must fail', CURRENT_DATE);
+    RAISE EXCEPTION 'inactive actor insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END
+$$;
 ROLLBACK;
 
--- SET LOCAL is transaction-scoped: after rollback, the runtime role has no
--- actor context and shared reads are denied again.
+-- SET LOCAL actor state is transaction-scoped and is absent after rollback.
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SET LOCAL app.actor_id = '00000000-0000-0000-0000-000000000001';
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 1 THEN 1 ELSE 0 END AS transaction_actor_allow;
 ROLLBACK;
 
 BEGIN;
-SET LOCAL ROLE app_runtime;
 SELECT 1 / CASE WHEN (SELECT count(*) FROM public.playbook) = 0 THEN 1 ELSE 0 END AS transaction_actor_reset;
 ROLLBACK;
 
-SELECT 'portable identity, actor context and RLS behavior assertions passed' AS result;
+SELECT 'portable identity, actor context and RLS DML assertions passed' AS result;

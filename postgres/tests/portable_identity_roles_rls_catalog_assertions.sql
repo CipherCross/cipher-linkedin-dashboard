@@ -4,11 +4,19 @@ DO $$
 DECLARE
   v_public_tables integer;
   v_rls_tables integer;
+  v_owner_login boolean;
+  v_owner_bypass boolean;
   v_runtime_owned integer;
   v_runtime_bypass boolean;
   v_runtime_login boolean;
   v_runtime_inherit boolean;
+  v_migration_owned integer;
+  v_migration_bypass boolean;
+  v_migration_login boolean;
+  v_migration_inherit boolean;
   v_runtime_memberships integer;
+  v_owner_memberships integer;
+  v_runtime_owner_memberships integer;
   v_identity_constraints integer;
   v_policy_count integer;
   v_user_id_type text;
@@ -16,6 +24,7 @@ DECLARE
   v_public_schema_acl text;
   v_public_tables_acl integer;
   v_owner_relations integer;
+  v_non_owner_relations integer;
   v_user_columns text[];
   v_mapping_columns text[];
 BEGIN
@@ -35,15 +44,43 @@ BEGIN
   JOIN pg_roles r ON r.oid = c.relowner
   WHERE n.nspname = 'public' AND r.rolname = 'app_runtime';
 
+  SELECT rolbypassrls, rolcanlogin
+    INTO v_owner_bypass, v_owner_login
+  FROM pg_roles
+  WHERE rolname = 'app_owner';
+
   SELECT rolbypassrls, rolcanlogin, rolinherit
     INTO v_runtime_bypass, v_runtime_login, v_runtime_inherit
   FROM pg_roles
   WHERE rolname = 'app_runtime';
 
+  SELECT count(*) INTO v_migration_owned
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_roles r ON r.oid = c.relowner
+  WHERE n.nspname = 'public' AND r.rolname = 'app_migration';
+
+  SELECT rolbypassrls, rolcanlogin, rolinherit
+    INTO v_migration_bypass, v_migration_login, v_migration_inherit
+  FROM pg_roles
+  WHERE rolname = 'app_migration';
+
   SELECT count(*) INTO v_runtime_memberships
   FROM pg_auth_members m
-  JOIN pg_roles r ON r.oid = m.roleid
-  WHERE r.rolname IN ('app_owner', 'app_runtime', 'app_readonly');
+  JOIN pg_roles r ON r.oid = m.member
+  WHERE r.rolname IN ('app_runtime', 'app_readonly', 'app_machine', 'app_system');
+
+  SELECT count(*) INTO v_owner_memberships
+  FROM pg_auth_members m
+  JOIN pg_roles granted ON granted.oid = m.roleid
+  JOIN pg_roles member ON member.oid = m.member
+  WHERE granted.rolname = 'app_owner' AND member.rolname = 'app_migration';
+
+  SELECT count(*) INTO v_runtime_owner_memberships
+  FROM pg_auth_members m
+  JOIN pg_roles granted ON granted.oid = m.roleid
+  JOIN pg_roles member ON member.oid = m.member
+  WHERE granted.rolname IN ('app_owner', 'app_migration') AND member.rolname = 'app_runtime';
 
   SELECT count(*) INTO v_policy_count
   FROM pg_policy p
@@ -85,7 +122,17 @@ BEGIN
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   JOIN pg_roles r ON r.oid = c.relowner
-  WHERE n.nspname = 'public' AND r.rolname = 'app_owner';
+  WHERE n.nspname = 'public'
+    AND c.relkind IN ('r', 'v', 'S')
+    AND r.rolname = 'app_owner';
+
+  SELECT count(*) INTO v_non_owner_relations
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_roles r ON r.oid = c.relowner
+  WHERE n.nspname = 'public'
+    AND c.relkind IN ('r', 'v', 'S')
+    AND r.rolname <> 'app_owner';
 
   SELECT array_agg(a.attname ORDER BY a.attnum) INTO v_user_columns
   FROM pg_attribute a
@@ -101,25 +148,36 @@ BEGIN
 
   IF v_public_tables <> 27
      OR v_rls_tables <> 27
+     OR v_owner_login
+     OR v_owner_bypass
      OR v_runtime_owned <> 0
      OR v_runtime_bypass
-     OR v_runtime_login
+     OR NOT v_runtime_login
      OR v_runtime_inherit
+     OR v_migration_owned <> 0
+     OR v_migration_bypass
+     OR NOT v_migration_login
+     OR v_migration_inherit
      OR v_runtime_memberships <> 0
+     OR v_owner_memberships <> 1
+     OR v_runtime_owner_memberships <> 0
      OR v_policy_count <> 27
      OR v_user_id_type <> 'uuid'
      OR NOT v_user_id_not_null
      OR v_identity_constraints <> 5
      OR v_public_schema_acl ~ '(^|,)='
      OR v_public_tables_acl <> 0
-     OR v_owner_relations = 0
+     OR v_owner_relations <> 47
+     OR v_non_owner_relations <> 0
      OR v_user_columns IS DISTINCT FROM ARRAY['id', 'active', 'created_at', 'updated_at']
      OR v_mapping_columns IS DISTINCT FROM ARRAY['user_id', 'provider', 'provider_subject', 'created_at'] THEN
-    RAISE EXCEPTION 'identity/RLS catalog mismatch: tables %, RLS %, runtime owners %, bypass %, login %, inherit %, memberships %, policies %, user_id %/% constraints %, public schema ACL %, public table ACL %, owner relations %, user columns %, mapping columns %',
-      v_public_tables, v_rls_tables, v_runtime_owned, v_runtime_bypass,
-      v_runtime_login, v_runtime_inherit, v_runtime_memberships, v_policy_count,
+    RAISE EXCEPTION 'identity/RLS catalog mismatch: tables %, RLS %, owner login/bypass %/%, runtime owners/bypass/login/inherit %/%/%/%, migration owners/bypass/login/inherit %/%/%/%, memberships owner/runtime %/%, policies %, user_id %/% constraints %, public schema ACL %, public table ACL %, owner/non-owner relations %/%, user columns %, mapping columns %',
+      v_public_tables, v_rls_tables, v_owner_login, v_owner_bypass,
+      v_runtime_owned, v_runtime_bypass, v_runtime_login, v_runtime_inherit,
+      v_migration_owned, v_migration_bypass, v_migration_login, v_migration_inherit,
+      v_owner_memberships, v_runtime_owner_memberships, v_policy_count,
       v_user_id_type, v_user_id_not_null, v_identity_constraints, v_public_schema_acl,
-      v_public_tables_acl, v_owner_relations, v_user_columns, v_mapping_columns;
+      v_public_tables_acl, v_owner_relations, v_non_owner_relations, v_user_columns, v_mapping_columns;
   END IF;
 
   IF EXISTS (

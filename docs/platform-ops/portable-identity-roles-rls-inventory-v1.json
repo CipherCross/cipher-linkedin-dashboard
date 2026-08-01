@@ -4,7 +4,7 @@
   "artifact_version": "v1",
   "artifact": {
     "file": "postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql",
-    "sha256": "2275e41277a32c8bc0a46383fa092b187245c89b4e6f04471c6d716cac66074c",
+    "sha256": "18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80",
     "schema": "public",
     "applies_after": "postgres/tenant-baseline/v1/001_portable_business_baseline.sql"
   },
@@ -44,11 +44,21 @@
       "bypass_rls": false,
       "object_owner": true
     },
-    "runtime": {
-      "name": "app_runtime",
-      "login": false,
+    "migration": {
+      "name": "app_migration",
+      "login": true,
+      "superuser": false,
       "bypass_rls": false,
       "object_owner": false,
+      "can_set_role": ["app_owner"],
+      "direct_business_grants": []
+    },
+    "runtime": {
+      "name": "app_runtime",
+      "login": true,
+      "bypass_rls": false,
+      "object_owner": false,
+      "can_set_role": [],
       "grants": ["schema_usage", "business_select_insert_update_delete", "identity_select", "identity_sequence_usage"]
     },
     "readonly": {
@@ -57,13 +67,35 @@
       "bypass_rls": false,
       "object_owner": false,
       "grants": ["schema_usage", "select"]
+    },
+    "machine": {
+      "name": "app_machine",
+      "login": false,
+      "bypass_rls": false,
+      "object_owner": false,
+      "grants": [],
+      "fail_closed": true,
+      "future_owner": "S21"
+    },
+    "system": {
+      "name": "app_system",
+      "login": false,
+      "bypass_rls": false,
+      "object_owner": false,
+      "grants": [],
+      "fail_closed": true,
+      "future_owner": "S15"
     }
   },
   "actor_context": {
     "setting": "app.actor_id",
     "scope": "transaction_local",
     "server_operation": "SET LOCAL app.actor_id",
-    "value": "canonical users.id UUID",
+    "kind": "S03 ActorContext.kind=user is the only database-authorized kind in S06",
+    "value": "canonical users.id UUID for user actors",
+    "tenant": "S03 tenantId is validated by the server boundary; one S06 database is one tenant and no provider tenant ID is stored",
+    "role": "S03 user member/admin role is validated by the server boundary and is not trusted from a database setting",
+    "machine_system": "S03 machine/system contexts have no S06 table grants and no canonical team-member fixture; S21 owns machine identity/ingest and S15 owns system/job identity",
     "fail_closed": ["missing", "empty", "malformed", "unknown", "inactive user", "inactive membership"]
   },
   "business_tables": {
@@ -104,13 +136,30 @@
     "shared_workspace_policy_suffix": "_active_member",
     "identity_policy_suffix": "_active_actor_select"
   },
+  "clean_room_tests": {
+    "role_bootstrap": "postgres/tests/portable_identity_roles_rls_role_bootstrap.sql",
+    "artifact_apply_principal": "app_migration",
+    "runtime_principal": "app_runtime",
+    "fixture_seed": "postgres/tests/portable_identity_roles_rls_fixture_seed.sql",
+    "catalog_assertions": "postgres/tests/portable_identity_roles_rls_catalog_assertions.sql",
+    "runtime_boundary_assertions": "postgres/tests/portable_identity_roles_rls_runtime_boundary.sql",
+    "behavior_assertions": "postgres/tests/portable_identity_roles_rls_behavior_assertions.sql"
+  },
+  "duplicate_indexes_removed": [
+    "user_identities_user_id_idx",
+    "team_members_user_id_idx"
+  ],
   "portability_assertions": {
     "canonical_business_contracts_use_only_user_id": true,
     "provider_subjects_only_in_mapping_table": true,
     "no_provider_claim_helpers": true,
     "server_owned_api_required": true,
+    "owner_migration_runtime_separate": true,
+    "migration_principal_non_superuser": true,
+    "runtime_cannot_set_owner_or_migration": true,
     "runtime_non_owner": true,
     "runtime_non_bypassrls": true,
+    "machine_system_principals_fail_closed": true,
     "no_browser_or_anonymous_grants": true,
     "no_credentials_or_passwords": true,
     "no_stored_functions_triggers_or_ai_guard": true

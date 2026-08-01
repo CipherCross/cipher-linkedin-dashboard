@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const inventory = readJson("docs/platform-ops/portable-business-schema-inventory-v1.json");
 const sourceInventory = readJson("docs/platform-ops/tenant-schema-inventory-v053.json");
+const sourceDependencies = readJson("docs/platform-ops/supabase-dependencies-v053.json");
 const baseline = readFileSync("postgres/tenant-baseline/v1/001_portable_business_baseline.sql", "utf8");
 const source = readFileSync("supabase/tenant-baseline/v053/053_tenant_baseline.sql", "utf8");
 const failures = [];
@@ -51,6 +52,9 @@ assert(inventory.format_version === 1, "portable inventory format_version must b
 assert(inventory.inventory_type === "portable-business-schema", "portable inventory type mismatch");
 assert(sha256(baseline) === inventory.baseline.sha256, "portable inventory baseline SHA-256 is stale");
 assert(sha256(readFileSync("docs/platform-ops/tenant-schema-inventory-v053.json")) === inventory.source_contract.inventory_sha256, "portable source inventory SHA-256 is stale");
+assert(sourceInventory.functions.find(({ signature }) => signature === "archive_follow_up_after_last_lead()")?.execute_to?.includes("service_role"), "S04 archive trigger execute ACL correction is not pinned");
+assert(sourceInventory.provider_bootstrap.absent_bucket === "agent", "S04 agent bucket negative dependency is not pinned");
+assert(sourceDependencies.dependencies.some(({ id }) => id === "agent-artifact-storage"), "S04 agent-artifact Storage dependency is not pinned");
 assert(portableTables.length === inventory.counts.tables, `table count mismatch: ${portableTables.length}`);
 assert(sorted(portableTables.map(({ name }) => name).filter((name) => name !== "team_members")).join(",") === sorted(sourceInventory.tables.filter((name) => name !== "team_members")).join(","), "portable table names do not match S04 source contract");
 assert(!baseline.includes("auth_user_id"), "provider-specific identity column leaked into portable baseline");

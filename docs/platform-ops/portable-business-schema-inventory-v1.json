@@ -4,7 +4,7 @@
   "artifact_version": "v1",
   "source_contract": {
     "inventory_file": "docs/platform-ops/tenant-schema-inventory-v053.json",
-    "inventory_sha256": "4c6c58970dfac464de6c7a0d43d64e2c8a0f6c44b92c3eaa35e87f8246f5302a",
+    "inventory_sha256": "75fddc92d8b720d205e6d02a1749313b38db04b3626d8756beb81aeeba3e5493",
     "source_artifact": "supabase/tenant-baseline/v053/053_tenant_baseline.sql",
     "source_artifact_version": "v053"
   },

@@ -1,20 +1,20 @@
 -- Provider-neutral identity, runtime roles, actor context and RLS artifact.
 -- Apply after 001_portable_business_baseline.sql in an empty tenant database.
 --
+-- Role bootstrap is deliberately outside this artifact. A control-plane
+-- bootstrap creates app_owner, app_migration, app_runtime, app_readonly,
+-- app_machine and app_system, transfers the S05 objects/schema to app_owner,
+-- and grants app_migration SET ROLE to app_owner. The migration runner then
+-- connects as the non-superuser app_migration principal; this first statement
+-- makes the owner role explicit without using postgres as the apply principal.
+--
+SET ROLE app_owner;
+
 -- The application owns canonical users. Provider subjects are deliberately
 -- isolated in user_identities. The server-owned API must begin each database
 -- transaction with SET LOCAL app.actor_id = '<canonical user UUID>'. Missing,
 -- malformed, unknown, inactive, or non-member actors fail closed in policy
 -- expressions without relying on provider claims.
-
-CREATE ROLE app_owner
-    NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOLOGIN NOREPLICATION NOBYPASSRLS;
-
-CREATE ROLE app_runtime
-    NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOLOGIN NOREPLICATION NOBYPASSRLS;
-
-CREATE ROLE app_readonly
-    NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOLOGIN NOREPLICATION NOBYPASSRLS;
 
 CREATE TABLE public.users (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -44,12 +44,6 @@ ALTER TABLE ONLY public.team_members
 
 ALTER TABLE ONLY public.team_members
     ADD CONSTRAINT team_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-CREATE INDEX user_identities_user_id_idx
-    ON public.user_identities USING btree (user_id);
-
-CREATE INDEX team_members_user_id_idx
-    ON public.team_members USING btree (user_id);
 
 -- Keep all public objects owned by the non-login migration/owner role. The
 -- runtime roles below receive explicit least-privilege grants only.

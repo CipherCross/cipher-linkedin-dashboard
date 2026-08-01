@@ -25,16 +25,29 @@ extension required because the existing UUID defaults use `gen_random_uuid()`.
 
 `002_identity_roles_actor_rls.sql` is applied after the business baseline. It
 adds application-owned canonical `users`, the `user_identities` provider
-mapping, the canonical `team_members.user_id` link, non-login owner/runtime
-roles, transaction-local `app.actor_id` policy context and RLS over all 25
-business tables plus the two new identity tables. It does not modify `001` and
-does not add stored functions, triggers or an AI SQL guard; those remain later
-session scope.
+mapping, the canonical `team_members.user_id` link, transaction-local
+`app.actor_id` policy context and RLS over all 25 business tables plus the two
+new identity tables. It does not modify `001` and does not add stored
+functions, triggers or an AI SQL guard; those remain later session scope.
+
+The role contract is separate and explicit: `app_owner` is a non-login,
+non-superuser object owner; `app_migration` is a non-superuser login that may
+`SET ROLE app_owner` and owns no objects; `app_runtime` is a separate
+non-superuser login with no membership in either owner or migration and no
+`BYPASSRLS`; `app_readonly` is a read-only group. `app_machine` and
+`app_system` are separate no-login, no-grant fail-closed principals. S21 owns
+machine identity/ingest and S15 owns system/job identity; S06 does not create
+fake team users for either context. Role bootstrap and transfer of the S05
+objects to `app_owner` happen before the artifact; the artifact itself is
+applied through the `app_migration` session, not through `postgres`.
 
 The runtime roles have no passwords or credentials in SQL. The server-owned API
-must set `SET LOCAL app.actor_id` inside each transaction. The runtime role is
-not an object owner and does not have `BYPASSRLS`; anonymous/public schema and
-table privileges are revoked.
+must set `SET LOCAL app.actor_id` inside each transaction. S03's `user` actor
+is the only database-authorized context in S06; tenant binding and member/admin
+role checks remain at the server boundary. Machine/system contexts have no
+table grants and therefore fail closed. The runtime role is not an object
+owner, cannot `SET ROLE` into owner or migration, and does not have
+`BYPASSRLS`; anonymous/public schema and table privileges are revoked.
 
 ## Checks
 
@@ -43,6 +56,8 @@ From the repository root:
 ```bash
 node postgres/tests/portable_business_inventory_assertions.mjs
 postgres/tests/portable_business_cleanroom.sh
+node postgres/tests/portable_identity_roles_rls_inventory_assertions.mjs
+postgres/tests/portable_identity_roles_rls_cleanroom.sh
 ```
 
 The clean-room harness refuses an implicit image pull. Set `POSTGRES_IMAGE` to
