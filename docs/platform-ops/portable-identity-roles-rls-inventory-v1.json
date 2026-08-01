@@ -1,0 +1,118 @@
+{
+  "format_version": 1,
+  "inventory_type": "portable-identity-roles-rls",
+  "artifact_version": "v1",
+  "artifact": {
+    "file": "postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql",
+    "sha256": "2275e41277a32c8bc0a46383fa092b187245c89b4e6f04471c6d716cac66074c",
+    "schema": "public",
+    "applies_after": "postgres/tenant-baseline/v1/001_portable_business_baseline.sql"
+  },
+  "canonical_users": {
+    "table": "users",
+    "id_column": "id",
+    "id_type": "uuid",
+    "application_owned": true,
+    "provider_specific_columns": [],
+    "active_column": "active"
+  },
+  "provider_mapping": {
+    "table": "user_identities",
+    "columns": ["user_id", "provider", "provider_subject"],
+    "primary_key": ["user_id", "provider"],
+    "unique_provider_subject": ["provider", "provider_subject"],
+    "user_fk": {
+      "column": "user_id",
+      "target": "users.id",
+      "on_delete": "CASCADE"
+    }
+  },
+  "membership": {
+    "table": "team_members",
+    "canonical_user_column": "user_id",
+    "user_fk": {
+      "target": "users.id",
+      "on_delete": "CASCADE"
+    },
+    "unique_canonical_user": true,
+    "provider_specific_columns": []
+  },
+  "roles": {
+    "owner": {
+      "name": "app_owner",
+      "login": false,
+      "bypass_rls": false,
+      "object_owner": true
+    },
+    "runtime": {
+      "name": "app_runtime",
+      "login": false,
+      "bypass_rls": false,
+      "object_owner": false,
+      "grants": ["schema_usage", "business_select_insert_update_delete", "identity_select", "identity_sequence_usage"]
+    },
+    "readonly": {
+      "name": "app_readonly",
+      "login": false,
+      "bypass_rls": false,
+      "object_owner": false,
+      "grants": ["schema_usage", "select"]
+    }
+  },
+  "actor_context": {
+    "setting": "app.actor_id",
+    "scope": "transaction_local",
+    "server_operation": "SET LOCAL app.actor_id",
+    "value": "canonical users.id UUID",
+    "fail_closed": ["missing", "empty", "malformed", "unknown", "inactive user", "inactive membership"]
+  },
+  "business_tables": {
+    "count": 25,
+    "names": [
+      "team_members",
+      "annotations",
+      "briefing_jobs",
+      "briefings",
+      "messages",
+      "campaign_steps",
+      "campaigns",
+      "coaching_digest",
+      "conversation_coaching",
+      "conversation_follow_up_state",
+      "events",
+      "follow_up_events",
+      "hypotheses",
+      "hypothesis_campaigns",
+      "icp_industries",
+      "icp_personas",
+      "icps",
+      "instances",
+      "lead_gender_reviews",
+      "lead_notes",
+      "leads",
+      "pipeline_events",
+      "playbook",
+      "saved_searches",
+      "sync_runs"
+    ],
+    "shared_workspace_tables": 24
+  },
+  "rls": {
+    "enabled_tables": 27,
+    "forced_tables": 0,
+    "identity_boundary_tables": ["users", "user_identities", "team_members"],
+    "shared_workspace_policy_suffix": "_active_member",
+    "identity_policy_suffix": "_active_actor_select"
+  },
+  "portability_assertions": {
+    "canonical_business_contracts_use_only_user_id": true,
+    "provider_subjects_only_in_mapping_table": true,
+    "no_provider_claim_helpers": true,
+    "server_owned_api_required": true,
+    "runtime_non_owner": true,
+    "runtime_non_bypassrls": true,
+    "no_browser_or_anonymous_grants": true,
+    "no_credentials_or_passwords": true,
+    "no_stored_functions_triggers_or_ai_guard": true
+  }
+}
