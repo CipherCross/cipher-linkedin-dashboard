@@ -35,6 +35,12 @@
     "extensions": 1,
     "source_observed_extensions": 5
   },
+  "function_acl_semantics": {
+    "field": "execute_to",
+    "meaning": "explicit_final_grant_roles_only",
+    "definition": "execute_to lists roles with an explicit final EXECUTE grant; it is not the complete effective PostgreSQL ACL. Assertions replay GRANT/REVOKE order and separately require PUBLIC, anon and authenticated denial whenever the source contains an explicit ACL boundary, except for roles listed in execute_to.",
+    "required_denial_roles": ["public", "anon", "authenticated"]
+  },
   "view_count_note": "The eighth view declaration is the final CREATE OR REPLACE VIEW for campaign_metrics; the current catalog has seven distinct view objects.",
   "tables": [
     "annotations",

@@ -53,6 +53,7 @@ assert(inventory.inventory_type === "portable-business-schema", "portable invent
 assert(sha256(baseline) === inventory.baseline.sha256, "portable inventory baseline SHA-256 is stale");
 assert(sha256(readFileSync("docs/platform-ops/tenant-schema-inventory-v053.json")) === inventory.source_contract.inventory_sha256, "portable source inventory SHA-256 is stale");
 assert(sourceInventory.functions.find(({ signature }) => signature === "archive_follow_up_after_last_lead()")?.execute_to?.includes("service_role"), "S04 archive trigger execute ACL correction is not pinned");
+assert(sourceInventory.function_acl_semantics?.meaning === "explicit_final_grant_roles_only", "S04 function ACL semantics are not pinned");
 assert(sourceInventory.provider_bootstrap.absent_bucket === "agent", "S04 agent bucket negative dependency is not pinned");
 assert(sourceDependencies.dependencies.some(({ id }) => id === "agent-artifact-storage"), "S04 agent-artifact Storage dependency is not pinned");
 assert(portableTables.length === inventory.counts.tables, `table count mismatch: ${portableTables.length}`);

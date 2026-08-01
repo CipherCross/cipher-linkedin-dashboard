@@ -24,7 +24,30 @@ const sorted = (values) => [...values].sort();
 const names = (values) => values.map((value) => value.name ?? value);
 const matchAll = (pattern) => [...baseline.matchAll(pattern)];
 const equalArrays = (actual, expected) => JSON.stringify(sorted(actual)) === JSON.stringify(sorted(expected));
-const compact = (value) => value.replace(/\s+/g, " ").trim();
+const equalRows = (actual, expected) => JSON.stringify(sorted(actual.map((row) => JSON.stringify(row)))) === JSON.stringify(sorted(expected.map((row) => JSON.stringify(row))));
+const compact = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+const splitSqlArguments = (value) => {
+  const argumentsList = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "(") depth += 1;
+    if (value[index] === ")") depth -= 1;
+    if (value[index] === "," && depth === 0) {
+      argumentsList.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (compact(value)) argumentsList.push(value.slice(start));
+  return argumentsList;
+};
+const normalizeFunctionArguments = (value) => splitSqlArguments(value)
+  .map((argument) => compact(argument)
+    .replace(/\s+DEFAULT\s+.+$/i, "")
+    .replace(/^(IN|OUT|INOUT|VARIADIC)\s+/i, "")
+    .replace(/^(?:p_[a-z0-9_]+|query)\s+/i, ""))
+  .join(",");
+const normalizeFunctionSignature = (name, argumentsText) => `${name}(${normalizeFunctionArguments(argumentsText)})`;
 
 const actualBaselineSha = createHash("sha256").update(baseline).digest("hex");
 const actualBaselineBytes = Buffer.byteLength(baseline);
@@ -56,28 +79,67 @@ for (const view of inventory.views) {
   assert(securityInvoker.test(baseline), `view ${view.name} is not marked security_invoker in the final definition`);
 }
 
-const functionMatches = matchAll(/^CREATE FUNCTION public\.([a-z0-9_]+)\(/gm).map((match) => match[1]);
+const functionDefinitions = matchAll(/^CREATE FUNCTION public\.([a-z0-9_]+)\(([\s\S]*?)\) RETURNS /gm).map((match) => ({
+  name: match[1],
+  signature: normalizeFunctionSignature(match[1], match[2]),
+  start: match.index,
+}));
+const functionMatches = functionDefinitions.map((definition) => definition.name);
 assert(functionMatches.length === inventory.counts.functions, `function count mismatch: ${functionMatches.length}`);
-assert(equalArrays(functionMatches, inventory.functions.map((entry) => entry.signature.split("(")[0])), "function names do not match the baseline");
+assert(equalArrays(functionDefinitions.map((definition) => definition.signature), inventory.functions.map((entry) => entry.signature)), "function signatures do not match the baseline");
+
+const functionOwners = matchAll(/^ALTER FUNCTION public\.([a-z0-9_]+)\(([\s\S]*?)\) OWNER TO ([a-z0-9_]+);/gm).map((match) => ({
+  signature: normalizeFunctionSignature(match[1], match[2]),
+  owner: match[3],
+}));
+const functionAclStatements = matchAll(/\b(GRANT|REVOKE)\s+(ALL|EXECUTE)\s+ON FUNCTION public\.([a-z0-9_]+)\(([\s\S]*?)\)\s+(TO|FROM)\s+([^;]+);/gim).map((match) => ({
+  operation: match[1].toUpperCase(),
+  signature: normalizeFunctionSignature(match[3], match[4]),
+  roles: match[6].split(",").map((role) => role.trim().toLowerCase() === "public" ? "public" : role.trim().toLowerCase()),
+}));
+const functionAcls = new Map();
+for (const statement of functionAclStatements) {
+  if (!functionAcls.has(statement.signature)) functionAcls.set(statement.signature, []);
+  functionAcls.get(statement.signature).push(statement);
+}
+for (const signature of functionAcls.keys()) {
+  assert(functionDefinitions.some((definition) => definition.signature === signature), `function ACL targets unknown signature: ${signature}`);
+}
+const functionAclSemantics = inventory.function_acl_semantics;
+assert(functionAclSemantics?.field === "execute_to", "function ACL semantics must identify execute_to");
+assert(functionAclSemantics?.meaning === "explicit_final_grant_roles_only", "execute_to must be documented as explicit final grant roles");
+assert(functionAclSemantics?.required_denial_roles?.join(",") === "public,anon,authenticated", "function ACL required denial roles are incomplete");
+
 for (const functionEntry of inventory.functions) {
-  const name = functionEntry.signature.split("(")[0];
-  const start = baseline.indexOf(`CREATE FUNCTION public.${name}(`);
-  const end = baseline.indexOf(`\nALTER FUNCTION public.${name}(`, start);
+  const definitionStart = functionDefinitions.find((definition) => definition.signature === functionEntry.signature)?.start ?? -1;
+  const end = baseline.indexOf("\nALTER FUNCTION public.", definitionStart);
+  const start = definitionStart;
   const definition = start >= 0 && end > start ? baseline.slice(start, end) : "";
   assert(start >= 0, `function ${functionEntry.signature} is absent from the baseline`);
-  assert(definition.includes(`LANGUAGE ${functionEntry.language}`), `function ${functionEntry.signature} language mismatch`);
-  assert(definition.includes("SECURITY DEFINER") === functionEntry.security_definer, `function ${functionEntry.signature} security-definer semantics mismatch`);
-  if (functionEntry.search_path === null) {
-    assert(!definition.includes("SET search_path"), `function ${functionEntry.signature} unexpectedly sets search_path`);
-  } else {
-    assert(definition.includes(`SET search_path TO '${functionEntry.search_path}'`), `function ${functionEntry.signature} search_path mismatch`);
+  const language = definition.match(/\bLANGUAGE\s+([a-z0-9_]+)/i)?.[1]?.toLowerCase();
+  const securityDefiner = /\bSECURITY DEFINER\b/i.test(definition);
+  const searchPath = definition.match(/\bSET search_path TO\s+'([^']*)'/i)?.[1] ?? null;
+  assert(language === functionEntry.language, `function ${functionEntry.signature} language mismatch`);
+  assert(securityDefiner === functionEntry.security_definer, `function ${functionEntry.signature} security-definer semantics mismatch`);
+  assert(searchPath === functionEntry.search_path, `function ${functionEntry.signature} search_path mismatch`);
+  assert(functionOwners.find((owner) => owner.signature === functionEntry.signature)?.owner === functionEntry.owner, `function ${functionEntry.signature} owner mismatch`);
+
+  const aclStatements = functionAcls.get(functionEntry.signature) ?? [];
+  const aclState = new Map([["public", true]]);
+  for (const statement of aclStatements) {
+    for (const role of statement.roles) aclState.set(role, statement.operation === "GRANT");
   }
-  assert(new RegExp(`\\nALTER FUNCTION public\\.${name}\\([^\\n]*\\) OWNER TO ${functionEntry.owner};`).test(baseline), `function ${functionEntry.signature} owner mismatch`);
-  const grantedTo = [...baseline.matchAll(new RegExp(`(?:GRANT (?:ALL|EXECUTE) ON FUNCTION public\\.${name}\\([^;]*?\\)\\s+TO\\s+([^;]+);)`, "gi"))]
-    .flatMap((match) => match[1].split(","))
-    .map((role) => role.trim().toLowerCase())
-    .filter((role) => /^[a-z_]+$/.test(role));
-  assert(equalArrays([...new Set(grantedTo)], functionEntry.execute_to.map((role) => role.toLowerCase())), `function ${functionEntry.signature} execute ACL mismatch`);
+  const explicitGrantedTo = [...aclState.entries()]
+    .filter(([role, granted]) => granted && role !== "public")
+    .map(([role]) => role);
+  assert(equalArrays(explicitGrantedTo, functionEntry.execute_to.map((role) => role.toLowerCase())), `function ${functionEntry.signature} explicit execute ACL mismatch`);
+  if (aclStatements.length > 0) {
+    for (const role of functionAclSemantics.required_denial_roles) {
+      if (!functionEntry.execute_to.map((allowedRole) => allowedRole.toLowerCase()).includes(role)) {
+        assert(aclState.get(role) !== true, `function ${functionEntry.signature} must explicitly deny ${role}`);
+      }
+    }
+  }
 }
 
 const triggerMatches = matchAll(/^CREATE TRIGGER ([a-z0-9_]+) (BEFORE|AFTER) (.*?) ON public\.([a-z0-9_]+).*?EXECUTE FUNCTION public\.([a-z0-9_]+)\(/gm).map((match) => ({
@@ -119,7 +181,17 @@ for (const index of inventory.indexes) {
 const inlineChecks = matchAll(/^\s+CONSTRAINT ([a-z0-9_]+) CHECK/gm).map((match) => match[1]);
 const primaryKeys = matchAll(/ADD CONSTRAINT ([a-z0-9_]+) PRIMARY KEY/gm).map((match) => match[1]);
 const uniqueConstraints = matchAll(/ADD CONSTRAINT ([a-z0-9_]+) UNIQUE/gm).map((match) => match[1]);
-const foreignKeys = matchAll(/ADD CONSTRAINT ([a-z0-9_]+) FOREIGN KEY/gm).map((match) => match[1]);
+const foreignKeyMatches = matchAll(/ALTER TABLE ONLY public\.([a-z0-9_]+)\s+ADD CONSTRAINT ([a-z0-9_]+) FOREIGN KEY \(([^)]+)\)\s+REFERENCES ([a-z0-9_]+)\.([a-z0-9_]+)\s*\(([^)]+)\)(?:\s+ON DELETE (NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT))?(?:\s+ON UPDATE (NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT))?;/gim).map((match) => ({
+  table: match[1],
+  name: match[2],
+  columns: match[3].split(",").map((column) => compact(column)),
+  targetSchema: match[4],
+  targetTable: match[5],
+  targetColumns: match[6].split(",").map((column) => compact(column)),
+  onDelete: match[7] ?? "NO ACTION",
+  onUpdate: match[8] ?? "NO ACTION",
+}));
+const foreignKeys = foreignKeyMatches.map((foreignKey) => foreignKey.name);
 assert(inlineChecks.length === inventory.counts.check_constraints, `check constraint count mismatch: ${inlineChecks.length}`);
 assert(equalArrays(inlineChecks, inventory.constraints.check), "check constraint names do not match the baseline");
 assert(primaryKeys.length === inventory.counts.primary_key_constraints, `primary-key constraint count mismatch: ${primaryKeys.length}`);
@@ -128,22 +200,40 @@ assert(uniqueConstraints.length === inventory.counts.unique_constraints, `unique
 assert(equalArrays(uniqueConstraints, names(inventory.constraints.unique)), "unique constraint names do not match the baseline");
 assert(foreignKeys.length === inventory.counts.foreign_key_constraints, `foreign-key constraint count mismatch: ${foreignKeys.length}`);
 assert(equalArrays(foreignKeys, names(inventory.constraints.foreign_keys)), "foreign-key names do not match the baseline");
+for (const foreignKey of inventory.constraints.foreign_keys) {
+  const actual = foreignKeyMatches.find((candidate) => candidate.name === foreignKey.name);
+  const reference = foreignKey.references.match(/^([a-z0-9_]+)\.([a-z0-9_]+)\(([^)]+)\)$/i);
+  assert(actual?.table === foreignKey.table, `foreign key ${foreignKey.name} source table mismatch`);
+  assert(JSON.stringify(actual?.columns ?? []) === JSON.stringify(foreignKey.columns), `foreign key ${foreignKey.name} local column order mismatch`);
+  assert(reference && actual?.targetSchema === reference[1] && actual?.targetTable === reference[2], `foreign key ${foreignKey.name} target relation mismatch`);
+  assert(JSON.stringify(actual?.targetColumns ?? []) === JSON.stringify(reference ? reference[3].split(",").map((column) => compact(column)) : []), `foreign key ${foreignKey.name} target column order mismatch`);
+  assert(actual?.onDelete === foreignKey.on_delete, `foreign key ${foreignKey.name} ON DELETE mismatch`);
+  assert(actual?.onUpdate === (foreignKey.on_update ?? "NO ACTION"), `foreign key ${foreignKey.name} ON UPDATE mismatch`);
+}
 assert(inlineChecks.length + primaryKeys.length + uniqueConstraints.length + foreignKeys.length === inventory.counts.constraints, "total constraint count mismatch");
 assert(primaryKeys.length + uniqueConstraints.length === inventory.counts.constraint_backed_indexes, "constraint-backed index count mismatch");
 assert(indexMatches.length + primaryKeys.length + uniqueConstraints.length === inventory.counts.indexes, "total index count mismatch");
 
-const policyMatches = matchAll(/^CREATE POLICY "([^"]+)" ON public\.([a-z0-9_]+) FOR SELECT TO ([a-z0-9_]+)/gm).map((match) => ({
+const policyMatches = matchAll(/^CREATE POLICY "([^"]+)" ON public\.([a-z0-9_]+) FOR ([A-Z]+) TO ([a-z0-9_]+) USING \(([\s\S]*?)\);$/gm).map((match) => ({
   name: match[1],
   table: match[2],
-  role: match[3],
+  command: match[3],
+  role: match[4],
+  using: compact(match[5]),
 }));
 assert(policyMatches.length === inventory.counts.policies, `policy count mismatch: ${policyMatches.length}`);
 assert(inventory.rls.policy_count_per_table === 2, "RLS inventory must require two policies per table");
 assert(equalArrays([...new Set(policyMatches.map((policy) => policy.table))], inventory.rls.enabled_tables), "RLS table names do not match policy tables");
+const expectedPolicies = inventory.rls.enabled_tables.flatMap((table) => inventory.rls.policy_templates.map((template) => ({
+  name: template.name.replace("{table}", table),
+  table,
+  command: template.command,
+  role: template.role,
+  using: compact(template.using),
+})));
+assert(equalRows(policyMatches, expectedPolicies), "RLS policy definitions do not match name/table/command/role/USING exactly");
 for (const table of inventory.rls.enabled_tables) {
   assert(policyMatches.filter((policy) => policy.table === table).length === 2, `RLS policy count mismatch for ${table}`);
-  assert(policyMatches.some((policy) => policy.table === table && policy.role === "authenticated" && policy.name === `active members can read ${table}`), `member policy missing for ${table}`);
-  assert(policyMatches.some((policy) => policy.table === table && policy.role === "ai_sql_runner" && policy.name === "ai sql runner can read"), `AI policy missing for ${table}`);
 }
 
 const rlsMatches = matchAll(/^ALTER TABLE public\.([a-z0-9_]+) ENABLE ROW LEVEL SECURITY;/gm).map((match) => match[1]);

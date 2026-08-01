@@ -31,15 +31,39 @@ BEGIN
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public'
-      AND c.relkind IN ('r', 'v', 'S')
+      AND c.relkind = 'r'
+    ORDER BY c.relname
   LOOP
     EXECUTE format(
-      'ALTER %s public.%I OWNER TO app_owner',
-      CASE object_row.relkind
-        WHEN 'r' THEN 'TABLE'
-        WHEN 'v' THEN 'VIEW'
-        WHEN 'S' THEN 'SEQUENCE'
-      END,
+      'ALTER TABLE public.%I OWNER TO app_owner',
+      object_row.relname
+    );
+  END LOOP;
+
+  FOR object_row IN
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind = 'v'
+    ORDER BY c.relname
+  LOOP
+    EXECUTE format(
+      'ALTER VIEW public.%I OWNER TO app_owner',
+      object_row.relname
+    );
+  END LOOP;
+
+  FOR object_row IN
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind = 'S'
+    ORDER BY c.relname
+  LOOP
+    EXECUTE format(
+      'ALTER SEQUENCE public.%I OWNER TO app_owner',
       object_row.relname
     );
   END LOOP;
