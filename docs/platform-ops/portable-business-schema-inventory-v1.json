@@ -1,0 +1,2272 @@
+{
+  "format_version": 1,
+  "inventory_type": "portable-business-schema",
+  "artifact_version": "v1",
+  "source_contract": {
+    "inventory_file": "docs/platform-ops/tenant-schema-inventory-v053.json",
+    "inventory_sha256": "4c6c58970dfac464de6c7a0d43d64e2c8a0f6c44b92c3eaa35e87f8246f5302a",
+    "source_artifact": "supabase/tenant-baseline/v053/053_tenant_baseline.sql",
+    "source_artifact_version": "v053"
+  },
+  "baseline": {
+    "file": "postgres/tenant-baseline/v1/001_portable_business_baseline.sql",
+    "sha256": "4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415",
+    "initial_data": "empty",
+    "schema": "public"
+  },
+  "counts": {
+    "tables": 25,
+    "identity_columns": 13,
+    "views": 7,
+    "explicit_indexes": 37,
+    "constraint_backed_indexes": 34,
+    "indexes": 71,
+    "check_constraints": 63,
+    "primary_key_constraints": 25,
+    "unique_constraints": 9,
+    "foreign_key_constraints": 28,
+    "constraints": 125
+  },
+  "tables": [
+    {
+      "name": "team_members",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "name",
+          "definition": "name text NOT NULL"
+        },
+        {
+          "name": "active",
+          "definition": "active boolean DEFAULT true NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "email",
+          "definition": "email text"
+        },
+        {
+          "name": "role",
+          "definition": "role text DEFAULT 'member'::text NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "annotations",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text"
+        },
+        {
+          "name": "campaign_id",
+          "definition": "campaign_id text"
+        },
+        {
+          "name": "note",
+          "definition": "note text NOT NULL"
+        },
+        {
+          "name": "noted_at",
+          "definition": "noted_at date DEFAULT CURRENT_DATE NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "briefing_jobs",
+      "columns": [
+        {
+          "name": "briefing_date",
+          "definition": "briefing_date date NOT NULL"
+        },
+        {
+          "name": "status",
+          "definition": "status text DEFAULT 'pending'::text NOT NULL"
+        },
+        {
+          "name": "version",
+          "definition": "version integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "attempt",
+          "definition": "attempt integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "seed",
+          "definition": "seed text"
+        },
+        {
+          "name": "signals_block",
+          "definition": "signals_block text"
+        },
+        {
+          "name": "prior_md",
+          "definition": "prior_md text"
+        },
+        {
+          "name": "drafts",
+          "definition": "drafts jsonb"
+        },
+        {
+          "name": "verified_text",
+          "definition": "verified_text text"
+        },
+        {
+          "name": "error",
+          "definition": "error text"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "briefing_kind",
+          "definition": "briefing_kind text DEFAULT 'daily'::text NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "briefings",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id uuid DEFAULT gen_random_uuid() NOT NULL"
+        },
+        {
+          "name": "briefing_date",
+          "definition": "briefing_date date NOT NULL"
+        },
+        {
+          "name": "headline",
+          "definition": "headline text"
+        },
+        {
+          "name": "summary",
+          "definition": "summary text"
+        },
+        {
+          "name": "sections",
+          "definition": "sections jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "actions",
+          "definition": "actions jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "risks",
+          "definition": "risks jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "model",
+          "definition": "model text"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "changes",
+          "definition": "changes jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "metrics",
+          "definition": "metrics jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "briefing_kind",
+          "definition": "briefing_kind text DEFAULT 'daily'::text NOT NULL"
+        },
+        {
+          "name": "period_start",
+          "definition": "period_start date"
+        },
+        {
+          "name": "period_end",
+          "definition": "period_end date"
+        }
+      ]
+    },
+    {
+      "name": "messages",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "campaign_id",
+          "definition": "campaign_id text"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text NOT NULL"
+        },
+        {
+          "name": "direction",
+          "definition": "direction text DEFAULT 'in'::text NOT NULL"
+        },
+        {
+          "name": "body",
+          "definition": "body text"
+        },
+        {
+          "name": "sent_at",
+          "definition": "sent_at timestamp with time zone NOT NULL"
+        },
+        {
+          "name": "sentiment",
+          "definition": "sentiment text"
+        },
+        {
+          "name": "reason",
+          "definition": "reason text"
+        },
+        {
+          "name": "classified_at",
+          "definition": "classified_at timestamp with time zone"
+        },
+        {
+          "name": "classified_model",
+          "definition": "classified_model text"
+        },
+        {
+          "name": "content_hash",
+          "definition": "content_hash text DEFAULT ''::text NOT NULL"
+        },
+        {
+          "name": "source",
+          "definition": "source text DEFAULT 'sync'::text NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "notified_at",
+          "definition": "notified_at timestamp with time zone"
+        },
+        {
+          "name": "intent_level",
+          "definition": "intent_level text"
+        },
+        {
+          "name": "intent_reason",
+          "definition": "intent_reason text"
+        },
+        {
+          "name": "intent_classified_at",
+          "definition": "intent_classified_at timestamp with time zone"
+        },
+        {
+          "name": "intent_classified_model",
+          "definition": "intent_classified_model text"
+        },
+        {
+          "name": "intent_taxonomy_version",
+          "definition": "intent_taxonomy_version text"
+        }
+      ]
+    },
+    {
+      "name": "campaign_steps",
+      "columns": [
+        {
+          "name": "campaign_id",
+          "definition": "campaign_id text NOT NULL"
+        },
+        {
+          "name": "step_index",
+          "definition": "step_index integer NOT NULL"
+        },
+        {
+          "name": "step_label",
+          "definition": "step_label text"
+        },
+        {
+          "name": "step_type",
+          "definition": "step_type text"
+        },
+        {
+          "name": "template_body",
+          "definition": "template_body text"
+        },
+        {
+          "name": "sent_count",
+          "definition": "sent_count integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "replied_count",
+          "definition": "replied_count integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "current_count",
+          "definition": "current_count integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "campaigns",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id text NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "lh_campaign_id",
+          "definition": "lh_campaign_id text NOT NULL"
+        },
+        {
+          "name": "name",
+          "definition": "name text NOT NULL"
+        },
+        {
+          "name": "status",
+          "definition": "status text DEFAULT 'active'::text NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "briefing_context",
+          "definition": "briefing_context text"
+        },
+        {
+          "name": "briefing_context_updated_at",
+          "definition": "briefing_context_updated_at timestamp with time zone"
+        }
+      ]
+    },
+    {
+      "name": "coaching_digest",
+      "columns": [
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "summary",
+          "definition": "summary text"
+        },
+        {
+          "name": "patterns",
+          "definition": "patterns jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "computed_at",
+          "definition": "computed_at timestamp with time zone"
+        },
+        {
+          "name": "model",
+          "definition": "model text"
+        }
+      ]
+    },
+    {
+      "name": "conversation_coaching",
+      "columns": [
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text NOT NULL"
+        },
+        {
+          "name": "next_action",
+          "definition": "next_action text"
+        },
+        {
+          "name": "issues",
+          "definition": "issues jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "tips",
+          "definition": "tips jsonb DEFAULT '[]'::jsonb NOT NULL"
+        },
+        {
+          "name": "summary",
+          "definition": "summary text"
+        },
+        {
+          "name": "last_msg_marker",
+          "definition": "last_msg_marker text"
+        },
+        {
+          "name": "coached_at",
+          "definition": "coached_at timestamp with time zone"
+        },
+        {
+          "name": "model",
+          "definition": "model text"
+        }
+      ]
+    },
+    {
+      "name": "conversation_follow_up_state",
+      "columns": [
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text NOT NULL"
+        },
+        {
+          "name": "next_follow_up_date",
+          "definition": "next_follow_up_date date"
+        },
+        {
+          "name": "owner_id",
+          "definition": "owner_id bigint"
+        },
+        {
+          "name": "revision",
+          "definition": "revision bigint DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "last_event_id",
+          "definition": "last_event_id bigint"
+        },
+        {
+          "name": "last_mutation_id",
+          "definition": "last_mutation_id uuid"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_by",
+          "definition": "updated_by text DEFAULT 'unknown'::text NOT NULL"
+        },
+        {
+          "name": "archived_at",
+          "definition": "archived_at timestamp with time zone"
+        }
+      ]
+    },
+    {
+      "name": "events",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "campaign_id",
+          "definition": "campaign_id text"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text"
+        },
+        {
+          "name": "event_type",
+          "definition": "event_type text NOT NULL"
+        },
+        {
+          "name": "occurred_at",
+          "definition": "occurred_at timestamp with time zone NOT NULL"
+        },
+        {
+          "name": "raw",
+          "definition": "raw jsonb"
+        }
+      ]
+    },
+    {
+      "name": "follow_up_events",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text NOT NULL"
+        },
+        {
+          "name": "mutation_id",
+          "definition": "mutation_id uuid NOT NULL"
+        },
+        {
+          "name": "event_ordinal",
+          "definition": "event_ordinal smallint NOT NULL"
+        },
+        {
+          "name": "request_fingerprint",
+          "definition": "request_fingerprint text NOT NULL"
+        },
+        {
+          "name": "event_kind",
+          "definition": "event_kind text NOT NULL"
+        },
+        {
+          "name": "previous_due_date",
+          "definition": "previous_due_date date"
+        },
+        {
+          "name": "new_due_date",
+          "definition": "new_due_date date"
+        },
+        {
+          "name": "previous_owner_id",
+          "definition": "previous_owner_id bigint"
+        },
+        {
+          "name": "new_owner_id",
+          "definition": "new_owner_id bigint"
+        },
+        {
+          "name": "previous_owner_name",
+          "definition": "previous_owner_name text"
+        },
+        {
+          "name": "new_owner_name",
+          "definition": "new_owner_name text"
+        },
+        {
+          "name": "state_revision",
+          "definition": "state_revision bigint NOT NULL"
+        },
+        {
+          "name": "actor",
+          "definition": "actor text NOT NULL"
+        },
+        {
+          "name": "reason",
+          "definition": "reason text"
+        },
+        {
+          "name": "occurred_at",
+          "definition": "occurred_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "hypotheses",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "name",
+          "definition": "name text NOT NULL"
+        },
+        {
+          "name": "icp_id",
+          "definition": "icp_id bigint"
+        },
+        {
+          "name": "description",
+          "definition": "description text"
+        },
+        {
+          "name": "archived",
+          "definition": "archived boolean DEFAULT false NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "hypothesis_campaigns",
+      "columns": [
+        {
+          "name": "hypothesis_id",
+          "definition": "hypothesis_id bigint NOT NULL"
+        },
+        {
+          "name": "campaign_id",
+          "definition": "campaign_id text NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "icp_industries",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "icp_id",
+          "definition": "icp_id bigint NOT NULL"
+        },
+        {
+          "name": "name",
+          "definition": "name text NOT NULL"
+        },
+        {
+          "name": "include_keywords",
+          "definition": "include_keywords text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "icp_personas",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "icp_id",
+          "definition": "icp_id bigint NOT NULL"
+        },
+        {
+          "name": "kind",
+          "definition": "kind text NOT NULL"
+        },
+        {
+          "name": "job_titles",
+          "definition": "job_titles text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "age_range",
+          "definition": "age_range text"
+        },
+        {
+          "name": "location",
+          "definition": "location text"
+        },
+        {
+          "name": "background",
+          "definition": "background text"
+        },
+        {
+          "name": "profile_status",
+          "definition": "profile_status text"
+        },
+        {
+          "name": "connections_note",
+          "definition": "connections_note text"
+        },
+        {
+          "name": "followers_note",
+          "definition": "followers_note text"
+        },
+        {
+          "name": "sort",
+          "definition": "sort integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "icps",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "name",
+          "definition": "name text NOT NULL"
+        },
+        {
+          "name": "airtable_url",
+          "definition": "airtable_url text"
+        },
+        {
+          "name": "main_product",
+          "definition": "main_product text"
+        },
+        {
+          "name": "core_sphere",
+          "definition": "core_sphere text"
+        },
+        {
+          "name": "secondary_sphere",
+          "definition": "secondary_sphere text"
+        },
+        {
+          "name": "product_stage",
+          "definition": "product_stage text"
+        },
+        {
+          "name": "monetization",
+          "definition": "monetization text"
+        },
+        {
+          "name": "features_note",
+          "definition": "features_note text"
+        },
+        {
+          "name": "purchase_triggers",
+          "definition": "purchase_triggers text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "features",
+          "definition": "features text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "company_countries",
+          "definition": "company_countries text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "company_headcount",
+          "definition": "company_headcount text"
+        },
+        {
+          "name": "company_age",
+          "definition": "company_age text"
+        },
+        {
+          "name": "apollo_industries",
+          "definition": "apollo_industries text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "funding",
+          "definition": "funding text"
+        },
+        {
+          "name": "dev_team_availability",
+          "definition": "dev_team_availability text"
+        },
+        {
+          "name": "dev_team_location",
+          "definition": "dev_team_location text"
+        },
+        {
+          "name": "exclude_keywords",
+          "definition": "exclude_keywords text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "archived",
+          "definition": "archived boolean DEFAULT false NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "instances",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id text NOT NULL"
+        },
+        {
+          "name": "label",
+          "definition": "label text DEFAULT ''::text NOT NULL"
+        },
+        {
+          "name": "last_sync_at",
+          "definition": "last_sync_at timestamp with time zone"
+        },
+        {
+          "name": "agent_version",
+          "definition": "agent_version text"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "account_name",
+          "definition": "account_name text"
+        },
+        {
+          "name": "account_url",
+          "definition": "account_url text"
+        },
+        {
+          "name": "account_avatar",
+          "definition": "account_avatar text"
+        },
+        {
+          "name": "config",
+          "definition": "config jsonb DEFAULT '{}'::jsonb NOT NULL"
+        },
+        {
+          "name": "config_updated_at",
+          "definition": "config_updated_at timestamp with time zone"
+        }
+      ]
+    },
+    {
+      "name": "lead_gender_reviews",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "lead_id",
+          "definition": "lead_id uuid"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text NOT NULL"
+        },
+        {
+          "name": "action",
+          "definition": "action text NOT NULL"
+        },
+        {
+          "name": "predicted_gender",
+          "definition": "predicted_gender text"
+        },
+        {
+          "name": "predicted_confidence",
+          "definition": "predicted_confidence real"
+        },
+        {
+          "name": "predicted_model",
+          "definition": "predicted_model text"
+        },
+        {
+          "name": "predicted_version",
+          "definition": "predicted_version text"
+        },
+        {
+          "name": "reviewed_gender",
+          "definition": "reviewed_gender text"
+        },
+        {
+          "name": "reviewer",
+          "definition": "reviewer text"
+        },
+        {
+          "name": "reviewed_at",
+          "definition": "reviewed_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "lead_notes",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "lead_id",
+          "definition": "lead_id uuid NOT NULL"
+        },
+        {
+          "name": "author",
+          "definition": "author text"
+        },
+        {
+          "name": "body",
+          "definition": "body text NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now()"
+        }
+      ]
+    },
+    {
+      "name": "leads",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id uuid DEFAULT gen_random_uuid() NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "campaign_id",
+          "definition": "campaign_id text NOT NULL"
+        },
+        {
+          "name": "profile_url",
+          "definition": "profile_url text NOT NULL"
+        },
+        {
+          "name": "full_name",
+          "definition": "full_name text"
+        },
+        {
+          "name": "headline",
+          "definition": "headline text"
+        },
+        {
+          "name": "company",
+          "definition": "company text"
+        },
+        {
+          "name": "status",
+          "definition": "status text"
+        },
+        {
+          "name": "invited_at",
+          "definition": "invited_at timestamp with time zone"
+        },
+        {
+          "name": "connected_at",
+          "definition": "connected_at timestamp with time zone"
+        },
+        {
+          "name": "first_message_at",
+          "definition": "first_message_at timestamp with time zone"
+        },
+        {
+          "name": "replied_at",
+          "definition": "replied_at timestamp with time zone"
+        },
+        {
+          "name": "last_action_at",
+          "definition": "last_action_at timestamp with time zone"
+        },
+        {
+          "name": "raw",
+          "definition": "raw jsonb"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "added_at",
+          "definition": "added_at timestamp with time zone"
+        },
+        {
+          "name": "pipeline_stage",
+          "definition": "pipeline_stage text"
+        },
+        {
+          "name": "pipeline_substatus",
+          "definition": "pipeline_substatus text"
+        },
+        {
+          "name": "lost_reason",
+          "definition": "lost_reason text"
+        },
+        {
+          "name": "pipeline_stage_changed_at",
+          "definition": "pipeline_stage_changed_at timestamp with time zone"
+        },
+        {
+          "name": "assigned_to",
+          "definition": "assigned_to bigint"
+        },
+        {
+          "name": "education_start_year",
+          "definition": "education_start_year integer"
+        },
+        {
+          "name": "first_job_start_year",
+          "definition": "first_job_start_year integer"
+        },
+        {
+          "name": "birth_year_min",
+          "definition": "birth_year_min integer"
+        },
+        {
+          "name": "birth_year_max",
+          "definition": "birth_year_max integer"
+        },
+        {
+          "name": "gender",
+          "definition": "gender text"
+        },
+        {
+          "name": "gender_confidence",
+          "definition": "gender_confidence real"
+        },
+        {
+          "name": "demo_inferred_at",
+          "definition": "demo_inferred_at timestamp with time zone"
+        },
+        {
+          "name": "demo_model",
+          "definition": "demo_model text"
+        },
+        {
+          "name": "photo_path",
+          "definition": "photo_path text"
+        },
+        {
+          "name": "photo_synced_at",
+          "definition": "photo_synced_at timestamp with time zone"
+        },
+        {
+          "name": "age_inferred_at",
+          "definition": "age_inferred_at timestamp with time zone"
+        },
+        {
+          "name": "age_method_version",
+          "definition": "age_method_version text"
+        },
+        {
+          "name": "age_source",
+          "definition": "age_source text"
+        },
+        {
+          "name": "gender_inferred_at",
+          "definition": "gender_inferred_at timestamp with time zone"
+        },
+        {
+          "name": "gender_model_version",
+          "definition": "gender_model_version text"
+        }
+      ]
+    },
+    {
+      "name": "pipeline_events",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "lead_id",
+          "definition": "lead_id uuid NOT NULL"
+        },
+        {
+          "name": "kind",
+          "definition": "kind text NOT NULL"
+        },
+        {
+          "name": "actor",
+          "definition": "actor text DEFAULT 'unknown'::text NOT NULL"
+        },
+        {
+          "name": "from_stage",
+          "definition": "from_stage text"
+        },
+        {
+          "name": "to_stage",
+          "definition": "to_stage text"
+        },
+        {
+          "name": "from_substatus",
+          "definition": "from_substatus text"
+        },
+        {
+          "name": "to_substatus",
+          "definition": "to_substatus text"
+        },
+        {
+          "name": "from_assignee",
+          "definition": "from_assignee text"
+        },
+        {
+          "name": "to_assignee",
+          "definition": "to_assignee text"
+        },
+        {
+          "name": "lost_reason",
+          "definition": "lost_reason text"
+        },
+        {
+          "name": "occurred_at",
+          "definition": "occurred_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "playbook",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id boolean DEFAULT true NOT NULL"
+        },
+        {
+          "name": "content",
+          "definition": "content text DEFAULT ''::text NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        }
+      ]
+    },
+    {
+      "name": "saved_searches",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id bigint NOT NULL"
+        },
+        {
+          "name": "name",
+          "definition": "name text NOT NULL"
+        },
+        {
+          "name": "platform",
+          "definition": "platform text NOT NULL"
+        },
+        {
+          "name": "description",
+          "definition": "description text"
+        },
+        {
+          "name": "include_keywords",
+          "definition": "include_keywords text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "exclude_keywords",
+          "definition": "exclude_keywords text[] DEFAULT '{}'::text[] NOT NULL"
+        },
+        {
+          "name": "boolean_query",
+          "definition": "boolean_query text"
+        },
+        {
+          "name": "filters",
+          "definition": "filters jsonb DEFAULT '{}'::jsonb NOT NULL"
+        },
+        {
+          "name": "notes",
+          "definition": "notes text"
+        },
+        {
+          "name": "author",
+          "definition": "author text"
+        },
+        {
+          "name": "archived",
+          "definition": "archived boolean DEFAULT false NOT NULL"
+        },
+        {
+          "name": "created_at",
+          "definition": "created_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "updated_at",
+          "definition": "updated_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "hypothesis_id",
+          "definition": "hypothesis_id bigint"
+        }
+      ]
+    },
+    {
+      "name": "sync_runs",
+      "columns": [
+        {
+          "name": "id",
+          "definition": "id uuid DEFAULT gen_random_uuid() NOT NULL"
+        },
+        {
+          "name": "instance_id",
+          "definition": "instance_id text NOT NULL"
+        },
+        {
+          "name": "started_at",
+          "definition": "started_at timestamp with time zone DEFAULT now() NOT NULL"
+        },
+        {
+          "name": "finished_at",
+          "definition": "finished_at timestamp with time zone"
+        },
+        {
+          "name": "status",
+          "definition": "status text DEFAULT 'running'::text NOT NULL"
+        },
+        {
+          "name": "rows_upserted",
+          "definition": "rows_upserted integer DEFAULT 0 NOT NULL"
+        },
+        {
+          "name": "error",
+          "definition": "error text"
+        }
+      ]
+    }
+  ],
+  "identities": [
+    {
+      "table": "annotations",
+      "column": "id",
+      "sequence": "annotations_id_seq"
+    },
+    {
+      "table": "events",
+      "column": "id",
+      "sequence": "events_id_seq"
+    },
+    {
+      "table": "follow_up_events",
+      "column": "id",
+      "sequence": "follow_up_events_id_seq"
+    },
+    {
+      "table": "hypotheses",
+      "column": "id",
+      "sequence": "hypotheses_id_seq"
+    },
+    {
+      "table": "icp_industries",
+      "column": "id",
+      "sequence": "icp_industries_id_seq"
+    },
+    {
+      "table": "icp_personas",
+      "column": "id",
+      "sequence": "icp_personas_id_seq"
+    },
+    {
+      "table": "icps",
+      "column": "id",
+      "sequence": "icps_id_seq"
+    },
+    {
+      "table": "lead_gender_reviews",
+      "column": "id",
+      "sequence": "lead_gender_reviews_id_seq"
+    },
+    {
+      "table": "lead_notes",
+      "column": "id",
+      "sequence": "lead_notes_id_seq"
+    },
+    {
+      "table": "messages",
+      "column": "id",
+      "sequence": "messages_id_seq"
+    },
+    {
+      "table": "pipeline_events",
+      "column": "id",
+      "sequence": "pipeline_events_id_seq"
+    },
+    {
+      "table": "saved_searches",
+      "column": "id",
+      "sequence": "saved_searches_id_seq"
+    },
+    {
+      "table": "team_members",
+      "column": "id",
+      "sequence": "team_members_id_seq"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "briefings_date_idx",
+      "table": "briefings",
+      "unique": false,
+      "expression": "briefing_date DESC"
+    },
+    {
+      "name": "briefings_kind_date_idx",
+      "table": "briefings",
+      "unique": false,
+      "expression": "briefing_kind, briefing_date DESC"
+    },
+    {
+      "name": "conversation_follow_up_active_due_idx",
+      "table": "conversation_follow_up_state",
+      "unique": false,
+      "expression": "next_follow_up_date, owner_id",
+      "predicate": "next_follow_up_date IS NOT NULL AND archived_at IS NULL"
+    },
+    {
+      "name": "conversation_follow_up_owner_due_idx",
+      "table": "conversation_follow_up_state",
+      "unique": false,
+      "expression": "owner_id, next_follow_up_date",
+      "predicate": "next_follow_up_date IS NOT NULL AND archived_at IS NULL"
+    },
+    {
+      "name": "events_time_idx",
+      "table": "events",
+      "unique": false,
+      "expression": "occurred_at"
+    },
+    {
+      "name": "follow_up_events_thread_time_idx",
+      "table": "follow_up_events",
+      "unique": false,
+      "expression": "instance_id, profile_url, occurred_at DESC, id DESC"
+    },
+    {
+      "name": "follow_up_events_time_idx",
+      "table": "follow_up_events",
+      "unique": false,
+      "expression": "occurred_at DESC, id DESC"
+    },
+    {
+      "name": "hypotheses_icp_id",
+      "table": "hypotheses",
+      "unique": false,
+      "expression": "icp_id"
+    },
+    {
+      "name": "hypotheses_lower_name",
+      "table": "hypotheses",
+      "unique": true,
+      "expression": "lower(name)"
+    },
+    {
+      "name": "hypothesis_campaigns_hypothesis_id",
+      "table": "hypothesis_campaigns",
+      "unique": false,
+      "expression": "hypothesis_id"
+    },
+    {
+      "name": "icp_industries_icp_id",
+      "table": "icp_industries",
+      "unique": false,
+      "expression": "icp_id"
+    },
+    {
+      "name": "icp_industries_icp_lower_name",
+      "table": "icp_industries",
+      "unique": true,
+      "expression": "icp_id, lower(name)"
+    },
+    {
+      "name": "icp_personas_icp_id",
+      "table": "icp_personas",
+      "unique": false,
+      "expression": "icp_id"
+    },
+    {
+      "name": "icp_personas_icp_lower_kind",
+      "table": "icp_personas",
+      "unique": true,
+      "expression": "icp_id, lower(kind)"
+    },
+    {
+      "name": "icps_lower_name",
+      "table": "icps",
+      "unique": true,
+      "expression": "lower(name)"
+    },
+    {
+      "name": "lead_gender_reviews_person_idx",
+      "table": "lead_gender_reviews",
+      "unique": false,
+      "expression": "instance_id, profile_url, reviewed_at DESC"
+    },
+    {
+      "name": "lead_notes_lead_idx",
+      "table": "lead_notes",
+      "unique": false,
+      "expression": "lead_id, created_at DESC"
+    },
+    {
+      "name": "leads_added_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "added_at"
+    },
+    {
+      "name": "leads_assigned_to_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "assigned_to",
+      "predicate": "assigned_to IS NOT NULL"
+    },
+    {
+      "name": "leads_campaign_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "campaign_id"
+    },
+    {
+      "name": "leads_gender_backlog_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "instance_id, added_at",
+      "predicate": "gender_inferred_at IS NULL AND demo_model IS DISTINCT FROM 'manual'"
+    },
+    {
+      "name": "leads_instance_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "instance_id"
+    },
+    {
+      "name": "leads_instance_profile_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "instance_id, profile_url"
+    },
+    {
+      "name": "leads_pipeline_stage_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "pipeline_stage",
+      "predicate": "pipeline_stage IS NOT NULL"
+    },
+    {
+      "name": "leads_updated_at_idx",
+      "table": "leads",
+      "unique": false,
+      "expression": "updated_at"
+    },
+    {
+      "name": "messages_campaign_sentiment_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "campaign_id",
+      "predicate": "sentiment IS NOT NULL"
+    },
+    {
+      "name": "messages_inbound_sentiment_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "instance_id, campaign_id, profile_url, sent_at DESC",
+      "predicate": "direction = 'in' AND sentiment IS NOT NULL"
+    },
+    {
+      "name": "messages_intent_backlog_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "sent_at DESC",
+      "predicate": "direction = 'in' AND COALESCE(sentiment, '') <> 'auto' AND COALESCE(intent_taxonomy_version, '') <> 'p123-v1'"
+    },
+    {
+      "name": "messages_notify_pending_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "sent_at",
+      "predicate": "direction = 'in' AND source = 'sync' AND notified_at IS NULL"
+    },
+    {
+      "name": "messages_thread_latest_nonempty_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "instance_id, profile_url, sent_at DESC, id DESC",
+      "predicate": "body IS NOT NULL AND btrim(body) <> ''"
+    },
+    {
+      "name": "messages_unclassified_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "sent_at",
+      "predicate": "direction = 'in' AND sentiment IS NULL"
+    },
+    {
+      "name": "messages_updated_at_idx",
+      "table": "messages",
+      "unique": false,
+      "expression": "updated_at"
+    },
+    {
+      "name": "pipeline_events_lead_idx",
+      "table": "pipeline_events",
+      "unique": false,
+      "expression": "lead_id, occurred_at"
+    },
+    {
+      "name": "pipeline_events_time_idx",
+      "table": "pipeline_events",
+      "unique": false,
+      "expression": "occurred_at"
+    },
+    {
+      "name": "saved_searches_hypothesis_id",
+      "table": "saved_searches",
+      "unique": false,
+      "expression": "hypothesis_id"
+    },
+    {
+      "name": "saved_searches_platform_name",
+      "table": "saved_searches",
+      "unique": true,
+      "expression": "platform, lower(name)"
+    },
+    {
+      "name": "team_members_email_lower_uidx",
+      "table": "team_members",
+      "unique": true,
+      "expression": "lower(email)",
+      "predicate": "email IS NOT NULL"
+    }
+  ],
+  "constraints": {
+    "check": [
+      "team_members_role_check",
+      "briefing_jobs_briefing_kind_check",
+      "briefings_briefing_kind_check",
+      "messages_intent_level_check",
+      "messages_sentiment_check",
+      "messages_source_check",
+      "campaigns_briefing_context_length",
+      "conversation_follow_up_state_revision_check",
+      "conversation_follow_up_state_updated_by_check",
+      "follow_up_events_actor_check",
+      "follow_up_events_event_kind_check",
+      "follow_up_events_event_ordinal_check",
+      "follow_up_events_new_owner_name_check",
+      "follow_up_events_previous_owner_name_check",
+      "follow_up_events_reason_check",
+      "follow_up_events_skip_reason_check",
+      "follow_up_events_state_revision_check",
+      "follow_up_events_values_check",
+      "hypotheses_description_check",
+      "hypotheses_name_check",
+      "icp_industries_include_kw_len",
+      "icp_industries_name_check",
+      "icp_personas_age_range_check",
+      "icp_personas_background_check",
+      "icp_personas_connections_note_check",
+      "icp_personas_followers_note_check",
+      "icp_personas_job_titles_len",
+      "icp_personas_kind_check",
+      "icp_personas_location_check",
+      "icp_personas_profile_status_check",
+      "icps_airtable_url_check",
+      "icps_company_age_check",
+      "icps_company_headcount_check",
+      "icps_core_sphere_check",
+      "icps_countries_len",
+      "icps_dev_team_availability_check",
+      "icps_dev_team_location_check",
+      "icps_exclude_kw_len",
+      "icps_features_len",
+      "icps_features_note_check",
+      "icps_funding_check",
+      "icps_industries_len",
+      "icps_main_product_check",
+      "icps_monetization_check",
+      "icps_name_check",
+      "icps_product_stage_check",
+      "icps_purchase_triggers_len",
+      "icps_secondary_sphere_check",
+      "lead_gender_reviews_action_check",
+      "lead_gender_reviews_predicted_confidence_check",
+      "lead_gender_reviews_predicted_gender_check",
+      "lead_gender_reviews_reviewed_gender_check",
+      "leads_age_source_check",
+      "leads_education_start_year_check",
+      "leads_first_job_start_year_check",
+      "leads_gender_check",
+      "leads_gender_confidence_check",
+      "leads_pipeline_stage_check",
+      "leads_pipeline_substatus_check",
+      "pipeline_events_kind_check",
+      "playbook_singleton",
+      "saved_searches_name_check",
+      "saved_searches_platform_check"
+    ],
+    "primary_keys": [
+      {
+        "name": "annotations_pkey",
+        "table": "annotations",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "briefing_jobs_pkey",
+        "table": "briefing_jobs",
+        "columns": [
+          "briefing_date",
+          "briefing_kind"
+        ]
+      },
+      {
+        "name": "briefings_pkey",
+        "table": "briefings",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "campaign_steps_pkey",
+        "table": "campaign_steps",
+        "columns": [
+          "campaign_id",
+          "step_index"
+        ]
+      },
+      {
+        "name": "campaigns_pkey",
+        "table": "campaigns",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "coaching_digest_pkey",
+        "table": "coaching_digest",
+        "columns": [
+          "instance_id"
+        ]
+      },
+      {
+        "name": "conversation_coaching_pkey",
+        "table": "conversation_coaching",
+        "columns": [
+          "instance_id",
+          "profile_url"
+        ]
+      },
+      {
+        "name": "conversation_follow_up_state_pkey",
+        "table": "conversation_follow_up_state",
+        "columns": [
+          "instance_id",
+          "profile_url"
+        ]
+      },
+      {
+        "name": "events_pkey",
+        "table": "events",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "follow_up_events_pkey",
+        "table": "follow_up_events",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "hypotheses_pkey",
+        "table": "hypotheses",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "hypothesis_campaigns_pkey",
+        "table": "hypothesis_campaigns",
+        "columns": [
+          "hypothesis_id",
+          "campaign_id"
+        ]
+      },
+      {
+        "name": "icp_industries_pkey",
+        "table": "icp_industries",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "icp_personas_pkey",
+        "table": "icp_personas",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "icps_pkey",
+        "table": "icps",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "instances_pkey",
+        "table": "instances",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "lead_gender_reviews_pkey",
+        "table": "lead_gender_reviews",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "lead_notes_pkey",
+        "table": "lead_notes",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "leads_pkey",
+        "table": "leads",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "messages_pkey",
+        "table": "messages",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "pipeline_events_pkey",
+        "table": "pipeline_events",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "playbook_pkey",
+        "table": "playbook",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "saved_searches_pkey",
+        "table": "saved_searches",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "sync_runs_pkey",
+        "table": "sync_runs",
+        "columns": [
+          "id"
+        ]
+      },
+      {
+        "name": "team_members_pkey",
+        "table": "team_members",
+        "columns": [
+          "id"
+        ]
+      }
+    ],
+    "unique": [
+      {
+        "name": "annotations_scope_key",
+        "table": "annotations",
+        "columns": [
+          "note",
+          "noted_at",
+          "instance_id",
+          "campaign_id"
+        ],
+        "nulls_not_distinct": true
+      },
+      {
+        "name": "briefings_date_kind_key",
+        "table": "briefings",
+        "columns": [
+          "briefing_date",
+          "briefing_kind"
+        ]
+      },
+      {
+        "name": "campaigns_instance_id_lh_campaign_id_key",
+        "table": "campaigns",
+        "columns": [
+          "instance_id",
+          "lh_campaign_id"
+        ]
+      },
+      {
+        "name": "events_identity_key",
+        "table": "events",
+        "columns": [
+          "instance_id",
+          "campaign_id",
+          "profile_url",
+          "event_type"
+        ],
+        "nulls_not_distinct": true
+      },
+      {
+        "name": "follow_up_events_mutation_id_event_ordinal_key",
+        "table": "follow_up_events",
+        "columns": [
+          "mutation_id",
+          "event_ordinal"
+        ]
+      },
+      {
+        "name": "hypothesis_campaigns_campaign_id_key",
+        "table": "hypothesis_campaigns",
+        "columns": [
+          "campaign_id"
+        ]
+      },
+      {
+        "name": "leads_campaign_id_profile_url_key",
+        "table": "leads",
+        "columns": [
+          "campaign_id",
+          "profile_url"
+        ]
+      },
+      {
+        "name": "messages_identity_key",
+        "table": "messages",
+        "columns": [
+          "instance_id",
+          "profile_url",
+          "direction",
+          "sent_at",
+          "content_hash"
+        ]
+      },
+      {
+        "name": "team_members_name_key",
+        "table": "team_members",
+        "columns": [
+          "name"
+        ]
+      }
+    ],
+    "foreign_keys": [
+      {
+        "name": "campaign_steps_campaign_id_fkey",
+        "table": "campaign_steps",
+        "columns": [
+          "campaign_id"
+        ],
+        "references": "public.campaigns(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "campaigns_instance_id_fkey",
+        "table": "campaigns",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "coaching_digest_instance_id_fkey",
+        "table": "coaching_digest",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "conversation_coaching_instance_id_fkey",
+        "table": "conversation_coaching",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "conversation_follow_up_state_instance_id_fkey",
+        "table": "conversation_follow_up_state",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "conversation_follow_up_state_last_event_id_fkey",
+        "table": "conversation_follow_up_state",
+        "columns": [
+          "last_event_id"
+        ],
+        "references": "public.follow_up_events(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "conversation_follow_up_state_owner_id_fkey",
+        "table": "conversation_follow_up_state",
+        "columns": [
+          "owner_id"
+        ],
+        "references": "public.team_members(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "events_campaign_id_fkey",
+        "table": "events",
+        "columns": [
+          "campaign_id"
+        ],
+        "references": "public.campaigns(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "events_instance_id_fkey",
+        "table": "events",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "follow_up_events_instance_id_fkey",
+        "table": "follow_up_events",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "follow_up_events_new_owner_id_fkey",
+        "table": "follow_up_events",
+        "columns": [
+          "new_owner_id"
+        ],
+        "references": "public.team_members(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "follow_up_events_previous_owner_id_fkey",
+        "table": "follow_up_events",
+        "columns": [
+          "previous_owner_id"
+        ],
+        "references": "public.team_members(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "hypotheses_icp_id_fkey",
+        "table": "hypotheses",
+        "columns": [
+          "icp_id"
+        ],
+        "references": "public.icps(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "hypothesis_campaigns_campaign_id_fkey",
+        "table": "hypothesis_campaigns",
+        "columns": [
+          "campaign_id"
+        ],
+        "references": "public.campaigns(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "hypothesis_campaigns_hypothesis_id_fkey",
+        "table": "hypothesis_campaigns",
+        "columns": [
+          "hypothesis_id"
+        ],
+        "references": "public.hypotheses(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "icp_industries_icp_id_fkey",
+        "table": "icp_industries",
+        "columns": [
+          "icp_id"
+        ],
+        "references": "public.icps(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "icp_personas_icp_id_fkey",
+        "table": "icp_personas",
+        "columns": [
+          "icp_id"
+        ],
+        "references": "public.icps(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "lead_gender_reviews_instance_id_fkey",
+        "table": "lead_gender_reviews",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "lead_gender_reviews_lead_id_fkey",
+        "table": "lead_gender_reviews",
+        "columns": [
+          "lead_id"
+        ],
+        "references": "public.leads(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "lead_notes_lead_id_fkey",
+        "table": "lead_notes",
+        "columns": [
+          "lead_id"
+        ],
+        "references": "public.leads(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "leads_assigned_to_fkey",
+        "table": "leads",
+        "columns": [
+          "assigned_to"
+        ],
+        "references": "public.team_members(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "leads_campaign_id_fkey",
+        "table": "leads",
+        "columns": [
+          "campaign_id"
+        ],
+        "references": "public.campaigns(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "leads_instance_id_fkey",
+        "table": "leads",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "messages_campaign_id_fkey",
+        "table": "messages",
+        "columns": [
+          "campaign_id"
+        ],
+        "references": "public.campaigns(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "messages_instance_id_fkey",
+        "table": "messages",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "pipeline_events_lead_id_fkey",
+        "table": "pipeline_events",
+        "columns": [
+          "lead_id"
+        ],
+        "references": "public.leads(id)",
+        "on_delete": "CASCADE"
+      },
+      {
+        "name": "saved_searches_hypothesis_id_fkey",
+        "table": "saved_searches",
+        "columns": [
+          "hypothesis_id"
+        ],
+        "references": "public.hypotheses(id)",
+        "on_delete": "SET NULL"
+      },
+      {
+        "name": "sync_runs_instance_id_fkey",
+        "table": "sync_runs",
+        "columns": [
+          "instance_id"
+        ],
+        "references": "public.instances(id)",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "views": [
+    {
+      "name": "campaign_metrics",
+      "output_columns": [
+        "campaign_id",
+        "campaign_name",
+        "instance_id",
+        "status",
+        "total_leads",
+        "invites_sent",
+        "accepted",
+        "replies",
+        "acceptance_rate",
+        "reply_rate",
+        "last_activity_at",
+        "briefing_context",
+        "briefing_context_updated_at"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "6625cceeb963d21840bf175eb4205f50f8f756fd75fcd6d7f3956519b479b6bf"
+    },
+    {
+      "name": "campaign_reply_intent",
+      "output_columns": [
+        "campaign_id",
+        "intent_level",
+        "cnt"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "5769f4157e43107c139dae7f57c7a6f9cdb997710bdaa075ed0d650284a6c1d8"
+    },
+    {
+      "name": "campaign_reply_sentiment",
+      "output_columns": [
+        "campaign_id",
+        "sentiment",
+        "cnt"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "38d6ceafd701cd3cb9171db3dd01394f5a974746a51d511130c42e5c2e9a8279"
+    },
+    {
+      "name": "conversation_latest_message",
+      "output_columns": [
+        "instance_id",
+        "profile_url",
+        "message_id",
+        "direction",
+        "body",
+        "sent_at",
+        "source"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "c54b7827eeb6d02db35c2ae6515bd2b9e23c800c79a44fee992cfdbfc2db6abc"
+    },
+    {
+      "name": "conversation_reply_intent",
+      "output_columns": [
+        "instance_id",
+        "profile_url",
+        "highest_intent",
+        "first_p1_at",
+        "first_p2_at",
+        "first_p3_at",
+        "first_p3_campaign_id",
+        "last_out_after_p3_at",
+        "last_in_after_p3_at"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "f049516c5b416c9197f870b93cde30e227a0b1c7190ef90b534ce3e0b724e6ba"
+    },
+    {
+      "name": "daily_activity",
+      "output_columns": [
+        "day",
+        "instance_id",
+        "event_type",
+        "cnt"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "f9d8fae541229acf20ec6fb1e05f36e5a8a36fd327a44cbd17fa5ba396335367"
+    },
+    {
+      "name": "pipeline_metrics",
+      "output_columns": [
+        "campaign_id",
+        "instance_id",
+        "pipeline_stage",
+        "pipeline_substatus",
+        "leads",
+        "oldest_in_stage",
+        "stale_14d"
+      ],
+      "security_invoker": true,
+      "definition_sha256": "b7a71ed561bfec1363ce27b9437523c77b52372ac5dc98e53f382d1ec823db48"
+    }
+  ],
+  "business_semantics": {
+    "campaign_id": "<instance_id>:<lh_campaign_id>",
+    "thread_key": "<instance_id>|<profile_url>",
+    "funnel_milestones": [
+      "invited_at",
+      "connected_at",
+      "first_message_at",
+      "replied_at"
+    ],
+    "timestamp_convention": "timestamptz values are UTC; views preserve source funnel and aggregation semantics"
+  },
+  "deferred_from_v053": [
+    "auth.users and Supabase identity references",
+    "auth.uid() and request-scoped actor context",
+    "Supabase roles and provider ACL/default-privilege semantics",
+    "RLS and policies for all 25 source tables",
+    "portable functions and triggers (13 functions, 12 triggers)",
+    "ai_execute_sql SELECT-only guard",
+    "Storage metadata and storage.*",
+    "supabase_migrations migration ledger"
+  ],
+  "portability_assertions": {
+    "no_provider_subject_or_provider_resource_ids": true,
+    "server_owned_api_required": true,
+    "runtime_must_be_non_owner_and_non_bypassrls": true,
+    "no_browser_database_access_grant": true
+  }
+}
