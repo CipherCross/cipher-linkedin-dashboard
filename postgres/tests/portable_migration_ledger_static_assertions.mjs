@@ -1,0 +1,296 @@
+#!/usr/bin/env node
+// Static assertions for the S08 ledger, dump/restore and reconciliation
+// artifacts. Runs without a database.
+//
+//   node postgres/tests/portable_migration_ledger_static_assertions.mjs
+//
+// Checks:
+//   * the manifest is well formed, declares 001 -> 002 -> 003 contiguously,
+//     pins a SHA-256 for every artifact and declares no down migration path;
+//   * every pinned SHA-256 matches the file on disk;
+//   * the three immutable baseline artifacts still carry the digests S05, S06
+//     and S07 published, so S08 provably did not edit them;
+//   * no provider marker appears in executable SQL, script or manifest content
+//     (a provider name inside a comment is documentation, not a dependency, and
+//     comments are stripped before the sweep);
+//   * no secret, credential, password or connection string appears anywhere;
+//   * S08 changed no frontend, API, sync-agent, ops or historical migration
+//     file relative to its base.
+
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const BASELINE_DIR = join(REPO_DIR, 'postgres', 'tenant-baseline', 'v1');
+const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
+
+// The digests S05, S06 and S07 published for the immutable baseline set.
+const IMMUTABLE_BASELINE = {
+  '001_portable_business_baseline.sql':
+    '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
+  '002_identity_roles_actor_rls.sql':
+    '18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80',
+  '003_functions_triggers_ai_guard.sql':
+    'a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92',
+};
+
+// Everything S08 adds. Every one of these is swept for markers and secrets.
+const S08_ARTIFACTS = [
+  'postgres/tenant-baseline/v1/000_control_plane_role_bootstrap.sql',
+  'postgres/tenant-baseline/v1/000_migration_ledger.sql',
+  'postgres/tenant-baseline/v1/restore_window_open.sql',
+  'postgres/tenant-baseline/v1/restore_window_close.sql',
+  'postgres/tenant-baseline/v1/ledger.manifest.json',
+  'postgres/tools/portable_migration_ledger.mjs',
+  'postgres/tests/portable_schema_inventory_snapshot.sql',
+  'postgres/tests/portable_sequence_state.sql',
+  'postgres/tests/portable_restore_reconciliation.sql',
+  'postgres/tests/portable_restore_behavior_assertions.sql',
+  'postgres/tests/portable_restore_ai_guard_assertions.sql',
+  'postgres/tests/portable_dump_restore_test_roles.sql',
+  'postgres/tests/portable_migration_ledger_tests.sh',
+  'postgres/tests/portable_dump_restore_cleanroom.sh',
+  'postgres/tests/portable_migration_ledger_static_assertions.mjs',
+  'docs/platform-ops/g1-dump-restore-go-no-go.json',
+];
+
+const EXECUTABLE_SCRIPTS = [
+  'postgres/tests/portable_migration_ledger_tests.sh',
+  'postgres/tests/portable_dump_restore_cleanroom.sh',
+];
+
+// Paths S08 must not touch.
+const PROTECTED_PATHS = [
+  'frontend/',
+  'sync-agent/',
+  'ops/',
+  'supabase/migrations/',
+  'supabase/tenant-baseline/',
+  'postgres/tenant-baseline/v1/001_portable_business_baseline.sql',
+  'postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql',
+  'postgres/tenant-baseline/v1/003_functions_triggers_ai_guard.sql',
+];
+
+// Provider surfaces the portable baseline must not depend on.
+const PROVIDER_MARKERS = [
+  /\bsupabase\b/i,
+  /\bpostgrest\b/i,
+  /\bservice_role\b/i,
+  /\bauth\.(uid|users|jwt)\b/i,
+  /\bstorage\.(objects|buckets)\b/i,
+  /\banon\b/i,
+  /\bauthenticated\b/i,
+  /\bauthenticator\b/i,
+  /\bai_sql_runner\b/i,
+  /\bneon\b/i,
+  /\bvercel\b/i,
+  /\bcloudflare\b/i,
+];
+
+// Two files necessarily name provider surfaces in executable content, because
+// their whole job is to prove those surfaces are absent. Exempting them from the
+// marker sweep is explicit and reasoned rather than a silent regex hole; the
+// credential sweep still applies to both.
+const MARKER_SWEEP_EXEMPT = {
+  'postgres/tests/portable_restore_reconciliation.sql':
+    'asserts that no provider schema or provider role exists after restore, so it must name them',
+  'postgres/tests/portable_migration_ledger_static_assertions.mjs':
+    'defines the marker patterns themselves',
+  'docs/platform-ops/g1-dump-restore-go-no-go.json':
+    'is the owner decision document; naming the provider being adopted and the one being left is its purpose. It is swept for resource IDs and credentials instead.',
+};
+
+// Provider RESOURCE identifiers, as opposed to provider names. These must not
+// appear anywhere, including in the owner decision document: an evidence file
+// that carries a project, endpoint or account identifier stops being safe to
+// share and starts being an inventory of live infrastructure.
+const RESOURCE_ID_MARKERS = [
+  /\bprj_[A-Za-z0-9]{8,}/,
+  /\bteam_[A-Za-z0-9]{8,}/,
+  /\bacct_[A-Za-z0-9]{8,}/,
+  /\barn:aws:/i,
+  /\bep-[a-z0-9]+-[a-z0-9]+-\d{5,}/i,
+  /[A-Za-z0-9-]+\.neon\.tech/i,
+  /[A-Za-z0-9-]+\.vercel\.app/i,
+  /[A-Za-z0-9-]+\.supabase\.(co|in)/i,
+  /[A-Za-z0-9-]+\.r2\.cloudflarestorage\.com/i,
+];
+
+// Secrets and credentials, in any file.
+const SECRET_MARKERS = [
+  /\bpostgres(ql)?:\/\//i,
+  /\bPGPASSWORD\b/,
+  /\bpassword\s*[:=]\s*['"][^'"]+['"]/i,
+  /\bPASSWORD\s+'[^']+'/i,
+  /\bENCRYPTED\s+PASSWORD\b/i,
+  /\b(api[_-]?key|secret[_-]?key|access[_-]?token|bearer)\s*[:=]\s*['"][^'"]{8,}/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /\beyJ[A-Za-z0-9_-]{20,}\./,
+];
+
+let failures = 0;
+let checks = 0;
+
+function check(label, condition, detail = '') {
+  checks += 1;
+  if (condition) {
+    process.stdout.write(`  ok   ${label}\n`);
+  } else {
+    failures += 1;
+    process.stderr.write(`  FAIL ${label}${detail ? `: ${detail}` : ''}\n`);
+  }
+}
+
+function sha256(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+// Comments are documentation. A provider name inside one is a note about what
+// the artifact deliberately does NOT use; a provider name in executable code is
+// a dependency. Only the latter is a finding, so comments come out first.
+function stripComments(path, text) {
+  if (path.endsWith('.sql')) {
+    return text
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .split('\n')
+      .map((line) => line.replace(/--.*$/, ''))
+      .join('\n');
+  }
+  if (path.endsWith('.sh')) {
+    return text
+      .split('\n')
+      .map((line) => (/^\s*#/.test(line) ? '' : line))
+      .join('\n');
+  }
+  if (path.endsWith('.mjs')) {
+    return text
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .split('\n')
+      .map((line) => (/^\s*\/\//.test(line) ? '' : line))
+      .join('\n');
+  }
+  return text;
+}
+
+// --- manifest ----------------------------------------------------------------
+
+process.stdout.write('Ledger manifest\n');
+
+const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
+
+check('manifest declares the portable ledger contract',
+  manifest.ledger_contract === 'portable-tenant-baseline-ledger');
+check('manifest declares no down migration path',
+  manifest.down_migrations?.supported === false);
+check('manifest declares idempotent-skip re-apply semantics',
+  manifest.reapply_semantics?.mode === 'idempotent-skip');
+check('manifest declares the non-superuser apply principal',
+  manifest.apply_principal?.session_user === 'app_migration'
+  && manifest.apply_principal?.current_user === 'app_owner'
+  && manifest.apply_principal?.superuser_forbidden === true);
+check('manifest stores the ledger outside the business schema',
+  manifest.ledger_store?.schema === 'app_ledger' && manifest.ledger_store?.append_only === true);
+check('manifest declares the seven-role bootstrap dependency',
+  Array.isArray(manifest.role_bootstrap?.required_roles)
+  && manifest.role_bootstrap.required_roles.length === 7
+  && manifest.role_bootstrap.is_ledger_step === false);
+check('manifest declares three steps in order 1 -> 2 -> 3',
+  manifest.steps.length === 3 && manifest.steps.every((s, i) => s.step === i + 1));
+
+const pinned = [
+  manifest.role_bootstrap,
+  manifest.ledger_bootstrap,
+  manifest.restore_procedure.window_open,
+  manifest.restore_procedure.window_close,
+  ...manifest.steps,
+];
+
+for (const entry of pinned) {
+  const path = join(BASELINE_DIR, entry.artifact);
+  const actual = existsSync(path) ? sha256(path) : '<missing>';
+  check(`pinned digest matches ${entry.artifact}`, actual === entry.sha256,
+    `manifest ${entry.sha256}, disk ${actual}`);
+}
+
+process.stdout.write('\nImmutable baseline set\n');
+for (const [artifact, expected] of Object.entries(IMMUTABLE_BASELINE)) {
+  const actual = sha256(join(BASELINE_DIR, artifact));
+  check(`${artifact} is unchanged since its own session`, actual === expected,
+    `expected ${expected}, found ${actual}`);
+  const declared = manifest.steps.find((s) => s.artifact === artifact);
+  check(`${artifact} is pinned in the ledger at its published digest`,
+    declared?.sha256 === expected);
+}
+
+// --- marker and secret sweep -------------------------------------------------
+
+process.stdout.write('\nProvider and credential sweep\n');
+for (const relative of S08_ARTIFACTS) {
+  const path = join(REPO_DIR, relative);
+  if (!existsSync(path)) {
+    check(`${relative} exists`, false);
+    continue;
+  }
+  const raw = readFileSync(path, 'utf8');
+  const code = stripComments(relative, raw);
+
+  if (MARKER_SWEEP_EXEMPT[relative]) {
+    process.stdout.write(`  ok   ${relative} is exempt from the marker sweep (${MARKER_SWEEP_EXEMPT[relative]})\n`);
+    checks += 1;
+  } else {
+    const providerHits = PROVIDER_MARKERS
+      .filter((pattern) => pattern.test(code))
+      .map((pattern) => pattern.source);
+    check(`${relative} has no provider marker in executable content`,
+      providerHits.length === 0, providerHits.join(', '));
+  }
+
+  const secretHits = SECRET_MARKERS
+    .filter((pattern) => pattern.test(raw))
+    .map((pattern) => pattern.source);
+  check(`${relative} has no secret, credential or connection string`,
+    secretHits.length === 0, secretHits.join(', '));
+
+  const resourceHits = RESOURCE_ID_MARKERS
+    .filter((pattern) => pattern.test(raw))
+    .map((pattern) => pattern.source);
+  check(`${relative} has no provider resource identifier`,
+    resourceHits.length === 0, resourceHits.join(', '));
+}
+
+process.stdout.write('\nHarness hygiene\n');
+for (const relative of EXECUTABLE_SCRIPTS) {
+  const path = join(REPO_DIR, relative);
+  const mode = statSync(path).mode;
+  check(`${relative} is executable`, (mode & 0o111) !== 0);
+  check(`${relative} refuses an implicit image pull`,
+    readFileSync(path, 'utf8').includes('refusing an implicit network pull'));
+  check(`${relative} removes its containers`,
+    readFileSync(path, 'utf8').includes('trap cleanup EXIT'));
+}
+
+// --- scope -------------------------------------------------------------------
+
+process.stdout.write('\nSession scope\n');
+let changed = null;
+try {
+  const base = execFileSync('git', ['merge-base', 'HEAD', 'main'], { cwd: REPO_DIR, encoding: 'utf8' }).trim();
+  changed = execFileSync('git', ['diff', '--name-only', base], { cwd: REPO_DIR, encoding: 'utf8' })
+    .split('\n').filter(Boolean);
+} catch {
+  process.stdout.write('  skip Git is unavailable; scope check not run\n');
+}
+
+if (changed) {
+  const violations = changed.filter((file) =>
+    PROTECTED_PATHS.some((protectedPath) =>
+      protectedPath.endsWith('/') ? file.startsWith(protectedPath) : file === protectedPath));
+  check('no frontend, API, sync-agent, ops, historical migration or immutable baseline file changed',
+    violations.length === 0, violations.join(', '));
+}
+
+process.stdout.write(`\nStatic assertions: ${checks - failures} passed, ${failures} failed\n`);
+process.exit(failures === 0 ? 0 : 1);

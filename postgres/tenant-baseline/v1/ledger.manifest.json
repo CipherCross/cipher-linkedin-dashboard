@@ -1,0 +1,89 @@
+{
+  "ledger_contract": "portable-tenant-baseline-ledger",
+  "ledger_version": "v1",
+  "baseline_directory": "postgres/tenant-baseline/v1",
+  "description": "Provider-neutral migration ledger for the immutable portable tenant baseline set. Declares the canonical apply order, the SHA-256 of every artifact, the apply principal and the control-plane role-bootstrap dependency.",
+  "ledger_store": {
+    "schema": "app_ledger",
+    "applied_table": "applied_migration",
+    "role_bootstrap_table": "role_bootstrap",
+    "append_only": true,
+    "note": "The table in the tenant database is the source of truth for what a given database actually received. This manifest is the source of truth for what it should have received. Any disagreement is drift."
+  },
+  "apply_principal": {
+    "session_user": "app_migration",
+    "current_user": "app_owner",
+    "superuser_forbidden": true,
+    "note": "The runner connects as the non-superuser app_migration login and applies every step under SET ROLE app_owner, so app_migration owns no object."
+  },
+  "reapply_semantics": {
+    "mode": "idempotent-skip",
+    "note": "A step already recorded with a matching SHA-256 is skipped and the run exits successfully. The baseline SQL is not internally idempotent, so re-executing it would fail; the runner must skip rather than re-run. Any disagreement between manifest, artifact file and ledger row is a hard failure instead."
+  },
+  "down_migrations": {
+    "supported": false,
+    "note": "The operations contract keeps reversal as an explicit break-glass action outside this ledger. No down step is declared, generated or accepted."
+  },
+  "role_bootstrap": {
+    "artifact": "000_control_plane_role_bootstrap.sql",
+    "sha256": "19d2594c6d18da2a06a1a75ba86d109547188bdb1449af5de2db936d649bb79f",
+    "applied_by": "control-plane",
+    "is_ledger_step": false,
+    "required_roles": [
+      "app_owner",
+      "app_migration",
+      "app_runtime",
+      "app_readonly",
+      "app_machine",
+      "app_system",
+      "app_ai_runner"
+    ],
+    "note": "Roles are cluster-level objects and are not carried by pg_dump. A restore target must be prepared with this bootstrap before the dump is restored; the harness never uses pg_dumpall --roles-only, which would move credentials between clusters."
+  },
+  "ledger_bootstrap": {
+    "artifact": "000_migration_ledger.sql",
+    "sha256": "c1b4223c3c0c19c67c714c420aad84707387f6bb4624c96a5ad9ce4aa8120a43",
+    "applied_by": "app_migration",
+    "is_ledger_step": false,
+    "note": "Creates the app_ledger store itself, so it cannot be recorded as a step in that store."
+  },
+  "restore_procedure": {
+    "dump": "pg_dump --format=custom --role=app_owner, run as the non-superuser app_migration login",
+    "restore": "pg_restore --exit-on-error --role=app_owner into a target prepared with the role bootstrap; pg_dumpall --roles-only is never used",
+    "window_open": {
+      "artifact": "restore_window_open.sql",
+      "sha256": "2ad791f76f5641d21818b21281d13a1ff711d33ba2a34317dd49677066750e21"
+    },
+    "window_close": {
+      "artifact": "restore_window_close.sql",
+      "sha256": "afb0999a936208749a78edc16f5fe51148f18997313d2b244d645a89aac3d994"
+    },
+    "note": "A restore target needs a temporary, explicitly closed window so the AI SQL guard can be handed back to app_ai_runner and re-grant its own ACL. Without it pg_restore silently leaves the guard executable by PUBLIC and without its app_system grant, because a failed GRANT is a warning rather than an error."
+  },
+  "steps": [
+    {
+      "step": 1,
+      "artifact": "001_portable_business_baseline.sql",
+      "sha256": "4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415",
+      "owner_role_entered_by": "runner",
+      "session": "S05",
+      "description": "Portable business tables, identities, constraints, indexes and the seven final views."
+    },
+    {
+      "step": 2,
+      "artifact": "002_identity_roles_actor_rls.sql",
+      "sha256": "18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80",
+      "owner_role_entered_by": "artifact",
+      "session": "S06",
+      "description": "Canonical users, provider identity mapping, transaction-local actor context, grants and RLS."
+    },
+    {
+      "step": 3,
+      "artifact": "003_functions_triggers_ai_guard.sql",
+      "sha256": "a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92",
+      "owner_role_entered_by": "artifact",
+      "session": "S07",
+      "description": "Portable stored functions, business triggers and the SELECT-only AI SQL guard."
+    }
+  ]
+}

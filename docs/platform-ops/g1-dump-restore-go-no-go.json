@@ -1,0 +1,296 @@
+{
+  "gate": "G1",
+  "title": "Disposable tenant approval and dump/restore go/no-go",
+  "schema_version": "1.0",
+  "status": "awaiting-owner-decision",
+  "decision": null,
+  "decided_at": null,
+  "prepared_by_session": "S08",
+  "prepared_on": "2026-08-02",
+  "phase": "N1",
+  "spec": "specs/2026-07-30-neon-migration-and-multitenancy.md",
+
+  "gate_semantics": {
+    "kind": "owner-decision-gate",
+    "self_passing": false,
+    "note": "G1 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes; until the owner records a decision here, the gate is open and blocking.",
+    "blocks": [
+      "S11 - Neon driver, connection lifecycle and actor-scoped transaction wrapper",
+      "any live Neon project, database, branch, role or credential creation",
+      "any restore rehearsal against a real provider"
+    ],
+    "does_not_block": [
+      "S09 - HostingControlPlanePort, fake adapter and canonical capability tests, which depends on S02 rather than on G1"
+    ]
+  },
+
+  "external_mutations": {
+    "performed": "none",
+    "detail": "All evidence below was produced in disposable local PostgreSQL containers created and destroyed by their own harnesses. No Neon project, database, branch, role or credential was created; no Auth user, no object-storage bucket, no deployment, no `supabase db push`, no data copy and no Git push."
+  },
+
+  "environment": {
+    "postgres_image": "postgres:17-alpine",
+    "server_version": "PostgreSQL 17.10 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "pg_dump_version": "pg_dump (PostgreSQL) 17.10",
+    "pg_restore_version": "pg_restore (PostgreSQL) 17.10",
+    "psql_version": "psql (PostgreSQL) 17.10",
+    "clusters": 3,
+    "note": "Source, replica and restore target are three separate clusters, not three databases in one, so cluster-level role state cannot leak between them."
+  },
+
+  "baseline_under_test": {
+    "directory": "postgres/tenant-baseline/v1",
+    "manifest": "postgres/tenant-baseline/v1/ledger.manifest.json",
+    "apply_principal": "app_migration (non-superuser login) acting as app_owner",
+    "steps": [
+      {
+        "step": 1,
+        "artifact": "001_portable_business_baseline.sql",
+        "sha256": "4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415"
+      },
+      {
+        "step": 2,
+        "artifact": "002_identity_roles_actor_rls.sql",
+        "sha256": "18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80"
+      },
+      {
+        "step": 3,
+        "artifact": "003_functions_triggers_ai_guard.sql",
+        "sha256": "a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92"
+      }
+    ]
+  },
+
+  "evidence": {
+    "clean_room_reproducibility": {
+      "result": "pass",
+      "harness": "postgres/tests/portable_dump_restore_cleanroom.sh",
+      "independent_clean_applies": 2,
+      "inventory_lines_per_apply": 733,
+      "inventory_diff_lines": 0,
+      "ledger_diff_lines": 0,
+      "detail": "Two independent clusters, each bootstrapped and applied from scratch through the ledger runner, produced byte-identical schema inventories and identical ledger contents. The inventory covers schemas, extensions and extension members, tables, columns, views, indexes, constraints, sequences and identity definitions, functions, triggers, policies, both RLS flags, ownership, table grants, column-level grants, default privileges, application roles and role memberships."
+    },
+    "migration_ledger": {
+      "result": "pass",
+      "harness": "postgres/tests/portable_migration_ledger_tests.sh",
+      "checks_passed": 19,
+      "checks_failed": 0,
+      "storage": "app_ledger schema inside the tenant database, append-only, plus a repo-side pinned manifest",
+      "reapply_semantics": "idempotent-skip",
+      "down_migrations": "not supported",
+      "drift_detected": [
+        "artifact bytes changed relative to the manifest",
+        "applied step digest disagrees with the manifest",
+        "step skipped",
+        "steps applied out of order",
+        "step recorded twice",
+        "ledger rewritten by UPDATE, DELETE or TRUNCATE",
+        "control-plane role bootstrap missing",
+        "apply principal is a superuser"
+      ]
+    },
+    "dump_restore": {
+      "result": "pass",
+      "dump_command": "pg_dump --format=custom --role=app_owner, run as the non-superuser app_migration login",
+      "restore_command": "pg_restore --exit-on-error --role=app_owner, run as the non-superuser app_migration login",
+      "roles_only_dump_used": false,
+      "dump_bytes": 235987,
+      "dump_bytes_note": "Measured on the final run. A custom-format dump embeds run metadata, so the size varies by a few bytes between otherwise identical runs; it is recorded as scale, not as a digest.",
+      "restore_warnings": 0,
+      "detail": "The restore target was prepared with the control-plane role bootstrap alone. The dump was verified to contain no role definitions, so the restored database depends on roles the control plane created rather than on credentials carried between clusters."
+    },
+    "reconciliation": {
+      "result": "pass",
+      "inventory_diff_lines": 0,
+      "sequence_and_row_state_diff_lines": 0,
+      "asserted": {
+        "tables_in_public": 27,
+        "s05_business_tables": 25,
+        "views": 7,
+        "rls_enabled_tables": 27,
+        "force_rls_tables": 0,
+        "policies": 52,
+        "ai_read_policies": 25,
+        "portable_functions": 13,
+        "security_definer_functions": 8,
+        "triggers": 12,
+        "disabled_triggers": 0,
+        "indexes": 75,
+        "constraints": 133,
+        "not_valid_constraints": 0,
+        "generated_always_identity_columns": 13
+      },
+      "known_pitfalls_verified_after_restore": [
+        {
+          "pitfall": "pgcrypto installed in public; extension members must stay out of the portable function inventory",
+          "result": "pass",
+          "detail": "pgcrypto is present in schema public and its members are excluded through pg_depend deptype = 'e', leaving exactly 13 portable functions."
+        },
+        {
+          "pitfall": "ai_execute_sql ownership by app_ai_runner must survive",
+          "result": "pass",
+          "detail": "The guard is owned by app_ai_runner after restore; app_ai_runner owns exactly one function and zero relations."
+        },
+        {
+          "pitfall": "the temporary GRANT CREATE to app_ai_runner must not become permanent",
+          "result": "pass",
+          "detail": "The restore window is opened and closed explicitly; app_ai_runner has no CREATE on schema public afterwards."
+        },
+        {
+          "pitfall": "column-scoped grants on team_members and instances must survive, including the absence of instances.config",
+          "result": "pass",
+          "detail": "team_members exposes exactly id, name, active, created_at; instances exposes exactly nine columns and not config; users and user_identities have no AI grant at all."
+        },
+        {
+          "pitfall": "GENERATED ALWAYS AS IDENTITY sequences must restore with correct values",
+          "result": "pass",
+          "detail": "All 13 identity columns come back GENERATED ALWAYS, sequence last_value matches the source exactly, and a fresh insert on each seeded table receives an id above the restored maximum."
+        },
+        {
+          "pitfall": "security_invoker views must remain security_invoker",
+          "result": "pass",
+          "detail": "All 7 views carry security_invoker = true after restore."
+        },
+        {
+          "pitfall": "RLS must not restore as FORCE where it was not FORCE",
+          "result": "pass",
+          "detail": "27 tables have RLS enabled and none has relforcerowsecurity set."
+        }
+      ]
+    },
+    "post_restore_behaviour": {
+      "result": "pass",
+      "cases": [
+        "a valid active actor keeps read and write access to the shared workspace",
+        "missing, malformed, unknown and inactive actors all fail closed",
+        "a non-NULL milestone cannot be regressed to NULL; a NULL milestone can still be filled forward",
+        "the AI SQL guard accepts SELECT and WITH and returns a JSON array",
+        "the AI SQL guard rejects insert, update, delete, truncate, DDL, grant, multi-statement input, data-modifying CTEs, SELECT ... FOR UPDATE and SET ROLE",
+        "the AI SQL guard still refuses instances.config, the withheld team_members columns, users and user_identities",
+        "app_runtime cannot execute the AI SQL guard and cannot SET ROLE into app_ai_runner or app_system",
+        "app_readonly cannot execute the AI SQL guard"
+      ]
+    },
+    "static": {
+      "result": "pass",
+      "harness": "postgres/tests/portable_migration_ledger_static_assertions.mjs",
+      "detail": "Manifest shape, every pinned digest, the three immutable baseline digests, a provider-marker sweep over executable content, a credential sweep over raw content, harness hygiene, and a scope check that no frontend, API, sync-agent, ops, historical migration or immutable baseline file changed."
+    },
+    "replayed_dependency_assertions": {
+      "result": "pass",
+      "detail": "The S04, S05, S06 and S07 inventory assertions and all three existing clean-room harnesses were re-run unchanged and passed. Exact results are recorded in docs/implementation-handoffs/N-S08.md."
+    }
+  },
+
+  "provider_requirements_from_s02": {
+    "source": "docs/platform-ops/neon-provider-decisions.md",
+    "tier": "Neon Free",
+    "tier_note": "A deliberate cost-first choice for two measured small databases, not a production SLA. An upgrade to Launch is considered only after a measured capacity, recovery or support blocker.",
+    "region": "AWS Europe (Frankfurt)",
+    "region_note": "Chosen on latency and cost preference, with no residency requirement asserted.",
+    "excluded_components": [
+      "Neon Data API (beta)",
+      "managed Neon Auth (beta)",
+      "Neon Storage (beta)"
+    ],
+    "recovery_objectives": {
+      "rpo_hours": 24,
+      "rto_business_hours": 8,
+      "maintenance_window_minutes": 90,
+      "note": "Free-tier restore history does not substitute for portable export, object and identity recovery evidence."
+    }
+  },
+
+  "known_risks": [
+    {
+      "id": "R1",
+      "risk": "A restore needs a temporary privilege window that an operator could leave open.",
+      "severity": "medium",
+      "detail": "Because the AI guard is deliberately owned by a role that owns nothing else, pg_restore cannot re-establish its ownership or its ACL without a temporary CREATE grant and a temporarily inheriting membership. Worse, pg_restore reports a failed GRANT as a warning rather than an error, so without the window the guard silently comes back executable by PUBLIC and without its app_system grant, and --exit-on-error does not notice.",
+      "mitigation": "The window is two committed, digest-pinned files. restore_window_close.sql refuses to succeed while either capability is still in place, the harness fails on any pg_restore warning, and the reconciliation re-checks the same properties independently.",
+      "residual": "An operator who runs pg_restore outside the documented procedure can still produce a weakened database. S25 must encode this procedure in the Neon adapter rather than leave it to a runbook."
+    },
+    {
+      "id": "R2",
+      "risk": "Evidence comes from PostgreSQL 17.10 in a container, not from Neon.",
+      "severity": "medium",
+      "detail": "Neon's control plane hands out a different privileged bootstrap role, may differ on trusted-extension installation and on whether a non-superuser can be granted CREATE on the database, and its own pg_dump/pg_restore version may differ from the server's.",
+      "mitigation": "Nothing in the baseline, the ledger or the restore procedure uses a superuser, a provider role or a provider extension. The role bootstrap is a single small file that a provider-specific control plane can execute with whatever privileged principal it offers.",
+      "residual": "First real Neon apply must re-run both harnesses against a disposable project before any tenant data is involved. That is the substance of the G1 decision."
+    },
+    {
+      "id": "R3",
+      "risk": "The 10 second AI guard timeout still needs the caller to arm it.",
+      "severity": "low",
+      "detail": "Inherited unchanged from S07 and from the source schema: PostgreSQL arms statement_timeout when the outer statement begins, so the value the guard sets on itself cannot abort a call already in flight.",
+      "mitigation": "Both halves are pinned as S07 assertions.",
+      "residual": "S11's transaction wrapper and S15's AI handlers must issue SET LOCAL statement_timeout per transaction."
+    },
+    {
+      "id": "R4",
+      "risk": "Dump and restore timings are not representative.",
+      "severity": "low",
+      "detail": "The dump measured here is about 236 kB of an empty schema plus fixtures. It says nothing about the real cutover window.",
+      "mitigation": "S01 recorded the real source sizes; S27 owns two timed rehearsals.",
+      "residual": "The cutover window can only be chosen from a rehearsal against real data volume."
+    },
+    {
+      "id": "R5",
+      "risk": "The ledger is authoritative only for databases it was used on.",
+      "severity": "low",
+      "detail": "A database prepared by hand, outside the runner, has no ledger rows and will be reported as unprepared rather than as drifted.",
+      "mitigation": "The runner refuses to verify a database with no ledger, and the apply path is the only sanctioned way to create one.",
+      "residual": "S24 to S26 must make the ledger the only apply path exposed through the operations core."
+    }
+  ],
+
+  "owner_approval_items": [
+    {
+      "id": "A1",
+      "item": "Accept dump/restore, rather than logical replication, as the cutover mechanism for the internal workspace.",
+      "evidence": "evidence.dump_restore and evidence.reconciliation",
+      "decision": null
+    },
+    {
+      "id": "A2",
+      "item": "Accept the portable baseline set 001 -> 002 -> 003 at the digests above as the immutable per-tenant baseline.",
+      "evidence": "baseline_under_test and evidence.clean_room_reproducibility",
+      "decision": null
+    },
+    {
+      "id": "A3",
+      "item": "Accept the app_ledger migration ledger, its idempotent-skip re-apply contract and its absence of down migrations.",
+      "evidence": "evidence.migration_ledger",
+      "decision": null
+    },
+    {
+      "id": "A4",
+      "item": "Accept the documented restore window, including its residual operator risk (R1).",
+      "evidence": "known_risks R1",
+      "decision": null
+    },
+    {
+      "id": "A5",
+      "item": "Authorise creation of ONE disposable Neon project on the S02 tier and region for the purpose of re-running both harnesses against a real provider. This is the first external resource of the migration.",
+      "evidence": "provider_requirements_from_s02 and known_risks R2",
+      "decision": null
+    },
+    {
+      "id": "A6",
+      "item": "Confirm the recovery objectives (RPO 24h, RTO 8 business hours, 90 minute maintenance window) remain the target given Neon Free tier restore history.",
+      "evidence": "provider_requirements_from_s02.recovery_objectives",
+      "decision": null
+    }
+  ],
+
+  "contains_no": [
+    "credentials",
+    "passwords",
+    "connection strings",
+    "API keys",
+    "provider resource IDs",
+    "customer data"
+  ]
+}
