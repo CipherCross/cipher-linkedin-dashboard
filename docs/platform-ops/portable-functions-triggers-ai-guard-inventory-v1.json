@@ -1,0 +1,333 @@
+{
+  "format_version": 1,
+  "inventory_type": "portable-functions-triggers-ai-guard",
+  "artifact_version": "v1",
+  "artifact": {
+    "file": "postgres/tenant-baseline/v1/003_functions_triggers_ai_guard.sql",
+    "sha256": "a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92",
+    "schema": "public",
+    "applies_after": "postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql",
+    "apply_principal": "app_migration",
+    "object_owner": "app_owner"
+  },
+  "source": {
+    "inventory": "docs/platform-ops/tenant-schema-inventory-v053.json",
+    "baseline": "supabase/tenant-baseline/v053/053_tenant_baseline.sql",
+    "source_functions": 13,
+    "source_triggers": 12,
+    "portable_functions": 13,
+    "portable_triggers": 12,
+    "one_to_one_with_source": true,
+    "invented_business_semantics": []
+  },
+  "counts": {
+    "functions": 13,
+    "triggers": 12,
+    "security_definer_functions": 8,
+    "security_invoker_functions": 5,
+    "functions_with_fixed_search_path": 13,
+    "functions_executable_by_public": 0,
+    "ai_read_policies": 25,
+    "policies_total_after_s07": 52,
+    "extension_functions_excluded": "pgcrypto installs its functions into public; every catalog assertion excludes pg_depend deptype='e' members"
+  },
+  "functions": [
+    {
+      "signature": "admin_update_team_member(bigint,text,text,boolean)",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": true,
+      "search_path": "",
+      "execute_to": ["app_runtime"],
+      "source_execute_to": ["service_role"],
+      "portable_change": "the final-active-admin invariant now counts the canonical team_members.user_id link instead of the provider identity column"
+    },
+    {
+      "signature": "ai_execute_sql(text)",
+      "owner": "app_ai_runner",
+      "language": "plpgsql",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_to": ["app_system"],
+      "source_execute_to": ["service_role"],
+      "portable_change": "owned by the provider-neutral app_ai_runner sandbox instead of ai_sql_runner; explicit single-statement, empty and malformed rejection added"
+    },
+    {
+      "signature": "apply_follow_up_action(text,text,text,text,bigint,uuid,bigint,date,text)",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_to": ["app_runtime"],
+      "source_execute_to": ["service_role"],
+      "portable_change": null
+    },
+    {
+      "signature": "archive_follow_up_after_last_lead()",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_to": ["app_runtime"],
+      "source_execute_to": ["service_role"],
+      "portable_change": null
+    },
+    {
+      "signature": "delete_manual_message(bigint)",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_to": ["app_runtime"],
+      "source_execute_to": ["service_role"],
+      "portable_change": null
+    },
+    {
+      "signature": "is_active_team_member()",
+      "owner": "app_owner",
+      "language": "sql",
+      "security_definer": true,
+      "search_path": "",
+      "execute_to": ["app_readonly", "app_runtime"],
+      "source_execute_to": ["authenticated", "service_role"],
+      "portable_change": "resolves the transaction-local canonical actor instead of a provider claim helper, and requires an active canonical user as well as an active membership, matching the S06 policy contract"
+    },
+    {
+      "signature": "is_app_admin()",
+      "owner": "app_owner",
+      "language": "sql",
+      "security_definer": true,
+      "search_path": "",
+      "execute_to": ["app_readonly", "app_runtime"],
+      "source_execute_to": ["authenticated", "service_role"],
+      "portable_change": "same actor resolution change as is_active_team_member"
+    },
+    {
+      "signature": "leads_keep_milestones()",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": false,
+      "search_path": "",
+      "execute_to": [],
+      "source_execute_to": [],
+      "portable_change": "search_path pinned; body unchanged"
+    },
+    {
+      "signature": "pipeline_auto_advance()",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": true,
+      "search_path": "public",
+      "execute_to": ["app_runtime"],
+      "source_execute_to": ["service_role"],
+      "portable_change": null
+    },
+    {
+      "signature": "refresh_lead_age_estimate()",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": false,
+      "search_path": "",
+      "execute_to": [],
+      "source_execute_to": [],
+      "portable_change": "search_path pinned; body unchanged"
+    },
+    {
+      "signature": "reset_lead_gender_on_input_change()",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": false,
+      "search_path": "",
+      "execute_to": [],
+      "source_execute_to": [],
+      "portable_change": "search_path pinned; body unchanged"
+    },
+    {
+      "signature": "set_hypothesis_campaigns(bigint,text[])",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": false,
+      "search_path": "public",
+      "execute_to": ["app_runtime"],
+      "source_execute_to": ["service_role"],
+      "portable_change": "search_path pinned; body unchanged. Still SECURITY INVOKER, so it runs under the caller's RLS rather than owner rights"
+    },
+    {
+      "signature": "touch_updated_at()",
+      "owner": "app_owner",
+      "language": "plpgsql",
+      "security_definer": false,
+      "search_path": "",
+      "execute_to": [],
+      "source_execute_to": [],
+      "portable_change": "search_path pinned; body unchanged"
+    }
+  ],
+  "triggers": [
+    { "table": "leads", "name": "archive_follow_up_on_last_lead_delete", "timing": "AFTER", "events": ["DELETE"], "function": "archive_follow_up_after_last_lead()" },
+    { "table": "leads", "name": "leads_keep_milestones", "timing": "BEFORE", "events": ["UPDATE"], "function": "leads_keep_milestones()" },
+    { "table": "leads", "name": "refresh_lead_age_estimate", "timing": "BEFORE", "events": ["INSERT", "UPDATE OF education_start_year, first_job_start_year"], "function": "refresh_lead_age_estimate()" },
+    { "table": "leads", "name": "reset_lead_gender_on_input_change", "timing": "BEFORE", "events": ["UPDATE OF full_name, headline"], "function": "reset_lead_gender_on_input_change()" },
+    { "table": "campaigns", "name": "touch_campaigns_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "hypotheses", "name": "touch_hypotheses_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "icp_industries", "name": "touch_icp_industries_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "icp_personas", "name": "touch_icp_personas_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "icps", "name": "touch_icps_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "leads", "name": "touch_leads_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "messages", "name": "touch_messages_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" },
+    { "table": "saved_searches", "name": "touch_saved_searches_updated_at", "timing": "BEFORE", "events": ["UPDATE"], "function": "touch_updated_at()" }
+  ],
+  "milestone_contract": {
+    "trigger": "leads_keep_milestones",
+    "columns": ["invited_at", "connected_at", "first_message_at", "replied_at", "added_at"],
+    "null_to_non_null": "allowed, stored verbatim",
+    "non_null_to_null": "preserved, the previous value is restored without raising",
+    "repeated_sync_upsert": "idempotent; a replay that carries no milestone values changes nothing",
+    "sanctioned_regress": {
+      "setting": "app.allow_milestone_regress",
+      "scope": "transaction_local",
+      "only_writer": "delete_manual_message(bigint)",
+      "purpose": "recompute a milestone that was derived from the manual message being deleted"
+    }
+  },
+  "ai_sql_guard": {
+    "function": "public.ai_execute_sql(text)",
+    "sandbox_role": {
+      "name": "app_ai_runner",
+      "replaces_provider_role": "ai_sql_runner",
+      "login": false,
+      "superuser": false,
+      "bypass_rls": false,
+      "object_owner": false,
+      "owns_only": ["public.ai_execute_sql(text)"],
+      "credentials_in_sql": false,
+      "schema_privileges_after_apply": ["USAGE"],
+      "create_on_schema_public": "granted only to transfer function ownership, revoked in the same artifact"
+    },
+    "execution_principal": {
+      "name": "app_system",
+      "rationale": "S06 reserved app_system as the server-owned system/job principal that S15 will wire to the AI handlers. S07 gives it exactly one capability.",
+      "privileges": ["USAGE on schema public", "EXECUTE on public.ai_execute_sql(text)"],
+      "table_privileges": [],
+      "other_function_privileges": [],
+      "s06_delta": "S06 recorded app_system as having no grants until S15; S07 grants it the AI guard only, without owner rights or BYPASSRLS"
+    },
+    "denied_direct_execution": ["app_runtime", "app_readonly", "app_migration", "app_machine", "PUBLIC", "anonymous"],
+    "accepts": ["a single SELECT statement", "a single WITH statement", "leading and trailing comments", "one trailing statement terminator and trailing whitespace"],
+    "rejects": [
+      "NULL, empty and whitespace-only input",
+      "input that is only a comment",
+      "unterminated string literals, quoted identifiers and comments",
+      "any statement that does not begin with SELECT or WITH",
+      "INSERT, UPDATE, DELETE, MERGE, TRUNCATE and all DDL",
+      "data-modifying CTEs inside an otherwise valid WITH statement",
+      "SELECT ... FOR UPDATE and SELECT ... INTO",
+      "multi-statement input, including a terminator hidden behind a comment",
+      "escape and unicode string literals, which would reintroduce backslash escaping"
+    ],
+    "not_rejected_by_design": [
+      "a statement terminator or a mutation keyword that appears only inside a string literal, quoted identifier or comment"
+    ],
+    "result_shape": {
+      "wrapper": "select coalesce(jsonb_agg(t), '[]'::jsonb) from (select * from (<query>) sub limit 1000) t",
+      "empty_result": "[]",
+      "never_null": true,
+      "row_cap": 1000,
+      "inherited_quirk": "the wrapper's own `t` and `sub` aliases are shadowed when the submitted query names a column the same; carried over from the source unchanged"
+    },
+    "statement_timeout": {
+      "declared": "10s",
+      "set_at": ["function-level SET statement_timeout", "transaction-local set_config inside the body"],
+      "enforced_when": "the caller arms SET LOCAL statement_timeout before invoking the guard",
+      "boundary": "PostgreSQL arms statement_timeout when the outer statement begins, so a value the guard sets on itself cannot abort a call that is already running",
+      "owner_of_the_caller_side": ["S11 transaction wrapper", "S15 AI handlers"],
+      "verified": "both halves asserted in the clean-room"
+    },
+    "data_boundary": {
+      "full_table_select": [
+        "annotations", "briefing_jobs", "briefings", "campaign_steps", "campaigns",
+        "coaching_digest", "conversation_coaching", "conversation_follow_up_state",
+        "events", "follow_up_events", "hypotheses", "hypothesis_campaigns",
+        "icp_industries", "icp_personas", "icps", "lead_gender_reviews", "lead_notes",
+        "leads", "messages", "pipeline_events", "playbook", "saved_searches", "sync_runs"
+      ],
+      "view_select": [
+        "campaign_metrics", "campaign_reply_intent", "campaign_reply_sentiment",
+        "conversation_latest_message", "conversation_reply_intent", "daily_activity",
+        "pipeline_metrics"
+      ],
+      "column_scoped_select": {
+        "team_members": ["id", "name", "active", "created_at"],
+        "instances": ["id", "label", "last_sync_at", "agent_version", "created_at", "account_name", "account_url", "account_avatar", "config_updated_at"]
+      },
+      "withheld": {
+        "instances": ["config"],
+        "team_members": ["email", "role", "user_id"],
+        "tables": ["users", "user_identities"]
+      },
+      "policy_suffix": "_ai_read",
+      "policy_expression": "true",
+      "policy_rationale": "the AI path is server-owned and aggregate by nature and reads the shared workspace without an actor, exactly as in the source; row reach is bounded by the SELECT-only grants instead"
+    }
+  },
+  "preserved_from_s06": {
+    "actor_context_setting": "app.actor_id",
+    "actor_context_scope": "transaction_local",
+    "rls_tables": 27,
+    "s06_policies_unchanged": 27,
+    "runtime_role_non_owner": true,
+    "runtime_role_non_bypassrls": true,
+    "ai_role_non_owner": true,
+    "ai_role_non_bypassrls": true,
+    "server_owned_api_required": true,
+    "artifacts_not_modified": [
+      "postgres/tenant-baseline/v1/001_portable_business_baseline.sql",
+      "postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql",
+      "supabase/tenant-baseline/v053/053_tenant_baseline.sql"
+    ]
+  },
+  "clean_room_tests": {
+    "harness": "postgres/tests/portable_functions_triggers_ai_guard_cleanroom.sh",
+    "apply_order": [
+      "postgres/tenant-baseline/v1/001_portable_business_baseline.sql",
+      "postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql",
+      "postgres/tenant-baseline/v1/003_functions_triggers_ai_guard.sql"
+    ],
+    "role_bootstrap": [
+      "postgres/tests/portable_identity_roles_rls_role_bootstrap.sql",
+      "postgres/tests/portable_functions_triggers_ai_guard_role_bootstrap.sql"
+    ],
+    "fixture_seed": [
+      "postgres/tests/portable_identity_roles_rls_fixture_seed.sql",
+      "postgres/tests/portable_functions_triggers_fixture_seed.sql"
+    ],
+    "catalog_assertions": "postgres/tests/portable_functions_triggers_ai_guard_catalog_assertions.sql",
+    "behavior_assertions": "postgres/tests/portable_functions_triggers_behavior_assertions.sql",
+    "ai_guard_assertions": "postgres/tests/portable_ai_guard_behavior_assertions.sql",
+    "replayed_s06_catalog_assertions": "postgres/tests/portable_identity_roles_rls_catalog_assertions.sql",
+    "artifact_apply_principal": "app_migration",
+    "business_assertion_principal": "app_runtime",
+    "ai_assertion_principal": "app_ai_client -> SET ROLE app_system",
+    "test_only_roles": ["app_ai_client"]
+  },
+  "portability_assertions": {
+    "no_provider_schemas": true,
+    "no_provider_roles": true,
+    "no_provider_claim_helpers": true,
+    "no_postgrest_dependency": true,
+    "no_provider_resource_ids": true,
+    "no_credentials_or_passwords": true,
+    "no_public_function_execution": true,
+    "every_function_has_a_fixed_search_path": true,
+    "security_definer_functions_owned_by_app_owner_or_ai_sandbox": true,
+    "runtime_role_cannot_reach_the_ai_guard": true,
+    "ai_role_has_no_write_path": true,
+    "ai_role_cannot_execute_business_functions": true,
+    "no_frontend_api_or_sync_agent_changes": true
+  },
+  "known_limits": {
+    "security_definer_rpcs_run_with_owner_rights": "admin_update_team_member, apply_follow_up_action, delete_manual_message and pipeline_auto_advance are SECURITY DEFINER exactly as in the source, so they bypass RLS once invoked. They are gated by EXECUTE grants and by the server-owned API, which authorizes the caller before invoking them. S15 owns that handler authorization.",
+    "in_function_statement_timeout": "see ai_sql_guard.statement_timeout.boundary; the caller must arm the limit per transaction",
+    "pgcrypto_functions_are_public_executable": "pgcrypto is installed in public by S05 and its functions keep the extension's default PUBLIC EXECUTE, so generated SQL can call them. They read no application data and every S07 catalog assertion excludes extension members from the portable function inventory."
+  }
+}
