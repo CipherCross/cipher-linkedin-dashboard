@@ -236,6 +236,14 @@ export interface SupabaseControlPlanePort {
   ): Promise<ProviderActionResult>;
 }
 
+/**
+ * @deprecated Superseded by the canonical `HostingControlPlanePort` in
+ * `./hosting.js`, which describes hosting capabilities instead of one vendor's
+ * resources. This port stays in the tree only so the existing concrete adapter,
+ * runtime and tests keep working; S10 ports them onto the canonical contract and
+ * removes this interface together with the Vercel-shaped request/inspection
+ * types above. Do not add new callers.
+ */
 export interface VercelControlPlanePort {
   inspect(request: VercelInspectionRequest): Promise<VercelInspection>;
   createOrAdoptProject(request: VercelProjectRequest): Promise<ProviderResource>;

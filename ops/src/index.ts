@@ -12,6 +12,8 @@ export * from "./core/state-machines.js";
 export * from "./core/types.js";
 export * from "./providers/fakes.js";
 export * from "./providers/adapters.js";
+export * from "./providers/hosting.js";
+export * from "./providers/hosting-fake.js";
 export * from "./providers/interfaces.js";
 export * from "./providers/p4c-sdk.js";
 export * from "./mcp/adapter.js";
