@@ -10,7 +10,7 @@ through the migration ledger and nothing else.
 | Commits | `7d82075` → `256cd02` → one final docs commit correcting the SHAs below |
 | Phase | N4, between `G3` and `S17` |
 | Mandate | `G3` owner decision, condition **C3**, which also folded **B4** into this session |
-| Applied to a live provider project | **no** — an apply is prepared and requested at the end of this document |
+| Applied to a live provider project | **yes** — the owner authorised it on 2026-08-03; see "The apply, as performed" |
 
 ## Why this session exists
 
@@ -426,7 +426,70 @@ unrelated validation assertion firing earlier in the file, which would have been
 false positive for the property under test. The single-case rerun proves the
 non-admin denial itself fires.
 
-## The Neon apply this session is asking for, and its blast radius
+## The apply, as performed
+
+The owner authorised both parts on 2026-08-03, after the session was committed.
+Recorded here as what happened, with the request that preceded it kept below
+unchanged for the audit trail.
+
+**Preflight.** The project was at `ledger consistent: 3/4 steps, order 1 -> 2 ->
+3` with every row recorded as `app_migration/app_owner`, and the
+`role_bootstrap` row still carrying `408bb527…` — the digest the manifest pins.
+No drift. `identity_store` and schema `identity` both absent.
+
+**Part 1, control plane, as the provider's privileged principal.**
+`000_identity_store_role_bootstrap.sql` applied, exit 0. Verified on the live
+project: `identity_store` exists with `login=true super=false bypassrls=false
+createrole=false createdb=false inherit=false`, its role-level setting is
+`search_path=identity, pg_temp`, `app_owner` holds the membership with
+`inherit=false set=true`, and `pg_has_role('app_owner','identity_store','SET')`
+is true — which is the precondition step 004 needs.
+
+**A credential had to be rotated to do part 2.** The ledger apply must run as
+`app_migration`, because the runner writes `session_user`/`current_user` into
+the append-only ledger and any other principal would record a row that fails
+every future `verify` with `ledger_principal_invalid`, permanently. No
+`app_migration` credential was on this machine. On the owner's instruction a
+fresh one was set (as the privileged principal, which holds ADMIN on that role)
+and stored **only** at `~/.config/neon-identity-ledger.env`, mode 600, pointing
+at the **direct, unpooled** endpoint because the runner relies on `SET ROLE` and
+transaction-scoped state that a transaction pooler does not preserve. Any
+`app_migration` credential held elsewhere for this project stopped working at
+that moment. Nothing was written to the repository.
+
+**Part 2, the ledger.**
+
+```
+applied step 4: 004_identity_write_path_and_store.sql
+ledger consistent: 4/4 steps, order 1 -> 2 -> 3 -> 4
+```
+
+All four rows recorded as `app_migration/app_owner`. The digest recorded for
+step 4 is `2ec822cad4067273aac7ead38e1dfdb29dc8dbf3ce5e1ee1765ea0e24ecf7163`,
+byte-identical to the manifest pin.
+
+**Verified on the live project afterwards, not assumed:**
+
+| Check | Result |
+|---|---|
+| `portable_identity_write_path_catalog_assertions.sql` as `app_migration` | **passed** — the same file the clean room ran, which is why it is a file |
+| `portable_identity_write_path_behavior_assertions.sql` as `app_runtime` | **passed** — the real request principal, including every non-admin denial and the store being unreachable |
+| re-apply | `ledger already at step 4/4; nothing to apply` — the idempotent skip holds on a real provider |
+| `verify` with no `--allow-partial` | `ledger consistent: 4/4 steps, order 1 -> 2 -> 3 -> 4` |
+| identity store | four tables, every one `owner=identity_store` |
+
+The behavioural file needed no seeding: the project already carried the S06
+fixture actors from `S11`/`S12`, and everything that file does is inside a
+transaction it rolls back. So the apply added **no row** to the project — only
+the schema, the four empty tables, the five functions and one ledger row.
+
+Two clean-room proofs could not be repeated live, and neither is a gap in the
+evidence: the store isolation file needs an `identity_store` session and the AI
+boundary file needs an `app_ai_client` session, and no credential exists for
+either on this machine. Both properties are covered on the live project by the
+catalog assertions, which measure the same ACLs from the catalog.
+
+## The Neon apply this session asked for, and its blast radius
 
 **Nothing was applied to the live project.** It is running the baseline at
 `3/3`; the manifest now declares four steps, so the project is one step behind by
