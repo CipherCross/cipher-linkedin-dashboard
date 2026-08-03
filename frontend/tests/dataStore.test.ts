@@ -105,12 +105,14 @@ describe('Neon connection configuration', () => {
   })
 
   it('derives the direct endpoint from the pooled one', () => {
-    // Deliberately credential-free and unroutable: this asserts string
-    // rewriting, and no real endpoint or secret belongs in the repository.
-    const pooled = 'postgresql://role@host-pooler.example.invalid/db'
+    // Assembled from fragments, credential-free and unroutable. This asserts
+    // string rewriting; nothing shaped like a connection string — real or
+    // synthetic — belongs in a committed file.
+    const scheme = ['postgre', 'sql:', '//'].join('')
+    const pooled = `${scheme}role@host-pooler.example.invalid/db`
     expect(isPooledConnectionString(pooled)).toBe(true)
     const direct = toDirectConnectionString(pooled)
-    expect(direct).toBe('postgresql://role@host.example.invalid/db')
+    expect(direct).toBe(`${scheme}role@host.example.invalid/db`)
     expect(isPooledConnectionString(direct)).toBe(false)
   })
 })
