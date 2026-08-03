@@ -7,7 +7,8 @@ import { authPost } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 
 // Per-instance config editor for the Health page. Writes the `config` override
-// blob via /api/config; the sync agent merges it over the notebook's local
+// blob via /api/pipeline (action `set_instance_config`); the sync agent merges
+// it over the notebook's local
 // config.yaml on its next run (remote wins), so notebooks are reconfigured
 // online with no local edits. Structured fields cover the routine keys; the
 // Advanced raw-JSON box exposes everything else (e.g. the LH2 `mapping` SQL).
@@ -167,7 +168,11 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     setBusy(true)
     setMsg(null)
     try {
-      const res = await authPost('/api/config', { instance_id: inst.id, config })
+      const res = await authPost('/api/pipeline', {
+        action: 'set_instance_config',
+        instance_id: inst.id,
+        config,
+      })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(res.status === 401 || res.status === 403 ? 'Admin access required.' : `Save failed: ${out.error ?? res.status}`)

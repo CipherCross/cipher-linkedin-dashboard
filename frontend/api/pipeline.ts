@@ -40,6 +40,60 @@ const json = (body: unknown, status = 200) =>
 
 const nowIso = () => new Date().toISOString()
 
+// --- set_instance_config ---------------------------------------------------
+// Notebook config writer, folded in from the former /api/config function so the
+// Neon read path (/api/activity-daily) could take its serverless slot without
+// exceeding the plan's function limit. Behaviour is unchanged: it persists the
+// per-instance override blob the sync agent reads on its next run (see
+// apply_remote_config in sync-agent/agent.py), so notebooks can be reconfigured
+// from the Health page with no local edits.
+
+// Bootstrap keys are needed locally just to connect/identify a notebook; a remote
+// blob must never set them. The agent ignores them too, but we strip here so they
+// never even land in the database.
+const FORBIDDEN_CONFIG_KEYS = new Set([
+  'supabase_url',
+  'supabase_service_key',
+  'instance_id',
+  'ignore_remote_config',
+  'notify_secret',
+])
+
+const MAX_CONFIG_BYTES = 64_000
+
+async function setInstanceConfig(
+  supa: ReturnType<typeof db>,
+  payload: Record<string, unknown>,
+): Promise<Response> {
+  const instance_id = payload.instance_id
+  const config = payload.config
+  if (typeof instance_id !== 'string' || !instance_id) {
+    return json({ error: 'instance_id (string) is required' }, 400)
+  }
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    return json({ error: 'config must be an object' }, 400)
+  }
+
+  // Drop bootstrap keys defensively, then size-check what we'll store.
+  const clean: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(config as Record<string, unknown>)) {
+    if (!FORBIDDEN_CONFIG_KEYS.has(k)) clean[k] = v
+  }
+  if (JSON.stringify(clean).length > MAX_CONFIG_BYTES) {
+    return json({ error: 'config too large' }, 413)
+  }
+
+  const { data, error } = await supa
+    .from('instances')
+    .update({ config: clean, config_updated_at: nowIso() })
+    .eq('id', instance_id)
+    .select('id')
+  if (error) return json({ error: error.message }, 500)
+  if (!data?.length) return json({ error: 'unknown instance_id' }, 404)
+
+  return json({ ok: true, instance_id })
+}
+
 // --- set_stage -------------------------------------------------------------
 
 async function setStage(
@@ -786,6 +840,7 @@ async function handle(req: Request): Promise<Response> {
     'invite_member',
     'update_member',
     'set_gender',
+    'set_instance_config',
   ])
   if (
     typeof payload.action === 'string' &&
@@ -817,6 +872,8 @@ async function handle(req: Request): Promise<Response> {
       return updateMember(supa, payload)
     case 'set_gender':
       return setGender(supa, payload, principal.member.name)
+    case 'set_instance_config':
+      return setInstanceConfig(supa, payload)
     case 'schedule_follow_up':
     case 'reschedule_follow_up':
     case 'reassign_follow_up':
