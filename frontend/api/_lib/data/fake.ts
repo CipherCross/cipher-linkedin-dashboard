@@ -106,6 +106,21 @@ class MapFakeState implements FakeState {
   }
 }
 
+function toTransactionError(error: unknown): Error {
+  if (error instanceof DataStoreContractError) return error
+  const message = error instanceof Error ? error.message : String(error)
+  const wrapped = new DataStoreTransactionError(
+    `Transaction failed and was rolled back: ${message}`,
+  )
+  Object.defineProperty(wrapped, 'cause', {
+    value: error,
+    configurable: true,
+    writable: true,
+    enumerable: false,
+  })
+  return wrapped
+}
+
 function cloneValue<TValue>(value: TValue): TValue {
   if (value instanceof Date) return new Date(value.valueOf()) as TValue
   if (Array.isArray(value)) {
@@ -192,6 +207,11 @@ export class FakeDataStore implements DataStore {
       const result = await work(transaction)
       this.state = transactionState
       return result
+    } catch (error) {
+      // Parity with a real adapter: the snapshot is discarded, and anything
+      // that is not already a contract error is surfaced as a rolled-back
+      // transaction with the original failure attached as `cause`.
+      throw toTransactionError(error)
     } finally {
       transaction.close()
       this.transactionActive = false
