@@ -1,0 +1,429 @@
+{
+  "gate": "G3",
+  "title": "Accept or change the Auth candidate",
+  "schema_version": "1.0",
+  "status": null,
+  "decision": null,
+  "decided_at": null,
+  "prepared_by_session": "S16",
+  "prepared_on": "2026-08-03",
+  "phase": "N4",
+  "spec": "specs/2026-07-30-neon-migration-and-multitenancy.md",
+  "handoff": "docs/implementation-handoffs/N-S16.md",
+  "spike": "spikes/s16-identity/",
+  "gate_semantics": {
+    "kind": "owner-decision-gate",
+    "self_passing": false,
+    "note": "G3 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes. `status` and `decision` are deliberately left unset by S16. A reasoned 'change the candidate' would have been a successful S16 too.",
+    "blocks": [
+      "S17 - production IdentityProvider and server session/admin endpoints",
+      "S18 - frontend AuthContext, route gates and Team admin, which depends on S17"
+    ],
+    "does_not_block": [
+      "the B4 roster-function session",
+      "the B2 bounded tenant-data copy",
+      "S13, which depends on G2 only"
+    ]
+  },
+  "candidate": {
+    "name": "self-hosted Better Auth",
+    "version_tested": "1.6.25",
+    "licence": "MIT",
+    "hosting": "application-hosted library inside frontend/api, not a managed service and not a separate deployment",
+    "accepted_at": "G0, 2026-07-31, as the initial IdentityProvider adapter, explicitly subject to confirmation or replacement by S16/G3",
+    "store": "its own four tables - user, session, account, verification - which the spike places in a dedicated schema, never in public"
+  },
+  "external_mutations": {
+    "performed": "none",
+    "detail": "No Auth tenant, project, branch, database, role, bucket, domain, deployment or Auth user was created on any provider. No DDL was executed on the Neon project and no row was written to it - the live leg is read-only and uses the three identity fixtures the baseline already ships. No `supabase db push`, no `sync-agent/deploy.sh`, no Vercel deploy, no `git push`. The only infrastructure the spike creates is a local Docker container that is destroyed at the end of each run.",
+    "npm_dependency": "`better-auth` was installed into `spikes/s16-identity/` only. It is deliberately absent from `frontend/package.json`, asserted by a test, so it cannot reach a bundle or a Vercel build."
+  },
+  "isolation": {
+    "claim": "no product integration",
+    "evidence": [
+      "The spike is a separate npm package. Nothing under frontend/ imports it.",
+      "frontend/api still holds exactly 12 serverless function files - asserted by spikes/s16-identity/tests/serverlessShape.test.ts and unchanged from B3's resolution.",
+      "AuthContext.tsx, DataContext.tsx, App.tsx, vercel.json and frontend/package.json contain no reference to the spike or to the candidate - asserted.",
+      "postgres/tenant-baseline/ and supabase/migrations/ are unchanged; the static assertions' immutability check passes at 75/0.",
+      "The running dashboard's invite-only Supabase Auth sign-in is untouched and still serves every page."
+    ]
+  },
+  "how_the_evidence_was_produced": {
+    "clean_room_leg": {
+      "command": "cd spikes/s16-identity && npm test",
+      "result": "8 files / 62 tests passed",
+      "what_it_is": "An ephemeral local postgres:17-alpine container to which the spike applies the *actual immutable baseline files*, unmodified, through the same principals postgres/tests/portable_identity_roles_rls_cleanroom.sh uses: `postgres` for 001 and the role bootstrap, then the non-superuser `app_migration` for 002 and the fixture seed.",
+      "why_local": "The negative cases need writes - disable a user, tamper a mapping, try a candidate SECURITY DEFINER function. Doing any of those on Neon would be a schema or data change outside the migration ledger, which R5 forbids and which is not an identity session's to make.",
+      "what_makes_it_real": "The tables, roles, grants and RLS policies measured are byte-for-byte the ones a tenant gets."
+    },
+    "live_neon_leg": {
+      "command": "cd spikes/s16-identity && npm run test:neon",
+      "result": "1 file / 6 tests passed",
+      "read_only": true,
+      "what_it_is": "A session the candidate issued, resolved to a canonical actor by the live Neon project through the *product's own* driver (frontend/api/_lib/data/neon.ts) and the *product's own* identity.resolveSelf operation - the same code path frontend/api/activity-daily.ts uses today. The spike supplies the subject; the product supplies the mapping.",
+      "why_nothing_was_written": "The candidate was told to mint accounts whose ids are exactly the baseline's fixture subjects (`subject-one`/`-two`/`-three` under `provider = 'fixture'`), so the existing rows are enough. A test asserts that subjects the suite invented resolve to nothing, which they could not do if the suite had written them."
+    }
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "subject": "the mechanism works, and the mapping is real",
+      "severity": "supporting",
+      "finding": "A signed-in session issued by the candidate resolves to a canonical `public.users.id` through `public.user_identities` on the live Neon project, under the baseline's own RLS, with the role read from `team_members`. Every negative case fails closed.",
+      "evidence": {
+        "test": "spikes/s16-identity/tests/mapping.neon.test.ts (live, read-only) and tests/mapping.test.ts (clean room)",
+        "cases": [
+          "active member -> 200, canonical id 00000000-...-0001, role member",
+          "active admin -> 200, canonical id ...0002, role admin - and the account carries no role of its own, so the role demonstrably came from the database",
+          "inactive canonical user -> 403",
+          "subject with no user_identities row -> 403",
+          "proposal naming a different real user -> 403",
+          "account with no canonical mapping at all -> 403",
+          "mapping row deleted after the account existed -> 403"
+        ]
+      },
+      "significance": "This is the thing S12's temporary bridge faked with an environment-held map. It is now real, and it needs no environment variable per team member."
+    },
+    {
+      "id": "F2",
+      "subject": "session cookie posture",
+      "severity": "supporting",
+      "finding": "Measured off the wire, not asserted to exist: one session cookie, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age=604800` (7 days), value signed as `<token>.<hmac>`. `Secure` is set only when told - the candidate keys it off `NODE_ENV === 'production'`. Nothing is script-visible, so an XSS payload reading `document.cookie` gets nothing.",
+      "evidence": {
+        "test": "spikes/s16-identity/tests/cookies.test.ts",
+        "across_a_redirect": "A real 302 - the password-reset email link - carries the already-held HttpOnly session to the target path, and the target authenticates. Chain length 2, first hop 302, second hop 200.",
+        "open_redirect_guard": "A `redirectTo` off-origin is refused 403 INVALID_REDIRECT_URL.",
+        "secure_over_http": "With `useSecureCookies` on and the harness on plain HTTP, the header is sent and a browser drops the cookie, so the next request is anonymous (401). This is the local-development trap: `Secure` must be on in production and off on an http harness."
+      },
+      "note": "`Path=/` means the session cookie rides along on every request to the origin, including the product's own /api routes. That is what makes a shared session work without plumbing, and it is also why CSRF has to be handled per request rather than by hoping the cookie is narrowly scoped."
+    },
+    {
+      "id": "F3",
+      "subject": "CSRF is origin-based, and the candidate disables it under test detection",
+      "severity": "blocking for S17's test discipline; not blocking for the candidate",
+      "finding": "Two separate results. (a) There is no synchroniser token. The defence is `SameSite=Lax` plus validation of the `Origin` header, and origin validation fires only when the request carries a `Cookie` header. Login CSRF is handled by a separate fetch-metadata path. (b) `skipOriginCheck` resolves to `disableOriginCheck ?? (isTest() ? true : false)` where `isTest()` is `NODE_ENV === 'test' || TEST`, and skipping the origin check *also* skips the CSRF check through a backward-compatibility branch. Vitest sets `NODE_ENV=test`. A CSRF suite that does not set `advanced.disableOriginCheck: false` therefore runs against a build with no CSRF defence and reports green.",
+      "evidence": {
+        "source": "node_modules/better-auth/dist/context/create-context.mjs:210 and dist/api/middlewares/origin-check.mjs",
+        "test": "spikes/s16-identity/tests/csrf.test.ts",
+        "refusals_observed": [
+          "update-user, valid session, hostile origin -> 403 INVALID_ORIGIN",
+          "update-user, valid session, no Origin header -> 403 MISSING_OR_NULL_ORIGIN",
+          "change-password, hostile origin -> 403 INVALID_ORIGIN",
+          "sign-out, hostile origin -> 403 INVALID_ORIGIN",
+          "cross-site navigation sign-in -> 403 MISSING_OR_NULL_ORIGIN",
+          "off-origin callbackURL -> 403 INVALID_CALLBACK_URL",
+          "the same request from its own origin -> 200, the control"
+        ],
+        "the_hazard_demonstrated": "With the check off - i.e. the candidate's own default under vitest - the identical hostile-origin request returns 200. Both are asserted, so the pair cannot rot.",
+        "samesite_first_line": "The jar confirms a browser would not attach the session to a cross-site POST at all."
+      },
+      "consequences_for_s17": [
+        "Set `advanced.disableOriginCheck: false` and `disableCSRFCheck: false` explicitly, in every environment, and assert it.",
+        "GET is exempt from the origin check by design (`originCheckMiddleware` returns immediately for GET/HEAD/OPTIONS), so no S17 endpoint may change state on a GET.",
+        "The candidate protects only its own routes. The product's endpoints - /api/pipeline, /api/import and the S13 dispatching endpoint - get no CSRF protection from it and need the same origin check applied themselves."
+      ]
+    },
+    {
+      "id": "F4",
+      "subject": "a password reset does not revoke existing sessions",
+      "severity": "important, one-line fix",
+      "finding": "By default, completing a password reset changes the password and leaves every existing session alive. `revokeSessionsOnPasswordReset` is only consulted when set. A reset is the flow used *after* a suspected compromise, so the default is the wrong way round for this product.",
+      "evidence": {
+        "test": "spikes/s16-identity/tests/inviteResetDisable.test.ts",
+        "default": "existing session after reset -> 200",
+        "with_the_option": "existing session after reset -> 401",
+        "both_measured": true
+      },
+      "consequences_for_s17": "Set `emailAndPassword.revokeSessionsOnPasswordReset: true` and assert it."
+    },
+    {
+      "id": "F5",
+      "subject": "disable works, and there are two independent kill switches",
+      "severity": "supporting - this is the strongest structural result",
+      "finding": "Deactivating a person in the canonical tables (`team_members.active = false`) stops their very next request at 403, with no session bookkeeping at all, because the actor is re-resolved from the tenant database on every request. Their session cookie remains valid and they can still sign in - they are authenticated but no longer a member, which is a distinction S18 has to render. Separately, `admin/ban-user` destroys the sessions outright: the same cookie returns 401 and a new sign-in is refused.",
+      "evidence": {
+        "test": "spikes/s16-identity/tests/inviteResetDisable.test.ts",
+        "canonical_deactivation": "200 before, 403 on the next request after, sign-in still 200",
+        "candidate_ban": "200 before, 401 after, subsequent sign-in refused",
+        "role_conflict": "An account whose candidate-side role says `admin` while `team_members.role` says `member` resolves as **member**. Privilege originates in the database, never in the session."
+      },
+      "significance": "Authorization does not depend on the identity provider's own state being correct. That is what makes replacing the provider later a bounded change, and it is the single best argument for the overall architecture regardless of which candidate wins."
+    },
+    {
+      "id": "F6",
+      "subject": "the runtime role has no write path to the identity tables",
+      "severity": "blocking for S17",
+      "finding": "`app_runtime` holds INSERT/UPDATE/DELETE on the business tables and on none of `public.users`, `public.user_identities`, `public.team_members`. This is table grants, not RLS, so no actor context can unlock it. S17's invite, disable and role-change endpoints therefore have **no way to write the canonical tables as the request-path role**.",
+      "evidence": {
+        "test": "spikes/s16-identity/tests/mapping.test.ts - four attempted writes, every one refused with SQLSTATE 42501",
+        "attempts": ["INSERT users", "INSERT team_members", "INSERT user_identities", "UPDATE team_members"]
+      },
+      "required_before_s17_can_ship_admin_endpoints": "An owner decision and a ledger session. Two shapes are available: SECURITY DEFINER admin functions owned by app_owner and granted to app_runtime, or a distinct privileged login role used only by admin endpoints. The spike used `app_migration` + an explicit `SET ROLE app_owner` as a stand-in to prove the path is needed; it is not a proposal for production.",
+      "sequencing_note": "This is the same kind of change as the B4 roster function the owner already approved, on the same tables, through the same ledger. Landing them in one session is cheaper and gives the reviewer one coherent identity-write surface to judge."
+    },
+    {
+      "id": "F7",
+      "subject": "how the subject is resolved - two shapes, an owner decision",
+      "severity": "decision required, not blocking",
+      "finding": "`user_identities` is readable by `app_runtime` only through `user_identities_active_actor_select`, which requires `user_id = app.actor_id` - reading the mapping requires already knowing the answer. Two ways out, both measured.",
+      "option_a": {
+        "name": "propose-then-confirm, no schema change",
+        "how": "The account row carries a `canonicalUserId`, set at invite time. The handler publishes it as `app.actor_id` and RLS confirms the pairing against the presented subject.",
+        "works_today": true,
+        "measured": "Correct resolution on the live Neon project; a stale or hostile proposal fails closed with 403.",
+        "cost": "An extra column that must be kept correct, and one extra round trip. It is the same shape as S12's bridge, but the proposal is durable per-account rather than held in an environment variable, so adding a person no longer needs a redeploy."
+      },
+      "option_b": {
+        "name": "a SECURITY DEFINER resolver, one ledger-applied function",
+        "file": "spikes/s16-identity/sql/candidate_identity_resolver.sql",
+        "applied_to": "the ephemeral clean-room container only - never to Neon, never to the baseline",
+        "measured": "Resolves the same actor in one round trip; still fails closed for an inactive member and an unknown subject; returns nothing for a wildcard, so it is not an enumeration primitive; and it is *immune to a stale proposal*, because it never reads one.",
+        "cost": "It is a schema change, so it is the owner's and the ledger's. It also lets a caller holding a subject learn the canonical id, which is strictly more exposure than option A's ability to test a pair - that is precisely why it is not S16's call."
+      },
+      "recommendation": "Option B, landed in the same ledger session as F6 and the B4 roster function. It removes a duplicated field, removes a round trip, and removes the class of bug where a cached proposal drifts.",
+      "note_if_option_a_is_chosen": "Then `canonicalUserId` must be written inside the same transaction as the `user_identities` row, which the spike's invite already does."
+    },
+    {
+      "id": "F8",
+      "subject": "where the identity store lives, and whether there are two sources of truth",
+      "severity": "supporting",
+      "finding": "The candidate owns four tables. `user.id` is `text` and is a *provider subject*: it belongs in `user_identities.provider_subject` and must never be joined to `public.users.id`. So the canonical id has exactly one source of truth, provided the store stays subordinate - which the type difference helpfully enforces.",
+      "the_one_genuine_duplication": "The email address exists on both `identity_spike.user` and `public.team_members`. Nothing else is duplicated.",
+      "the_reconciliation_answer": "Put the store in the same database, in its own schema, owned by its own role. Then invite and disable are one SQL transaction across both stores, and there is no compensating write and no reconciliation job.",
+      "evidence": {
+        "atomicity": "spikes/s16-identity/tests/inviteResetDisable.test.ts - a transaction that writes public.users, public.team_members, public.user_identities and the candidate's user/account rows, then fails on the candidate's half, leaves neither store with a half-person.",
+        "isolation": "spikes/s16-identity/tests/storeIsolation.test.ts - the `identity_store` role cannot read any business table nor the canonical identity tables (42501, six relations); `app_runtime` cannot read the candidate's user/session/account tables (42501, three relations); only the admin path reaches both, and only under an explicit SET ROLE because `app_migration` is NOINHERIT.",
+        "hashing": "`account.password` holds a scrypt hash in `<32 hex salt>:<128 hex key>` form; the passphrase does not appear in it.",
+        "ddl": "spikes/s16-identity/sql/better_auth_generated_schema.sql is the candidate's own `compileMigrations()` output, regenerated and diffed by a test so it cannot go stale. This is what S17 hands to the ledger."
+      },
+      "consequence_for_s17": "The candidate's tables are a schema change too. They belong in the same ledger session as F6 and F7, applied to a dedicated schema with a dedicated owner, with no grant to app_runtime."
+    },
+    {
+      "id": "F9",
+      "subject": "rotation and expiry",
+      "severity": "informational, with one housekeeping item",
+      "finding": "The session expiry slides forward while the session is used (`updateAge`), but the **token does not change**. There is no rolling token: a value captured on day one is still valid on day thirty as long as the session keeps being used. Each sign-in issues a distinct session and leaves earlier ones live; sign-out ends one, `revoke-sessions` ends all. A session issued before sign-in cannot be adopted by it, so there is no fixation surface.",
+      "evidence": {
+        "test": "spikes/s16-identity/tests/rotationExpiry.test.ts",
+        "expiry": "With expiresIn=3s: the browser drops the cookie at Max-Age, and the raw value replayed afterwards is refused 401.",
+        "refresh": "expiresAt moves forward; `session.token` and the cookie value are byte-identical before and after.",
+        "pruning": "An expired session that is *presented* is deleted; one that is simply abandoned is left in the table forever. `session` therefore grows with every abandoned login."
+      },
+      "consequences_for_s17": [
+        "Own a pruning job for `session`, or accept unbounded growth. Not a security hole - an expired row is never honoured - but not self-limiting.",
+        "Decide `expiresIn` deliberately. The 7-day default combined with a non-rotating token means a leaked cookie is good for a week of active use."
+      ]
+    },
+    {
+      "id": "F10",
+      "subject": "the design limit, stated rather than discovered later",
+      "severity": "accepted limit",
+      "finding": "The session cookie is a bearer credential. It is bound to the server's secret, not to the client: no device binding, no IP pinning, no proof of possession. An intact stolen cookie authenticates from anywhere. Asserted as a test so it cannot be quietly forgotten.",
+      "evidence": "spikes/s16-identity/tests/csrf.test.ts - the same cookie from a different client, with a different user agent, returns 200 for the right subject.",
+      "why_it_is_acceptable": "It is true of every cookie-session scheme, and the mitigations that matter are the ones already measured: HttpOnly keeps it away from script, Secure keeps it off plaintext, SameSite plus the origin check keep it off cross-site requests, and revocation is immediate and available in two places (F5).",
+      "what_would_change_it": "Nothing short of DPoP-style proof of possession or mTLS, neither of which is proportionate for a four-person internal dashboard."
+    },
+    {
+      "id": "F11",
+      "subject": "the Vercel smoke test was not performed",
+      "severity": "open, deliberately",
+      "finding": "The S16 coverage list asks for a Vercel smoke test. This session's invariants forbid creating anything on a provider, and a deployment is a provider resource. The owner was asked on 2026-08-03 and chose **no deployment**, with the gap recorded here.",
+      "options_put_to_the_owner": [
+        "No deploy, record the gap - CHOSEN",
+        "Deploy to the existing Vercel project - rejected: it needs a 13th function file in frontend/api, over the Hobby cap that B3 has only just cleared, and it would expose spike auth routes on the production domain",
+        "Authorize a throwaway Vercel project - rejected: a new provider resource plus a Neon-reachable deployment"
+      ],
+      "what_was_measured_instead": {
+        "test": "spikes/s16-identity/tests/serverlessShape.test.ts",
+        "items": [
+          "The handler is a pure `(Request) => Promise<Response>`: called directly with a Web Request and no HTTP server at all, it returns 401 unauthenticated and 200 for the right subject.",
+          "It holds no per-instance state: a handler constructed from scratch accepts a session an earlier one issued, which is the property a multi-instance or frozen-instance deployment needs.",
+          "Multiple Set-Cookie headers are emitted separately rather than folded into one - the classic serverless-adapter bug, which fails silently.",
+          "The module imports without a database credential, so a cold start pays for a connection only when it needs one.",
+          "frontend/api still holds exactly 12 function files."
+        ]
+      },
+      "what_is_therefore_unproven": [
+        "Behaviour on the actual Vercel runtime: cold-start cost, the platform's own header handling, request size and duration limits, and region-to-Neon latency for the session read.",
+        "That the candidate's cookie handling survives Vercel's edge/CDN layer unchanged.",
+        "TLS itself: the harness is plain HTTP on localhost, so `Secure` was measured through the jar's storage rule rather than over a real TLS connection."
+      ],
+      "who_closes_it": "S17, which is building the real endpoints and will have a deployable surface to smoke. It should be an explicit S17 exit criterion, not an assumption."
+    },
+    {
+      "id": "F12",
+      "subject": "the alternatives, and why they lost",
+      "severity": "the comparison G3 is being asked to make",
+      "note": "Presented as a comparison rather than as advocacy. Nothing below was benchmarked by this spike; only the candidate was measured. The alternatives are assessed on fit against this product's actual requirements - invite-only, four users, email and password, server-side disable, provider-neutral canonical identity, no new deployment.",
+      "options": [
+        {
+          "name": "self-hosted Better Auth (the candidate)",
+          "verdict": "measured, and it passes",
+          "for": [
+            "Every requirement is covered by primitives it already ships: invite-only via disableSignUp plus the admin plugin, reset with a token sink we control, ban and session revocation, scrypt hashing, signed cookies, origin-based CSRF.",
+            "It is a library, not a service: no new deployment, no new provider, no new bill. That matters because the whole migration exists to remove a provider dependency.",
+            "The porting surface is tiny. The spike's handler depends on exactly two members of it - `handler(request)` and `api.getSession({headers})` - so replacing it later is a bounded change rather than a rewrite.",
+            "MIT, TypeScript, and its own migration generator produces the DDL the ledger needs."
+          ],
+          "against": [
+            "It brings its own user store (F8) and its own role column, which have to be kept subordinate deliberately.",
+            "Two security-relevant defaults are wrong for this product and must be overridden explicitly (F3, F4). One of them is environment-dependent, which is a genuine footgun.",
+            "No synchroniser token; the CSRF story rests on SameSite plus origin validation (F3)."
+          ]
+        },
+        {
+          "name": "hand-rolled sessions on the canonical tables",
+          "verdict": "the serious alternative, and the closest call",
+          "for": [
+            "No second user store at all, so F8's duplication and F7's proposal both disappear.",
+            "Nothing to keep subordinate, no plugin surface, no library defaults to audit.",
+            "The requirement really is small: email and password, invite, reset, disable, for four people."
+          ],
+          "against": [
+            "We would own scrypt parameters, token entropy, timing-safe comparison, single-use reset tokens, cookie signing, origin validation and every future correction to all of them. The candidate already passes each check this spike ran; a hand-rolled implementation would have to pass them again, written by us.",
+            "It also needs its own schema change - a sessions table - so it does not avoid the ledger session either.",
+            "It converts a reviewed dependency into unreviewed code owned by one person."
+          ],
+          "why_it_lost": "The delta it buys is one column and one round trip (F7), both of which option B in F7 removes anyway. The delta it costs is authorship of the security-critical parts."
+        },
+        {
+          "name": "Auth.js / @auth/core",
+          "verdict": "poor fit",
+          "against": [
+            "Framework-coupled in practice and oriented toward OAuth providers and JWT sessions rather than invite-only credentials with server-side disable.",
+            "No admin, invite, ban or session-revocation primitives; we would build the whole lifecycle ourselves on top of it and still carry the dependency."
+          ]
+        },
+        {
+          "name": "Lucia",
+          "verdict": "not viable",
+          "against": [
+            "Deprecated as a library in March 2025; it is now a learning resource for implementing sessions yourself. Choosing it is really choosing the hand-rolled option with a reference implementation."
+          ]
+        },
+        {
+          "name": "self-hosted Ory Kratos / Keycloak / Zitadel",
+          "verdict": "disproportionate",
+          "against": [
+            "Each is a service to deploy, operate, upgrade and back up - a new runtime component for four users, and a new deployment the current constraints forbid.",
+            "They also re-introduce a second identity store with far more surface than the candidate's four tables."
+          ]
+        },
+        {
+          "name": "a managed provider (Clerk, WorkOS, Auth0, Stack Auth) or staying on Supabase Auth",
+          "verdict": "contradicts the point of the migration",
+          "against": [
+            "G0 already excluded managed Auth. Replacing one managed identity dependency with another leaves the dashboard dependent on a provider after the database has moved.",
+            "Ongoing cost, and identity data outside our own database.",
+            "Staying on Supabase Auth specifically would keep a live Supabase dependency after N8 is supposed to have removed the last one."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F13",
+      "subject": "cookie or token - where the session lives",
+      "severity": "design call, recorded",
+      "decision_taken_by_the_spike": "An opaque session token in an HttpOnly cookie, with the session row in the database. Not a JWT, and not a token held in browser storage.",
+      "why": [
+        "Revocation has to be immediate. F5's whole result - that deactivating a member stops their next request - depends on server-side state being consulted per request. A self-contained JWT would stay valid until it expired.",
+        "An HttpOnly cookie is the only option that keeps the credential away from script. Anything the SPA holds in memory or storage is readable by an XSS payload.",
+        "The cost is CSRF surface, because the browser attaches the cookie automatically. That cost is paid explicitly by SameSite=Lax plus origin validation, and it is measured in F3 rather than assumed."
+      ],
+      "serverless_consequence": "The session read is a database round trip on every request. The spike deliberately left `session.cookieCache` **disabled**: enabling it validates the session from a signed cookie instead, which would reintroduce exactly the revocation delay a JWT has, for up to `cookieCache.maxAge`. If S17 later wants it for latency, that is a deliberate trade against F5 and needs its own decision.",
+      "cost_to_watch": "S12 measured the actor confirmation at 196 ms of a 525 ms request from a dev host. S17 adds the candidate's own session lookup ahead of it. Both should be resolved **once per request** and passed down, which is G2's B5 decision applied to identity as well."
+    },
+    {
+      "id": "F14",
+      "subject": "what S18 needs from this",
+      "severity": "informational",
+      "finding": "Enough is now fixed that the AuthContext rewrite should be mechanical.",
+      "contract_for_s18": [
+        "Sign-in is a POST to the auth base path with `{email, password}` and JSON, and it returns 200 with a Set-Cookie; it does **not** 302 even when given a callbackURL, so the SPA performs its own navigation.",
+        "The browser holds nothing. There is no token for AuthContext to store, read or refresh - the session is an HttpOnly cookie the SPA cannot see. AuthContext's state comes from one authenticated call, not from parsing a token.",
+        "`GET /api/s16-whoami` is the shape of the call AuthContext makes on startup: it returns `{subject, actor: {actorId, role}}` on 200, and the three outcomes AuthContext must render are 401 (not signed in), 403 (signed in, not an active member) and 200.",
+        "403 is a real, reachable state and is not the same as 401. A deactivated member keeps a valid session (F5), so the UI needs a distinct 'your access has been removed' path rather than bouncing them to sign-in.",
+        "`role` comes from the response, never from the session, and is the only thing route gates may key on.",
+        "Every state-changing request must send its own origin and be same-origin; a cross-origin call from a preview domain to the production API will be refused 403 (F3).",
+        "Password reset is two calls - request, then complete with the token from the link - and the link is a GET that 302s to a `redirectTo` which must be same-origin."
+      ]
+    }
+  ],
+  "coverage_against_the_s16_requirement": [
+    {
+      "item": "session cookies",
+      "status": "covered",
+      "proves": "the exact attributes set, that they are invisible to script, that they survive a real 302, and that a Secure cookie is dropped over plain HTTP",
+      "does_not_prove": "browser-engine behaviour - the SameSite=Lax POST grace period, third-party cookie policy, CHIPS partitioning, `__Host-`/`__Secure-` prefix enforcement - nor anything over real TLS. The jar implements the RFC rules; it is not a browser."
+    },
+    {
+      "item": "CSRF",
+      "status": "covered, with a finding",
+      "proves": "seven refusals observed over HTTP with their status and error codes, a same-origin control that succeeds, and that the defence is off by default under vitest",
+      "does_not_prove": "that a real browser produces these header combinations - the requests are constructed. It also proves nothing about the product's own endpoints, which the candidate does not protect."
+    },
+    {
+      "item": "invite / reset / disable",
+      "status": "covered",
+      "proves": "public sign-up refused; admin create-user refused for anonymous (401) and for a member (403); reset issues a token to a sink we control, is not an enumeration oracle, is single-use, invalidates the old password; and that a disabled person's **existing session** stops working - at 403 via the canonical tables and at 401 via a ban",
+      "does_not_prove": "email delivery. No SMTP provider was configured and no mail was sent; the token is captured in process. The spec already treats SMTP as an external gate."
+    },
+    {
+      "item": "mapping",
+      "status": "covered, on the live project",
+      "proves": "a provider subject resolving to a canonical users.id through user_identities under real RLS, and failing closed for an unmapped subject, an inactive user, and a proposal naming someone else",
+      "does_not_prove": "the production provider label. The live leg matches on `provider = 'fixture'` because those are the rows that exist; production would use `provider = 'better-auth'`, which the clean-room leg uses. The predicate is the same either way."
+    },
+    {
+      "item": "Vercel smoke",
+      "status": "NOT DONE - owner decided no deployment",
+      "see": "F11"
+    },
+    {
+      "item": "rotation and expiry",
+      "status": "covered",
+      "proves": "expiry refuses a replayed value, refresh slides the expiry without changing the token, sign-in issues distinct sessions, sign-out is per-session, revoke-sessions is global, and there is no fixation surface",
+      "does_not_prove": "behaviour across a clock change or a long-running deployment; the windows tested are seconds, not days."
+    }
+  ],
+  "test_results": {
+    "recorded_pre_edit_baselines": {
+      "frontend_npm_test": "10 files / 69 tests",
+      "frontend_test_neon": "2 files / 55 tests",
+      "frontend_typecheck_api": "clean",
+      "frontend_npm_build": "clean",
+      "ops_npm_test": "70 passed, 0 failed",
+      "static_assertions": "75 passed, 0 failed",
+      "all_matched_expected": true
+    },
+    "after": {
+      "frontend_npm_test": "10 files / 69 tests - unchanged",
+      "frontend_test_neon": "2 files / 55 tests - unchanged",
+      "frontend_typecheck_api": "clean",
+      "frontend_npm_build": "clean",
+      "ops_npm_test": "70 passed, 0 failed - unchanged",
+      "static_assertions": "75 passed, 0 failed - unchanged",
+      "spike_clean_room": "8 files / 62 tests passed",
+      "spike_live_neon": "1 file / 6 tests passed",
+      "spike_typecheck": "clean",
+      "serverless_function_count": 12,
+      "git_diff_check": "clean",
+      "secret_sweep": "26 changed files scanned with S08's RESOURCE_ID_MARKERS and SECRET_MARKERS, canary-verified across 5 patterns, 0 hits"
+    }
+  },
+  "recommendation": {
+    "summary": "Accept the candidate. Self-hosted Better Auth covers every requirement this product actually has, and the two defaults that are wrong for it are wrong in a way a single line each corrects and a test each pins.",
+    "detail": "The spike found nothing that would make the candidate the wrong choice, and it found two things that would have shipped as real defects if S17 had been written without it: the CSRF defence that disables itself under the very environment S17's tests run in, and the password reset that leaves a compromised session alive. Both are now measured in both directions. The structural result matters more than either: authorization is re-derived from the tenant database on every request, so a deactivated member is stopped at 403 on their next request regardless of what the identity provider believes - which means the provider is a replaceable component rather than the authority, and the porting surface if it ever needs replacing is two function members.",
+    "what_acceptance_should_carry": [
+      "F3 - S17 sets `disableOriginCheck: false` and `disableCSRFCheck: false` explicitly and asserts it; no S17 endpoint changes state on a GET; the product's own endpoints get their own origin check.",
+      "F4 - S17 sets `revokeSessionsOnPasswordReset: true` and asserts it.",
+      "F6 and F7 - one ledger session adds the identity write path, the resolver function (option B recommended) and the candidate's own schema, alongside the already-approved B4 roster function. S17 cannot ship admin endpoints until it lands.",
+      "F9 - S17 owns a pruning job for the session table and chooses `expiresIn` deliberately rather than inheriting 7 days.",
+      "F11 - the Vercel smoke becomes an explicit S17 exit criterion.",
+      "F13 - `session.cookieCache` stays disabled unless the latency trade is taken deliberately; the actor is resolved once per request, as G2's B5 already requires."
+    ],
+    "what_would_change_this_recommendation": "If the owner is unwilling to carry a second user store at all - even a subordinate one in its own schema with no grants - then the hand-rolled option in F12 becomes the answer, and S17 grows by roughly the size of what the candidate provides. That is a preference about ownership, not a finding about the candidate, which is why it is the owner's call and not the spike's.",
+    "prepared_by": "S16",
+    "decision_is_the_owners": true
+  }
+}
