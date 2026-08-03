@@ -7,7 +7,7 @@ through the migration ledger and nothing else.
 |---|---|
 | Base SHA | `43719c5` (`main`, "docs(neon): record the owner's G3 decision and close the gate") |
 | Branch | `codex/neon-identity-ledger` |
-| Commits | `7d82075`, then `abdc869` (this document is part of the second) |
+| Commits | `7d82075` → `256cd02` → one final docs commit correcting the SHAs below |
 | Phase | N4, between `G3` and `S17` |
 | Mandate | `G3` owner decision, condition **C3**, which also folded **B4** into this session |
 | Applied to a live provider project | **no** — an apply is prepared and requested at the end of this document |
@@ -571,7 +571,8 @@ Do these first, in this order:
 | SHA | Subject |
 |---|---|
 | `7d82075` | `test(neon): add the clean-room assertions for identity ledger step 004` — the five assertion/harness files, committed ahead of the artifact they cover so the evidence reads on its own |
-| `abdc869` | `feat(neon): land the identity write path and store as ledger step 004` — the two baseline artifacts, the manifest, the restore window, the reconciliation and ledger-test updates, the README and this handoff |
+| `256cd02` | `feat(neon): land the identity write path and store as ledger step 004` — the two baseline artifacts, the manifest, the restore window, the reconciliation and ledger-test updates, the README and this handoff |
+| *(final)* | `docs(neon): correct the commit references in the identity ledger handoff` — this table. A commit cannot contain its own hash, so this row is the one thing here that `git log --oneline main..HEAD` has to tell you rather than this document. |
 
 Not pushed. The branch is local, as the brief requires.
 
