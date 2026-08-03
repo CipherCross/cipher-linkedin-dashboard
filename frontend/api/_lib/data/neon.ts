@@ -56,6 +56,7 @@ const { Pool, types: pgTypes } = pgDefault
 /** PostgreSQL type OIDs the adapter normalizes on the way out. */
 const OID_TIMESTAMPTZ = 1184
 const OID_TIMESTAMP = 1114
+const OID_DATE = 1082
 
 /** SQLSTATEs the adapter translates into contract errors. */
 const SQLSTATE_QUERY_CANCELED = '57014'
@@ -192,6 +193,14 @@ const transactionScope = new AsyncLocalStorage<TransactionScope>()
  * hands the application the same instant representation regardless of the
  * process time zone. Applied per-pool rather than through the global
  * `pg.types` registry so nothing else in the process is affected.
+ *
+ * `date` (OID 1082) is normalized too, and for a different reason. `pg` parses
+ * a bare `date` into a `Date` at **local** midnight, so the calendar day
+ * `2026-01-01` read on a host at UTC+1 becomes `2025-12-31T23:00:00.000Z` — a
+ * different day, and the shift is not even a constant, since it follows the
+ * host's DST. A `date` is a calendar day and not an instant, so it crosses this
+ * boundary as the `YYYY-MM-DD` text PostgreSQL sent. Found by the first real
+ * operation (S12) reading `daily_activity.day`.
  */
 function buildTypeParsers(): PoolConfig['types'] {
   const parseTimestamptz = pgTypes.getTypeParser(OID_TIMESTAMPTZ, 'text')
@@ -207,10 +216,15 @@ function buildTypeParsers(): PoolConfig['types'] {
       return String(parsed)
     }
 
+  // A calendar day is returned exactly as PostgreSQL spelled it.
+  const parseDate = (value: string): string | null =>
+    value === null ? null : value
+
   return {
     getTypeParser: ((oid: number, format?: unknown) => {
       if (oid === OID_TIMESTAMPTZ) return toUtc(parseTimestamptz)
       if (oid === OID_TIMESTAMP) return toUtc(parseTimestamp)
+      if (oid === OID_DATE) return parseDate
       return (pgTypes.getTypeParser as (o: number, f?: unknown) => unknown)(
         oid,
         format,
