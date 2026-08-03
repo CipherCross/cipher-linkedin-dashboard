@@ -1,0 +1,268 @@
+{
+  "gate": "G2",
+  "title": "Mass DataContext migration go/no-go",
+  "schema_version": "1.0",
+  "status": null,
+  "decision": null,
+  "decided_at": null,
+  "prepared_by_session": "S12",
+  "prepared_on": "2026-08-03",
+  "phase": "N2",
+  "spec": "specs/2026-07-30-neon-migration-and-multitenancy.md",
+  "handoff": "docs/implementation-handoffs/N-S12.md",
+  "gate_semantics": {
+    "kind": "owner-decision-gate",
+    "self_passing": false,
+    "note": "G2 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes. `status` and `decision` are deliberately left unset by S12.",
+    "blocks": [
+      "S13 - DataContext and component-local reads through the application API",
+      "S14 - non-AI writes, which depends on S13",
+      "any production cutover of dashboard reads from Supabase to Neon"
+    ],
+    "does_not_block": [
+      "S12 itself, which is complete and adds a path beside the existing one rather than switching one",
+      "S16-S18 identity work, which G2 in fact depends on rather than the reverse"
+    ]
+  },
+  "external_mutations": {
+    "performed": "fixture rows only, on the single pre-existing Neon project",
+    "detail": "No project, branch, database, role, Auth user, bucket, domain or deployment was created. No DDL was executed; the migration ledger remains the only apply path (R5). No tenant data was copied to or from any provider. No `supabase db push`, no `sync-agent/deploy.sh`, no Vercel deploy, no `git push`. Writes were: one `instances` row (`s12-activity`) and 4,800 `events` rows under that instance, inserted as `app_runtime` through the baseline's RLS policies, idempotent under re-run."
+  },
+  "slice_under_test": {
+    "name": "daily activity series",
+    "route": "GET /api/activity-daily",
+    "handler": "frontend/api/activity-daily.ts",
+    "page": "frontend/src/pages/NeonActivity.tsx (route #/neon-activity)",
+    "relation": "public.daily_activity",
+    "read_only": true,
+    "why_this_slice": "Read-only and four columns wide, so it is small enough to judge. It has a real counterpart on the existing Supabase path (`DataContext` already fetches `daily_activity`), so parity compares the same view through two providers rather than two independently written aggregates. `events` is the only relation on Neon with the volume to exercise pagination past 1000 rows. And the view's day bucketing is session-timezone dependent, which makes the UTC requirement substantive rather than ceremonial. Its existing consumer surface is zero: `DashboardData.activity` is fetched but read by no page today, so the slice touches no existing consumer."
+  },
+  "evidence": {
+    "parity": {
+      "result": "holds over one shared dataset; does NOT cover tenant data",
+      "method": "Two independent legs. (1) Structural: the `daily_activity` definition is semantically identical in `supabase/migrations/001_init.sql:92-99` and `postgres/tenant-baseline/v1/001_portable_business_baseline.sql:886-892` - same `date_trunc('day', occurred_at)::date`, same `count(*)`, same GROUP BY, both `security_invoker = true`. Parity of numbers therefore reduces to parity of the range predicate and the session timezone. (2) Executable: the new path's formulation (UTC instants converted to a half-open day range) was diffed row for row against the formulation the Supabase path actually uses (PostgREST `.gte`/`.lte` inclusive bounds compared directly against the `date` column) over the same fixture on the same database, across five windows including both single-day endpoints.",
+      "windows_compared": 5,
+      "rows_compared": 2700,
+      "row_level_mismatches": 0,
+      "total_mismatches": 0,
+      "cross_check": "The sum of `cnt` over the view equals `count(*)` over the underlying `events` rows for the same instance: 4,800 = 4,800.",
+      "what_it_does_not_cover": [
+        "Production tenant numbers. Neon holds no tenant data and none has ever been copied, so no claim is made that the live dashboard's figures match. This is the single largest gap in the evidence.",
+        "Any relation other than `daily_activity`. The 13 other reads `DataContext` performs are unproven.",
+        "The `leads`-derived recompute path. Every page today renders activity from `leadsToActivity(data.leads)` rather than from the view, so the view itself is currently unconsumed and its parity with the client recompute was not measured.",
+        "Timezone parity with Supabase. The Neon path pins `timezone = 'UTC'` per transaction; the Supabase path relies on that project's session default. Both are UTC today, but only one of them guarantees it."
+      ]
+    },
+    "pagination": {
+      "result": "pass, past the 1000-row cap, through the real handler against real volume",
+      "fixture_rows_in_view": 2700,
+      "fixture_rows_in_events": 4800,
+      "page_sizes_at_limit_1000": [1000, 1000, 700],
+      "pages_at_limit_250": 11,
+      "identical_rows_across_page_sizes": true,
+      "distinct_keys": 2700,
+      "duplicates": 0,
+      "gaps": 0,
+      "ordering": "day, instance_id, event_type - a total order over the aggregate, so offset paging cannot duplicate or skip",
+      "cursor": "opaque, scope-bound; a cursor replayed against a different range was refused with 400",
+      "limit_above_cap": "refused with 400"
+    },
+    "utc": {
+      "result": "pass, and the guarantee is asserted rather than assumed",
+      "boundary_instants_seeded": ["00:00:00.000Z", "23:59:59.000Z", "23:00:00.000Z"],
+      "day_assignment": "Every one of 2,700 (day, event_type) buckets carries exactly the count the fixture wrote, which holds only if all three boundary instants land on the same UTC calendar day.",
+      "agreement_with_client": "`dayRangeToUtcRange` was asserted against `presetRanges` and `weekStart` from `frontend/src/lib/leads.ts` directly, not against a restatement of them. `leads.ts` uses an inclusive `[from, to]` day pair; the contract uses a half-open instant range; the exclusive end is exactly one day past the inclusive one, verified for every preset the client can produce. A UTC ISO week read through the handler returned exactly 7 days and 21 rows, with `weekStart` confirmed to be a Monday.",
+      "timezone_sensitivity_demonstrated": "The same rows read on an `Asia/Tokyo` session bucket into different days than on a UTC session, so the day boundaries genuinely depend on the session setting.",
+      "finding": "The baseline pins no timezone. This Neon project's default session timezone is currently `GMT`, so days come out UTC-correct even without the driver's preamble today. The preamble's value is that the result stops depending on that default - a server-side, pooler-side or provider change would otherwise silently shift every day boundary in the dashboard, with no test to catch it."
+    },
+    "auth_deny_matrix": {
+      "result": "pass, fail-closed on every path",
+      "rows": [
+        {
+          "case": "no bearer token",
+          "outcome": "401",
+          "enforced_by": "handler",
+          "jwt_verification": "real, unstubbed"
+        },
+        {
+          "case": "invalid or expired token",
+          "outcome": "401",
+          "enforced_by": "identity provider verification",
+          "jwt_verification": "real, unstubbed"
+        },
+        {
+          "case": "verified user with no canonical mapping",
+          "outcome": "403",
+          "enforced_by": "actor bridge, before any database connection",
+          "jwt_verification": "stubbed subject"
+        },
+        {
+          "case": "inactive user",
+          "outcome": "403",
+          "enforced_by": "RLS - `user_identities_active_actor_select` requires an active `users` row and an active `team_members` row, so the confirming read returns zero rows and the handler denies",
+          "jwt_verification": "stubbed subject",
+          "corroborated_directly": "The same actor, published the same way out of band, sees 0 identity rows and 0 events, while an active actor sees 1 and 4,800."
+        },
+        {
+          "case": "proposal that does not match the presented subject (stale or tampered bridge map)",
+          "outcome": "403",
+          "enforced_by": "RLS - the policy compares `user_identities.user_id` against the published actor and the presented subject in the same predicate",
+          "jwt_verification": "stubbed subject"
+        },
+        {
+          "case": "active member and active admin",
+          "outcome": "200",
+          "enforced_by": "RLS permits",
+          "jwt_verification": "stubbed subject"
+        }
+      ],
+      "rls_enforced_denials": 2,
+      "note": "The two 401 rows run the real identity-provider verification. The 403 rows stub only the JWT verification, because minting an Auth user for an inactive-account test would have created a resource on a live provider. What they exercise - the bridge and the RLS policies - is real.",
+      "mutation_verified": "Making the bridge accept an unconfirmed actor turned exactly the two RLS-enforced rows red; the other rows were unaffected, which is the correct signature."
+    },
+    "latency": {
+      "host": "macOS dev host to Neon Free, AWS eu-central-1, ~40 ms RTT",
+      "note": "These are dev-host figures dominated by the round trip to Frankfurt and are NOT production latency. A Vercel function co-located with the project pays single-digit milliseconds per round trip. What transfers is the ratio, not the absolute.",
+      "warm_full_request_p50_ms": 525,
+      "warm_full_request_min_ms": 518,
+      "identity_confirmation_alone_p50_ms": 196,
+      "activity_page_1000_rows_alone_p50_ms": 334,
+      "bridge_share_of_request_pct": 37,
+      "page_at_offset_1000_ms": 522,
+      "first_page_ms": 525,
+      "store_location": "module scope, lazily constructed, `frontend/api/_lib/data/store.ts`; asserted that a second request reuses the same instance",
+      "pool_ceiling": 2,
+      "statement_timeout_ms": 8000
+    },
+    "pagination_strategy": {
+      "decision": "offset retained for this slice, deliberately, not inherited",
+      "measured_justification": "A page at offset 1000 cost 522 ms against 525 ms for the first page. Offset is not the dominant term here because the slice reads an aggregate: the GROUP BY over every matching event in the range has to run for any page, so keyset would remove the OFFSET skip without removing the cost that actually dominates.",
+      "structural_justification": "The sort key `(day, instance_id, event_type)` is a total order over the aggregate, so offset paging is correct - no duplicates, no gaps, asserted over 2,700 rows at two different page sizes.",
+      "when_keyset_becomes_required": "S13's inbound-messages read. That one is over a base table rather than an aggregate, is far larger than 2,700 rows, and has a natural indexed key `(sent_at, id)`, so O(offset) would be paid for nothing. The driver's cursor is offset-based generically, so adding keyset means extending `neon.ts`, which is a driver change and should be scoped as such."
+    },
+    "driver_findings": {
+      "defect_found_and_fixed": {
+        "what": "`date` (OID 1082) was not normalized. `pg` parses a bare `date` into a `Date` at local midnight, so the calendar day 2026-01-01 read on this UTC+1/+2 host arrived as 2025-12-31T23:00:00.000Z - a different day, shifted by an amount that follows the host's DST rather than by a constant.",
+        "exposed_by": "the first real operation reading `daily_activity.day`",
+        "fix": "`frontend/api/_lib/data/neon.ts` normalizes OID 1082 to the `YYYY-MM-DD` text PostgreSQL sent. A calendar day is not an instant.",
+        "scope": "additive, per-pool, alongside the existing 1184/1114 handling; S11's 33 contract tests remain green",
+        "regression_test": "asserted through a store and registry of its own, since the slice's own SQL casts to text and would not have caught it",
+        "mutation_verified": "reverting the fix turns exactly that test red"
+      },
+      "second_finding_not_fixed_in_the_driver": {
+        "what": "`toContractError` wraps a failure as `${what}: ${originalMessage}`, so a connection-level failure's message embeds the database hostname even though the error is a contract error. Measured against an unresolvable host: message was `Acquiring a database connection: getaddrinfo ENOTFOUND <host>` while name/code was `DataStoreTransactionError/TRANSACTION_INVALID`.",
+        "raised_by": "code review of the S12 diff",
+        "why_it_matters": "This session's invariants forbid a provider hostname in any log line. The handler's first draft logged the error object and its second logged `error.message`; both were unsafe.",
+        "resolution_in_s12": "The handler logs only a `safeErrorLabel` built from the contract error's `name` and `code`, at both log sites. Defended by four tests with no database or network, mutation-verified.",
+        "generalises_to": "Every handler S13 and S15 add. The safe rule is that a DataStoreContractError's `code` and `name` are loggable and its `message` is not. A tidier fix is for the driver to keep provider text on `cause` and out of `message` - a driver change S12 declined to make."
+      },
+      "contract_unchanged": "`frontend/api/_lib/data/contracts.ts` was not modified. The S03 contract needed no change for the first real slice.",
+      "driver_otherwise_unchanged": "No redesign. The transaction wrapper, cursor mechanism, actor publication, SQLSTATE translation and principal verification are untouched."
+    },
+    "what_the_first_slice_cost": {
+      "new_source_files": 7,
+      "modified_source_files": 4,
+      "deleted_source_files": 1,
+      "new_tests": 22,
+      "sql_written": "two operations, 12 and 8 lines",
+      "assessment": "The per-slice cost is low and mostly mechanical once the shared parts exist: a named operation plus a `mapRow`. The expensive parts of S12 were not the slice - they were the actor bridge, the operation-registry placement and the serverless-function budget, all of which are one-time and now done."
+    },
+    "blockers_and_preconditions": [
+      {
+        "id": "B1",
+        "severity": "blocking for production cutover",
+        "finding": "The actor bridge is an environment-held map from identity-provider subject to canonical user id. It maps only explicitly configured subjects, so every real team member would have to be hand-entered, and adding a person breaks reads until the variable is edited and redeployed. This is workable for one slice and unworkable for a team.",
+        "required_before_mass_migration": "S16-S18 identity, or an explicit owner acceptance that the bridge stays development-only while S13 is built behind a flag."
+      },
+      {
+        "id": "B2",
+        "severity": "blocking for any correctness claim about the migrated dashboard",
+        "finding": "Neon holds no tenant data, so 'the dashboard shows the same numbers' cannot be verified for any slice, including this one. S12's parity is over a synthetic fixture plus a structural argument about identical view SQL.",
+        "required_before_mass_migration": "One of: an owner-approved copy of a bounded tenant slice into Neon (which changes the project's status from 'holds no tenant data'); or a dual-read comparison that runs both providers in production and diffs; or acceptance that S13 ships behind a flag and parity is checked at cutover rather than before."
+      },
+      {
+        "id": "B3",
+        "severity": "resolved in S12, but it constrains S13's shape",
+        "finding": "`frontend/api/` was at exactly 12 function files, the Vercel Hobby serverless-function cap, asserted by `tests/briefing.test.ts`. Any new endpoint exceeds it, so one endpoint per slice does not scale.",
+        "resolution": "By owner decision the former `/api/config` function was folded into `/api/pipeline` as an admin-gated `set_instance_config` action and deleted, freeing its slot for the Neon read. No feature was lost, no cron changed, no AI handler was touched, and the count is back to 12 with the guard green.",
+        "required_before_mass_migration": "S13 must serve its reads from one dispatching endpoint keyed by allowlisted operation name, not one endpoint per slice. There is no slot budget for the latter."
+      },
+      {
+        "id": "B4",
+        "severity": "blocking for specific S13 pages",
+        "finding": "`team_members` is self-only under RLS for `app_runtime`: the policy restricts it to `user_id = app.actor_id`. Any join that resolves an assignee or owner name - `leads.assigned_to`, follow-up owners, pipeline audit names - returns NULL for everyone except the calling actor. The baseline exposes no `SECURITY DEFINER` roster read.",
+        "required_before_mass_migration": "An owner decision. Serving a member roster needs a baseline change applied through the migration ledger, which is not S13's to make."
+      },
+      {
+        "id": "B5",
+        "severity": "advisory",
+        "finding": "The actor bridge costs a full extra transaction, measured at 196 ms of a 525 ms request on this host - 37%. If S13 resolves the actor independently per read, 13 reads would pay it 13 times.",
+        "required_before_mass_migration": "Resolve the actor once per request and pass the `ActorContext` down. This is a code-shape requirement, not a redesign."
+      },
+      {
+        "id": "B6",
+        "severity": "advisory, pre-existing",
+        "finding": "`events` carries `events_identity_key UNIQUE NULLS NOT DISTINCT (instance_id, campaign_id, profile_url, event_type)`, so it is not an append-only log and `daily_activity.cnt` counts distinct tuples rather than occurrences. This is true on both providers and was preserved rather than corrected, because correcting it would have broken parity.",
+        "required_before_mass_migration": "Nothing. Recorded so it is not rediscovered as a Neon regression."
+      }
+    ],
+    "browser_evidence": {
+      "result": "pass - the slice renders in a browser against Neon",
+      "tool": "local harness, not `vercel dev`",
+      "why_not_vercel_dev": "The CLI is not installed on this host, and `vercel dev` requires logging in and linking a Vercel project, which creates or re-parents a provider resource. S12 must create nothing on any provider. The harness serves the real Vite SPA and mounts the real `api/activity-daily.ts` module at the same path Vercel would, converting Node's request into the same Web `Request` the handler receives in production.",
+      "session": "the owner's real signed-in Supabase Auth session; no Auth user was created",
+      "observed_sequence": [
+        "401 unauthenticated, before signing in",
+        "403 after signing in, while the actor bridge had no canonical mapping for the subject",
+        "200 with 1000 rows once the mapping existed and RLS confirmed the actor",
+        "200 with 1000 rows following the returned cursor at offset 1000",
+        "200 with 700 rows following the cursor at offset 2000"
+      ],
+      "pages_walked_in_browser": 3,
+      "rows_walked_in_browser": 2700,
+      "bytes_returned": 236066,
+      "significance": "Pagination past the 1000-row cap is proven in the browser following an opaque cursor, not only in the test suite. The 401 and 403 rows are the deny path observed over real HTTP with a real session rather than asserted in-process.",
+      "owner_confirmation": "The owner confirmed the rendered chart and its summary line were visible in the browser."
+    },
+    "test_results": {
+      "recorded_pre_edit_baselines": {
+        "frontend_npm_test": "9 files / 65 tests passed",
+        "frontend_test_neon": "1 file / 33 tests passed",
+        "frontend_typecheck_api": "clean",
+        "ops_npm_test": "70 passed, 0 failed",
+        "static_assertions": "75 passed, 0 failed",
+        "all_matched_expected": true
+      },
+      "after": {
+        "frontend_npm_test": "9 files / 65 tests passed",
+        "frontend_test_neon": "2 files / 55 tests passed",
+        "frontend_typecheck_api": "clean",
+        "frontend_npm_build": "clean",
+        "ops_npm_test": "70 passed, 0 failed",
+        "static_assertions": "75 passed, 0 failed",
+        "git_diff_check": "clean"
+      }
+    },
+    "invariants_held": {
+      "service_role_untouched": "The Neon path never uses `service_role` and never reads Supabase's `team_members`. It verifies the JWT with the anon key and resolves authority entirely from Neon.",
+      "supabase_path_still_runs": "`DataContext`, every page and every other handler still read Supabase. S12 adds a path beside one; it does not switch one.",
+      "ai_sql_guard": "not loosened, gained no write path, not touched",
+      "read_only": "The application registry declares no command operation - asserted - and the slice's transactions run `BEGIN READ ONLY`.",
+      "no_credential_in_repository": "Swept every changed file for provider resource identifiers, connection strings, embedded credentials, JWT-shaped strings and PEM headers, using a canary line to prove the pattern was live. Clean.",
+      "baseline_immutable": "Nothing under `postgres/tenant-baseline/` or `supabase/migrations/` changed; the static assertions' immutability check passes."
+    }
+  },
+  "recommendation": {
+    "summary": "Conditional go for building S13; not yet a go for a production cutover of dashboard reads.",
+    "detail": "The data path itself is proven and the per-slice cost is low. A real browser reached a real handler, which resolved a real actor and read the real Neon database under the baseline's own RLS policies; pagination past the 1000-row cap, UTC day semantics and a fail-closed deny matrix are all asserted rather than assumed, and three mutation checks confirm the assertions bite. The S03 contract needed no change and the driver needed one small, generic fix. Nothing about S13's mechanics looks risky.",
+    "not_an_unconditional_go_because": "Two of the six findings are not engineering details. B2 means correctness of a migrated dashboard cannot currently be demonstrated at all, because there is no tenant data on Neon to compare against - S12's parity is a structural argument plus a synthetic fixture, which is honest but is not evidence about production numbers. B1 means the identity bridge that makes any of this reachable from a browser cannot serve a team as built. Either one alone would make a production cutover premature.",
+    "recommended_sequencing": [
+      "Approve S13 as implementation behind a flag, with reads verified against fixtures rather than tenant data.",
+      "Decide B2 explicitly - it is an owner decision about whether the Neon project may hold a bounded slice of tenant data, and it changes the project's status.",
+      "Do not cut over production reads until B1 is resolved by S16-S18 or explicitly accepted, and B4 has an owner decision.",
+      "Require S13 to use one dispatching endpoint (B3) and to resolve the actor once per request (B5)."
+    ],
+    "prepared_by": "S12",
+    "decision_is_the_owners": true
+  }
+}
