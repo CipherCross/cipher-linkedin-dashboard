@@ -1,6 +1,17 @@
 import { OpsError, assertOps } from "./errors.js";
 import { Redactor } from "./redaction.js";
 import type { StepState } from "./types.js";
+import {
+  CANONICAL_TENANT_SCHEDULES,
+  scheduleManifestDigest,
+} from "../providers/hosting.js";
+import {
+  CANONICAL_BUILD_RECIPE_ID,
+  CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
+  CANONICAL_RUNTIME_PROFILE_ID,
+  LEGACY_PUBLIC_BUILD_VALUE_NAMES,
+  buildTenantEnvironmentBindings,
+} from "../providers/hosting-tenant.js";
 import type {
   OwnershipMarker,
   OnboardingProviders,
@@ -41,6 +52,23 @@ export interface OnboardingExecutionContext {
   readonly smokeTestIds: readonly string[];
   readonly ownership: OwnershipMarker;
 }
+
+/**
+ * The runtime checks the hosting control plane owns inside the smoke suite. The
+ * other smoke IDs belong to the data, auth and SMTP ports and are unchanged.
+ */
+const HOSTING_RUNTIME_CHECK_IDS: readonly string[] = [
+  "api_health",
+  "cron_configuration",
+  "preview_isolation",
+  "runtime_project_ref",
+];
+
+/** Every public build value the release carries: canonical names plus legacy ones. */
+const PUBLIC_VALUE_NAMES: readonly string[] = [
+  ...CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
+  ...LEGACY_PUBLIC_BUILD_VALUE_NAMES,
+].sort();
 
 export interface ExecuteNextResult {
   readonly ordinal: number;
@@ -190,7 +218,10 @@ export class OnboardingExecutor {
       "supabase",
       "project",
     );
-    const vercelProject = this.#registry.getResourceReference(
+    // `providerKind` stays "vercel" and `resourceKind` stays "project": the
+    // registry vocabulary and the persisted rows belong to S24, not here. What
+    // the row now holds is a canonical target handle, not a provider project ID.
+    const hostingTarget = this.#registry.getResourceReference(
       context.tenantId,
       "vercel",
       "project",
@@ -276,93 +307,124 @@ export class OnboardingExecutor {
           )
         ).providerRequestId;
       case 6: {
-        const resource = await this.#providerCall("vercel.createOrAdoptProject", () => this.#providers.vercel.createOrAdoptProject({
-          teamId: context.vercelTeamId,
-          deterministicName: context.vercelProjectName,
-          ownership: context.ownership,
-          gitAutoPromotion: false,
-        }));
+        const target = await this.#providerCall(
+          "hosting.createDeploymentTarget",
+          () => this.#providers.hosting.createDeploymentTarget({
+            deterministicName: context.vercelProjectName,
+            workspaceClass: context.workspaceClass,
+            runtimeProfileId: CANONICAL_RUNTIME_PROFILE_ID,
+            ownership: context.ownership,
+            automaticPromotionEnabled: false,
+            isolatedPreviewsEnabled: false,
+          }),
+        );
         this.#registry.saveResourceReference(
           {
             tenantId: context.tenantId,
             providerKind: "vercel",
             resourceKind: "project",
-            providerOwnerId: resource.providerOwnerId,
-            resourceId: resource.resourceId,
-            deterministicName: resource.deterministicName,
-            ownershipMarkerDigest: resource.ownershipMarkerDigest,
-            observedLifecycle: resource.lifecycle,
+            providerOwnerId: context.vercelTeamId,
+            resourceId: target.targetHandle,
+            deterministicName: target.deterministicName,
+            ownershipMarkerDigest: target.ownershipMarkerDigest,
+            observedLifecycle: target.lifecycle,
           },
           context.operationId,
           context.fencingToken,
-          resource.providerRequestId,
+          target.hostingRequestId,
         );
-        return resource.providerRequestId;
+        return target.hostingRequestId;
       }
-      case 7:
-        assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
+      case 7: {
+        assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
         assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        // Ties the plan's declared public build values to the canonical
+        // environment contract without changing the plan's vocabulary.
+        assertOps(
+          JSON.stringify([...context.publicBuildValueNames].sort()) ===
+            JSON.stringify([...LEGACY_PUBLIC_BUILD_VALUE_NAMES].sort()),
+          "invalid_plan",
+          "Plan public build values do not match the canonical environment contract",
+        );
         return (
-          await this.#providerCall("vercel.configureProductionEnvironment", () => this.#providers.vercel.configureProductionEnvironment({
-            projectId: vercelProject.resourceId,
-            tenantSlug: context.tenantSlug,
-            supabaseProjectId: supabaseProject.resourceId,
-            secretLabels: context.integrationSecretLabels,
-            publicBuildValueNames: context.publicBuildValueNames,
-            scope: "production_only",
-          }))
-        ).providerRequestId;
-      case 8:
-        assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
-        return (
-          await this.#providerCall("domain.bindProductionDomain", () =>
-            this.#providers.domain.bindProductionDomain({
-              projectId: vercelProject.resourceId,
-              hostname: context.productionHostname,
-              ownership: context.ownership,
+          await this.#providerCall("hosting.bindEnvironment", () =>
+            this.#providers.hosting.bindEnvironment({
+              targetHandle: hostingTarget.resourceId,
+              scope: "production",
+              bindings: buildTenantEnvironmentBindings({
+                tenantSlug: context.tenantSlug,
+              }),
             }),
           )
-        ).providerRequestId;
+        ).hostingRequestId;
+      }
+      case 8:
+        assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
+        return (
+          await this.#providerCall("hosting.assignDomain", () =>
+            this.#providers.hosting.assignDomain({
+              targetHandle: hostingTarget.resourceId,
+              hostname: context.productionHostname,
+              ownership: context.ownership,
+              certificateMode: "provider_managed",
+            }),
+          )
+        ).hostingRequestId;
       case 9: {
-        assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
+        assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
         assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
-        const build = await this.#providerCall("vercel.buildTenant", () => this.#providers.vercel.buildTenant({
-          projectId: vercelProject.resourceId,
-          supabaseProjectId: supabaseProject.resourceId,
-          productionHostname: context.productionHostname,
-          sourceGitSha: context.sourceGitSha,
-          publicBuildValueNames: context.publicBuildValueNames,
-        }));
+        const manifestDigest = scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES);
+        const release = await this.#providerCall("hosting.buildRelease", () =>
+          this.#providers.hosting.buildRelease({
+            targetHandle: hostingTarget.resourceId,
+            revisionId: context.sourceGitSha,
+            buildRecipeId: CANONICAL_BUILD_RECIPE_ID,
+            publicValueNames: PUBLIC_VALUE_NAMES,
+            scheduleManifestDigest: manifestDigest,
+          }),
+        );
         this.#registry.saveResourceReference(
           {
             tenantId: context.tenantId,
             providerKind: "vercel",
             resourceKind: "build",
             providerOwnerId: context.vercelTeamId,
-            resourceId: build.buildId,
+            resourceId: release.releaseHandle,
             deterministicName: `${context.vercelProjectName}@${context.sourceGitSha}`,
             ownershipMarkerDigest: context.ownership.digest,
             observedLifecycle: "verified",
           },
           context.operationId,
           context.fencingToken,
-          build.providerRequestId,
+          release.hostingRequestId,
         );
-        return build.providerRequestId;
+        // Schedules are pinned to the release they belong to, so they are
+        // registered as part of building it rather than as a free-standing step
+        // that could drift away from the revision serving those routes.
+        return (
+          await this.#providerCall("hosting.registerSchedules", () =>
+            this.#providers.hosting.registerSchedules({
+              targetHandle: hostingTarget.resourceId,
+              releaseHandle: release.releaseHandle,
+              schedules: CANONICAL_TENANT_SCHEDULES,
+              manifestDigest,
+            }),
+          )
+        ).hostingRequestId;
       }
       case 10: {
-        assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
-        const build = this.#registry.getResourceReference(
+        assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
+        const release = this.#registry.getResourceReference(
           context.tenantId,
           "vercel",
           "build",
         );
-        assertOps(build, "invalid_plan", "Verified tenant build is missing");
-        const deployment = await this.#providerCall("vercel.deployAndPromote", () =>
-          this.#providers.vercel.deployAndPromote(
-            vercelProject.resourceId,
-            build.resourceId,
-          ),
+        assertOps(release, "invalid_plan", "Verified tenant build is missing");
+        const rollout = await this.#providerCall("hosting.promoteRelease", () =>
+          this.#providers.hosting.promoteRelease({
+            targetHandle: hostingTarget.resourceId,
+            releaseHandle: release.resourceId,
+          }),
         );
         this.#registry.saveResourceReference(
           {
@@ -370,20 +432,26 @@ export class OnboardingExecutor {
             providerKind: "vercel",
             resourceKind: "deployment",
             providerOwnerId: context.vercelTeamId,
-            resourceId: deployment.deploymentId,
+            resourceId: rollout.rolloutHandle,
             deterministicName: `${context.vercelProjectName}@production`,
             ownershipMarkerDigest: context.ownership.digest,
             observedLifecycle: "promoted",
           },
           context.operationId,
           context.fencingToken,
-          deployment.providerRequestId,
+          rollout.hostingRequestId,
         );
-        return deployment.providerRequestId;
+        return rollout.hostingRequestId;
       }
       case 11: {
         assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
-        assertOps(vercelProject, "invalid_plan", "Vercel resource reference is missing");
+        assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
+        const release = this.#registry.getResourceReference(
+          context.tenantId,
+          "vercel",
+          "build",
+        );
+        assertOps(release, "invalid_plan", "Verified tenant build is missing");
         await this.#providerCall("supabase.runSmokeTests", () =>
           this.#providers.supabase.runSmokeTests(
             supabaseProject.resourceId,
@@ -414,21 +482,25 @@ export class OnboardingExecutor {
             context.smokeTestIds.filter((id) => id === "smtp_delivery"),
           ),
         );
-        return (
-          await this.#providerCall("vercel.runSmokeTests", () =>
-            this.#providers.vercel.runSmokeTests(
-              vercelProject.resourceId,
-              context.smokeTestIds.filter((id) =>
-                [
-                  "api_health",
-                  "cron_configuration",
-                  "preview_isolation",
-                  "runtime_project_ref",
-                ].includes(id),
-              ),
+        const verification = await this.#providerCall(
+          "hosting.verifyDeployment",
+          () => this.#providers.hosting.verifyDeployment({
+            targetHandle: hostingTarget.resourceId,
+            expectedActiveReleaseHandle: release.resourceId,
+            expectedHostname: context.productionHostname,
+            expectedRevisionId: context.sourceGitSha,
+            expectedSchedules: CANONICAL_TENANT_SCHEDULES,
+            runtimeCheckIds: context.smokeTestIds.filter((id) =>
+              HOSTING_RUNTIME_CHECK_IDS.includes(id),
             ),
-          )
-        ).providerRequestId;
+          }),
+        );
+        assertOps(
+          verification.status === "passed",
+          "provider_error",
+          "Hosting deployment verification did not pass",
+        );
+        return verification.hostingRequestId;
       }
       case 12:
         assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");

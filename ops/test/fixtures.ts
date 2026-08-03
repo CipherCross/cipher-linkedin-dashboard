@@ -1,4 +1,5 @@
 import {
+  CANONICAL_RUNTIME_PROFILE_ID,
   asJsonValue,
   InMemoryCatalogResolver,
   planDigest,
@@ -191,9 +192,7 @@ export function disposableProfile(): DisposableOnboardingProfile {
     templateSetId: "templates-1",
     senderDomain: "example.com",
     fromIdentity: "hello@example.com",
-    serverlessFunctionCount: 12,
-    scheduledJobCount: 4,
-    requiredCronSlots: 1,
+    runtimeProfileId: CANONICAL_RUNTIME_PROFILE_ID,
     baselineVersion: 53,
     migrationVersions: [54],
     targetSchemaVersion: 54,

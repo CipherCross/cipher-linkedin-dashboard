@@ -5,16 +5,10 @@ import type {
   AuthConfigurationRequest,
   AuthInspectionRequest,
   AuthProvider,
-  BuildRequest,
-  BuildResult,
   CompanyAdminRequest,
-  DeploymentResult,
-  DomainBindingRequest,
   DomainInspectionRequest,
   DomainProvider,
-  OnboardingProviders,
   PrivateStorageRequest,
-  ProductionEnvironmentRequest,
   ProviderActionResult,
   ProviderResource,
   SmtpConfigurationRequest,
@@ -26,9 +20,6 @@ import type {
   SupabaseProjectRequest,
   SupabaseProvider,
   TenantSchemaRequest,
-  VercelInspectionRequest,
-  VercelProjectRequest,
-  VercelProvider,
 } from "./interfaces.js";
 
 export type FailureTiming = "before_effect" | "after_effect" | "outcome_unknown";
@@ -193,99 +184,6 @@ export class FakeSupabaseProvider extends FakeProviderBase implements SupabasePr
   }
 }
 
-export class FakeVercelProvider extends FakeProviderBase implements VercelProvider {
-  readonly #projects = new Map<string, ProviderResource>();
-
-  get projectCount(): number {
-    return this.#projects.size;
-  }
-
-  async inspect(request: VercelInspectionRequest) {
-    const existing = this.#projects.get(
-      `${request.teamId}:${request.deterministicName}`,
-    );
-    return this.effect("inspect", () => ({
-      teamAccessible: true,
-      deterministicNameAvailable: existing === undefined,
-      existingResourceOwned:
-        existing?.ownershipMarkerDigest === request.ownership.digest,
-      tierAvailable: true,
-      functionCapacityAvailable: true,
-      cronCapacityAvailable: true,
-      productionOnlyEnvironmentSupported: true,
-      gitAutoPromotionCanBeDisabled: true,
-      validUntil: "2030-01-01T00:30:00.000Z",
-    }));
-  }
-
-  async createOrAdoptProject(request: VercelProjectRequest): Promise<ProviderResource> {
-    return this.effect("createOrAdoptProject", () => {
-      const key = `${request.teamId}:${request.deterministicName}`;
-      const existing = this.#projects.get(key);
-      if (existing !== undefined) {
-        if (existing.ownershipMarkerDigest !== request.ownership.digest) {
-          throw new OpsError(
-            "provider_error",
-            "Vercel resource ownership marker mismatch",
-          );
-        }
-        return { ...existing, adopted: true };
-      }
-      const resource: ProviderResource = {
-        providerRequestId: requestId("createOrAdoptProject", this.callCount("createOrAdoptProject")),
-        providerOwnerId: request.teamId,
-        resourceId: stableId("vc", key),
-        deterministicName: request.deterministicName,
-        ownershipMarkerDigest: request.ownership.digest,
-        lifecycle: "ready",
-        adopted: false,
-      };
-      this.#projects.set(key, resource);
-      return resource;
-    });
-  }
-
-  async configureProductionEnvironment(
-    request: ProductionEnvironmentRequest,
-  ): Promise<ProviderActionResult> {
-    return this.action(
-      "configureProductionEnvironment",
-      JSON.stringify(request),
-    );
-  }
-
-  async buildTenant(request: BuildRequest): Promise<BuildResult> {
-    return this.idempotentEffect("buildTenant", JSON.stringify(request), () => ({
-      providerRequestId: requestId("buildTenant", this.callCount("buildTenant")),
-      buildId: stableId("build", `${request.projectId}:${request.sourceGitSha}`),
-      sourceGitSha: request.sourceGitSha,
-    }));
-  }
-
-  async deployAndPromote(
-    projectId: string,
-    buildId: string,
-  ): Promise<DeploymentResult> {
-    return this.idempotentEffect("deployAndPromote", `${projectId}:${buildId}`, () => ({
-      providerRequestId: requestId("deployAndPromote", this.callCount("deployAndPromote")),
-      deploymentId: stableId("deployment", `${projectId}:${buildId}`),
-    }));
-  }
-
-  async runSmokeTests(
-    projectId: string,
-    smokeTestIds: readonly string[],
-  ): Promise<ProviderActionResult> {
-    return this.action("runSmokeTests", `${projectId}:${smokeTestIds.join(",")}`);
-  }
-
-  private async action(method: string, key: string): Promise<ProviderActionResult> {
-    return this.idempotentEffect(method, key, () => ({
-      providerRequestId: requestId(method, this.callCount(method)),
-    }));
-  }
-}
-
 export class FakeAuthProvider extends FakeProviderBase implements AuthProvider {
   async inspect(_request: AuthInspectionRequest) {
     return this.effect("inspect", () => ({
@@ -363,11 +261,23 @@ export class FakeSmtpProvider extends FakeProviderBase implements SmtpProvider {
   }
 }
 
+/**
+ * Zone preflight only. The hostname binding itself is a hosting capability and
+ * lives on `FakeHostingProvider.assignDomain`.
+ */
 export class FakeDomainProvider extends FakeProviderBase implements DomainProvider {
-  readonly #bindings = new Set<string>();
+  readonly #ownedHostnames: ReadonlySet<string>;
+
+  constructor(
+    rules: readonly FailureRule[] = [],
+    ownedHostnames: readonly string[] = [],
+  ) {
+    super(rules);
+    this.#ownedHostnames = new Set(ownedHostnames);
+  }
 
   async inspect(request: DomainInspectionRequest) {
-    const existing = this.#bindings.has(request.hostname);
+    const existing = this.#ownedHostnames.has(request.hostname);
     return this.effect("inspect", () => ({
       zoneOwned: true,
       hostnameAvailable: !existing,
@@ -376,24 +286,6 @@ export class FakeDomainProvider extends FakeProviderBase implements DomainProvid
       legalReviewApproved: true,
       validUntil: "2030-01-01T00:30:00.000Z",
     }));
-  }
-
-  async bindProductionDomain(
-    request: DomainBindingRequest,
-  ): Promise<ProviderActionResult> {
-    return this.idempotentEffect(
-      "bindProductionDomain",
-      `${request.projectId}:${request.hostname}`,
-      () => {
-        this.#bindings.add(request.hostname);
-        return {
-          providerRequestId: requestId(
-            "bindProductionDomain",
-            this.callCount("bindProductionDomain"),
-          ),
-        };
-      },
-    );
   }
 }
 
@@ -408,34 +300,5 @@ export class FakeSourceRepositoryProvider
       artifactPinned: true,
       validUntil: "2030-01-01T00:30:00.000Z",
     }));
-  }
-}
-
-export class FakeOnboardingProviderBundle implements OnboardingProviders {
-  readonly supabase: FakeSupabaseProvider;
-  readonly vercel: FakeVercelProvider;
-  readonly auth: FakeAuthProvider;
-  readonly smtp: FakeSmtpProvider;
-  readonly domain: FakeDomainProvider;
-  readonly sourceRepository: FakeSourceRepositoryProvider;
-
-  constructor(
-    rules: {
-      readonly supabase?: readonly FailureRule[];
-      readonly vercel?: readonly FailureRule[];
-      readonly auth?: readonly FailureRule[];
-      readonly smtp?: readonly FailureRule[];
-      readonly domain?: readonly FailureRule[];
-      readonly sourceRepository?: readonly FailureRule[];
-    } = {},
-  ) {
-    this.supabase = new FakeSupabaseProvider(rules.supabase);
-    this.vercel = new FakeVercelProvider(rules.vercel);
-    this.auth = new FakeAuthProvider(rules.auth);
-    this.smtp = new FakeSmtpProvider(rules.smtp);
-    this.domain = new FakeDomainProvider(rules.domain);
-    this.sourceRepository = new FakeSourceRepositoryProvider(
-      rules.sourceRepository,
-    );
   }
 }

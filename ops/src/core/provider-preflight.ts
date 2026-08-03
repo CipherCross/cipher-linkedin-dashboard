@@ -2,6 +2,14 @@ import { canonicalJson, sha256Digest, type JsonValue } from "./canonical.js";
 import { Redactor } from "./redaction.js";
 import type { CatalogSnapshot, ProviderSnapshot } from "./types.js";
 import type { OnboardingBusinessInputs } from "../mcp/schemas.js";
+import {
+  CANONICAL_TENANT_SCHEDULES,
+  type HostingCapabilityInspection,
+} from "../providers/hosting.js";
+import {
+  CANONICAL_TENANT_ENVIRONMENT,
+  CANONICAL_RUNTIME_PROFILE_ID,
+} from "../providers/hosting-tenant.js";
 import type {
   AuthInspection,
   DomainInspection,
@@ -9,9 +17,19 @@ import type {
   OwnershipMarker,
   SourceRepositoryInspection,
   SupabaseInspection,
-  VercelInspection,
   SmtpInspection,
 } from "../providers/interfaces.js";
+
+/**
+ * How many values of each class the canonical environment contract binds,
+ * counting the legacy names that are dual-written during the transition.
+ */
+const REQUIRED_SERVER_VALUE_COUNT = CANONICAL_TENANT_ENVIRONMENT.filter(
+  (entry) => entry.valueClass !== "public_build",
+).reduce((total, entry) => total + (entry.legacyName === null ? 1 : 2), 0);
+const REQUIRED_PUBLIC_VALUE_COUNT = CANONICAL_TENANT_ENVIRONMENT.filter(
+  (entry) => entry.valueClass === "public_build",
+).reduce((total, entry) => total + (entry.legacyName === null ? 1 : 2), 0);
 
 export const PREFLIGHT_KINDS = [
   "provider_access",
@@ -39,9 +57,7 @@ export interface DisposableOnboardingProfile {
   readonly templateSetId: string;
   readonly senderDomain: string;
   readonly fromIdentity: string;
-  readonly serverlessFunctionCount: number;
-  readonly scheduledJobCount: number;
-  readonly requiredCronSlots: 1;
+  readonly runtimeProfileId: string;
   readonly baselineVersion: 53;
   readonly migrationVersions: readonly number[];
   readonly targetSchemaVersion: number;
@@ -157,7 +173,7 @@ export class ProviderPreflightService {
 
     const [
       supabase,
-      vercel,
+      hosting,
       auth,
       smtp,
       domain,
@@ -172,13 +188,13 @@ export class ProviderPreflightService {
         backupProfileId: inputs.backup_profile_id,
         ownership,
       }),
-      this.#providers.vercel.inspect({
-        teamId: this.#profile.vercelTeamId,
+      this.#providers.hosting.inspect({
         deterministicName: projectName,
-        tierId: inputs.vercel_tier_id,
-        serverlessFunctionCount: this.#profile.serverlessFunctionCount,
-        scheduledJobCount: this.#profile.scheduledJobCount,
-        requiredCronSlots: this.#profile.requiredCronSlots,
+        workspaceClass: inputs.workspace_class,
+        runtimeProfileId: this.#profile.runtimeProfileId,
+        requiredScheduleCount: CANONICAL_TENANT_SCHEDULES.length,
+        requiredServerValueCount: REQUIRED_SERVER_VALUE_COUNT,
+        requiredPublicValueCount: REQUIRED_PUBLIC_VALUE_COUNT,
         ownership,
       }),
       this.#providers.auth.inspect({
@@ -205,7 +221,7 @@ export class ProviderPreflightService {
       }),
     ]);
 
-    const raw = { supabase, vercel, auth, smtp, domain, sourceRepository };
+    const raw = { supabase, hosting, auth, smtp, domain, sourceRepository };
     this.#redactor.assertSecretFree(raw, "provider preflight responses");
     const snapshots = this.#snapshots(observedAt, raw);
     const now = Date.parse(observedAt);
@@ -238,14 +254,14 @@ export class ProviderPreflightService {
     observedAt: string,
     observations: {
       readonly supabase: SupabaseInspection;
-      readonly vercel: VercelInspection;
+      readonly hosting: HostingCapabilityInspection;
       readonly auth: AuthInspection;
       readonly smtp: SmtpInspection;
       readonly domain: DomainInspection;
       readonly sourceRepository: SourceRepositoryInspection;
     },
   ): readonly DetailedProviderSnapshot[] {
-    const { supabase, vercel, auth, smtp, domain, sourceRepository } = observations;
+    const { supabase, hosting, auth, smtp, domain, sourceRepository } = observations;
     return [
       snapshot(
         "supabase",
@@ -268,18 +284,24 @@ export class ProviderPreflightService {
           auth_release_compatible: auth.releaseCompatible,
         },
       ),
-      snapshot("vercel", observedAt, vercel.validUntil, {
+      // The snapshot's provider key stays "vercel" because `ProviderKind` and
+      // the persisted registry rows are S24's to migrate. What the snapshot
+      // records is now capability state, not vendor resource state.
+      snapshot("vercel", observedAt, hosting.validUntil, {
         provider: "vercel",
-        team_accessible: vercel.teamAccessible,
+        control_plane_accessible: hosting.controlPlaneAccessible,
         deterministic_name_usable:
-          vercel.deterministicNameAvailable || vercel.existingResourceOwned,
-        tier_available: vercel.tierAvailable,
-        function_capacity_available: vercel.functionCapacityAvailable,
-        cron_capacity_available: vercel.cronCapacityAvailable,
-        production_only_environment_supported:
-          vercel.productionOnlyEnvironmentSupported,
-        git_auto_promotion_can_be_disabled:
-          vercel.gitAutoPromotionCanBeDisabled,
+          hosting.deterministicNameAvailable || hosting.existingTargetOwned,
+        runtime_profile_available: hosting.runtimeProfileAvailable,
+        server_value_binding_supported: hosting.serverValueBindingSupported,
+        public_value_binding_supported: hosting.publicValueBindingSupported,
+        pinned_revision_build_supported: hosting.pinnedRevisionBuildSupported,
+        custom_domain_supported: hosting.customDomainSupported,
+        schedule_capacity_available: hosting.scheduleCapacityAvailable,
+        rollback_supported: hosting.rollbackSupported,
+        automatic_promotion_can_be_disabled:
+          hosting.automaticPromotionCanBeDisabled,
+        isolated_previews_supported: hosting.isolatedPreviewsSupported,
       }),
       snapshot("dns", observedAt, domain.validUntil, {
         provider: "dns",
@@ -309,7 +331,7 @@ export class ProviderPreflightService {
     inputs: OnboardingBusinessInputs,
     observations: {
       readonly supabase: SupabaseInspection;
-      readonly vercel: VercelInspection;
+      readonly hosting: HostingCapabilityInspection;
       readonly auth: AuthInspection;
       readonly smtp: SmtpInspection;
       readonly domain: DomainInspection;
@@ -317,7 +339,7 @@ export class ProviderPreflightService {
     },
     validSnapshots: boolean,
   ): readonly PreflightPrerequisite[] {
-    const { supabase, vercel, auth, smtp, domain, sourceRepository } = observations;
+    const { supabase, hosting, auth, smtp, domain, sourceRepository } = observations;
     const disposableScope =
       inputs.workspace_class === "disposable" &&
       inputs.release_channel === "canary" &&
@@ -328,8 +350,8 @@ export class ProviderPreflightService {
         supabase.organizationAccessible &&
         (supabase.deterministicNameAvailable ||
           supabase.existingResourceOwned) &&
-        vercel.teamAccessible &&
-        (vercel.deterministicNameAvailable || vercel.existingResourceOwned) &&
+        hosting.controlPlaneAccessible &&
+        (hosting.deterministicNameAvailable || hosting.existingTargetOwned) &&
         smtp.providerAccessible,
       domain:
         domain.zoneOwned &&
@@ -338,11 +360,15 @@ export class ProviderPreflightService {
       tier_capacity: allTrue([
         supabase.tierAvailable,
         supabase.computeAvailable,
-        vercel.tierAvailable,
-        vercel.functionCapacityAvailable,
-        vercel.cronCapacityAvailable,
-        vercel.productionOnlyEnvironmentSupported,
-        vercel.gitAutoPromotionCanBeDisabled,
+        hosting.runtimeProfileAvailable,
+        hosting.scheduleCapacityAvailable,
+        hosting.serverValueBindingSupported,
+        hosting.publicValueBindingSupported,
+        hosting.pinnedRevisionBuildSupported,
+        hosting.customDomainSupported,
+        hosting.rollbackSupported,
+        hosting.automaticPromotionCanBeDisabled,
+        hosting.isolatedPreviewsSupported,
       ]),
       smtp_dns: allTrue([
         smtp.customSmtp,

@@ -160,7 +160,7 @@ test("full fake onboarding finishes in order and invites admin only after smoke 
     assert.equal(registry.getOperation(started.operationId)?.state, "succeeded");
     assert.equal(registry.getTenantLifecycle(TENANT_UUID), "active");
     assert.equal(providers.supabase.projectCount, 1);
-    assert.equal(providers.vercel.projectCount, 1);
+    assert.equal(providers.hosting.targetCount, 1);
     assert.equal(providers.auth.callCount("createCompanyAdminAndInvite"), 1);
     assert.equal(registry.countResourceReferences(TENANT_UUID), 4);
     assert.ok(

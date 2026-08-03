@@ -18,9 +18,9 @@ import {
   StrictSupabaseAdapter,
   StrictAuthAdapter,
   StrictDomainAdapter,
+  StrictHostingAdapter,
   StrictSmtpAdapter,
   StrictSourceRepositoryAdapter,
-  StrictVercelAdapter,
   ownerToolSchemas,
   type ApplyRequest,
   type FailureRule,
@@ -61,7 +61,7 @@ function strictProviders(
 ): OnboardingProviders {
   return {
     supabase: new StrictSupabaseAdapter(ports.supabase),
-    vercel: new StrictVercelAdapter(ports.vercel),
+    hosting: new StrictHostingAdapter(ports.hosting),
     auth: new StrictAuthAdapter(ports.auth),
     smtp: new StrictSmtpAdapter(ports.smtp),
     domain: new StrictDomainAdapter(ports.domain),
@@ -168,7 +168,7 @@ test("disposable dry-run is deterministic and provider snapshots are read-only",
     );
     assert.equal(registry.registryVersion, 0);
     assert.equal(providerPorts.supabase.projectCount, 0);
-    assert.equal(providerPorts.vercel.projectCount, 0);
+    assert.equal(providerPorts.hosting.targetCount, 0);
   } finally {
     registry.close();
   }
@@ -227,7 +227,7 @@ test("fixed MCP schemas drive preflight, plan and resumable disposable onboardin
     }
     assert.equal(result?.state, "succeeded");
     assert.equal(providerPorts.supabase.projectCount, 1);
-    assert.equal(providerPorts.vercel.projectCount, 1);
+    assert.equal(providerPorts.hosting.targetCount, 1);
     assert.equal(
       providerPorts.auth.effectCount("createCompanyAdminAndInvite"),
       1,
@@ -245,15 +245,16 @@ const injectedEffects = [
   ["auth", "configure"],
   ["smtp", "configure"],
   ["auth", "createDisabledSupportMembership"],
-  ["vercel", "createOrAdoptProject"],
-  ["vercel", "configureProductionEnvironment"],
-  ["domain", "bindProductionDomain"],
-  ["vercel", "buildTenant"],
-  ["vercel", "deployAndPromote"],
+  ["hosting", "createDeploymentTarget"],
+  ["hosting", "bindEnvironment"],
+  ["hosting", "assignDomain"],
+  ["hosting", "buildRelease"],
+  ["hosting", "registerSchedules"],
+  ["hosting", "promoteRelease"],
   ["supabase", "runSmokeTests"],
   ["auth", "runSmokeTests"],
   ["smtp", "runSmokeTests"],
-  ["vercel", "runSmokeTests"],
+  ["hosting", "verifyDeployment"],
   ["auth", "createCompanyAdminAndInvite"],
 ] as const;
 
@@ -311,7 +312,7 @@ test("failure after every provider effect quarantines and resumes without duplic
       }
       assert.equal(registry.getOperation(operationId)?.state, "succeeded");
       assert.equal(providerPorts.supabase.projectCount, 1);
-      assert.equal(providerPorts.vercel.projectCount, 1);
+      assert.equal(providerPorts.hosting.targetCount, 1);
       assert.ok(
         providerPorts.auth.effectCount("createCompanyAdminAndInvite") <= 1,
       );

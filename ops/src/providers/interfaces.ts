@@ -1,3 +1,5 @@
+import type { HostingProvider } from "./hosting.js";
+
 export type WorkspaceClass = "internal" | "disposable" | "external";
 export type ProviderKind =
   | "supabase"
@@ -38,13 +40,6 @@ export interface SupabaseProjectRequest {
   readonly ownership: OwnershipMarker;
 }
 
-export interface VercelProjectRequest {
-  readonly teamId: string;
-  readonly deterministicName: string;
-  readonly ownership: OwnershipMarker;
-  readonly gitAutoPromotion: false;
-}
-
 export interface TenantSchemaRequest {
   readonly projectId: string;
   readonly baselineVersion: 53;
@@ -73,44 +68,6 @@ export interface SmtpConfigurationRequest {
   readonly smtpSecretLabels: readonly string[];
 }
 
-export interface ProductionEnvironmentRequest {
-  readonly projectId: string;
-  readonly tenantSlug: string;
-  readonly supabaseProjectId: string;
-  readonly secretLabels: readonly string[];
-  readonly publicBuildValueNames: readonly (
-    | "VITE_SUPABASE_URL"
-    | "VITE_SUPABASE_ANON_KEY"
-  )[];
-  readonly scope: "production_only";
-}
-
-export interface DomainBindingRequest {
-  readonly projectId: string;
-  readonly hostname: string;
-  readonly ownership: OwnershipMarker;
-}
-
-export interface BuildRequest {
-  readonly projectId: string;
-  readonly supabaseProjectId: string;
-  readonly productionHostname: string;
-  readonly sourceGitSha: string;
-  readonly publicBuildValueNames: readonly (
-    | "VITE_SUPABASE_URL"
-    | "VITE_SUPABASE_ANON_KEY"
-  )[];
-}
-
-export interface BuildResult extends ProviderActionResult {
-  readonly buildId: string;
-  readonly sourceGitSha: string;
-}
-
-export interface DeploymentResult extends ProviderActionResult {
-  readonly deploymentId: string;
-}
-
 export interface CompanyAdminRequest {
   readonly projectId: string;
   readonly adminEmail: string;
@@ -135,28 +92,6 @@ export interface SupabaseInspection {
   readonly computeAvailable: boolean;
   readonly backupCompatible: boolean;
   readonly authConfigurationSupported: boolean;
-  readonly validUntil: string;
-}
-
-export interface VercelInspectionRequest {
-  readonly teamId: string;
-  readonly deterministicName: string;
-  readonly tierId: string;
-  readonly serverlessFunctionCount: number;
-  readonly scheduledJobCount: number;
-  readonly requiredCronSlots: number;
-  readonly ownership: OwnershipMarker;
-}
-
-export interface VercelInspection {
-  readonly teamAccessible: boolean;
-  readonly deterministicNameAvailable: boolean;
-  readonly existingResourceOwned: boolean;
-  readonly tierAvailable: boolean;
-  readonly functionCapacityAvailable: boolean;
-  readonly cronCapacityAvailable: boolean;
-  readonly productionOnlyEnvironmentSupported: boolean;
-  readonly gitAutoPromotionCanBeDisabled: boolean;
   readonly validUntil: string;
 }
 
@@ -236,28 +171,6 @@ export interface SupabaseControlPlanePort {
   ): Promise<ProviderActionResult>;
 }
 
-/**
- * @deprecated Superseded by the canonical `HostingControlPlanePort` in
- * `./hosting.js`, which describes hosting capabilities instead of one vendor's
- * resources. This port stays in the tree only so the existing concrete adapter,
- * runtime and tests keep working; S10 ports them onto the canonical contract and
- * removes this interface together with the Vercel-shaped request/inspection
- * types above. Do not add new callers.
- */
-export interface VercelControlPlanePort {
-  inspect(request: VercelInspectionRequest): Promise<VercelInspection>;
-  createOrAdoptProject(request: VercelProjectRequest): Promise<ProviderResource>;
-  configureProductionEnvironment(
-    request: ProductionEnvironmentRequest,
-  ): Promise<ProviderActionResult>;
-  buildTenant(request: BuildRequest): Promise<BuildResult>;
-  deployAndPromote(projectId: string, buildId: string): Promise<DeploymentResult>;
-  runSmokeTests(
-    projectId: string,
-    smokeTestIds: readonly string[],
-  ): Promise<ProviderActionResult>;
-}
-
 export interface AuthControlPlanePort {
   inspect(request: AuthInspectionRequest): Promise<AuthInspection>;
   configure(request: AuthConfigurationRequest): Promise<ProviderActionResult>;
@@ -280,9 +193,14 @@ export interface SmtpControlPlanePort {
   ): Promise<ProviderActionResult>;
 }
 
+/**
+ * Zone authority only. Attaching a hostname to a deployment target is an
+ * operation the *hosting* control plane performs, so the binding lives on
+ * `HostingControlPlanePort.assignDomain`; what stays here is the zone
+ * preflight — ownership, availability and sender-domain verification.
+ */
 export interface DomainControlPlanePort {
   inspect(request: DomainInspectionRequest): Promise<DomainInspection>;
-  bindProductionDomain(request: DomainBindingRequest): Promise<ProviderActionResult>;
 }
 
 export interface SourceRepositoryReadPort {
@@ -292,7 +210,6 @@ export interface SourceRepositoryReadPort {
 }
 
 export interface SupabaseProvider extends SupabaseControlPlanePort {}
-export interface VercelProvider extends VercelControlPlanePort {}
 export interface AuthProvider extends AuthControlPlanePort {}
 export interface SmtpProvider extends SmtpControlPlanePort {}
 export interface DomainProvider extends DomainControlPlanePort {}
@@ -300,7 +217,12 @@ export interface SourceRepositoryProvider extends SourceRepositoryReadPort {}
 
 export interface OnboardingProviders {
   readonly supabase: SupabaseProvider;
-  readonly vercel: VercelProvider;
+  /**
+   * The canonical hosting capability port. Any adapter satisfying it —
+   * the in-memory fake or the concrete Vercel adapter — drives the same plan
+   * to the same canonical results.
+   */
+  readonly hosting: HostingProvider;
   readonly auth: AuthProvider;
   readonly smtp: SmtpProvider;
   readonly domain: DomainProvider;

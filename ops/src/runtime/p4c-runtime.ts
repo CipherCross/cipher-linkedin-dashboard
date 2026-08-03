@@ -15,10 +15,11 @@ import {
   StrictAuthAdapter,
   StrictDomainAdapter,
   StrictSmtpAdapter,
+  StrictHostingAdapter,
   StrictSourceRepositoryAdapter,
   StrictSupabaseAdapter,
-  StrictVercelAdapter,
 } from "../providers/adapters.js";
+import { CANONICAL_RUNTIME_PROFILE_ID } from "../providers/hosting-tenant.js";
 import { createP4CSdkPorts } from "../providers/p4c-sdk.js";
 import { MacOsKeychainSecretStore } from "../secrets/keychain.js";
 import type { SecretStore } from "../secrets/types.js";
@@ -182,9 +183,7 @@ export function p4cProfile(): DisposableOnboardingProfile {
     templateSetId: "p4c-auth-v1",
     senderDomain: "mail.ciphercross.dev",
     fromIdentity: "no-reply@mail.ciphercross.dev",
-    serverlessFunctionCount: 12,
-    scheduledJobCount: 4,
-    requiredCronSlots: 1,
+    runtimeProfileId: CANONICAL_RUNTIME_PROFILE_ID,
     baselineVersion: 53,
     migrationVersions: [54],
     targetSchemaVersion: 54,
@@ -321,7 +320,7 @@ export async function createP4COwnerOperations(
   );
   const providers = {
     supabase: new StrictSupabaseAdapter(ports.supabase, redactor),
-    vercel: new StrictVercelAdapter(ports.vercel, redactor),
+    hosting: new StrictHostingAdapter(ports.hosting, redactor),
     auth: new StrictAuthAdapter(ports.auth, redactor),
     smtp: new StrictSmtpAdapter(ports.smtp, redactor),
     domain: new StrictDomainAdapter(ports.domain, redactor),

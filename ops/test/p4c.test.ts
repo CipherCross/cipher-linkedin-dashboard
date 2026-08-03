@@ -11,7 +11,7 @@ import {
   FakeSmtpProvider,
   FakeSourceRepositoryProvider,
   FakeSupabaseProvider,
-  FakeVercelProvider,
+  FakeHostingProvider,
   MCP_TOOL_CONTRACT_DIGEST,
   OnboardingExecutor,
   ProviderPreflightService,
@@ -19,6 +19,7 @@ import {
   executionContextFromPlan,
   p4cBusinessInputs,
   p4cProfile,
+  type DeploymentVerificationRequest,
   type OnboardingProviders,
 } from "../src/index.js";
 import { OWNER_UUID } from "./fixtures.js";
@@ -80,7 +81,7 @@ test("P4-C plan is pinned to one disposable tenant and disabled integrations", a
   try {
     const providers = {
       supabase: new FakeSupabaseProvider(),
-      vercel: new FakeVercelProvider(),
+      hosting: new FakeHostingProvider(),
       auth: new FakeAuthProvider(),
       smtp: new FakeSmtpProvider(),
       domain: new FakeDomainProvider(),
@@ -151,10 +152,10 @@ test("smoke ownership is complete and admin invite remains the following step", 
       return super.runSmokeTests(projectId, ids);
     }
   }
-  class RecordingVercel extends FakeVercelProvider {
-    override async runSmokeTests(projectId: string, ids: readonly string[]) {
-      events.push(`vercel:${ids.join(",")}`);
-      return super.runSmokeTests(projectId, ids);
+  class RecordingHosting extends FakeHostingProvider {
+    override async verifyDeployment(request: DeploymentVerificationRequest) {
+      events.push(`hosting:${request.runtimeCheckIds.join(",")}`);
+      return super.verifyDeployment(request);
     }
   }
 
@@ -162,7 +163,7 @@ test("smoke ownership is complete and admin invite remains the following step", 
   try {
     const providers: OnboardingProviders = {
       supabase: new RecordingSupabase(),
-      vercel: new RecordingVercel(),
+      hosting: new RecordingHosting(),
       auth: new RecordingAuth(),
       smtp: new RecordingSmtp(),
       domain: new FakeDomainProvider(),
@@ -210,7 +211,7 @@ test("smoke ownership is complete and admin invite remains the following step", 
       "supabase:schema_ledger,rls_role_boundaries,private_storage_delivery",
       "auth:auth_anonymous_denied,auth_inactive_denied,auth_member_allowed",
       "smtp:smtp_delivery",
-      "vercel:api_health,cron_configuration,preview_isolation,runtime_project_ref",
+      "hosting:api_health,cron_configuration,preview_isolation,runtime_project_ref",
     ]);
     const invite = await executor.executeNext(context);
     assert.equal(invite.ordinal, 12);

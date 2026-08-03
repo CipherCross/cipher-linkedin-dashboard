@@ -10,6 +10,32 @@ import { SupabaseManagementAPI } from "supabase-management-js";
 
 import { OpsError, assertOps } from "../core/errors.js";
 import { Redactor } from "../core/redaction.js";
+import {
+  CANONICAL_TENANT_SCHEDULES,
+  type HostingProvider,
+  type HostingSchedule,
+  type HostingValueSource,
+} from "./hosting.js";
+import {
+  CANONICAL_RUNTIME_PROFILE_ID,
+  buildTenantEnvironmentBindings,
+  tenantSecretLabel,
+} from "./hosting-tenant.js";
+import {
+  VercelHostingAdapter,
+  parseReleaseScheduleManifest,
+  type HostingValueResolver,
+  type HostingVendorCapabilities,
+  type HostingVendorClient,
+  type HostingVendorDomain,
+  type HostingVendorEnvironmentValue,
+  type HostingVendorRelease,
+  type HostingVendorReleaseRequest,
+  type HostingVendorRuntimeCheck,
+  type HostingVendorSchedule,
+  type HostingVendorTarget,
+  type HostingVendorTargetRequest,
+} from "./hosting-vercel.js";
 import { SecretBootstrapService } from "../secrets/service.js";
 import {
   labelsForSecret,
@@ -21,14 +47,10 @@ import type {
   AuthConfigurationRequest,
   AuthControlPlanePort,
   AuthInspectionRequest,
-  BuildRequest,
-  BuildResult,
   CompanyAdminRequest,
-  DomainBindingRequest,
   DomainControlPlanePort,
   DomainInspectionRequest,
   PrivateStorageRequest,
-  ProductionEnvironmentRequest,
   ProviderActionResult,
   ProviderResource,
   SmtpConfigurationRequest,
@@ -40,9 +62,6 @@ import type {
   SupabaseInspectionRequest,
   SupabaseProjectRequest,
   TenantSchemaRequest,
-  VercelControlPlanePort,
-  VercelInspectionRequest,
-  VercelProjectRequest,
 } from "./interfaces.js";
 
 const BASELINE_SHA256 =
@@ -62,30 +81,21 @@ const AUTH_SMOKE_IDS = [
   "auth_inactive_denied",
   "auth_member_allowed",
 ] as const;
-const VERCEL_SMOKE_IDS = [
-  "api_health",
-  "cron_configuration",
-  "preview_isolation",
-  "runtime_project_ref",
-] as const;
 const SMTP_SMOKE_IDS = ["smtp_delivery"] as const;
-const PRODUCTION_ENV_KEYS = [
-  "VITE_SUPABASE_URL",
-  "VITE_SUPABASE_ANON_KEY",
-  "SUPABASE_URL",
-  "SUPABASE_ANON_KEY",
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "CRON_SECRET",
-  "NOTIFY_SECRET",
-  "MCP_SECRET",
-  "DASHBOARD_URL",
-] as const;
-const EXPECTED_CRONS = [
-  ["/api/classify", "0 6 * * *"],
-  ["/api/notify-replies", "30 6 * * *"],
-  ["/api/briefing?kind=weekly", "0 7 * * 1"],
-  ["/api/briefing?kind=daily", "30 7 * * 1-5"],
-] as const;
+/**
+ * Generator IDs from the canonical environment contract mapped onto the key
+ * store's existing tenant secret names, so the new names do not orphan a stored
+ * value or grow the reviewed secret catalog.
+ */
+const GENERATED_SECRET_NAMES: Readonly<
+  Record<string, "cron.secret" | "notify.secret" | "mcp.secret">
+> = {
+  "tenant.schedule_invoke_secret": "cron.secret",
+  "tenant.ingest_invoke_secret": "notify.secret",
+  "tenant.tool_bridge_secret": "mcp.secret",
+};
+/** Provider-side upper bound on scheduled jobs for the reviewed tier. */
+const MAXIMUM_SCHEDULES = 20;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -106,7 +116,7 @@ export interface P4CSdkConfiguration {
 
 export interface P4CSdkPorts {
   readonly supabase: SupabaseControlPlanePort;
-  readonly vercel: VercelControlPlanePort;
+  readonly hosting: HostingProvider;
   readonly auth: AuthControlPlanePort;
   readonly smtp: SmtpControlPlanePort;
   readonly domain: DomainControlPlanePort;
@@ -128,7 +138,18 @@ interface SharedSdkState {
   readonly supabase: SupabaseManagementAPI;
   readonly vercel: Vercel;
   readonly credentials: Map<string, ProjectCredentials>;
-  readonly builds: Map<string, string>;
+}
+
+export interface P4CSdkPortOptions {
+  /**
+   * The hosting transport. Defaults to the reviewed vendor SDK client built
+   * below; a test supplies an in-memory one so adapter parity can be proven
+   * without touching a provider. The seam is deliberately the *narrow*
+   * `HostingVendorClient` rather than an HTTP client or the SDK object itself:
+   * nothing arbitrary can be sent through it.
+   */
+  readonly hostingClient?: HostingVendorClient;
+  readonly hostingResolver?: HostingValueResolver;
 }
 
 export async function createP4CSdkPorts(
@@ -136,6 +157,7 @@ export async function createP4CSdkPorts(
   registry: Registry,
   secretStore: SecretStore,
   redactor: Redactor,
+  options: P4CSdkPortOptions = {},
 ): Promise<P4CSdkPorts> {
   validateConfiguration(config);
   const supabaseToken = await requiredPlatformSecret(
@@ -158,11 +180,14 @@ export async function createP4CSdkPorts(
     supabase: new SupabaseManagementAPI({ accessToken: supabaseToken }),
     vercel: new Vercel({ bearerToken: vercelToken }),
     credentials: new Map(),
-    builds: new Map(),
   };
   return {
     supabase: new P4CSupabaseSdkPort(state),
-    vercel: new P4CVercelSdkPort(state),
+    hosting: new VercelHostingAdapter(
+      options.hostingClient ?? new VercelHostingVendorClient(state),
+      options.hostingResolver ?? new P4CHostingValueResolver(state),
+      { redactor },
+    ),
     auth: new P4CAuthSdkPort(state),
     smtp: new P4CSmtpSdkPort(state),
     domain: new P4CDomainSdkPort(state),
@@ -710,356 +735,6 @@ class P4CSmtpSdkPort implements SmtpControlPlanePort {
   }
 }
 
-class P4CVercelSdkPort implements VercelControlPlanePort {
-  readonly #state: SharedSdkState;
-
-  constructor(state: SharedSdkState) {
-    this.#state = state;
-  }
-
-  async inspect(request: VercelInspectionRequest) {
-    return providerCall(this.#state, "vercel.inspect", async () => {
-      assertOps(
-        request.teamId === this.#state.config.vercelTeamId,
-        "provider_error",
-        "Vercel team is outside the reviewed P4-C scope",
-      );
-      const team = await this.#state.vercel.teams.getTeam({
-        teamId: request.teamId,
-      });
-      const existing = await getVercelProject(
-        this.#state,
-        request.deterministicName,
-      );
-      const owned = existing === undefined
-        ? false
-        : registryOwnsVercel(
-            this.#state,
-            String(existing.id),
-            request.ownership.digest,
-          );
-      return {
-        teamAccessible: team.id === request.teamId,
-        deterministicNameAvailable: existing === undefined,
-        existingResourceOwned: owned,
-        tierAvailable: request.tierId === "vercel-pro",
-        functionCapacityAvailable: request.serverlessFunctionCount <= 100,
-        cronCapacityAvailable:
-          request.scheduledJobCount === EXPECTED_CRONS.length &&
-          request.requiredCronSlots === 1,
-        productionOnlyEnvironmentSupported: true,
-        gitAutoPromotionCanBeDisabled: true,
-        validUntil: validUntil(),
-      };
-    });
-  }
-
-  async createOrAdoptProject(
-    request: VercelProjectRequest,
-  ): Promise<ProviderResource> {
-    return providerCall(this.#state, "vercel.createOrAdoptProject", async () => {
-      const existing = await getVercelProject(
-        this.#state,
-        request.deterministicName,
-      );
-      if (existing !== undefined) {
-        assertOps(
-          registryOwnsVercel(
-            this.#state,
-            String(existing.id),
-            request.ownership.digest,
-          ),
-          "provider_error",
-          "Existing Vercel project is not owned by this operation",
-        );
-        return resourceResult(
-          "vercel-adopt",
-          request.teamId,
-          String(existing.id),
-          request.deterministicName,
-          request.ownership.digest,
-          "ready",
-          true,
-        );
-      }
-      const created = await this.#state.vercel.projects.createProject({
-        teamId: request.teamId,
-        requestBody: {
-          name: request.deterministicName,
-          framework: "vite",
-          buildCommand: "npm run build",
-          outputDirectory: "dist",
-          rootDirectory: null,
-          previewDeploymentsDisabled: true,
-          skipGitConnectDuringLink: true,
-        },
-      });
-      await this.#state.vercel.projects.updateProject({
-        idOrName: created.id,
-        teamId: request.teamId,
-        requestBody: {
-          autoAssignCustomDomains: false,
-          previewDeploymentsDisabled: true,
-          gitForkProtection: true,
-        },
-      });
-      return resourceResult(
-        "vercel-create",
-        request.teamId,
-        created.id,
-        created.name,
-        request.ownership.digest,
-        "ready",
-        false,
-      );
-    });
-  }
-
-  async configureProductionEnvironment(
-    request: ProductionEnvironmentRequest,
-  ): Promise<ProviderActionResult> {
-    return providerCall(this.#state, "vercel.configureProductionEnvironment", async () => {
-      assertOps(
-        request.scope === "production_only" &&
-          request.tenantSlug === this.#state.config.allowedTenantSlug &&
-          request.secretLabels.length === 0,
-        "provider_error",
-        "Production environment request is outside the disabled-integration profile",
-      );
-      assertExactIds(
-        request.publicBuildValueNames,
-        ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"],
-        "Public build values",
-      );
-      const supabase = await projectCredentials(
-        this.#state,
-        request.supabaseProjectId,
-      );
-      const cronSecret = await ensureTenantSecret(
-        this.#state,
-        request.tenantSlug,
-        "cron.secret",
-      );
-      const notifySecret = await ensureTenantSecret(
-        this.#state,
-        request.tenantSlug,
-        "notify.secret",
-      );
-      const mcpSecret = await ensureTenantSecret(
-        this.#state,
-        request.tenantSlug,
-        "mcp.secret",
-      );
-      const dashboardUrl =
-        `https://${this.#state.config.allowedTenantSlug}.${this.#state.config.platformDomain}`;
-      const values: Readonly<Record<(typeof PRODUCTION_ENV_KEYS)[number], string>> = {
-        VITE_SUPABASE_URL: supabase.url,
-        VITE_SUPABASE_ANON_KEY: supabase.publicKey,
-        SUPABASE_URL: supabase.url,
-        SUPABASE_ANON_KEY: supabase.publicKey,
-        SUPABASE_SERVICE_ROLE_KEY: supabase.serviceRoleKey,
-        CRON_SECRET: cronSecret,
-        NOTIFY_SECRET: notifySecret,
-        MCP_SECRET: mcpSecret,
-        DASHBOARD_URL: dashboardUrl,
-      };
-      registerSecrets(this.#state.redactor, [
-        supabase.serviceRoleKey,
-        cronSecret,
-        notifySecret,
-        mcpSecret,
-      ]);
-      await this.#state.vercel.projects.createProjectEnv({
-        idOrName: request.projectId,
-        teamId: this.#state.config.vercelTeamId,
-        upsert: "true",
-        requestBody: PRODUCTION_ENV_KEYS.map((key) => ({
-          key,
-          value: values[key],
-          type: key.startsWith("VITE_") || key === "SUPABASE_URL" || key === "DASHBOARD_URL"
-            ? "plain" as const
-            : "encrypted" as const,
-          target: ["production" as const],
-        })),
-      });
-      return actionResult("vercel-env", request.projectId);
-    });
-  }
-
-  async buildTenant(request: BuildRequest): Promise<BuildResult> {
-    return providerCall(this.#state, "vercel.buildTenant", async () => {
-      assertOps(
-        request.sourceGitSha === this.#state.config.sourceGitSha &&
-          request.productionHostname ===
-            `${this.#state.config.allowedTenantSlug}.${this.#state.config.platformDomain}`,
-        "provider_error",
-        "Build request is outside the pinned P4-C release",
-      );
-      const files = await committedFrontendFiles(
-        this.#state.config.repositoryRoot,
-        request.sourceGitSha,
-      );
-      for (const file of files) {
-        await this.#state.vercel.deployments.uploadFile({
-          teamId: this.#state.config.vercelTeamId,
-          contentLength: file.content.byteLength,
-          xVercelDigest: file.sha,
-          requestBody: file.content,
-        });
-      }
-      const deployment = await this.#state.vercel.deployments.createDeployment({
-        teamId: this.#state.config.vercelTeamId,
-        forceNew: "1",
-        skipAutoDetectionConfirmation: "1",
-        requestBody: {
-          name: `lh2-disposable-${this.#state.config.allowedTenantSlug}`,
-          project: request.projectId,
-          target: "production",
-          files: files.map((file) => ({
-            file: file.path,
-            sha: file.sha,
-            size: file.content.byteLength,
-          })),
-          gitMetadata: {
-            commitSha: request.sourceGitSha,
-            commitRef: "p4c-pinned",
-            dirty: false,
-          },
-          meta: {
-            "lh2-source-git-sha": request.sourceGitSha,
-            "lh2-supabase-project-ref": request.supabaseProjectId,
-            "lh2-production-hostname": request.productionHostname,
-          },
-          projectSettings: {
-            framework: "vite",
-            buildCommand: "npm run build",
-            outputDirectory: "dist",
-            rootDirectory: null,
-          },
-        },
-      });
-      await waitForDeployment(this.#state, deployment.id);
-      this.#state.builds.set(request.projectId, deployment.id);
-      return {
-        providerRequestId: stableRequestId("vercel-build", deployment.id),
-        buildId: deployment.id,
-        sourceGitSha: request.sourceGitSha,
-      };
-    });
-  }
-
-  async deployAndPromote(
-    projectId: string,
-    buildId: string,
-  ): Promise<ProviderActionResult & { readonly deploymentId: string }> {
-    return providerCall(this.#state, "vercel.deployAndPromote", async () => {
-      const deployment = await this.#state.vercel.deployments.getDeployment({
-        idOrUrl: buildId,
-        teamId: this.#state.config.vercelTeamId,
-      });
-      const deploymentRecord = record(deployment);
-      assertOps(
-        deployment.readyState === "READY" &&
-          deploymentRecord.projectId === projectId,
-        "provider_error",
-        "Only the verified tenant build can be promoted",
-      );
-      await this.#state.vercel.projects.requestPromote({
-        projectId,
-        deploymentId: buildId,
-        teamId: this.#state.config.vercelTeamId,
-      });
-      return {
-        providerRequestId: stableRequestId("vercel-promote", buildId),
-        deploymentId: buildId,
-      };
-    });
-  }
-
-  async runSmokeTests(
-    projectId: string,
-    smokeTestIds: readonly string[],
-  ): Promise<ProviderActionResult> {
-    return providerCall(this.#state, "vercel.runSmokeTests", async () => {
-      assertExactIds(smokeTestIds, VERCEL_SMOKE_IDS, "Vercel smoke");
-      const buildId = this.#state.builds.get(projectId) ??
-        this.#state.registry.getResourceReference(
-          this.#state.registry.getTenantBySlug(
-            this.#state.config.allowedTenantSlug,
-          )!.tenantId,
-          "vercel",
-          "build",
-        )?.resourceId;
-      assertOps(buildId, "provider_error", "Verified Vercel build is missing");
-      const deployment = await this.#state.vercel.deployments.getDeployment({
-        idOrUrl: buildId,
-        teamId: this.#state.config.vercelTeamId,
-      });
-      const deploymentRecord = record(deployment);
-      assertOps(
-        deployment.readyState === "READY" &&
-          deploymentRecord.projectId === projectId &&
-          record(deploymentRecord.meta)["lh2-source-git-sha"] ===
-            this.#state.config.sourceGitSha,
-        "provider_error",
-        "Deployment health or pinned revision smoke failed",
-      );
-      const project = await this.#state.vercel.projects.getProject({
-        idOrName: projectId,
-        teamId: this.#state.config.vercelTeamId,
-      });
-      const projectRecord = record(project);
-      assertOps(
-        projectRecord.previewDeploymentsDisabled === true &&
-          projectRecord.autoAssignCustomDomains === false,
-        "provider_error",
-        "Preview isolation smoke failed",
-      );
-      const environment = await this.#state.vercel.projects.filterProjectEnvs({
-        idOrName: projectId,
-        teamId: this.#state.config.vercelTeamId,
-      });
-      const environmentRecord = record(environment);
-      const candidates = Array.isArray(environmentRecord.envs)
-        ? environmentRecord.envs.map((candidate) => record(candidate))
-        : [environmentRecord];
-      const selected = candidates.filter((candidate) =>
-        PRODUCTION_ENV_KEYS.includes(candidate.key as never),
-      );
-      assertOps(
-        selected.length === PRODUCTION_ENV_KEYS.length &&
-          selected.every((candidate) =>
-            Array.isArray(candidate.target)
-              ? candidate.target.length === 1 && candidate.target[0] === "production"
-              : candidate.target === "production"
-          ),
-        "provider_error",
-        "Production-only environment smoke failed",
-      );
-      const vercelConfig = JSON.parse(
-        await committedText(
-          this.#state.config.repositoryRoot,
-          this.#state.config.sourceGitSha,
-          "frontend/vercel.json",
-        ),
-      ) as UnknownRecord;
-      const crons = vercelConfig.crons;
-      assertOps(
-        Array.isArray(crons) &&
-          JSON.stringify(
-            crons.map((candidate) => {
-              const item = record(candidate);
-              return [item.path, item.schedule];
-            }),
-          ) === JSON.stringify(EXPECTED_CRONS),
-        "provider_error",
-        "Cron configuration smoke failed",
-      );
-      return actionResult("vercel-smoke", buildId);
-    });
-  }
-}
-
 class P4CDomainSdkPort implements DomainControlPlanePort {
   readonly #state: SharedSdkState;
 
@@ -1105,6 +780,8 @@ class P4CDomainSdkPort implements DomainControlPlanePort {
           candidate.name === "resend._domainkey.mail" &&
           candidate.value.includes("p="),
         );
+      const deterministicName = `lh2-${request.workspaceClass}-${this.#state.config.allowedTenantSlug}`;
+      const ownedProject = await getVercelProject(this.#state, deterministicName);
       const projectDomains = await this.#state.vercel.domains.getDomainProjectDomains({
         domain: this.#state.config.apexDomain,
         teamId: this.#state.config.vercelTeamId,
@@ -1117,58 +794,466 @@ class P4CDomainSdkPort implements DomainControlPlanePort {
           domain.domain.verified &&
           domain.domain.teamId === this.#state.config.vercelTeamId,
         hostnameAvailable: binding === undefined,
-        existingBindingOwned: binding !== undefined &&
-          registryOwnsVercel(
-            this.#state,
-            binding.projectId,
-            this.#state.registry.getResourceReference(
-              this.#state.registry.getTenantBySlug(
-                this.#state.config.allowedTenantSlug,
-              )?.tenantId ?? "",
-              "vercel",
-              "project",
-            )?.ownershipMarkerDigest ?? "",
-          ),
+        // Owned when the hostname is bound to the project carrying this
+        // tenant's deterministic name and the registry records that name.
+        existingBindingOwned:
+          binding !== undefined &&
+          ownedProject !== undefined &&
+          binding.projectId === String(ownedProject.id) &&
+          registryOwnershipDigest(this.#state, deterministicName) !== null,
         senderDomainVerified: smtpDnsReady,
         legalReviewApproved: true,
         validUntil: validUntil(),
       };
     });
   }
+}
 
-  async bindProductionDomain(
-    request: DomainBindingRequest,
-  ): Promise<ProviderActionResult> {
-    return providerCall(this.#state, "domain.bindProductionDomain", async () => {
+/* ------------------------------------------------------------------ *
+ * Hosting: the concrete vendor transport and the value resolver
+ *
+ * Everything Vercel-specific about hosting lives below: project IDs, deployment
+ * IDs, file uploads, promotion and the routing manifest. None of it crosses
+ * `HostingVendorClient` outward — `VercelHostingAdapter` receives only the
+ * provider-neutral shapes declared there and issues canonical handles of its
+ * own.
+ * ------------------------------------------------------------------ */
+
+/** The registry is the ownership record; it is keyed by deterministic name. */
+function registryOwnershipDigest(
+  state: SharedSdkState,
+  deterministicName: string,
+): string | null {
+  const tenant = state.registry.getTenantBySlug(state.config.allowedTenantSlug);
+  if (tenant === undefined) return null;
+  const resource = state.registry.getResourceReference(
+    tenant.tenantId,
+    "vercel",
+    "project",
+  );
+  if (resource === undefined || resource.deterministicName !== deterministicName) {
+    return null;
+  }
+  return resource.ownershipMarkerDigest;
+}
+
+class VercelHostingVendorClient implements HostingVendorClient {
+  readonly #state: SharedSdkState;
+  /** Provider release ID to the revision it was built from. */
+  readonly #revisions = new Map<string, string>();
+
+  constructor(state: SharedSdkState) {
+    this.#state = state;
+  }
+
+  async describeCapabilities(): Promise<HostingVendorCapabilities> {
+    return providerCall(this.#state, "hosting.describeCapabilities", async () => {
+      const team = await this.#state.vercel.teams.getTeam({
+        teamId: this.#state.config.vercelTeamId,
+      });
+      return {
+        controlPlaneAccessible: team.id === this.#state.config.vercelTeamId,
+        runtimeProfileIds: [CANONICAL_RUNTIME_PROFILE_ID],
+        maximumSchedules: MAXIMUM_SCHEDULES,
+        serverValueBindingSupported: true,
+        publicValueBindingSupported: true,
+        pinnedRevisionBuildSupported: true,
+        customDomainSupported: true,
+        rollbackSupported: true,
+        automaticPromotionCanBeDisabled: true,
+        isolatedPreviewsSupported: true,
+        validUntil: validUntil(),
+      };
+    });
+  }
+
+  async findTarget(name: string): Promise<HostingVendorTarget | undefined> {
+    return providerCall(this.#state, "hosting.findTarget", async () => {
+      const existing = await getVercelProject(this.#state, name);
+      if (existing === undefined) return undefined;
+      return {
+        targetId: String(existing.id),
+        name,
+        lifecycle: "ready" as const,
+        automaticPromotionEnabled: existing.autoAssignCustomDomains === true,
+        isolatedPreviewsEnabled: existing.previewDeploymentsDisabled !== true,
+        ownershipMarkerDigest: registryOwnershipDigest(this.#state, name),
+      };
+    });
+  }
+
+  async createTarget(
+    request: HostingVendorTargetRequest,
+  ): Promise<HostingVendorTarget> {
+    return providerCall(this.#state, "hosting.createTarget", async () => {
       assertOps(
-        request.hostname ===
+        request.runtimeProfileId === CANONICAL_RUNTIME_PROFILE_ID,
+        "provider_error",
+        "Runtime profile is outside the reviewed P4-C profile",
+      );
+      const created = await this.#state.vercel.projects.createProject({
+        teamId: this.#state.config.vercelTeamId,
+        requestBody: {
+          name: request.name,
+          framework: "vite",
+          buildCommand: "npm run build",
+          outputDirectory: "dist",
+          rootDirectory: null,
+          previewDeploymentsDisabled: true,
+          skipGitConnectDuringLink: true,
+        },
+      });
+      await this.#state.vercel.projects.updateProject({
+        idOrName: created.id,
+        teamId: this.#state.config.vercelTeamId,
+        requestBody: {
+          autoAssignCustomDomains: false,
+          previewDeploymentsDisabled: true,
+          gitForkProtection: true,
+        },
+      });
+      return {
+        targetId: created.id,
+        name: created.name,
+        lifecycle: "ready" as const,
+        automaticPromotionEnabled: false,
+        isolatedPreviewsEnabled: false,
+        ownershipMarkerDigest: request.ownershipMarkerDigest,
+      };
+    });
+  }
+
+  async putEnvironmentValues(
+    targetId: string,
+    values: readonly HostingVendorEnvironmentValue[],
+  ): Promise<void> {
+    await providerCall(this.#state, "hosting.putEnvironmentValues", async () => {
+      await this.#state.vercel.projects.createProjectEnv({
+        idOrName: targetId,
+        teamId: this.#state.config.vercelTeamId,
+        upsert: "true",
+        requestBody: values.map((value) => ({
+          key: value.name,
+          value: value.value,
+          type: value.secret ? ("encrypted" as const) : ("plain" as const),
+          target: ["production" as const],
+        })),
+      });
+      return true;
+    });
+  }
+
+  async createRelease(
+    request: HostingVendorReleaseRequest,
+  ): Promise<HostingVendorRelease> {
+    return providerCall(this.#state, "hosting.createRelease", async () => {
+      assertOps(
+        request.revisionId === this.#state.config.sourceGitSha,
+        "provider_error",
+        "Build request is outside the pinned P4-C release",
+      );
+      const files = await committedFrontendFiles(
+        this.#state.config.repositoryRoot,
+        request.revisionId,
+      );
+      for (const file of files) {
+        await this.#state.vercel.deployments.uploadFile({
+          teamId: this.#state.config.vercelTeamId,
+          contentLength: file.content.byteLength,
+          xVercelDigest: file.sha,
+          requestBody: file.content,
+        });
+      }
+      const deployment = await this.#state.vercel.deployments.createDeployment({
+        teamId: this.#state.config.vercelTeamId,
+        forceNew: "1",
+        skipAutoDetectionConfirmation: "1",
+        requestBody: {
+          name: `lh2-disposable-${this.#state.config.allowedTenantSlug}`,
+          project: request.targetId,
+          target: "production",
+          files: files.map((file) => ({
+            file: file.path,
+            sha: file.sha,
+            size: file.content.byteLength,
+          })),
+          gitMetadata: {
+            commitSha: request.revisionId,
+            commitRef: "p4c-pinned",
+            dirty: false,
+          },
+          meta: {
+            "lh2-source-git-sha": request.revisionId,
+            "lh2-build-recipe-id": request.buildRecipeId,
+            "lh2-public-value-names": request.publicValueNames.join(","),
+          },
+          projectSettings: {
+            framework: "vite",
+            buildCommand: "npm run build",
+            outputDirectory: "dist",
+            rootDirectory: null,
+          },
+        },
+      });
+      await waitForDeployment(this.#state, deployment.id);
+      this.#revisions.set(deployment.id, request.revisionId);
+      return {
+        releaseId: deployment.id,
+        targetId: request.targetId,
+        revisionId: request.revisionId,
+        state: "ready" as const,
+        artifactDigest: artifactDigestOf(files),
+      };
+    });
+  }
+
+  async readReleaseSchedules(
+    revisionId: string,
+  ): Promise<readonly HostingVendorSchedule[]> {
+    return providerCall(this.#state, "hosting.readReleaseSchedules", async () =>
+      parseReleaseScheduleManifest(
+        await committedText(
+          this.#state.config.repositoryRoot,
+          revisionId,
+          "frontend/vercel.json",
+        ),
+      ),
+    );
+  }
+
+  async findDomain(
+    targetId: string,
+    hostname: string,
+  ): Promise<HostingVendorDomain | undefined> {
+    return providerCall(this.#state, "hosting.findDomain", async () => {
+      const domains = await this.#state.vercel.projects.getProjectDomains({
+        idOrName: targetId,
+        teamId: this.#state.config.vercelTeamId,
+      });
+      const existing = domains.domains.find(
+        (candidate) => candidate.name === hostname,
+      );
+      if (existing === undefined) return undefined;
+      return {
+        hostname,
+        targetId: existing.projectId,
+        certificateReady: existing.verified,
+      };
+    });
+  }
+
+  async attachDomain(
+    targetId: string,
+    hostname: string,
+  ): Promise<HostingVendorDomain> {
+    return providerCall(this.#state, "hosting.attachDomain", async () => {
+      assertOps(
+        hostname ===
           `${this.#state.config.allowedTenantSlug}.${this.#state.config.platformDomain}`,
         "provider_error",
         "Production hostname is outside the reviewed P4-C scope",
       );
-      const domains = await this.#state.vercel.projects.getProjectDomains({
-        idOrName: request.projectId,
+      const added = await this.#state.vercel.projects.addProjectDomain({
+        idOrName: targetId,
+        teamId: this.#state.config.vercelTeamId,
+        requestBody: { name: hostname },
+      });
+      return {
+        hostname,
+        targetId,
+        certificateReady: added.verified,
+      };
+    });
+  }
+
+  async activateRelease(targetId: string, releaseId: string): Promise<void> {
+    await providerCall(this.#state, "hosting.activateRelease", async () => {
+      const deployment = await this.#state.vercel.deployments.getDeployment({
+        idOrUrl: releaseId,
         teamId: this.#state.config.vercelTeamId,
       });
-      const existing = domains.domains.find(
-        (candidate) => candidate.name === request.hostname,
+      assertOps(
+        deployment.readyState === "READY" &&
+          record(deployment).projectId === targetId,
+        "provider_error",
+        "Only a verified release of this target can be activated",
       );
-      if (existing === undefined) {
-        const added = await this.#state.vercel.projects.addProjectDomain({
-          idOrName: request.projectId,
-          teamId: this.#state.config.vercelTeamId,
-          requestBody: { name: request.hostname },
-        });
-        assertOps(added.verified, "provider_error", "Vercel domain binding is unverified");
-      } else {
-        assertOps(
-          existing.projectId === request.projectId,
-          "provider_error",
-          "Production hostname is bound to another Vercel project",
-        );
-      }
-      return actionResult("domain-bind", request.hostname);
+      await this.#state.vercel.projects.requestPromote({
+        projectId: targetId,
+        deploymentId: releaseId,
+        teamId: this.#state.config.vercelTeamId,
+      });
+      return true;
     });
+  }
+
+  async activeReleaseId(targetId: string): Promise<string | null> {
+    return providerCall(this.#state, "hosting.activeReleaseId", async () => {
+      const project = await this.#state.vercel.projects.getProject({
+        idOrName: targetId,
+        teamId: this.#state.config.vercelTeamId,
+      });
+      const production = record(record(project).targets).production;
+      const id = record(production).id;
+      return typeof id === "string" ? id : null;
+    });
+  }
+
+  async runRuntimeChecks(
+    targetId: string,
+    releaseId: string,
+    checkIds: readonly string[],
+  ): Promise<readonly HostingVendorRuntimeCheck[]> {
+    return providerCall(this.#state, "hosting.runRuntimeChecks", async () => {
+      const deployment = await this.#state.vercel.deployments.getDeployment({
+        idOrUrl: releaseId,
+        teamId: this.#state.config.vercelTeamId,
+      });
+      const deploymentRecord = record(deployment);
+      const project = await this.#state.vercel.projects.getProject({
+        idOrName: targetId,
+        teamId: this.#state.config.vercelTeamId,
+      });
+      const projectRecord = record(project);
+      const environment = await this.#state.vercel.projects.filterProjectEnvs({
+        idOrName: targetId,
+        teamId: this.#state.config.vercelTeamId,
+      });
+      const environmentRecord = record(environment);
+      const candidates = Array.isArray(environmentRecord.envs)
+        ? environmentRecord.envs.map((candidate) => record(candidate))
+        : [environmentRecord];
+      const boundNames = new Set(
+        candidates
+          .filter((candidate) =>
+            Array.isArray(candidate.target)
+              ? candidate.target.length === 1 &&
+                candidate.target[0] === "production"
+              : candidate.target === "production",
+          )
+          .map((candidate) => String(candidate.key)),
+      );
+      const expectedNames = buildTenantEnvironmentBindings({
+        tenantSlug: this.#state.config.allowedTenantSlug,
+      }).map((binding) => binding.name);
+      const revisionId =
+        this.#revisions.get(releaseId) ?? this.#state.config.sourceGitSha;
+      const declared = await this.readReleaseSchedules(revisionId);
+
+      const outcomes: Readonly<Record<string, boolean>> = {
+        api_health:
+          deployment.readyState === "READY" &&
+          deploymentRecord.projectId === targetId,
+        runtime_project_ref:
+          record(deploymentRecord.meta)["lh2-source-git-sha"] === revisionId &&
+          expectedNames.every((name) => boundNames.has(name)),
+        preview_isolation:
+          projectRecord.previewDeploymentsDisabled === true &&
+          projectRecord.autoAssignCustomDomains === false,
+        cron_configuration: schedulesMatchCanonical(declared),
+      };
+      return checkIds.map((checkId) => ({
+        checkId,
+        passed: outcomes[checkId] === true,
+      }));
+    });
+  }
+}
+
+function schedulesMatchCanonical(
+  declared: readonly HostingVendorSchedule[],
+): boolean {
+  const shape = (
+    entry: HostingVendorSchedule | HostingSchedule,
+  ): string =>
+    JSON.stringify([
+      entry.routePath,
+      Object.entries({ ...entry.queryParameters }).sort(),
+      entry.expression,
+    ]);
+  return (
+    JSON.stringify([...declared].map(shape).sort()) ===
+    JSON.stringify([...CANONICAL_TENANT_SCHEDULES].map(shape).sort())
+  );
+}
+
+function artifactDigestOf(files: readonly CommittedFile[]): string {
+  const hash = createHash("sha256");
+  for (const file of [...files].sort((left, right) =>
+    left.path < right.path ? -1 : 1,
+  )) {
+    hash.update(`${file.path}:${file.sha}\n`);
+  }
+  return `sha256:${hash.digest("hex")}`;
+}
+
+/**
+ * Turns a declared binding source into the value to write. Every branch either
+ * reads the key store, generates and stores a tenant secret, or reads a field
+ * the approved plan already pins. Nothing it returns reaches a canonical result.
+ */
+class P4CHostingValueResolver implements HostingValueResolver {
+  readonly #state: SharedSdkState;
+
+  constructor(state: SharedSdkState) {
+    this.#state = state;
+  }
+
+  async resolve(source: HostingValueSource): Promise<string> {
+    const slug = this.#state.config.allowedTenantSlug;
+    if (source.kind === "derived_from_plan") {
+      if (source.planFieldRef === "domain.hostname") {
+        return `https://${slug}.${this.#state.config.platformDomain}`;
+      }
+      if (source.planFieldRef === "resources.data_api_url") {
+        return (await this.#credentials()).url;
+      }
+      throw new OpsError(
+        "invalid_plan",
+        `Unknown plan field reference ${source.planFieldRef}`,
+      );
+    }
+    if (source.kind === "generated_secret") {
+      const name = GENERATED_SECRET_NAMES[source.generatorId];
+      assertOps(
+        name !== undefined,
+        "invalid_plan",
+        `Unknown value generator ${source.generatorId}`,
+      );
+      return ensureTenantSecret(this.#state, slug, name);
+    }
+    const credentials = await this.#credentials();
+    if (source.secretLabel === tenantSecretLabel(slug, "data.public_key")) {
+      return credentials.publicKey;
+    }
+    if (source.secretLabel === tenantSecretLabel(slug, "data.admin_key")) {
+      this.#state.redactor.registerSecret(credentials.serviceRoleKey);
+      return credentials.serviceRoleKey;
+    }
+    throw new OpsError(
+      "invalid_plan",
+      "Binding references a secret label outside the reviewed contract",
+    );
+  }
+
+  async #credentials(): Promise<ProjectCredentials> {
+    const tenant = this.#state.registry.getTenantBySlug(
+      this.#state.config.allowedTenantSlug,
+    );
+    const resource =
+      tenant === undefined
+        ? undefined
+        : this.#state.registry.getResourceReference(
+            tenant.tenantId,
+            "supabase",
+            "project",
+          );
+    assertOps(
+      resource,
+      "invalid_plan",
+      "Environment binding requires the tenant data project",
+    );
+    return projectCredentials(this.#state, resource.resourceId);
   }
 }
 
@@ -1546,24 +1631,6 @@ async function getVercelProject(
     if (status === 404) return undefined;
     throw error;
   }
-}
-
-function registryOwnsVercel(
-  state: SharedSdkState,
-  resourceId: string,
-  ownershipDigest: string,
-): boolean {
-  const tenant = state.registry.getTenantBySlug(state.config.allowedTenantSlug);
-  if (tenant === undefined) return false;
-  const resource = state.registry.getResourceReference(
-    tenant.tenantId,
-    "vercel",
-    "project",
-  );
-  return (
-    resource?.resourceId === resourceId &&
-    resource.ownershipMarkerDigest === ownershipDigest
-  );
 }
 
 interface CommittedFile {

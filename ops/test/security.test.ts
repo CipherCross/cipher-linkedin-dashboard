@@ -10,7 +10,7 @@ import {
   FakeSmtpProvider,
   FakeSourceRepositoryProvider,
   FakeSupabaseProvider,
-  FakeVercelProvider,
+  FakeHostingProvider,
   MacOsKeychainSecretStore,
   OnboardingExecutor,
   OpsError,
@@ -118,7 +118,7 @@ test("canary values are removed from provider error and success paths", async ()
         registry,
         {
           supabase,
-          vercel: new FakeVercelProvider(),
+          hosting: new FakeHostingProvider(),
           auth: new FakeAuthProvider(),
           smtp: new FakeSmtpProvider(),
           domain: new FakeDomainProvider(),
