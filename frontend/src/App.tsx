@@ -24,6 +24,7 @@ const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })
 const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
 const CsvImport = lazy(() => import('./pages/CsvImport').then((m) => ({ default: m.CsvImport })))
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
+const NeonActivity = lazy(() => import('./pages/NeonActivity').then((m) => ({ default: m.NeonActivity })))
 
 /** Replies folded into Leads, but old deep links carried a `sentiment` query
  *  param (positive/neutral/negative/objection/referral/auto/unclassified) — forward
@@ -74,6 +75,9 @@ export default function App() {
                       <Route path="health" element={<Health />} />
                       <Route path="team" element={<Team />} />
                       <Route path="chat" element={<Chat />} />
+                      {/* S12: one read-only slice served from Neon, beside the
+                          Supabase path every other route still uses. */}
+                      <Route path="neon-activity" element={<NeonActivity />} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>
                   </Routes>
