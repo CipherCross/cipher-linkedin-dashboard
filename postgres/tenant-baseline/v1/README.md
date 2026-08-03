@@ -92,11 +92,12 @@ halves of that contract are asserted in the clean-room.
 
 ## S08 migration ledger and restore procedure
 
-S08 does not add a fourth baseline step. It adds the machinery that applies the
-three existing ones repeatably and moves the result between clusters.
+S08 itself adds no baseline step. It adds the machinery that applies the existing
+ones repeatably and moves the result between clusters. The fourth step below was
+added later, by the identity ledger session, through this same machinery.
 
 `ledger.manifest.json` is the repo-side source of truth: it declares the
-canonical order `001 → 002 → 003`, pins the SHA-256 of every artifact, names the
+canonical order `001 → 002 → 003 → 004`, pins the SHA-256 of every artifact, names the
 apply principal and records the control-plane role-bootstrap dependency.
 `app_ledger.applied_migration` inside each tenant database is the source of truth
 for what that database actually received. Any disagreement between the two is
@@ -106,6 +107,20 @@ drift.
   seven roles and their memberships; roles are cluster objects and are safely
   re-runnable. Part B grants the database-scoped capabilities the baseline needs
   and runs again for every database. It contains no credential.
+- `000_identity_store_role_bootstrap.sql` — an *additive* control-plane
+  prerequisite, required by step `004` and declared in the manifest under
+  `role_bootstrap_extensions`. It creates the eighth role, `identity_store`, and
+  grants `app_owner` membership in it so the step can hand over the schema.
+
+  It is a separate file rather than an edit to the seven-role bootstrap for a
+  hard reason: `app_ledger.role_bootstrap` is a **single-row, append-only**
+  record of that artifact's digest, and the runner hard-fails with
+  `role_bootstrap_sha_mismatch` when the recorded digest and the manifest
+  disagree. The row cannot be updated or replaced, so changing the bytes of the
+  seven-role bootstrap would permanently break the ledger of every database
+  already prepared with it — including a production tenant — with no way to apply
+  any further step. Treat the seven-role contract as immutable once a database
+  exists, and add roles this way.
 - `000_migration_ledger.sql` — creates the `app_ledger` schema and its two
   append-only tables. It lives outside `public` deliberately: `public` is the
   business inventory that S05, S06 and S07 assert against, and a bookkeeping
@@ -156,6 +171,33 @@ back executable by `PUBLIC` and without its `app_system` grant while
 `--exit-on-error` reports success. Open the window, restore, close it, and treat
 any `pg_restore` warning as a failure.
 
+## The fourth step: identity write path and store
+
+`004_identity_write_path_and_store.sql` carries the four changes the owner
+attached to gate `G3` as condition `C3`:
+
+- **the identity write path** — `app_runtime` holds no `INSERT`/`UPDATE`/`DELETE`
+  on `public.users`, `public.user_identities` or `public.team_members`, measured
+  as SQLSTATE 42501 on four attempts, and no actor context can unlock a table
+  grant. Three `SECURITY DEFINER` functions owned by `app_owner`
+  (`identity_admin_invite_member`, `identity_admin_set_member_active`,
+  `identity_admin_set_member_role`) give the admin endpoints a write path. Each
+  refuses a caller that is not an active admin actor *itself*, so an ordinary
+  member cannot reach it even though the `EXECUTE` grant is identical;
+- **`identity_resolve_actor(provider, subject)`** — resolves a verified provider
+  subject to its canonical actor. The account-side `canonicalUserId` proposal was
+  not accepted and does not appear anywhere in the baseline;
+- **`team_roster()`** — the roster read. `public.team_members` is self-only under
+  RLS, so every assignee and owner join would otherwise resolve to `NULL`;
+- **the identity store** — the accepted candidate's four tables in schema
+  `identity`, owned by `identity_store`, with no grant to `app_runtime` in either
+  direction. `identity."user".id` is `text`: it is a provider subject and is never
+  joined to the `uuid` `public.users.id`.
+
+The step checks for its `identity_store` prerequisite and refuses to apply
+without it, naming the artifact to run. Nothing partial can land — the runner
+wraps each step in one transaction with its own ledger row.
+
 ## Checks
 
 From the repository root:
@@ -170,6 +212,7 @@ postgres/tests/portable_functions_triggers_ai_guard_cleanroom.sh
 node postgres/tests/portable_migration_ledger_static_assertions.mjs
 postgres/tests/portable_migration_ledger_tests.sh
 postgres/tests/portable_dump_restore_cleanroom.sh
+postgres/tests/portable_identity_write_path_cleanroom.sh
 ```
 
 The S07 harness applies all three artifacts in order and replays the S06 catalog

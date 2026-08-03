@@ -87,8 +87,11 @@ BEGIN
    WHERE n.nspname = 'public'
      AND NOT EXISTS (SELECT 1 FROM pg_depend d
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
-  IF actual <> 13 THEN
-    RAISE EXCEPTION 'expected 13 portable functions, found %', actual;
+  -- 13 from S07 plus the 5 ledger step 004 added: the three identity admin write
+  -- functions, the actor resolver and the roster read. The figure moved because
+  -- the baseline genuinely gained functions, not because the check was relaxed.
+  IF actual <> 18 THEN
+    RAISE EXCEPTION 'expected 18 portable functions, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -122,8 +125,10 @@ BEGIN
    WHERE n.nspname = 'public' AND p.prosecdef
      AND NOT EXISTS (SELECT 1 FROM pg_depend d
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
-  IF actual <> 8 THEN
-    RAISE EXCEPTION 'expected 8 SECURITY DEFINER functions, found %', actual;
+  -- 8 from S07 plus all 5 of step 004's, which are SECURITY DEFINER by design:
+  -- they exist precisely to hold a privilege the calling role does not have.
+  IF actual <> 13 THEN
+    RAISE EXCEPTION 'expected 13 SECURITY DEFINER functions, found %', actual;
   END IF;
 
   SELECT string_agg(p.proname, ', ' ORDER BY p.proname) INTO detail
@@ -171,6 +176,53 @@ BEGIN
    WHERE n.nspname = 'public' AND NOT a.attisdropped AND a.attidentity = 'a';
   IF actual <> 13 THEN
     RAISE EXCEPTION 'expected 13 GENERATED ALWAYS AS IDENTITY columns, found %', actual;
+  END IF;
+
+  --
+  -- 4b. The identity store survived the restore, with its own owner.
+  --
+  -- The inventory snapshot this file diffs is scoped to public and app_ledger, so
+  -- the identity schema is outside the line-by-line comparison. These counts are
+  -- deliberately here instead: a restore that silently arrives without the
+  -- identity store, or with its tables owned by app_owner because the role was
+  -- missing in the target cluster, is exactly the failure the control-plane
+  -- prerequisite exists to prevent, and it must not pass quietly.
+  --
+  SELECT count(*) INTO actual
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'identity' AND c.relkind = 'r';
+  IF actual <> 4 THEN
+    RAISE EXCEPTION 'expected 4 identity store tables after restore, found %', actual;
+  END IF;
+
+  SELECT string_agg(format('%s(%s)', c.relname, pg_get_userbyid(c.relowner)), ', ' ORDER BY c.relname)
+    INTO detail
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'identity' AND c.relkind = 'r'
+     AND pg_get_userbyid(c.relowner) <> 'identity_store';
+  IF detail IS NOT NULL THEN
+    RAISE EXCEPTION 'identity store tables not owned by identity_store after restore: %', detail;
+  END IF;
+
+  IF pg_catalog.has_schema_privilege('app_runtime', 'identity', 'USAGE') THEN
+    RAISE EXCEPTION 'app_runtime gained USAGE on schema identity across the restore';
+  END IF;
+
+  -- The backup principal's read of the store has to survive, or this restored
+  -- tenant cannot itself be dumped. pg_restore replays those grants as app_owner
+  -- rather than as their grantor identity_store, so without the restore window
+  -- they are warnings that silently do nothing -- the same failure shape as the
+  -- AI guard's ACL, and the reason the window covers both.
+  IF NOT pg_catalog.has_schema_privilege('app_owner', 'identity', 'USAGE') THEN
+    RAISE EXCEPTION 'app_owner lost USAGE on schema identity across the restore';
+  END IF;
+
+  SELECT count(*) INTO actual
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'identity' AND c.relkind = 'r'
+     AND pg_catalog.has_table_privilege('app_owner', c.oid, 'SELECT');
+  IF actual <> 4 THEN
+    RAISE EXCEPTION 'app_owner can read only % of 4 identity store tables after restore', actual;
   END IF;
 
   --
@@ -349,13 +401,13 @@ BEGIN
   -- 12. The ledger travelled with the database and still describes it.
   --
   SELECT count(*) INTO actual FROM app_ledger.applied_migration;
-  IF actual <> 3 THEN
-    RAISE EXCEPTION 'expected 3 ledger rows after restore, found %', actual;
+  IF actual <> 4 THEN
+    RAISE EXCEPTION 'expected 4 ledger rows after restore, found %', actual;
   END IF;
 
   SELECT string_agg(artifact, ' -> ' ORDER BY applied_seq) INTO detail
     FROM app_ledger.applied_migration;
-  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql' THEN
+  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql' THEN
     RAISE EXCEPTION 'ledger order did not survive restore: %', detail;
   END IF;
 

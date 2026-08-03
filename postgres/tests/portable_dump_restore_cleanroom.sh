@@ -28,6 +28,11 @@ baseline_dir="$repo_dir/postgres/tenant-baseline/v1"
 tests_dir="$repo_dir/postgres/tests"
 runner="$repo_dir/postgres/tools/portable_migration_ledger.mjs"
 bootstrap="$baseline_dir/000_control_plane_role_bootstrap.sql"
+# Additive control-plane prerequisite for ledger step 004. It runs everywhere the
+# seven-role bootstrap runs, including the restore target: identity_store is a
+# cluster object, so pg_restore cannot recreate an object owned by it unless the
+# role is already there.
+identity_bootstrap="$baseline_dir/000_identity_store_role_bootstrap.sql"
 image="${POSTGRES_IMAGE:-postgres:17-alpine}"
 work_dir="$(mktemp -d)"
 evidence_path="${S08_EVIDENCE_JSON:-}"
@@ -108,6 +113,7 @@ echo "  psql:       $psql_version"
 step "Clean apply #1 (source cluster)"
 docker exec "$source_container" psql -U postgres -d postgres -q -c "CREATE DATABASE tenant_source;" >/dev/null
 run_sql "$source_container" postgres tenant_source "$bootstrap" >/dev/null
+run_sql "$source_container" postgres tenant_source "$identity_bootstrap" >/dev/null
 run_sql "$source_container" postgres tenant_source "$tests_dir/portable_dump_restore_test_roles.sql" >/dev/null
 psql_wrapper "$source_container" "$work_dir/psql-source"
 LEDGER_PSQL="$work_dir/psql-source" LEDGER_DB=tenant_source \
@@ -120,6 +126,7 @@ ok "first clean apply produced $(wc -l < "$work_dir/inventory-apply-1.txt" | tr 
 step "Clean apply #2 (independent replica cluster)"
 docker exec "$replica_container" psql -U postgres -d postgres -q -c "CREATE DATABASE tenant_source;" >/dev/null
 run_sql "$replica_container" postgres tenant_source "$bootstrap" >/dev/null
+run_sql "$replica_container" postgres tenant_source "$identity_bootstrap" >/dev/null
 run_sql "$replica_container" postgres tenant_source "$tests_dir/portable_dump_restore_test_roles.sql" >/dev/null
 psql_wrapper "$replica_container" "$work_dir/psql-replica"
 LEDGER_PSQL="$work_dir/psql-replica" LEDGER_DB=tenant_source \
@@ -177,8 +184,9 @@ ok "pg_dump produced $(wc -c < "$work_dir/tenant.dump" | tr -d ' ') bytes as a n
 step "Restore into a clean, separately bootstrapped cluster"
 docker exec "$target_container" psql -U postgres -d postgres -q -c "CREATE DATABASE tenant_restored;" >/dev/null
 run_sql "$target_container" postgres tenant_restored "$bootstrap" >/dev/null
+run_sql "$target_container" postgres tenant_restored "$identity_bootstrap" >/dev/null
 run_sql "$target_container" postgres tenant_restored "$tests_dir/portable_dump_restore_test_roles.sql" >/dev/null
-ok "restore target prepared by the control-plane role bootstrap alone"
+ok "restore target prepared by the control-plane role bootstraps alone (seven-role plus the identity store extension)"
 
 # Prove the roles came from the bootstrap and not from the dump.
 docker cp "$work_dir/tenant.dump" "$target_container":/tmp/tenant.dump >/dev/null

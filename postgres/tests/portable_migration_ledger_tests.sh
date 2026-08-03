@@ -8,7 +8,7 @@ set -euo pipefail
 #
 # Covered:
 #   1. the correct apply order is accepted, and the ledger records 001 -> 002 ->
-#      003 with their SHA-256, the apply principal and the role-bootstrap
+#      003 -> 004 with their SHA-256, the apply principal and the role-bootstrap
 #      dependency;
 #   2. a re-apply is an idempotent no-op (the chosen contract);
 #   3. an artifact whose bytes no longer match the manifest is rejected;
@@ -25,6 +25,12 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 baseline_dir="$repo_dir/postgres/tenant-baseline/v1"
 runner="$repo_dir/postgres/tools/portable_migration_ledger.mjs"
 bootstrap="$baseline_dir/000_control_plane_role_bootstrap.sql"
+# Step 004 needs an eighth role that the seven-role bootstrap deliberately does
+# not create. Every prepared database in these tests therefore also receives the
+# additive control-plane extension; the case that proves the prerequisite check
+# bites lives in portable_identity_write_path_cleanroom.sh, which is the harness
+# that owns step 004.
+identity_bootstrap="$baseline_dir/000_identity_store_role_bootstrap.sql"
 image="${POSTGRES_IMAGE:-postgres:17-alpine}"
 container="portable-ledger-tests-$$"
 work_dir="$(mktemp -d)"
@@ -92,6 +98,8 @@ new_db() {
   docker exec "$container" psql -U postgres -d postgres -q -c "CREATE DATABASE $db;" >/dev/null
   docker exec --interactive "$container" psql -U postgres -d "$db" --set ON_ERROR_STOP=1 -q \
     < "$bootstrap" >/dev/null
+  docker exec --interactive "$container" psql -U postgres -d "$db" --set ON_ERROR_STOP=1 -q \
+    < "$identity_bootstrap" >/dev/null
 }
 
 # Runs the ledger runner and checks the outcome. Expected exit status 0 means
@@ -156,10 +164,10 @@ echo "Ledger contract tests"
 
 # --- 1. correct order is accepted -------------------------------------------
 new_db ledger_happy
-expect_runner "correct apply order 001 -> 002 -> 003 is accepted" ledger_happy apply accept
+expect_runner "correct apply order 001 -> 002 -> 003 -> 004 is accepted" ledger_happy apply accept
 
 recorded="$(printf "SET ROLE app_owner;\nSELECT string_agg(step || ':' || artifact || ':' || sha256 || ':' || apply_principal || '/' || apply_role, ' | ' ORDER BY applied_seq) FROM app_ledger.applied_migration;\n" | sql_as app_migration ledger_happy)"
-expected="1:001_portable_business_baseline.sql:$(sha_of 001_portable_business_baseline.sql):app_migration/app_owner | 2:002_identity_roles_actor_rls.sql:$(sha_of 002_identity_roles_actor_rls.sql):app_migration/app_owner | 3:003_functions_triggers_ai_guard.sql:$(sha_of 003_functions_triggers_ai_guard.sql):app_migration/app_owner"
+expected="1:001_portable_business_baseline.sql:$(sha_of 001_portable_business_baseline.sql):app_migration/app_owner | 2:002_identity_roles_actor_rls.sql:$(sha_of 002_identity_roles_actor_rls.sql):app_migration/app_owner | 3:003_functions_triggers_ai_guard.sql:$(sha_of 003_functions_triggers_ai_guard.sql):app_migration/app_owner | 4:004_identity_write_path_and_store.sql:$(sha_of 004_identity_write_path_and_store.sql):app_migration/app_owner"
 if [ "$recorded" = "$expected" ]; then
   ok "ledger records the order, digests and apply principal"
 else

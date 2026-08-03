@@ -43,4 +43,35 @@ GRANT CREATE ON SCHEMA public TO app_ai_runner;
 --    other object in the database.
 GRANT app_ai_runner TO app_owner WITH INHERIT TRUE;
 
-SELECT 'restore window open: app_ai_runner may receive ownership and re-grant the AI guard' AS result;
+-- 3. The same two problems, for the identity store that ledger step 004 adds.
+--
+--    The store's schema and four tables are owned by identity_store, a role with
+--    no CREATE anywhere. A dump of that database therefore contains statements a
+--    clean target cannot satisfy:
+--
+--      ALTER SCHEMA identity OWNER TO identity_store;
+--          PostgreSQL requires the incoming owner of a schema to hold CREATE on
+--          the database. 004 never grants that -- it creates the schema with
+--          CREATE SCHEMA ... AUTHORIZATION instead -- so a restored database has
+--          no such grant to inherit.
+--
+--      GRANT USAGE ON SCHEMA identity TO app_owner;
+--      GRANT SELECT ON TABLE identity."user" TO app_owner;   (and the other three)
+--          Only the owner may re-grant. pg_restore runs these as app_owner, which
+--          is a member of identity_store but NOINHERIT, so they emit a warning
+--          and silently do nothing. The failure mode is the nasty one: the
+--          restore reports success and the restored tenant can no longer be
+--          dumped, because the backup principal has lost its read of the store.
+--
+--    Neither capability may outlive the restore. restore_window_close.sql
+--    reverses both, asserts they are shut, and asserts the store's grants and
+--    ownership actually came back.
+DO $$
+BEGIN
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO identity_store', current_database());
+END
+$$;
+
+GRANT identity_store TO app_owner WITH INHERIT TRUE;
+
+SELECT 'restore window open: app_ai_runner may receive the AI guard, identity_store may receive its schema, and app_owner may re-grant for both' AS result;

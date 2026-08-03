@@ -5,11 +5,14 @@
 //   node postgres/tests/portable_migration_ledger_static_assertions.mjs
 //
 // Checks:
-//   * the manifest is well formed, declares 001 -> 002 -> 003 contiguously,
-//     pins a SHA-256 for every artifact and declares no down migration path;
+//   * the manifest is well formed, declares 001 -> 002 -> 003 -> 004
+//     contiguously, pins a SHA-256 for every artifact -- including the additive
+//     control-plane role-bootstrap extension, which is not a step -- and
+//     declares no down migration path;
 //   * every pinned SHA-256 matches the file on disk;
-//   * the three immutable baseline artifacts still carry the digests S05, S06
-//     and S07 published, so S08 provably did not edit them;
+//   * the four published baseline artifacts still carry the digests S05, S06,
+//     S07 and the identity ledger session published, so a later session
+//     provably did not edit them;
 //   * no provider marker appears in executable SQL, script or manifest content
 //     (a provider name inside a comment is documentation, not a dependency, and
 //     comments are stripped before the sweep);
@@ -27,7 +30,14 @@ const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASELINE_DIR = join(REPO_DIR, 'postgres', 'tenant-baseline', 'v1');
 const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 
-// The digests S05, S06 and S07 published for the immutable baseline set.
+// The digests S05, S06, S07 and the identity ledger session published for the
+// baseline set. 004 joins the list here, at the digest this session publishes,
+// so any later edit to it fails two independent checks rather than one.
+//
+// It is deliberately NOT added to PROTECTED_PATHS in the same session that
+// introduces it: that list is checked against the diff since the merge base, so
+// a session's own new file would flag itself. The session after this one adds it,
+// exactly as S08 did for 001..003.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -35,9 +45,14 @@ const IMMUTABLE_BASELINE = {
     '18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80',
   '003_functions_triggers_ai_guard.sql':
     'a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92',
+  '004_identity_write_path_and_store.sql':
+    '2ec822cad4067273aac7ead38e1dfdb29dc8dbf3ce5e1ee1765ea0e24ecf7163',
 };
 
-// Everything S08 adds. Every one of these is swept for markers and secrets.
+// Everything the ledger sessions add. Every one of these is swept for markers
+// and secrets. A new baseline artifact that is not on this list is never swept,
+// so the list grows with the baseline: the identity ledger session's seven files
+// are at the end.
 const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/000_control_plane_role_bootstrap.sql',
   'postgres/tenant-baseline/v1/000_migration_ledger.sql',
@@ -55,11 +70,21 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_dump_restore_cleanroom.sh',
   'postgres/tests/portable_migration_ledger_static_assertions.mjs',
   'docs/platform-ops/g1-dump-restore-go-no-go.json',
+  // Identity ledger session (step 004 and its control-plane prerequisite).
+  'postgres/tenant-baseline/v1/000_identity_store_role_bootstrap.sql',
+  'postgres/tenant-baseline/v1/004_identity_write_path_and_store.sql',
+  'postgres/tests/portable_identity_write_path_catalog_assertions.sql',
+  'postgres/tests/portable_identity_write_path_behavior_assertions.sql',
+  'postgres/tests/portable_identity_store_isolation_assertions.sql',
+  'postgres/tests/portable_identity_write_path_ai_boundary_assertions.sql',
+  'postgres/tests/portable_identity_write_path_cleanroom.sh',
+  'docs/implementation-handoffs/N-IDENTITY-LEDGER.md',
 ];
 
 const EXECUTABLE_SCRIPTS = [
   'postgres/tests/portable_migration_ledger_tests.sh',
   'postgres/tests/portable_dump_restore_cleanroom.sh',
+  'postgres/tests/portable_identity_write_path_cleanroom.sh',
 ];
 
 // Paths no session may touch, on any branch, for the life of the migration.
@@ -106,6 +131,8 @@ const MARKER_SWEEP_EXEMPT = {
     'defines the marker patterns themselves',
   'docs/platform-ops/g1-dump-restore-go-no-go.json':
     'is the owner decision document; naming the provider being adopted and the one being left is its purpose. It is swept for resource IDs and credentials instead.',
+  'docs/implementation-handoffs/N-IDENTITY-LEDGER.md':
+    'is a handoff document, not executable content; naming the provider it asks the owner to apply to is its purpose. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
 };
 
 // Provider RESOURCE identifiers, as opposed to provider names. These must not
@@ -198,18 +225,44 @@ check('manifest declares the non-superuser apply principal',
   && manifest.apply_principal?.superuser_forbidden === true);
 check('manifest stores the ledger outside the business schema',
   manifest.ledger_store?.schema === 'app_ledger' && manifest.ledger_store?.append_only === true);
-check('manifest declares the seven-role bootstrap dependency',
+// Still seven, and that is the point rather than an oversight. The identity
+// ledger session needed an eighth role and did NOT add it here: the digest of
+// this artifact is recorded in app_ledger.role_bootstrap, a single-row
+// append-only table, so changing its bytes would permanently break the ledger of
+// every database already prepared with it. The eighth role arrives as an
+// additive extension artifact, asserted separately below.
+check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares three steps in order 1 -> 2 -> 3',
-  manifest.steps.length === 3 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares four steps in order 1 -> 2 -> 3 -> 4',
+  manifest.steps.length === 4 && manifest.steps.every((s, i) => s.step === i + 1));
+
+// Role-bootstrap extensions: additive control-plane prerequisites, each pinned,
+// each declaring the roles it creates and the step that needs them, and none of
+// them a ledger step.
+const extensions = manifest.role_bootstrap_extensions ?? [];
+check('every role-bootstrap extension declares its roles and the step that needs them',
+  extensions.length === 1
+  && extensions.every((e) =>
+    Array.isArray(e.required_roles) && e.required_roles.length > 0
+    && e.is_ledger_step === false
+    && Number.isInteger(e.required_by_step)
+    && manifest.steps.some((s) => s.step === e.required_by_step)));
+check('no extension role is also claimed by the seven-role bootstrap',
+  extensions.every((e) =>
+    e.required_roles.every((r) => !manifest.role_bootstrap.required_roles.includes(r))));
+check('every step needing an extension names the artifact that provides it',
+  manifest.steps
+    .filter((s) => s.requires_role_bootstrap_extension)
+    .every((s) => extensions.some((e) => e.artifact === s.requires_role_bootstrap_extension)));
 
 const pinned = [
   manifest.role_bootstrap,
   manifest.ledger_bootstrap,
   manifest.restore_procedure.window_open,
   manifest.restore_procedure.window_close,
+  ...extensions,
   ...manifest.steps,
 ];
 
