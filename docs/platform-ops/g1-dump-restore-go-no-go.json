@@ -2,18 +2,17 @@
   "gate": "G1",
   "title": "Disposable tenant approval and dump/restore go/no-go",
   "schema_version": "1.0",
-  "status": "awaiting-owner-decision",
-  "decision": null,
-  "decided_at": null,
+  "status": "approved",
+  "decision": "go",
+  "decided_at": "2026-08-03",
   "prepared_by_session": "S08",
   "prepared_on": "2026-08-02",
   "phase": "N1",
   "spec": "specs/2026-07-30-neon-migration-and-multitenancy.md",
-
   "gate_semantics": {
     "kind": "owner-decision-gate",
     "self_passing": false,
-    "note": "G1 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes; until the owner records a decision here, the gate is open and blocking.",
+    "note": "G1 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes. The owner recorded that decision on 2026-08-03; the gate is closed and no longer blocking.",
     "blocks": [
       "S11 - Neon driver, connection lifecycle and actor-scoped transaction wrapper",
       "any live Neon project, database, branch, role or credential creation",
@@ -23,12 +22,10 @@
       "S09 - HostingControlPlanePort, fake adapter and canonical capability tests, which depends on S02 rather than on G1"
     ]
   },
-
   "external_mutations": {
     "performed": "none",
     "detail": "All evidence below was produced in disposable local PostgreSQL containers created and destroyed by their own harnesses. No Neon project, database, branch, role or credential was created; no Auth user, no object-storage bucket, no deployment, no `supabase db push`, no data copy and no Git push."
   },
-
   "environment": {
     "postgres_image": "postgres:17-alpine",
     "server_version": "PostgreSQL 17.10 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
@@ -38,7 +35,6 @@
     "clusters": 3,
     "note": "Source, replica and restore target are three separate clusters, not three databases in one, so cluster-level role state cannot leak between them."
   },
-
   "baseline_under_test": {
     "directory": "postgres/tenant-baseline/v1",
     "manifest": "postgres/tenant-baseline/v1/ledger.manifest.json",
@@ -61,7 +57,6 @@
       }
     ]
   },
-
   "evidence": {
     "clean_room_reproducibility": {
       "result": "pass",
@@ -183,7 +178,6 @@
       "detail": "The S04, S05, S06 and S07 inventory assertions and all three existing clean-room harnesses were re-run unchanged and passed. Exact results are recorded in docs/implementation-handoffs/N-S08.md."
     }
   },
-
   "provider_requirements_from_s02": {
     "source": "docs/platform-ops/neon-provider-decisions.md",
     "tier": "Neon Free",
@@ -202,7 +196,6 @@
       "note": "Free-tier restore history does not substitute for portable export, object and identity recovery evidence."
     }
   },
-
   "known_risks": [
     {
       "id": "R1",
@@ -245,46 +238,44 @@
       "residual": "S24 to S26 must make the ledger the only apply path exposed through the operations core."
     }
   ],
-
   "owner_approval_items": [
     {
       "id": "A1",
       "item": "Accept dump/restore, rather than logical replication, as the cutover mechanism for the internal workspace.",
       "evidence": "evidence.dump_restore and evidence.reconciliation",
-      "decision": null
+      "decision": "approved"
     },
     {
       "id": "A2",
       "item": "Accept the portable baseline set 001 -> 002 -> 003 at the digests above as the immutable per-tenant baseline.",
       "evidence": "baseline_under_test and evidence.clean_room_reproducibility",
-      "decision": null
+      "decision": "approved"
     },
     {
       "id": "A3",
       "item": "Accept the app_ledger migration ledger, its idempotent-skip re-apply contract and its absence of down migrations.",
       "evidence": "evidence.migration_ledger",
-      "decision": null
+      "decision": "approved"
     },
     {
       "id": "A4",
       "item": "Accept the documented restore window, including its residual operator risk (R1).",
       "evidence": "known_risks R1",
-      "decision": null
+      "decision": "approved"
     },
     {
       "id": "A5",
       "item": "Authorise creation of ONE disposable Neon project on the S02 tier and region for the purpose of re-running both harnesses against a real provider. This is the first external resource of the migration.",
       "evidence": "provider_requirements_from_s02 and known_risks R2",
-      "decision": null
+      "decision": "approved"
     },
     {
       "id": "A6",
       "item": "Confirm the recovery objectives (RPO 24h, RTO 8 business hours, 90 minute maintenance window) remain the target given Neon Free tier restore history.",
       "evidence": "provider_requirements_from_s02.recovery_objectives",
-      "decision": null
+      "decision": "approved"
     }
   ],
-
   "contains_no": [
     "credentials",
     "passwords",
@@ -292,5 +283,7 @@
     "API keys",
     "provider resource IDs",
     "customer data"
-  ]
+  ],
+  "decided_by": "owner",
+  "decision_note": "All six approval items accepted. A5 authorises exactly ONE disposable Neon project on the S02 tier and region, for the sole purpose of re-running the migration-ledger and dump/restore harnesses against a real provider and closing residual risk R2. It does not authorise a production project, a second project, any tenant data copy, or any Auth, object-storage or deployment resource. No project, endpoint or account identifier may be recorded in this document."
 }
