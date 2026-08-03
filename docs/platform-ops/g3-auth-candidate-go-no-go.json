@@ -2,19 +2,83 @@
   "gate": "G3",
   "title": "Accept or change the Auth candidate",
   "schema_version": "1.0",
-  "status": null,
-  "decision": null,
-  "decided_at": null,
+  "status": "approved",
+  "decision": "accept-candidate",
+  "decided_at": "2026-08-03",
   "prepared_by_session": "S16",
   "prepared_on": "2026-08-03",
   "phase": "N4",
   "spec": "specs/2026-07-30-neon-migration-and-multitenancy.md",
   "handoff": "docs/implementation-handoffs/N-S16.md",
   "spike": "spikes/s16-identity/",
+  "owner_decision": {
+    "decided_at": "2026-08-03",
+    "decided_by": "owner",
+    "recorded_by_session": "S16, after the branch was reviewed and integrated into main with git merge --ff-only",
+    "post_merge_main_sha": "2b8c571",
+    "decision": "accept-candidate",
+    "what_is_permitted": "S17 may build the production IdentityProvider on self-hosted Better Auth.",
+    "what_is_not_permitted": "S17 may not ship admin endpoints before the identity ledger session lands, and may not start S18.",
+    "relationship_to_s16_recommendation": "Accepted in full, including all six conditions, with no change to any of them. The owner raised no objection to any finding. This is the first gate in the series where the owner's decision matches the preparing session's recommendation exactly.",
+    "differs_from_recommendation_on": [],
+    "conditions_accepted": [
+      {
+        "id": "C1",
+        "from_finding": "F3",
+        "condition": "S17 sets `advanced.disableOriginCheck: false` and `advanced.disableCSRFCheck: false` explicitly in every environment, with an assertion. No S17 endpoint changes state on a GET. The product's own state-changing endpoints get the same origin check, because the candidate protects only its own routes.",
+        "why_it_is_a_condition_and_not_advice": "The candidate's default here is environment-dependent: under NODE_ENV=test - which every vitest run sets - the origin check and the CSRF check are both off. A CSRF suite written without this override passes while testing a build with no CSRF defence."
+      },
+      {
+        "id": "C2",
+        "from_finding": "F4",
+        "condition": "S17 sets `emailAndPassword.revokeSessionsOnPasswordReset: true`, with an assertion.",
+        "why": "The default leaves every existing session alive after a reset, and a reset is the flow used after a suspected compromise."
+      },
+      {
+        "id": "C3",
+        "from_findings": ["F6", "F7", "F8"],
+        "condition": "One migration-ledger session lands before S17's admin endpoints, carrying four things on the same tables: the identity write path, the SECURITY DEFINER resolver (F7 option B), the candidate's own schema, and the already-approved B4 roster function.",
+        "changes_the_g2_sequencing": {
+          "g2_recorded": "B4 was to be its own session, sequenced before S13.",
+          "now": "B4 is folded into the identity ledger session. It is still a ledger-applied schema change, still before S13, and still reviewed as a schema change - it simply shares a session with three changes to the same tables rather than standing alone.",
+          "why": "Same tables, same ledger, same reviewer. Splitting them would mean two reviews of one identity write surface.",
+          "unchanged": "The B2 bounded tenant-data copy remains its own separate session and is not folded into anything.",
+          "recorded_in": "specs/2026-07-30-neon-migration-and-multitenancy.md, the G2 note, amended with a dated G3 pointer rather than rewritten."
+        }
+      },
+      {
+        "id": "C4",
+        "from_finding": "F9",
+        "condition": "S17 owns a pruning job for the `session` table and chooses `expiresIn` deliberately rather than inheriting the 7-day default.",
+        "why": "An abandoned expired session is never pruned, and a non-rotating token combined with a 7-day window means a leaked cookie is good for a week of active use."
+      },
+      {
+        "id": "C5",
+        "from_finding": "F11",
+        "condition": "The Vercel smoke test is an explicit S17 exit criterion.",
+        "why": "S16 could not perform it - the owner chose no deployment rather than create a provider resource - so the obligation moves rather than disappearing."
+      },
+      {
+        "id": "C6",
+        "from_finding": "F13",
+        "condition": "`session.cookieCache` stays disabled unless the revocation-delay trade is taken deliberately and recorded. The actor is resolved once per request and the context passed down, which is G2's B5 applied to the session lookup as well.",
+        "why": "Enabling the cookie cache validates the session from a signed cookie instead of the database, reintroducing exactly the revocation delay a JWT would have - and F5, the result the whole acceptance rests on, depends on server-side state being consulted per request."
+      }
+    ],
+    "the_question_behind_the_decision": {
+      "asked": "Is the owner willing to carry a second user store at all - even a subordinate one, in its own schema, with no grants in either direction?",
+      "answered": "Yes.",
+      "consequence": "F12's hand-rolled alternative is closed. It was the only alternative the spike rated as a close call, and it lost on authorship of the security-critical parts rather than on features."
+    },
+    "what_remains_open_and_is_not_touched_by_this_decision": [
+      "The B2 bounded tenant-data copy: its exact scope and whether to pseudonymise it are still undecided, and both must be settled in writing before that session runs.",
+      "G4, G5 and G6 are untouched."
+    ]
+  },
   "gate_semantics": {
     "kind": "owner-decision-gate",
     "self_passing": false,
-    "note": "G3 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes. `status` and `decision` are deliberately left unset by S16. A reasoned 'change the candidate' would have been a successful S16 too.",
+    "note": "G3 does not pass by itself and no automated result can pass it. This document is evidence prepared for a decision the owner makes. `status` and `decision` were left unset by S16 and were set by the owner on 2026-08-03; see `owner_decision`. A reasoned 'change the candidate' would have been a successful S16 too.",
     "blocks": [
       "S17 - production IdentityProvider and server session/admin endpoints",
       "S18 - frontend AuthContext, route gates and Team admin, which depends on S17"
@@ -424,6 +488,12 @@
     ],
     "what_would_change_this_recommendation": "If the owner is unwilling to carry a second user store at all - even a subordinate one in its own schema with no grants - then the hand-rolled option in F12 becomes the answer, and S17 grows by roughly the size of what the candidate provides. That is a preference about ownership, not a finding about the candidate, which is why it is the owner's call and not the spike's.",
     "prepared_by": "S16",
-    "decision_is_the_owners": true
+    "decision_is_the_owners": true,
+    "outcome_2026_08_03": {
+      "accepted": "In full. `status = approved`, `decision = accept-candidate`, all six conditions taken as written and none amended.",
+      "the_open_question_was_answered": "The owner is willing to carry a subordinate second user store, which closes the hand-rolled alternative.",
+      "one_thing_the_decision_added": "B4 is folded into the identity ledger session rather than standing alone, which amends G2's sequencing. See `owner_decision.conditions_accepted[C3]`.",
+      "see": "owner_decision"
+    }
   }
 }

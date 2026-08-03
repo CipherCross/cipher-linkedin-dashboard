@@ -479,6 +479,26 @@ downtime и decommission всегда требуют отдельного owner 
 >    Итоговый порядок: `S16 → G3 → S17 → [B4 roster] → [B2 data slice] → S13 →
 >    S18`. Обе вставленные сессии обязаны завершиться до `S13`; их порядок
 >    относительно друг друга не зафиксирован.
+>
+> **Amendment — owner decision at gate G3, 2026-08-03.** `G3`: `status =
+> approved`, `decision = accept-candidate` — self-hosted Better Auth принят как
+> production `IdentityProvider`, все шесть условий без изменений. Источник:
+> `docs/platform-ops/g3-auth-candidate-go-no-go.json` (`owner_decision`) и
+> `docs/implementation-handoffs/N-S16.md`, раздел "Owner decisions,
+> 2026-08-03". `S16` закрыт.
+>
+> Пункт 2 выше изменяется в одном месте: **`B4` больше не отдельная сессия.**
+> Она входит в **identity ledger session**, которая идет непосредственно перед
+> admin-эндпоинтами `S17` и несет четыре изменения по одним и тем же таблицам:
+> путь записи в `users`/`user_identities`/`team_members` (у `app_runtime` его
+> нет вообще — SQLSTATE 42501), `SECURITY DEFINER` резолвер
+> `identity_resolve_actor`, собственная схема кандидата и roster-функция `B4`.
+> Природа `B4` не меняется: это по-прежнему schema change **только через
+> migration ledger** (R5), по-прежнему до `S13`. **`B2` не затронут и остается
+> отдельной сессией.**
+>
+> Итоговый порядок после `G3`: `[identity ledger] → S17 → [B2 data slice] →
+> S13 → S18`.
 
 ## Affected files/modules
 
