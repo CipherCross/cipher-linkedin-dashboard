@@ -32,11 +32,19 @@ frontend/tsconfig.api.json                          new   type-checks api/ and t
 frontend/package.json                                ±6   pg, @types/pg, two scripts
 frontend/package-lock.json                        (lock)
 docs/implementation-handoffs/N-S11-phase1.md        new   this document
+
+# added by owner decision after the driver was reviewed (see "Owner decision")
+postgres/tests/portable_migration_ledger_static_assertions.mjs  ±14  scope guard narrowed to real invariants
+ops/test/hosting-parity.test.ts                                 -18  obsolete S10 scope test removed
 ```
 
-14 source files, all under `frontend/`, plus this document. Nothing under `postgres/`, `supabase/`,
-`ops/`, `sync-agent/`, `frontend/src/`, or any `frontend/api/` handler. No page
-and no handler calls the driver: that is S12's job.
+14 source files under `frontend/`, plus this document, plus the two guard files
+changed by the owner decision recorded below. Nothing under
+`postgres/tenant-baseline/`, `supabase/`, `sync-agent/`, `frontend/src/`, or
+any `frontend/api/` handler. No baseline artifact, ledger artifact or harness
+changed; the two guard files are test scripts, carry no pinned digest, and are
+not part of the ledger. No page and no handler calls the driver: that is S12's
+job.
 
 `frontend/api/_lib/data/contracts.ts` — the S03 contract — was **not** changed.
 It did not need to be. The one place it chafed is recorded under Known limits.
@@ -435,14 +443,60 @@ decision, the driver delegates it.
 | `cd frontend && npm run test:neon` | did not exist | 1 file / **33 tests, 0 failed**, 21.7 s against the live project |
 | `cd frontend && npm run typecheck:api` | did not exist | **clean** over `frontend/api` + `frontend/tests` |
 | `cd frontend && npm run build` | — | **clean** |
-| `cd ops && npm test` | 71 passed, 0 failed | **70 passed, 1 failed** — see below |
-| static assertions | 75 passed, 0 failed | **74 passed, 1 failed** — see below |
+| `cd ops && npm test` | 71 passed, 0 failed | **70 passed, 0 failed** — one obsolete test removed, see below |
+| static assertions | 75 passed, 0 failed | **75 passed, 0 failed** — guard narrowed, see below |
 | `git diff --check` | — | clean |
 
 The fake suite grew 49 → 65 because the shared contract suite is finer-grained
 than the eight tests it replaced; no assertion was dropped.
 
-### The two failures are earlier sessions' own scope guards
+### Owner decision, 2026-08-03: both guards resolved in this session
+
+The owner elected to fix the guards rather than carry two permanently-red
+checks. Recorded here because it changes files this session was originally
+scoped away from. **Both suites are now green: static assertions 75/0, ops
+70/70.** The section below describes what was wrong and what was done.
+
+**Not a blanket removal.** The two guards were not equally empty, so they were
+not treated the same way.
+
+- **`postgres/tests/portable_migration_ledger_static_assertions.mjs` —
+  narrowed, not deleted.** `PROTECTED_PATHS` mixed two different things.
+  `frontend/`, `sync-agent/` and `ops/` were S08's session scope: the file's own
+  comment said "Paths S08 must not touch", and once S08 merged they could only
+  ever fire on later branches doing their commissioned work. Those three were
+  removed. `supabase/migrations/`, `supabase/tenant-baseline/` and the three
+  published baseline artifacts are permanent invariants and were **kept** —
+  already-applied migrations are immutable on any branch, forever. The check is
+  renamed from "no frontend, API, sync-agent, ops, historical migration or
+  immutable baseline file changed" to **"no historical migration or immutable
+  baseline file changed"**, and its section heading from `Session scope` to
+  `Immutability`, so the name now matches the invariant.
+- **`ops/test/hosting-parity.test.ts` — the S10 scope test deleted.** It was
+  session scope end to end, named for a session that has merged, and it
+  duplicated repo-wide immutability into a suite whose subject is hosting
+  parity. A comment in its place records what it was and where the surviving
+  invariant lives. The now-unused `spawnSync` import went with it. **The ops
+  count drops 71 → 70 tests; no assertion was lost**, because the half worth
+  keeping was already enforced — more strongly — next door.
+
+**Verified the narrowed guard still bites**, since a guard that cannot fail is
+worse than no guard:
+
+| canary | result |
+|---|---|
+| appended a line to `supabase/migrations/054_private_lead_photos.sql` | **74 passed, 1 failed** — `no historical migration or immutable baseline file changed: supabase/migrations/054_private_lead_photos.sql` |
+| appended a line to `002_identity_roles_actor_rls.sql` | **72 passed, 3 failed** — caught three independent ways: manifest digest mismatch, published-digest mismatch, and the path check |
+
+Both files were restored and the suite returned to 75/0.
+
+Note that the baseline artifacts are protected by `IMMUTABLE_BASELINE` digest
+constants *and* manifest pinning, either of which is strictly stronger than a
+path check. Their entry in `PROTECTED_PATHS` is deliberate redundancy, not the
+primary enforcement — which is why removing `frontend/`/`ops/`/`sync-agent/`
+loosens nothing that was ever load-bearing.
+
+### What the two failures were, before that decision
 
 Both are structurally inapplicable to a session whose entire purpose is to add
 `frontend/` files, and neither can be repaired here because both live in
@@ -462,11 +516,9 @@ directories this session must not change.
 `git diff --name-only main` corroborates the scope exactly: 14 files, all under
 `frontend/`, none under `postgres/`, `supabase/`, `ops/` or `sync-agent/`.
 
-**This is a finding for the owner, not something to patch.** Two guards now
-fire on any legitimate `frontend/` work, which means they will fire for S12,
-S13, S14 and S15 as well, and a permanently-red check stops being read. They
-should be re-scoped — most simply, to compare against each session's own base
-rather than `main`, or to be retired now that their sessions are closed.
+Both guards fired on any legitimate `frontend/` work, so they would have
+fired for S12 through S15 too, and a permanently-red check stops being read.
+The owner's decision above resolves this.
 
 ### Mutation checks — what makes "33 passed" mean something
 
@@ -540,8 +592,9 @@ are redundant.
 2. **No application operations are registered.** The only registries that
    exist are the contract and diagnostics ones under `frontend/tests/`. S12
    owns the first real ones, and where the shared registry lives is S12's call.
-3. **Two session-scope guards now fail by construction** (above). They will
-   fail for every session from S12 to S15 as well.
+3. ~~Two session-scope guards fail by construction.~~ **Resolved in this
+   session by owner decision** — see "Owner decision, 2026-08-03" above. Both
+   suites are green and the surviving immutability guard is canary-verified.
 4. **One statement timeout per store.** The AI guard's own 10-second timeout
    (migration 021) is separate and untouched. If an AI path is ever routed
    through this driver, the two need reconciling deliberately.
@@ -551,7 +604,8 @@ are redundant.
    reader on that backend could observe it. Nothing does this today; assertion
    2 above documents the mechanism precisely so the hazard is not rediscovered.
 6. **R2's dump/restore half is still open**, unchanged from phase 0, for the
-   three reasons recorded there. Nothing in phase 1 moved it.
+   three reasons recorded there. Nothing in phase 1 moved it. It is now
+   explicitly sequenced rather than merely open — see below.
 7. **`pg` is CommonJS.** `import pg from 'pg'` and destructure; named ESM
    imports fail. Trivial, but a real constraint on anything added later.
 8. **The Neon suite mutates the shared project.** Two concurrent runs would
@@ -568,6 +622,44 @@ are redundant.
     into a single command is a small chore left undone deliberately, since
     changing `build` affects the Vercel deploy path.
 
+## Owner decision, 2026-08-03: R2's dump/restore half does not block S12
+
+**Decision: no. Real-provider dump/restore evidence is not required before
+S12. It is required before S25, and it is scheduled as its own session there.**
+
+Reasoning:
+
+- **S12 does not touch the restore path.** It is one read-only dashboard slice
+  over the driver proven here. Whether `pg_dump`/`pg_restore` round-trips on a
+  managed provider has no bearing on whether that slice is correct, and G2 —
+  the mass-DataContext-migration go/no-go S12 carries — asks a question about
+  the data path, not the recovery path. Blocking S12 on it would buy nothing
+  and would stall the migration behind unrelated infrastructure work.
+- **What R2's open half actually gates is recovery.** S25 owns the restore
+  window procedure (risk R1) and S27 owns the timed restore rehearsals. Those
+  are the points where "we have never proved a restore works on the real
+  provider" becomes a live hazard rather than a documentation gap. S25 is the
+  right fence: the procedure and the evidence for it should land together.
+- **The work is substantial and genuinely orthogonal.** Phase 0 established
+  that neither harness can be pointed at a managed provider: both `docker run`
+  their own clusters, both drive them as superuser under trust auth, and the
+  clean room needs three *independent* clusters, which Neon branches and extra
+  databases cannot supply because they inherit the project's roles. Closing it
+  properly means an external-endpoint mode plus a source of independent
+  clusters. That is a session, not a task, and squeezing it in front of S12
+  would mix it with driver review.
+
+**A cheaper interim step, if the gap feels uncomfortable before S25.** Most of
+the practical risk is on the *dump* side — whether `pg_dump` can read a managed
+Neon server faithfully, with extensions, ownership and grants intact. That half
+can be tested now at a fraction of the cost: dump the live project and restore
+into a throwaway container, then run the existing reconciliation and inventory
+assertions against it. It does not reproduce the three-independent-cluster
+clean-room property, so it would not close R2 — but it would convert the
+largest unknown into a measurement well before S25. It was **not** done in this
+session, because the brief scoped it out and because it is exactly the kind of
+work that deserves its own owner decision about what evidence it is claiming.
+
 ## Exact starting point for the next session
 
 The next session is **S12** — one read-only dashboard slice, browser → API →
@@ -577,12 +669,9 @@ remain untouched.
 Before it starts:
 
 1. Review this branch and integrate it into `main` with `git merge --ff-only`.
-2. Decide the two guard questions this session surfaced:
-   - whether the S08 and S10 session-scope guards should be re-scoped or
-     retired, given they now fail for every remaining frontend session;
-   - whether real-provider dump/restore evidence (R2's open half) is required
-     before S12, or can wait — it is a prerequisite for S27 either way, and it
-     is its own session.
+2. Nothing to decide about the guards or about R2 — both were decided by the
+   owner on 2026-08-03 and are recorded above and below. S12 inherits two green
+   suites and an unblocked path.
 3. Nothing to decide about the Neon project. It is retained, the baseline and
    fixtures are applied, `app_runtime` has a working credential in
    `~/.config/neon-s11-datastore.env`, and the contract fixtures (2,504 rows

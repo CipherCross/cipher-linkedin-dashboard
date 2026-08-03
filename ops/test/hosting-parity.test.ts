@@ -18,7 +18,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -1365,20 +1364,12 @@ test("the new sources carry no secret, credential or vendor resource ID", () => 
   }
 });
 
-test("S10 changed no database, frontend or agent file", (t) => {
-  const diff = spawnSync("git", ["diff", "--name-only", "main"], {
-    cwd: REPOSITORY_ROOT,
-    encoding: "utf8",
-  });
-  if (diff.status !== 0) {
-    t.skip("git is unavailable in this environment");
-    return;
-  }
-  const protectedPrefixes = ["postgres/", "supabase/", "frontend/", "sync-agent/"];
-  const offending = diff.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .filter((line) => protectedPrefixes.some((prefix) => line.startsWith(prefix)));
-  assert.deepEqual(offending, [], "a protected path was modified");
-});
+// Removed in S11 phase 1: test("S10 changed no database, frontend or agent
+// file"). It diffed the working branch against main and failed if any
+// postgres/, supabase/, frontend/ or sync-agent/ path appeared. That was S10's
+// own blast-radius contract, and S10 has merged — from then on it could only
+// fire on later branches doing the work they were commissioned to do, starting
+// with S11 phase 1's driver. Repo-wide immutability is not this suite's job
+// either way: postgres/tests/portable_migration_ledger_static_assertions.mjs
+// owns it, and still enforces the half that is a real invariant (already-applied
+// migrations and the published baseline set, the latter by digest).

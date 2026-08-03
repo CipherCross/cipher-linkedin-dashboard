@@ -14,8 +14,8 @@
 //     (a provider name inside a comment is documentation, not a dependency, and
 //     comments are stripped before the sweep);
 //   * no secret, credential, password or connection string appears anywhere;
-//   * S08 changed no frontend, API, sync-agent, ops or historical migration
-//     file relative to its base.
+//   * no already-applied migration and no published baseline artifact changed
+//     relative to the current branch's merge base with main.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -62,11 +62,16 @@ const EXECUTABLE_SCRIPTS = [
   'postgres/tests/portable_dump_restore_cleanroom.sh',
 ];
 
-// Paths S08 must not touch.
+// Paths no session may touch, on any branch, for the life of the migration.
+//
+// This list was originally S08's own blast-radius contract and also carried
+// 'frontend/', 'sync-agent/' and 'ops/'. Those three were session scope, not
+// invariants: once S08 merged they only ever fired on later branches doing
+// exactly the work they were commissioned to do (S11 phase 1 was the first).
+// They were removed rather than weakened. What remains is genuinely immutable:
+// already-applied migrations, and the published baseline set — the latter also
+// enforced, more strongly, by the IMMUTABLE_BASELINE digest checks above.
 const PROTECTED_PATHS = [
-  'frontend/',
-  'sync-agent/',
-  'ops/',
   'supabase/migrations/',
   'supabase/tenant-baseline/',
   'postgres/tenant-baseline/v1/001_portable_business_baseline.sql',
@@ -272,9 +277,9 @@ for (const relative of EXECUTABLE_SCRIPTS) {
     readFileSync(path, 'utf8').includes('trap cleanup EXIT'));
 }
 
-// --- scope -------------------------------------------------------------------
+// --- immutability ------------------------------------------------------------
 
-process.stdout.write('\nSession scope\n');
+process.stdout.write('\nImmutability\n');
 let changed = null;
 try {
   const base = execFileSync('git', ['merge-base', 'HEAD', 'main'], { cwd: REPO_DIR, encoding: 'utf8' }).trim();
@@ -288,7 +293,7 @@ if (changed) {
   const violations = changed.filter((file) =>
     PROTECTED_PATHS.some((protectedPath) =>
       protectedPath.endsWith('/') ? file.startsWith(protectedPath) : file === protectedPath));
-  check('no frontend, API, sync-agent, ops, historical migration or immutable baseline file changed',
+  check('no historical migration or immutable baseline file changed',
     violations.length === 0, violations.join(', '));
 }
 
