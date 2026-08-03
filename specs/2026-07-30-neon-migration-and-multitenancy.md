@@ -448,6 +448,38 @@ downtime и decommission всегда требуют отдельного owner 
   после acceptance `S27`; физическое удаление Supabase остается отдельным
   явно одобренным break-glass действием после `S28`.
 
+> **Note — owner decision at gate G2, 2026-08-03.** Записано по решению
+> владельца при закрытии `G2` (`status = approved`, `decision =
+> conditional-go`). Таблица сессий выше **не переписана**; это дополнение к ней.
+> Источник: `docs/platform-ops/g2-datacontext-migration-go-no-go.json`
+> (`owner_decision`) и `docs/implementation-handoffs/N-S12.md`, раздел
+> "Owner decisions, 2026-08-03".
+>
+> 1. **Reordering: `S16 → G3 → S17 → S13 → S18`.** Identity идет первым.
+>    Причина — блокер `B1`: временный actor bridge
+>    (`frontend/api/_lib/neonActor.ts`) **не переносится в `S13`**; он остается
+>    development-only scaffolding для страницы S12 и удаляется в `S17`.
+>    Проверено по таблице зависимостей выше: `S16` зависит от `G0, S06` (оба
+>    закрыты), `S17` — от `G3, S06`, `S13` — только от `G2` (принят), `S18` — от
+>    `S17, S13`. Единственное ребро, которое все еще требует `S13` раньше, — это
+>    `S18`, и новый порядок это сохраняет. Ни одна зависимость не нарушена.
+> 2. **Две вставленные сессии, обе отдельные — ни одна не входит в `S13` или
+>    `S16`.**
+>    - **B2 data slice.** Копирование ограниченного среза реальных tenant data в
+>      Neon, чтобы parity проверялась до cutover. Меняет статус Neon project с
+>      "holds no tenant data" на "holds a bounded slice of tenant data". Требует
+>      письменно утвержденного scope до запуска (таблицы, instance, объем строк,
+>      порядок удаления). Scope и вопрос псевдонимизации на 2026-08-03 **не
+>      решены**.
+>    - **B4 roster function.** `SECURITY DEFINER` функция, отдающая roster
+>      `team_members`, применяется **только через migration ledger** (R5).
+>      Schema change, поэтому отдельная сессия; ставится **до `S13`**, так как ее
+>      требуют и reads `S13`, и Team admin в `S18`.
+>
+>    Итоговый порядок: `S16 → G3 → S17 → [B4 roster] → [B2 data slice] → S13 →
+>    S18`. Обе вставленные сессии обязаны завершиться до `S13`; их порядок
+>    относительно друг друга не зафиксирован.
+
 ## Affected files/modules
 
 - `frontend/src/lib/supabase.ts` — заменить provider-neutral browser client/API.

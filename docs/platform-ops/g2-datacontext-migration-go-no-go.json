@@ -2,14 +2,136 @@
   "gate": "G2",
   "title": "Mass DataContext migration go/no-go",
   "schema_version": "1.0",
-  "status": null,
-  "decision": null,
-  "decided_at": null,
+  "status": "approved",
+  "decision": "conditional-go",
+  "decided_at": "2026-08-03",
   "prepared_by_session": "S12",
   "prepared_on": "2026-08-03",
   "phase": "N2",
   "spec": "specs/2026-07-30-neon-migration-and-multitenancy.md",
   "handoff": "docs/implementation-handoffs/N-S12.md",
+  "owner_decision": {
+    "decided_at": "2026-08-03",
+    "decided_by": "owner",
+    "recorded_by_session": "G2 decision session (documentation only; no application code was written and no schema, migration or data copy was performed)",
+    "post_merge_main_sha": "7919fdc1693d86e2d8fe03e422b0eb904fdee1ee",
+    "decision": "conditional-go",
+    "what_is_permitted": "S13 is permitted as development behind a flag.",
+    "what_is_not_permitted": "No production cutover of dashboard reads from Supabase to Neon until B1 and B2 are closed.",
+    "relationship_to_s12_recommendation": "The recommendation was accepted on its headline (conditional go for building S13, no cutover yet) and made stricter on two of its six findings. B1 and B2 were both decided against the option S12 leaned toward, in each case choosing the more conservative path. B3 and B5 were confirmed as recommended. B4 was decided, in the direction S12 flagged as needing an owner decision. B6 needs nothing.",
+    "differs_from_recommendation_on": ["B1", "B2"],
+    "items": [
+      {
+        "id": "B1",
+        "subject": "the actor bridge",
+        "stricter_than_recommended": true,
+        "recommended_by_s12": "S16-S18 identity, or an explicit owner acceptance that the bridge stays development-only while S13 is built behind a flag. S12's recommended sequencing put S13 first and left the bridge carrying development traffic until identity landed.",
+        "owner_decision": "Rejected carrying the temporary bridge into S13. Identity comes first. The session order becomes S16 -> G3 -> S17 -> S13 -> S18.",
+        "why_this_is_stricter": "S12's recommendation would have let the environment-held bridge map remain the reachable identity path for the whole of S13's development, which is exactly the condition under which temporary scaffolding becomes permanent. Requiring identity first removes that possibility entirely rather than managing it.",
+        "reordering_legality": {
+          "verified_against": "the session dependency table in specs/2026-07-30-neon-migration-and-multitenancy.md (lines 414-419)",
+          "S16": "depends on G0, S06 - both closed (G0 accepted 2026-07-31; S06 complete, docs/implementation-handoffs/N-S06.md). S16 does not depend on G2 or S13.",
+          "S17": "depends on G3, S06. G3 is S16's own exit gate, so S16 -> G3 -> S17 is the table's own order.",
+          "S13": "depends on G2 only, which is approved by this decision. Nothing in the table requires S13 to precede S16 or S17.",
+          "S18": "depends on S17 and S13 - the only edge in this group that still requires S13 to run ahead of it, and the reordering keeps S13 before S18.",
+          "conclusion": "The reordering is legal. No dependency edge is violated and no session runs before a prerequisite."
+        },
+        "consequence_recorded_explicitly": "`frontend/api/_lib/neonActor.ts` will never reach production and will never be extended. It stays development-only scaffolding for S12's `#/neon-activity` page, and it is deleted by S17. No S13 code may build on it, extend its map, or add a caller to it.",
+        "assessment": "This is a better outcome than S12 proposed. S12 could only offer to mark the bridge temporary and hope the marking held; the owner's ordering makes the bridge structurally incapable of reaching production, because the session that would have carried it into the product now runs after the session that deletes it."
+      },
+      {
+        "id": "B2",
+        "subject": "parity without tenant data",
+        "stricter_than_recommended": true,
+        "recommended_by_s12": "One of three options, with S12 leaning toward the cheapest: accept that S13 ships behind a flag and parity is checked at cutover rather than before.",
+        "owner_decision": "Copy a bounded slice of real tenant data into Neon, rather than deferring parity to cutover.",
+        "why_this_is_stricter": "Deferring parity to cutover means the first comparison of real numbers happens at the moment of highest cost to be wrong. Copying a bounded slice moves that comparison earlier, at the price of accepting real data on a new provider - a price the owner chose to pay deliberately rather than defer.",
+        "changes_the_neon_project_status": {
+          "from": "holds no tenant data, and none has ever been copied",
+          "to": "holds a bounded slice of tenant data",
+          "in_effect_from": "the moment the B2 data-slice session runs; as of 2026-08-03 the Neon project still holds no tenant data and the old status is still literally true",
+          "documents_asserting_the_old_status": [
+            "docs/platform-ops/g2-datacontext-migration-go-no-go.json - lines 29 (`external_mutations.detail`), 50 (`evidence.parity.what_it_does_not_cover`), 180-181 (blocker B2) and 258 (`recommendation.not_an_unconditional_go_because`). Updated by this decision: each now carries the pending status change.",
+            "docs/implementation-handoffs/N-S12.md - the parity section, `what parity does not cover`, the G2 recommendation, `Credentials, resources and the existing application` and `Known limits` item 1. Updated by this decision through the new `Owner decisions, 2026-08-03` section, which those passages now point to.",
+            "docs/implementation-handoffs/N-S11.md - finding 6, `It still holds no tenant data`. A historical session record; annotated with a dated forward pointer rather than rewritten, because the statement was true when written and the record of S11 should stay accurate.",
+            "docs/implementation-handoffs/N-S11-phase1.md - the external-resources paragraph, `no domain, no deployment, no tenant data`. Same treatment and same reason."
+          ],
+          "no_other_document_found": "A repository-wide search of `docs/` and `specs/` for the phrasings `holds no tenant data`, `no tenant data`, `tenant data was copied`, `never been copied` and `production bytes` returned only the files listed above, plus one unrelated hit: specs/2026-07-30-neon-migration-and-multitenancy.md line 420, which constrains S19 storage bytes and is not about the Neon database."
+        },
+        "is_its_own_session": true,
+        "must_not_happen_inside": ["S16", "S13"],
+        "requires_before_it_runs": "An explicit written scope, approved by the owner: which tables, which instance, how many rows, and how the copy is deleted afterwards.",
+        "proposed_starting_scope_for_owner_to_confirm_or_narrow": {
+          "instances": ["notebook-1"],
+          "excluded": ["notebook-1:4 - the retired test campaign"],
+          "tables": ["instances", "campaigns", "campaign_steps", "leads", "messages", "events"],
+          "status": "proposed, not approved - the owner may confirm or narrow it"
+        },
+        "open_refinement_raised_not_decided": {
+          "question": "Should the copied slice be redacted and pseudonymised?",
+          "reasoning": "The parity claim is about counts, rates and day buckets. Those depend on milestone timestamps, ids, stage columns and the already-derived sentiment/intent columns - not on message bodies, full names or headlines. The same parity evidence is therefore obtainable with message bodies redacted and person names pseudonymised, which would carry far less personal data to a new provider for identical evidentiary value.",
+          "status": "raised as a question for the owner. Deliberately not decided by this session.",
+          "if_adopted": "It would narrow the scope above rather than replace it - the same tables, the same instance, the same row counts, with `messages.body`, `leads.full_name` and `leads.headline` (and any comparable free-text or identifying column) replaced by deterministic surrogates."
+        }
+      },
+      {
+        "id": "B3",
+        "subject": "one dispatching endpoint",
+        "stricter_than_recommended": false,
+        "owner_decision": "Confirmed as recommended. Reads are served from one dispatching endpoint keyed by allowlisted operation name. One endpoint per slice is not available - the serverless function budget is full at 12.",
+        "note": "This endpoint is deliberately the first step of the application API's operation vocabulary, not a transitional shim. See `architectural_direction`."
+      },
+      {
+        "id": "B4",
+        "subject": "the team_members roster",
+        "stricter_than_recommended": false,
+        "owner_decision": "Add a `SECURITY DEFINER` function exposing the member roster, applied through the migration ledger.",
+        "is_its_own_session": true,
+        "must_not_happen_inside": ["S13", "S16"],
+        "why_its_own_session": "It is a schema change to the tenant baseline. The migration ledger is the only sanctioned apply path (R5), and a schema change must not be smuggled into a frontend or identity session.",
+        "sequencing": "Before S13. S13's reads need it - any join resolving an assignee or owner name returns NULL without it - and S18's Team admin needs it too.",
+        "resolves": "the blocker as stated: `team_members` is self-only under RLS for `app_runtime`, so the baseline exposes no roster read."
+      },
+      {
+        "id": "B5",
+        "subject": "actor resolution cost",
+        "stricter_than_recommended": false,
+        "owner_decision": "Confirmed as recommended. The actor is resolved once per request and the `ActorContext` is passed down. The bridge costs p50 196 ms of a 525 ms request; resolving per read would pay that once per read."
+      },
+      {
+        "id": "B6",
+        "subject": "events upsert dedup",
+        "stricter_than_recommended": false,
+        "owner_decision": "Nothing required, unchanged. Recorded so it is not rediscovered as a Neon regression."
+      }
+    ],
+    "session_order_after_this_decision": [
+      "S16 - isolated identity security spike (carries G3)",
+      "G3 - accept or change the Auth candidate",
+      "S17 - production IdentityProvider and server session/admin endpoints; deletes frontend/api/_lib/neonActor.ts and the temporary user_identities row",
+      "B4 roster-function session - SECURITY DEFINER roster read through the migration ledger (inserted; own session; before S13)",
+      "B2 data-slice session - bounded tenant-data copy into Neon under an approved written scope (inserted; own session; before the parity claim it supports)",
+      "S13 - DataContext and component-local reads through the application API, behind a flag",
+      "S18 - frontend AuthContext, route gates and Team admin"
+    ],
+    "inserted_sessions": [
+      "the B2 bounded tenant-data copy",
+      "the B4 SECURITY DEFINER roster function"
+    ],
+    "architectural_direction": {
+      "statement": "This is heading toward a proper backend, not a database behind a dashboard.",
+      "detail": "S13-S15 build an application API with its own operation vocabulary. `DataContext` becomes a client of that API rather than a table-fetcher, so the unit of change stops being `a table the browser reads` and becomes `an operation the application offers`.",
+      "not_in_scope": "Extracting a separately deployable service. The API stays inside `frontend/api/` on the existing hosting adapter.",
+      "consequence_for_b3": "The dispatching endpoint from B3 is deliberately the first step of that vocabulary rather than a transitional shim. Its allowlisted operation names are the vocabulary's first entries and should be named as product operations, not as table reads to be replaced later."
+    },
+    "temporary_identity_row": {
+      "what": "A `user_identities` row with `provider = 'supabase'` mapping the owner's Auth subject to canonical user `00000000-0000-0000-0000-000000000001`.",
+      "disposition": "Keep it.",
+      "why": "It is development-only and it is needed to re-verify S12's `#/neon-activity` page in a browser.",
+      "cleanup_owned_by": "S17, which replaces the identity path and deletes the bridge module alongside it.",
+      "status": "open cleanup item"
+    }
+  },
   "gate_semantics": {
     "kind": "owner-decision-gate",
     "self_passing": false,
@@ -26,7 +148,8 @@
   },
   "external_mutations": {
     "performed": "fixture rows only, on the single pre-existing Neon project",
-    "detail": "No project, branch, database, role, Auth user, bucket, domain or deployment was created. No DDL was executed; the migration ledger remains the only apply path (R5). No tenant data was copied to or from any provider. No `supabase db push`, no `sync-agent/deploy.sh`, no Vercel deploy, no `git push`. Writes were: one `instances` row (`s12-activity`) and 4,800 `events` rows under that instance, inserted as `app_runtime` through the baseline's RLS policies, idempotent under re-run."
+    "detail": "No project, branch, database, role, Auth user, bucket, domain or deployment was created. No DDL was executed; the migration ledger remains the only apply path (R5). No tenant data was copied to or from any provider. No `supabase db push`, no `sync-agent/deploy.sh`, no Vercel deploy, no `git push`. Writes were: one `instances` row (`s12-activity`) and 4,800 `events` rows under that instance, inserted as `app_runtime` through the baseline's RLS policies, idempotent under re-run.",
+    "status_change_pending": "This describes S12 and remains accurate for it. The owner's B2 decision of 2026-08-03 authorises a bounded tenant-data copy in a dedicated later session, after which `no tenant data was copied to or from any provider` stops being true of the Neon project. See `owner_decision.items[B2].changes_the_neon_project_status`."
   },
   "slice_under_test": {
     "name": "daily activity series",
@@ -47,7 +170,7 @@
       "total_mismatches": 0,
       "cross_check": "The sum of `cnt` over the view equals `count(*)` over the underlying `events` rows for the same instance: 4,800 = 4,800.",
       "what_it_does_not_cover": [
-        "Production tenant numbers. Neon holds no tenant data and none has ever been copied, so no claim is made that the live dashboard's figures match. This is the single largest gap in the evidence.",
+        "Production tenant numbers. As of 2026-08-03 Neon holds no tenant data and none has ever been copied, so no claim is made that the live dashboard's figures match. This is the single largest gap in the evidence. The owner's B2 decision of the same date closes it by authorising a bounded tenant-data copy in a dedicated session, which changes the project's status to `holds a bounded slice of tenant data`; this gap stands until that session runs.",
         "Any relation other than `daily_activity`. The 13 other reads `DataContext` performs are unproven.",
         "The `leads`-derived recompute path. Every page today renders activity from `leadsToActivity(data.leads)` rather than from the view, so the view itself is currently unconsumed and its parity with the client recompute was not measured.",
         "Timezone parity with Supabase. The Neon path pins `timezone = 'UTC'` per transaction; the Supabase path relies on that project's session default. Both are UTC today, but only one of them guarantees it."
@@ -172,32 +295,42 @@
         "id": "B1",
         "severity": "blocking for production cutover",
         "finding": "The actor bridge is an environment-held map from identity-provider subject to canonical user id. It maps only explicitly configured subjects, so every real team member would have to be hand-entered, and adding a person breaks reads until the variable is edited and redeployed. This is workable for one slice and unworkable for a team.",
-        "required_before_mass_migration": "S16-S18 identity, or an explicit owner acceptance that the bridge stays development-only while S13 is built behind a flag."
+        "required_before_mass_migration": "S16-S18 identity, or an explicit owner acceptance that the bridge stays development-only while S13 is built behind a flag.",
+        "owner_decision_2026_08_03": "Decided, stricter than recommended. The owner rejected carrying the bridge into S13 at all: identity comes first, and the order becomes S16 -> G3 -> S17 -> S13 -> S18. `frontend/api/_lib/neonActor.ts` will never reach production and will never be extended; it is deleted by S17. Full text in `owner_decision.items[0]`.",
+        "state": "closed by decision; the code change lands in S17"
       },
       {
         "id": "B2",
         "severity": "blocking for any correctness claim about the migrated dashboard",
-        "finding": "Neon holds no tenant data, so 'the dashboard shows the same numbers' cannot be verified for any slice, including this one. S12's parity is over a synthetic fixture plus a structural argument about identical view SQL.",
-        "required_before_mass_migration": "One of: an owner-approved copy of a bounded tenant slice into Neon (which changes the project's status from 'holds no tenant data'); or a dual-read comparison that runs both providers in production and diffs; or acceptance that S13 ships behind a flag and parity is checked at cutover rather than before."
+        "finding": "As of 2026-08-03 Neon holds no tenant data, so 'the dashboard shows the same numbers' cannot be verified for any slice, including this one. S12's parity is over a synthetic fixture plus a structural argument about identical view SQL.",
+        "required_before_mass_migration": "One of: an owner-approved copy of a bounded tenant slice into Neon (which changes the project's status from 'holds no tenant data'); or a dual-read comparison that runs both providers in production and diffs; or acceptance that S13 ships behind a flag and parity is checked at cutover rather than before.",
+        "owner_decision_2026_08_03": "Decided, stricter than recommended. The owner chose the first option - copy a bounded slice of real tenant data into Neon - rather than deferring parity to cutover. This changes the Neon project's status to 'holds a bounded slice of tenant data'. The copy is its own session, needs an explicit written scope before it runs, and must not happen inside S16 or S13. Full text, proposed scope and the open pseudonymisation question in `owner_decision.items[1]`.",
+        "state": "decided in principle; scope still to be confirmed by the owner, and the copy itself has not run"
       },
       {
         "id": "B3",
         "severity": "resolved in S12, but it constrains S13's shape",
         "finding": "`frontend/api/` was at exactly 12 function files, the Vercel Hobby serverless-function cap, asserted by `tests/briefing.test.ts`. Any new endpoint exceeds it, so one endpoint per slice does not scale.",
         "resolution": "By owner decision the former `/api/config` function was folded into `/api/pipeline` as an admin-gated `set_instance_config` action and deleted, freeing its slot for the Neon read. No feature was lost, no cron changed, no AI handler was touched, and the count is back to 12 with the guard green.",
-        "required_before_mass_migration": "S13 must serve its reads from one dispatching endpoint keyed by allowlisted operation name, not one endpoint per slice. There is no slot budget for the latter."
+        "required_before_mass_migration": "S13 must serve its reads from one dispatching endpoint keyed by allowlisted operation name, not one endpoint per slice. There is no slot budget for the latter.",
+        "owner_decision_2026_08_03": "Confirmed as recommended, with one addition: the dispatching endpoint is deliberately the first step of the application API's operation vocabulary, not a transitional shim. See `owner_decision.architectural_direction`.",
+        "state": "confirmed; binding on S13"
       },
       {
         "id": "B4",
         "severity": "blocking for specific S13 pages",
         "finding": "`team_members` is self-only under RLS for `app_runtime`: the policy restricts it to `user_id = app.actor_id`. Any join that resolves an assignee or owner name - `leads.assigned_to`, follow-up owners, pipeline audit names - returns NULL for everyone except the calling actor. The baseline exposes no `SECURITY DEFINER` roster read.",
-        "required_before_mass_migration": "An owner decision. Serving a member roster needs a baseline change applied through the migration ledger, which is not S13's to make."
+        "required_before_mass_migration": "An owner decision. Serving a member roster needs a baseline change applied through the migration ledger, which is not S13's to make.",
+        "owner_decision_2026_08_03": "Decided. Add a `SECURITY DEFINER` function exposing the member roster, applied through the migration ledger. Because it is a schema change it is its own session and must not happen inside S13 or S16. Sequenced before S13, since S13's reads and S18's Team admin both need it. Full text in `owner_decision.items[3]`.",
+        "state": "closed by decision; the schema change lands in its own inserted session"
       },
       {
         "id": "B5",
         "severity": "advisory",
         "finding": "The actor bridge costs a full extra transaction, measured at 196 ms of a 525 ms request on this host - 37%. If S13 resolves the actor independently per read, 13 reads would pay it 13 times.",
-        "required_before_mass_migration": "Resolve the actor once per request and pass the `ActorContext` down. This is a code-shape requirement, not a redesign."
+        "required_before_mass_migration": "Resolve the actor once per request and pass the `ActorContext` down. This is a code-shape requirement, not a redesign.",
+        "owner_decision_2026_08_03": "Confirmed as recommended. The actor is resolved once per request.",
+        "state": "confirmed; binding on S13"
       },
       {
         "id": "B6",
@@ -255,7 +388,7 @@
   "recommendation": {
     "summary": "Conditional go for building S13; not yet a go for a production cutover of dashboard reads.",
     "detail": "The data path itself is proven and the per-slice cost is low. A real browser reached a real handler, which resolved a real actor and read the real Neon database under the baseline's own RLS policies; pagination past the 1000-row cap, UTC day semantics and a fail-closed deny matrix are all asserted rather than assumed, and three mutation checks confirm the assertions bite. The S03 contract needed no change and the driver needed one small, generic fix. Nothing about S13's mechanics looks risky.",
-    "not_an_unconditional_go_because": "Two of the six findings are not engineering details. B2 means correctness of a migrated dashboard cannot currently be demonstrated at all, because there is no tenant data on Neon to compare against - S12's parity is a structural argument plus a synthetic fixture, which is honest but is not evidence about production numbers. B1 means the identity bridge that makes any of this reachable from a browser cannot serve a team as built. Either one alone would make a production cutover premature.",
+    "not_an_unconditional_go_because": "Two of the six findings are not engineering details. B2 means correctness of a migrated dashboard cannot currently be demonstrated at all, because as of 2026-08-03 there is no tenant data on Neon to compare against - S12's parity is a structural argument plus a synthetic fixture, which is honest but is not evidence about production numbers. B1 means the identity bridge that makes any of this reachable from a browser cannot serve a team as built. Either one alone would make a production cutover premature.",
     "recommended_sequencing": [
       "Approve S13 as implementation behind a flag, with reads verified against fixtures rather than tenant data.",
       "Decide B2 explicitly - it is an owner decision about whether the Neon project may hold a bounded slice of tenant data, and it changes the project's status.",
@@ -263,6 +396,15 @@
       "Require S13 to use one dispatching endpoint (B3) and to resolve the actor once per request (B5)."
     ],
     "prepared_by": "S12",
-    "decision_is_the_owners": true
+    "decision_is_the_owners": true,
+    "outcome_2026_08_03": {
+      "accepted": "The headline was accepted verbatim: conditional go, S13 as development behind a flag, no production cutover of dashboard reads until B1 and B2 are closed.",
+      "recommended_sequencing_superseded": "The four recommended sequencing steps are superseded by `owner_decision.session_order_after_this_decision`. Step 1 stands but no longer runs first; steps 2 and 3 were decided rather than deferred; step 4 was confirmed.",
+      "made_stricter_on": {
+        "B1": "S12 offered to keep the bridge as accepted development-only scaffolding during S13. The owner instead put identity first, so the bridge is deleted before S13's product code exists.",
+        "B2": "S12 leaned toward parity checked at cutover. The owner instead authorised a bounded tenant-data copy so parity is checked before cutover."
+      },
+      "see": "owner_decision"
+    }
   }
 }

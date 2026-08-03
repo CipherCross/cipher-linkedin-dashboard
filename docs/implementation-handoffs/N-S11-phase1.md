@@ -568,6 +568,14 @@ are redundant.
   production project, no branch, no extra database, no Auth user, no bucket,
   no domain, no deployment, no tenant data. Exactly one Neon project still
   exists, as A5 authorised.
+
+  > **Superseded in part, 2026-08-03.** The "no tenant data" clause describes
+  > S11 phase 1 accurately and is still true of the project today, but it is no
+  > longer its settled status: the owner's G2 decision (blocker B2) authorises
+  > copying a **bounded slice of tenant data** into this project in a dedicated
+  > later session. See `docs/platform-ops/g2-datacontext-migration-go-no-go.json`
+  > (`owner_decision.items[B2]`) and "Owner decisions, 2026-08-03" in
+  > `docs/implementation-handoffs/N-S12.md`. Every other clause is unaffected.
 - **No DDL was executed.** The only writes were fixture rows through
   `app_runtime` under RLS: one `instances` row (`s11-contract`), 4
   `s11_contract_range` events, 2,500 `s11_contract_page` events, and
