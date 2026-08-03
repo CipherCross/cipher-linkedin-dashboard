@@ -1,0 +1,23 @@
+{
+  "name": "s16-identity-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "S16 isolated identity security spike. Not product code; not built, bundled or deployed.",
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "test:neon": "vitest run --config vitest.neon.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "better-auth": "^1.6.25",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/pg": "^8.20.3",
+    "tsx": "^4.20.7",
+    "typescript": "^5.5.3",
+    "vitest": "^4.1.10"
+  }
+}
