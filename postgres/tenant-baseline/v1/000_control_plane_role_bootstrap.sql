@@ -92,6 +92,38 @@ BEGIN
 END
 $$;
 
+-- Make the executing principal able to SET ROLE app_owner before the ownership
+-- transfer below needs it.
+--
+-- A managed provider hands the operator a NON-SUPERUSER privileged principal
+-- (Neon's neondb_owner, and the equivalent elsewhere). Since PostgreSQL 16, a
+-- role holding CREATEROLE that creates a role is auto-granted membership in it
+-- with admin_option = true but SET_OPTION = FALSE. Transferring an object to a
+-- role requires the executor to be able to SET ROLE into it, so without this
+-- grant the next statement fails with: must be able to SET ROLE "app_owner".
+--
+-- A superuser is exempt from that membership check, which is why the clean-room
+-- harnesses -- which bootstrap as the postgres superuser -- never exercised this
+-- path and the defect stayed invisible until the first real managed apply. The
+-- grant is therefore made ONLY for a non-superuser principal, so the clean-room
+-- role graph, and the S08 inventory snapshots that cover role memberships, stay
+-- byte-identical.
+--
+-- This confers nothing the principal did not already hold: it created these
+-- roles and holds ADMIN OPTION on them, so it could grant itself SET at any
+-- time. INHERIT FALSE preserves the rule that a privilege is only ever used
+-- after an explicit SET ROLE.
+DO $$
+BEGIN
+    IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = CURRENT_USER) THEN
+        EXECUTE format(
+            'GRANT app_owner TO %I WITH SET TRUE, INHERIT FALSE',
+            CURRENT_USER
+        );
+    END IF;
+END
+$$;
+
 -- Schema ownership. 001 predates the role contract and contains no SET ROLE, so
 -- the ledger runner enters app_owner for it; that requires public to be owned by
 -- app_owner up front. 002 re-asserts the same ownership as a no-op.

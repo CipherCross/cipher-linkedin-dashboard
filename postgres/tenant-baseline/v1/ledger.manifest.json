@@ -26,7 +26,7 @@
   },
   "role_bootstrap": {
     "artifact": "000_control_plane_role_bootstrap.sql",
-    "sha256": "19d2594c6d18da2a06a1a75ba86d109547188bdb1449af5de2db936d649bb79f",
+    "sha256": "408bb527871b503daa9dde5c3770ab591ba1baab98c9a7af61fa33127e106409",
     "applied_by": "control-plane",
     "is_ledger_step": false,
     "required_roles": [
