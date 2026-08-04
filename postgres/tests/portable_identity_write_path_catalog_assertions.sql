@@ -100,7 +100,14 @@ BEGIN
   END LOOP;
 
   --
-  -- Function inventory. S07 published 13 portable functions in public and the
+  -- Function inventory. Counted after the WHOLE manifest is applied, not after
+  -- step 004 alone: the clean room applies through the ledger runner, which has
+  -- no "stop at step N". So these figures move whenever a later step adds a
+  -- function, exactly as portable_restore_reconciliation.sql's did. Left alone,
+  -- they fail the moment anyone runs the drill and the failure looks like
+  -- corruption rather than an expected baseline change.
+  --   13 (S07) + 5 (step 004) + 1 (step 005, identity_admin_invite_member_atomic)
+  -- S07 published 13 portable functions in public and the
   -- AI guard is one of them. Step 004 adds exactly five. A later session that
   -- changes this number must change it here too, deliberately.
   --
@@ -112,8 +119,8 @@ BEGIN
       SELECT 1 FROM pg_depend d
       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
     );
-  IF v_public_functions <> 18 THEN
-    RAISE EXCEPTION 'expected 18 non-extension functions in public after step 004 (13 + 5), found %',
+  IF v_public_functions <> 19 THEN
+    RAISE EXCEPTION 'expected 19 non-extension functions in public after steps 004-005 (13 + 5 + 1), found %',
       v_public_functions;
   END IF;
 
@@ -125,8 +132,8 @@ BEGIN
       SELECT 1 FROM pg_depend d
       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
     );
-  IF v_secdef <> 13 THEN
-    RAISE EXCEPTION 'expected 13 SECURITY DEFINER functions in public after step 004 (8 + 5), found %',
+  IF v_secdef <> 14 THEN
+    RAISE EXCEPTION 'expected 14 SECURITY DEFINER functions in public after steps 004-005 (8 + 5 + 1), found %',
       v_secdef;
   END IF;
 
@@ -270,7 +277,7 @@ BEGIN
     RAISE EXCEPTION 'unexpected RLS policy in the identity schema';
   END IF;
 
-  RAISE NOTICE 'identity write path catalog assertions passed: 18 functions in public, 13 SECURITY DEFINER, identity schema owned by identity_store';
+  RAISE NOTICE 'identity write path catalog assertions passed: 19 functions in public, 14 SECURITY DEFINER, identity schema owned by identity_store';
 END
 $$;
 

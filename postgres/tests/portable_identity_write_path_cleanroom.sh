@@ -139,9 +139,12 @@ recorded="$(query app_migration identity_prepared \
   "SET ROLE app_owner;
    SELECT string_agg(step || ':' || artifact, ' | ' ORDER BY applied_seq)
      FROM app_ledger.applied_migration;")"
-expected="1:001_portable_business_baseline.sql | 2:002_identity_roles_actor_rls.sql | 3:003_functions_triggers_ai_guard.sql | 4:004_identity_write_path_and_store.sql"
+# The runner applies the whole manifest, which is five steps as of S17. This
+# harness is step 004's, but it cannot apply "up to 4" -- so the expectation is
+# manifest-wide and grows with the manifest.
+expected="1:001_portable_business_baseline.sql | 2:002_identity_roles_actor_rls.sql | 3:003_functions_triggers_ai_guard.sql | 4:004_identity_write_path_and_store.sql | 5:005_identity_atomic_invite.sql"
 if [ "$recorded" = "$expected" ]; then
-  ok "the ledger records four steps in canonical order"
+  ok "the ledger records five steps in canonical order"
 else
   bad "ledger contents differ
        expected: $expected

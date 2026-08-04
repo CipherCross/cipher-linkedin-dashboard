@@ -106,6 +106,15 @@
       "session": "identity-ledger",
       "requires_role_bootstrap_extension": "000_identity_store_role_bootstrap.sql",
       "description": "Identity admin write path, actor resolver, roster read and the identity provider store schema. Carries the four changes attached to gate G3 as condition C3."
+    },
+    {
+      "step": 5,
+      "artifact": "005_identity_atomic_invite.sql",
+      "sha256": "229442570c0440d5a6f0d1ae336e9e80924155d9437bab5347855eaed3ee27e8",
+      "owner_role_entered_by": "artifact",
+      "session": "S17",
+      "requires_role_bootstrap_extension": "000_identity_store_role_bootstrap.sql",
+      "description": "The atomic cross-store invite: one SECURITY DEFINER function writing the canonical rows and the identity-store account in a single transaction, plus the two INSERT grants it needs. Closes the known limit step 004 recorded. No new role and no new credential."
     }
   ]
 }

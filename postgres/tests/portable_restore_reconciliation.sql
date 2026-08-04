@@ -87,11 +87,16 @@ BEGIN
    WHERE n.nspname = 'public'
      AND NOT EXISTS (SELECT 1 FROM pg_depend d
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
-  -- 13 from S07 plus the 5 ledger step 004 added: the three identity admin write
+  -- 13 from S07, plus the 5 ledger step 004 added, plus the 1 step 005 added
+  -- (identity_admin_invite_member_atomic). These figures are manifest-wide and
+  -- move with every step that adds a function; left alone they fail on the next
+  -- restore drill and the failure looks like corruption rather than an expected
+  -- baseline change.
+  -- The step-004 five are: the three identity admin write
   -- functions, the actor resolver and the roster read. The figure moved because
   -- the baseline genuinely gained functions, not because the check was relaxed.
-  IF actual <> 18 THEN
-    RAISE EXCEPTION 'expected 18 portable functions, found %', actual;
+  IF actual <> 19 THEN
+    RAISE EXCEPTION 'expected 19 portable functions, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -125,10 +130,11 @@ BEGIN
    WHERE n.nspname = 'public' AND p.prosecdef
      AND NOT EXISTS (SELECT 1 FROM pg_depend d
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
-  -- 8 from S07 plus all 5 of step 004's, which are SECURITY DEFINER by design:
-  -- they exist precisely to hold a privilege the calling role does not have.
-  IF actual <> 13 THEN
-    RAISE EXCEPTION 'expected 13 SECURITY DEFINER functions, found %', actual;
+  -- 8 from S07, plus all 5 of step 004's and the 1 of step 005's, which are
+  -- SECURITY DEFINER by design: they exist precisely to hold a privilege the
+  -- calling role does not have.
+  IF actual <> 14 THEN
+    RAISE EXCEPTION 'expected 14 SECURITY DEFINER functions, found %', actual;
   END IF;
 
   SELECT string_agg(p.proname, ', ' ORDER BY p.proname) INTO detail
@@ -401,13 +407,13 @@ BEGIN
   -- 12. The ledger travelled with the database and still describes it.
   --
   SELECT count(*) INTO actual FROM app_ledger.applied_migration;
-  IF actual <> 4 THEN
-    RAISE EXCEPTION 'expected 4 ledger rows after restore, found %', actual;
+  IF actual <> 5 THEN
+    RAISE EXCEPTION 'expected 5 ledger rows after restore, found %', actual;
   END IF;
 
   SELECT string_agg(artifact, ' -> ' ORDER BY applied_seq) INTO detail
     FROM app_ledger.applied_migration;
-  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql' THEN
+  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql -> 005_identity_atomic_invite.sql' THEN
     RAISE EXCEPTION 'ledger order did not survive restore: %', detail;
   END IF;
 

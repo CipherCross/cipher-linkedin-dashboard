@@ -164,10 +164,13 @@ echo "Ledger contract tests"
 
 # --- 1. correct order is accepted -------------------------------------------
 new_db ledger_happy
-expect_runner "correct apply order 001 -> 002 -> 003 -> 004 is accepted" ledger_happy apply accept
+expect_runner "correct apply order 001 -> 002 -> 003 -> 004 -> 005 is accepted" ledger_happy apply accept
 
 recorded="$(printf "SET ROLE app_owner;\nSELECT string_agg(step || ':' || artifact || ':' || sha256 || ':' || apply_principal || '/' || apply_role, ' | ' ORDER BY applied_seq) FROM app_ledger.applied_migration;\n" | sql_as app_migration ledger_happy)"
-expected="1:001_portable_business_baseline.sql:$(sha_of 001_portable_business_baseline.sql):app_migration/app_owner | 2:002_identity_roles_actor_rls.sql:$(sha_of 002_identity_roles_actor_rls.sql):app_migration/app_owner | 3:003_functions_triggers_ai_guard.sql:$(sha_of 003_functions_triggers_ai_guard.sql):app_migration/app_owner | 4:004_identity_write_path_and_store.sql:$(sha_of 004_identity_write_path_and_store.sql):app_migration/app_owner"
+# One entry per manifest step, in canonical order. The digests come from the
+# artifacts themselves via sha_of, so this string never has to be edited when a
+# digest changes -- only when the manifest gains a step, as S17 did.
+expected="1:001_portable_business_baseline.sql:$(sha_of 001_portable_business_baseline.sql):app_migration/app_owner | 2:002_identity_roles_actor_rls.sql:$(sha_of 002_identity_roles_actor_rls.sql):app_migration/app_owner | 3:003_functions_triggers_ai_guard.sql:$(sha_of 003_functions_triggers_ai_guard.sql):app_migration/app_owner | 4:004_identity_write_path_and_store.sql:$(sha_of 004_identity_write_path_and_store.sql):app_migration/app_owner | 5:005_identity_atomic_invite.sql:$(sha_of 005_identity_atomic_invite.sql):app_migration/app_owner"
 if [ "$recorded" = "$expected" ]; then
   ok "ledger records the order, digests and apply principal"
 else

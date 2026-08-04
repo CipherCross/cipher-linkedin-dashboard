@@ -30,14 +30,15 @@ const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASELINE_DIR = join(REPO_DIR, 'postgres', 'tenant-baseline', 'v1');
 const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 
-// The digests S05, S06, S07 and the identity ledger session published for the
-// baseline set. 004 joins the list here, at the digest this session publishes,
-// so any later edit to it fails two independent checks rather than one.
+// The digests S05, S06, S07, the identity ledger session and S17 published for
+// the baseline set. 005 joins the list here, at the digest S17 publishes, so any
+// later edit to it fails two independent checks rather than one.
 //
-// It is deliberately NOT added to PROTECTED_PATHS in the same session that
-// introduces it: that list is checked against the diff since the merge base, so
-// a session's own new file would flag itself. The session after this one adds it,
-// exactly as S08 did for 001..003.
+// A new artifact is deliberately NOT added to PROTECTED_PATHS in the session that
+// introduces it: that list is checked against the diff since the merge base, so a
+// session's own new file would flag itself. The session after adds it. S17 is
+// that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS,
+// while 005 appears only here.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -47,6 +48,8 @@ const IMMUTABLE_BASELINE = {
     'a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92',
   '004_identity_write_path_and_store.sql':
     '2ec822cad4067273aac7ead38e1dfdb29dc8dbf3ce5e1ee1765ea0e24ecf7163',
+  '005_identity_atomic_invite.sql':
+    '229442570c0440d5a6f0d1ae336e9e80924155d9437bab5347855eaed3ee27e8',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -79,12 +82,18 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_identity_write_path_ai_boundary_assertions.sql',
   'postgres/tests/portable_identity_write_path_cleanroom.sh',
   'docs/implementation-handoffs/N-IDENTITY-LEDGER.md',
+  // S17 (step 005, the atomic cross-store invite).
+  'postgres/tenant-baseline/v1/005_identity_atomic_invite.sql',
+  'postgres/tests/portable_identity_atomic_invite_assertions.sql',
+  'postgres/tests/portable_identity_atomic_invite_cleanroom.sh',
+  'docs/implementation-handoffs/N-S17.md',
 ];
 
 const EXECUTABLE_SCRIPTS = [
   'postgres/tests/portable_migration_ledger_tests.sh',
   'postgres/tests/portable_dump_restore_cleanroom.sh',
   'postgres/tests/portable_identity_write_path_cleanroom.sh',
+  'postgres/tests/portable_identity_atomic_invite_cleanroom.sh',
 ];
 
 // Paths no session may touch, on any branch, for the life of the migration.
@@ -102,6 +111,10 @@ const PROTECTED_PATHS = [
   'postgres/tenant-baseline/v1/001_portable_business_baseline.sql',
   'postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql',
   'postgres/tenant-baseline/v1/003_functions_triggers_ai_guard.sql',
+  // Added by S17, the session after the one that introduced it, exactly as the
+  // identity ledger handoff asked. It is applied to the live project, so from
+  // here on it is as immutable as 001..003.
+  'postgres/tenant-baseline/v1/004_identity_write_path_and_store.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
@@ -133,6 +146,8 @@ const MARKER_SWEEP_EXEMPT = {
     'is the owner decision document; naming the provider being adopted and the one being left is its purpose. It is swept for resource IDs and credentials instead.',
   'docs/implementation-handoffs/N-IDENTITY-LEDGER.md':
     'is a handoff document, not executable content; naming the provider it asks the owner to apply to is its purpose. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
+  'docs/implementation-handoffs/N-S17.md':
+    'is a handoff document, not executable content; it names the provider whose apply it requests, the hosting provider whose function cap shaped the design, and the identity provider G3 accepted. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
 };
 
 // Provider RESOURCE identifiers, as opposed to provider names. These must not
@@ -235,8 +250,15 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares four steps in order 1 -> 2 -> 3 -> 4',
-  manifest.steps.length === 4 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares five steps in order 1 -> 2 -> 3 -> 4 -> 5',
+  manifest.steps.length === 5 && manifest.steps.every((s, i) => s.step === i + 1));
+
+// Step 005 needs the same control-plane prerequisite as 004 and must say so.
+// It writes the identity tables, so a database without the identity_store role
+// has no such tables to write and the step could only fail at apply time.
+check('step 005 declares the identity_store prerequisite it inherits from 004',
+  manifest.steps.find((s) => s.step === 5)
+    ?.requires_role_bootstrap_extension === '000_identity_store_role_bootstrap.sql');
 
 // Role-bootstrap extensions: additive control-plane prerequisites, each pinned,
 // each declaring the roles it creates and the step that needs them, and none of
