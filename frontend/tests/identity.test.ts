@@ -769,6 +769,63 @@ describe('candidate route forwarding', () => {
     expect(JSON.parse(seen!.body)).toEqual({ email: MEMBER.email, password: 'pw' })
   })
 
+  it('password.change is allowlisted, POST-only and origin-checked', async () => {
+    // It exists because password.requestReset needs email this deployment does
+    // not have, so without it nobody could ever change a password. The candidate
+    // requires the current password and a valid session, so the product adds no
+    // authorization of its own — but it must still be a POST and must still be
+    // origin-checked, or it would be CSRF-reachable.
+    const h = harness()
+
+    expect((await h.handler(get('password.change'))).status).toBe(405)
+
+    const hostile = new Request(`${ORIGIN}/api/identity?op=password.change`, {
+      method: 'POST',
+      headers: { origin: 'https://evil.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'pw', newPassword: 'new' }),
+    })
+    const refused = await h.handler(hostile)
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toMatchObject({ code: 'INVALID_ORIGIN' })
+  })
+
+  it('password.change forwards to the candidate route, body intact', async () => {
+    const h = harness()
+    let seenUrl = ''
+    let seenBody = ''
+    const spy = {
+      ...h.identity,
+      name: 'fake',
+      handle: async (request: Request) => {
+        seenUrl = request.url
+        seenBody = await request.text()
+        return new Response('{}', { status: 200 })
+      },
+      pruneExpiredSessions: async () => 0,
+    } as unknown as FakeIdentityProvider
+
+    const handler = createIdentityHandler({
+      identity: spy,
+      store: h.store,
+      trustedOrigin: ORIGIN,
+      providerName: 'fake',
+    })
+    const token = h.identity.seedSession(MEMBER.subject)
+    await handler(
+      withCookie(
+        post('password.change', { currentPassword: 'pw', newPassword: 'a-new-one' }),
+        token,
+      ),
+    )
+
+    expect(seenUrl).toContain('/api/identity/change-password')
+    // Both values reach the candidate and neither is touched on the way.
+    expect(JSON.parse(seenBody)).toEqual({
+      currentPassword: 'pw',
+      newPassword: 'a-new-one',
+    })
+  })
+
   it('signs out, and the session stops working', async () => {
     const h = harness()
     const token = h.identity.seedSession(MEMBER.subject)

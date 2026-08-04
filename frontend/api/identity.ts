@@ -22,6 +22,7 @@
  * | `session.signOut` | POST | anyone | candidate's `/sign-out` |
  * | `password.requestReset` | POST | anyone | candidate's `/forget-password` |
  * | `password.completeReset` | POST | anyone | candidate's `/reset-password` |
+ * | `password.change` | POST | signed in, knows current password | candidate's `/change-password` |
  * | `session.current` | GET | any signed-in caller | the resolver, then nothing |
  * | `team.roster` | GET | any active member | `public.team_roster()` |
  * | `admin.invite` | POST | admin | `identity_admin_invite_member_atomic` |
@@ -80,6 +81,22 @@ const CANDIDATE_ROUTES: Readonly<Record<string, string>> = {
   'session.signOut': '/sign-out',
   'password.requestReset': '/forget-password',
   'password.completeReset': '/reset-password',
+  /**
+   * Change your own password while signed in.
+   *
+   * Here because its absence was an omission, not a decision, and the gap was
+   * sharp: `password.requestReset` needs email delivery this deployment does not
+   * have, so without this there is **no** way for anyone to change their
+   * password — an initial passphrase handed over out of band would have been
+   * permanent.
+   *
+   * The candidate's own route requires the *current* password as well as the new
+   * one, and requires a valid session, so this endpoint adds no authorization of
+   * its own: it is POST, so it is origin-checked like every other state change,
+   * and the candidate refuses a caller who cannot prove the existing password.
+   * Nothing here reads or logs either value.
+   */
+  'password.change': '/change-password',
 }
 
 /** The only operations reachable with GET, and every one is a pure read. */
