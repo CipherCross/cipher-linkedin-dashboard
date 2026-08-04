@@ -39,6 +39,12 @@ export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
 export {
   IDENTITY_ADMIN_COMMANDS,
   IDENTITY_OPERATIONS,
+  // Re-exported, and still not registered below. See the note on
+  // `resolveSelfOperation`: it is S16's live evidence surface, fenced off from
+  // the request path by being absent from the allowlist rather than by being
+  // deleted.
+  resolveSelfOperation,
+  type ResolvedIdentity,
   type IdentityAdminResult,
   type InviteMemberParams,
   type SetMemberActiveParams,

@@ -36,6 +36,11 @@ export const IDENTITY_OPERATIONS = {
   resolveActor: RESOLVE_ACTOR_OPERATION,
   /** The whole roster, to any active member (B4). */
   teamRoster: 'identity.teamRoster',
+  /**
+   * S12's propose-then-confirm read. **Exported but deliberately NOT registered
+   * in the application registry** — see `resolveSelfOperation` below.
+   */
+  resolveSelf: 'identity.resolveSelf',
 } as const
 
 export const IDENTITY_ADMIN_COMMANDS = {
@@ -93,6 +98,65 @@ export const resolveActorOperation: NeonActorlessQueryOperation<
   mapRow: (row: NeonRow): ResolvedActor => ({
     actorId: String(row.actor_id),
     // The baseline constrains team_members.role to 'member' | 'admin'.
+    role: row.role === 'admin' ? 'admin' : 'member',
+  }),
+}
+
+// ---------------------------------------------------------------------------
+// S12's propose-then-confirm read: retained, exported, and NOT registered.
+// ---------------------------------------------------------------------------
+
+/** What `resolveSelfOperation` returns. Shape kept for `S16`'s evidence. */
+export interface ResolvedIdentity {
+  readonly actorId: string
+  readonly role: 'member' | 'admin'
+}
+
+/**
+ * The read S12's actor bridge used, kept for one specific reason and carefully
+ * fenced off.
+ *
+ * `spikes/s16-identity/tests/mapping.neon.test.ts` is `G3`'s live evidence — the
+ * result the whole acceptance rests on — and it exercises the mapping through
+ * *this* operation, against the product's own driver. It builds its own registry
+ * and registers this itself, so it needs the symbol rather than the registration.
+ * Deleting it would invalidate S16's evidence to save a few lines, and S17 is not
+ * allowed to edit the spike to compensate.
+ *
+ * **It is not registered in `buildApplicationRegistry`.** That is the fence, and
+ * it is the meaningful one: the request path can only reach allowlisted
+ * operations, so no handler can use this even by mistake, while the evidence
+ * stays runnable. `public.identity_resolve_actor` is what the product uses.
+ *
+ * Why it needs a proposed actor at all: both tables it reads are self-scoped by
+ * policy, so a row comes back only when the published `app.actor_id` really is
+ * the canonical user for the presented subject. That is what made it safe and
+ * also what made it need a proposal — the constraint step 004 lifted.
+ */
+const RESOLVE_SELF_SQL = `SELECT ui.user_id::text AS actor_id,
+          tm.role AS role
+     FROM public.user_identities ui
+     JOIN public.team_members tm ON tm.user_id = ui.user_id
+    WHERE ui.provider = $1
+      AND ui.provider_subject = $2
+    ORDER BY ui.user_id`
+
+export interface ResolveSelfParams {
+  readonly provider: string
+  readonly providerSubject: string
+  readonly [key: string]: string
+}
+
+export const resolveSelfOperation: NeonQueryOperation<
+  ResolvedIdentity,
+  ResolveSelfParams
+> = {
+  build: ({ params }) => ({
+    text: RESOLVE_SELF_SQL,
+    values: [params?.provider ?? '', params?.providerSubject ?? ''],
+  }),
+  mapRow: (row: NeonRow): ResolvedIdentity => ({
+    actorId: String(row.actor_id),
     role: row.role === 'admin' ? 'admin' : 'member',
   }),
 }

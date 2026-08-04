@@ -27,6 +27,7 @@ import {
   IDENTITY_ADMIN_COMMANDS,
   IDENTITY_OPERATIONS,
   buildApplicationRegistry,
+  resolveSelfOperation,
 } from '../api/_lib/data/operations/index.js'
 import { FakeIdentityProvider, FAKE_SESSION_COOKIE } from '../api/_lib/identity/fakeProvider.js'
 import {
@@ -822,6 +823,29 @@ describe('the operation registry', () => {
     expect(() => registry.lookupQuery(IDENTITY_OPERATIONS.teamRoster)).not.toThrow()
     expect(() => registry.lookupCommand(IDENTITY_OPERATIONS.teamRoster)).toThrow(
       /not allowlisted/,
+    )
+  })
+
+  it("S12's resolveSelf is exported for S16's evidence but is NOT reachable", () => {
+    // The fence, pinned. `spikes/s16-identity/tests/mapping.neon.test.ts` is G3's
+    // live evidence and exercises the mapping through this operation against the
+    // product's own driver, building its own registry — so it needs the symbol,
+    // not the registration. Deleting the symbol would invalidate that evidence to
+    // save a few lines; registering it would give the request path a second,
+    // weaker way to resolve an actor. Exported and unregistered is the answer, and
+    // this test is what stops either half from drifting.
+    expect(resolveSelfOperation).toBeTypeOf('object')
+    expect(IDENTITY_OPERATIONS.resolveSelf).toBe('identity.resolveSelf')
+
+    const registry = buildApplicationRegistry()
+    expect(() => registry.lookupQuery(IDENTITY_OPERATIONS.resolveSelf)).toThrow(
+      /not allowlisted/,
+    )
+    expect(() => registry.lookupCommand(IDENTITY_OPERATIONS.resolveSelf)).toThrow(
+      /not allowlisted/,
+    )
+    expect(registry.actorlessOperationNames()).not.toContain(
+      IDENTITY_OPERATIONS.resolveSelf,
     )
   })
 })
