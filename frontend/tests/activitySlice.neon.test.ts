@@ -70,21 +70,25 @@ const ACTORS = {
   inactive: CONTRACT_ACTORS.inactive.actorId,
 } as const
 
-// The temporary bridge's proposal map. Note `inactive` and the deliberate
-// mismatch are *present* here — the point is that a proposal the map is willing
-// to make is still refused by the database.
-process.env.NEON_ACTOR_BRIDGE = JSON.stringify({
-  [SUBJECTS.activeMember]: ACTORS.activeMember,
-  [SUBJECTS.activeAdmin]: ACTORS.activeAdmin,
-  [SUBJECTS.inactive]: ACTORS.inactive,
-  // A hostile/stale proposal: subject-one mapped to a *different* real user.
-  'subject-one-mismapped': ACTORS.activeAdmin,
-})
-process.env.NEON_ACTOR_BRIDGE_PROVIDER = 'fixture'
+// S17 removed the bridge, and with it the proposal map that used to sit here.
+// There is no longer anything to propose: `identity_resolve_actor` answers the
+// mapping directly, so the deny matrix below is unchanged in its expectations
+// and different in its mechanism. What used to be "the map proposes an actor the
+// database then refuses" is now simply "the database resolves nobody".
+//
+// The mismapped case is worth keeping for exactly that reason: it used to prove
+// that a hostile proposal could not escalate, and it now proves the narrower and
+// stronger thing that a subject nobody has mapped resolves to nobody at all.
+const { createActivityDailyHandler, dayRangeToUtcRange } = await import(
+  '../api/activity-daily.js'
+)
 
-// Imported after the env is in place; the store resolves its credential lazily,
-// but the bridge reads the map per request so order only matters for clarity.
-const { GET, dayRangeToUtcRange } = await import('../api/activity-daily.js')
+/**
+ * The baseline seeds its identity fixtures under `provider = 'fixture'`, and the
+ * transitional bearer path defaults to `provider = 'supabase'`. Injected rather
+ * than overridden through the environment.
+ */
+const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
 const { resetDataStore, dataStoreExists, getDataStore } = await import(
   '../api/_lib/data/store.js'
 )
@@ -180,12 +184,21 @@ describe('S12 slice — read-only by construction', () => {
     }
     for (const candidate of [
       'activity.dailySeries',
-      'identity.resolveSelf',
+      'identity.teamRoster',
+      'identity.resolveActor',
       'events.insert',
       'annotations.insert',
     ]) {
       expect(() => registry.lookupCommand(candidate)).toThrow(/not allowlisted/)
     }
+
+    // The actor resolver is reachable *only* through the actorless path: it is
+    // not a query and not a command, so no code holding an actor can route a
+    // request to it by name and no code lacking one can reach anything else.
+    expect(() => registry.lookupQuery('identity.resolveActor')).toThrow(
+      /not allowlisted/,
+    )
+    expect(registry.actorlessOperationNames()).toEqual(['identity.resolveActor'])
   })
 
   it('refuses an operation that is not allowlisted', () => {
@@ -694,11 +707,13 @@ describe('S12 slice — measured latency end to end', () => {
       return median
     }
 
-    const bridgeMs = await measure('identity confirmation alone', () =>
-      store.query(CONTRACT_ACTORS.activeMember, {
-        operation: 'identity.resolveSelf',
-        params: { provider: 'fixture', providerSubject: SUBJECTS.activeMember },
-        page: { limit: 2 },
+    // One round trip now, and no actor published: S12 measured the confirming
+    // read at 196 ms of a 525 ms request, and this is the same measurement
+    // against the resolver that replaced it.
+    const bridgeMs = await measure('identity resolution alone', () =>
+      store.resolveActor({
+        provider: 'fixture',
+        subject: SUBJECTS.activeMember,
       }),
     )
     const readMs = await measure('activity page of 1000 alone', () =>

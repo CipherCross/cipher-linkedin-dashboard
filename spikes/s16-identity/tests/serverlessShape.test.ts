@@ -122,6 +122,14 @@ describe('the product surface is untouched', () => {
   })
 
   it('the spike is not referenced anywhere in the product', () => {
+    // The `s16` half of this is unchanged and still worth asserting: the spike is
+    // evidence, and no product file may import it or depend on it.
+    //
+    // The `better-auth` half was removed when S17 landed, deliberately and with
+    // the owner's decision on record. G3 accepted the candidate, so the product
+    // now depends on it by design — `frontend/api/_lib/identity/` is that
+    // dependency. An assertion that the product does not use the accepted
+    // candidate would be asserting that S17 never happened.
     for (const file of [
       'frontend/src/lib/AuthContext.tsx',
       'frontend/src/lib/DataContext.tsx',
@@ -130,17 +138,31 @@ describe('the product surface is untouched', () => {
       'frontend/package.json',
     ]) {
       const text = readFileSync(resolve(REPO, file), 'utf8')
-      expect(text, `${file} must not reference the spike`).not.toMatch(/s16|better-auth/i)
+      expect(text, `${file} must not reference the spike`).not.toMatch(/s16/i)
     }
   })
 
-  it('the candidate is not a dependency of the product', () => {
-    const manifest = JSON.parse(readFileSync(resolve(REPO, 'frontend/package.json'), 'utf8')) as {
-      dependencies: Record<string, string>
-      devDependencies: Record<string, string>
-    }
-    expect(Object.keys(manifest.dependencies)).not.toContain('better-auth')
-    expect(Object.keys(manifest.devDependencies)).not.toContain('better-auth')
+  it('the candidate is a product dependency as of S17, and the spike pins the same major', () => {
+    // Inverted by S17, from "must not be a dependency" to "must be one". Kept as
+    // an assertion rather than deleted, because the thing worth pinning now is
+    // that the spike and the product agree on the version: this spike's evidence
+    // — every measurement in G3 — was taken against 1.6.x, and it stops being
+    // evidence for the product's build the moment the two diverge on a major.
+    const productManifest = JSON.parse(
+      readFileSync(resolve(REPO, 'frontend/package.json'), 'utf8'),
+    ) as { dependencies: Record<string, string>; devDependencies: Record<string, string> }
+    const spikeManifest = JSON.parse(
+      readFileSync(resolve(REPO, 'spikes/s16-identity/package.json'), 'utf8'),
+    ) as { dependencies: Record<string, string> }
+
+    expect(Object.keys(productManifest.dependencies)).toContain('better-auth')
+    // Still not a devDependency: it ships.
+    expect(Object.keys(productManifest.devDependencies)).not.toContain('better-auth')
+
+    const major = (range: string) => range.replace(/^[^\d]*/, '').split('.')[0]
+    expect(major(productManifest.dependencies['better-auth'])).toBe(
+      major(spikeManifest.dependencies['better-auth']),
+    )
   })
 
   it('the immutable baseline is not touched by the spike', () => {
