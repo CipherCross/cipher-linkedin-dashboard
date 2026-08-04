@@ -282,6 +282,36 @@ export interface DataStoreTransaction {
   ): Promise<TResult>
 }
 
+/**
+ * A canonical actor, as the database resolved it from a provider subject.
+ *
+ * The `role` comes from `public.team_members` and never from the identity
+ * provider's own state. That is the whole point: an account whose provider-side
+ * role claims `admin` while `team_members.role` says `member` resolves as
+ * **member**, so privilege originates in the database and the provider is a
+ * replaceable component rather than an authority.
+ */
+export interface ResolvedActor {
+  readonly actorId: string
+  readonly role: 'member' | 'admin'
+}
+
+/**
+ * The single allowlisted actorless operation name.
+ *
+ * Defined here rather than in the operations registry because both the adapter
+ * and the registry need it, and the adapter must not import the application's
+ * operation modules — they import it.
+ */
+export const RESOLVE_ACTOR_OPERATION = 'identity.resolveActor'
+
+export interface ResolveActorRequest {
+  /** `public.user_identities.provider`, e.g. `better-auth`. */
+  readonly provider: string
+  /** The identity-provider subject, never a canonical user id. */
+  readonly subject: string
+}
+
 export interface DataStore {
   readonly security: DataStoreSecurityContract
 
@@ -289,6 +319,19 @@ export interface DataStore {
     actor: ActorContext,
     request: QueryRequest<TParams>,
   ): Promise<Page<TRow>>
+
+  /**
+   * Turn a verified provider subject into a canonical actor, or `null`.
+   *
+   * The one read that runs with **no actor published**, because it is what
+   * establishes the actor — everything after it in a request is actor-scoped.
+   *
+   * `null` covers an unknown subject, an inactive user and an inactive
+   * membership without distinguishing between them, so a caller learns nothing
+   * about who exists. Matching is by equality, so it is not an enumeration
+   * primitive.
+   */
+  resolveActor(request: ResolveActorRequest): Promise<ResolvedActor | null>
 
   transaction<TResult>(
     actor: ActorContext,

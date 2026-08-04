@@ -38,6 +38,7 @@ import {
   normalizePageRequest,
   normalizeUtcRange,
   PaginationError,
+  RESOLVE_ACTOR_OPERATION,
   type ActorContext,
   type DataStore,
   type DataStoreCommand,
@@ -47,6 +48,8 @@ import {
   type NormalizedPageRequest,
   type Page,
   type QueryRequest,
+  type ResolveActorRequest,
+  type ResolvedActor,
   type UtcRange,
 } from './contracts.js'
 
@@ -107,8 +110,40 @@ export interface NeonCommandOperation<
   readonly mapResult?: (rows: readonly NeonRow[], rowCount: number) => TResult
 }
 
+/**
+ * A read that runs with **no actor published**, because it is what establishes
+ * the actor.
+ *
+ * This is a deliberately awkward, deliberately tiny category. `S17` needs
+ * exactly one member of it — `public.identity_resolve_actor`, which the identity
+ * ledger describes as "the ONE function in this artifact that is deliberately
+ * reachable with no actor context". Everything a request does *after* that point
+ * is actor-scoped in the ordinary way.
+ *
+ * Two properties keep it from becoming a general escape hatch:
+ *
+ * 1. It has its own allowlist, separate from `queries`. An actor-scoped
+ *    operation cannot be reached through this path and vice versa, so nothing
+ *    already registered can accidentally lose its actor.
+ * 2. It has no `authorize` hook and no `actor` in its build context. There is
+ *    no actor to authorize against — pretending otherwise by inventing a
+ *    synthetic actor id would put a value that identifies nobody into
+ *    `app.actor_id`, which is exactly the confusion this avoids.
+ */
+export interface NeonActorlessQueryOperation<
+  TRow,
+  TParams extends DataStoreParams = DataStoreParams,
+> {
+  readonly build: (params: TParams | undefined) => NeonStatement
+  readonly mapRow?: (row: NeonRow) => TRow
+}
+
 type StoredQueryOperation = NeonQueryOperation<unknown, DataStoreParams>
 type StoredCommandOperation = NeonCommandOperation<unknown, DataStoreParams>
+type StoredActorlessOperation = NeonActorlessQueryOperation<
+  unknown,
+  DataStoreParams
+>
 
 /**
  * Adapter-owned allowlist. An operation that is not registered is refused
@@ -117,6 +152,7 @@ type StoredCommandOperation = NeonCommandOperation<unknown, DataStoreParams>
 export class NeonOperationRegistry {
   private readonly queries = new Map<string, StoredQueryOperation>()
   private readonly commands = new Map<string, StoredCommandOperation>()
+  private readonly actorless = new Map<string, StoredActorlessOperation>()
 
   registerQuery<TRow, TParams extends DataStoreParams = DataStoreParams>(
     operation: string,
@@ -138,6 +174,33 @@ export class NeonOperationRegistry {
       definition as unknown as StoredCommandOperation,
     )
     return this
+  }
+
+  /** Register the pre-actor resolver. See `NeonActorlessQueryOperation`. */
+  registerActorlessQuery<TRow, TParams extends DataStoreParams = DataStoreParams>(
+    operation: string,
+    definition: NeonActorlessQueryOperation<TRow, TParams>,
+  ): this {
+    this.actorless.set(
+      assertOperationName(operation),
+      definition as unknown as StoredActorlessOperation,
+    )
+    return this
+  }
+
+  lookupActorlessQuery(operation: string): StoredActorlessOperation {
+    const definition = this.actorless.get(operation)
+    if (!definition) {
+      throw new DataStoreAuthorizationError(
+        `Actorless query operation is not allowlisted: ${operation}`,
+      )
+    }
+    return definition
+  }
+
+  /** Every actorless operation registered, so a test can assert how many. */
+  actorlessOperationNames(): readonly string[] {
+    return [...this.actorless.keys()]
   }
 
   lookupQuery(operation: string): StoredQueryOperation {
@@ -465,6 +528,104 @@ export class NeonDataStore implements DataStore {
       (transaction) => transaction.query<TRow, TParams>(request),
       { readOnly: true },
     )
+  }
+
+  /**
+   * The pre-actor read. See `DataStore.resolveActor`.
+   *
+   * It runs in its own `BEGIN READ ONLY` with the same statement timeout and the
+   * same UTC timezone as every other read — the only difference is that
+   * `app.actor_id` is published as the empty string rather than an actor id.
+   * That is deliberate and it is safer than it looks: every RLS policy in the
+   * baseline compares `app.actor_id` against a `user_id`, so an empty setting
+   * matches nothing and every actor-scoped table returns zero rows on this
+   * connection. The one thing that does work is the `SECURITY DEFINER` resolver,
+   * which reads as its owner and consults no actor at all.
+   *
+   * Publishing `''` rather than leaving the setting unset is itself a choice: an
+   * unset `app.actor_id` and one left over from a previous transaction on a
+   * pooled connection are indistinguishable to a policy, so it is set every
+   * time, transaction-locally, exactly as `runTransaction` does.
+   */
+  async resolveActor(
+    request: ResolveActorRequest,
+  ): Promise<ResolvedActor | null> {
+    if (
+      !request ||
+      typeof request.provider !== 'string' ||
+      request.provider.trim() === '' ||
+      typeof request.subject !== 'string' ||
+      request.subject.trim() === ''
+    ) {
+      // Not a denial to report upward: a blank subject cannot identify anyone,
+      // and refusing here keeps a malformed session from reaching the database.
+      return null
+    }
+
+    if (this.closed) {
+      throw new DataStoreTransactionError('Data store is closed')
+    }
+    const definition = this.config.operations.lookupActorlessQuery(
+      RESOLVE_ACTOR_OPERATION,
+    )
+
+    await this.ensureRuntimePrincipal()
+
+    let client: PoolClient
+    try {
+      client = await this.pool.connect()
+    } catch (error) {
+      throw toContractError(error, 'Acquiring a database connection')
+    }
+
+    let opened = false
+    let poisoned: unknown = null
+    try {
+      await client.query('BEGIN READ ONLY')
+      opened = true
+      await client.query(
+        'SELECT set_config($1, $2, true) AS statement_timeout,' +
+          ' set_config($3, $4, true) AS timezone,' +
+          ' set_config($5, $6, true) AS actor_id',
+        [
+          'statement_timeout',
+          String(this.config.statementTimeoutMs),
+          'timezone',
+          'UTC',
+          'app.actor_id',
+          '',
+        ],
+      )
+
+      const statement = definition.build({
+        provider: request.provider.trim(),
+        subject: request.subject.trim(),
+      } as unknown as DataStoreParams)
+
+      const result = await client.query<NeonRow>(statement.text, [
+        ...(statement.values ?? []),
+      ])
+      await client.query('COMMIT')
+
+      // More than one row would mean the baseline's uniqueness on
+      // (provider, provider_subject) was violated. Refuse rather than pick one.
+      if (result.rows.length !== 1) return null
+      const mapped = definition.mapRow
+        ? definition.mapRow(result.rows[0])
+        : result.rows[0]
+      return mapped as ResolvedActor
+    } catch (error) {
+      if (opened) {
+        try {
+          await client.query('ROLLBACK')
+        } catch (rollbackError) {
+          poisoned = rollbackError
+        }
+      }
+      throw toContractError(error, 'Resolving the actor')
+    } finally {
+      client.release(poisoned ? (poisoned as Error) : undefined)
+    }
   }
 
   async transaction<TResult>(

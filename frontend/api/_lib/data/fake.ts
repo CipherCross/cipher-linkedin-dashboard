@@ -17,6 +17,8 @@ import {
   type NormalizedPageRequest,
   type Page,
   type QueryRequest,
+  type ResolveActorRequest,
+  type ResolvedActor,
   type UtcRange,
 } from './contracts.js'
 
@@ -146,6 +148,7 @@ export class FakeDataStore implements DataStore {
   private readonly queries = new Map<string, StoredQuery>()
   private readonly commands = new Map<string, StoredCommand>()
   private readonly cursors = new Map<string, CursorState>()
+  private readonly actors = new Map<string, ResolvedActor | null>()
   private nextCursorId = 1
   private transactionActive = false
 
@@ -188,6 +191,42 @@ export class FakeDataStore implements DataStore {
     request: QueryRequest<TParams>,
   ): Promise<Page<TRow>> {
     return this.runQuery<TRow, TParams>(actor, request, this.state)
+  }
+
+  /**
+   * Register the actor resolver's backing map: `provider|subject` to the actor
+   * the database would return, or absent for "resolves to nobody".
+   *
+   * Kept as its own registration rather than a normal query because it is its
+   * own contract member — a fake in which `resolveActor` were an ordinary query
+   * could not model the property that matters, which is that it needs no actor.
+   */
+  seedActor(
+    provider: string,
+    subject: string,
+    resolved: ResolvedActor | null,
+  ): void {
+    this.actors.set(`${provider}|${subject}`, resolved)
+  }
+
+  async resolveActor(
+    request: ResolveActorRequest,
+  ): Promise<ResolvedActor | null> {
+    if (
+      !request ||
+      typeof request.provider !== 'string' ||
+      request.provider.trim() === '' ||
+      typeof request.subject !== 'string' ||
+      request.subject.trim() === ''
+    ) {
+      return null
+    }
+    // Equality only. A pattern resolves to nothing here for the same reason it
+    // does in the database: the lookup is not an enumeration primitive.
+    return (
+      this.actors.get(`${request.provider.trim()}|${request.subject.trim()}`) ??
+      null
+    )
   }
 
   async transaction<TResult>(

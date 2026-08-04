@@ -23,7 +23,7 @@ import {
   type DailyActivityRow,
 } from './_lib/data/operations/index.js'
 import { getDataStore } from './_lib/data/store.js'
-import { requireNeonActor } from './_lib/neonActor.js'
+import { resolveRequestActor } from './_lib/identity/session.js'
 
 export const maxDuration = 10
 
@@ -115,14 +115,45 @@ export function safeErrorLabel(error: unknown): string {
   return 'UnknownError'
 }
 
-async function handle(req: Request): Promise<Response> {
+export interface ActivityDailyDeps {
+  /**
+   * Which `user_identities.provider` the transitional bearer resolves under.
+   *
+   * Injectable rather than read from the environment, which is a deliberate
+   * change from the bridge this replaced: that carried a
+   * `NEON_ACTOR_BRIDGE_PROVIDER` override so the contract suite could match the
+   * baseline's `provider = 'fixture'` fixtures. An environment variable that
+   * only exists for tests is indistinguishable at a glance from one a deployment
+   * is supposed to set, so the seam is now an argument.
+   */
+  readonly legacyProviderName?: string
+}
+
+async function handle(
+  req: Request,
+  deps: ActivityDailyDeps = {},
+): Promise<Response> {
   if (req.method !== 'GET') {
     return json({ error: 'method not allowed' }, 405)
   }
 
+  // S17 replaced S12's actor bridge. The change here is small and the reason it
+  // is small is the point: the bridge's *shape* — verify a subject, then let the
+  // database decide who that is — was always right; only the environment-held
+  // map in the middle was temporary, and `identity_resolve_actor` removed it.
+  //
+  // No identity provider is passed, so this endpoint reads no session cookie and
+  // needs no identity credential: it authenticates the same signed-in browser it
+  // always did, through the transitional bearer, and resolves it through the real
+  // resolver instead of a redeploy-per-member map. S18 rewires the browser.
   let actor
   try {
-    actor = await requireNeonActor(req)
+    const resolved = await resolveRequestActor(req, {
+      store: getDataStore(),
+      acceptLegacyBearer: true,
+      legacyProviderName: deps.legacyProviderName,
+    })
+    actor = resolved.actor
   } catch (error) {
     const denial = authorizationResponse(error)
     if (denial) return denial
@@ -183,5 +214,11 @@ async function handle(req: Request): Promise<Response> {
     throw error
   }
 }
+
+/** Build the handler with explicit dependencies. For the contract suite. */
+export const createActivityDailyHandler =
+  (deps: ActivityDailyDeps) =>
+  (req: Request): Promise<Response> =>
+    handle(req, deps)
 
 export const GET = (req: Request) => handle(req)
