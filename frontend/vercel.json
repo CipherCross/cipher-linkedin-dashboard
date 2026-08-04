@@ -8,6 +8,7 @@
     { "path": "/api/briefing?kind=daily", "schedule": "30 7 * * 1-5" }
   ],
   "rewrites": [
+    { "source": "/api/reclassify", "destination": "/api/classify?mode=reclassify" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -26,6 +26,9 @@ const SENTIMENTS = [
 const INTENTS = ['p1', 'p2', 'p3'] as const
 const INTENT_TAXONOMY_VERSION = 'p123-v1'
 
+type Sentiment = (typeof SENTIMENTS)[number]
+type ReplyIntent = (typeof INTENTS)[number]
+
 const BATCH = 60 // max replies classified per invocation
 const GROUP = 10 // replies per model call
 const CTX_MSGS = 8 // thread messages of context per reply
@@ -153,6 +156,16 @@ function renderReply(ref: number, reply: Reply, thread: Msg[]): string {
 }
 
 async function handle(req: Request): Promise<Response> {
+  const mode = new URL(req.url).searchParams.get('mode')
+
+  // Manual reclassification used to be its own function file. It was folded in
+  // here to free the one Vercel slot S17's identity endpoint needs, under the
+  // same `?mode=` dispatch the demographics branch below already uses. It keeps
+  // its own method check and its own admin guard rather than inheriting the
+  // GET/cron branch below — a cron caller must never reach it. `vercel.json`
+  // rewrites `/api/reclassify` here, so the client-visible URL is unchanged.
+  if (mode === 'reclassify') return handleReclassify(req)
+
   if (req.method === 'GET') {
     const denied = await guardMachine(req, 'CRON_SECRET')
     if (denied) return denied
@@ -166,7 +179,7 @@ async function handle(req: Request): Promise<Response> {
   // Dedicated mode lets an operator drain the gender backlog without first spending
   // the invocation budget on reply classification. It stays on this endpoint to
   // preserve the Vercel function-count constraint.
-  if (new URL(req.url).searchParams.get('mode') === 'demographics') {
+  if (mode === 'demographics') {
     return json({
       classified: 0,
       remaining: 0,
@@ -574,6 +587,122 @@ async function runDemographics(sb: ReturnType<typeof db>): Promise<DemographicsR
       lifecycle: 'unavailable',
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Manual reclassification — formerly `frontend/api/reclassify.ts`.
+//
+// The conversation drawer posts a single inbound message id plus the sentiment
+// and/or intent a human picked after reading the whole thread, and we write it
+// back with `classified_model='manual'` so corrections stay distinguishable
+// from this file's AI batch output. Same service-role client, same taxonomy
+// constants — which is part of why this is the right file to fold it into: the
+// two paths write the same columns under the same taxonomy version, and a copy
+// of `INTENT_TAXONOMY_VERSION` in a second file could drift from this one.
+//
+// POST only and admin-guarded. The write is a single row scoped to one inbound
+// message and is idempotent.
+// ---------------------------------------------------------------------------
+
+async function handleReclassify(req: Request): Promise<Response> {
+  if (req.method !== 'POST') {
+    return json({ error: 'method not allowed' }, 405)
+  }
+
+  const auth = await guardAdmin(req)
+  if (auth.response) return auth.response
+
+  let payload: {
+    id?: unknown
+    sentiment?: unknown
+    intent_level?: unknown
+    reason?: unknown
+    intent_reason?: unknown
+  }
+  try {
+    payload = await req.json()
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400)
+  }
+
+  const id = Number(payload.id)
+  if (!Number.isInteger(id) || id <= 0) {
+    return json({ error: 'id must be a positive integer' }, 400)
+  }
+  const hasSentiment = payload.sentiment !== undefined
+  const hasIntent = payload.intent_level !== undefined
+  if (!hasSentiment && !hasIntent) {
+    return json({ error: 'sentiment or intent_level is required' }, 400)
+  }
+  if (hasSentiment && !SENTIMENTS.includes(payload.sentiment as Sentiment)) {
+    return json({ error: `sentiment must be one of ${SENTIMENTS.join(', ')}` }, 400)
+  }
+  if (
+    hasIntent &&
+    payload.intent_level !== null &&
+    !INTENTS.includes(payload.intent_level as ReplyIntent)
+  ) {
+    return json({ error: `intent_level must be null or one of ${INTENTS.join(', ')}` }, 400)
+  }
+  const sentiment = payload.sentiment as Sentiment | undefined
+  const intent = payload.intent_level as ReplyIntent | null | undefined
+  const reason =
+    typeof payload.reason === 'string' && payload.reason.trim()
+      ? payload.reason.trim().slice(0, 300)
+      : 'manual override'
+  const intentReason =
+    typeof payload.intent_reason === 'string' && payload.intent_reason.trim()
+      ? payload.intent_reason.trim().slice(0, 300)
+      : 'manual override'
+
+  const patch: Record<string, unknown> = {}
+  if (hasSentiment) {
+    Object.assign(patch, {
+      sentiment,
+      reason,
+      classified_at: new Date().toISOString(),
+      classified_model: 'manual',
+    })
+  }
+  if (hasIntent) {
+    Object.assign(patch, {
+      intent_level: intent,
+      intent_reason: intentReason,
+      intent_classified_at: new Date().toISOString(),
+      intent_classified_model: 'manual',
+      intent_taxonomy_version: INTENT_TAXONOMY_VERSION,
+    })
+  }
+
+  const sb = db()
+  const { data, error } = await sb
+    .from('messages')
+    .update(patch)
+    .eq('id', id)
+    .eq('direction', 'in')
+    .select('id,sentiment,intent_level')
+    .single()
+
+  if (error) return json({ error: error.message }, 500)
+  if (!data) return json({ error: 'no inbound message with that id' }, 404)
+
+  // A corrected sentiment may unblock automatic pipeline advancement. Non-fatal
+  // and tolerant of migration 028 not being pushed yet: supabase-js returns
+  // {error} (e.g. SQLSTATE 42883, function does not exist) rather than throwing,
+  // but guard both. A missing/failed RPC just omits auto_advanced.
+  //
+  // `autoAdvancePipeline` is this file's existing helper, defined once above and
+  // shared with the batch path — the duplicate that used to live in
+  // reclassify.ts is gone with it.
+  const auto_advanced = await autoAdvancePipeline(sb)
+
+  return json({
+    ok: true,
+    id: data.id,
+    sentiment: data.sentiment,
+    intent_level: data.intent_level,
+    ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+  })
 }
 
 export const GET = (req: Request) => handle(req)
