@@ -13,7 +13,11 @@ was inferred from the code and never counted. It is counted here.
 `FollowUpPanel`'s `id`-only seek turns out to be latent twice over, for reasons
 below. Also fixed.
 
-Ledger step **006** is written and **not applied**. The owner runs it.
+Ledger step **006** is written **and applied** — the owner authorised it after the
+session was committed. `ledger consistent: 6/6`. The apply produced a finding that
+**contradicts part of the case made for it**: under RLS the runtime plan uses the
+new index only via a bitmap scan and still sorts, so the gain is 1.65× rather than
+4×, and the offset formulation gets nothing. See design call 8.
 
 ## Identity
 
@@ -21,7 +25,7 @@ Ledger step **006** is written and **not applied**. The owner runs it.
 |---|---|
 | Base SHA | `0ad09b0`, which is `main` after the fast-forward this session performed |
 | Branch | `codex/neon-s13-consolidation`, not merged, not pushed |
-| Commits | `3e04ade` the two browser fixes · `acf506e` ledger step 006 · this document |
+| Commits | `3e04ade` the two browser fixes · `acf506e` ledger step 006 · this document (twice: written before the apply, amended after it) |
 | Session | S13 consolidation (follow-up to `N-S13-part3.md`) |
 | Predecessor | `docs/implementation-handoffs/N-S13-part3.md`, `N-S13.md`, `N-IDENTITY-LEDGER.md` |
 | Gate carried | none. G2 was decided 2026-08-03 (`approved` / `conditional-go`) |
@@ -338,15 +342,11 @@ Scan` at 0.27 ms — faster, but only because that control projects two columns
 instead of seventeen, so it is not the operation's shape and is recorded as a
 control rather than as a result.
 
-**One measurement could not be taken, and it matters.** The plans are all from
-`app_owner`, which is not subject to the `messages` RLS policy. `app_owner` is
-deliberately **not** a member of `app_runtime` — `SET ROLE app_runtime` fails with
-`permission denied` — so the credential that can create an index cannot assume the
-role that reads under RLS, and the two cannot be combined in one transaction. The
-policy references no column of `public.messages` (it gates on `app.actor_id` plus
-two `EXISTS` probes against `users` and `team_members`), so it cannot constrain an
-index scan on this key — but that is an argument from the policy text, not a
-measurement. Known limit 3.
+**These plans are all from `app_owner`, which is not subject to the `messages`
+RLS policy** — the credential that can create an index is deliberately not a
+member of `app_runtime`, so the two could not be combined before the apply. That
+gap was closed after the apply, and **the answer partly contradicts the paragraph
+above.** See design call 8.
 
 ### 7. The step was dry-run, including both failure paths
 
@@ -363,6 +363,101 @@ raised is a comment:
 | artifact pointed at a relation that does not exist | raises `42P01`, naming step 001 |
 | artifact pointed at a real relation lacking the three columns | raises `42703` |
 | same, at a relation carrying all three | passes, no raise |
+
+### 8. Under RLS the index helps, but not the way design call 6 predicted
+
+The apply made the missing measurement possible: the index exists, so the runtime
+credential can be used. Same method, same page, **under RLS as `app_runtime`**
+with the actor published transaction-locally, 4,243 inbound rows visible. The
+index is applied and cannot be un-applied, so "without the index" is simulated by
+`SET LOCAL enable_bitmapscan = off`, which is precisely what makes this index
+unreachable in this plan:
+
+| page | index available | index unreachable | gain |
+|---|---|---|---|
+| `OFFSET 2000` | 18.87 ms | 18.94 ms | **none** |
+| keyset seek to row 2000 | **9.50 ms** | 15.65 ms | **1.65×** |
+
+Three corrections to design call 6, in descending order of importance:
+
+1. **The runtime plan is not an ordered `Index Scan`. It is a
+   `Bitmap Index Scan` → `Bitmap Heap Scan` → `Sort`.** A bitmap scan does not
+   preserve order, so the top-N sort survives; the index reduces the rows fetched
+   rather than supplying the ordering. Design call 6's "every plan changes from
+   `Seq Scan → Sort` to `Index Scan`" is true as `app_owner` and **false for the
+   path the application actually takes**.
+2. **The gain is 1.65×, not 4×,** and it accrues only to the keyset. The offset
+   formulation gets **nothing** from this index under RLS — it stays a `Seq Scan`
+   feeding a sort, within noise of the unreachable-index run.
+3. **What the index actually buys is the keyset's margin over offset**, which goes
+   from 1.21× to **1.99×**. That is the real result, and it is still the result
+   worth having, because it is the ratio that widens with the relation. But it is
+   half the story design call 6 told.
+
+**And the ordered plan exists — the planner is simply not choosing it.** With
+`enable_seqscan` and `enable_bitmapscan` both off, the same keyset query reaches
+an ordered `Index Scan` with **no `Sort` at all** at **3.72 ms** — 2.6× faster
+than what the planner picks unaided — and the offset page reaches 11.16 ms. So
+this is a cost-estimation outcome under the RLS-qualified plan, not a limitation
+of the index. Chasing it means touching planner settings or the policy's `EXISTS`
+probes, neither of which is this session's, and it is left as Known limit 3.
+
+**The artifact's own header still carries the pre-apply, non-RLS numbers**, and it
+is **not** being corrected — `006`'s bytes are hashed into an append-only ledger
+row on a live database, so editing it would break every future `verify`. That is
+the ledger working as designed: the artifact records what was known when it was
+applied, and this document records what was learned afterwards.
+
+## The apply, as performed
+
+**The owner authorised the apply after this session was committed, and it was
+performed.** Recorded here as what happened.
+
+There is no `psql` on this machine, so the runner spoke to the database through a
+throwaway Docker `psql` wrapper built in the session scratchpad — the same
+technique S17 recorded — reading the `app_migration` credential from
+`~/.config/neon-identity-ledger.env` and exporting it as `PG*` variables. The
+wrapper was never written to the repository and no connection string was printed.
+The apply ran as `app_migration` against the **unpooled** endpoint, because the
+runner relies on `SET ROLE` and transaction-scoped state.
+
+**Preflight, before anything was applied:**
+
+| check | result |
+|---|---|
+| `status` | 5 steps applied, every row `app_migration/app_owner`, `pending [6]` |
+| `role_bootstrap` digest on the database | `408bb527…`, the digest the manifest pins |
+| `verify --allow-partial` | `ledger consistent: 5/6 steps, order 1 -> 2 -> 3 -> 4 -> 5` |
+| plain `verify` | correctly `ledger is incomplete: applied 5/6, pending [6]` |
+| `messages_direction_seek_idx` | absent; 9 indexes on `messages`; 6,343 rows |
+
+**The apply:**
+
+```
+applied step 6: 006_messages_direction_seek_index.sql
+ledger consistent: 6/6 steps, order 1 -> 2 -> 3 -> 4 -> 5 -> 6
+```
+
+**Verified on the live project afterwards, not assumed:**
+
+| check | result |
+|---|---|
+| ledger row for step 6 | `app_migration/app_owner`, `applied_seq=6` |
+| digest recorded | `87991430eca2ffc22a69a0570d6d4f45e9b852dc4274a4828f84306dfa37bf47` — byte-identical to the manifest pin |
+| `indexdef` | `CREATE INDEX messages_direction_seek_idx ON public.messages USING btree (direction, sent_at DESC, id DESC)` |
+| `indisvalid` / `indisready` | **true / true** — so no `INVALID` index, which is the failure mode `CONCURRENTLY` was refused to avoid |
+| owner / size / partial | `app_owner` / 272 kB / not partial |
+| `COMMENT ON INDEX` | present |
+| indexes on `messages` | 9 → **10** |
+| re-apply | `ledger already at step 6/6; nothing to apply` — the idempotent skip holds on a real provider |
+| plain `verify` | `ledger consistent: 6/6 steps, order 1 -> 2 -> 3 -> 4 -> 5 -> 6` |
+| repo-side digest assertions | `144 passed, 0 failed` |
+
+**Blast radius.** One index, one `app_ledger.applied_migration` row. No business
+row was written, no role created, no grant changed, no credential rotated. The
+`ShareLock` was not separately timed at apply — it is inside the runner's single
+transaction — but the same `CREATE INDEX` was measured at 102 ms over these 6,343
+rows during the dry run.
 
 ## Coverage and checks, with real numbers
 
@@ -411,9 +506,13 @@ first. It is the cheapest available expression of design call 4.
   the item-1 count, which is a `SELECT` through the guard as designed.
 - **No `supabase db push`, no `sync-agent/deploy.sh`, no Vercel deploy, no
   `git push`.** `NEON_DATABASE_URL` is still set in no Vercel environment.
-- **Ledger step 006 was not applied.** No `app_ledger` row was written. Every
-  probe ran inside a transaction that ended in `ROLLBACK`, and the absence of the
-  index was re-checked from `pg_indexes` afterwards each time.
+- **Ledger step 006 was applied only after the owner asked for it**, and only
+  through the ledger runner as `app_migration` — the one apply path R5 permits.
+  Everything before that ran inside a transaction that ended in `ROLLBACK`, with
+  the index's absence re-checked from `pg_indexes` each time. No DDL was ever
+  issued outside the runner: the post-apply RLS measurement is read-only inside
+  `BEGIN READ ONLY`, and it simulates the index's absence with a session-local
+  planner switch rather than by dropping anything.
 - **Ledger artifacts `000`–`005` and the manifest's existing entries are
   unmodified.** Nothing under `spikes/s16-identity/` changed. The immutability
   assertion is green.
@@ -447,11 +546,14 @@ first. It is the cheapest available expression of design call 4.
    census found **0** `(occurred_at, id)` order inversions. The filter string is
    proved to parse and filter correctly on real PostgREST; the skip it prevents is
    proved on the Neon fixture. No single environment shows both.
-3. **The index's benefit is measured without RLS.** See design call 6: the
-   credential that can create an index cannot assume the role that reads under
-   RLS. The policy cannot constrain the scan by inspection, but that is not a
-   measurement. If the owner wants it closed, the way is to measure after the
-   apply, from the runtime credential.
+3. **Under RLS the runtime plan leaves about 2.6× on the table, and the index
+   does not fix it.** Measured after the apply (design call 8): the planner
+   chooses `Bitmap Index Scan` → `Bitmap Heap Scan` → `Sort` at 9.50 ms, while an
+   ordered `Index Scan` with no sort at all is reachable at 3.72 ms and is simply
+   not costed as the winner under the RLS-qualified plan. The offset formulation
+   gets no benefit from the index whatsoever under RLS. Closing this means
+   touching planner settings or the policy's `EXISTS` probes; neither was in
+   scope, and the index is a prerequisite for either, not a substitute.
 4. **`fetchAllPipelineEvents` still returns its accumulator on a mid-walk error.**
    The anti-pattern the new module is written against is still live, two functions
    above it, and a transient failure on page three still yields a silently short
@@ -461,15 +563,17 @@ first. It is the cheapest available expression of design call 4.
    corrected.** No historical number needs restating and no backfill is implied.
    If the owner wants a tripwire rather than a fix that quietly holds, the count
    is 177 today and the threshold is 1,000.
-6. **Step 006 is unapplied**, so nothing running benefits from it and no `pg_index`
-   row exists. Until the owner applies it, part 2's keyset remains the shape
-   without the payoff, exactly as before this session.
-7. **006 is not in `PROTECTED_PATHS`**, on purpose and per the list's own comment:
+6. **The artifact's header now understates what is known.** `006`'s own comment
+   block carries the pre-apply `app_owner` numbers and predicts an `Index Scan`
+   for every plan. Its bytes are hashed into a ledger row on a live database, so
+   it must never be edited — design call 8 is where the corrected picture lives,
+   and anyone reading `006` should read this document with it.
+7. **006 is not yet in `PROTECTED_PATHS`.** It could not be added in this session:
    that check runs against the diff since the merge base, so a session's own new
-   file would flag itself. It is pinned in `IMMUTABLE_BASELINE` at its published
-   digest, which is the stronger of the two checks. Whichever session follows
-   should promote it — **after** the owner has applied it, not before, because an
-   unapplied step may still need a correction.
+   file flags itself. It **is** pinned in `IMMUTABLE_BASELINE` at its published
+   digest, which is the stronger of the two checks. It is now applied, so the next
+   session must promote it — the condition the previous version of this limit
+   attached is satisfied.
 8. **`rangedCampaigns` and `campaign_metrics` still disagree on
    `last_activity_at`** — pre-existing on both providers, asserted as a divergence
    rather than fixed. Untouched.
@@ -496,34 +600,38 @@ deployed.
 
 ## Exact starting point for the next session
 
-1. **Ask the owner to apply ledger step 006.** It is written, dry-run, and
-   unapplied. The command is
-   `node postgres/tools/portable_migration_ledger.mjs apply` with
-   `NEON_MIGRATION_URL` (`~/.config/neon-identity-ledger.env`) in the
-   environment — the `app_migration` principal, which is what the manifest
-   requires. Expect `applied step 6` then `ledger consistent: 6/6`. Prefer a
-   moment outside a sync window: it takes a `ShareLock` on `messages` for
-   ~100 ms at today's size.
-2. **Then promote `006` into `PROTECTED_PATHS`**, in the session *after* the
-   apply, exactly as `004` and `005` were promoted. Not before — see Known
-   limit 7.
-3. **Then close Known limit 3** if it is worth closing: re-run the A/B from the
-   runtime credential under RLS, with the index in place, and record whether the
-   `Index Cond` survives the policy.
-4. **`fetchAllPipelineEvents` is the remaining instance of the same defect
-   class** (Known limit 4). It is a smaller change than item 1 was, and
-   `src/lib/conversationPaging.ts` is now the place to put it and the test to
-   copy.
-5. **S18 is still the switch session** and its own starting point is unchanged —
+1. **Promote `006` into `PROTECTED_PATHS`** in
+   `postgres/tests/portable_migration_ledger_static_assertions.mjs`, exactly as
+   `004` and `005` were promoted by the sessions that followed them. It is applied
+   to the live project, so from here on it is as immutable as `001`-`005`. A
+   two-line change, and the first thing to do; Known limit 7 explains why this
+   session could not do it itself.
+2. **Known limit 3 is the open technical question, and it is now well posed.** The
+   runtime's RLS-qualified plan takes `Bitmap Index Scan` -> `Sort` at 9.50 ms
+   when an ordered `Index Scan` with no sort at all is reachable at 3.72 ms. Two
+   things worth trying, in this order: check whether `random_page_cost` on this
+   project is still the default, since the storage is not local disk and the
+   default over-prices random I/O, which is exactly what tips an ordered index
+   scan into a bitmap scan; and look at whether the policy's two `EXISTS` probes
+   can be written so the planner costs them once instead of inflating the scan.
+   Both are measurable with the script shape design call 8 used - `BEGIN READ
+   ONLY`, actor published with `set_config(..., true)`, `EXPLAIN (ANALYZE, FORMAT
+   JSON)` - and neither is a code change to the read slice.
+3. **`fetchAllPipelineEvents` is the remaining instance of item 1's defect
+   class.** It still returns its accumulator on any mid-walk error, so a transient
+   failure on page three yields a silently short audit log.
+   `src/lib/conversationPaging.ts` is now the place to put the fix and
+   `tests/conversationPaging.test.ts` the test to copy.
+4. **S18 is still the switch session**, and its own starting point is unchanged -
    see `N-S13-part3.md` §"Exact starting point for S18", items 1 to 4. Both
-   defects it listed as item 5 are now closed; item 6, the index, is written and
-   waiting on the apply above.
-6. **`leads` and `team_members` are still one unit.** Four columns carry
+   defects it listed as item 5 are now closed, and item 6, the index, is applied.
+5. **`leads` and `team_members` are still one unit.** Four columns carry
    source-space `team_members.id`; N-B2 has the id map. `config.readPath` cannot
    be flipped for `leads` until the roster moves.
-7. **Seed your own fixtures.** `s13-rest` and `s13-dashboard` are on the shared
-   Neon project (now 6,343 `messages` rows in total); that is a mutation of a
-   shared database, not a contract.
+6. **Seed your own fixtures.** `s13-rest` and `s13-dashboard` are on the shared
+   Neon project, which now carries 6,343 `messages` rows and a tenth index on
+   that table. That is a mutation of a shared database, not a contract.
 
-**The next session must not edit** ledger artifacts `000`–`006`, the manifest's
-existing entries, or any file under `spikes/s16-identity/`.
+**The next session must not edit** ledger artifacts `000`-`006`, the manifest's
+existing entries, or any file under `spikes/s16-identity/`. `006` joined that
+list the moment it was applied.
