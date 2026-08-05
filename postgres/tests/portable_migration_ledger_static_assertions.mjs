@@ -5,10 +5,12 @@
 //   node postgres/tests/portable_migration_ledger_static_assertions.mjs
 //
 // Checks:
-//   * the manifest is well formed, declares 001 -> 002 -> 003 -> 004
-//     contiguously, pins a SHA-256 for every artifact -- including the additive
-//     control-plane role-bootstrap extension, which is not a step -- and
-//     declares no down migration path;
+//   * the manifest is well formed, declares 001 .. 006 contiguously, pins a
+//     SHA-256 for every artifact -- including the additive control-plane
+//     role-bootstrap extension, which is not a step -- and declares no down
+//     migration path;
+//   * no step uses CREATE INDEX CONCURRENTLY, which the one-step-one-transaction
+//     runner cannot apply;
 //   * every pinned SHA-256 matches the file on disk;
 //   * the four published baseline artifacts still carry the digests S05, S06,
 //     S07 and the identity ledger session published, so a later session
@@ -97,6 +99,7 @@ const S08_ARTIFACTS = [
   'docs/implementation-handoffs/N-S17.md',
   // S13 consolidation (step 006, the message keyset's index).
   'postgres/tenant-baseline/v1/006_messages_direction_seek_index.sql',
+  'docs/implementation-handoffs/N-S13-consolidation.md',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -163,6 +166,8 @@ const MARKER_SWEEP_EXEMPT = {
     'is a handoff document, not executable content; naming the provider it asks the owner to apply to is its purpose. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
   'docs/implementation-handoffs/N-S17.md':
     'is a handoff document, not executable content; it names the provider whose apply it requests, the hosting provider whose function cap shaped the design, and the identity provider G3 accepted. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
+  'docs/implementation-handoffs/N-S13-consolidation.md':
+    'is a handoff document, not executable content; the two defects it fixes are in the provider-specific read path and the step it writes is for the provider being migrated to, so naming both is its subject. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
 };
 
 // Provider RESOURCE identifiers, as opposed to provider names. These must not
