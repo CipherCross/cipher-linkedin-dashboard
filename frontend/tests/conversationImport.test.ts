@@ -35,10 +35,10 @@ describe('conversation history actions', () => {
       error: null,
     })
 
-    const response = await handleConversationImport({
-      action: 'delete_message',
-      id: 42,
-    })
+    const response = await handleConversationImport(
+      { action: 'delete_message', id: 42 },
+      new Request('https://example.test/api/import', { method: 'POST' }),
+    )
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
@@ -54,11 +54,10 @@ describe('conversation history actions', () => {
   it('edits a manual message without requiring conversation identity fields', async () => {
     maybeSingle.mockResolvedValue({ data: { id: 42 }, error: null })
 
-    const response = await handleConversationImport({
-      action: 'edit_message',
-      id: 42,
-      body: '  Corrected message  ',
-    })
+    const response = await handleConversationImport(
+      { action: 'edit_message', id: 42, body: '  Corrected message  ' },
+      new Request('https://example.test/api/import', { method: 'POST' }),
+    )
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
