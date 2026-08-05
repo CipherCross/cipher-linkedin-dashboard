@@ -57,7 +57,11 @@ import {
   type TeamRosterRow,
 } from './_lib/data/operations/index.js'
 import { getDataStore } from './_lib/data/store.js'
-import { IDENTITY_BASE_PATH, readIdentityConfig } from './_lib/identity/config.js'
+import {
+  IDENTITY_BASE_PATH,
+  IdentityConfigurationError,
+  readIdentityConfig,
+} from './_lib/identity/config.js'
 import { checkRequestOrigin, originRefusal } from './_lib/identity/origin.js'
 import type { IdentityProvider } from './_lib/identity/provider.js'
 import { getIdentityProvider, pruneSessionsIfDue } from './_lib/identity/runtime.js'
@@ -594,8 +598,22 @@ async function entry(request: Request): Promise<Response> {
   try {
     return await deployedHandler()(request)
   } catch (error) {
-    // A configuration failure must not look like an authentication failure.
-    console.error('identity: handler unavailable:', safeErrorLabel(error))
+    // A configuration failure must not look like an authentication failure, and
+    // the *response* stays deliberately vague: this endpoint is unauthenticated,
+    // and which variables a deployment is missing is not something to publish.
+    //
+    // The server log is the opposite case, and the distinction is the point.
+    // Everywhere else here logs only `name/code`, because a driver-level failure
+    // embeds the database hostname in its message. An IdentityConfigurationError
+    // names an environment *variable* and never a value, so logging its message
+    // leaks nothing and is the only thing that makes a misconfigured deployment
+    // diagnosable at all. Learned the hard way: the first production deploy
+    // returned this 500 and the logs could not say which variable was at fault.
+    if (error instanceof IdentityConfigurationError) {
+      console.error('identity: not configured:', error.message)
+    } else {
+      console.error('identity: handler unavailable:', safeErrorLabel(error))
+    }
     return json({ error: 'Identity is not configured' }, 500)
   }
 }
