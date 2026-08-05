@@ -131,6 +131,46 @@ import {
   lockThreadOperation,
   threadDedupKeysOperation,
 } from './conversationWrites.js'
+import {
+  AI_WRITE_OPERATIONS,
+  classifyAutoAdvanceOperation,
+  classifyGenderBacklogOperation,
+  classifyGenderBatchOperation,
+  classifyPendingRepliesOperation,
+  classifyReclassifyOperation,
+  classifyRemainingCountOperation,
+  classifyThreadContextOperation,
+  classifyWriteGenderOperation,
+  classifyWriteLabelsOperation,
+  coachActionableProfilesOperation,
+  coachDigestUpsertOperation,
+  coachExistingOperation,
+  coachHypothesisAssignmentOperation,
+  coachHypothesisIcpOperation,
+  coachIcpDetailOperation,
+  coachIcpPersonasOperation,
+  coachIssuesByInstanceOperation,
+  coachPlaybookOperation,
+  coachUpsertOperation,
+} from './aiWrites.js'
+import {
+  briefingAssignmentsOperation,
+  briefingAssignedSearchesOperation,
+  briefingCampaignsContextOperation,
+  briefingClaimJobOperation,
+  briefingEnsureJobOperation,
+  briefingFailStageOperation,
+  briefingFinishStageOperation,
+  briefingHypothesesListOperation,
+  briefingInstancesListOperation,
+  briefingJobRowOperation,
+  briefingPriorOperation,
+  briefingRecentAnnotationsOperation,
+  briefingResetJobOperation,
+  briefingStaleErrorOperation,
+  briefingUpsertBriefingOperation,
+  briefingWeeklyReferenceOperation,
+} from './briefingWrites.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
 export {
@@ -228,6 +268,39 @@ export {
   type InstanceRow,
   type SyncRunRow,
 } from './dashboard.js'
+export {
+  AI_WRITE_OPERATIONS,
+  type ActionableProfileRow,
+  type ClassifyParams,
+  type CoachIcpPersonaRow,
+  type CoachThreadKeyParams,
+  type CoachUpsertParams,
+  type CoachingRow,
+  type DigestUpsertParams,
+  type GenderBatchParams,
+  type GenderBatchRow,
+  type HypothesisAssignmentRow,
+  type HypothesisIcpRow,
+  type IcpDetailRow,
+  type PendingReplyRow,
+  type ReclassifyParams,
+  type ReclassifyResult,
+  type ThreadContextParams,
+  type ThreadContextRow,
+  type WriteGenderParams,
+  type WriteLabelsParams,
+} from './aiWrites.js'
+export {
+  BRIEFING_WRITE_COMMANDS,
+  BRIEFING_WRITE_OPERATIONS,
+  type BriefingJobRowShape,
+  type ClaimJobParams,
+  type FailStageParams,
+  type FinishStageParams,
+  type JobKeyParams,
+  type PriorBriefingRow,
+  type UpsertBriefingParams,
+} from './briefingWrites.js'
 export {
   IDENTITY_ADMIN_COMMANDS,
   IDENTITY_OPERATIONS,
@@ -480,6 +553,137 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     savePlaybookOperation,
   )
 
+  // S15 — the AI layer's HUMAN-ACTOR half. The guard reads run as app_system
+  // in the separate AI registry (`operations/ai.ts`); everything registered
+  // here has a signed-in actor and runs as app_runtime in this shared store,
+  // under the same active-member policies as S14's writes. The cron halves of
+  // these handlers are not here: they have no actor, and stay declared
+  // blocked until ledger step 007 is applied.
+  registry.registerQuery(AI_WRITE_OPERATIONS.coachExisting, coachExistingOperation)
+  registry.registerQuery(AI_WRITE_OPERATIONS.coachPlaybook, coachPlaybookOperation)
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.coachHypothesisAssignment,
+    coachHypothesisAssignmentOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.coachHypothesisIcp,
+    coachHypothesisIcpOperation,
+  )
+  registry.registerQuery(AI_WRITE_OPERATIONS.coachIcpDetail, coachIcpDetailOperation)
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.coachIcpPersonas,
+    coachIcpPersonasOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.coachActionableProfiles,
+    coachActionableProfilesOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.coachIssuesByInstance,
+    coachIssuesByInstanceOperation,
+  )
+  registry.registerCommand(AI_WRITE_OPERATIONS.coachUpsert, coachUpsertOperation)
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.coachDigestUpsert,
+    coachDigestUpsertOperation,
+  )
+
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.classifyPendingReplies,
+    classifyPendingRepliesOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.classifyThreadContext,
+    classifyThreadContextOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.classifyRemainingCount,
+    classifyRemainingCountOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.classifyGenderBatch,
+    classifyGenderBatchOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.classifyGenderBacklog,
+    classifyGenderBacklogOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.classifyWriteLabels,
+    classifyWriteLabelsOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.classifyWriteGender,
+    classifyWriteGenderOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.classifyReclassify,
+    classifyReclassifyOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.classifyAutoAdvance,
+    classifyAutoAdvanceOperation,
+  )
+
+  registry.registerQuery(AI_WRITE_OPERATIONS.briefingJobRow, briefingJobRowOperation)
+  registry.registerQuery(AI_WRITE_OPERATIONS.briefingPrior, briefingPriorOperation)
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingWeeklyReference,
+    briefingWeeklyReferenceOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingCampaignsContext,
+    briefingCampaignsContextOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingInstancesList,
+    briefingInstancesListOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingHypothesesList,
+    briefingHypothesesListOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingAssignments,
+    briefingAssignmentsOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingAssignedSearches,
+    briefingAssignedSearchesOperation,
+  )
+  registry.registerQuery(
+    AI_WRITE_OPERATIONS.briefingRecentAnnotations,
+    briefingRecentAnnotationsOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingEnsureJob,
+    briefingEnsureJobOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingClaimJob,
+    briefingClaimJobOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingFinishStage,
+    briefingFinishStageOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingFailStage,
+    briefingFailStageOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingResetJob,
+    briefingResetJobOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingStaleError,
+    briefingStaleErrorOperation,
+  )
+  registry.registerCommand(
+    AI_WRITE_OPERATIONS.briefingUpsertBriefing,
+    briefingUpsertBriefingOperation,
+  )
+
   return registry
 }
 
@@ -513,6 +717,28 @@ export const APPLICATION_QUERY_OPERATIONS = [
   PIPELINE_WRITE_OPERATIONS.actorDisplayName,
   CONVERSATION_WRITE_OPERATIONS.leadForImport,
   CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
+  AI_WRITE_OPERATIONS.coachExisting,
+  AI_WRITE_OPERATIONS.coachPlaybook,
+  AI_WRITE_OPERATIONS.coachHypothesisAssignment,
+  AI_WRITE_OPERATIONS.coachHypothesisIcp,
+  AI_WRITE_OPERATIONS.coachIcpDetail,
+  AI_WRITE_OPERATIONS.coachIcpPersonas,
+  AI_WRITE_OPERATIONS.coachActionableProfiles,
+  AI_WRITE_OPERATIONS.coachIssuesByInstance,
+  AI_WRITE_OPERATIONS.classifyPendingReplies,
+  AI_WRITE_OPERATIONS.classifyThreadContext,
+  AI_WRITE_OPERATIONS.classifyRemainingCount,
+  AI_WRITE_OPERATIONS.classifyGenderBatch,
+  AI_WRITE_OPERATIONS.classifyGenderBacklog,
+  AI_WRITE_OPERATIONS.briefingJobRow,
+  AI_WRITE_OPERATIONS.briefingPrior,
+  AI_WRITE_OPERATIONS.briefingWeeklyReference,
+  AI_WRITE_OPERATIONS.briefingCampaignsContext,
+  AI_WRITE_OPERATIONS.briefingInstancesList,
+  AI_WRITE_OPERATIONS.briefingHypothesesList,
+  AI_WRITE_OPERATIONS.briefingAssignments,
+  AI_WRITE_OPERATIONS.briefingAssignedSearches,
+  AI_WRITE_OPERATIONS.briefingRecentAnnotations,
 ] as const
 
 /**
@@ -555,6 +781,19 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   LIBRARY_WRITE_COMMANDS.assignSearchHypothesis,
   LIBRARY_WRITE_COMMANDS.saveCampaignContext,
   LIBRARY_WRITE_COMMANDS.savePlaybook,
+  AI_WRITE_OPERATIONS.coachUpsert,
+  AI_WRITE_OPERATIONS.coachDigestUpsert,
+  AI_WRITE_OPERATIONS.classifyWriteLabels,
+  AI_WRITE_OPERATIONS.classifyWriteGender,
+  AI_WRITE_OPERATIONS.classifyReclassify,
+  AI_WRITE_OPERATIONS.classifyAutoAdvance,
+  AI_WRITE_OPERATIONS.briefingEnsureJob,
+  AI_WRITE_OPERATIONS.briefingClaimJob,
+  AI_WRITE_OPERATIONS.briefingFinishStage,
+  AI_WRITE_OPERATIONS.briefingFailStage,
+  AI_WRITE_OPERATIONS.briefingResetJob,
+  AI_WRITE_OPERATIONS.briefingStaleError,
+  AI_WRITE_OPERATIONS.briefingUpsertBriefing,
 ] as const
 
 /**

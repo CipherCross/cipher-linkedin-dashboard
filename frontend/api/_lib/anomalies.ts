@@ -2,7 +2,7 @@
 // computed BEFORE any model call, so a "declining/stalled/at-risk" claim in the
 // briefing can be grounded in a real, pre-verified multi-day pattern instead of a
 // model's read of one snapshot. Never model-judged; fail-soft like the seed queries.
-import { INVITE_QUEUE_SQL, WEEKLY_FUNNEL_BY_ACCOUNT_SQL, db, executeSql } from './core.js'
+import { executeNamedSql } from './core.js'
 
 export type AnomalySignal = {
   account: string
@@ -13,14 +13,6 @@ export type AnomalySignal = {
   severity: 'high' | 'med'
   detail: string
 }
-
-const DAILY_TREND_SQL = `
-  select day, instance_id, event_type, cnt
-  from daily_activity
-  where day > current_date - interval '21 days'
-    and event_type in ('invite_sent', 'invite_accepted', 'reply_received')
-  order by day
-`.trim()
 
 const RECENT_OFFSETS = [1, 2, 3] // t-1..t-3 (today excluded — likely still partial)
 const BASELINE_OFFSETS = [4, 5, 6, 7, 8, 9, 10] // t-4..t-10
@@ -204,17 +196,17 @@ function withInviteQueueContext(signals: AnomalySignal[], queueRows: QueueRow[])
 export async function computeAnomalySignals(): Promise<AnomalySignal[]> {
   try {
     const [daily, cohorts, instances, queue] = await Promise.all([
-      executeSql(DAILY_TREND_SQL),
-      executeSql(WEEKLY_FUNNEL_BY_ACCOUNT_SQL),
-      db().from('instances').select('id, account_name, label'),
+      executeNamedSql('dailyTrend'),
+      executeNamedSql('weeklyFunnelByAccount'),
+      executeNamedSql('instancesList'),
       // Enrichment only — a queue failure must never suppress the signals themselves.
-      executeSql(INVITE_QUEUE_SQL).catch((e) => {
+      executeNamedSql('inviteQueue').catch((e) => {
         console.error('invite queue query failed:', e instanceof Error ? e.message : String(e))
         return { rows: [] as unknown[], rowCount: 0, truncated: false }
       }),
     ])
     const accountNames = new Map<string, string>()
-    for (const i of instances.data ?? []) {
+    for (const i of instances.rows as { id: string; account_name: string | null; label: string | null }[]) {
       accountNames.set(i.id, i.account_name || i.label || i.id)
     }
     const signals = [

@@ -17,6 +17,15 @@ export const NEON_DATABASE_URL_ENV = 'NEON_DATABASE_URL'
  * migrations — none of which the request path uses.
  */
 export const NEON_DIRECT_DATABASE_URL_ENV = 'NEON_DATABASE_URL_UNPOOLED'
+/**
+ * The AI execution principal's own connection string. It resolves a *second*
+ * principal — `app_system` or a login able to become it — and is deliberately
+ * not derivable from `NEON_DATABASE_URL`: one credential must never silently
+ * serve both paths, because the two paths are authorized differently by the
+ * database and a deployment that conflates them would run the AI layer with
+ * the runtime role's write surface.
+ */
+export const NEON_AI_DATABASE_URL_ENV = 'NEON_AI_DATABASE_URL'
 
 export type EnvSource = Readonly<Record<string, string | undefined>>
 
@@ -60,6 +69,16 @@ export function readNeonConnectionString(
   env: EnvSource = process.env,
 ): string {
   return readRequired(env, NEON_DATABASE_URL_ENV, 'The Neon data store')
+}
+
+export function readNeonAiConnectionString(
+  env: EnvSource = process.env,
+): string {
+  return readRequired(
+    env,
+    NEON_AI_DATABASE_URL_ENV,
+    'The Neon AI store (the app_system execution principal)',
+  )
 }
 
 export function readNeonDirectConnectionString(

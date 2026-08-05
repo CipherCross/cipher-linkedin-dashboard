@@ -1,6 +1,35 @@
 // Shared data-access core for the AI layer. Used by both /api/chat (Vercel AI
 // SDK tools) and /api/mcp (MCP server) so the two surfaces stay in sync.
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { deploymentAiPath } from './data/aiPath.js'
+import { getAiDataStore, SYSTEM_ACTOR } from './data/aiStore.js'
+import {
+  AI_NAMED_SQL,
+  AI_OPERATIONS,
+  ACCEPT_LAG_SQL,
+  CAMPAIGN_OVERVIEW_SQL,
+  DAILY_TREND_SQL,
+  HYPOTHESIS_OVERVIEW_SQL,
+  INVITE_QUEUE_SQL,
+  PIPELINE_OVERVIEW_SQL,
+  WEEKLY_FUNNEL_BY_ACCOUNT_SQL,
+  WEEKLY_FUNNEL_SQL,
+  type AiNamedQuery,
+} from './data/operations/ai.js'
+
+// The fixed queries live in the adapter — one definition, reviewed per
+// allowlist entry — and are re-exported here so every existing import site
+// keeps working unchanged.
+export {
+  ACCEPT_LAG_SQL,
+  CAMPAIGN_OVERVIEW_SQL,
+  DAILY_TREND_SQL,
+  HYPOTHESIS_OVERVIEW_SQL,
+  INVITE_QUEUE_SQL,
+  PIPELINE_OVERVIEW_SQL,
+  WEEKLY_FUNNEL_BY_ACCOUNT_SQL,
+  WEEKLY_FUNNEL_SQL,
+}
 
 let _client: SupabaseClient | null = null
 
@@ -30,17 +59,46 @@ export interface SqlResult {
   truncated: boolean
 }
 
-/** Run a read-only SQL query via the ai_execute_sql RPC (enforced in Postgres). */
-export async function executeSql(query: string): Promise<SqlResult> {
-  const { data, error } = await db().rpc('ai_execute_sql', { query })
-  if (error) throw new Error(`SQL error: ${error.message}`)
-  const all = Array.isArray(data) ? data : []
+/** Apply the row/character caps, identically on both provider branches. */
+function capRows(all: unknown[]): SqlResult {
   let rows = all.slice(0, MAX_ROWS)
   // Hard cap on payload size so one giant query can't blow up the context.
   while (rows.length > 1 && JSON.stringify(rows).length > MAX_CHARS) {
     rows = rows.slice(0, Math.ceil(rows.length / 2))
   }
   return { rows, rowCount: all.length, truncated: rows.length < all.length }
+}
+
+/** Run a read-only SQL query through the guard (enforced in Postgres). On the
+ *  Supabase path that is the ai_execute_sql RPC with the service-role client;
+ *  on the Neon path it is the `ai.executeSql` operation of the AI store, which
+ *  connects as the app_system principal and calls the portable baseline's
+ *  guard — the same function, one provider step later. */
+export async function executeSql(query: string): Promise<SqlResult> {
+  if (deploymentAiPath() === 'neon') {
+    const page = await getAiDataStore().query<unknown[]>(SYSTEM_ACTOR, {
+      operation: AI_OPERATIONS.executeSql,
+      params: { query },
+    })
+    return capRows((page.items[0] as unknown[] | undefined) ?? [])
+  }
+  const { data, error } = await db().rpc('ai_execute_sql', { query })
+  if (error) throw new Error(`SQL error: ${error.message}`)
+  return capRows(Array.isArray(data) ? data : [])
+}
+
+/** Run one of the application's FIXED queries by name. The Neon branch passes
+ *  only the operation name — the SQL is owned by the adapter's registry — so
+ *  each fixed query is its own allowlist entry rather than text passed through
+ *  the generic operation. The Supabase branch runs the same text via the RPC. */
+export async function executeNamedSql(name: AiNamedQuery): Promise<SqlResult> {
+  if (deploymentAiPath() === 'neon') {
+    const page = await getAiDataStore().query<unknown[]>(SYSTEM_ACTOR, {
+      operation: AI_OPERATIONS[name],
+    })
+    return capRows((page.items[0] as unknown[] | undefined) ?? [])
+  }
+  return executeSql(AI_NAMED_SQL[name])
 }
 
 /** Compact, cheap "ICP + hypothesis roster" for the chat copilot's always-on system
@@ -86,59 +144,8 @@ export async function loadIcpRoster(): Promise<string> {
     .join('\n\n')
 }
 
-// Per-campaign invite queue: who is still WAITING for an invite (not yet invited,
-// not excluded), how many of those sit in warm-up steps before InvitePerson, and how
-// recently leads were added. This is the ground truth for interpreting a zero-invite
-// stretch — LH2's runtime state (running/paused) is NOT synced, so the queue is the
-// only observable distinction between "batch still warming up" and "ran out of leads".
-export const INVITE_QUEUE_SQL = `
-with invite_step as (
-  select campaign_id, min(step_index) as invite_idx
-  from campaign_steps
-  where step_type = 'InvitePerson'
-  group by 1
-),
-warmup as (
-  select s.campaign_id, sum(s.current_count) as in_warmup
-  from campaign_steps s
-  join invite_step v on v.campaign_id = s.campaign_id
-  where s.step_index < v.invite_idx
-  group by 1
-),
-queue as (
-  select campaign_id,
-         count(*) filter (where coalesce(status, '') not like '-%') as awaiting_invite,
-         count(*) filter (where coalesce(status, '') not like '-%'
-                            and added_at > now() - interval '3 days') as added_3d,
-         max(added_at) filter (where coalesce(status, '') not like '-%') as last_added_at
-  from leads
-  where invited_at is null
-  group by 1
-),
-last_inv as (
-  select campaign_id, max(invited_at)::date as last_invite_date
-  from leads
-  group by 1
-)
-select c.id as campaign_id, c.name as campaign, c.instance_id,
-       coalesce(i.account_name, i.label, c.instance_id) as account,
-       (v.invite_idx is not null)      as has_invite_step,
-       coalesce(q.awaiting_invite, 0)  as leads_awaiting_invite,
-       coalesce(w.in_warmup, 0)        as in_pre_invite_warmup,
-       coalesce(q.added_3d, 0)         as added_last_3d,
-       q.last_added_at,
-       li.last_invite_date
-from campaigns c
-join instances i on i.id = c.instance_id
-left join invite_step v on v.campaign_id = c.id
-left join queue q on q.campaign_id = c.id
-left join warmup w on w.campaign_id = c.id
-left join last_inv li on li.campaign_id = c.id
-order by 4, 2
-`.trim()
-
 export const SCHEMA_DOC = `
-PostgreSQL (Supabase) schema for a LinkedIn outreach dashboard. Data is synced
+PostgreSQL schema for a LinkedIn outreach dashboard. Data is synced
 from Linked Helper 2 (LH2) running on several machines ("instances"); each
 instance corresponds to one real LinkedIn account.
 
@@ -151,8 +158,9 @@ instances — one row per LH2 instance / LinkedIn account
   config_updated_at timestamptz
   WARNING: never \`select *\` from instances — it also has a config jsonb column
   (online config overrides the agent merges over its local config.yaml;
-  operational, not analytical) that the AI's SQL role can NOT read (column-level
-  grant); \`select *\` will fail with a permission error. List columns explicitly,
+  operational, not analytical) that is outside the AI SQL role's explicit
+  column allowlist (the grant names exactly the readable columns above);
+  \`select *\` will fail with a permission error. List columns explicitly,
   e.g. select id, label, account_name, last_sync_at from instances.
 
 campaigns — one row per LH2 campaign per instance
@@ -224,9 +232,9 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   NOTE: gender/age are INFERRED for internal analytics; always describe them as
   inferred-with-confidence unless demo_model='manual'. Name-based gender is less
   accurate for non-Western names — prefer 'unknown' over a low-confidence guess.
-  photo_path text (bucket-relative path to the lead's avatar in Supabase Storage,
-    <instance_id>/<slug>.jpg; NULL = no photo. UI DISPLAY ONLY — never fetch for
-    inference/classification; never pass to any model),
+  photo_path text (bucket-relative path to the lead's avatar in the private
+    object-storage bucket, <instance_id>/<slug>.jpg; NULL = no photo. UI DISPLAY
+    ONLY — never fetch for inference/classification; never pass to any model),
   photo_synced_at timestamptz (when the agent last resolved a photo; a non-NULL
     photo_synced_at with NULL photo_path means "checked, none available")
 
@@ -337,10 +345,11 @@ annotations — manual notes pinned to dates (e.g. "changed template on X")
   note text, noted_at date, created_at
 
 team_members — the SDRs who own leads in the manual CRM pipeline
-  AI-READABLE COLUMNS: id bigint PK, name text (unique), active bool (default
-  true; inactive members can't be newly assigned), created_at.
-  Authentication identity/access columns exist but are deliberately unavailable
-  to the AI SQL role. Do not select * from team_members.
+  AI-READABLE COLUMNS (an explicit column allowlist, exactly these four):
+  id bigint PK, name text (unique), active bool (default true; inactive members
+  can't be newly assigned), created_at.
+  Membership metadata columns (email, role) exist but are outside the allowlist
+  and unreadable by the AI SQL role. Do not select * from team_members.
   leads.assigned_to references this table.
 
 lead_notes — free-text notes pinned to a single lead in the pipeline board
@@ -437,12 +446,38 @@ sync_runs — sync agent run log
     empty; see error for which section and why,
   rows_upserted int, error text
 
+playbook — a SINGLETON (one row, id=true) holding the team's global sales
+  playbook as Markdown: content text, updated_at. Grounds the coach and the
+  briefings; analytical questions about "what do we tell SDRs to do" can read it.
+
+briefings — delivered AI briefings, one row per (briefing_date, briefing_kind)
+  ('daily'|'weekly'): headline text, summary text, changes/sections/actions/risks/
+  metrics jsonb arrays, period_start/period_end date, model text, created_at.
+  Use to answer "what did the last daily/weekly briefing say" or to compare
+  briefings over time.
+
+briefing_jobs — resumable state machine BEHIND briefing generation
+  (briefing_date, briefing_kind) PK: status ('pending'|'investigating'|
+  'investigated'|'verifying'|'verified'|'structuring'|'done'|'error'), version/
+  attempt int (optimistic concurrency), seed/signals_block/prior_md/verified_text
+  text, drafts jsonb, error text, updated_at. Operational plumbing — prefer
+  briefings above unless asked how generation itself is doing.
+
+conversation_coaching — cached per-conversation coach output, one row per
+  (instance_id, profile_url): next_action ('reply'|'wait'|'book_call'|'refer'|
+  'close'|'none'), issues/tips jsonb, summary text, last_msg_marker text
+  (staleness key), coached_at, model.
+
+coaching_digest — per-account rollup of recurring coaching issues:
+  instance_id PK, summary text, patterns jsonb, computed_at, model.
+
 VIEWS
 
 campaign_metrics — per-campaign funnel rollup:
   campaign_id, campaign_name, instance_id, status, total_leads, invites_sent,
   accepted, replies, acceptance_rate (%), reply_rate (% of accepted),
-  last_activity_at
+  last_activity_at, briefing_context, briefing_context_updated_at (the two
+  team-context columns carried through from campaigns)
 
 daily_activity — events bucketed per day:
   day date, instance_id, event_type, cnt
@@ -658,143 +693,4 @@ ${INVITE_QUEUE_SQL}
   a ready-made "stuck > 14 days" count per stage). Do not infer pipeline timing
   from milestone timestamps.
 - All timestamps are timestamptz; use date_trunc for bucketing.
-`.trim()
-
-// Current manual-CRM pipeline snapshot: how many leads sit in each stage per
-// campaign (with account name), how many are stale (>14d in-stage), plus a single
-// summary row counting UNTRIAGED replies — leads that have replied but nobody has
-// put into the pipeline yet (pipeline_stage IS NULL), the top of the triage queue.
-export const PIPELINE_OVERVIEW_SQL = `
-with by_stage as (
-  select pm.campaign_id,
-         coalesce(c.name, pm.campaign_id)              as campaign,
-         pm.instance_id,
-         coalesce(i.account_name, i.label, pm.instance_id) as account,
-         pm.pipeline_stage,
-         pm.pipeline_substatus,
-         sum(pm.leads)     as leads,
-         min(pm.oldest_in_stage) as oldest_in_stage,
-         sum(pm.stale_14d) as stale_14d
-  from pipeline_metrics pm
-  left join campaigns c on c.id = pm.campaign_id
-  left join instances i on i.id = pm.instance_id
-  group by 1, 2, 3, 4, 5, 6
-)
-select 'stage'::text as row_type, campaign_id, campaign, instance_id, account,
-       pipeline_stage, pipeline_substatus, leads, oldest_in_stage, stale_14d
-from by_stage
-union all
-select 'untriaged_replies'::text, null, null, null, null,
-       null, null, count(*), null, null
-from leads
-where replied_at is not null and pipeline_stage is null
-order by row_type, leads desc nulls last
-`.trim()
-
-export const WEEKLY_FUNNEL_SQL = `
-select
-  date_trunc('week', l.invited_at)::date as invite_week,
-  count(*)                               as invites,
-  count(l.connected_at)                  as accepted,
-  count(l.replied_at)                    as replied,
-  round(100.0 * count(l.connected_at) / nullif(count(*), 0), 1)               as acceptance_rate,
-  round(100.0 * count(l.replied_at) filter (where l.connected_at is not null)
-        / nullif(count(l.connected_at), 0), 1)                                as reply_rate_of_accepted,
-  round(avg(extract(epoch from (l.replied_at - l.invited_at)) / 86400.0), 1)  as avg_days_to_reply
-from leads l
-where l.invited_at is not null
-group by 1
-order by 1 desc
-limit 16
-`.trim()
-
-// Actual observed invite-to-accept lag, last 90 days. Grounds "is this cohort old enough
-// to judge yet" in real data instead of a guessed threshold — see SCHEMA_DOC's ACCEPT_LAG_SQL
-// note. A rising median/p90 vs the historical norm means people are slower to accept right
-// now (e.g. a holiday slowdown), not that a campaign got worse.
-export const ACCEPT_LAG_SQL = `
-select
-  round((percentile_cont(0.5) within group (
-    order by extract(epoch from (connected_at - invited_at)) / 86400))::numeric, 1) as median_days_to_accept,
-  round((percentile_cont(0.9) within group (
-    order by extract(epoch from (connected_at - invited_at)) / 86400))::numeric, 1) as p90_days_to_accept,
-  count(*) as accepted_n
-from leads
-where connected_at is not null and invited_at > now() - interval '90 days'
-`.trim()
-
-// Per-hypothesis rollup: ICP name, #campaigns, and the funnel — invited/connected/
-// replied + rates — deduped by PERSON (instance_id, profile_url) across the
-// hypothesis's campaigns, taking the earliest non-null milestone per person (see the
-// HYPOTHESIS FUNNEL guidance in SCHEMA_DOC above). campaign_counts and person_agg are
-// aggregated in SEPARATE CTEs before the final join specifically so joining hypotheses
-// to both at once can't cross-multiply campaigns x people into an inflated count.
-export const HYPOTHESIS_OVERVIEW_SQL = `
-with campaign_counts as (
-  select hypothesis_id, count(*) as campaigns
-  from hypothesis_campaigns
-  group by 1
-),
-person_leads as (
-  select hc.hypothesis_id, l.instance_id, l.profile_url,
-         min(l.invited_at)   as invited_at,
-         min(l.connected_at) as connected_at,
-         min(l.replied_at)   as replied_at
-  from leads l
-  join hypothesis_campaigns hc on hc.campaign_id = l.campaign_id
-  group by hc.hypothesis_id, l.instance_id, l.profile_url
-),
-person_agg as (
-  select hypothesis_id,
-         count(*)             as leads,
-         count(invited_at)    as invited,
-         count(connected_at)  as connected,
-         count(replied_at)    as replied
-  from person_leads
-  group by 1
-)
-select
-  h.id as hypothesis_id,
-  h.name as hypothesis,
-  i.name as icp,
-  coalesce(cc.campaigns, 0) as campaigns,
-  coalesce(pa.leads, 0)     as leads,
-  coalesce(pa.invited, 0)   as invited,
-  coalesce(pa.connected, 0) as connected,
-  coalesce(pa.replied, 0)   as replied,
-  round(100.0 * pa.connected / nullif(pa.invited, 0), 1)   as connect_rate,
-  round(100.0 * pa.replied / nullif(pa.connected, 0), 1)   as reply_rate
-from hypotheses h
-left join icps i on i.id = h.icp_id
-left join campaign_counts cc on cc.hypothesis_id = h.id
-left join person_agg pa on pa.hypothesis_id = h.id
-where h.archived = false
-order by pa.leads desc nulls last
-`.trim()
-
-export const CAMPAIGN_OVERVIEW_SQL = `
-select cm.*, i.account_name, i.last_sync_at
-from campaign_metrics cm
-join instances i on i.id = cm.instance_id
-order by cm.invites_sent desc
-`.trim()
-
-// Same cohort math as WEEKLY_FUNNEL_SQL, but broken out per account instead of
-// aggregated across all of them — needed to spot one account's cohorts quietly
-// declining even while the fleet-wide trend looks fine.
-export const WEEKLY_FUNNEL_BY_ACCOUNT_SQL = `
-select
-  l.instance_id,
-  coalesce(i.account_name, i.label, l.instance_id)                            as account,
-  date_trunc('week', l.invited_at)::date                                      as invite_week,
-  count(*)                                                                    as invites,
-  count(l.connected_at)                                                       as accepted,
-  count(l.replied_at)                                                         as replied,
-  round(100.0 * count(l.replied_at) filter (where l.connected_at is not null)
-        / nullif(count(l.connected_at), 0), 1)                                as reply_rate_of_accepted
-from leads l
-join instances i on i.id = l.instance_id
-where l.invited_at is not null and l.invited_at > now() - interval '120 days'
-group by 1, 2, 3
-order by 1, 3 desc
 `.trim()

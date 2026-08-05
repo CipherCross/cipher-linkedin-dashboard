@@ -321,6 +321,25 @@ export interface NeonDataStoreConfig {
    */
   readonly connectionString: string
   readonly operations: NeonOperationRegistry
+  /**
+   * A role every transaction enters immediately after `BEGIN`, before the
+   * statement timeout, the timezone and the actor are published.
+   *
+   * The AI store uses it to enter `app_system` **unconditionally**: a role may
+   * always `SET ROLE` to itself, so the same statement is correct when the pool
+   * connects as `app_system` directly *and* when it connects as a member of it
+   * with `SET TRUE` — which makes the production path and a test that connects
+   * as a member login byte-identical instead of differing by a branch nothing
+   * tests. The entry is transaction-scoped (`set_config(..., is_local => true)`
+   * is exactly `SET LOCAL` here, parameterized like the rest of the preamble),
+   * never the session-scoped variant, because the pooled endpoint reuses
+   * backends across clients.
+   *
+   * Validated to a bare identifier so a malformed value fails at construction
+   * rather than inside the first transaction; it is bound as a parameter
+   * either way.
+   */
+  readonly localRole?: string
   /** Per-transaction `SET LOCAL statement_timeout`, in milliseconds. */
   readonly statementTimeoutMs?: number
   /** Client-side pool ceiling. Serverless invocations want this small. */
@@ -333,7 +352,10 @@ export interface NeonDataStoreConfig {
 interface ResolvedConfig {
   readonly statementTimeoutMs: number
   readonly operations: NeonOperationRegistry
+  readonly localRole: string | null
 }
+
+const ROLE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/
 
 interface TransactionScope {
   readonly depth: number
@@ -676,7 +698,21 @@ export class NeonDataStore implements DataStore {
       )
     }
 
-    this.config = { statementTimeoutMs, operations: config.operations }
+    let localRole: string | null = null
+    if (config.localRole !== undefined) {
+      if (
+        typeof config.localRole !== 'string' ||
+        !ROLE_IDENTIFIER_PATTERN.test(config.localRole)
+      ) {
+        throw new DataStoreContractError(
+          'DATASTORE_CONFIG_INVALID',
+          'localRole must be a bare lowercase role identifier',
+        )
+      }
+      localRole = config.localRole
+    }
+
+    this.config = { statementTimeoutMs, operations: config.operations, localRole }
     this.pool = new Pool({
       connectionString: config.connectionString,
       max: config.maxConnections ?? 4,
@@ -780,19 +816,7 @@ export class NeonDataStore implements DataStore {
     try {
       await client.query('BEGIN READ ONLY')
       opened = true
-      await client.query(
-        'SELECT set_config($1, $2, true) AS statement_timeout,' +
-          ' set_config($3, $4, true) AS timezone,' +
-          ' set_config($5, $6, true) AS actor_id',
-        [
-          'statement_timeout',
-          String(this.config.statementTimeoutMs),
-          'timezone',
-          'UTC',
-          'app.actor_id',
-          '',
-        ],
-      )
+      await client.query(this.preambleSql(), this.preambleValues(''))
 
       const statement = definition.build({
         provider: request.provider.trim(),
@@ -869,10 +893,14 @@ export class NeonDataStore implements DataStore {
 
       // One round trip establishes the whole transaction preamble. Latency
       // against a remote region is dominated by the *number* of round trips,
-      // not by the driver, so these three are deliberately not three
-      // statements. `set_config(..., is_local => true)` is exactly `SET LOCAL`,
+      // not by the driver, so these are deliberately not separate statements.
+      // `set_config(..., is_local => true)` is exactly `SET LOCAL`,
       // but parameterized, so no caller value is ever interpolated into SQL.
       //
+      // - `role` enters the store's configured local role when it has one —
+      //   the AI store's unconditional `SET LOCAL ROLE app_system`. Absent
+      //   from the runtime store's preamble, which stays exactly the three
+      //   settings it has always issued.
       // - `statement_timeout` closes R3: PostgreSQL arms the timeout when the
       //   outer statement begins, so a guard installed inside a call already
       //   in flight cannot abort it. It must be armed here, before any work
@@ -883,19 +911,7 @@ export class NeonDataStore implements DataStore {
       //   is transaction-scoped by construction: discarded at COMMIT/ROLLBACK,
       //   so it cannot outlive the transaction that set it, on a pooled or a
       //   direct connection alike.
-      await client.query(
-        'SELECT set_config($1, $2, true) AS statement_timeout,' +
-          ' set_config($3, $4, true) AS timezone,' +
-          ' set_config($5, $6, true) AS actor_id',
-        [
-          'statement_timeout',
-          String(this.config.statementTimeoutMs),
-          'timezone',
-          'UTC',
-          'app.actor_id',
-          actor.actorId,
-        ],
-      )
+      await client.query(this.preambleSql(), this.preambleValues(actor.actorId))
 
       const result = await transactionScope.run({ depth: 1 }, () =>
         work(transaction),
@@ -919,6 +935,36 @@ export class NeonDataStore implements DataStore {
       // connection whose state we could not restore never re-enters the pool.
       client.release(poisoned ? (poisoned as Error) : undefined)
     }
+  }
+
+  /**
+   * The transaction preamble as SQL. Shared by `runTransaction` and by the
+   * pre-actor resolver so a store that enters a local role does so on every
+   * code path to the database, without exception.
+   */
+  private preambleSql(): string {
+    const rolePart = this.config.localRole
+      ? ' set_config($7, $8, true) AS local_role'
+      : ''
+    return (
+      'SELECT set_config($1, $2, true) AS statement_timeout,' +
+      ' set_config($3, $4, true) AS timezone,' +
+      ' set_config($5, $6, true) AS actor_id' +
+      rolePart
+    )
+  }
+
+  private preambleValues(actorId: string): unknown[] {
+    const values: unknown[] = [
+      'statement_timeout',
+      String(this.config.statementTimeoutMs),
+      'timezone',
+      'UTC',
+      'app.actor_id',
+      actorId,
+    ]
+    if (this.config.localRole) values.push('role', this.config.localRole)
+    return values
   }
 
   /**
