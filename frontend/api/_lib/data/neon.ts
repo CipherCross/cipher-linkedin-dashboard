@@ -944,7 +944,7 @@ export class NeonDataStore implements DataStore {
    */
   private preambleSql(): string {
     const rolePart = this.config.localRole
-      ? ' set_config($7, $8, true) AS local_role'
+      ? ', set_config($7, $8, true) AS local_role'
       : ''
     return (
       'SELECT set_config($1, $2, true) AS statement_timeout,' +
