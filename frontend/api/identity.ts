@@ -63,7 +63,10 @@ import {
   readIdentityConfig,
 } from './_lib/identity/config.js'
 import { checkRequestOrigin, originRefusal } from './_lib/identity/origin.js'
-import type { IdentityProvider } from './_lib/identity/provider.js'
+import {
+  IdentityProviderError,
+  type IdentityProvider,
+} from './_lib/identity/provider.js'
 import { getIdentityProvider, pruneSessionsIfDue } from './_lib/identity/runtime.js'
 import {
   requireAdminActor,
@@ -128,6 +131,15 @@ const json = (body: unknown, status = 200) =>
  */
 function safeErrorLabel(error: unknown): string {
   if (error instanceof DataStoreContractError) return `${error.name}/${error.code}`
+  // Same reasoning, one layer out: an IdentityProviderError's `code` is an
+  // adapter-owned constant naming *which* precondition failed — the principal,
+  // the search_path, a closed pool — and carries no host and no credential.
+  // Without it every one of those failures logs the same word, which is what
+  // made the first production 500 undiagnosable from the outside.
+  if (error instanceof IdentityProviderError) return `${error.name}/${error.code}`
+  // Deliberately still name-only. A pg connection failure is a plain Error whose
+  // message embeds the database hostname (`getaddrinfo ENOTFOUND <host>`), so
+  // this branch must never widen to include it.
   if (error instanceof Error) return error.name
   return 'UnknownError'
 }
