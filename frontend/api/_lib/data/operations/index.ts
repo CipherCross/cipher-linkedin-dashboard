@@ -26,6 +26,14 @@ import { NeonOperationRegistry } from '../neon.js'
 
 import { ACTIVITY_OPERATIONS, dailySeriesOperation } from './activity.js'
 import {
+  DASHBOARD_OPERATIONS,
+  annotationsTimelineOperation,
+  campaignsPerformanceOperation,
+  campaignsSequenceStepsOperation,
+  instancesOverviewOperation,
+  syncRecentRunsOperation,
+} from './dashboard.js'
+import {
   IDENTITY_ADMIN_COMMANDS,
   IDENTITY_OPERATIONS,
   inviteMemberOperation,
@@ -34,8 +42,28 @@ import {
   setMemberRoleOperation,
   teamRosterOperation,
 } from './identity.js'
+import { LEADS_OPERATIONS, leadsDirectoryOperation } from './leads.js'
+import {
+  MESSAGES_OPERATIONS,
+  inboundHistoryOperation,
+  outboundRecentOperation,
+} from './messages.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
+export { LEADS_OPERATIONS, type LeadRow, type LeadsDirectoryParams } from './leads.js'
+export {
+  MESSAGES_OPERATIONS,
+  type MessageRow,
+  type MessagesParams,
+} from './messages.js'
+export {
+  DASHBOARD_OPERATIONS,
+  type AnnotationRow,
+  type CampaignMetricsRow,
+  type CampaignStepRow,
+  type InstanceRow,
+  type SyncRunRow,
+} from './dashboard.js'
 export {
   IDENTITY_ADMIN_COMMANDS,
   IDENTITY_OPERATIONS,
@@ -67,6 +95,39 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(IDENTITY_OPERATIONS.teamRoster, teamRosterOperation)
   registry.registerQuery(ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation)
 
+  // S13's first DataContext slice.
+  registry.registerQuery(
+    DASHBOARD_OPERATIONS.instancesOverview,
+    instancesOverviewOperation,
+  )
+  registry.registerQuery(
+    DASHBOARD_OPERATIONS.campaignsPerformance,
+    campaignsPerformanceOperation,
+  )
+  registry.registerQuery(
+    DASHBOARD_OPERATIONS.campaignsSequenceSteps,
+    campaignsSequenceStepsOperation,
+  )
+  registry.registerQuery(
+    DASHBOARD_OPERATIONS.syncRecentRuns,
+    syncRecentRunsOperation,
+  )
+  registry.registerQuery(
+    DASHBOARD_OPERATIONS.annotationsTimeline,
+    annotationsTimelineOperation,
+  )
+
+  // S13's second slice — the two keyset-paginated base-table reads.
+  registry.registerQuery(LEADS_OPERATIONS.directory, leadsDirectoryOperation)
+  registry.registerQuery(
+    MESSAGES_OPERATIONS.inboundHistory,
+    inboundHistoryOperation,
+  )
+  registry.registerQuery(
+    MESSAGES_OPERATIONS.outboundRecent,
+    outboundRecentOperation,
+  )
+
   registry.registerCommand(IDENTITY_ADMIN_COMMANDS.invite, inviteMemberOperation)
   registry.registerCommand(
     IDENTITY_ADMIN_COMMANDS.setActive,
@@ -81,6 +142,14 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
 export const APPLICATION_QUERY_OPERATIONS = [
   IDENTITY_OPERATIONS.teamRoster,
   ACTIVITY_OPERATIONS.dailySeries,
+  DASHBOARD_OPERATIONS.instancesOverview,
+  DASHBOARD_OPERATIONS.campaignsPerformance,
+  DASHBOARD_OPERATIONS.campaignsSequenceSteps,
+  DASHBOARD_OPERATIONS.syncRecentRuns,
+  DASHBOARD_OPERATIONS.annotationsTimeline,
+  LEADS_OPERATIONS.directory,
+  MESSAGES_OPERATIONS.inboundHistory,
+  MESSAGES_OPERATIONS.outboundRecent,
 ] as const
 
 /** Every write. All three are the identity write path; none is a table write. */

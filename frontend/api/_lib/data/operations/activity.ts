@@ -31,8 +31,22 @@ export interface DailyActivityRow {
 }
 
 export interface DailyActivityParams {
-  readonly instanceId: string
-  readonly [key: string]: string
+  /**
+   * One instance, or `null` for every instance the actor may read.
+   *
+   * S12 required an instance because its slice was a single-instance page.
+   * `DataContext` fetches `daily_activity` for the whole team at once, so S13
+   * widened the parameter rather than issuing one request per notebook. The
+   * widening is additive: a non-null instance produces exactly the rows S12's
+   * SQL produced, which is what keeps its 22 live assertions meaningful.
+   *
+   * "Every instance the actor may read" is not a widening of authority — the
+   * view is `security_invoker`, so RLS decides the row set either way. Dropping
+   * the predicate removes a filter the caller chose, never one the database
+   * imposed.
+   */
+  readonly instanceId: string | null
+  readonly [key: string]: string | null
 }
 
 /**
@@ -60,7 +74,7 @@ const DAILY_SERIES_SQL = `SELECT to_char(da.day, 'YYYY-MM-DD') AS day,
           da.event_type,
           da.cnt::bigint AS cnt
      FROM public.daily_activity da
-    WHERE da.instance_id = $1
+    WHERE ($1::text IS NULL OR da.instance_id = $1)
       AND ($2::timestamptz IS NULL
            OR da.day >= ($2::timestamptz AT TIME ZONE 'UTC')::date)
       AND ($3::timestamptz IS NULL
@@ -74,7 +88,10 @@ export const dailySeriesOperation: NeonQueryOperation<
   build: ({ params, range }) => ({
     text: DAILY_SERIES_SQL,
     values: [
-      params?.instanceId ?? '',
+      // `undefined` and `null` both mean "every instance"; an empty string does
+      // not, and is passed through so it matches nothing rather than silently
+      // becoming an unscoped read.
+      params?.instanceId ?? null,
       range?.fromInclusive ?? null,
       range?.toExclusive ?? null,
     ],
