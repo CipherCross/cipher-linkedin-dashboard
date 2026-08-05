@@ -76,16 +76,76 @@ export interface NeonStatement {
   readonly values?: readonly unknown[]
 }
 
+/**
+ * A scalar of an operation's sort key, as it arrives back from a cursor.
+ *
+ * Deliberately narrow. Key values make a round trip through a JSON cursor, so
+ * anything whose JSON form is not its SQL form — a `Date`, a `bigint`, an array
+ * — cannot be a key component without a lossy conversion nobody would see. Every
+ * key column an operation declares must therefore select as text, a JSON-safe
+ * number, or NULL. Timestamps already cross this boundary as ISO-8601 UTC
+ * strings (see `buildTypeParsers`), so `(sent_at, id)` is expressible as-is.
+ */
+export type NeonKeysetValue = string | number | null
+
 export interface NeonQueryContext<TParams> {
   readonly actor: ActorContext
   readonly params: TParams | undefined
   readonly page: NormalizedPageRequest
   readonly range: UtcRange | undefined
+  /**
+   * The sort key of the last row of the previous page, or `undefined` on the
+   * first page. Present only for an operation that declares `keyset`.
+   *
+   * The operation — not the driver — turns this into a predicate, because the
+   * operation owns its SQL and its sort order. See `NeonKeysetPagination`.
+   */
+  readonly after: readonly NeonKeysetValue[] | undefined
 }
 
 export interface NeonCommandContext<TParams> {
   readonly actor: ActorContext
   readonly params: TParams | undefined
+}
+
+/**
+ * Keyset (seek) pagination for one operation.
+ *
+ * **Why the driver does not generate the predicate.** The obvious design is for
+ * the driver to wrap the operation's SQL and append its own
+ * `WHERE (a, b) < ($1, $2) ORDER BY a DESC, b DESC` — the driver already wraps
+ * every query for `LIMIT/OFFSET`, so it would be symmetrical. It was rejected on
+ * two grounds. First, a filter applied *outside* a subquery relies on the planner
+ * pushing the qual down through it to reach the index; when it does not, every
+ * page sorts the whole relation and keyset buys nothing while looking like it
+ * works. Second, the driver would have to know each operation's sort direction,
+ * its NULL ordering and its column types in order to emit a correct comparison —
+ * which is the operation's own knowledge, and duplicating it in the driver is how
+ * the two drift apart.
+ *
+ * So the split is: the **operation** owns the predicate and the `ORDER BY`, and
+ * the **driver** owns the cursor — its opacity, its scope binding, and reading
+ * the next key off the last row. The driver applies `LIMIT` and, for a keyset
+ * operation, **no `OFFSET`**, which is the entire point.
+ *
+ * **What the cursor carries, and why that is safe.** For an offset operation the
+ * payload is an integer; for a keyset operation it is a JSON array of the last
+ * row's key values. Those values were in the response body the caller just
+ * received, so the cursor discloses nothing new. Tampering is bounded exactly as
+ * it is for offset: the digest pins operation, params, range, tenant and actor,
+ * so a forged key can only re-request rows this actor could have requested
+ * directly, and RLS still decides the row set.
+ */
+export interface NeonKeysetPagination {
+  /**
+   * The operation's sort-key columns, in `ORDER BY` order, named as they appear
+   * in the operation's own projection.
+   *
+   * Must be a **total order** — end it in a unique column. This is the same
+   * requirement offset paging has; keyset merely makes violating it louder,
+   * because a repeated key makes the walk loop rather than silently skip.
+   */
+  readonly columns: readonly string[]
 }
 
 export interface NeonQueryOperation<
@@ -97,6 +157,13 @@ export interface NeonQueryOperation<
    * already permits — it is never the authorization decision itself.
    */
   readonly authorize?: (actor: ActorContext) => void
+  /**
+   * Declare keyset pagination. Absent means offset, which stays the default:
+   * S12 measured offset at 522 ms against 525 ms for the first page on an
+   * aggregate slice, so keyset is a considered choice per operation rather than
+   * a blanket upgrade.
+   */
+  readonly keyset?: NeonKeysetPagination
   readonly build: (context: NeonQueryContext<TParams>) => NeonStatement
   readonly mapRow?: (row: NeonRow) => TRow
 }
@@ -322,29 +389,104 @@ function cursorDigest(
   return createHash('sha256').update(scope).digest('base64url')
 }
 
-function encodeCursor(digest: string, offset: number): string {
-  return Buffer.from(`${digest}.${offset}`, 'utf8').toString('base64url')
+function encodeCursor(digest: string, payload: string): string {
+  return Buffer.from(`${digest}.${payload}`, 'utf8').toString('base64url')
 }
 
-function decodeCursor(token: string, digest: string): number {
+/**
+ * Strip the digest and return the payload, or refuse.
+ *
+ * Split on the **first** separator rather than the last. A sha256 digest in
+ * base64url is 43 characters and contains no `.`, so for the offset payload the
+ * two are identical — but a keyset payload is JSON, and an ISO-8601 instant with
+ * milliseconds carries a `.` of its own. `lastIndexOf` would have found that one.
+ */
+function decodeCursorPayload(token: string, digest: string): string {
   let decoded: string
   try {
     decoded = Buffer.from(token, 'base64url').toString('utf8')
   } catch {
     throw new PaginationError('Cursor is invalid or belongs to another scope')
   }
-  const separator = decoded.lastIndexOf('.')
+  const separator = decoded.indexOf('.')
   if (separator <= 0) {
     throw new PaginationError('Cursor is invalid or belongs to another scope')
   }
   if (decoded.slice(0, separator) !== digest) {
     throw new PaginationError('Cursor is invalid or belongs to another scope')
   }
-  const offset = Number(decoded.slice(separator + 1))
+  return decoded.slice(separator + 1)
+}
+
+function decodeOffsetCursor(token: string, digest: string): number {
+  const offset = Number(decodeCursorPayload(token, digest))
   if (!Number.isSafeInteger(offset) || offset < 0) {
     throw new PaginationError('Cursor is invalid or belongs to another scope')
   }
   return offset
+}
+
+/**
+ * Decode a keyset payload into exactly the key the operation declared.
+ *
+ * The arity check is the load-bearing one. A key of the wrong width would be
+ * spliced into the operation's parameter list and shift every later placeholder,
+ * producing a query that is syntactically valid and semantically unrelated. It is
+ * refused as a pagination error rather than reaching the database.
+ */
+function decodeKeysetCursor(
+  token: string,
+  digest: string,
+  keyset: NeonKeysetPagination,
+): readonly NeonKeysetValue[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(decodeCursorPayload(token, digest))
+  } catch (error) {
+    if (error instanceof PaginationError) throw error
+    throw new PaginationError('Cursor is invalid or belongs to another scope')
+  }
+  if (!Array.isArray(parsed) || parsed.length !== keyset.columns.length) {
+    throw new PaginationError('Cursor is invalid or belongs to another scope')
+  }
+  for (const value of parsed) {
+    const type = typeof value
+    if (value !== null && type !== 'string' && type !== 'number') {
+      throw new PaginationError('Cursor is invalid or belongs to another scope')
+    }
+  }
+  return parsed as readonly NeonKeysetValue[]
+}
+
+/**
+ * Read the next page's key off the last row of this page.
+ *
+ * A declared key column missing from the projection is a programming error in the
+ * operation, not a caller error — and it is one that would otherwise surface as a
+ * walk that silently stops or repeats, so it fails loudly here.
+ */
+function keysetOf(
+  row: NeonRow,
+  keyset: NeonKeysetPagination,
+  operation: string,
+): readonly NeonKeysetValue[] {
+  return keyset.columns.map((column) => {
+    if (!(column in row)) {
+      throw new DataStoreContractError(
+        'OPERATION_INVALID',
+        `Operation ${operation} declares keyset column ${column}, which it does not select`,
+      )
+    }
+    const value = row[column]
+    if (value === null || value === undefined) return null
+    if (typeof value === 'string' || typeof value === 'number') return value
+    // A `Date`, a `bigint` or an object would not survive the JSON round trip
+    // as the same SQL value. See `NeonKeysetValue`.
+    throw new DataStoreContractError(
+      'OPERATION_INVALID',
+      `Operation ${operation} keyset column ${column} is not a cursor-safe scalar`,
+    )
+  })
 }
 
 function isPgError(error: unknown): error is { code?: string; message: string } {
@@ -794,27 +936,45 @@ export class NeonDataStore implements DataStore {
     const page = normalizePageRequest(request.page)
     const range = normalizeUtcRange(request.range)
     const digest = cursorDigest(operation, request.params, range, validatedActor)
-    const offset = page.cursor ? decodeCursor(page.cursor, digest) : 0
+    const keyset = definition.keyset
+
+    // Decode before building, so the operation receives the key it needs to
+    // write its own predicate, and so a bad cursor costs no query.
+    const after =
+      keyset && page.cursor
+        ? decodeKeysetCursor(page.cursor, digest, keyset)
+        : undefined
+    const offset =
+      !keyset && page.cursor ? decodeOffsetCursor(page.cursor, digest) : 0
 
     const statement = definition.build({
       actor: validatedActor,
       params: request.params,
       page,
       range,
+      after,
     } as unknown as NeonQueryContext<DataStoreParams>)
 
     const values = [...(statement.values ?? [])]
     // Fetch one extra row to learn whether another page exists without a
     // second round trip or a COUNT over the whole relation.
     const limitPlaceholder = `$${values.length + 1}`
-    const offsetPlaceholder = `$${values.length + 2}`
-    values.push(page.limit + 1, offset)
+    values.push(page.limit + 1)
+
+    // A keyset operation gets no `OFFSET` at all — that is the whole point. The
+    // wrapper stays, so the shared row cap and the extra-row probe are applied
+    // identically on both paths and there is one place they can be reasoned about.
+    let pageClause = ` LIMIT ${limitPlaceholder}`
+    if (!keyset) {
+      const offsetPlaceholder = `$${values.length + 1}`
+      values.push(offset)
+      pageClause += ` OFFSET ${offsetPlaceholder}`
+    }
 
     let result
     try {
       result = await client.query<NeonRow>(
-        `SELECT * FROM (${statement.text}) AS datastore_page` +
-          ` LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+        `SELECT * FROM (${statement.text}) AS datastore_page${pageClause}`,
         values,
       )
     } catch (error) {
@@ -827,11 +987,19 @@ export class NeonDataStore implements DataStore {
       definition.mapRow ? rows.map((row) => definition.mapRow!(row)) : rows
     ) as readonly TRow[]
 
-    return {
-      items,
-      hasMore,
-      nextCursor: hasMore ? encodeCursor(digest, offset + items.length) : null,
+    let nextCursor: string | null = null
+    if (hasMore) {
+      nextCursor = keyset
+        ? encodeCursor(
+            digest,
+            // Off the raw row, before `mapRow`: a mapper may rename or reshape
+            // the projection, and the key belongs to the SQL, not to the DTO.
+            JSON.stringify(keysetOf(rows[rows.length - 1], keyset, operation)),
+          )
+        : encodeCursor(digest, String(offset + items.length))
     }
+
+    return { items, hasMore, nextCursor }
   }
 
   async runCommand<TResult, TParams extends DataStoreParams = DataStoreParams>(
