@@ -22,13 +22,31 @@
  * meant: the column may be *selected*, and must never be *joined or resolved*.
  * The distinction is asserted per operation below.
  *
+ * **And `owner_id` was narrowed the same way in S13's third part, for the same
+ * reason.** Part 1 asserted that no operation's SQL mentions `owner_id` at all,
+ * which held only while nothing read the follow-up relations.
+ * `conversation_follow_up_state.owner_id` and `follow_up_events`'
+ * `previous_owner_id` / `new_owner_id` are `team_members.id` values in the source
+ * id space — the identical hazard to `assigned_to` under a different column name —
+ * and the two reads that carry them cannot drop them: the follow-up queue's owner
+ * filter *is* that value. So the blanket ban becomes two per-operation
+ * permissions, and every other read still may not mention a member id in any
+ * spelling.
+ *
+ * `follow_up_events` also carries `previous_owner_name` / `new_owner_name`. Those
+ * are text snapshots written at the time of the event and are not asserted
+ * against: they need no roster to read, which is exactly why they are safe.
+ *
  * No database and no network — the SQL is inspected as text and the allowlist as
  * data.
  */
 
 import { describe, expect, it } from 'vitest'
 
-import { READ_OPERATION_NAMES } from '../api/activity-daily.js'
+import {
+  READ_OPERATION_NAMES,
+  TOLERANT_OPERATION_NAMES,
+} from '../api/activity-daily.js'
 import type {
   NeonQueryContext,
   NeonQueryOperation,
@@ -37,10 +55,13 @@ import type {
 import type { DataStoreParams } from '../api/_lib/data/contracts.js'
 import {
   ACTIVITY_OPERATIONS,
+  CONVERSATION_OPERATIONS,
   DASHBOARD_OPERATIONS,
   IDENTITY_OPERATIONS,
   LEADS_OPERATIONS,
+  LIBRARY_OPERATIONS,
   MESSAGES_OPERATIONS,
+  PIPELINE_OPERATIONS,
 } from '../api/_lib/data/operations/index.js'
 import {
   annotationsTimelineOperation,
@@ -49,12 +70,31 @@ import {
   instancesOverviewOperation,
   syncRecentRunsOperation,
 } from '../api/_lib/data/operations/dashboard.js'
-import { leadsDirectoryOperation } from '../api/_lib/data/operations/leads.js'
+import {
+  leadNotesOperation,
+  leadsDirectoryOperation,
+} from '../api/_lib/data/operations/leads.js'
 import {
   inboundHistoryOperation,
   outboundRecentOperation,
+  threadOperation,
 } from '../api/_lib/data/operations/messages.js'
 import { dailySeriesOperation } from '../api/_lib/data/operations/activity.js'
+import {
+  conversationLatestMessageOperation,
+  conversationReplyIntentOperation,
+  followUpHistoryOperation,
+  followUpStateOperation,
+} from '../api/_lib/data/operations/conversations.js'
+import {
+  hypothesesOperation,
+  hypothesisCampaignsOperation,
+  icpIndustriesOperation,
+  icpPersonasOperation,
+  icpProfilesOperation,
+  savedSearchesOperation,
+} from '../api/_lib/data/operations/library.js'
+import { pipelineEventLogOperation } from '../api/_lib/data/operations/pipeline.js'
 
 /**
  * Every operation asserted below either ignores its context or reads it through
@@ -100,36 +140,120 @@ const READ_SLICE = [
   [LEADS_OPERATIONS.directory, leadsDirectoryOperation],
   [MESSAGES_OPERATIONS.inboundHistory, inboundHistoryOperation],
   [MESSAGES_OPERATIONS.outboundRecent, outboundRecentOperation],
+  [PIPELINE_OPERATIONS.eventLog, pipelineEventLogOperation],
+  [CONVERSATION_OPERATIONS.followUpState, followUpStateOperation],
+  [CONVERSATION_OPERATIONS.latestMessage, conversationLatestMessageOperation],
+  [CONVERSATION_OPERATIONS.replyIntent, conversationReplyIntentOperation],
+  [CONVERSATION_OPERATIONS.followUpHistory, followUpHistoryOperation],
+  [MESSAGES_OPERATIONS.thread, threadOperation],
+  [LEADS_OPERATIONS.notes, leadNotesOperation],
+  [LIBRARY_OPERATIONS.savedSearches, savedSearchesOperation],
+  [LIBRARY_OPERATIONS.icpProfiles, icpProfilesOperation],
+  [LIBRARY_OPERATIONS.icpPersonas, icpPersonasOperation],
+  [LIBRARY_OPERATIONS.icpIndustries, icpIndustriesOperation],
+  [LIBRARY_OPERATIONS.hypotheses, hypothesesOperation],
+  [LIBRARY_OPERATIONS.hypothesisCampaigns, hypothesisCampaignsOperation],
 ] as unknown as Slice
 
-/** The subset that must not so much as mention a member id. */
+/**
+ * The reads permitted to carry a member id, and the only ones. Each is named
+ * individually rather than filtered by a pattern, so adding a fourth has to
+ * appear here as a decision.
+ */
+const MEMBER_ID_BEARING = [
+  LEADS_OPERATIONS.directory,
+  CONVERSATION_OPERATIONS.followUpState,
+  CONVERSATION_OPERATIONS.followUpHistory,
+] as readonly string[]
+
+/** The subset that must not so much as mention a member id, in any spelling. */
 const ROSTER_FREE_SLICE = READ_SLICE.filter(
-  ([name]) => name !== LEADS_OPERATIONS.directory,
+  ([name]) => !MEMBER_ID_BEARING.includes(name),
 )
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists nine reads and no more', () => {
+  it('allowlists twenty-two reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
+    //
+    // It said *nine* until S13's third part, which added the four medium
+    // relations, the six tolerated library reads and the three reads that used to
+    // live inside a component. Deliberately edited, and this is the record of it:
+    // the number in a test name is the cheapest possible tripwire on the surface
+    // area of the whole read path.
     expect([...READ_OPERATION_NAMES].sort()).toEqual([
       'activity.dailySeries',
       'annotations.timeline',
       'campaigns.performance',
       'campaigns.sequenceSteps',
+      'conversations.followUpHistory',
+      'conversations.followUpState',
+      'conversations.latestMessage',
+      'conversations.replyIntent',
+      'hypotheses.campaigns',
+      'hypotheses.list',
+      'icp.industries',
+      'icp.personas',
+      'icp.profiles',
       'instances.overview',
       'leads.directory',
+      'leads.notes',
       'messages.inboundHistory',
       'messages.outboundRecent',
+      'messages.thread',
+      'pipeline.eventLog',
+      'searches.saved',
       'sync.recentRuns',
     ])
   })
 
   it('covers every allowlisted name with an inspected definition', () => {
-    // Otherwise a tenth read could be added to the endpoint and skip every
+    // Otherwise a twenty-third read could be added to the endpoint and skip every
     // assertion in this file by simply not appearing in `READ_SLICE`.
     expect(READ_SLICE.map(([name]) => name).sort()).toEqual(
       [...READ_OPERATION_NAMES].sort(),
     )
+  })
+
+  it('tolerates a missing relation on exactly the ten reads that may', () => {
+    // The set, not the mechanism. Marking a funnel read tolerant is one word and
+    // would turn a broken deployment into a quietly smaller funnel — so the
+    // permission is enumerated, and every read that computes a number is absent
+    // from it.
+    expect([...TOLERANT_OPERATION_NAMES].sort()).toEqual([
+      'conversations.followUpState',
+      'conversations.latestMessage',
+      'conversations.replyIntent',
+      'hypotheses.campaigns',
+      'hypotheses.list',
+      'icp.industries',
+      'icp.personas',
+      'icp.profiles',
+      'pipeline.eventLog',
+      'searches.saved',
+    ])
+
+    for (const funnelRead of [
+      ACTIVITY_OPERATIONS.dailySeries,
+      DASHBOARD_OPERATIONS.campaignsPerformance,
+      DASHBOARD_OPERATIONS.instancesOverview,
+      LEADS_OPERATIONS.directory,
+      MESSAGES_OPERATIONS.inboundHistory,
+      MESSAGES_OPERATIONS.outboundRecent,
+    ]) {
+      expect(TOLERANT_OPERATION_NAMES).not.toContain(funnelRead)
+    }
+
+    // And the on-demand component reads are not tolerant either: each is behind a
+    // panel with its own error state, so an empty answer would hide a message the
+    // user would otherwise see.
+    for (const onDemand of [
+      CONVERSATION_OPERATIONS.followUpHistory,
+      MESSAGES_OPERATIONS.thread,
+      LEADS_OPERATIONS.notes,
+    ]) {
+      expect(TOLERANT_OPERATION_NAMES).not.toContain(onDemand)
+    }
   })
 
   it('does not offer the team roster', () => {
@@ -152,29 +276,54 @@ describe('no operation on the read path resolves a member id', () => {
     const sql = sqlOf(operation).toLowerCase()
     expect(sql).not.toContain('team_members')
     expect(sql).not.toContain('team_roster')
-    // `owner_id` on `follow_ups` is the same hazard by another column name.
-    expect(sql).not.toContain('owner_id')
   })
 
   it.each(ROSTER_FREE_SLICE)('%s carries no member id at all', (_name, operation) => {
-    expect(sqlOf(operation).toLowerCase()).not.toContain('assigned_to')
+    const sql = sqlOf(operation).toLowerCase()
+    expect(sql).not.toContain('assigned_to')
+    // The same hazard under its other column name. `owner_id` matches
+    // `previous_owner_id` and `new_owner_id` as substrings, which is the point.
+    expect(sql).not.toContain('owner_id')
   })
 
-  it('leads.directory selects assigned_to and joins nothing to it', () => {
-    const sql = sqlOf(inspectable(leadsDirectoryOperation)).toLowerCase()
+  /**
+   * The three reads that may carry a member id, each asserted the same way:
+   * the column is present, and the SQL structurally cannot resolve it — one
+   * `FROM`, no `JOIN`, no subquery that could reach a roster. That is what makes
+   * the raw id safe to hand to the browser, which already holds a
+   * Supabase-shaped roster to interpret it with.
+   */
+  const idBearing = [
+    ['leads.directory', leadsDirectoryOperation, 'assigned_to', 'from public.leads'],
+    [
+      'conversations.followUpState',
+      followUpStateOperation,
+      'owner_id',
+      'from public.conversation_follow_up_state',
+    ],
+    [
+      'conversations.followUpHistory',
+      followUpHistoryOperation,
+      'owner_id',
+      'from public.follow_up_events',
+    ],
+  ] as const
 
-    // It must carry the column: the Pipeline page's owner state is this value,
-    // and omitting it would be data loss dressed up as caution.
-    expect(sql).toContain('assigned_to')
+  it.each(idBearing)(
+    '%s selects its member id and joins nothing to it',
+    (_name, operation, column, from) => {
+      const sql = sqlOf(inspectable(operation)).toLowerCase()
 
-    // And it must not resolve it. A single-relation read cannot: there is exactly
-    // one `FROM`, no `JOIN` of any kind, and no subquery that could reach a
-    // roster. That is what makes the id safe to hand to the browser — the browser
-    // already holds a Supabase-shaped roster to interpret it with.
-    expect(sql).not.toMatch(/\bjoin\b/)
-    expect(sql.match(/\bfrom\b/g) ?? []).toHaveLength(1)
-    expect(sql).toContain('from public.leads')
-  })
+      // It must carry the column. The Pipeline page's owner state and the
+      // follow-up queue's owner filter *are* these values; dropping them would be
+      // data loss dressed up as caution.
+      expect(sql).toContain(column)
+
+      expect(sql).not.toMatch(/\bjoin\b/)
+      expect(sql.match(/\bfrom\b/g) ?? []).toHaveLength(1)
+      expect(sql).toContain(from)
+    },
+  )
 })
 
 describe('every read is a paged, ordered, read-only projection', () => {
@@ -202,26 +351,93 @@ describe('every read is a paged, ordered, read-only projection', () => {
     }
   })
 
-  it('keysets the two base-table reads and leaves the aggregates on offset', () => {
+  it('keysets the unbounded reads and leaves the bounded ones on offset', () => {
     // Which reads seek and which count is a measured decision, not an accident.
-    // S12 measured offset at 522 ms vs 525 ms on the aggregate slice, so the
-    // small and view-backed reads keep it; the base tables that grow without
-    // bound seek instead.
+    // S12 measured offset at 522 ms vs 525 ms on the aggregate slice, so the small
+    // and view-backed reads keep it; the reads that grow without bound seek.
+    //
+    // The line between the two is "does the row count grow with the team's work":
+    // leads, messages, the pipeline audit log and one row per conversation all do.
+    // A thread, one lead's notes, and a hand-maintained ICP library do not — and
+    // `leads.notes` additionally *may not* seek, because `lead_notes.created_at` is
+    // nullable and a ROW comparison against NULL drops rows silently.
     const keysetNames = READ_SLICE.filter(([, op]) => op.keyset).map(([name]) => name)
     expect(keysetNames.sort()).toEqual([
+      'conversations.followUpHistory',
+      'conversations.followUpState',
+      'conversations.latestMessage',
+      'conversations.replyIntent',
       'leads.directory',
       'messages.inboundHistory',
       'messages.outboundRecent',
+      'pipeline.eventLog',
     ])
   })
 
   it('ends every keyset order in a unique column', () => {
     // The requirement keyset pagination cannot survive without: a repeated key
     // makes a walk loop or stall rather than silently skip, so it is asserted
-    // rather than commented. `leads.id` and `messages.id` are the primary keys.
+    // rather than commented.
+    //
+    // `leads.id`, `messages.id`, `pipeline_events.id` and `follow_up_events.id`
+    // are primary keys. `(instance_id, profile_url)` is the primary key of
+    // `conversation_follow_up_state` and the grouping key of the two conversation
+    // views, so it is unique in each of their outputs — which no constraint
+    // declares, so the live suite proves it over a full walk as well.
     expect(leadsDirectoryOperation.keyset?.columns).toEqual(['id'])
     expect(inboundHistoryOperation.keyset?.columns).toEqual(['sent_at', 'id'])
     expect(outboundRecentOperation.keyset?.columns).toEqual(['sent_at', 'id'])
+    expect(pipelineEventLogOperation.keyset?.columns).toEqual(['occurred_at', 'id'])
+    expect(followUpHistoryOperation.keyset?.columns).toEqual(['occurred_at', 'id'])
+    for (const operation of [
+      followUpStateOperation,
+      conversationLatestMessageOperation,
+      conversationReplyIntentOperation,
+    ]) {
+      expect(operation.keyset?.columns).toEqual(['instance_id', 'profile_url'])
+    }
+  })
+
+  it('seeks in the direction each keyset read actually orders', () => {
+    // A seek predicate pointing the opposite way to the `ORDER BY` returns the
+    // page it just returned, forever — a walk that never terminates rather than one
+    // that skips. The driver deliberately does not generate either half
+    // (`NeonKeysetPagination`), so the two agreeing is the operation's own
+    // responsibility and worth pinning as text.
+    const ascending = [
+      [PIPELINE_OPERATIONS.eventLog, pipelineEventLogOperation],
+      [CONVERSATION_OPERATIONS.followUpState, followUpStateOperation],
+      [CONVERSATION_OPERATIONS.latestMessage, conversationLatestMessageOperation],
+      [CONVERSATION_OPERATIONS.replyIntent, conversationReplyIntentOperation],
+      [LEADS_OPERATIONS.directory, leadsDirectoryOperation],
+    ] as const
+    for (const [name, operation] of ascending) {
+      const sql = sqlOf(inspectable(operation))
+      expect(sql, name).toMatch(/>\s*\(?\$/)
+      expect(sql, name).not.toMatch(/order by[^;]*\bdesc\b/i)
+    }
+
+    const descending = [
+      [MESSAGES_OPERATIONS.inboundHistory, inboundHistoryOperation],
+      [MESSAGES_OPERATIONS.outboundRecent, outboundRecentOperation],
+      [CONVERSATION_OPERATIONS.followUpHistory, followUpHistoryOperation],
+    ] as const
+    for (const [name, operation] of descending) {
+      const sql = sqlOf(inspectable(operation))
+      expect(sql, name).toMatch(/<\s*\(\$/)
+      expect(sql, name).toMatch(/order by[^;]*\bdesc\b/i)
+    }
+  })
+
+  it('scopes every conversation-scoped read by instance as well as profile', () => {
+    // `CLAUDE.md`'s rule, and the schema's: the same person can be reached from two
+    // LinkedIn accounts, so a `profile_url` on its own names two conversations.
+    // A read filtered on the profile alone would merge two people's threads.
+    for (const operation of [threadOperation, followUpHistoryOperation]) {
+      const sql = sqlOf(inspectable(operation)).toLowerCase()
+      expect(sql).toContain('instance_id = $1')
+      expect(sql).toContain('profile_url = $2')
+    }
   })
 })
 
