@@ -66,8 +66,12 @@ const {
   neonSetStage,
 } = await import('../api/_lib/neonWrites.js')
 const { NeonDataStore } = await import('../api/_lib/data/neon.js')
-const { buildApplicationRegistry, PIPELINE_WRITE_COMMANDS, CONVERSATION_WRITE_COMMANDS } =
-  await import('../api/_lib/data/operations/index.js')
+const {
+  buildApplicationRegistry,
+  CONVERSATION_WRITE_COMMANDS,
+  PIPELINE_WRITE_COMMANDS,
+  PIPELINE_WRITE_OPERATIONS,
+} = await import('../api/_lib/data/operations/index.js')
 const { resetDataStore } = await import('../api/_lib/data/store.js')
 const { deploymentWritePath, NEON_WRITES_ENV } = await import(
   '../api/_lib/data/writePath.js'
@@ -672,6 +676,62 @@ describe('conversation import: dedup by normalized body, never by the unique key
     expect(lead[0]?.replied_at).not.toBeNull()
   })
 
+  it('never moves a milestone LH2 already recorded, even to an earlier instant', async () => {
+    // The one property `COALESCE(column, $n)` exists for, and the one the
+    // argument order decides. LH2 is ground truth for anything it captured: a
+    // paste may FILL a NULL milestone and may never CHANGE a filled one, in
+    // either direction. `leads_keep_milestones` only blocks non-NULL -> NULL, so
+    // nothing but this statement's argument order stops an overwrite.
+    const recorded = '2026-03-01T08:00:00.000Z'
+    await fixtures.asActor(CONTRACT_ACTORS.activeMember.actorId, (client) =>
+      client.query(
+        `UPDATE public.leads
+            SET replied_at = $2::timestamptz, first_message_at = $2::timestamptz,
+                connected_at = $2::timestamptz
+          WHERE id = $1`,
+        [LEAD_IDS.import, recorded],
+      ),
+    )
+
+    const response = await neonImportConversation(
+      request('activeAdmin'),
+      {
+        instanceId: WRITE_SCOPE,
+        campaignId: WRITE_CAMPAIGN_ID,
+        profileUrl: PROFILE_URLS.import,
+        messages: await importBlocks([
+          // Both earlier than what is recorded, which is the direction a
+          // "fill the earliest" rule would happily take.
+          { direction: 'out', body: 'Much earlier note', sent_at: '2026-02-01T07:00:00.000Z' },
+          { direction: 'in', body: 'Much earlier reply', sent_at: '2026-02-02T07:00:00.000Z' },
+        ]),
+        normalize,
+      },
+      { store, legacyProviderName: 'fixture' },
+    )
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body).toMatchObject({ inserted: 2 })
+    // Nothing is reported as newly filled, because nothing was.
+    expect(body.milestones).toBeUndefined()
+
+    // `read` goes through the raw fixture client, which has no type parsers, so
+    // these arrive as `Date` rather than as the driver's ISO strings.
+    const lead = await read<Record<string, Date>>(
+      `SELECT connected_at, first_message_at, replied_at FROM public.leads WHERE id = $1`,
+      [LEAD_IDS.import],
+    )
+    expect({
+      connected_at: lead[0]?.connected_at?.toISOString(),
+      first_message_at: lead[0]?.first_message_at?.toISOString(),
+      replied_at: lead[0]?.replied_at?.toISOString(),
+    }).toEqual({
+      connected_at: recorded,
+      first_message_at: recorded,
+      replied_at: recorded,
+    })
+  })
+
   it('is idempotent: the same paste twice inserts nothing the second time', async () => {
     const blocks = await importBlocks([
       { direction: 'out', body: 'Hello there', sent_at: '2026-02-01T10:00:00.000Z' },
@@ -1153,4 +1213,107 @@ describe('applyFollowUpAction: registered, unrouted, and proven anyway', () => {
       }),
     ).rejects.toThrow(/FOLLOW_UP_CONFLICT/)
   })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The concurrency test `FOR UPDATE` was waiting for.
+ *
+ * Two stage moves of the **same lead**, deliberately overlapped: the first
+ * store's `actorDisplayName` query is swapped for one that holds the
+ * transaction open in `pg_sleep`, *after* the pre-read has taken its lock. So
+ * the second call is guaranteed to arrive while the first is still open, which
+ * is the window a wall-clock race would only sometimes hit.
+ *
+ * The assertion is not "the second one waited" — it is that the two audit rows
+ * **chain**: the later event's `from_stage` is the earlier one's `to_stage`.
+ * Without `FOR UPDATE` both would read `first_contact` and claim the same
+ * origin, and the reconstructed history would fork.
+ */
+describe('set_stage: two concurrent moves of one lead', () => {
+  /** A store whose actor-name read sleeps, holding the transaction open. */
+  function slowStore(seconds: number) {
+    const registry = buildApplicationRegistry()
+    registry.registerQuery(PIPELINE_WRITE_OPERATIONS.actorDisplayName, {
+      build: ({ params }) => ({
+        text: `SELECT tm.name
+                 FROM public.team_members tm, pg_sleep(${seconds})
+                WHERE tm.user_id = $1::uuid AND tm.active`,
+        values: [(params as { actorId?: string })?.actorId ?? ''],
+      }),
+      mapRow: (row) => ({ name: String(row.name) }),
+    })
+    return new NeonDataStore({
+      connectionString: connection.pooled,
+      operations: registry,
+      statementTimeoutMs: 8_000,
+      maxConnections: 2,
+      applicationName: 's14-write-slice-slow',
+    })
+  }
+
+  it('chains the audit rows instead of forking them', async () => {
+    const slow = slowStore(1)
+    try {
+      // Warm the new pool first. Without this the race is decided by whose TLS
+      // handshake finishes, and the file passes or fails depending on whether
+      // the other store's pool is already open -- which is exactly the kind of
+      // timing-dependent test this one exists to replace.
+      await slow.transaction(
+        { kind: 'user', actorId: CONTRACT_ACTORS.activeMember.actorId, tenantId: 'tenant-a', role: 'member' },
+        (transaction) =>
+          transaction.query({
+            operation: PIPELINE_WRITE_OPERATIONS.leadPipelineFields,
+            params: { leadId: LEAD_IDS.notes },
+            page: { limit: 1 },
+          }),
+      )
+
+      const first = neonSetStage(
+        request('activeMember'),
+        { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
+        { store: slow, legacyProviderName: 'fixture' },
+      )
+      // Long enough for `first` to have taken the row lock and entered the
+      // sleep, short enough to be inside it.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      const second = neonSetStage(
+        request('activeMember'),
+        { leadId: LEAD_IDS.stage, stage: 'call_booked', substatus: null, lostReason: null },
+        { store, legacyProviderName: 'fixture' },
+      )
+
+      const [a, b] = await Promise.all([first, second])
+      expect(a.status).toBe(200)
+      expect(b.status).toBe(200)
+
+      const events = await read<{ from_stage: string | null; to_stage: string | null }>(
+        `SELECT from_stage, to_stage FROM public.pipeline_events
+          WHERE lead_id = $1 ORDER BY id`,
+        [LEAD_IDS.stage],
+      )
+      // Asserted as a *chain*, not as a fixed order: which of the two wins the
+      // lock is legitimately undecided, and pinning it would be testing the
+      // scheduler. What must hold is that the second one's origin is the first
+      // one's destination -- without FOR UPDATE both read `first_contact` and
+      // the reconstructed history forks.
+      expect(events).toHaveLength(2)
+      expect(events[0]?.from_stage).toBe('first_contact')
+      expect(events[1]?.from_stage).toBe(events[0]?.to_stage)
+      expect(new Set(events.map((event) => event.to_stage))).toEqual(
+        new Set(['interested', 'call_booked']),
+      )
+      expect(
+        (
+          await read<{ pipeline_stage: string }>(
+            `SELECT pipeline_stage FROM public.leads WHERE id = $1`,
+            [LEAD_IDS.stage],
+          )
+        )[0]?.pipeline_stage,
+      ).toBe(events[1]?.to_stage)
+    } finally {
+      await slow.close()
+    }
+  }, 30_000)
 })

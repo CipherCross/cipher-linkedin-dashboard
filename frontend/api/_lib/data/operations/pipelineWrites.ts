@@ -97,25 +97,44 @@ export interface LeadByIdParams {
 }
 
 /**
- * Read inside the write transaction, not before it.
+ * Read inside the write transaction, **and with `FOR UPDATE`**.
  *
- * That is the difference from the Supabase path, where the "what was the stage
- * before?" read is its own call: two concurrent stage moves there can both read
- * the same previous stage and write two audit rows claiming the same origin, so
- * the reconstructed history has a gap. Reading it inside the transaction that
- * writes does not by itself serialize the pair — Postgres default isolation is
- * READ COMMITTED — but the `UPDATE` that follows takes a row lock, so the second
- * transaction blocks there and its own audit row is written from a value it can
- * no longer have read. The remaining exposure is recorded as a Known limit; the
- * fix is `SELECT … FOR UPDATE`, which is a one-word change to this statement and
- * was left out of this session because it wants its own concurrency test.
+ * The first half is the difference from the Supabase path, where the "what was
+ * the stage before?" read is its own call: two concurrent stage moves there can
+ * both read the same previous stage and write two audit rows claiming the same
+ * origin, so the reconstructed history forks.
+ *
+ * Reading it inside the writing transaction does not by itself fix that —
+ * Postgres default isolation is READ COMMITTED, so both transactions can still
+ * read the same row before either writes. The `UPDATE` that follows does take a
+ * row lock, so the second transaction blocks *there*; but by then it has already
+ * decided what its audit row says, and it says the stage came from a value that
+ * is no longer true. `pipeline_events` is what "ever reached stage X" is
+ * reconstructed from, so that is a wrong history rather than a stale one.
+ *
+ * `FOR UPDATE` moves the lock to the read, which is where the decision is taken.
+ * The second transaction blocks before it reads, and resumes seeing the first
+ * one's result — so the two audit rows chain instead of forking. Three notes:
+ *
+ * - **No deadlock is introduced.** One row, locked first, and every stage move
+ *   takes it in the same order.
+ * - **It serializes concurrent moves of the *same* lead only.** Different leads
+ *   are different rows and do not contend.
+ * - **`leadDemographics` deliberately does not get the same treatment.**
+ *   `set_gender` updates by `(instance_id, profile_url)` while reading by lead
+ *   id, so locking the row it read would leave a concurrent writer that read a
+ *   *sibling* row of the same person unblocked — a lock that looks like a fix
+ *   and is not one. Closing that properly means locking the person, and the
+ *   right instrument is the advisory lock the import already uses. Recorded as a
+ *   Known limit rather than half-done.
  */
 const LEAD_PIPELINE_FIELDS_SQL = `SELECT l.id::text AS id,
           l.pipeline_stage,
           l.pipeline_substatus,
           l.lost_reason
      FROM public.leads l
-    WHERE l.id = $1::uuid`
+    WHERE l.id = $1::uuid
+      FOR UPDATE`
 
 export const leadPipelineFieldsOperation: NeonQueryOperation<
   LeadPipelineFieldsRow,
