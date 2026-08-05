@@ -16,10 +16,23 @@
  *    is asserted to be that single entry, so a second one cannot be added
  *    quietly.
  *
- * S12 registered no command, because its slice was read-only. S17 registers the
+ * S12 registered no command, because its slice was read-only. S17 registered the
  * first three: the identity write path. They are not general table writes — each
- * is one `SECURITY DEFINER` function that authorizes itself against the
- * canonical tables. S14 still owns the first *business* writes.
+ * is one `SECURITY DEFINER` function that authorizes itself against the canonical
+ * tables.
+ *
+ * S14 registers the first *business* writes, and they are a different kind of
+ * thing: plain INSERT/UPDATE/DELETE on relations whose `FOR ALL TO app_runtime`
+ * policy re-derives the actor from `app.actor_id`, so the database authorizes
+ * every one of them without a function in between. Two exceptions call a
+ * step-`003` function because it does something a statement cannot —
+ * `delete_manual_message` repairs the milestones an import backfilled, and
+ * `apply_follow_up_action` owns the revision check and the replay path.
+ *
+ * 4. A write that must not come apart from another write is **not** one
+ *    operation. It is two, run inside one `DataStore.transaction`. The registry
+ *    is a vocabulary, not a place to hide a procedure — see the header of
+ *    `pipelineWrites.ts` on the CTE alternative and why it lost.
  */
 
 import { NeonOperationRegistry } from '../neon.js'
@@ -70,6 +83,32 @@ import {
   threadOperation,
 } from './messages.js'
 import { PIPELINE_OPERATIONS, pipelineEventLogOperation } from './pipeline.js'
+import {
+  PIPELINE_WRITE_COMMANDS,
+  PIPELINE_WRITE_OPERATIONS,
+  actorDisplayNameOperation,
+  addNoteOperation,
+  appendGenderReviewOperation,
+  appendStageEventOperation,
+  deleteNoteOperation,
+  leadDemographicsOperation,
+  leadPipelineFieldsOperation,
+  setGenderOperation,
+  setInstanceConfigOperation,
+  setStageOperation,
+} from './pipelineWrites.js'
+import {
+  CONVERSATION_WRITE_COMMANDS,
+  CONVERSATION_WRITE_OPERATIONS,
+  applyFollowUpActionOperation,
+  backfillMilestonesOperation,
+  deleteManualMessageOperation,
+  editManualMessageOperation,
+  insertImportedMessagesOperation,
+  leadForImportOperation,
+  lockThreadOperation,
+  threadDedupKeysOperation,
+} from './conversationWrites.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
 export {
@@ -108,6 +147,45 @@ export {
   type PipelineEventLogParams,
   type PipelineEventRow,
 } from './pipeline.js'
+export {
+  PIPELINE_WRITE_COMMANDS,
+  PIPELINE_WRITE_OPERATIONS,
+  type ActorDisplayNameParams,
+  type ActorDisplayNameRow,
+  type AddNoteParams,
+  type AppendEventResult,
+  type AppendGenderReviewParams,
+  type AppendStageEventParams,
+  type DeleteNoteParams,
+  type DeleteResult,
+  type LeadByIdParams,
+  type LeadDemographicsRow,
+  type LeadNoteResult,
+  type LeadPipelineFieldsRow,
+  type SetGenderParams,
+  type SetGenderResult,
+  type SetInstanceConfigParams,
+  type SetStageParams,
+  type SetStageResult,
+  type StageChangedAtMode,
+} from './pipelineWrites.js'
+export {
+  CONVERSATION_WRITE_COMMANDS,
+  CONVERSATION_WRITE_OPERATIONS,
+  type ApplyFollowUpActionParams,
+  type BackfillMilestonesParams,
+  type BackfillMilestonesResult,
+  type DeleteManualMessageParams,
+  type DeleteManualMessageResult,
+  type EditManualMessageParams,
+  type EditManualMessageResult,
+  type FollowUpAction,
+  type InsertImportedMessagesParams,
+  type LeadForImportParams,
+  type LeadForImportRow,
+  type ThreadDedupKeyRow,
+  type ThreadKeyParams,
+} from './conversationWrites.js'
 export {
   DASHBOARD_OPERATIONS,
   type AnnotationRow,
@@ -217,12 +295,85 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     hypothesisCampaignsOperation,
   )
 
+  // S14's two reads, which exist only so a write can build its audit row or its
+  // dedup set. They are registered as ordinary queries because that is what they
+  // are; both are called from inside a write transaction.
+  registry.registerQuery(
+    PIPELINE_WRITE_OPERATIONS.leadPipelineFields,
+    leadPipelineFieldsOperation,
+  )
+  registry.registerQuery(
+    PIPELINE_WRITE_OPERATIONS.leadDemographics,
+    leadDemographicsOperation,
+  )
+  registry.registerQuery(
+    PIPELINE_WRITE_OPERATIONS.actorDisplayName,
+    actorDisplayNameOperation,
+  )
+  registry.registerQuery(
+    CONVERSATION_WRITE_OPERATIONS.leadForImport,
+    leadForImportOperation,
+  )
+  registry.registerQuery(
+    CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
+    threadDedupKeysOperation,
+  )
+
   registry.registerCommand(IDENTITY_ADMIN_COMMANDS.invite, inviteMemberOperation)
   registry.registerCommand(
     IDENTITY_ADMIN_COMMANDS.setActive,
     setMemberActiveOperation,
   )
   registry.registerCommand(IDENTITY_ADMIN_COMMANDS.setRole, setMemberRoleOperation)
+
+  // S14 — the first *business* writes. Every one of them is a plain table write
+  // subject to the relation's `FOR ALL TO app_runtime` policy, except the two
+  // that call a step-`003` function (`deleteManualMessage`,
+  // `applyFollowUpAction`) and therefore authorize themselves.
+  registry.registerCommand(PIPELINE_WRITE_COMMANDS.setStage, setStageOperation)
+  registry.registerCommand(
+    PIPELINE_WRITE_COMMANDS.appendStageEvent,
+    appendStageEventOperation,
+  )
+  registry.registerCommand(PIPELINE_WRITE_COMMANDS.addNote, addNoteOperation)
+  registry.registerCommand(PIPELINE_WRITE_COMMANDS.deleteNote, deleteNoteOperation)
+  registry.registerCommand(PIPELINE_WRITE_COMMANDS.setGender, setGenderOperation)
+  registry.registerCommand(
+    PIPELINE_WRITE_COMMANDS.appendGenderReview,
+    appendGenderReviewOperation,
+  )
+  registry.registerCommand(
+    PIPELINE_WRITE_COMMANDS.setInstanceConfig,
+    setInstanceConfigOperation,
+  )
+
+  registry.registerCommand(
+    CONVERSATION_WRITE_COMMANDS.lockThread,
+    lockThreadOperation,
+  )
+  registry.registerCommand(
+    CONVERSATION_WRITE_COMMANDS.insertImportedMessages,
+    insertImportedMessagesOperation,
+  )
+  registry.registerCommand(
+    CONVERSATION_WRITE_COMMANDS.backfillMilestones,
+    backfillMilestonesOperation,
+  )
+  registry.registerCommand(
+    CONVERSATION_WRITE_COMMANDS.editManualMessage,
+    editManualMessageOperation,
+  )
+  registry.registerCommand(
+    CONVERSATION_WRITE_COMMANDS.deleteManualMessage,
+    deleteManualMessageOperation,
+  )
+  // Registered, and deliberately not reachable from an endpoint: the roster wall
+  // (N-B2) blocks `p_owner_id` while reads stay on Supabase. See the module
+  // header and the S14 handoff.
+  registry.registerCommand(
+    CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
+    applyFollowUpActionOperation,
+  )
 
   return registry
 }
@@ -252,13 +403,34 @@ export const APPLICATION_QUERY_OPERATIONS = [
   LIBRARY_OPERATIONS.icpIndustries,
   LIBRARY_OPERATIONS.hypotheses,
   LIBRARY_OPERATIONS.hypothesisCampaigns,
+  PIPELINE_WRITE_OPERATIONS.leadPipelineFields,
+  PIPELINE_WRITE_OPERATIONS.leadDemographics,
+  PIPELINE_WRITE_OPERATIONS.actorDisplayName,
+  CONVERSATION_WRITE_OPERATIONS.leadForImport,
+  CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
 ] as const
 
-/** Every write. All three are the identity write path; none is a table write. */
+/**
+ * Every write. The first three are the identity write path and are not table
+ * writes; the rest are S14's business writes.
+ */
 export const APPLICATION_COMMAND_OPERATIONS = [
   IDENTITY_ADMIN_COMMANDS.invite,
   IDENTITY_ADMIN_COMMANDS.setActive,
   IDENTITY_ADMIN_COMMANDS.setRole,
+  PIPELINE_WRITE_COMMANDS.setStage,
+  PIPELINE_WRITE_COMMANDS.appendStageEvent,
+  PIPELINE_WRITE_COMMANDS.addNote,
+  PIPELINE_WRITE_COMMANDS.deleteNote,
+  PIPELINE_WRITE_COMMANDS.setGender,
+  PIPELINE_WRITE_COMMANDS.appendGenderReview,
+  PIPELINE_WRITE_COMMANDS.setInstanceConfig,
+  CONVERSATION_WRITE_COMMANDS.lockThread,
+  CONVERSATION_WRITE_COMMANDS.insertImportedMessages,
+  CONVERSATION_WRITE_COMMANDS.backfillMilestones,
+  CONVERSATION_WRITE_COMMANDS.editManualMessage,
+  CONVERSATION_WRITE_COMMANDS.deleteManualMessage,
+  CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
 ] as const
 
 /**

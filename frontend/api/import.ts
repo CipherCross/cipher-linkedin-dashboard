@@ -65,7 +65,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (CONVERSATION_ACTIONS.has(action)) {
-    return handleConversationImport(payload)
+    return handleConversationImport(payload, req)
   }
 
   return json({ error: 'unknown import action' }, 400)

@@ -15,6 +15,14 @@
 import { db } from './_lib/core.js'
 import { PIPELINE_STAGE_IDS, stageAllowsSubstatus } from './_lib/pipeline.js'
 import { guardMember, type AppPrincipal } from './_lib/auth.js'
+import { deploymentWritePath } from './_lib/data/writePath.js'
+import {
+  neonAddNote,
+  neonDeleteNote,
+  neonSetGender,
+  neonSetInstanceConfig,
+  neonSetStage,
+} from './_lib/neonWrites.js'
 
 export const maxDuration = 10
 
@@ -64,6 +72,7 @@ const MAX_CONFIG_BYTES = 64_000
 async function setInstanceConfig(
   supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
+  req: Request,
 ): Promise<Response> {
   const instance_id = payload.instance_id
   const config = payload.config
@@ -83,6 +92,10 @@ async function setInstanceConfig(
     return json({ error: 'config too large' }, 413)
   }
 
+  if (deploymentWritePath() === 'neon') {
+    return neonSetInstanceConfig(req, { instanceId: instance_id, config: clean })
+  }
+
   const { data, error } = await supa
     .from('instances')
     .update({ config: clean, config_updated_at: nowIso() })
@@ -100,6 +113,7 @@ async function setStage(
   supa: ReturnType<typeof db>,
   p: Record<string, unknown>,
   actor: string,
+  req: Request,
 ) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
@@ -145,6 +159,18 @@ async function setStage(
     newStage === 'lost' && typeof lostReasonRaw === 'string'
       ? lostReasonRaw.slice(0, MAX_LOST_REASON)
       : null
+
+  // The provider split happens here: validation above is shared, and everything
+  // below — the pre-read, the write, the audit row and the response — belongs to
+  // one provider. Splitting later would mean two definitions of a legal stage.
+  if (deploymentWritePath() === 'neon') {
+    return neonSetStage(req, {
+      leadId,
+      stage: newStage,
+      substatus: newSubstatus,
+      lostReason: newLost,
+    })
+  }
 
   const { data: lead, error: leadErr } = await supa
     .from('leads')
@@ -282,6 +308,7 @@ async function addNote(
   supa: ReturnType<typeof db>,
   p: Record<string, unknown>,
   author: string,
+  req: Request,
 ) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
@@ -291,6 +318,10 @@ async function addNote(
   if (!body || body.length > MAX_NOTE) {
     return json({ error: `body must be a non-empty string (max ${MAX_NOTE} chars)` }, 400)
   }
+  if (deploymentWritePath() === 'neon') {
+    return neonAddNote(req, { leadId, body })
+  }
+
   const { data: lead, error: leadErr } = await supa
     .from('leads')
     .select('id')
@@ -309,10 +340,17 @@ async function addNote(
   return json({ ok: true, note: data })
 }
 
-async function deleteNote(supa: ReturnType<typeof db>, p: Record<string, unknown>) {
+async function deleteNote(
+  supa: ReturnType<typeof db>,
+  p: Record<string, unknown>,
+  req: Request,
+) {
   const noteId = p.note_id
   if (typeof noteId !== 'number' || !Number.isInteger(noteId) || noteId <= 0) {
     return json({ error: 'note_id must be a positive integer' }, 400)
+  }
+  if (deploymentWritePath() === 'neon') {
+    return neonDeleteNote(req, { noteId })
   }
   const { data, error } = await supa.from('lead_notes').delete().eq('id', noteId).select('id')
   if (error) return json({ error: error.message }, 500)
@@ -595,6 +633,7 @@ async function setGender(
   supa: ReturnType<typeof db>,
   p: Record<string, unknown>,
   reviewer: string,
+  req: Request,
 ) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
@@ -607,6 +646,10 @@ async function setGender(
     !(typeof gender === 'string' && (GENDERS as readonly string[]).includes(gender))
   ) {
     return json({ error: `gender must be null or one of ${GENDERS.join(', ')}` }, 400)
+  }
+
+  if (deploymentWritePath() === 'neon') {
+    return neonSetGender(req, { leadId, gender: gender as string | null })
   }
 
   const { data: lead, error: leadErr } = await supa
@@ -853,13 +896,13 @@ async function handle(req: Request): Promise<Response> {
   const supa = db()
   switch (payload.action) {
     case 'set_stage':
-      return setStage(supa, payload, principal.member.name)
+      return setStage(supa, payload, principal.member.name, req)
     case 'assign':
       return assign(supa, payload, principal.member.name)
     case 'add_note':
-      return addNote(supa, payload, principal.member.name)
+      return addNote(supa, payload, principal.member.name, req)
     case 'delete_note':
-      return deleteNote(supa, payload)
+      return deleteNote(supa, payload, req)
     case 'add_member':
       return addMember(supa, payload)
     case 'set_member_active':
@@ -871,9 +914,9 @@ async function handle(req: Request): Promise<Response> {
     case 'update_member':
       return updateMember(supa, payload)
     case 'set_gender':
-      return setGender(supa, payload, principal.member.name)
+      return setGender(supa, payload, principal.member.name, req)
     case 'set_instance_config':
-      return setInstanceConfig(supa, payload)
+      return setInstanceConfig(supa, payload, req)
     case 'schedule_follow_up':
     case 'reschedule_follow_up':
     case 'reassign_follow_up':

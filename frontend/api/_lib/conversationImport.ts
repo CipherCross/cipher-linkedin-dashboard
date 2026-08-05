@@ -28,6 +28,12 @@
 // refuses them and we 404.
 import { createHash } from 'node:crypto'
 import { db } from './core.js'
+import { deploymentWritePath } from './data/writePath.js'
+import {
+  neonDeleteMessage,
+  neonEditMessage,
+  neonImportConversation,
+} from './neonWrites.js'
 
 const MAX_MESSAGES = 500
 const MAX_BODY_CHARS = 5000
@@ -58,7 +64,8 @@ const minIso = (msgs: ImportMessage[], direction: 'in' | 'out'): string | null =
   return times.length ? times.reduce((a, b) => (a < b ? a : b)) : null
 }
 
-export async function handleConversationImport(payload: {
+export async function handleConversationImport(
+  payload: {
     action?: unknown
     id?: unknown
     body?: unknown
@@ -66,14 +73,16 @@ export async function handleConversationImport(payload: {
     campaign_id?: unknown
     profile_url?: unknown
     messages?: unknown
-  }): Promise<Response> {
+  },
+  req: Request,
+): Promise<Response> {
   // Deleting a single imported row intentionally needs only its message id.
   // Dispatch it before validating the full conversation-import payload.
   if (payload.action === 'delete_message') {
-    return deleteMessage(payload.id)
+    return deleteMessage(payload.id, req)
   }
   if (payload.action === 'edit_message') {
-    return editMessage(payload.id, payload.body)
+    return editMessage(payload.id, payload.body, req)
   }
 
   const { instance_id, campaign_id, profile_url } = payload
@@ -109,6 +118,25 @@ export async function handleConversationImport(payload: {
       body: msg.body,
       sent_at: new Date(msg.sent_at).toISOString(),
       force: msg.force === true,
+    })
+  }
+
+  // The provider split, after the payload is fully validated. `normalizeForDedup`
+  // and `md5` are passed across rather than reimplemented: the dedup rule has one
+  // definition per TS root and this session does not add a third.
+  if (deploymentWritePath() === 'neon') {
+    return neonImportConversation(req, {
+      instanceId: instance_id,
+      campaignId: campaign_id,
+      profileUrl: profile_url,
+      messages: msgs.map((m) => ({
+        direction: m.direction,
+        body: m.body,
+        sent_at: m.sent_at,
+        force: m.force === true,
+        contentHash: md5(m.body),
+      })),
+      normalize: normalizeForDedup,
     })
   }
 
@@ -202,9 +230,12 @@ export async function handleConversationImport(payload: {
   })
 }
 
-async function deleteMessage(id: unknown): Promise<Response> {
+async function deleteMessage(id: unknown, req: Request): Promise<Response> {
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id (positive integer) is required' }, 400)
+  }
+  if (deploymentWritePath() === 'neon') {
+    return neonDeleteMessage(req, { messageId: id })
   }
   const { data, error } = await db().rpc('delete_manual_message', { p_message_id: id })
   if (error) return json({ error: error.message }, 500)
@@ -216,7 +247,11 @@ async function deleteMessage(id: unknown): Promise<Response> {
   return json({ ok: true, deleted: id, milestones_recomputed: result.milestones_recomputed ?? 0 })
 }
 
-async function editMessage(id: unknown, body: unknown): Promise<Response> {
+async function editMessage(
+  id: unknown,
+  body: unknown,
+  req: Request,
+): Promise<Response> {
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id (positive integer) is required' }, 400)
   }
@@ -225,6 +260,13 @@ async function editMessage(id: unknown, body: unknown): Promise<Response> {
   }
 
   const nextBody = body.trim()
+  if (deploymentWritePath() === 'neon') {
+    return neonEditMessage(req, {
+      messageId: id,
+      body: nextBody,
+      contentHash: md5(nextBody),
+    })
+  }
   const { data, error } = await db()
     .from('messages')
     .update({ body: nextBody, content_hash: md5(nextBody) })
