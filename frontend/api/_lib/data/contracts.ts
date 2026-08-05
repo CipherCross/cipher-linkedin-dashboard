@@ -72,6 +72,43 @@ export class DataStoreTransactionError extends DataStoreContractError {
   }
 }
 
+/**
+ * An operation named a relation the database does not have.
+ *
+ * **This is the first widening of the S03 contract, and it exists for exactly
+ * one caller need.** `DataContext` today swallows the errors of ten reads so a
+ * database missing a not-yet-applied table yields `[]` rather than a failed
+ * dashboard load — the Search Library, the ICP/Hypothesis layer, the follow-up
+ * projections, the pipeline audit log. Preserving that through an API means the
+ * handler has to distinguish "this relation is absent" from every other failure,
+ * and it cannot do so without a structural signal:
+ *
+ * - **It must not read the error's message.** The driver composes a failure as
+ *   `` `${what}: ${originalMessage}` ``, and for a connection-level failure the
+ *   original text embeds the database hostname — which is why
+ *   `safeErrorLabel` in the endpoint logs `name`/`code` and nothing else.
+ *   String-matching `does not exist`, the way the Supabase path's
+ *   `isMissingRelation` must, would put the handler back in the business of
+ *   parsing driver text.
+ * - **It must not be the driver's own decision.** Tolerating a missing relation
+ *   is a *product* judgement about one read; an adapter that quietly returned
+ *   zero rows for an absent table would make every read tolerant, including the
+ *   funnel reads where an empty result is a wrong answer rather than a blank
+ *   panel.
+ *
+ * So the adapter classifies and the caller decides. Any `DataStore`
+ * implementation can raise this; the Neon adapter raises it for SQLSTATE 42P01
+ * (`undefined_table`) and **only** for that. A missing *column* is deliberately
+ * not this error — see `operations/leads.ts` on why the column ladders do not
+ * survive the move.
+ */
+export class DataStoreSchemaError extends DataStoreContractError {
+  constructor(message: string) {
+    super('SCHEMA_OBJECT_MISSING', message)
+    this.name = 'DataStoreSchemaError'
+  }
+}
+
 export interface UserActorContext {
   readonly kind: 'user'
   /** Canonical application user ID; never an identity-provider subject. */

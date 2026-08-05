@@ -34,6 +34,7 @@ import {
   DATASTORE_SECURITY_CONTRACT,
   DataStoreAuthorizationError,
   DataStoreContractError,
+  DataStoreSchemaError,
   DataStoreTransactionError,
   normalizePageRequest,
   normalizeUtcRange,
@@ -64,6 +65,18 @@ const OID_DATE = 1082
 /** SQLSTATEs the adapter translates into contract errors. */
 const SQLSTATE_QUERY_CANCELED = '57014'
 const SQLSTATE_INSUFFICIENT_PRIVILEGE = '42501'
+/**
+ * `undefined_table`. Translated so a caller can tolerate a relation this
+ * deployment's schema does not have yet, without reading driver text — see
+ * `DataStoreSchemaError`.
+ *
+ * Deliberately **not** paired with `42703` (`undefined_column`). A missing
+ * column is a mismatched deployment rather than a pending migration on this
+ * path, and the retry ladders that used to degrade around one are gone by
+ * decision (`operations/leads.ts`). Widening this constant to cover 42703 would
+ * reinstate silent degradation through the back door.
+ */
+const SQLSTATE_UNDEFINED_TABLE = '42P01'
 
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 10_000
 
@@ -530,6 +543,18 @@ function toContractError(error: unknown, what: string): Error {
       return withCause(
         new DataStoreAuthorizationError(
           `${what} was denied by database authorization`,
+        ),
+        error,
+      )
+    }
+    if (error.code === SQLSTATE_UNDEFINED_TABLE) {
+      // The original text names the missing relation, which would be harmless
+      // to keep — but the rule that no driver message reaches a log or a
+      // response is worth more than the diagnostic, and the SQLSTATE is
+      // preserved as the `cause`. So the message is composed rather than quoted.
+      return withCause(
+        new DataStoreSchemaError(
+          `${what} referenced a relation that does not exist`,
         ),
         error,
       )
