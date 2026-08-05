@@ -2,6 +2,13 @@
 // (notified_at IS NULL), claims them, and posts one Block Kit message to Slack
 // so SDRs can jump on warm leads without watching the dashboard.
 //
+// AI-path status: this endpoint has NO human actor — both triggers are machine
+// callers (the sync-agent ping and the cron). It therefore stays on Supabase
+// when `NEON_AI_PATH_DEFAULT=neon`, declared blocked, until ledger step 007
+// (the system write path, `postgres/tenant-baseline/v1/007_ai_system_write_path.sql`)
+// is applied. S15 wrote that step precisely so this endpoint and the cron halves
+// of classify/briefing share one designed migration instead of ad-hoc grants.
+//
 // Triggers:
 //   POST — the sync-agent pings after every successful push (see agent.py's
 //          notify_new_replies) with the dedicated NOTIFY_SECRET bearer token.

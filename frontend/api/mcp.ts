@@ -8,14 +8,12 @@
 // service-role-backed SQL. MCP clients cannot inherit the SPA's user session.
 import { createMcpHandler } from 'mcp-handler'
 import {
-  CAMPAIGN_OVERVIEW_SQL,
-  HYPOTHESIS_OVERVIEW_SQL,
-  PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
-  WEEKLY_FUNNEL_SQL,
+  executeNamedSql,
   executeSql,
 } from './_lib/core.js'
 import { executeSaveSearch, toolDefs } from './_lib/tools.js'
+import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { guardMachine } from './_lib/auth.js'
 
 function asText(value: unknown) {
@@ -52,28 +50,28 @@ function registerReadOnlyTools(server: McpServer) {
     toolDefs.weekly_funnel.name,
     toolDefs.weekly_funnel.description,
     toolDefs.weekly_funnel.inputShape,
-    async () => asText(await executeSql(WEEKLY_FUNNEL_SQL))
+    async () => asText(await executeNamedSql('weeklyFunnel'))
   )
 
   server.tool(
     toolDefs.campaign_overview.name,
     toolDefs.campaign_overview.description,
     toolDefs.campaign_overview.inputShape,
-    async () => asText(await executeSql(CAMPAIGN_OVERVIEW_SQL))
+    async () => asText(await executeNamedSql('campaignOverview'))
   )
 
   server.tool(
     toolDefs.pipeline_overview.name,
     toolDefs.pipeline_overview.description,
     toolDefs.pipeline_overview.inputShape,
-    async () => asText(await executeSql(PIPELINE_OVERVIEW_SQL))
+    async () => asText(await executeNamedSql('pipelineOverview'))
   )
 
   server.tool(
     toolDefs.hypothesis_overview.name,
     toolDefs.hypothesis_overview.description,
     toolDefs.hypothesis_overview.inputShape,
-    async () => asText(await executeSql(HYPOTHESIS_OVERVIEW_SQL))
+    async () => asText(await executeNamedSql('hypothesisOverview'))
   )
 }
 
@@ -94,7 +92,19 @@ const adminHandler = createMcpHandler(
       toolDefs.save_search.name,
       toolDefs.save_search.description,
       toolDefs.save_search.inputShape,
-      async (args) => asText(await executeSaveSearch(args))
+      async (args) => {
+        // MCP authenticates with MCP_SECRET — a machine caller with no human
+        // actor. On the Neon path that write is declared blocked until ledger
+        // step 007 (the system write path) is applied; it stays on Supabase
+        // only while the AI layer itself is still on Supabase.
+        if (deploymentAiPath() === 'neon') {
+          return asText(
+            'save_search is unavailable: MCP has no signed-in member to write as, ' +
+              'and the system write path (ledger step 007) has not been applied yet.'
+          )
+        }
+        return asText(await executeSaveSearch(args))
+      }
     )
   },
   serverOptions,

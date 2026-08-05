@@ -4,15 +4,14 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import {
-  CAMPAIGN_OVERVIEW_SQL,
-  HYPOTHESIS_OVERVIEW_SQL,
-  PIPELINE_OVERVIEW_SQL,
   SCHEMA_DOC,
-  WEEKLY_FUNNEL_SQL,
   db,
+  executeNamedSql,
   executeSql,
 } from './core.js'
 import { validateSearch } from './savedSearch.js'
+import { deploymentAiPath } from './data/aiPath.js'
+import { neonSaveEntity } from './neonLibraryWrites.js'
 
 export interface ToolDef {
   name: string
@@ -194,46 +193,100 @@ export async function executeSaveSearch(input: {
   return { ok: true, search: data }
 }
 
-export const tools = {
-  run_sql: tool({
-    description: toolDefs.run_sql.description,
-    inputSchema: z.object(toolDefs.run_sql.inputShape),
-    execute: async ({ query }) => executeSql(query),
-  }),
+/** The Neon branch of the chat's save_search. The patch is validated exactly
+ *  as the Supabase path does; the write goes through S14's library operation
+ *  under the request's resolved actor. Returns the same tool-result shapes. */
+async function saveSearchOnNeon(
+  req: Request,
+  input: { id?: number; [k: string]: unknown },
+): Promise<{ ok: true; search: unknown } | string> {
+  const { id, ...rest } = input
+  const isUpdate = id !== undefined && id !== null
+  const normalized = validateSearch(rest, !isUpdate)
+  if (typeof normalized === 'string') return `Invalid search: ${normalized}`
+  if (isUpdate && Object.keys(normalized).length === 0) {
+    return 'Nothing to update — provide at least one field to change.'
+  }
 
-  get_schema: tool({
-    description: toolDefs.get_schema.description,
-    inputSchema: z.object(toolDefs.get_schema.inputShape),
-    execute: async () => SCHEMA_DOC,
-  }),
+  const response = await neonSaveEntity(req, {
+    entity: 'search',
+    ...(isUpdate ? { id: id as number } : {}),
+    patch: normalized,
+    bodyKey: 'search',
+    conflictMessage:
+      'A search with that name already exists for this platform — update the existing search (pass its id) instead of creating a duplicate.',
+  })
+  const body = (await response.json().catch(() => null)) as
+    | { ok?: boolean; search?: unknown; error?: string }
+    | null
+  if (response.ok && body?.ok) return { ok: true, search: body.search }
+  if (body?.error) return body.error
+  return `Save failed (status ${response.status})`
+}
 
-  weekly_funnel: tool({
-    description: toolDefs.weekly_funnel.description,
-    inputSchema: z.object(toolDefs.weekly_funnel.inputShape),
-    execute: async () => executeSql(WEEKLY_FUNNEL_SQL),
-  }),
+export interface BuildToolsDeps {
+  /**
+   * The request whose bearer the save_search write resolves its actor under.
+   * The chat supplies it; callers without one (the MCP surface, the cron)
+   * receive a declared-blocked message on the Neon path instead — machine
+   * writes wait on ledger step 007.
+   */
+  readonly req?: Request
+}
 
-  campaign_overview: tool({
-    description: toolDefs.campaign_overview.description,
-    inputSchema: z.object(toolDefs.campaign_overview.inputShape),
-    execute: async () => executeSql(CAMPAIGN_OVERVIEW_SQL),
-  }),
+/** Build the tool set for one request. The four read-only tools are identical
+ *  across requests; save_search is bound to the caller's request. */
+export function buildTools(deps: BuildToolsDeps = {}) {
+  return {
+    run_sql: tool({
+      description: toolDefs.run_sql.description,
+      inputSchema: z.object(toolDefs.run_sql.inputShape),
+      execute: async ({ query }) => executeSql(query),
+    }),
 
-  pipeline_overview: tool({
-    description: toolDefs.pipeline_overview.description,
-    inputSchema: z.object(toolDefs.pipeline_overview.inputShape),
-    execute: async () => executeSql(PIPELINE_OVERVIEW_SQL),
-  }),
+    get_schema: tool({
+      description: toolDefs.get_schema.description,
+      inputSchema: z.object(toolDefs.get_schema.inputShape),
+      execute: async () => SCHEMA_DOC,
+    }),
 
-  hypothesis_overview: tool({
-    description: toolDefs.hypothesis_overview.description,
-    inputSchema: z.object(toolDefs.hypothesis_overview.inputShape),
-    execute: async () => executeSql(HYPOTHESIS_OVERVIEW_SQL),
-  }),
+    weekly_funnel: tool({
+      description: toolDefs.weekly_funnel.description,
+      inputSchema: z.object(toolDefs.weekly_funnel.inputShape),
+      execute: async () => executeNamedSql('weeklyFunnel'),
+    }),
 
-  save_search: tool({
-    description: toolDefs.save_search.description,
-    inputSchema: z.object(toolDefs.save_search.inputShape),
-    execute: async (input) => executeSaveSearch(input),
-  }),
+    campaign_overview: tool({
+      description: toolDefs.campaign_overview.description,
+      inputSchema: z.object(toolDefs.campaign_overview.inputShape),
+      execute: async () => executeNamedSql('campaignOverview'),
+    }),
+
+    pipeline_overview: tool({
+      description: toolDefs.pipeline_overview.description,
+      inputSchema: z.object(toolDefs.pipeline_overview.inputShape),
+      execute: async () => executeNamedSql('pipelineOverview'),
+    }),
+
+    hypothesis_overview: tool({
+      description: toolDefs.hypothesis_overview.description,
+      inputSchema: z.object(toolDefs.hypothesis_overview.inputShape),
+      execute: async () => executeNamedSql('hypothesisOverview'),
+    }),
+
+    save_search: tool({
+      description: toolDefs.save_search.description,
+      inputSchema: z.object(toolDefs.save_search.inputShape),
+      execute: async (input) => {
+        if (deploymentAiPath() !== 'neon') return executeSaveSearch(input)
+        if (!deps.req) {
+          return (
+            'save_search is unavailable: writes on the Neon path need a signed-in ' +
+            'member, and the system write path (ledger step 007) has not been applied yet.'
+          )
+        }
+        return saveSearchOnNeon(deps.req, input)
+      },
+    }),
+  }
 }

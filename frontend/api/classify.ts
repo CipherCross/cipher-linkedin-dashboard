@@ -1,4 +1,4 @@
-// Reply classifier. Reads unclassified inbound replies from Supabase, sends
+// Reply classifier. Reads unclassified inbound replies, sends
 // each one (with its conversation thread for context) to Claude, and writes
 // back independent sentiment + commercial-intent labels. Reuses the same Anthropic key and
 // service-role Supabase client as /api/chat — nothing runs on the notebooks.
@@ -6,11 +6,33 @@
 // Triggers:
 //   GET  — the daily Vercel cron (guarded by CRON_SECRET).
 //   POST — the admin-only "Classify replies" button on the Leads page.
+//
+// AI-path split, by actor: the POST branches (batch, ?mode=demographics,
+// ?mode=reclassify) have a human and move with `NEON_AI_PATH_DEFAULT=neon` —
+// the actor resolves against Neon and the admin role is re-checked there, so
+// the database being written decides membership. The GET cron has no human to
+// publish and stays on Supabase, declared blocked, until ledger step 007 (the
+// system write path) is applied.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { db } from './_lib/core.js'
-import { guardAdmin, guardMachine } from './_lib/auth.js'
+import { guardAdmin, guardMachine, authorizationResponse } from './_lib/auth.js'
+import { deploymentAiPath } from './_lib/data/aiPath.js'
+import {
+  DataStoreContractError,
+  MAX_PAGE_SIZE,
+  type ActorContext,
+  type DataStore,
+  type Page,
+} from './_lib/data/contracts.js'
+import {
+  AI_WRITE_OPERATIONS,
+  type GenderBatchRow,
+  type PendingReplyRow,
+  type ThreadContextRow,
+} from './_lib/data/operations/index.js'
+import { neonWriter, type NeonWriteDeps } from './_lib/neonWrites.js'
 
 export const maxDuration = 300
 
@@ -138,7 +160,11 @@ function chunk<T>(arr: T[], n: number): T[][] {
 }
 
 /** Render a numbered reply with its preceding conversation for the model. */
-function renderReply(ref: number, reply: Reply, thread: Msg[]): string {
+function renderReply(
+  ref: number,
+  reply: Pick<Reply, 'body' | 'sent_at'>,
+  thread: Msg[]
+): string {
   const prior = thread
     .filter((m) => m.sent_at <= reply.sent_at)
     .slice(-CTX_MSGS)
@@ -155,7 +181,7 @@ function renderReply(ref: number, reply: Reply, thread: Msg[]): string {
   return `[reply ${ref}]\n${lines.join('\n')}`
 }
 
-async function handle(req: Request): Promise<Response> {
+async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response> {
   const mode = new URL(req.url).searchParams.get('mode')
 
   // Manual reclassification used to be its own function file. It was folded in
@@ -164,11 +190,16 @@ async function handle(req: Request): Promise<Response> {
   // its own method check and its own admin guard rather than inheriting the
   // GET/cron branch below — a cron caller must never reach it. `vercel.json`
   // rewrites `/api/reclassify` here, so the client-visible URL is unchanged.
-  if (mode === 'reclassify') return handleReclassify(req)
+  if (mode === 'reclassify') return handleReclassify(req, deps)
 
   if (req.method === 'GET') {
     const denied = await guardMachine(req, 'CRON_SECRET')
     if (denied) return denied
+    // The cron stays on Supabase whatever NEON_AI_PATH_DEFAULT says: it has no
+    // human actor, and the system write path (ledger step 007) is written but
+    // not applied yet. Declared blocked, not silently routed.
+  } else if (deploymentAiPath() === 'neon') {
+    return classifyOnNeon(req, mode, deps)
   } else {
     const auth = await guardAdmin(req)
     if (auth.response) return auth.response
@@ -590,6 +621,354 @@ async function runDemographics(sb: ReturnType<typeof db>): Promise<DemographicsR
 }
 
 // ---------------------------------------------------------------------------
+// The Neon branches of the POST paths (batch, demographics, reclassify).
+//
+// Same authorization argument as `neonWrites.ts`: the actor resolves against
+// the database being written, and the admin role is re-checked from that
+// resolution — the Supabase guardAdmin answer is not carried over. Same
+// response bodies as the Supabase path, because the client cannot tell which
+// provider answered.
+// ---------------------------------------------------------------------------
+
+/** Log a failure by class, never by message — the driver composes connection
+ *  failures with the database hostname, and no driver text may reach a log.
+ *  Same duplication note as the copies in `neonWrites.ts` and `coach.ts`. */
+function safeErrorLabel(error: unknown): string {
+  if (error instanceof DataStoreContractError) return `${error.name}(${error.code})`
+  if (error instanceof Error) return error.name
+  return 'UnknownError'
+}
+
+/** Run pipeline_auto_advance() through the store; undefined on any failure,
+ *  mirroring `autoAdvancePipeline`'s never-throw contract. */
+async function autoAdvanceNeon(
+  store: DataStore,
+  actor: ActorContext
+): Promise<number | undefined> {
+  try {
+    const result = await store.transaction(actor, async (transaction) =>
+      transaction.execute<{ advanced: number }>({
+        operation: AI_WRITE_OPERATIONS.classifyAutoAdvance,
+      })
+    )
+    return result.advanced
+  } catch (e) {
+    console.warn('pipeline_auto_advance skipped:', safeErrorLabel(e))
+    return undefined
+  }
+}
+
+/** The demographics phase on Neon. The baseline carries migration 048's v2
+ *  columns by construction, so there is no legacy ladder here — one fair-batch
+ *  statement replaces the per-instance walk `selectGenderBatchV2` does. */
+async function runDemographicsOnNeon(
+  store: DataStore,
+  actor: ActorContext
+): Promise<DemographicsRun> {
+  let processed = 0
+  let failed = 0
+  try {
+    const batchPage = await store.query<GenderBatchRow>(actor, {
+      operation: AI_WRITE_OPERATIONS.classifyGenderBatch,
+      params: {
+        genderVersion: GENDER_VERSION,
+        bucketLimit: DEMO_BATCH,
+        batchLimit: DEMO_BATCH,
+      },
+      page: { limit: DEMO_BATCH },
+    })
+    const leads = [...batchPage.items]
+
+    const countBacklog = async (): Promise<number | null> => {
+      try {
+        const page = await store.query<{ remaining: number }>(actor, {
+          operation: AI_WRITE_OPERATIONS.classifyGenderBacklog,
+          params: { genderVersion: GENDER_VERSION },
+          page: { limit: 1 },
+        })
+        return page.items[0]?.remaining ?? 0
+      } catch (e) {
+        console.warn('gender backlog count failed:', safeErrorLabel(e))
+        return null
+      }
+    }
+
+    if (!leads.length) {
+      return {
+        processed: 0,
+        failed: 0,
+        remaining: await countBacklog(),
+        lifecycle: 'v2',
+      }
+    }
+
+    const now = new Date().toISOString()
+
+    const writeDemo = async (
+      lead: GenderBatchRow,
+      gender: (typeof GENDERS)[number],
+      confidence: number
+    ) => {
+      try {
+        await store.transaction(actor, async (transaction) =>
+          transaction.execute<{ updated: number }>({
+            operation: AI_WRITE_OPERATIONS.classifyWriteGender,
+            params: {
+              instanceId: lead.instance_id,
+              profileUrl: lead.profile_url,
+              gender,
+              confidence,
+              now,
+              model: MODEL,
+              genderVersion: GENDER_VERSION,
+            },
+          })
+        )
+        processed++
+      } catch {
+        failed++
+      }
+    }
+
+    // Leads with no usable name skip the model entirely — stamp 'unknown' directly.
+    const named: GenderBatchRow[] = []
+    const nameless: GenderBatchRow[] = []
+    for (const l of leads) {
+      if (l.full_name && l.full_name.trim()) named.push(l)
+      else nameless.push(l)
+    }
+    await Promise.all(nameless.map((l) => writeDemo(l, 'unknown', 0)))
+
+    for (const group of chunk(named, DEMO_GROUP)) {
+      const prompt = group
+        .map(
+          (l, i) =>
+            `[person ${i}] name: ${l.full_name?.trim() ?? ''}` +
+            (l.headline?.trim() ? `\nheadline: ${l.headline.trim().slice(0, BODY_CAP)}` : '')
+        )
+        .join('\n\n')
+
+      let results: Array<{ ref: number; gender: (typeof GENDERS)[number]; confidence: number }>
+      try {
+        const { object } = await generateObject({
+          model: anthropic(MODEL),
+          schema: z.object({
+            results: z
+              .array(
+                z.object({
+                  ref: z.number().int(),
+                  gender: z.enum(GENDERS),
+                  confidence: z.number().min(0).max(1),
+                })
+              )
+              .length(group.length),
+          }),
+          system: GENDER_SYSTEM,
+          prompt,
+        })
+        results = object.results
+      } catch (e) {
+        console.warn('gender inference failed for a group:', e)
+        failed += group.length
+        continue
+      }
+
+      // Same ref-validation as sentiment: valid, in-range, not-yet-used index
+      // into THIS group.
+      const usedRefs = new Set<number>()
+      await Promise.all(
+        results.map(async (r) => {
+          if (!Number.isInteger(r.ref) || r.ref < 0 || r.ref >= group.length) return
+          if (usedRefs.has(r.ref)) return
+          usedRefs.add(r.ref)
+          const lead = group[r.ref]
+          if (!lead) return
+          const confidence = Math.min(1, Math.max(0, r.confidence))
+          await writeDemo(lead, r.gender, confidence)
+        })
+      )
+    }
+
+    return {
+      processed,
+      failed,
+      remaining: await countBacklog(),
+      lifecycle: 'v2',
+    }
+  } catch (e) {
+    console.warn('demographics phase threw:', safeErrorLabel(e))
+    return {
+      processed,
+      failed,
+      remaining: null,
+      lifecycle: 'unavailable',
+    }
+  }
+}
+
+/** The admin batch + demographics on Neon. Admin is re-checked from the Neon
+ *  actor resolution — the database being written decides. */
+async function classifyOnNeon(
+  req: Request,
+  mode: string | null,
+  deps: NeonWriteDeps = {}
+): Promise<Response> {
+  let writer
+  try {
+    writer = await neonWriter(req, deps)
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    console.error('Neon classify failed (verify team access):', safeErrorLabel(error))
+    return json({ error: 'Could not verify team access' }, 500)
+  }
+  if (writer.actor.role !== 'admin') {
+    return json({ error: 'Admin access required' }, 403)
+  }
+  const { store, actor } = writer
+
+  try {
+    // Dedicated mode: drain the gender backlog without spending the invocation
+    // budget on reply classification — same shape as the Supabase branch.
+    if (mode === 'demographics') {
+      return json({
+        classified: 0,
+        remaining: 0,
+        demographics: await runDemographicsOnNeon(store, actor),
+      })
+    }
+
+    const repliesPage = await store.query<PendingReplyRow>(actor, {
+      operation: AI_WRITE_OPERATIONS.classifyPendingReplies,
+      params: { taxonomyVersion: INTENT_TAXONOMY_VERSION },
+      page: { limit: BATCH },
+    })
+    const replies = [...repliesPage.items]
+    if (!replies.length) {
+      // No backlog, but auto-advance and demographics still run — same contract
+      // as the Supabase path's empty-batch branch.
+      const auto_advanced = await autoAdvanceNeon(store, actor)
+      const demographics = await runDemographicsOnNeon(store, actor)
+      return json({
+        classified: 0,
+        remaining: 0,
+        ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+        demographics,
+      })
+    }
+
+    // One context fetch for the whole batch, scoped by instance AND profile and
+    // capped at the same 5000 rows PostgREST's `.limit(5000)` gives — newest
+    // first, so the cap drops the oldest context.
+    const profiles = [...new Set(replies.map((r) => r.profile_url))]
+    const instances = [...new Set(replies.map((r) => r.instance_id))]
+    const ctxRows: ThreadContextRow[] = []
+    let cursor: string | null = null
+    while (ctxRows.length < 5000) {
+      const page: Page<ThreadContextRow> = await store.query<ThreadContextRow>(actor, {
+        operation: AI_WRITE_OPERATIONS.classifyThreadContext,
+        params: { instances, profiles },
+        page: { limit: MAX_PAGE_SIZE, cursor },
+      })
+      ctxRows.push(...page.items)
+      if (!page.hasMore || page.nextCursor === null) break
+      cursor = page.nextCursor
+    }
+    const threads = new Map<string, Msg[]>()
+    for (const m of ctxRows.slice(0, 5000)) {
+      const k = key(m.instance_id, m.profile_url)
+      let arr = threads.get(k)
+      if (!arr) threads.set(k, (arr = []))
+      arr.push(m)
+    }
+    // renderReply expects each thread oldest-first; we fetched newest-first.
+    for (const arr of threads.values()) arr.reverse()
+
+    const now = new Date().toISOString()
+    let classified = 0
+
+    for (const group of chunk(replies, GROUP)) {
+      const prompt = group
+        .map((r, i) => renderReply(i, r, threads.get(key(r.instance_id, r.profile_url)) ?? []))
+        .join('\n\n')
+
+      const { object } = await generateObject({
+        model: anthropic(MODEL),
+        schema: z.object({
+          results: z.array(
+            z.object({
+              ref: z.number().int(),
+              sentiment: z.enum(SENTIMENTS),
+              sentiment_reason: z.string(),
+              intent_level: z.enum(INTENTS).nullable(),
+              intent_reason: z.string(),
+            })
+          ),
+        }),
+        system: SYSTEM,
+        prompt,
+      })
+
+      // Same ref-validation as the Supabase path, and the same manual-sentiment
+      // protection: the operation's CASE keeps a manual row's sentiment.
+      const usedRefs = new Set<number>()
+      await Promise.all(
+        object.results.map(async (r) => {
+          if (!Number.isInteger(r.ref) || r.ref < 0 || r.ref >= group.length) return
+          if (usedRefs.has(r.ref)) return
+          usedRefs.add(r.ref)
+          const reply = group[r.ref]
+          if (!reply) return
+          try {
+            await store.transaction(actor, async (transaction) =>
+              transaction.execute<{ updated: number }>({
+                operation: AI_WRITE_OPERATIONS.classifyWriteLabels,
+                params: {
+                  messageId: reply.id,
+                  applySentiment: reply.classified_model !== 'manual',
+                  sentiment: r.sentiment,
+                  reason: r.sentiment_reason.slice(0, 300),
+                  intentLevel: r.intent_level,
+                  intentReason: r.intent_reason.slice(0, 300),
+                  now,
+                  model: MODEL,
+                  taxonomyVersion: INTENT_TAXONOMY_VERSION,
+                },
+              })
+            )
+            classified++
+          } catch {
+            // A failed single label must not abort the batch — the Supabase path
+            // tolerates the same per-row failure.
+          }
+        })
+      )
+    }
+
+    const remainingPage = await store.query<{ remaining: number }>(actor, {
+      operation: AI_WRITE_OPERATIONS.classifyRemainingCount,
+      params: { taxonomyVersion: INTENT_TAXONOMY_VERSION },
+      page: { limit: 1 },
+    })
+
+    const auto_advanced = await autoAdvanceNeon(store, actor)
+    const demographics = await runDemographicsOnNeon(store, actor)
+
+    return json({
+      classified,
+      remaining: remainingPage.items[0]?.remaining ?? 0,
+      ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+      demographics,
+    })
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    console.error('Neon classify failed:', safeErrorLabel(error))
+    return json({ error: 'Could not classify replies' }, 500)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Manual reclassification — formerly `frontend/api/reclassify.ts`.
 //
 // The conversation drawer posts a single inbound message id plus the sentiment
@@ -604,10 +983,143 @@ async function runDemographics(sb: ReturnType<typeof db>): Promise<DemographicsR
 // message and is idempotent.
 // ---------------------------------------------------------------------------
 
-async function handleReclassify(req: Request): Promise<Response> {
+interface ReclassifyInput {
+  readonly id: number
+  readonly hasSentiment: boolean
+  readonly sentiment: Sentiment | undefined
+  readonly hasIntent: boolean
+  readonly intent: ReplyIntent | null | undefined
+  readonly reason: string
+  readonly intentReason: string
+}
+
+/** The one definition of a legal reclassify body, shared by both providers so
+ *  they cannot drift on what a manual correction may contain. */
+function parseReclassifyPayload(payload: {
+  id?: unknown
+  sentiment?: unknown
+  intent_level?: unknown
+  reason?: unknown
+  intent_reason?: unknown
+}): { error: string; status: number } | { input: ReclassifyInput } {
+  const id = Number(payload.id)
+  if (!Number.isInteger(id) || id <= 0) {
+    return { error: 'id must be a positive integer', status: 400 }
+  }
+  const hasSentiment = payload.sentiment !== undefined
+  const hasIntent = payload.intent_level !== undefined
+  if (!hasSentiment && !hasIntent) {
+    return { error: 'sentiment or intent_level is required', status: 400 }
+  }
+  if (hasSentiment && !SENTIMENTS.includes(payload.sentiment as Sentiment)) {
+    return { error: `sentiment must be one of ${SENTIMENTS.join(', ')}`, status: 400 }
+  }
+  if (
+    hasIntent &&
+    payload.intent_level !== null &&
+    !INTENTS.includes(payload.intent_level as ReplyIntent)
+  ) {
+    return { error: `intent_level must be null or one of ${INTENTS.join(', ')}`, status: 400 }
+  }
+  return {
+    input: {
+      id,
+      hasSentiment,
+      sentiment: payload.sentiment as Sentiment | undefined,
+      hasIntent,
+      intent: payload.intent_level as ReplyIntent | null | undefined,
+      reason:
+        typeof payload.reason === 'string' && payload.reason.trim()
+          ? payload.reason.trim().slice(0, 300)
+          : 'manual override',
+      intentReason:
+        typeof payload.intent_reason === 'string' && payload.intent_reason.trim()
+          ? payload.intent_reason.trim().slice(0, 300)
+          : 'manual override',
+    },
+  }
+}
+
+/** The Neon branch of manual reclassification: resolve the actor against the
+ *  database being written, re-check admin there, then the single-row update. */
+async function reclassifyOnNeon(req: Request, deps: NeonWriteDeps = {}): Promise<Response> {
+  let writer
+  try {
+    writer = await neonWriter(req, deps)
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    console.error('Neon reclassify failed (verify team access):', safeErrorLabel(error))
+    return json({ error: 'Could not verify team access' }, 500)
+  }
+  if (writer.actor.role !== 'admin') {
+    return json({ error: 'Admin access required' }, 403)
+  }
+  const { store, actor } = writer
+
+  let payload: {
+    id?: unknown
+    sentiment?: unknown
+    intent_level?: unknown
+    reason?: unknown
+    intent_reason?: unknown
+  }
+  try {
+    payload = await req.json()
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400)
+  }
+
+  const parsed = parseReclassifyPayload(payload)
+  if ('error' in parsed) return json({ error: parsed.error }, parsed.status)
+  const { input } = parsed
+
+  try {
+    const result = await store.transaction(actor, async (transaction) =>
+      transaction.execute<{
+        id: number | null
+        sentiment: string | null
+        intent_level: string | null
+      }>({
+        operation: AI_WRITE_OPERATIONS.classifyReclassify,
+        params: {
+          messageId: input.id,
+          hasSentiment: input.hasSentiment,
+          sentiment: input.sentiment ?? null,
+          reason: input.reason,
+          hasIntent: input.hasIntent,
+          intentLevel: input.intent ?? null,
+          intentReason: input.intentReason,
+          now: new Date().toISOString(),
+          taxonomyVersion: INTENT_TAXONOMY_VERSION,
+        },
+      })
+    )
+    if (result.id === null) return json({ error: 'no inbound message with that id' }, 404)
+
+    const auto_advanced = await autoAdvanceNeon(store, actor)
+
+    return json({
+      ok: true,
+      id: result.id,
+      sentiment: result.sentiment,
+      intent_level: result.intent_level,
+      ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+    })
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    console.error('Neon reclassify failed:', safeErrorLabel(error))
+    return json({ error: 'Could not reclassify message' }, 500)
+  }
+}
+
+async function handleReclassify(req: Request, deps: NeonWriteDeps = {}): Promise<Response> {
   if (req.method !== 'POST') {
     return json({ error: 'method not allowed' }, 405)
   }
+
+  if (deploymentAiPath() === 'neon') return reclassifyOnNeon(req, deps)
 
   const auth = await guardAdmin(req)
   if (auth.response) return auth.response
@@ -625,49 +1137,23 @@ async function handleReclassify(req: Request): Promise<Response> {
     return json({ error: 'invalid JSON body' }, 400)
   }
 
-  const id = Number(payload.id)
-  if (!Number.isInteger(id) || id <= 0) {
-    return json({ error: 'id must be a positive integer' }, 400)
-  }
-  const hasSentiment = payload.sentiment !== undefined
-  const hasIntent = payload.intent_level !== undefined
-  if (!hasSentiment && !hasIntent) {
-    return json({ error: 'sentiment or intent_level is required' }, 400)
-  }
-  if (hasSentiment && !SENTIMENTS.includes(payload.sentiment as Sentiment)) {
-    return json({ error: `sentiment must be one of ${SENTIMENTS.join(', ')}` }, 400)
-  }
-  if (
-    hasIntent &&
-    payload.intent_level !== null &&
-    !INTENTS.includes(payload.intent_level as ReplyIntent)
-  ) {
-    return json({ error: `intent_level must be null or one of ${INTENTS.join(', ')}` }, 400)
-  }
-  const sentiment = payload.sentiment as Sentiment | undefined
-  const intent = payload.intent_level as ReplyIntent | null | undefined
-  const reason =
-    typeof payload.reason === 'string' && payload.reason.trim()
-      ? payload.reason.trim().slice(0, 300)
-      : 'manual override'
-  const intentReason =
-    typeof payload.intent_reason === 'string' && payload.intent_reason.trim()
-      ? payload.intent_reason.trim().slice(0, 300)
-      : 'manual override'
+  const parsed = parseReclassifyPayload(payload)
+  if ('error' in parsed) return json({ error: parsed.error }, parsed.status)
+  const { input } = parsed
 
   const patch: Record<string, unknown> = {}
-  if (hasSentiment) {
+  if (input.hasSentiment) {
     Object.assign(patch, {
-      sentiment,
-      reason,
+      sentiment: input.sentiment,
+      reason: input.reason,
       classified_at: new Date().toISOString(),
       classified_model: 'manual',
     })
   }
-  if (hasIntent) {
+  if (input.hasIntent) {
     Object.assign(patch, {
-      intent_level: intent,
-      intent_reason: intentReason,
+      intent_level: input.intent,
+      intent_reason: input.intentReason,
       intent_classified_at: new Date().toISOString(),
       intent_classified_model: 'manual',
       intent_taxonomy_version: INTENT_TAXONOMY_VERSION,
@@ -678,7 +1164,7 @@ async function handleReclassify(req: Request): Promise<Response> {
   const { data, error } = await sb
     .from('messages')
     .update(patch)
-    .eq('id', id)
+    .eq('id', input.id)
     .eq('direction', 'in')
     .select('id,sentiment,intent_level')
     .single()

@@ -1,7 +1,7 @@
 import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { SCHEMA_DOC, loadIcpRoster } from './_lib/core.js'
-import { tools } from './_lib/tools.js'
+import { buildTools } from './_lib/tools.js'
 import { guardMember } from './_lib/auth.js'
 
 export const maxDuration = 300
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     model: anthropic('claude-opus-4-8'),
     system: SYSTEM,
     messages: await convertToModelMessages(messages),
-    tools,
+    tools: buildTools({ req }),
     stopWhen: stepCountIs(40),
     maxOutputTokens: 16000,
     providerOptions: {
