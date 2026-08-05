@@ -34,13 +34,24 @@
  * instead of a false success. `tests/pipelineWrites.neon.test.ts` proves it by
  * failing the second write on purpose and then showing the first one absent.
  *
- * **The cost of that, stated rather than glossed:** a pair is two round trips
- * inside the transaction instead of two independent ones, on top of the driver's
- * `BEGIN` and its `set_config` preamble. Measured in the handoff. The alternative
- * — one statement with a CTE chain doing both writes — is one round trip and
- * equally atomic, and it was rejected because it puts two operations' SQL in one
+ * **The cost of that, measured rather than asserted:** a pair is two round trips
+ * inside the transaction instead of one, on top of the driver's `BEGIN` and its
+ * `set_config` preamble. `tests/pairedWriteLatency.neon.test.ts` runs both
+ * against the live pooled endpoint and the answer is stable across runs:
+ *
+ * | | p50 | p90 |
+ * |---|---|---|
+ * | two operations in one transaction | **197–201 ms** | 252–285 ms |
+ * | one CTE statement doing both writes | **156–159 ms** | 241–247 ms |
+ *
+ * So the extra round trip costs **≈41 ms, a factor of 1.26** — three runs of 15,
+ * same region, same minute. The alternative is one round trip and equally
+ * atomic, and it was rejected because it puts two operations' SQL in one
  * allowlist entry, which is exactly the coupling the named-operation registry
- * exists to prevent. Latency here is a human clicking a board, not a fan-out.
+ * exists to prevent. 41 ms is a human clicking a board once, not a fan-out; if
+ * this ever became a fan-out the trade would be worth re-taking, which is why
+ * the measurement is a test that keeps running rather than a number in a
+ * document.
  *
  * ## No `authorize` hooks, for the reason `identity.ts` gives
  *
