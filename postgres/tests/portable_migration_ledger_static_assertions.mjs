@@ -38,7 +38,13 @@ const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 // introduces it: that list is checked against the diff since the merge base, so a
 // session's own new file would flag itself. The session after adds it. S17 is
 // that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS,
-// while 005 appears only here.
+// while 006 appears only here.
+//
+// 005 graduated on that schedule and is now in both. 006 is the S13 consolidation
+// session's own, so it is pinned here and nowhere else; whichever session follows
+// should promote it once the owner has applied it — and only then, because
+// PROTECTED_PATHS means "already applied, never touch again" and an unapplied
+// step may still need a correction.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -50,6 +56,8 @@ const IMMUTABLE_BASELINE = {
     '2ec822cad4067273aac7ead38e1dfdb29dc8dbf3ce5e1ee1765ea0e24ecf7163',
   '005_identity_atomic_invite.sql':
     '229442570c0440d5a6f0d1ae336e9e80924155d9437bab5347855eaed3ee27e8',
+  '006_messages_direction_seek_index.sql':
+    '87991430eca2ffc22a69a0570d6d4f45e9b852dc4274a4828f84306dfa37bf47',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -87,6 +95,8 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_identity_atomic_invite_assertions.sql',
   'postgres/tests/portable_identity_atomic_invite_cleanroom.sh',
   'docs/implementation-handoffs/N-S17.md',
+  // S13 consolidation (step 006, the message keyset's index).
+  'postgres/tenant-baseline/v1/006_messages_direction_seek_index.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -255,8 +265,26 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares five steps in order 1 -> 2 -> 3 -> 4 -> 5',
-  manifest.steps.length === 5 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares six steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6',
+  manifest.steps.length === 6 && manifest.steps.every((s, i) => s.step === i + 1));
+
+// Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
+// and 005 both do, so "declares none" is the distinguishing fact, and an index
+// that silently acquired a role dependency would be a different step entirely.
+check('step 006 declares no role-bootstrap prerequisite, because an index needs none',
+  manifest.steps.find((s) => s.step === 6)
+    ?.requires_role_bootstrap_extension === undefined);
+
+// The runner applies every step inside BEGIN/COMMIT, and CREATE INDEX
+// CONCURRENTLY cannot run in a transaction block — it would fail at apply time,
+// and special-casing the runner to allow it would trade the ledger's
+// commit-together guarantee for a lock. Asserted over every step, not just 006,
+// so the next person reaching for it has to change this line first.
+for (const step of manifest.steps) {
+  const body = readFileSync(join(BASELINE_DIR, step.artifact), 'utf8');
+  check(`step ${step.step} contains no CONCURRENTLY, which the one-transaction runner cannot apply`,
+    !/\bCONCURRENTLY\b/i.test(stripComments(step.artifact, body)));
+}
 
 // Step 005 needs the same control-plane prerequisite as 004 and must say so.
 // It writes the identity tables, so a database without the identity_store role

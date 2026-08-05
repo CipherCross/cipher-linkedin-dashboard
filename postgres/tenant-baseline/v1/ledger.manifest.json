@@ -115,6 +115,14 @@
       "session": "S17",
       "requires_role_bootstrap_extension": "000_identity_store_role_bootstrap.sql",
       "description": "The atomic cross-store invite: one SECURITY DEFINER function writing the canonical rows and the identity-store account in a single transaction, plus the two INSERT grants it needs. Closes the known limit step 004 recorded. No new role and no new credential."
+    },
+    {
+      "step": 6,
+      "artifact": "006_messages_direction_seek_index.sql",
+      "sha256": "87991430eca2ffc22a69a0570d6d4f45e9b852dc4274a4828f84306dfa37bf47",
+      "owner_role_entered_by": "artifact",
+      "session": "S13-consolidation",
+      "description": "One btree index on public.messages (direction, sent_at DESC, id DESC), which turns the message keyset seek from a filter over a sequential scan into an index condition. Closes the known limit S13 parts 2 and 3 both carried. Plain CREATE INDEX rather than CONCURRENTLY, because the runner applies each step in one transaction and an interrupted concurrent build would leave an INVALID index the append-only ledger cannot express. Additive: no role, grant, function or credential."
     }
   ]
 }
