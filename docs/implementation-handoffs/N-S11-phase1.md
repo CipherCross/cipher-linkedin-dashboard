@@ -576,6 +576,16 @@ are redundant.
   > later session. See `docs/platform-ops/g2-datacontext-migration-go-no-go.json`
   > (`owner_decision.items[B2]`) and "Owner decisions, 2026-08-03" in
   > `docs/implementation-handoffs/N-S12.md`. Every other clause is unaffected.
+
+  > **Superseded outright, 2026-08-05.** The "no tenant data" clause is now false
+  > of the project, and it failed earlier and differently than the note above
+  > predicted. The **S17 first-admin bootstrap on 2026-08-04** put a real
+  > person's name and email into `public.team_members`, before B2 ran and
+  > independently of it; the **B2 session on 2026-08-05** then copied a bounded
+  > slice of real business data (8,039 rows, instance `notebook-1`) and deleted
+  > it the same day. Every other clause of this finding — no second project, no
+  > branch, no bucket, no domain — remains true. See
+  > `docs/implementation-handoffs/N-B2.md`.
 - **No DDL was executed.** The only writes were fixture rows through
   `app_runtime` under RLS: one `instances` row (`s11-contract`), 4
   `s11_contract_range` events, 2,500 `s11_contract_page` events, and

@@ -19,7 +19,10 @@
     "what_is_permitted": "S13 is permitted as development behind a flag.",
     "what_is_not_permitted": "No production cutover of dashboard reads from Supabase to Neon until B1 and B2 are closed.",
     "relationship_to_s12_recommendation": "The recommendation was accepted on its headline (conditional go for building S13, no cutover yet) and made stricter on two of its six findings. B1 and B2 were both decided against the option S12 leaned toward, in each case choosing the more conservative path. B3 and B5 were confirmed as recommended. B4 was decided, in the direction S12 flagged as needing an owner decision. B6 needs nothing.",
-    "differs_from_recommendation_on": ["B1", "B2"],
+    "differs_from_recommendation_on": [
+      "B1",
+      "B2"
+    ],
     "items": [
       {
         "id": "B1",
@@ -59,12 +62,26 @@
           "no_other_document_found": "A repository-wide search of `docs/` and `specs/` for the phrasings `holds no tenant data`, `no tenant data`, `tenant data was copied`, `never been copied` and `production bytes` returned only the files listed above, plus one unrelated hit: specs/2026-07-30-neon-migration-and-multitenancy.md line 420, which constrains S19 storage bytes and is not about the Neon database."
         },
         "is_its_own_session": true,
-        "must_not_happen_inside": ["S16", "S13"],
+        "must_not_happen_inside": [
+          "S16",
+          "S13"
+        ],
         "requires_before_it_runs": "An explicit written scope, approved by the owner: which tables, which instance, how many rows, and how the copy is deleted afterwards.",
         "proposed_starting_scope_for_owner_to_confirm_or_narrow": {
-          "instances": ["notebook-1"],
-          "excluded": ["notebook-1:4 - the retired test campaign"],
-          "tables": ["instances", "campaigns", "campaign_steps", "leads", "messages", "events"],
+          "instances": [
+            "notebook-1"
+          ],
+          "excluded": [
+            "notebook-1:4 - the retired test campaign"
+          ],
+          "tables": [
+            "instances",
+            "campaigns",
+            "campaign_steps",
+            "leads",
+            "messages",
+            "events"
+          ],
           "status": "proposed, not approved - the owner may confirm or narrow it"
         },
         "open_refinement_raised_not_decided": {
@@ -72,6 +89,39 @@
           "reasoning": "The parity claim is about counts, rates and day buckets. Those depend on milestone timestamps, ids, stage columns and the already-derived sentiment/intent columns - not on message bodies, full names or headlines. The same parity evidence is therefore obtainable with message bodies redacted and person names pseudonymised, which would carry far less personal data to a new provider for identical evidentiary value.",
           "status": "raised as a question for the owner. Deliberately not decided by this session.",
           "if_adopted": "It would narrow the scope above rather than replace it - the same tables, the same instance, the same row counts, with `messages.body`, `leads.full_name` and `leads.headline` (and any comparable free-text or identifying column) replaced by deterministic surrogates."
+        },
+        "outcome_2026_08_05": {
+          "status": "ran and completed",
+          "scope_approved_by_owner": {
+            "instances": [
+              "notebook-1"
+            ],
+            "excluded": [
+              "notebook-1:4 - already absent from the source; migration 038 removed it, so the exclusion is satisfied by construction"
+            ],
+            "tables": [
+              "instances",
+              "campaigns",
+              "campaign_steps",
+              "leads",
+              "messages",
+              "events"
+            ],
+            "row_ceiling": 8039,
+            "rows_copied": {
+              "instances": 1,
+              "campaigns": 4,
+              "campaign_steps": 66,
+              "leads": 1713,
+              "messages": 3702,
+              "events": 2553,
+              "total": 8039
+            }
+          },
+          "pseudonymisation_decision": "The owner was offered deterministic surrogates for messages.body, leads.full_name and leads.headline and DECLINED them: the slice was copied verbatim. The decision is the owner's and was taken against the preparing session's recommendation.",
+          "deletion_decision": "Deleted before the end of the B2 session, by owner decision.",
+          "what_the_copy_could_not_carry_verbatim": "leads.assigned_to. public.team_members.id denotes different people on the two sides - source id 1 is the real admin, target id 1 is an immutable S06 fixture - and team_members is not in scope. Copying it unchanged would have succeeded while silently reassigning real work to fixtures. Owner decision: remap 1 -> 5 (the same real person, 113 leads) and null the one assignee with no counterpart on the target (8 leads). This is a named deviation from verbatim and affects no metric.",
+          "finding_for_cutover": "The team_members id collision is not specific to B2. Every reference to team_members must be remapped at cutover, team_members must migrate before leads, and the three S06 fixtures occupying ids 1-3 cannot be deleted because the live contract suites assert them by id and role."
         }
       },
       {
@@ -87,7 +137,10 @@
         "stricter_than_recommended": false,
         "owner_decision": "Add a `SECURITY DEFINER` function exposing the member roster, applied through the migration ledger.",
         "is_its_own_session": true,
-        "must_not_happen_inside": ["S13", "S16"],
+        "must_not_happen_inside": [
+          "S13",
+          "S16"
+        ],
         "why_its_own_session": "It is a schema change to the tenant baseline. The migration ledger is the only sanctioned apply path (R5), and a schema change must not be smuggled into a frontend or identity session.",
         "sequencing": "Before S13. S13's reads need it - any join resolving an assignee or owner name returns NULL without it - and S18's Team admin needs it too.",
         "resolves": "the blocker as stated: `team_members` is self-only under RLS for `app_runtime`, so the baseline exposes no roster read."
@@ -149,7 +202,8 @@
   "external_mutations": {
     "performed": "fixture rows only, on the single pre-existing Neon project",
     "detail": "No project, branch, database, role, Auth user, bucket, domain or deployment was created. No DDL was executed; the migration ledger remains the only apply path (R5). No tenant data was copied to or from any provider. No `supabase db push`, no `sync-agent/deploy.sh`, no Vercel deploy, no `git push`. Writes were: one `instances` row (`s12-activity`) and 4,800 `events` rows under that instance, inserted as `app_runtime` through the baseline's RLS policies, idempotent under re-run.",
-    "status_change_pending": "This describes S12 and remains accurate for it. The owner's B2 decision of 2026-08-03 authorises a bounded tenant-data copy in a dedicated later session, after which `no tenant data was copied to or from any provider` stops being true of the Neon project. See `owner_decision.items[B2].changes_the_neon_project_status`."
+    "status_change_pending": "This describes S12 and remains accurate for it. The owner's B2 decision of 2026-08-03 authorises a bounded tenant-data copy in a dedicated later session, after which `no tenant data was copied to or from any provider` stops being true of the Neon project. See `owner_decision.items[B2].changes_the_neon_project_status`.",
+    "status_change_2026_08_05": "Superseded 2026-08-05. The Neon project's 'no tenant data' status did not survive until B2 as this document predicted: it ended on 2026-08-04, when S17's first-admin bootstrap wrote a real person's name and email into public.team_members. B2 then ran on 2026-08-05 under an owner-approved written scope, copied 8,039 rows across six tables for instance notebook-1, compared campaign_metrics and daily_activity cell for cell against the source with zero mismatches, and deleted the copy the same day. See docs/implementation-handoffs/N-B2.md."
   },
   "slice_under_test": {
     "name": "daily activity series",
@@ -174,13 +228,18 @@
         "Any relation other than `daily_activity`. The 13 other reads `DataContext` performs are unproven.",
         "The `leads`-derived recompute path. Every page today renders activity from `leadsToActivity(data.leads)` rather than from the view, so the view itself is currently unconsumed and its parity with the client recompute was not measured.",
         "Timezone parity with Supabase. The Neon path pins `timezone = 'UTC'` per transaction; the Supabase path relies on that project's session default. Both are UTC today, but only one of them guarantees it."
-      ]
+      ],
+      "status_change_2026_08_05": "Closed by B2 on 2026-08-05. Real production numbers were compared for instance notebook-1: campaign_metrics over 4 campaigns and daily_activity over 409 day/event-type buckets, every cell agreeing. What the new evidence still does not cover: the other three instances, every relation other than these two views, and any write path."
     },
     "pagination": {
       "result": "pass, past the 1000-row cap, through the real handler against real volume",
       "fixture_rows_in_view": 2700,
       "fixture_rows_in_events": 4800,
-      "page_sizes_at_limit_1000": [1000, 1000, 700],
+      "page_sizes_at_limit_1000": [
+        1000,
+        1000,
+        700
+      ],
       "pages_at_limit_250": 11,
       "identical_rows_across_page_sizes": true,
       "distinct_keys": 2700,
@@ -192,7 +251,11 @@
     },
     "utc": {
       "result": "pass, and the guarantee is asserted rather than assumed",
-      "boundary_instants_seeded": ["00:00:00.000Z", "23:59:59.000Z", "23:00:00.000Z"],
+      "boundary_instants_seeded": [
+        "00:00:00.000Z",
+        "23:59:59.000Z",
+        "23:00:00.000Z"
+      ],
       "day_assignment": "Every one of 2,700 (day, event_type) buckets carries exactly the count the fixture wrote, which holds only if all three boundary instants land on the same UTC calendar day.",
       "agreement_with_client": "`dayRangeToUtcRange` was asserted against `presetRanges` and `weekStart` from `frontend/src/lib/leads.ts` directly, not against a restatement of them. `leads.ts` uses an inclusive `[from, to]` day pair; the contract uses a half-open instant range; the exclusive end is exactly one day past the inclusive one, verified for every preset the client can produce. A UTC ISO week read through the handler returned exactly 7 days and 21 rows, with `weekStart` confirmed to be a Monday.",
       "timezone_sensitivity_demonstrated": "The same rows read on an `Asia/Tokyo` session bucket into different days than on a UTC session, so the day boundaries genuinely depend on the session setting.",
@@ -405,6 +468,7 @@
         "B2": "S12 leaned toward parity checked at cutover. The owner instead authorised a bounded tenant-data copy so parity is checked before cutover."
       },
       "see": "owner_decision"
-    }
+    },
+    "outcome_2026_08_05": "B2 is closed. The claim that 'correctness of a migrated dashboard cannot currently be demonstrated at all' no longer holds for instance notebook-1: campaign_metrics and daily_activity were compared against real production numbers with zero mismatches. B1 was closed by S17. See docs/implementation-handoffs/N-B2.md."
   }
 }
