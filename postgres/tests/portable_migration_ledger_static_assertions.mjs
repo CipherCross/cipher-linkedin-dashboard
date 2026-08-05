@@ -39,14 +39,12 @@ const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 // A new artifact is deliberately NOT added to PROTECTED_PATHS in the session that
 // introduces it: that list is checked against the diff since the merge base, so a
 // session's own new file would flag itself. The session after adds it. S17 is
-// that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS,
-// while 006 appears only here.
+// that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS.
 //
-// 005 graduated on that schedule and is now in both. 006 is the S13 consolidation
-// session's own, so it is pinned here and nowhere else; whichever session follows
-// should promote it once the owner has applied it — and only then, because
-// PROTECTED_PATHS means "already applied, never touch again" and an unapplied
-// step may still need a correction.
+// 005 graduated on that schedule under B2, and 006 under S14 — every step 001..006
+// is now in both lists. Promotion happens only once the owner has applied the step,
+// because PROTECTED_PATHS means "already applied, never touch again" and an
+// unapplied step may still need a correction.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -133,6 +131,11 @@ const PROTECTED_PATHS = [
   // 001..004. S17 could not add it, because this list is checked against the
   // diff since the merge base and a session's own new file would flag itself.
   'postgres/tenant-baseline/v1/005_identity_atomic_invite.sql',
+  // Added by S14, the session after the S13 consolidation, on the same schedule
+  // for the same reason: 006 is applied to the live project (ledger 6/6), so it
+  // is now as immutable as 001..005. N-S13-consolidation Known limit 7 explains
+  // why the session that wrote it could not promote it itself.
+  'postgres/tenant-baseline/v1/006_messages_direction_seek_index.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
