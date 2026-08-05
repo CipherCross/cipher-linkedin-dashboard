@@ -115,6 +115,11 @@ const PROTECTED_PATHS = [
   // identity ledger handoff asked. It is applied to the live project, so from
   // here on it is as immutable as 001..003.
   'postgres/tenant-baseline/v1/004_identity_write_path_and_store.sql',
+  // Added by B2, the session after S17, for the same reason and on the same
+  // schedule: 005 is applied to the live project, so it is now as immutable as
+  // 001..004. S17 could not add it, because this list is checked against the
+  // diff since the merge base and a session's own new file would flag itself.
+  'postgres/tenant-baseline/v1/005_identity_atomic_invite.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
