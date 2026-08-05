@@ -27,6 +27,16 @@ import {
   validateIndustry,
   validatePersona,
 } from './_lib/icp.js'
+import { deploymentWritePath } from './_lib/data/writePath.js'
+import {
+  neonAssignSearch,
+  neonDeleteEntity,
+  neonSaveCampaignContext,
+  neonSaveEntity,
+  neonSavePlaybook,
+  neonSetHypothesisCampaigns,
+  type LibraryEntity,
+} from './_lib/neonLibraryWrites.js'
 
 export const maxDuration = 10
 
@@ -45,13 +55,21 @@ const errCode = (e: unknown) => (e as { code?: string } | null)?.code
 
 // --- legacy: single global playbook (no `action` key) ----------------------
 
-async function savePlaybook(supa: ReturnType<typeof db>, payload: Record<string, unknown>) {
+async function savePlaybook(
+  supa: ReturnType<typeof db>,
+  payload: Record<string, unknown>,
+  req: Request,
+) {
   const content = payload.content
   if (typeof content !== 'string') {
     return json({ error: 'content (string) is required' }, 400)
   }
   if (content.length > MAX_CONTENT_BYTES) {
     return json({ error: 'playbook too large' }, 413)
+  }
+
+  if (deploymentWritePath() === 'neon') {
+    return neonSavePlaybook(req, { content })
   }
 
   // Upsert the singleton row (id=true, enforced by the table's check constraint).
@@ -65,7 +83,13 @@ async function savePlaybook(supa: ReturnType<typeof db>, payload: Record<string,
 
 // --- save_search: insert (no id) or partial-patch update (id present) ------
 
-async function saveSearch(supa: ReturnType<typeof db>, payload: Record<string, unknown>) {
+const SEARCH_CONFLICT = 'a search with that name already exists for this platform'
+
+async function saveSearch(
+  supa: ReturnType<typeof db>,
+  payload: Record<string, unknown>,
+  req: Request,
+) {
   const search = payload.search
   if (search === null || typeof search !== 'object' || Array.isArray(search)) {
     return json({ error: 'search (object) is required' }, 400)
@@ -83,10 +107,23 @@ async function saveSearch(supa: ReturnType<typeof db>, payload: Record<string, u
   const normalized = validateSearch(src, !isUpdate)
   if (typeof normalized === 'string') return json({ error: normalized }, 400)
 
+  if (isUpdate && Object.keys(normalized).length === 0) {
+    return json({ error: 'no fields to update' }, 400)
+  }
+
+  // The provider split, after validation: `normalized` is the same patch on
+  // both paths, so a legal search has one definition.
+  if (deploymentWritePath() === 'neon') {
+    return neonSaveEntity(req, {
+      entity: 'search',
+      ...(isUpdate ? { id: id as number } : {}),
+      patch: normalized,
+      bodyKey: 'search',
+      conflictMessage: SEARCH_CONFLICT,
+    })
+  }
+
   if (isUpdate) {
-    if (Object.keys(normalized).length === 0) {
-      return json({ error: 'no fields to update' }, 400)
-    }
     const { data, error } = await supa
       .from('saved_searches')
       .update(normalized)
@@ -95,7 +132,7 @@ async function saveSearch(supa: ReturnType<typeof db>, payload: Record<string, u
       .single()
     if (error) {
       if (errCode(error) === '23505') {
-        return json({ error: 'a search with that name already exists for this platform' }, 409)
+        return json({ error: SEARCH_CONFLICT }, 409)
       }
       // .single() with no matched row -> PGRST116; the id doesn't exist.
       if (errCode(error) === 'PGRST116') {
@@ -122,10 +159,17 @@ async function saveSearch(supa: ReturnType<typeof db>, payload: Record<string, u
 
 // --- delete_search: hard delete (page-only; NOT an AI tool) ----------------
 
-async function deleteSearch(supa: ReturnType<typeof db>, payload: Record<string, unknown>) {
+async function deleteSearch(
+  supa: ReturnType<typeof db>,
+  payload: Record<string, unknown>,
+  req: Request,
+) {
   const id = payload.id
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id must be a positive integer' }, 400)
+  }
+  if (deploymentWritePath() === 'neon') {
+    return neonDeleteEntity(req, { entity: 'search', id })
   }
   const { data, error } = await supa
     .from('saved_searches')
@@ -151,10 +195,12 @@ type EntityValidator<T> = (input: unknown, requireCore: boolean) => T | string
 async function saveEntity<T extends Record<string, unknown>>(
   supa: ReturnType<typeof db>,
   table: string,
+  entity: LibraryEntity,
   bodyKey: string,
   payload: Record<string, unknown>,
   validate: EntityValidator<T>,
   conflictMessage: string,
+  req: Request,
 ): Promise<Response> {
   const raw = payload[bodyKey]
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -171,10 +217,24 @@ async function saveEntity<T extends Record<string, unknown>>(
   const normalized = validate(src, !isUpdate)
   if (typeof normalized === 'string') return json({ error: normalized }, 400)
 
+  if (isUpdate && Object.keys(normalized).length === 0) {
+    return json({ error: 'no fields to update' }, 400)
+  }
+
+  // The provider split. `entity` replaces `table` on the Neon side: a relation
+  // may not be a run-time string behind an allowlist entry, so the closed union
+  // selects one of fifteen fixed statements instead.
+  if (deploymentWritePath() === 'neon') {
+    return neonSaveEntity(req, {
+      entity,
+      ...(isUpdate ? { id: id as number } : {}),
+      patch: normalized,
+      bodyKey,
+      conflictMessage,
+    })
+  }
+
   if (isUpdate) {
-    if (Object.keys(normalized).length === 0) {
-      return json({ error: 'no fields to update' }, 400)
-    }
     // Widen to Record<string, unknown> — supabase-js's .update<T>() runs an
     // excess-property check against its own inferred generic, which conflicts
     // with `normalized` still carrying saveEntity's generic T here.
@@ -211,11 +271,16 @@ async function saveEntity<T extends Record<string, unknown>>(
 async function deleteEntity(
   supa: ReturnType<typeof db>,
   table: string,
+  entity: LibraryEntity,
   payload: Record<string, unknown>,
+  req: Request,
 ): Promise<Response> {
   const id = payload.id
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id must be a positive integer' }, 400)
+  }
+  if (deploymentWritePath() === 'neon') {
+    return neonDeleteEntity(req, { entity, id })
   }
   const { data, error } = await supa.from(table).delete().eq('id', id).select('id')
   if (error) return json({ error: error.message }, 500)
@@ -229,6 +294,7 @@ async function deleteEntity(
 async function setHypothesisCampaigns(
   supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
+  req: Request,
 ): Promise<Response> {
   const hypothesis_id = payload.hypothesis_id
   if (typeof hypothesis_id !== 'number' || !Number.isInteger(hypothesis_id) || hypothesis_id <= 0) {
@@ -236,6 +302,10 @@ async function setHypothesisCampaigns(
   }
   const campaignIds = validateCampaignIds(payload.campaign_ids)
   if (typeof campaignIds === 'string') return json({ error: campaignIds }, 400)
+
+  if (deploymentWritePath() === 'neon') {
+    return neonSetHypothesisCampaigns(req, { hypothesisId: hypothesis_id, campaignIds })
+  }
 
   const { error } = await supa.rpc('set_hypothesis_campaigns', {
     p_hypothesis_id: hypothesis_id,
@@ -255,6 +325,7 @@ async function setHypothesisCampaigns(
 async function assignSearch(
   supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
+  req: Request,
 ): Promise<Response> {
   const search_id = payload.search_id
   if (typeof search_id !== 'number' || !Number.isInteger(search_id) || search_id <= 0) {
@@ -266,6 +337,9 @@ async function assignSearch(
     (typeof hypothesis_id !== 'number' || !Number.isInteger(hypothesis_id) || hypothesis_id <= 0)
   ) {
     return json({ error: 'hypothesis_id must be a positive integer or null' }, 400)
+  }
+  if (deploymentWritePath() === 'neon') {
+    return neonAssignSearch(req, { searchId: search_id, hypothesisId: hypothesis_id })
   }
   const { data, error } = await supa
     .from('saved_searches')
@@ -284,6 +358,7 @@ async function assignSearch(
 async function saveCampaignContext(
   supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
+  req: Request,
 ): Promise<Response> {
   const campaignId = payload.campaign_id
   const rawContext = payload.briefing_context
@@ -299,6 +374,10 @@ async function saveCampaignContext(
       { error: `briefing_context must be at most ${MAX_CAMPAIGN_CONTEXT_CHARS} characters` },
       413,
     )
+  }
+
+  if (deploymentWritePath() === 'neon') {
+    return neonSaveCampaignContext(req, { campaignId, context })
   }
 
   const updatedAt = new Date().toISOString()
@@ -339,46 +418,49 @@ async function handle(req: Request): Promise<Response> {
   if (typeof action === 'string') {
     switch (action) {
       case 'save_search':
-        return saveSearch(supa, payload)
+        return saveSearch(supa, payload, req)
       case 'delete_search':
-        return deleteSearch(supa, payload)
+        return deleteSearch(supa, payload, req)
       case 'save_icp':
-        return saveEntity(supa, 'icps', 'icp', payload, validateIcp, 'an ICP with that name already exists')
+        return saveEntity(
+          supa, 'icps', 'icp', 'icp', payload, validateIcp,
+          'an ICP with that name already exists', req,
+        )
       case 'delete_icp':
-        return deleteEntity(supa, 'icps', payload)
+        return deleteEntity(supa, 'icps', 'icp', payload, req)
       case 'save_icp_persona':
         return saveEntity(
-          supa, 'icp_personas', 'persona', payload, validatePersona,
-          'a persona of that kind already exists for this ICP',
+          supa, 'icp_personas', 'persona', 'persona', payload, validatePersona,
+          'a persona of that kind already exists for this ICP', req,
         )
       case 'delete_icp_persona':
-        return deleteEntity(supa, 'icp_personas', payload)
+        return deleteEntity(supa, 'icp_personas', 'persona', payload, req)
       case 'save_icp_industry':
         return saveEntity(
-          supa, 'icp_industries', 'industry', payload, validateIndustry,
-          'an industry with that name already exists for this ICP',
+          supa, 'icp_industries', 'industry', 'industry', payload, validateIndustry,
+          'an industry with that name already exists for this ICP', req,
         )
       case 'delete_icp_industry':
-        return deleteEntity(supa, 'icp_industries', payload)
+        return deleteEntity(supa, 'icp_industries', 'industry', payload, req)
       case 'save_hypothesis':
         return saveEntity(
-          supa, 'hypotheses', 'hypothesis', payload, validateHypothesis,
-          'a hypothesis with that name already exists',
+          supa, 'hypotheses', 'hypothesis', 'hypothesis', payload, validateHypothesis,
+          'a hypothesis with that name already exists', req,
         )
       case 'delete_hypothesis':
-        return deleteEntity(supa, 'hypotheses', payload)
+        return deleteEntity(supa, 'hypotheses', 'hypothesis', payload, req)
       case 'set_hypothesis_campaigns':
-        return setHypothesisCampaigns(supa, payload)
+        return setHypothesisCampaigns(supa, payload, req)
       case 'assign_search':
-        return assignSearch(supa, payload)
+        return assignSearch(supa, payload, req)
       case 'save_campaign_context':
-        return saveCampaignContext(supa, payload)
+        return saveCampaignContext(supa, payload, req)
       default:
         return json({ error: 'unknown action' }, 400)
     }
   }
 
-  return savePlaybook(supa, payload)
+  return savePlaybook(supa, payload, req)
 }
 
 export const POST = (req: Request) => handle(req)

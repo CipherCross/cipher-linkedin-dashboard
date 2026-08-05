@@ -109,6 +109,41 @@ export class DataStoreSchemaError extends DataStoreContractError {
   }
 }
 
+/**
+ * A write was refused by an integrity constraint the *caller* is expected to
+ * handle — a duplicate name, or a parent row that is not there.
+ *
+ * **The second widening of the S03 contract, and it exists for the same reason
+ * as the first: a caller has to distinguish an outcome from a failure without
+ * reading driver text.** The endpoints being ported here answer a duplicate
+ * name with 409 and a dangling reference with 400, and both are ordinary
+ * results of a human typing into a form. Everything below `DataStoreSchemaError`
+ * applies unchanged — the adapter classifies, the caller decides, and the
+ * composed message never quotes the driver's, which would name the constraint
+ * and through it the column layout.
+ *
+ * `kind` rather than two subclasses: the two cases are answered by the same
+ * `catch` in every caller and differ only in which status it returns, so a
+ * discriminant keeps that a one-line decision instead of an instanceof ladder.
+ *
+ * **Deliberately narrow.** A check-constraint violation (23514) is *not* this
+ * error: every cap in `_lib/icp.ts` and `_lib/savedSearch.ts` mirrors a `CHECK`
+ * exactly, so a payload that reaches the database and fails one is a drift
+ * between validator and schema — a defect, which must surface as a 500 and not
+ * as a tidy 400 the caller can be tempted to leave in place.
+ */
+export type ConstraintKind = 'unique' | 'foreign_key'
+
+export class DataStoreConstraintError extends DataStoreContractError {
+  readonly kind: ConstraintKind
+
+  constructor(kind: ConstraintKind, message: string) {
+    super('CONSTRAINT_VIOLATED', message)
+    this.name = 'DataStoreConstraintError'
+    this.kind = kind
+  }
+}
+
 export interface UserActorContext {
   readonly kind: 'user'
   /** Canonical application user ID; never an identity-provider subject. */

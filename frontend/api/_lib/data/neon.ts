@@ -33,6 +33,7 @@ import {
   asUtcTimestamp,
   DATASTORE_SECURITY_CONTRACT,
   DataStoreAuthorizationError,
+  DataStoreConstraintError,
   DataStoreContractError,
   DataStoreSchemaError,
   DataStoreTransactionError,
@@ -77,6 +78,15 @@ const SQLSTATE_INSUFFICIENT_PRIVILEGE = '42501'
  * reinstate silent degradation through the back door.
  */
 const SQLSTATE_UNDEFINED_TABLE = '42P01'
+/**
+ * `unique_violation` and `foreign_key_violation`. Translated because both are
+ * *answers* to a caller rather than failures of it — see
+ * `DataStoreConstraintError`. Note what is not here: `23514`
+ * (`check_violation`), which stays an opaque transaction error on purpose,
+ * because a validator and a `CHECK` that disagree is a defect and not a 400.
+ */
+const SQLSTATE_UNIQUE_VIOLATION = '23505'
+const SQLSTATE_FOREIGN_KEY_VIOLATION = '23503'
 
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 10_000
 
@@ -543,6 +553,26 @@ function toContractError(error: unknown, what: string): Error {
       return withCause(
         new DataStoreAuthorizationError(
           `${what} was denied by database authorization`,
+        ),
+        error,
+      )
+    }
+    if (error.code === SQLSTATE_UNIQUE_VIOLATION) {
+      // The original text names the constraint and quotes the conflicting key,
+      // so it is composed rather than quoted for the same reason as 42P01.
+      return withCause(
+        new DataStoreConstraintError(
+          'unique',
+          `${what} conflicted with a row that already exists`,
+        ),
+        error,
+      )
+    }
+    if (error.code === SQLSTATE_FOREIGN_KEY_VIOLATION) {
+      return withCause(
+        new DataStoreConstraintError(
+          'foreign_key',
+          `${what} referenced a row that does not exist`,
         ),
         error,
       )

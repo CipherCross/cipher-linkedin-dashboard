@@ -98,6 +98,28 @@ import {
   setStageOperation,
 } from './pipelineWrites.js'
 import {
+  LIBRARY_WRITE_COMMANDS,
+  assignSearchHypothesisOperation,
+  deleteHypothesisOperation,
+  deleteIcpOperation,
+  deleteIndustryOperation,
+  deletePersonaOperation,
+  deleteSavedSearchOperation,
+  insertHypothesisOperation,
+  insertIcpOperation,
+  insertIndustryOperation,
+  insertPersonaOperation,
+  insertSavedSearchOperation,
+  saveCampaignContextOperation,
+  savePlaybookOperation,
+  setHypothesisCampaignsOperation,
+  updateHypothesisOperation,
+  updateIcpOperation,
+  updateIndustryOperation,
+  updatePersonaOperation,
+  updateSavedSearchOperation,
+} from './libraryWrites.js'
+import {
   CONVERSATION_WRITE_COMMANDS,
   CONVERSATION_WRITE_OPERATIONS,
   applyFollowUpActionOperation,
@@ -147,6 +169,18 @@ export {
   type PipelineEventLogParams,
   type PipelineEventRow,
 } from './pipeline.js'
+export {
+  LIBRARY_WRITE_COMMANDS,
+  type AssignSearchParams,
+  type CampaignContextResult,
+  type EntityIdParams,
+  type EntityPatchParams,
+  type EntityUpdateParams,
+  type EntityWriteResult,
+  type SaveCampaignContextParams,
+  type SavePlaybookParams,
+  type SetHypothesisCampaignsParams,
+} from './libraryWrites.js'
 export {
   PIPELINE_WRITE_COMMANDS,
   PIPELINE_WRITE_OPERATIONS,
@@ -375,6 +409,77 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     applyFollowUpActionOperation,
   )
 
+  // S14's second slice — the sourcing library. Fifteen of these replace the two
+  // generic helpers `/api/playbook` dispatched nine actions through; see
+  // `libraryWrites.ts` on why a table name may not be a run-time parameter.
+  registry.registerCommand(LIBRARY_WRITE_COMMANDS.insertIcp, insertIcpOperation)
+  registry.registerCommand(LIBRARY_WRITE_COMMANDS.updateIcp, updateIcpOperation)
+  registry.registerCommand(LIBRARY_WRITE_COMMANDS.deleteIcp, deleteIcpOperation)
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.insertPersona,
+    insertPersonaOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.updatePersona,
+    updatePersonaOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.deletePersona,
+    deletePersonaOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.insertIndustry,
+    insertIndustryOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.updateIndustry,
+    updateIndustryOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.deleteIndustry,
+    deleteIndustryOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.insertHypothesis,
+    insertHypothesisOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.updateHypothesis,
+    updateHypothesisOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.deleteHypothesis,
+    deleteHypothesisOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.insertSavedSearch,
+    insertSavedSearchOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.updateSavedSearch,
+    updateSavedSearchOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.deleteSavedSearch,
+    deleteSavedSearchOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.setHypothesisCampaigns,
+    setHypothesisCampaignsOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.assignSearchHypothesis,
+    assignSearchHypothesisOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.saveCampaignContext,
+    saveCampaignContextOperation,
+  )
+  registry.registerCommand(
+    LIBRARY_WRITE_COMMANDS.savePlaybook,
+    savePlaybookOperation,
+  )
+
   return registry
 }
 
@@ -431,6 +536,25 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   CONVERSATION_WRITE_COMMANDS.editManualMessage,
   CONVERSATION_WRITE_COMMANDS.deleteManualMessage,
   CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
+  LIBRARY_WRITE_COMMANDS.insertIcp,
+  LIBRARY_WRITE_COMMANDS.updateIcp,
+  LIBRARY_WRITE_COMMANDS.deleteIcp,
+  LIBRARY_WRITE_COMMANDS.insertPersona,
+  LIBRARY_WRITE_COMMANDS.updatePersona,
+  LIBRARY_WRITE_COMMANDS.deletePersona,
+  LIBRARY_WRITE_COMMANDS.insertIndustry,
+  LIBRARY_WRITE_COMMANDS.updateIndustry,
+  LIBRARY_WRITE_COMMANDS.deleteIndustry,
+  LIBRARY_WRITE_COMMANDS.insertHypothesis,
+  LIBRARY_WRITE_COMMANDS.updateHypothesis,
+  LIBRARY_WRITE_COMMANDS.deleteHypothesis,
+  LIBRARY_WRITE_COMMANDS.insertSavedSearch,
+  LIBRARY_WRITE_COMMANDS.updateSavedSearch,
+  LIBRARY_WRITE_COMMANDS.deleteSavedSearch,
+  LIBRARY_WRITE_COMMANDS.setHypothesisCampaigns,
+  LIBRARY_WRITE_COMMANDS.assignSearchHypothesis,
+  LIBRARY_WRITE_COMMANDS.saveCampaignContext,
+  LIBRARY_WRITE_COMMANDS.savePlaybook,
 ] as const
 
 /**

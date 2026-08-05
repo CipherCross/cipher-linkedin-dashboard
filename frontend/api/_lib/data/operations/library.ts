@@ -169,17 +169,17 @@ export interface HypothesisCampaignRow {
 // Mapping helpers.
 // ---------------------------------------------------------------------------
 
-const nullableText = (value: unknown): string | null =>
+export const nullableText = (value: unknown): string | null =>
   value === null || value === undefined ? null : String(value)
 
-const nullableNumber = (value: unknown): number | null =>
+export const nullableNumber = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value)
 
 /** `pg` parses `text[]` for us; this only normalizes the NOT NULL default away. */
-const textArray = (value: unknown): readonly string[] =>
+export const textArray = (value: unknown): readonly string[] =>
   Array.isArray(value) ? value.map((entry) => String(entry)) : []
 
-const jsonObject = (value: unknown): Record<string, unknown> =>
+export const jsonObject = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}
@@ -205,24 +205,26 @@ const SAVED_SEARCHES_SQL = `SELECT s.id::text AS id,
      FROM public.saved_searches s
     ORDER BY s.platform, s.name, s.id`
 
+export const mapSavedSearchRow = (row: NeonRow): SavedSearchRow => ({
+  id: Number(row.id),
+  name: String(row.name),
+  platform: String(row.platform),
+  description: nullableText(row.description),
+  include_keywords: textArray(row.include_keywords),
+  exclude_keywords: textArray(row.exclude_keywords),
+  boolean_query: nullableText(row.boolean_query),
+  filters: jsonObject(row.filters),
+  notes: nullableText(row.notes),
+  author: nullableText(row.author),
+  archived: row.archived === true,
+  hypothesis_id: nullableNumber(row.hypothesis_id),
+  created_at: String(row.created_at),
+  updated_at: String(row.updated_at),
+})
+
 export const savedSearchesOperation: NeonQueryOperation<SavedSearchRow> = {
   build: () => ({ text: SAVED_SEARCHES_SQL }),
-  mapRow: (row: NeonRow): SavedSearchRow => ({
-    id: Number(row.id),
-    name: String(row.name),
-    platform: String(row.platform),
-    description: nullableText(row.description),
-    include_keywords: textArray(row.include_keywords),
-    exclude_keywords: textArray(row.exclude_keywords),
-    boolean_query: nullableText(row.boolean_query),
-    filters: jsonObject(row.filters),
-    notes: nullableText(row.notes),
-    author: nullableText(row.author),
-    archived: row.archived === true,
-    hypothesis_id: nullableNumber(row.hypothesis_id),
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  }),
+  mapRow: mapSavedSearchRow,
 }
 
 // ---------------------------------------------------------------------------
@@ -254,32 +256,34 @@ const ICPS_SQL = `SELECT i.id::text AS id,
      FROM public.icps i
     ORDER BY i.name, i.id`
 
+export const mapIcpRow = (row: NeonRow): IcpRow => ({
+  id: Number(row.id),
+  name: String(row.name),
+  airtable_url: nullableText(row.airtable_url),
+  main_product: nullableText(row.main_product),
+  core_sphere: nullableText(row.core_sphere),
+  secondary_sphere: nullableText(row.secondary_sphere),
+  product_stage: nullableText(row.product_stage),
+  monetization: nullableText(row.monetization),
+  features_note: nullableText(row.features_note),
+  purchase_triggers: textArray(row.purchase_triggers),
+  features: textArray(row.features),
+  company_countries: textArray(row.company_countries),
+  company_headcount: nullableText(row.company_headcount),
+  company_age: nullableText(row.company_age),
+  apollo_industries: textArray(row.apollo_industries),
+  funding: nullableText(row.funding),
+  dev_team_availability: nullableText(row.dev_team_availability),
+  dev_team_location: nullableText(row.dev_team_location),
+  exclude_keywords: textArray(row.exclude_keywords),
+  archived: row.archived === true,
+  created_at: String(row.created_at),
+  updated_at: String(row.updated_at),
+})
+
 export const icpProfilesOperation: NeonQueryOperation<IcpRow> = {
   build: () => ({ text: ICPS_SQL }),
-  mapRow: (row: NeonRow): IcpRow => ({
-    id: Number(row.id),
-    name: String(row.name),
-    airtable_url: nullableText(row.airtable_url),
-    main_product: nullableText(row.main_product),
-    core_sphere: nullableText(row.core_sphere),
-    secondary_sphere: nullableText(row.secondary_sphere),
-    product_stage: nullableText(row.product_stage),
-    monetization: nullableText(row.monetization),
-    features_note: nullableText(row.features_note),
-    purchase_triggers: textArray(row.purchase_triggers),
-    features: textArray(row.features),
-    company_countries: textArray(row.company_countries),
-    company_headcount: nullableText(row.company_headcount),
-    company_age: nullableText(row.company_age),
-    apollo_industries: textArray(row.apollo_industries),
-    funding: nullableText(row.funding),
-    dev_team_availability: nullableText(row.dev_team_availability),
-    dev_team_location: nullableText(row.dev_team_location),
-    exclude_keywords: textArray(row.exclude_keywords),
-    archived: row.archived === true,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  }),
+  mapRow: mapIcpRow,
 }
 
 // ---------------------------------------------------------------------------
@@ -302,24 +306,26 @@ const ICP_PERSONAS_SQL = `SELECT p.id::text AS id,
      FROM public.icp_personas p
     ORDER BY p.icp_id, p.sort, p.id`
 
+export const mapIcpPersonaRow = (row: NeonRow): IcpPersonaRow => ({
+  id: Number(row.id),
+  icp_id: Number(row.icp_id),
+  kind: String(row.kind),
+  job_titles: textArray(row.job_titles),
+  age_range: nullableText(row.age_range),
+  location: nullableText(row.location),
+  background: nullableText(row.background),
+  profile_status: nullableText(row.profile_status),
+  connections_note: nullableText(row.connections_note),
+  followers_note: nullableText(row.followers_note),
+  // `integer`, which `pg` already returns as a number.
+  sort: Number(row.sort),
+  created_at: String(row.created_at),
+  updated_at: String(row.updated_at),
+})
+
 export const icpPersonasOperation: NeonQueryOperation<IcpPersonaRow> = {
   build: () => ({ text: ICP_PERSONAS_SQL }),
-  mapRow: (row: NeonRow): IcpPersonaRow => ({
-    id: Number(row.id),
-    icp_id: Number(row.icp_id),
-    kind: String(row.kind),
-    job_titles: textArray(row.job_titles),
-    age_range: nullableText(row.age_range),
-    location: nullableText(row.location),
-    background: nullableText(row.background),
-    profile_status: nullableText(row.profile_status),
-    connections_note: nullableText(row.connections_note),
-    followers_note: nullableText(row.followers_note),
-    // `integer`, which `pg` already returns as a number.
-    sort: Number(row.sort),
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  }),
+  mapRow: mapIcpPersonaRow,
 }
 
 // ---------------------------------------------------------------------------
@@ -335,16 +341,18 @@ const ICP_INDUSTRIES_SQL = `SELECT n.id::text AS id,
      FROM public.icp_industries n
     ORDER BY n.icp_id, n.name, n.id`
 
+export const mapIcpIndustryRow = (row: NeonRow): IcpIndustryRow => ({
+  id: Number(row.id),
+  icp_id: Number(row.icp_id),
+  name: String(row.name),
+  include_keywords: textArray(row.include_keywords),
+  created_at: String(row.created_at),
+  updated_at: String(row.updated_at),
+})
+
 export const icpIndustriesOperation: NeonQueryOperation<IcpIndustryRow> = {
   build: () => ({ text: ICP_INDUSTRIES_SQL }),
-  mapRow: (row: NeonRow): IcpIndustryRow => ({
-    id: Number(row.id),
-    icp_id: Number(row.icp_id),
-    name: String(row.name),
-    include_keywords: textArray(row.include_keywords),
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  }),
+  mapRow: mapIcpIndustryRow,
 }
 
 // ---------------------------------------------------------------------------
@@ -361,17 +369,19 @@ const HYPOTHESES_SQL = `SELECT h.id::text AS id,
      FROM public.hypotheses h
     ORDER BY h.name, h.id`
 
+export const mapHypothesisRow = (row: NeonRow): HypothesisRow => ({
+  id: Number(row.id),
+  name: String(row.name),
+  icp_id: nullableNumber(row.icp_id),
+  description: nullableText(row.description),
+  archived: row.archived === true,
+  created_at: String(row.created_at),
+  updated_at: String(row.updated_at),
+})
+
 export const hypothesesOperation: NeonQueryOperation<HypothesisRow> = {
   build: () => ({ text: HYPOTHESES_SQL }),
-  mapRow: (row: NeonRow): HypothesisRow => ({
-    id: Number(row.id),
-    name: String(row.name),
-    icp_id: nullableNumber(row.icp_id),
-    description: nullableText(row.description),
-    archived: row.archived === true,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  }),
+  mapRow: mapHypothesisRow,
 }
 
 // ---------------------------------------------------------------------------
