@@ -5,9 +5,9 @@
 //   node postgres/tests/portable_migration_ledger_static_assertions.mjs
 //
 // Checks:
-//   * the manifest is well formed, declares 001 .. 006 contiguously, pins a
+//   * the manifest is well formed, declares 001 .. 007 contiguously, pins a
 //     SHA-256 for every artifact -- including the additive control-plane
-//     role-bootstrap extension, which is not a step -- and declares no down
+//     role-bootstrap extensions, which are not steps -- and declares no down
 //     migration path;
 //   * no step uses CREATE INDEX CONCURRENTLY, which the one-step-one-transaction
 //     runner cannot apply;
@@ -98,6 +98,10 @@ const S08_ARTIFACTS = [
   // S13 consolidation (step 006, the message keyset's index).
   'postgres/tenant-baseline/v1/006_messages_direction_seek_index.sql',
   'docs/implementation-handoffs/N-S13-consolidation.md',
+  // S15 (the AI execution role bootstrap and step 007, the system write path).
+  'postgres/tenant-baseline/v1/000_ai_execution_role_bootstrap.sql',
+  'postgres/tenant-baseline/v1/007_ai_system_write_path.sql',
+  'docs/implementation-handoffs/N-S15.md',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -171,6 +175,8 @@ const MARKER_SWEEP_EXEMPT = {
     'is a handoff document, not executable content; it names the provider whose apply it requests, the hosting provider whose function cap shaped the design, and the identity provider G3 accepted. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
   'docs/implementation-handoffs/N-S13-consolidation.md':
     'is a handoff document, not executable content; the two defects it fixes are in the provider-specific read path and the step it writes is for the provider being migrated to, so naming both is its subject. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
+  'docs/implementation-handoffs/N-S15.md':
+    'is a handoff document, not executable content; it names the provider the AI layer is migrating to, the one it is leaving, and the identity provider the transitional bearer resolves under. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
 };
 
 // Provider RESOURCE identifiers, as opposed to provider names. These must not
@@ -273,8 +279,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares six steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6',
-  manifest.steps.length === 6 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares seven steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7',
+  manifest.steps.length === 7 && manifest.steps.every((s, i) => s.step === i + 1));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index
@@ -302,19 +308,34 @@ check('step 005 declares the identity_store prerequisite it inherits from 004',
     ?.requires_role_bootstrap_extension === '000_identity_store_role_bootstrap.sql');
 
 // Role-bootstrap extensions: additive control-plane prerequisites, each pinned,
-// each declaring the roles it creates and the step that needs them, and none of
-// them a ledger step.
+// each declaring the roles it affects and the step that needs them, and none of
+// them a ledger step. Two shapes exist, and the distinction is asserted rather
+// than trusted: the identity extension CREATES its role (identity_store is not
+// in the seven-role contract), while the AI extension only ENABLES LOGIN on a
+// role the seven-role bootstrap already created (app_system). An extension that
+// claimed a contract role without declaring enables_login would be a stealthy
+// re-creation of the pinned seven-role set, so the two lists are checked
+// against each other.
 const extensions = manifest.role_bootstrap_extensions ?? [];
 check('every role-bootstrap extension declares its roles and the step that needs them',
-  extensions.length === 1
+  extensions.length === 2
   && extensions.every((e) =>
     Array.isArray(e.required_roles) && e.required_roles.length > 0
     && e.is_ledger_step === false
     && Number.isInteger(e.required_by_step)
     && manifest.steps.some((s) => s.step === e.required_by_step)));
-check('no extension role is also claimed by the seven-role bootstrap',
+check('no extension role is also claimed by the seven-role bootstrap unless it only enables login',
   extensions.every((e) =>
-    e.required_roles.every((r) => !manifest.role_bootstrap.required_roles.includes(r))));
+    e.required_roles.every((r) =>
+      manifest.role_bootstrap.required_roles.includes(r)
+        ? e.enables_login === true
+        : e.enables_login !== true)));
+check('exactly one extension creates a role and exactly one enables login on a contract role',
+  extensions.filter((e) => e.enables_login === true).length === 1
+  && extensions.filter((e) => e.enables_login !== true).length === 1);
+check('no extension role is claimed by two extensions',
+  extensions.flatMap((e) => e.required_roles).length
+    === new Set(extensions.flatMap((e) => e.required_roles)).size);
 check('every step needing an extension names the artifact that provides it',
   manifest.steps
     .filter((s) => s.requires_role_bootstrap_extension)

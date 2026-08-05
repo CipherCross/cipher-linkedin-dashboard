@@ -51,6 +51,18 @@
       ],
       "required_by_step": 4,
       "note": "Additive control-plane prerequisite, deliberately NOT an edit to 000_control_plane_role_bootstrap.sql. app_ledger.role_bootstrap is a single-row append-only record of that artifact's digest, so changing its bytes would permanently break the ledger of every database already prepared with it. Step 004 checks for the role itself and refuses to apply without it; the digest is pinned here and asserted by postgres/tests/portable_migration_ledger_static_assertions.mjs."
+    },
+    {
+      "artifact": "000_ai_execution_role_bootstrap.sql",
+      "sha256": "296e5cabee1deabade0cc6a2572e4fab1ec3b136cf28af934a78045d2602ef8c",
+      "applied_by": "control-plane",
+      "is_ledger_step": false,
+      "enables_login": true,
+      "required_roles": [
+        "app_system"
+      ],
+      "required_by_step": 7,
+      "note": "Additive control-plane prerequisite of the AI execution path. Creates NO role: app_system belongs to the seven-role contract and already exists in every prepared cluster. The artifact changes exactly one attribute - ALTER ROLE app_system LOGIN - so the AI layer connects as the principal the guard was designed around. Separate file for the same append-only-digest reason as the identity store extension. Step 007 applies either way (its grants and policies need no login); the login is what lets the AI path CONNECT, which is why this extension is declared against step 7 rather than carried inside it - roles are cluster objects a dump does not carry. The credential is assigned out of band, as for app_migration and app_runtime."
     }
   ],
   "ledger_bootstrap": {
@@ -123,6 +135,14 @@
       "owner_role_entered_by": "artifact",
       "session": "S13-consolidation",
       "description": "One btree index on public.messages (direction, sent_at DESC, id DESC), which turns the message keyset seek from a filter over a sequential scan into an index condition. Closes the known limit S13 parts 2 and 3 both carried. Plain CREATE INDEX rather than CONCURRENTLY, because the runner applies each step in one transaction and an interrupted concurrent build would leave an INVALID index the append-only ledger cannot express. Additive: no role, grant, function or credential."
+    },
+    {
+      "step": 7,
+      "artifact": "007_ai_system_write_path.sql",
+      "sha256": "cf99c5a2c06b9b1c11305b9d1d6e23880e9d64efe3fddc6e7c299372a9d47e77",
+      "owner_role_entered_by": "artifact",
+      "session": "S15",
+      "description": "The system write path: SELECT, INSERT and UPDATE on the five relations the server-owned jobs own (briefing_jobs, briefings, messages, leads, saved_searches), sequence usage for the two identity sequences among them, and one FOR ALL policy per relation gated on the published system actor - the nil uuid, well-formed but unassignable, because step 005 is the only user creator and accepts no caller-supplied id. Grants app_system its first table privileges; gives no DELETE, touches no other role, leaves the AI SQL guard SELECT-only. Written under the owner's role-only decision: applied only by explicit owner approval, never automatically."
     }
   ]
 }
