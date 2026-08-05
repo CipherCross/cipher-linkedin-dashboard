@@ -42,20 +42,72 @@ import {
   setMemberRoleOperation,
   teamRosterOperation,
 } from './identity.js'
-import { LEADS_OPERATIONS, leadsDirectoryOperation } from './leads.js'
+import {
+  CONVERSATION_OPERATIONS,
+  conversationLatestMessageOperation,
+  conversationReplyIntentOperation,
+  followUpHistoryOperation,
+  followUpStateOperation,
+} from './conversations.js'
+import {
+  LEADS_OPERATIONS,
+  leadNotesOperation,
+  leadsDirectoryOperation,
+} from './leads.js'
+import {
+  LIBRARY_OPERATIONS,
+  hypothesesOperation,
+  hypothesisCampaignsOperation,
+  icpIndustriesOperation,
+  icpPersonasOperation,
+  icpProfilesOperation,
+  savedSearchesOperation,
+} from './library.js'
 import {
   MESSAGES_OPERATIONS,
   inboundHistoryOperation,
   outboundRecentOperation,
+  threadOperation,
 } from './messages.js'
+import { PIPELINE_OPERATIONS, pipelineEventLogOperation } from './pipeline.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
-export { LEADS_OPERATIONS, type LeadRow, type LeadsDirectoryParams } from './leads.js'
+export {
+  LEADS_OPERATIONS,
+  type LeadNoteRow,
+  type LeadNotesParams,
+  type LeadRow,
+  type LeadsDirectoryParams,
+} from './leads.js'
 export {
   MESSAGES_OPERATIONS,
   type MessageRow,
   type MessagesParams,
+  type ThreadMessageRow,
+  type ThreadParams,
 } from './messages.js'
+export {
+  CONVERSATION_OPERATIONS,
+  type ConversationLatestMessageRow,
+  type ConversationParams,
+  type ConversationReplyIntentRow,
+  type FollowUpEventRow,
+  type FollowUpStateRow,
+} from './conversations.js'
+export {
+  LIBRARY_OPERATIONS,
+  type HypothesisCampaignRow,
+  type HypothesisRow,
+  type IcpIndustryRow,
+  type IcpPersonaRow,
+  type IcpRow,
+  type SavedSearchRow,
+} from './library.js'
+export {
+  PIPELINE_OPERATIONS,
+  type PipelineEventLogParams,
+  type PipelineEventRow,
+} from './pipeline.js'
 export {
   DASHBOARD_OPERATIONS,
   type AnnotationRow,
@@ -128,6 +180,43 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     outboundRecentOperation,
   )
 
+  // S13's third slice — the medium relations, the sourcing library and the three
+  // reads that belonged to a component rather than to `DataContext`.
+  registry.registerQuery(PIPELINE_OPERATIONS.eventLog, pipelineEventLogOperation)
+  registry.registerQuery(
+    CONVERSATION_OPERATIONS.followUpState,
+    followUpStateOperation,
+  )
+  registry.registerQuery(
+    CONVERSATION_OPERATIONS.latestMessage,
+    conversationLatestMessageOperation,
+  )
+  registry.registerQuery(
+    CONVERSATION_OPERATIONS.replyIntent,
+    conversationReplyIntentOperation,
+  )
+  registry.registerQuery(
+    CONVERSATION_OPERATIONS.followUpHistory,
+    followUpHistoryOperation,
+  )
+  registry.registerQuery(MESSAGES_OPERATIONS.thread, threadOperation)
+  registry.registerQuery(LEADS_OPERATIONS.notes, leadNotesOperation)
+  registry.registerQuery(
+    LIBRARY_OPERATIONS.savedSearches,
+    savedSearchesOperation,
+  )
+  registry.registerQuery(LIBRARY_OPERATIONS.icpProfiles, icpProfilesOperation)
+  registry.registerQuery(LIBRARY_OPERATIONS.icpPersonas, icpPersonasOperation)
+  registry.registerQuery(
+    LIBRARY_OPERATIONS.icpIndustries,
+    icpIndustriesOperation,
+  )
+  registry.registerQuery(LIBRARY_OPERATIONS.hypotheses, hypothesesOperation)
+  registry.registerQuery(
+    LIBRARY_OPERATIONS.hypothesisCampaigns,
+    hypothesisCampaignsOperation,
+  )
+
   registry.registerCommand(IDENTITY_ADMIN_COMMANDS.invite, inviteMemberOperation)
   registry.registerCommand(
     IDENTITY_ADMIN_COMMANDS.setActive,
@@ -150,6 +239,19 @@ export const APPLICATION_QUERY_OPERATIONS = [
   LEADS_OPERATIONS.directory,
   MESSAGES_OPERATIONS.inboundHistory,
   MESSAGES_OPERATIONS.outboundRecent,
+  PIPELINE_OPERATIONS.eventLog,
+  CONVERSATION_OPERATIONS.followUpState,
+  CONVERSATION_OPERATIONS.latestMessage,
+  CONVERSATION_OPERATIONS.replyIntent,
+  CONVERSATION_OPERATIONS.followUpHistory,
+  MESSAGES_OPERATIONS.thread,
+  LEADS_OPERATIONS.notes,
+  LIBRARY_OPERATIONS.savedSearches,
+  LIBRARY_OPERATIONS.icpProfiles,
+  LIBRARY_OPERATIONS.icpPersonas,
+  LIBRARY_OPERATIONS.icpIndustries,
+  LIBRARY_OPERATIONS.hypotheses,
+  LIBRARY_OPERATIONS.hypothesisCampaigns,
 ] as const
 
 /** Every write. All three are the identity write path; none is a table write. */

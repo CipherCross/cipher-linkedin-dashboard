@@ -42,6 +42,7 @@
 import { authorizationResponse } from './_lib/auth.js'
 import {
   DataStoreContractError,
+  DataStoreSchemaError,
   PaginationError,
   asUtcTimestamp,
   type DataStoreParams,
@@ -49,9 +50,12 @@ import {
 } from './_lib/data/contracts.js'
 import {
   ACTIVITY_OPERATIONS,
+  CONVERSATION_OPERATIONS,
   DASHBOARD_OPERATIONS,
   LEADS_OPERATIONS,
+  LIBRARY_OPERATIONS,
   MESSAGES_OPERATIONS,
+  PIPELINE_OPERATIONS,
 } from './_lib/data/operations/index.js'
 import { getDataStore } from './_lib/data/store.js'
 import { resolveRequestActor } from './_lib/identity/session.js'
@@ -204,6 +208,33 @@ interface ReadOperationSpec {
   readonly params?: (url: URL) => DataStoreParams
   /** Whether `from`/`to` day bounds apply. */
   readonly ranged?: boolean
+  /**
+   * Answer an *absent relation* with an empty page and `unavailable: true`
+   * instead of failing the request.
+   *
+   * This is the API's half of a behaviour `DataContext` already has: it excludes
+   * ten reads from the error it reports and takes `data ?? []`, so a database
+   * missing a not-yet-applied table renders a blank Search Library or an
+   * unavailable follow-up queue rather than an empty dashboard. Moving those
+   * reads behind an endpoint that 500s on the same input would have been a
+   * regression against today, on relations no funnel number depends on.
+   *
+   * Three properties keep it from being a blanket "ignore errors":
+   *
+   * 1. **It triggers on `DataStoreSchemaError` alone** — the adapter's
+   *    translation of SQLSTATE 42P01. A privilege denial, a statement timeout, a
+   *    bad cursor or a connection failure is unaffected and still fails.
+   * 2. **It is per operation, listed once, and asserted.** The funnel reads are
+   *    not tolerant, because for them an empty answer is a *wrong* answer rather
+   *    than a blank panel; `tests/dashboardSlice.test.ts` pins which reads carry
+   *    this and which do not.
+   * 3. **The response says which happened.** `items: []` with no marker means the
+   *    relation is there and empty; `unavailable: true` means it is absent. The
+   *    follow-up reads need that distinction to survive the move — an empty queue
+   *    and a pre-migration database look identical in an array, and today's UI
+   *    already distinguishes them (`followUpsAvailable`).
+   */
+  readonly tolerateMissingRelation?: boolean
 }
 
 /**
@@ -258,6 +289,73 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     ranged: true,
     params: (url) => ({ updatedSince: readOptionalInstant(url) }),
   },
+
+  // --- the medium relations ------------------------------------------------
+  [PIPELINE_OPERATIONS.eventLog]: {
+    operation: PIPELINE_OPERATIONS.eventLog,
+    // `occurred_since`, not `updated_since`: this relation is append-only and has
+    // no `updated_at` at all, so its insertion time is its watermark. A distinct
+    // name is what keeps the two from being confused where they coincide.
+    params: (url) => ({
+      occurredSince: readOptionalInstant(url, 'occurred_since'),
+    }),
+    tolerateMissingRelation: true,
+  },
+  [CONVERSATION_OPERATIONS.followUpState]: {
+    operation: CONVERSATION_OPERATIONS.followUpState,
+    tolerateMissingRelation: true,
+  },
+  [CONVERSATION_OPERATIONS.latestMessage]: {
+    operation: CONVERSATION_OPERATIONS.latestMessage,
+    tolerateMissingRelation: true,
+  },
+  [CONVERSATION_OPERATIONS.replyIntent]: {
+    operation: CONVERSATION_OPERATIONS.replyIntent,
+    tolerateMissingRelation: true,
+  },
+
+  // --- the component-local reads -------------------------------------------
+  [CONVERSATION_OPERATIONS.followUpHistory]: {
+    operation: CONVERSATION_OPERATIONS.followUpHistory,
+    // Not tolerant: the panel that asks for this has its own error state and
+    // shows it, so a swallowed failure would replace a visible message with an
+    // empty history.
+    params: (url) => readConversation(url),
+  },
+  [MESSAGES_OPERATIONS.thread]: {
+    operation: MESSAGES_OPERATIONS.thread,
+    params: (url) => readConversation(url),
+  },
+  [LEADS_OPERATIONS.notes]: {
+    operation: LEADS_OPERATIONS.notes,
+    params: (url) => ({ leadId: readRequiredUuid(url, 'lead_id') }),
+  },
+
+  // --- the sourcing library, all tolerant ----------------------------------
+  [LIBRARY_OPERATIONS.savedSearches]: {
+    operation: LIBRARY_OPERATIONS.savedSearches,
+    tolerateMissingRelation: true,
+  },
+  [LIBRARY_OPERATIONS.icpProfiles]: {
+    operation: LIBRARY_OPERATIONS.icpProfiles,
+    tolerateMissingRelation: true,
+  },
+  [LIBRARY_OPERATIONS.icpPersonas]: {
+    operation: LIBRARY_OPERATIONS.icpPersonas,
+    tolerateMissingRelation: true,
+  },
+  [LIBRARY_OPERATIONS.icpIndustries]: {
+    operation: LIBRARY_OPERATIONS.icpIndustries,
+    tolerateMissingRelation: true,
+  },
+  [LIBRARY_OPERATIONS.hypotheses]: {
+    operation: LIBRARY_OPERATIONS.hypotheses,
+    tolerateMissingRelation: true,
+  },
+  [LIBRARY_OPERATIONS.hypothesisCampaigns]: {
+    operation: LIBRARY_OPERATIONS.hypothesisCampaigns,
+    tolerateMissingRelation: true,
+  },
 }
 
 /**
@@ -268,6 +366,18 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
  */
 export const READ_OPERATION_NAMES: readonly string[] = Object.freeze(
   Object.keys(READ_OPERATIONS),
+)
+
+/**
+ * The reads that answer an absent relation with an empty page rather than a
+ * failure. Exported so the guard suite pins the set instead of the mechanism —
+ * making a funnel read tolerant is the mistake worth catching, and it is one
+ * word.
+ */
+export const TOLERANT_OPERATION_NAMES: readonly string[] = Object.freeze(
+  Object.entries(READ_OPERATIONS)
+    .filter(([, spec]) => spec.tolerateMissingRelation === true)
+    .map(([name]) => name),
 )
 
 function readOptionalInstance(url: URL): string | null {
@@ -288,16 +398,69 @@ function readOptionalInstance(url: URL): string | null {
  * sends `+02:00` gets the instant it meant. A bare local time has no instant and is
  * refused.
  */
-function readOptionalInstant(url: URL): string | null {
-  const raw = (url.searchParams.get('updated_since') ?? '').trim()
+function readOptionalInstant(url: URL, name = 'updated_since'): string | null {
+  const raw = (url.searchParams.get(name) ?? '').trim()
   if (raw === '') return null
   try {
     return asUtcTimestamp(raw)
   } catch {
     throw new BadRequest(
-      'updated_since must be an ISO-8601 instant with Z or an explicit UTC offset',
+      `${name} must be an ISO-8601 instant with Z or an explicit UTC offset`,
     )
   }
+}
+
+/**
+ * Longer than any LinkedIn profile URL or notebook id, short enough that a
+ * request cannot make the database compare megabytes. The cap refuses absurd
+ * input at the edge; it is not a validity check — the value is a parameter, never
+ * interpolated, and a wrong-but-plausible one simply matches nothing.
+ */
+const MAX_KEY_LENGTH = 500
+
+function readRequiredText(url: URL, name: string): string {
+  const raw = (url.searchParams.get(name) ?? '').trim()
+  if (raw === '') throw new BadRequest(`${name} is required`)
+  if (raw.length > MAX_KEY_LENGTH) {
+    throw new BadRequest(`${name} must be at most ${MAX_KEY_LENGTH} characters`)
+  }
+  return raw
+}
+
+/**
+ * A conversation's thread key: `(instance_id, profile_url)`.
+ *
+ * Both halves are required, and the instance half is the substantive one.
+ * `CLAUDE.md` states the rule the schema encodes — the same person can be reached
+ * from two LinkedIn accounts, so a `profile_url` alone names two different
+ * conversations. Accepting a bare profile URL and letting the query match
+ * whichever rows it found would merge two people's threads into one panel.
+ */
+function readConversation(url: URL): DataStoreParams {
+  return {
+    instanceId: readRequiredText(url, 'instance_id'),
+    profileUrl: readRequiredText(url, 'profile_url'),
+  }
+}
+
+/** Lowercase-canonical RFC 4122 form, which is how PostgreSQL renders a `uuid`. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * A `uuid`-typed key, refused here rather than at the `::uuid` cast.
+ *
+ * The cast would raise SQLSTATE 22P02 for a malformed value, which the driver
+ * turns into a transaction error and the endpoint reports as a 500 — a server
+ * fault for what is plainly a caller's mistake. Validating first keeps the status
+ * honest and costs no round trip.
+ */
+function readRequiredUuid(url: URL, name: string): string {
+  const raw = readRequiredText(url, name)
+  if (!UUID_PATTERN.test(raw)) {
+    throw new BadRequest(`${name} must be a UUID`)
+  }
+  return raw
 }
 
 export interface ActivityDailyDeps {
@@ -427,6 +590,23 @@ async function handle(
     // A cursor from another scope is the caller's mistake, not a server fault.
     if (error instanceof PaginationError) {
       return json({ error: error.message }, 400)
+    }
+    // An absent relation, on a read whose spec says an absent relation is an
+    // acceptable answer. Checked before the general contract-error branch so the
+    // ordering states the precedence, and logged at `warn` rather than swallowed:
+    // on this provider every one of these relations exists, so reaching here at
+    // all is a fact about a deployment that somebody should see.
+    if (error instanceof DataStoreSchemaError && spec.tolerateMissingRelation) {
+      console.warn(
+        `Read ${spec.operation} found no such relation:`,
+        safeErrorLabel(error),
+      )
+      return json({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        unavailable: true,
+      })
     }
     if (error instanceof DataStoreContractError) {
       // The operation name is adapter-owned constant text, so it is loggable —

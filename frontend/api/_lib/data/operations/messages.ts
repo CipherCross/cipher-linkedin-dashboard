@@ -71,6 +71,8 @@ export const MESSAGES_OPERATIONS = {
   inboundHistory: 'messages.inboundHistory',
   /** Outbound sends inside the caller's window, newest first. */
   outboundRecent: 'messages.outboundRecent',
+  /** One conversation in full, both directions, oldest first. */
+  thread: 'messages.thread',
 } as const
 
 /** One message row, in the browser's own column names (`Message` in `types.ts`). */
@@ -242,4 +244,104 @@ export const outboundRecentOperation: NeonQueryOperation<
     values: messageValues(params, after, range),
   }),
   mapRow: mapMessage,
+}
+
+// ---------------------------------------------------------------------------
+// messages.thread — one conversation, for the drawer
+// ---------------------------------------------------------------------------
+
+/**
+ * `ConversationDrawer.tsx:180`'s read: one lead's whole thread, both directions,
+ * **oldest first** because that is how a conversation reads.
+ *
+ * ## Its own three-rung column ladder does not survive either
+ *
+ * The drawer walks a ladder of its own — the intent columns, then `source`, then
+ * neither — dropping a rung on SQLSTATE 42703. It is dropped here for the reasons
+ * `operations/leads.ts` sets out in full, and one of them lands harder on this
+ * read than on any other: the drawer's *purpose* is triage, and the middle rung
+ * silently removes `intent_level` and `intent_reason` from every message in the
+ * thread. An SDR would be looking at a conversation that shows no buying intent
+ * because the query asked for none — a confident wrong answer, in the one place a
+ * human makes a decision from what is on screen. That was a defensible trade
+ * while migration 047 was in flight against a schema applied out of band. On a
+ * ledger-applied schema that already contains every column, it is a way to hide a
+ * broken deployment.
+ *
+ * ## Why this one is a distinct operation rather than a parameter on the others
+ *
+ * It reads the same relation as `inboundHistory` and `outboundRecent` and shares
+ * none of their shape: both directions rather than one, ascending rather than
+ * descending, one conversation rather than the team, and a narrower projection —
+ * no `instance_id`, `campaign_id` or `profile_url`, because the caller already
+ * holds the lead those came from. Folding it in as a mode of either would have
+ * made three unrelated behaviours share one builder and one set of parameters.
+ *
+ * ## Offset, not keyset
+ *
+ * A thread is bounded by a human conversation — tens of messages, occasionally
+ * hundreds — so the walk is one page in practice and `OFFSET n` never grows an
+ * `n` worth avoiding. The order is still total, `(sent_at, id)`, because the
+ * driver pages it regardless and `sent_at` repeats whenever an import stamps a
+ * batch. Should a thread ever exceed the cap, the cursor walks it correctly; it
+ * just counts instead of seeking.
+ */
+export interface ThreadMessageRow {
+  readonly id: number
+  readonly direction: string
+  readonly body: string | null
+  readonly sent_at: string
+  readonly sentiment: string | null
+  readonly reason: string | null
+  readonly classified_model: string | null
+  readonly source: string | null
+  readonly intent_level: string | null
+  readonly intent_reason: string | null
+  readonly intent_classified_model: string | null
+}
+
+/** One conversation, by thread key. Both halves are required. */
+export interface ThreadParams {
+  readonly instanceId: string
+  readonly profileUrl: string
+  readonly [key: string]: string | null
+}
+
+const THREAD_SQL = `SELECT m.id::text AS id,
+          m.direction,
+          m.body,
+          m.sent_at,
+          m.sentiment,
+          m.reason,
+          m.classified_model,
+          m.source,
+          m.intent_level,
+          m.intent_reason,
+          m.intent_classified_model
+     FROM public.messages m
+    WHERE m.instance_id = $1
+      AND m.profile_url = $2
+    ORDER BY m.sent_at, m.id`
+
+export const threadOperation: NeonQueryOperation<
+  ThreadMessageRow,
+  ThreadParams
+> = {
+  build: ({ params }): NeonStatement => ({
+    text: THREAD_SQL,
+    values: [params?.instanceId ?? null, params?.profileUrl ?? null],
+  }),
+  mapRow: (row: NeonRow): ThreadMessageRow => ({
+    id: Number(row.id),
+    direction: String(row.direction),
+    body: nullableText(row.body),
+    sent_at: String(row.sent_at),
+    sentiment: nullableText(row.sentiment),
+    reason: nullableText(row.reason),
+    classified_model: nullableText(row.classified_model),
+    source: nullableText(row.source),
+    intent_level: nullableText(row.intent_level),
+    intent_reason: nullableText(row.intent_reason),
+    intent_classified_model: nullableText(row.intent_classified_model),
+  }),
 }

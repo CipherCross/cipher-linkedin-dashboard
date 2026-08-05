@@ -60,6 +60,8 @@ import type {
 export const LEADS_OPERATIONS = {
   /** Every lead, with milestones, pipeline overlay and demographics. */
   directory: 'leads.directory',
+  /** The free-text notes an operator pinned to one lead, newest first. */
+  notes: 'leads.notes',
 } as const
 
 /**
@@ -242,3 +244,74 @@ export const leadsDirectoryOperation: NeonQueryOperation<
     photo_synced_at: nullableText(row.photo_synced_at),
   }),
 }
+
+// ---------------------------------------------------------------------------
+// leads.notes — LeadNotesPanel's own read
+// ---------------------------------------------------------------------------
+
+/**
+ * `LeadNotesPanel.tsx:43`'s read: one lead's notes, newest first, fetched on
+ * first expand rather than with the dashboard.
+ *
+ * It stays a component-local read rather than joining `leads.directory`: notes are
+ * opened for one lead at a time and most leads have none, so folding them into the
+ * directory would multiply the largest read on the path by a relation almost
+ * nobody looks at.
+ *
+ * **`created_at` is nullable, and that is why this one counts rather than seeks.**
+ * The baseline declares `created_at timestamptz DEFAULT now()` with no NOT NULL,
+ * so a note written by a path that passed an explicit NULL has none. A keyset seek
+ * over a nullable leading column needs an explicit NULL ordering on both the
+ * `ORDER BY` and the comparison, and a `ROW(...) < ROW(...)` compare involving
+ * NULL evaluates to NULL rather than to false — which drops rows silently rather
+ * than raising. With the relation bounded at a handful of notes per lead, offset
+ * costs nothing and avoids the trap entirely.
+ *
+ * The order is `created_at DESC, id DESC`. The `id` tiebreaker is added here: the
+ * Supabase path orders on `created_at` alone, which is fine for one unpaged
+ * response and is not a total order. NULL placement is PostgreSQL's default for
+ * `DESC`, which is NULLS FIRST — and it is PostgREST's too, since PostgREST emits
+ * the same bare `DESC` unless a caller asks otherwise. So a note with no
+ * `created_at` sorts first on both providers rather than first on one and last on
+ * the other.
+ */
+export interface LeadNoteRow {
+  readonly id: number
+  readonly lead_id: string
+  readonly author: string | null
+  readonly body: string
+  readonly created_at: string | null
+}
+
+export interface LeadNotesParams {
+  /** The lead's `uuid`. Validated as one by the handler before it gets here. */
+  readonly leadId: string
+  readonly [key: string]: string | null
+}
+
+const LEAD_NOTES_SQL = `SELECT n.id::text AS id,
+          n.lead_id::text AS lead_id,
+          n.author,
+          n.body,
+          n.created_at
+     FROM public.lead_notes n
+    WHERE n.lead_id = $1::uuid
+    ORDER BY n.created_at DESC, n.id DESC`
+
+export const leadNotesOperation: NeonQueryOperation<LeadNoteRow, LeadNotesParams> =
+  {
+    build: ({ params }) => ({
+      text: LEAD_NOTES_SQL,
+      values: [params?.leadId ?? null],
+    }),
+    mapRow: (row: NeonRow): LeadNoteRow => ({
+      id: Number(row.id),
+      lead_id: String(row.lead_id),
+      author: nullableText(row.author),
+      body: String(row.body),
+      // Nullable in the baseline; `LeadNote.created_at` in the browser is not.
+      // The wider of the two crosses, so a NULL is visible rather than becoming
+      // the epoch or the empty string.
+      created_at: nullableText(row.created_at),
+    }),
+  }
