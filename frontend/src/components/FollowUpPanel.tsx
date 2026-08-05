@@ -11,6 +11,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
+import { followUpHistorySeek } from '../lib/conversationPaging'
 import {
   actorMember,
   activeFollowUp,
@@ -117,7 +118,11 @@ export function FollowUpPanel({
       .order('occurred_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(50)
-    if (append && events.length) query = query.lt('id', events[events.length - 1].id)
+    // Seek on the whole sort key, not on `id` alone. `occurred_at` is
+    // transaction-start time and `id` is insert time, so two overlapping writes
+    // can commit with the two orders inverted; an `id`-only predicate then skips
+    // the row this order says comes next. See `followUpHistorySeek`.
+    if (append && events.length) query = query.or(followUpHistorySeek(events[events.length - 1]))
     const { data: rows, error: loadError } = await query
     if (loadError) {
       setHistoryError(loadError.message)

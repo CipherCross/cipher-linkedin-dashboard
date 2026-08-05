@@ -604,6 +604,62 @@ describe('S13 — conversations.followUpHistory', () => {
     expect(String(rows[FOLLOW_UP_PAGE].id)).toBe(firstOfNext.id)
   }, 120_000)
 
+  it('is fixed in the browser by the lexicographic expansion of that comparison', async () => {
+    // The browser's own read (`FollowUpPanel.tsx`) cannot emit a ROW comparison:
+    // PostgREST has no syntax for one, so `src/lib/conversationPaging.ts`
+    // spells it out as `or(occurred_at.lt.<ts>,and(occurred_at.eq.<ts>,id.lt.<id>))`,
+    // which is exactly the predicate below. Its behaviour is proved here, on the
+    // fixture that already carries the planted inversion, because that inversion
+    // cannot be planted on the provider the browser actually reads. The other
+    // half — that the filter string parses and filters identically on real
+    // PostgREST — was checked out of band against live data and is recorded in
+    // the handoff. Neither half is worth much alone.
+    const ordered = await fixtures.asActor(
+      CONTRACT_ACTORS.activeMember.actorId,
+      async (client) => {
+        const result = await client.query<{ id: string; occurred_at: Date }>(
+          `SELECT id::text AS id, occurred_at
+             FROM public.follow_up_events
+            WHERE instance_id = $1 AND profile_url = $2
+            ORDER BY occurred_at DESC, id DESC`,
+          [REST_SCOPE, HISTORY_PROFILE],
+        )
+        return result.rows
+      },
+    )
+    const lastOfPage = ordered[FOLLOW_UP_PAGE - 1]
+    expect(Number(lastOfPage.id)).toBeLessThan(Number(ordered[FOLLOW_UP_PAGE].id))
+
+    const expansionSeek = await fixtures.asActor(
+      CONTRACT_ACTORS.activeMember.actorId,
+      async (client) => {
+        const result = await client.query<{ id: string }>(
+          `SELECT id::text AS id
+             FROM public.follow_up_events
+            WHERE instance_id = $1 AND profile_url = $2
+              AND (occurred_at < $3::timestamptz
+                   OR (occurred_at = $3::timestamptz AND id < $4::bigint))
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT $5`,
+          [
+            REST_SCOPE,
+            HISTORY_PROFILE,
+            lastOfPage.occurred_at,
+            lastOfPage.id,
+            FOLLOW_UP_PAGE,
+          ],
+        )
+        return result.rows.map((row) => row.id)
+      },
+    )
+    // The row the id-only seek skips is the one this returns first.
+    expect(expansionSeek[0]).toBe(ordered[FOLLOW_UP_PAGE].id)
+    // And the whole second page matches the order, not just its first row.
+    expect(expansionSeek).toEqual(
+      ordered.slice(FOLLOW_UP_PAGE, 2 * FOLLOW_UP_PAGE).map((row) => row.id),
+    )
+  }, 120_000)
+
   it('is scoped by instance as well as profile', async () => {
     // Same profile URL, a different notebook: the schema's thread key is both
     // halves because the same person can be reached from two accounts.

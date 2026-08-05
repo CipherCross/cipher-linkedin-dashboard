@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
+import { fetchConversationReplyIntents, isMissingRelation } from './conversationPaging'
 import type {
-  CampaignMetrics, ConversationLatestMessage, ConversationReplyIntent, DashboardData, FollowUpState,
+  CampaignMetrics, ConversationLatestMessage, DashboardData, FollowUpState,
   Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Lead, Message, SavedSearch,
 } from './types'
 
@@ -129,12 +130,6 @@ async function fetchAllPipelineEvents(occurredSince?: string): Promise<Record<st
     if (!data || data.length < page) break
   }
   return all
-}
-
-function isMissingRelation(e: unknown): boolean {
-  const err = e as { code?: string; message?: string } | null
-  if (err?.code === '42P01' || err?.code === 'PGRST205') return true
-  return !!err?.message && /(relation|table|view).*(does not exist|not found)/i.test(err.message)
 }
 
 /** Follow-up state and its authoritative latest-message projection are both
@@ -631,22 +626,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
           supabase.from('icp_industries').select('*').order('icp_id').order('name'),
           supabase.from('hypotheses').select('*').order('name'),
           supabase.from('hypothesis_campaigns').select('*'),
-          // Full-thread projection needed for exact P3 ghosting even though the
-          // global message cache intentionally windows outbound rows to 90 days.
-          supabase.from('conversation_reply_intent').select('*'),
         ])
         // Big append-heavy tables delta on an interval refresh, full otherwise.
         const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
         const messagesP = delta ? fetchMessages(since, MESSAGE_COLUMNS, cursor!) : fetchMessages(since)
         const eventsP = delta ? fetchAllPipelineEvents(cursor!) : fetchAllPipelineEvents()
         const followUpsP = fetchFollowUpData()
-        const [small, leads, messages, pipelineEvents, followUps] = await Promise.all([
-          smallP, leadsP, messagesP, eventsP, followUpsP,
-        ])
+        // Full-thread projection needed for exact P3 ghosting even though the
+        // global message cache intentionally windows outbound rows to 90 days.
+        // Conversation-scoped and therefore unbounded, so it pages like the two
+        // sibling views in fetchFollowUpData rather than sitting in smallP with
+        // no .range() loop — which silently capped it at PostgREST's 1,000 rows.
+        // It resolves to rows or throws; a missing relation is the one tolerated
+        // failure, and it yields [] rather than a prefix.
+        const replyIntentsP = fetchConversationReplyIntents(supabase)
+        const [small, leads, messages, pipelineEvents, followUps, conversationReplyIntents] =
+          await Promise.all([
+            smallP, leadsP, messagesP, eventsP, followUpsP, replyIntentsP,
+          ])
         const [
           instances, campaigns, activity, syncRuns, annotations, steps, teamMembers,
           savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
-          conversationReplyIntents,
         ] = small
         if (id !== reqId.current) return
         const error =
@@ -699,7 +699,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               messages: nextMessages,
               conversationReplyIntents: stableSlice(
                 base.conversationReplyIntents,
-                (conversationReplyIntents.data ?? []) as ConversationReplyIntent[],
+                conversationReplyIntents,
               ),
               annotations: stableSlice(base.annotations, annotations.data ?? []),
               steps: stableSlice(base.steps, steps.data ?? []),
