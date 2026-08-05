@@ -988,3 +988,169 @@ describe('manual edit and delete', () => {
     expect(response.status).toBe(404)
   })
 })
+
+// ---------------------------------------------------------------------------
+
+/**
+ * `conversations.applyFollowUpAction` is registered and **not routed** — the
+ * roster wall (N-B2) blocks `p_owner_id` while reads stay on Supabase, so no
+ * endpoint may reach it yet. That is precisely why it needs its own evidence:
+ * an operation with no caller is an operation nothing proves, and the read
+ * slice's unwired reads got the same treatment.
+ *
+ * It is driven through the store directly, because there is no handler to call.
+ * The three properties below are the ones the spec's stopping conditions name,
+ * and all three are the *function's* — this session ported nothing, it is
+ * showing that step `003` still holds under `app_runtime` on Neon.
+ */
+describe('applyFollowUpAction: registered, unrouted, and proven anyway', () => {
+  /** The fixture's own roster id — a bigint from *this* database, never a
+   *  Supabase one. That distinction is the whole reason the family is unrouted. */
+  async function activeOwnerId(): Promise<number> {
+    const rows = await read<{ id: string }>(
+      `SELECT id::text AS id FROM public.team_members WHERE active ORDER BY id LIMIT 1`,
+    )
+    return Number(rows[0]?.id)
+  }
+
+  /** Europe/Madrid, because that is the zone the function compares against. */
+  async function dueDate(daysAhead: number): Promise<string> {
+    const rows = await read<{ day: string }>(
+      `SELECT ((now() AT TIME ZONE 'Europe/Madrid')::date + $1::int)::text AS day`,
+      [daysAhead],
+    )
+    return String(rows[0]?.day)
+  }
+
+  function apply(params: Record<string, unknown>) {
+    return store.transaction(
+      { kind: 'user', actorId: CONTRACT_ACTORS.activeMember.actorId, tenantId: 'tenant-a', role: 'member' },
+      (transaction) =>
+        transaction.execute<Record<string, unknown>>({
+          operation: CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
+          params: params as never,
+        }),
+    )
+  }
+
+  const base = async () => ({
+    instanceId: WRITE_SCOPE,
+    profileUrl: PROFILE_URLS.stage,
+    actor: 'S14 live suite',
+    ownerId: await activeOwnerId(),
+    nextFollowUpDate: await dueDate(3),
+    reason: null,
+  })
+
+  it('applies a schedule, writing the state row and its event in one commit', async () => {
+    const mutationId = '5a140000-0000-4000-8000-00000000f001'
+    const result = await apply({
+      ...(await base()),
+      action: 'schedule',
+      expectedRevision: 0,
+      mutationId,
+    })
+
+    // The function answers `replayed: false` on a first apply rather than
+    // omitting the key, so the replay test below compares against `true` and
+    // not against presence.
+    expect(result.replayed).toBe(false)
+    expect(result.state).toMatchObject({ revision: 1 })
+
+    const state = await read<{ revision: string; next_follow_up_date: string }>(
+      `SELECT revision::text AS revision, next_follow_up_date::text AS next_follow_up_date
+         FROM public.conversation_follow_up_state
+        WHERE instance_id = $1 AND profile_url = $2`,
+      [WRITE_SCOPE, PROFILE_URLS.stage],
+    )
+    expect(state).toHaveLength(1)
+    expect(Number(state[0]?.revision)).toBe(1)
+
+    const events = await read<{ event_kind: string }>(
+      `SELECT event_kind FROM public.follow_up_events
+        WHERE instance_id = $1 AND profile_url = $2`,
+      [WRITE_SCOPE, PROFILE_URLS.stage],
+    )
+    expect(events).toEqual([{ event_kind: 'scheduled' }])
+  })
+
+  it('replays the same mutation_id instead of writing a second event', async () => {
+    const mutationId = '5a140000-0000-4000-8000-00000000f002'
+    const input = { ...(await base()), action: 'schedule', expectedRevision: 0, mutationId }
+
+    const first = await apply(input)
+    expect(first.replayed).toBe(false)
+
+    // Identical inputs, identical mutation_id: the lost-response case.
+    const second = await apply(input)
+    expect(second.replayed).toBe(true)
+    expect(second.mutation_revision).toBe(1)
+
+    // And exactly one event exists, not two.
+    expect(
+      await read(`SELECT id FROM public.follow_up_events WHERE mutation_id = $1`, [
+        mutationId,
+      ]),
+    ).toHaveLength(1)
+    expect(
+      (
+        await read<{ revision: string }>(
+          `SELECT revision::text AS revision FROM public.conversation_follow_up_state
+            WHERE instance_id = $1 AND profile_url = $2`,
+          [WRITE_SCOPE, PROFILE_URLS.stage],
+        )
+      )[0]?.revision,
+    ).toBe('1')
+  })
+
+  it('refuses a stale expected_revision with 40001, changing nothing', async () => {
+    const input = await base()
+    await apply({
+      ...input,
+      action: 'schedule',
+      expectedRevision: 0,
+      mutationId: '5a140000-0000-4000-8000-00000000f003',
+    })
+
+    // Revision is now 1; a second caller still holding 0 must lose.
+    await expect(
+      apply({
+        ...input,
+        action: 'reschedule',
+        nextFollowUpDate: await dueDate(5),
+        expectedRevision: 0,
+        mutationId: '5a140000-0000-4000-8000-00000000f004',
+      }),
+    ).rejects.toThrow(/FOLLOW_UP_CONFLICT/)
+
+    const state = await read<{ revision: string; next_follow_up_date: string }>(
+      `SELECT revision::text AS revision, next_follow_up_date::text AS next_follow_up_date
+         FROM public.conversation_follow_up_state
+        WHERE instance_id = $1 AND profile_url = $2`,
+      [WRITE_SCOPE, PROFILE_URLS.stage],
+    )
+    expect(Number(state[0]?.revision)).toBe(1)
+    expect(state[0]?.next_follow_up_date).toBe(await dueDate(3))
+    expect(
+      await read(`SELECT id FROM public.follow_up_events WHERE mutation_id = $1`, [
+        '5a140000-0000-4000-8000-00000000f004',
+      ]),
+    ).toHaveLength(0)
+  })
+
+  it('refuses reusing a mutation_id with different inputs', async () => {
+    const input = await base()
+    const mutationId = '5a140000-0000-4000-8000-00000000f005'
+    await apply({ ...input, action: 'schedule', expectedRevision: 0, mutationId })
+
+    await expect(
+      apply({
+        ...input,
+        action: 'schedule',
+        expectedRevision: 0,
+        mutationId,
+        nextFollowUpDate: await dueDate(9),
+      }),
+    ).rejects.toThrow(/FOLLOW_UP_CONFLICT/)
+  })
+})
