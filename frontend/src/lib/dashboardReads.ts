@@ -51,10 +51,11 @@
 import { authFetch } from './api'
 import { toTeamMember, type RosterMember } from './identityAuth'
 import type {
-  Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
-  ConversationReplyIntent, DailyActivity, FollowUpEvent, FollowUpState,
-  Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Instance,
-  Lead, LeadNote, Message, PipelineEvent, SavedSearch, SyncRun, TeamMember,
+  Annotation, CampaignMetrics, CampaignStep, CoachingDigest,
+  ConversationLatestMessage, ConversationReplyIntent, DailyActivity,
+  FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
+  IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
+  SavedSearch, SyncRun, TeamMember,
 } from './types'
 
 /**
@@ -105,6 +106,14 @@ export const READ_OPS = {
    * keep correct.
    */
   teamRoster: 'identity.teamRoster',
+  /**
+   * The playbook, named `coach.playbook` for the same reason the roster is
+   * named `identity.teamRoster`: `/api/coach` already reads this singleton and
+   * the Playbook page wants the same row. Borrowed, not duplicated.
+   */
+  playbook: 'coach.playbook',
+  /** Every account's coaching digest, for the Leads Explorer's panel. */
+  coachingDigests: 'coaching.digests',
 } as const
 
 /** The flag lookup. Dispatched before authentication and reads no database. */
@@ -484,7 +493,7 @@ export async function fetchNeonDashboard(
 }
 
 // ---------------------------------------------------------------------------
-// The three component-local reads
+// The five page-local reads
 // ---------------------------------------------------------------------------
 
 /** The fields `ConversationDrawer` renders. The operation's projection is
@@ -559,4 +568,50 @@ export async function fetchNeonFollowUpHistory(
     nextCursor: page.nextCursor,
     hasMore: page.hasMore,
   }
+}
+
+/** The playbook as the page renders it. `updated_at` is what the header's
+ *  "last saved" line reads; the Supabase path takes the same two columns. */
+export interface PlaybookDocument {
+  readonly content: string
+  readonly updated_at: string | null
+}
+
+/**
+ * The singleton playbook, or `null` when it has never been written.
+ *
+ * The distinction is the whole return type. `public.playbook` ships with the
+ * baseline and no seeded row, so zero rows means "nobody has written one yet" —
+ * which the page renders as an empty editor with its placeholder, exactly as
+ * PostgREST's `maybeSingle()` produces today. A *failure* is a throw, never an
+ * empty document: the caller unlocks the editor on success, and a blank box an
+ * admin can Save over the real playbook is the one outcome this read must not
+ * be able to produce. The endpoint does not tolerate an absent relation here
+ * for the same reason.
+ */
+export async function fetchNeonPlaybook(
+  fetchImpl?: ApiFetch,
+): Promise<PlaybookDocument | null> {
+  const result = await readAll<PlaybookDocument>(READ_OPS.playbook, {}, fetchImpl)
+  return result.items[0] ?? null
+}
+
+/**
+ * Every account's coaching digest, keyed by `instance_id` the way the panel
+ * indexes it.
+ *
+ * Walked rather than capped, like the roster and for the same reason: the panel
+ * looks up `digests[instance.id]` for each instance the dashboard knows about,
+ * so a truncated read would leave the accounts past the cap silently
+ * digest-less — indistinguishable from never having computed one.
+ */
+export async function fetchNeonCoachingDigests(
+  fetchImpl?: ApiFetch,
+): Promise<CoachingDigest[]> {
+  const result = await readAll<CoachingDigest>(
+    READ_OPS.coachingDigests,
+    {},
+    fetchImpl,
+  )
+  return result.items
 }

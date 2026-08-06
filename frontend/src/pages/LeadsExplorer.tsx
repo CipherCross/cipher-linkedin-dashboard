@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronRight, Download, GraduationCap, Loader2, SearchX, Sparkles, X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { fetchNeonCoachingDigests, resolveReadPath } from '../lib/dashboardReads'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
 import { useToast } from '../lib/ToastContext'
@@ -231,21 +232,41 @@ export function LeadsExplorer() {
     }
   }
 
-  // Per-account coaching digest — collapsible, collapsed by default. Read anon
-  // like the rest of the dashboard; (re)computed on demand via POST /api/coach.
+  // Per-account coaching digest — collapsible, collapsed by default. Read on
+  // whichever path the deployment serves, like the rest of the dashboard;
+  // (re)computed on demand via POST /api/coach.
   const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
   const [digestOpen, setDigestOpen] = useState(false)
   const [digestBusy, setDigestBusy] = useState<string | null>(null)
   const [digestErr, setDigestErr] = useState<string | null>(null)
   useEffect(() => {
-    if (!supabase) return
     let cancelled = false
     ;(async () => {
-      const { data: rows } = await supabase!.from('coaching_digest').select('*')
+      const index = (rows: readonly CoachingDigest[]) => {
+        const map: Record<string, CoachingDigest> = {}
+        for (const r of rows) map[r.instance_id] = r
+        setDigests(map)
+      }
+      if ((await resolveReadPath()) === 'neon') {
+        try {
+          const rows = await fetchNeonCoachingDigests()
+          if (cancelled) return
+          index(rows)
+        } catch (e) {
+          if (cancelled) return
+          // The Supabase branch below swallows its error — it destructures only
+          // `data`, so a failure has always rendered as "no digests computed
+          // yet". The panel owns an error slot, so this path fills it instead.
+          setDigestErr(
+            `Couldn't load the coaching digest: ${e instanceof Error ? e.message : String(e)}`,
+          )
+        }
+        return
+      }
+      if (!supabase) return
+      const { data: rows } = await supabase.from('coaching_digest').select('*')
       if (cancelled || !rows) return
-      const map: Record<string, CoachingDigest> = {}
-      for (const r of rows as CoachingDigest[]) map[r.instance_id] = r
-      setDigests(map)
+      index(rows as CoachingDigest[])
     })()
     return () => {
       cancelled = true

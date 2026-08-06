@@ -62,6 +62,7 @@ import {
   followUpHistoryOperation,
   followUpStateOperation,
 } from './conversations.js'
+import { COACHING_OPERATIONS, coachingDigestsOperation } from './coaching.js'
 import {
   LEADS_OPERATIONS,
   leadNotesOperation,
@@ -195,6 +196,7 @@ export {
   type FollowUpEventRow,
   type FollowUpStateRow,
 } from './conversations.js'
+export { COACHING_OPERATIONS, type CoachingDigestRow } from './coaching.js'
 export {
   LIBRARY_OPERATIONS,
   type HypothesisCampaignRow,
@@ -401,6 +403,12 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     LIBRARY_OPERATIONS.hypothesisCampaigns,
     hypothesisCampaignsOperation,
   )
+
+  // The coaching slice's one new read. Its sibling — the playbook the Playbook
+  // page renders — needs no registration here: it is `coach.playbook`, already
+  // registered below for `/api/coach`, and the read endpoint allowlists that name
+  // rather than declaring a second operation over the same singleton.
+  registry.registerQuery(COACHING_OPERATIONS.digests, coachingDigestsOperation)
 
   // S14's two reads, which exist only so a write can build its audit row or its
   // dedup set. They are registered as ordinary queries because that is what they

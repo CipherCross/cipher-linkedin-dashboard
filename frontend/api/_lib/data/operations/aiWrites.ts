@@ -163,12 +163,40 @@ export const coachUpsertOperation: NeonCommandOperation<
   },
 }
 
-export const coachPlaybookOperation: NeonQueryOperation<{ content: string }> = {
+/**
+ * The singleton playbook, and the one operation in this module with two callers.
+ *
+ * `/api/coach` grounds its analysis on it and reads `content` alone. The
+ * **Playbook page** reads the same row through the dispatching read endpoint,
+ * which allowlists this name rather than declaring a second operation over one
+ * table — the argument the roster slice settled: a second spelling of one read is
+ * a second thing to keep correct. What the page needs beyond the coach is
+ * `updated_at`, so the projection carries it and the coach ignores it.
+ *
+ * Two details the second caller adds:
+ *
+ * - **`ORDER BY id`.** Ornamental on its own terms — `playbook_singleton` is a
+ *   CHECK that `id` is true, so there is at most one row — but the read endpoint
+ *   wraps every query in `LIMIT/OFFSET`, and "ordered" is a property its guard
+ *   suite asserts over the whole slice rather than reasoning about row counts
+ *   case by case.
+ * - **An empty page means the row has never been written**, not that the
+ *   relation is missing. The table ships in the baseline's first artifact with no
+ *   seeded row, so `items[0] ?? null` is the caller's correct reading, and the
+ *   endpoint does *not* tolerate an absent relation here. See `coaching.ts`.
+ */
+export const coachPlaybookOperation: NeonQueryOperation<{
+  content: string
+  updated_at: string
+}> = {
   build: (): NeonStatement => ({
-    text: `SELECT content FROM public.playbook WHERE id = true`,
+    text: `SELECT content, updated_at FROM public.playbook WHERE id = true ORDER BY id`,
     values: [],
   }),
-  mapRow: (row) => ({ content: text(row, 'content') }),
+  mapRow: (row) => ({
+    content: text(row, 'content'),
+    updated_at: String(row.updated_at),
+  }),
 }
 
 export interface HypothesisAssignmentRow {

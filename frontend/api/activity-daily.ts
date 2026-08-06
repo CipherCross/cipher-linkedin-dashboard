@@ -66,6 +66,8 @@ import {
 } from './_lib/data/contracts.js'
 import {
   ACTIVITY_OPERATIONS,
+  AI_WRITE_OPERATIONS,
+  COACHING_OPERATIONS,
   CONVERSATION_OPERATIONS,
   DASHBOARD_OPERATIONS,
   IDENTITY_OPERATIONS,
@@ -365,6 +367,34 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
   [LEADS_OPERATIONS.notes]: {
     operation: LEADS_OPERATIONS.notes,
     params: (url) => ({ leadId: readRequiredUuid(url, 'lead_id') }),
+  },
+
+  /**
+   * The coaching pair — the last two reads the dashboard still took straight
+   * from Supabase on both paths, and the reason `NEON_READS_DEFAULT=neon` did
+   * not yet mean what it says.
+   *
+   * **`coach.playbook` is an existing operation, borrowed rather than
+   * duplicated.** `/api/coach` already reads the singleton to ground its
+   * analysis; the Playbook page renders the same row plus its `updated_at`. One
+   * SQL, one place the projection is decided. Allowlisting a name that lives in
+   * the AI module is exactly what this list is for — the registry is not a
+   * pass-through, so being registered somewhere never made an operation
+   * reachable from here.
+   *
+   * **Neither tolerates an absent relation**, and the playbook is the sharper of
+   * the two: its editor unlocks on a successful load, so an empty document
+   * standing in for a missing table would invite an admin to type into a blank
+   * box and Save it over the real playbook. Both tables are in the baseline's
+   * first artifact, so absence is a broken deployment either way. No parameters:
+   * the playbook is a singleton and the digest relation is one row per notebook,
+   * which the page renders in full.
+   */
+  [AI_WRITE_OPERATIONS.coachPlaybook]: {
+    operation: AI_WRITE_OPERATIONS.coachPlaybook,
+  },
+  [COACHING_OPERATIONS.digests]: {
+    operation: COACHING_OPERATIONS.digests,
   },
 
   // --- the sourcing library, all tolerant ----------------------------------
