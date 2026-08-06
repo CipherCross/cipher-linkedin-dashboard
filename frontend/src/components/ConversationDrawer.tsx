@@ -7,6 +7,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { authPost } from '../lib/api'
 import { authFetch } from '../lib/api'
+import { fetchNeonThread, resolveReadPath } from '../lib/dashboardReads'
 import { useAuth } from '../lib/AuthContext'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
@@ -171,6 +172,26 @@ export function ConversationDrawer({
     setError(null)
     setRows(null)
     ;(async () => {
+      // The Neon path serves one fixed projection: the column ladder below dies
+      // there rather than being reproduced. Its middle rung silently drops
+      // `intent_level` and `intent_reason` from every message in the thread, so
+      // an SDR triaging a conversation would see no buying intent *because the
+      // query asked for none* — a confident wrong answer in the one place a
+      // human decides from what is on screen. That was worth it while migration
+      // 047 was in flight; against a ledger-applied schema it hides a broken
+      // deployment from the person least able to detect it.
+      if ((await resolveReadPath()) === 'neon') {
+        try {
+          const thread = await fetchNeonThread(lead.instance_id, lead.profile_url)
+          if (cancelled) return
+          setRows(thread as ThreadMsg[])
+        } catch (e) {
+          if (cancelled) return
+          setError(e instanceof Error ? e.message : String(e))
+        }
+        setLoading(false)
+        return
+      }
       if (!supabase) {
         setError('Supabase is not configured.')
         setLoading(false)

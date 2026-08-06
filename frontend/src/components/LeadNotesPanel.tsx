@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { fetchNeonLeadNotes, resolveReadPath } from '../lib/dashboardReads'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ago } from '../lib/format'
@@ -34,6 +35,22 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
     setLoading(true)
     setError(null)
     ;(async () => {
+      // Both paths order newest first with NULL `created_at` first: PostgreSQL's
+      // default for a bare `DESC` is NULLS FIRST and PostgREST emits the same
+      // bare `DESC`, so a note written with no timestamp sorts identically on
+      // either provider rather than first on one and last on the other.
+      if ((await resolveReadPath()) === 'neon') {
+        try {
+          const rows = await fetchNeonLeadNotes(lead.id)
+          if (cancelled) return
+          setNotes(rows)
+        } catch (e) {
+          if (cancelled) return
+          setError(e instanceof Error ? e.message : String(e))
+        }
+        setLoading(false)
+        return
+      }
       if (!supabase) {
         setError('Supabase is not configured.')
         setLoading(false)

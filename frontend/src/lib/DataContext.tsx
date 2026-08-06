@@ -2,9 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import { fetchConversationReplyIntents, isMissingRelation } from './conversationPaging'
+import { fetchNeonDashboard, resolveReadPath } from './dashboardReads'
 import type {
-  CampaignMetrics, ConversationLatestMessage, DashboardData, FollowUpState,
-  Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Lead, Message, SavedSearch,
+  Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
+  ConversationReplyIntent, DailyActivity, DashboardData, FollowUpState,
+  Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Instance, Lead,
+  Message, PipelineEvent, SavedSearch, SyncRun, TeamMember,
 } from './types'
 
 const EMPTY: DashboardData = {
@@ -266,6 +269,182 @@ const REFRESH_OVERLAP_MS = 2 * 60_000
 // refresh. These tables are small, so a JSON compare is cheap.
 function stableSlice<T>(prev: T, next: T): T {
   return JSON.stringify(prev) === JSON.stringify(next) ? prev : next
+}
+
+/**
+ * One load's worth of rows, in the browser's own types and with no trace of
+ * which provider answered.
+ *
+ * Both fetchers below produce exactly this, so the commit block in `load()` —
+ * the delta merge, the pending-patch replay, the reference-stability pass — is
+ * written once and is provider-independent. That is the whole point of the
+ * shape: the switch must not fork the part of `DataContext` that decides what
+ * the dashboard shows, only the part that decides where the rows come from.
+ */
+interface Fetched {
+  instances: Instance[]
+  campaigns: CampaignMetrics[]
+  activity: DailyActivity[]
+  syncRuns: SyncRun[]
+  annotations: Annotation[]
+  steps: CampaignStep[]
+  teamMembers: TeamMember[]
+  savedSearches: SavedSearch[]
+  icps: Icp[]
+  icpPersonas: IcpPersona[]
+  icpIndustries: IcpIndustry[]
+  hypotheses: Hypothesis[]
+  hypothesisCampaigns: HypothesisCampaign[]
+  leads: Lead[]
+  messages: Message[]
+  pipelineEvents: PipelineEvent[]
+  followUpStates: FollowUpState[]
+  latestConversationMessages: ConversationLatestMessage[]
+  followUpsAvailable: boolean
+  conversationReplyIntents: ConversationReplyIntent[]
+  /**
+   * A query-level failure that must be *reported* without throwing — the
+   * Supabase path's aggregate of the six reads whose errors are not tolerated.
+   * `null` on the Neon path, where every failure throws and the outer `catch`
+   * reports it; the field stays on the shape rather than becoming a union so
+   * the commit block does not have to know which fetcher ran.
+   */
+  error: string | null
+}
+
+/**
+ * The Supabase read path, unchanged in substance and moved out of `load()`
+ * verbatim.
+ *
+ * Everything about it is deliberately as it was: the seven reads whose errors
+ * are excluded from the aggregate (a missing manual-pipeline or Search Library
+ * table yields `[]` and never fails the load), the two column ladders, the
+ * inbound/outbound asymmetry, the delta watermark. The switch adds a sibling; it
+ * does not renegotiate this path, which is the one every deployment is running.
+ */
+async function fetchSupabaseDashboard(
+  since: string,
+  delta: boolean,
+  cursor: string | null,
+): Promise<Fetched> {
+  // Small / view-backed tables can't delta (views) and are cheap — always
+  // full, even on an interval refresh.
+  const smallP = Promise.all([
+    supabase!
+      .from('instances')
+      .select('id,label,last_sync_at,agent_version,account_name,account_url,account_avatar,config,config_updated_at')
+      .order('id'),
+    supabase!.from('campaign_metrics').select('*').order('campaign_name'),
+    supabase!.from('daily_activity').select('*').gte('day', since),
+    supabase!
+      .from('sync_runs')
+      .select('id,instance_id,started_at,finished_at,status,rows_upserted,error')
+      .order('started_at', { ascending: false })
+      .limit(200),
+    supabase!.from('annotations').select('*').order('noted_at'),
+    supabase!
+      .from('campaign_steps')
+      .select('*')
+      .order('campaign_id')
+      .order('step_index'),
+    // Manual-pipeline tables may not exist yet (migration pending). Their
+    // errors are intentionally NOT folded into the aggregate `error`
+    // below — a missing table just yields an empty list, never a failed
+    // load. team_members' .select() resolves with {data,error} (never
+    // throws); fetchAllPipelineEvents swallows its own errors to [].
+    supabase!
+      .from('team_members')
+      .select('id,name,active,created_at,auth_user_id,email,role')
+      .order('id'),
+    // Search Library (migration 040) — same tolerated-error pattern: a
+    // missing table (pre-migration DB) yields [] and its error is excluded
+    // from the aggregate `error` below, so it never fails the load.
+    supabase!.from('saved_searches').select('*').order('platform').order('name'),
+    // ICP + Hypothesis layer (migration 043) — same tolerated-error pattern.
+    supabase!.from('icps').select('*').order('name'),
+    supabase!.from('icp_personas').select('*').order('icp_id').order('sort'),
+    supabase!.from('icp_industries').select('*').order('icp_id').order('name'),
+    supabase!.from('hypotheses').select('*').order('name'),
+    supabase!.from('hypothesis_campaigns').select('*'),
+  ])
+  // Big append-heavy tables delta on an interval refresh, full otherwise.
+  const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
+  const messagesP = delta ? fetchMessages(since, MESSAGE_COLUMNS, cursor!) : fetchMessages(since)
+  const eventsP = delta ? fetchAllPipelineEvents(cursor!) : fetchAllPipelineEvents()
+  const followUpsP = fetchFollowUpData()
+  // Full-thread projection needed for exact P3 ghosting even though the
+  // global message cache intentionally windows outbound rows to 90 days.
+  // Conversation-scoped and therefore unbounded, so it pages like the two
+  // sibling views in fetchFollowUpData rather than sitting in smallP with
+  // no .range() loop — which silently capped it at PostgREST's 1,000 rows.
+  // It resolves to rows or throws; a missing relation is the one tolerated
+  // failure, and it yields [] rather than a prefix.
+  const replyIntentsP = fetchConversationReplyIntents(supabase!)
+  const [small, leads, messages, pipelineEvents, followUps, conversationReplyIntents] =
+    await Promise.all([
+      smallP, leadsP, messagesP, eventsP, followUpsP, replyIntentsP,
+    ])
+  const [
+    instances, campaigns, activity, syncRuns, annotations, steps, teamMembers,
+    savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
+  ] = small
+  const error =
+    instances.error ?? campaigns.error ?? activity.error ??
+    syncRuns.error ?? annotations.error ?? steps.error
+  return {
+    instances: (instances.data ?? []) as Instance[],
+    campaigns: (campaigns.data ?? []) as CampaignMetrics[],
+    activity: (activity.data ?? []) as DailyActivity[],
+    syncRuns: (syncRuns.data ?? []) as SyncRun[],
+    annotations: (annotations.data ?? []) as Annotation[],
+    steps: (steps.data ?? []) as CampaignStep[],
+    teamMembers: (teamMembers.data ?? []) as TeamMember[],
+    savedSearches: (savedSearches.data ?? []) as SavedSearch[],
+    icps: (icps.data ?? []) as Icp[],
+    icpPersonas: (icpPersonas.data ?? []) as IcpPersona[],
+    icpIndustries: (icpIndustries.data ?? []) as IcpIndustry[],
+    hypotheses: (hypotheses.data ?? []) as Hypothesis[],
+    hypothesisCampaigns: (hypothesisCampaigns.data ?? []) as HypothesisCampaign[],
+    leads,
+    messages,
+    pipelineEvents: pipelineEvents as unknown as PipelineEvent[],
+    followUpStates: followUps.states,
+    latestConversationMessages: followUps.latest,
+    followUpsAvailable: followUps.available,
+    conversationReplyIntents,
+    error: error ? error.message : null,
+  }
+}
+
+/**
+ * The application API's read path, behind the deployment's `NEON_READS_DEFAULT`
+ * flag. Everything it decides lives in `dashboardReads.ts`; this is the adapter
+ * from that module's result to `Fetched`, and it is two facts long.
+ *
+ * **The roster is empty, and that is the honest answer rather than a gap.**
+ * `leads.assigned_to` arriving from Neon is a Neon `team_members.id`, and the
+ * Supabase roster's integers name different people (`N-B2.md` has the map). So
+ * carrying the Supabase roster across would not fail anything — it would put the
+ * wrong name on every owner chip and in every CSV export. A missing name is
+ * visible; a wrong one is not. Until `team_members` migrates with `leads`, this
+ * path shows no names, which is also why the flag cannot be flipped yet.
+ */
+async function fetchNeonDashboardData(
+  since: string,
+  delta: boolean,
+  cursor: string | null,
+): Promise<Fetched> {
+  const fetched = await fetchNeonDashboard({
+    since,
+    updatedSince: delta ? cursor : null,
+  })
+  return {
+    ...fetched,
+    teamMembers: [],
+    // Never set: on this path a read either answers or throws, and the throw is
+    // reported by `load()`'s outer catch.
+    error: null,
+  }
 }
 
 const Ctx = createContext<{
@@ -573,7 +752,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // updated_at column yet (migration 031 pending).
   const load = useCallback(async (mode: 'full' | 'delta' = 'full') => {
     const id = ++reqId.current
-    if (!supabase) {
+    // Which provider answers this load. Memoized for the page's lifetime, so
+    // this costs one unauthenticated round trip per session and every later
+    // load — and every component read — sees the same answer. Any failure
+    // resolves to `supabase`, so a flag lookup can never take the working
+    // dashboard down.
+    const readPath = await resolveReadPath()
+    if (readPath === 'supabase' && !supabase) {
       showError(
         'Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
       )
@@ -587,74 +772,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const since = new Date(startedAt - 90 * 86_400_000)
           .toISOString()
           .slice(0, 10)
-        // Small / view-backed tables can't delta (views) and are cheap — always
-        // full, even on an interval refresh.
-        const smallP = Promise.all([
-          supabase
-            .from('instances')
-            .select('id,label,last_sync_at,agent_version,account_name,account_url,account_avatar,config,config_updated_at')
-            .order('id'),
-          supabase.from('campaign_metrics').select('*').order('campaign_name'),
-          supabase.from('daily_activity').select('*').gte('day', since),
-          supabase
-            .from('sync_runs')
-            .select('id,instance_id,started_at,finished_at,status,rows_upserted,error')
-            .order('started_at', { ascending: false })
-            .limit(200),
-          supabase.from('annotations').select('*').order('noted_at'),
-          supabase
-            .from('campaign_steps')
-            .select('*')
-            .order('campaign_id')
-            .order('step_index'),
-          // Manual-pipeline tables may not exist yet (migration pending). Their
-          // errors are intentionally NOT folded into the aggregate `error`
-          // below — a missing table just yields an empty list, never a failed
-          // load. team_members' .select() resolves with {data,error} (never
-          // throws); fetchAllPipelineEvents swallows its own errors to [].
-          supabase
-            .from('team_members')
-            .select('id,name,active,created_at,auth_user_id,email,role')
-            .order('id'),
-          // Search Library (migration 040) — same tolerated-error pattern: a
-          // missing table (pre-migration DB) yields [] and its error is excluded
-          // from the aggregate `error` below, so it never fails the load.
-          supabase.from('saved_searches').select('*').order('platform').order('name'),
-          // ICP + Hypothesis layer (migration 043) — same tolerated-error pattern.
-          supabase.from('icps').select('*').order('name'),
-          supabase.from('icp_personas').select('*').order('icp_id').order('sort'),
-          supabase.from('icp_industries').select('*').order('icp_id').order('name'),
-          supabase.from('hypotheses').select('*').order('name'),
-          supabase.from('hypothesis_campaigns').select('*'),
-        ])
-        // Big append-heavy tables delta on an interval refresh, full otherwise.
-        const leadsP = delta ? fetchAllLeads(LEAD_COLUMNS, cursor!) : fetchAllLeads()
-        const messagesP = delta ? fetchMessages(since, MESSAGE_COLUMNS, cursor!) : fetchMessages(since)
-        const eventsP = delta ? fetchAllPipelineEvents(cursor!) : fetchAllPipelineEvents()
-        const followUpsP = fetchFollowUpData()
-        // Full-thread projection needed for exact P3 ghosting even though the
-        // global message cache intentionally windows outbound rows to 90 days.
-        // Conversation-scoped and therefore unbounded, so it pages like the two
-        // sibling views in fetchFollowUpData rather than sitting in smallP with
-        // no .range() loop — which silently capped it at PostgREST's 1,000 rows.
-        // It resolves to rows or throws; a missing relation is the one tolerated
-        // failure, and it yields [] rather than a prefix.
-        const replyIntentsP = fetchConversationReplyIntents(supabase)
-        const [small, leads, messages, pipelineEvents, followUps, conversationReplyIntents] =
-          await Promise.all([
-            smallP, leadsP, messagesP, eventsP, followUpsP, replyIntentsP,
-          ])
-        const [
+        // The one line the switch adds. Both fetchers answer with `Fetched`, so
+        // everything below this point is provider-independent and did not change.
+        const fetched =
+          readPath === 'neon'
+            ? await fetchNeonDashboardData(since, delta, cursor)
+            : await fetchSupabaseDashboard(since, delta, cursor)
+        const {
           instances, campaigns, activity, syncRuns, annotations, steps, teamMembers,
           savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
-        ] = small
+          leads, messages, pipelineEvents, conversationReplyIntents,
+        } = fetched
         if (id !== reqId.current) return
-        const error =
-          instances.error ?? campaigns.error ?? activity.error ??
-          syncRuns.error ?? annotations.error ?? steps.error
-        if (error) {
+        if (fetched.error) {
           // Query-level failure: keep prior data, just flag the error.
-          showError(error.message)
+          showError(fetched.error)
         } else {
           // Success replaces the small tables wholesale (clearing any prior
           // error); the big tables replace on a full load and merge-by-id on a
@@ -692,39 +824,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
             // Small tables reuse the prior reference when deep-equal, so a no-op
             // refresh keeps every data slice reference-stable for downstream memos.
             return {
-              instances: stableSlice(base.instances, instances.data ?? []),
-              campaigns: stableSlice(base.campaigns, campaigns.data ?? []),
-              activity: stableSlice(base.activity, activity.data ?? []),
-              syncRuns: stableSlice(base.syncRuns, syncRuns.data ?? []),
+              instances: stableSlice(base.instances, instances),
+              campaigns: stableSlice(base.campaigns, campaigns),
+              activity: stableSlice(base.activity, activity),
+              syncRuns: stableSlice(base.syncRuns, syncRuns),
               messages: nextMessages,
               conversationReplyIntents: stableSlice(
                 base.conversationReplyIntents,
                 conversationReplyIntents,
               ),
-              annotations: stableSlice(base.annotations, annotations.data ?? []),
-              steps: stableSlice(base.steps, steps.data ?? []),
-              teamMembers: stableSlice(base.teamMembers, teamMembers.data ?? []),
-              savedSearches: stableSlice(
-                base.savedSearches,
-                (savedSearches.data ?? []) as SavedSearch[],
-              ),
-              icps: stableSlice(base.icps, (icps.data ?? []) as Icp[]),
-              icpPersonas: stableSlice(base.icpPersonas, (icpPersonas.data ?? []) as IcpPersona[]),
-              icpIndustries: stableSlice(base.icpIndustries, (icpIndustries.data ?? []) as IcpIndustry[]),
-              hypotheses: stableSlice(base.hypotheses, (hypotheses.data ?? []) as Hypothesis[]),
+              annotations: stableSlice(base.annotations, annotations),
+              steps: stableSlice(base.steps, steps),
+              teamMembers: stableSlice(base.teamMembers, teamMembers),
+              savedSearches: stableSlice(base.savedSearches, savedSearches),
+              icps: stableSlice(base.icps, icps),
+              icpPersonas: stableSlice(base.icpPersonas, icpPersonas),
+              icpIndustries: stableSlice(base.icpIndustries, icpIndustries),
+              hypotheses: stableSlice(base.hypotheses, hypotheses),
               hypothesisCampaigns: stableSlice(
                 base.hypothesisCampaigns,
-                (hypothesisCampaigns.data ?? []) as HypothesisCampaign[],
+                hypothesisCampaigns,
               ),
               // Already reference-stable on a no-op delta (mergeById returns the
               // prior array when the batch is empty); full fetch gets a fresh one.
               pipelineEvents: events as unknown as DashboardData['pipelineEvents'],
-              followUpStates: applyPendingFollowUps(followUps.states),
+              followUpStates: applyPendingFollowUps(fetched.followUpStates),
               latestConversationMessages: stableSlice(
                 base.latestConversationMessages,
-                followUps.latest,
+                fetched.latestConversationMessages,
               ),
-              followUpsAvailable: followUps.available,
+              followUpsAvailable: fetched.followUpsAvailable,
               leads: nextLeads,
             }
           })
@@ -735,6 +864,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // A delta query hit a missing updated_at column (migration 031 pending):
         // disable delta for the session and immediately retry as a full load so
         // the dashboard keeps working pre-migration.
+        //
+        // Supabase-path only in practice, and by construction rather than by a
+        // guard: the API never returns driver text (`safeErrorLabel` logs a name
+        // and a code, never a message), so nothing reaching here from the Neon
+        // path can look like a missing column. There is nothing to step down to
+        // on that path either — the ledger-applied baseline carries every column
+        // the operations select, so a missing one is a broken deployment.
         if (delta && isMissingColumn(e)) {
           deltaSupported.current = false
           return load('full')

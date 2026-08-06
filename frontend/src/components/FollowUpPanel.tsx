@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { followUpHistorySeek } from '../lib/conversationPaging'
+import { fetchNeonFollowUpHistory, resolveReadPath } from '../lib/dashboardReads'
 import {
   actorMember,
   activeFollowUp,
@@ -35,6 +36,10 @@ const EVENT_LABEL: Record<FollowUpEvent['event_kind'], string> = {
   skipped: 'Skipped',
   canceled: 'Canceled',
 }
+
+/** One "load more" step. Both paths ask for the same page size, so the panel
+ *  behaves identically whichever answers. */
+const HISTORY_PAGE = 50
 
 function nextBusinessDate(): string {
   const [year, month, day] = businessDateKey().split('-').map(Number)
@@ -66,6 +71,10 @@ export function FollowUpPanel({
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
+  // The Neon path's "load more" position. The server's opaque cursor replaces
+  // the client-side seek entirely; it stays null on the Supabase path, which
+  // seeks from the last row it already holds.
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
 
   const key = followUpKey(lead.instance_id, lead.profile_url)
@@ -107,9 +116,32 @@ export function FollowUpPanel({
   }
 
   const loadHistory = async (append = false) => {
-    if (!supabase) return
     setHistoryLoading(true)
     setHistoryError(null)
+    // The Neon path pages on the server's own cursor, which is a ROW comparison
+    // over the whole `(occurred_at, id)` sort key — so the seek and the order
+    // cannot disagree, and the client holds no seek logic at all.
+    if ((await resolveReadPath()) === 'neon') {
+      try {
+        const page = await fetchNeonFollowUpHistory(
+          lead.instance_id,
+          lead.profile_url,
+          HISTORY_PAGE,
+          append ? historyCursor : null,
+        )
+        setEvents((previous) => (append ? [...previous, ...page.events] : page.events))
+        setHistoryCursor(page.nextCursor)
+        setHasMore(page.hasMore && page.nextCursor !== null)
+      } catch (e) {
+        setHistoryError(e instanceof Error ? e.message : String(e))
+      }
+      setHistoryLoading(false)
+      return
+    }
+    if (!supabase) {
+      setHistoryLoading(false)
+      return
+    }
     let query = supabase
       .from('follow_up_events')
       .select('*')
@@ -117,7 +149,7 @@ export function FollowUpPanel({
       .eq('profile_url', lead.profile_url)
       .order('occurred_at', { ascending: false })
       .order('id', { ascending: false })
-      .limit(50)
+      .limit(HISTORY_PAGE)
     // Seek on the whole sort key, not on `id` alone. `occurred_at` is
     // transaction-start time and `id` is insert time, so two overlapping writes
     // can commit with the two orders inverted; an `id`-only predicate then skips
@@ -129,7 +161,7 @@ export function FollowUpPanel({
     } else {
       const page = (rows ?? []) as FollowUpEvent[]
       setEvents((previous) => append ? [...previous, ...page] : page)
-      setHasMore(page.length === 50)
+      setHasMore(page.length === HISTORY_PAGE)
     }
     setHistoryLoading(false)
   }
@@ -142,6 +174,7 @@ export function FollowUpPanel({
 
   useEffect(() => {
     setEvents([])
+    setHistoryCursor(null)
     void loadHistory()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, historyVersion])
