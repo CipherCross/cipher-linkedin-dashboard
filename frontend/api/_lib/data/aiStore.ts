@@ -4,12 +4,25 @@
  * Why a **second** store rather than the shared one: the two stores connect as
  * different principals and are authorized differently by the database.
  * `store.ts` resolves `NEON_DATABASE_URL` and runs as `app_runtime`, whose
- * surface is actor-scoped table reads and writes. This one resolves
- * `NEON_AI_DATABASE_URL` and enters `app_system`, which holds no table grant
- * at all — its whole capability is `EXECUTE` on the guard, so the guard is
- * genuinely the whole capability of every read this store serves. One store
- * could not be both: a connection is one principal, and conflating the two
- * credentials is exactly what `neonConfig.ts` refuses to do.
+ * surface is actor-scoped table reads and writes under an active-HUMAN policy.
+ * This one resolves `NEON_AI_DATABASE_URL` and enters `app_system`, the
+ * server-owned job principal, whose policies gate on the system actor instead.
+ * One store could not be both: a connection is one principal, and conflating
+ * the two credentials is exactly what `neonConfig.ts` refuses to do.
+ *
+ * ## What this store can reach, corrected for step 007
+ *
+ * This header used to say `app_system` held no table grant at all and that the
+ * guard was therefore the whole capability of every read served here. Ledger
+ * step 007 is applied and that is no longer true. The role now holds
+ * `SELECT, INSERT, UPDATE` — never `DELETE` — on five relations
+ * (`briefing_jobs`, `briefings`, `messages`, `leads`, `saved_searches`), each
+ * behind a policy that opens only for the published nil-uuid actor. So this
+ * store serves two things: guard calls, which remain the only route to every
+ * *other* relation and are still SELECT-only under a 1000-row cap; and the
+ * narrow, named DML the server-owned jobs need, registered one statement at a
+ * time in `operations/aiSystem.ts` and composed into the same registry. What
+ * did not change: the guard gained no write path, and nothing generic writes.
  *
  * Module scope and lazy construction for the same reason S11 measured for
  * `store.ts`: a warm Vercel invocation reuses the pool, a cold start pays the
@@ -32,10 +45,14 @@
  * publishes `SYSTEM_ACTOR` — a `SystemActorContext` whose id is the nil uuid.
  * The id is deliberately one that belongs to no user: it matches the strict
  * uuid regex the policies apply, and then fails the active-`users` EXISTS
- * behind it, so every actor-scoped policy denies it. Combined with
- * `app_system`'s empty grant set, that makes the guard the only thing this
- * store can reach — the actor is published for the contract and for the audit
- * trail, not as a key to anything.
+ * behind it, so every human-actor policy denies it. Step 007 turned it from a
+ * value that unlocked nothing into the gate of exactly five relations, which
+ * makes publishing it correctly load-bearing rather than ceremonial: a system
+ * transaction that failed to publish it would find `current_setting` NULL, and
+ * NULL never equals the system actor id, so the policies fail closed rather
+ * than open. It is still not a key to any human's data — no user can ever hold
+ * it, because step 005 is the only creator of users and generates ids with
+ * `gen_random_uuid()`.
  */
 
 import type { DataStore, SystemActorContext } from './contracts.js'

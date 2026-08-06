@@ -11,6 +11,10 @@ import {
 } from './core.js'
 import { validateSearch } from './savedSearch.js'
 import { deploymentAiPath } from './data/aiPath.js'
+import { getAiDataStore, SYSTEM_ACTOR } from './data/aiStore.js'
+import { DataStoreConstraintError } from './data/contracts.js'
+import { SYSTEM_OPERATIONS } from './data/operations/aiSystem.js'
+import type { EntityWriteResult, SavedSearchRow } from './data/operations/index.js'
 import { neonSaveEntity } from './neonLibraryWrites.js'
 
 export interface ToolDef {
@@ -224,12 +228,83 @@ async function saveSearchOnNeon(
   return `Save failed (status ${response.status})`
 }
 
+/**
+ * The MCP surface's save_search, on the Neon path.
+ *
+ * MCP has no signed-in member and cannot acquire one: it authenticates with
+ * `MCP_SECRET`, a machine credential, and its clients cannot inherit the SPA's
+ * session. That is why this answered with an explanatory refusal for a whole
+ * session. It now has a principal — `app_system`, whose step-007 grant includes
+ * `saved_searches` — so the write runs on the AI store under `SYSTEM_ACTOR`.
+ * No human actor is invented: the row records no author it cannot know, and the
+ * gate stays `MCP_SECRET`.
+ *
+ * The statements are the two S14 reviewed for the human path, registered a
+ * second time under system names (see `aiSystem.ts`), so the row an MCP client
+ * writes is the row a member would have written. Validation is `validateSearch`
+ * — the same call, on the same input — and every returned string is one of the
+ * Supabase path's, because the model on the other end reads them.
+ */
+async function saveSearchAsSystem(input: {
+  id?: number
+  [k: string]: unknown
+}): Promise<{ ok: true; search: unknown } | string> {
+  const { id, ...rest } = input
+  const isUpdate = id !== undefined && id !== null
+  const normalized = validateSearch(rest, !isUpdate)
+  if (typeof normalized === 'string') return `Invalid search: ${normalized}`
+  if (isUpdate && Object.keys(normalized).length === 0) {
+    return 'Nothing to update — provide at least one field to change.'
+  }
+
+  try {
+    const result = await getAiDataStore().transaction(SYSTEM_ACTOR, (transaction) =>
+      transaction.execute<EntityWriteResult<SavedSearchRow>>({
+        operation: isUpdate
+          ? SYSTEM_OPERATIONS.updateSavedSearch
+          : SYSTEM_OPERATIONS.insertSavedSearch,
+        params: isUpdate
+          ? { id: id as number, patchJson: JSON.stringify(normalized) }
+          : { patchJson: JSON.stringify(normalized) },
+      }),
+    )
+    // An UPDATE that matched nothing is an unknown id; an INSERT cannot return
+    // zero rows without having raised, so this branch is the update's.
+    if (result.rowCount === 0) return `No saved search with id ${id}.`
+    return { ok: true, search: result.row }
+  } catch (error) {
+    if (error instanceof DataStoreConstraintError && error.kind === 'unique') {
+      return isUpdate
+        ? 'A search with that name already exists for this platform — pick a different name or update that row by its id.'
+        : 'A search with that name already exists for this platform — update the existing search (pass its id) instead of creating a duplicate.'
+    }
+    // Composed, never quoted: the driver's text can carry a hostname, and this
+    // string is handed to a model that may repeat it verbatim.
+    console.error(
+      'Neon save_search failed (system path):',
+      error instanceof Error ? error.name : 'UnknownError',
+    )
+    return 'Save failed: the database refused the write.'
+  }
+}
+
+/** The MCP surface's save_search, whichever provider is configured. */
+export async function executeSaveSearchAsSystem(input: {
+  id?: number
+  [k: string]: unknown
+}): Promise<{ ok: true; search: unknown } | string> {
+  if (deploymentAiPath() !== 'neon') return executeSaveSearch(input)
+  return saveSearchAsSystem(input)
+}
+
 export interface BuildToolsDeps {
   /**
    * The request whose bearer the save_search write resolves its actor under.
-   * The chat supplies it; callers without one (the MCP surface, the cron)
-   * receive a declared-blocked message on the Neon path instead — machine
-   * writes wait on ledger step 007.
+   * The chat supplies it. A caller that builds this tool set without one has no
+   * member to write as and is told so; the machine-authenticated surface does
+   * not come through here at all — `/api/mcp` writes as `app_system` through
+   * `executeSaveSearchAsSystem`, which needs no request because it resolves no
+   * human.
    */
   readonly req?: Request
 }
@@ -281,8 +356,8 @@ export function buildTools(deps: BuildToolsDeps = {}) {
         if (deploymentAiPath() !== 'neon') return executeSaveSearch(input)
         if (!deps.req) {
           return (
-            'save_search is unavailable: writes on the Neon path need a signed-in ' +
-            'member, and the system write path (ledger step 007) has not been applied yet.'
+            'save_search is unavailable: this tool set was built without a request, ' +
+            'so there is no signed-in member to write as.'
           )
         }
         return saveSearchOnNeon(deps.req, input)

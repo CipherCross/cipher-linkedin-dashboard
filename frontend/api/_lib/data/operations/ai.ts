@@ -5,13 +5,39 @@
  * This registry is deliberately **not** the application registry and is never
  * merged into it: the two are authorized by different principals. The
  * application registry runs as `app_runtime` under actor-scoped policies; this
- * one runs as `app_system`, which holds no table grant at all — its whole
- * capability is `EXECUTE` on the step-`003` guard `public.ai_execute_sql`, a
- * `SECURITY DEFINER` function owned by the NOLOGIN, SELECT-only
- * `app_ai_runner`. Every operation here is therefore one call to that guard;
- * what varies is the SQL text passed to it as a bound parameter.
+ * one runs as `app_system`.
  *
- * Two kinds of entry:
+ * ## What `app_system` can reach, corrected for step 007
+ *
+ * This file used to say that `app_system` held no table grant at all and that
+ * `EXECUTE` on the guard was its whole capability. That was true when it was
+ * written and it is no longer true. Ledger step 007
+ * (`postgres/tenant-baseline/v1/007_ai_system_write_path.sql`) is applied, and
+ * it gave the role `SELECT, INSERT, UPDATE` — never `DELETE` — on exactly five
+ * relations (`briefing_jobs`, `briefings`, `messages`, `leads`,
+ * `saved_searches`), each behind a `FOR ALL TO app_system` policy that opens
+ * only when the published `app.actor_id` is the nil uuid. So the shape is now
+ * two-part, and the split follows the grant graph:
+ *
+ * - **The guard, for reads.** Arbitrary investigation and every fixed query in
+ *   *this* file still go through `public.ai_execute_sql`, the `SECURITY
+ *   DEFINER` step-`003` function owned by the NOLOGIN, SELECT-only
+ *   `app_ai_runner`. It remains the only way to read a relation outside those
+ *   five — `campaigns`, `instances`, `hypotheses` and the rest are still
+ *   invisible to a direct `app_system` statement — and it is still SELECT-only,
+ *   1000 rows, 10 seconds. Step 007 loosened nothing about it.
+ * - **A narrow, named DML surface, for the server-owned jobs.** The endpoints
+ *   with no human actor — the reply notifier, the machine-authenticated library
+ *   write — need to change rows, and a SELECT-only guard cannot express that.
+ *   Those statements live in `aiSystem.ts` and are composed into this registry
+ *   by `buildAiRegistry` below, so `getAiDataStore()` serves both halves from
+ *   one store. They are named one-per-statement exactly like every other
+ *   operation; nothing generic writes.
+ *
+ * ## The two kinds of entry in this file
+ *
+ * Everything registered *here* is still one call to the guard; what varies is
+ * the SQL text passed to it as a bound parameter.
  *
  * - `ai.executeSql`, the generic one. Its parameter is arbitrary SQL, and that
  *   is compatible with an allowlist only because of what the grant graph makes
@@ -32,6 +58,7 @@
 
 import { NeonOperationRegistry, type NeonRow } from '../neon.js'
 import type { DataStoreParams } from '../contracts.js'
+import { registerSystemOperations } from './aiSystem.js'
 
 export const AI_OPERATIONS = {
   executeSql: 'ai.executeSql',
@@ -278,8 +305,12 @@ export interface AiExecuteSqlParams extends DataStoreParams {
  * rows, never NULL. `pg` parses jsonb into a JS array, so the mapper asserts
  * the shape and hands the array onward; anything else is a contract break the
  * caller must not paper over.
+ *
+ * Exported for `aiSystem.ts`, whose out-of-grant reads are guard calls too.
+ * Sharing the mapper rather than copying four lines is what keeps "a guard call
+ * answers in one shape" a fact about the code instead of a convention.
  */
-function mapGuardRow(row: NeonRow): unknown[] {
+export function mapGuardRow(row: NeonRow): unknown[] {
   const result = row.result
   if (!Array.isArray(result)) {
     throw new Error('ai_execute_sql did not return a row aggregate')
@@ -287,7 +318,9 @@ function mapGuardRow(row: NeonRow): unknown[] {
   return result
 }
 
-const guardStatement = (query: string) => ({
+/** The guard call itself, with the query bound as a parameter. Exported for
+ *  the same reason as `mapGuardRow`. */
+export const guardStatement = (query: string) => ({
   text: 'SELECT public.ai_execute_sql($1) AS result',
   values: [query] as readonly unknown[],
 })
@@ -295,6 +328,10 @@ const guardStatement = (query: string) => ({
 /**
  * Build the AI registry. Exported — like `buildApplicationRegistry` — so a
  * test can build an identical one without reaching for the module-scope store.
+ *
+ * It composes `aiSystem.ts`'s registrations at the end, so one store answers
+ * both the guard reads and the system DML step 007 opened. They are separate
+ * modules and one registry because they are one principal.
  */
 export function buildAiRegistry(): NeonOperationRegistry {
   const registry = new NeonOperationRegistry()
@@ -322,5 +359,5 @@ export function buildAiRegistry(): NeonOperationRegistry {
     })
   }
 
-  return registry
+  return registerSystemOperations(registry)
 }

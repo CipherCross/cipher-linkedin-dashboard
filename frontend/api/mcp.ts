@@ -12,8 +12,7 @@ import {
   executeNamedSql,
   executeSql,
 } from './_lib/core.js'
-import { executeSaveSearch, toolDefs } from './_lib/tools.js'
-import { deploymentAiPath } from './_lib/data/aiPath.js'
+import { executeSaveSearchAsSystem, toolDefs } from './_lib/tools.js'
 import { guardMachine } from './_lib/auth.js'
 
 function asText(value: unknown) {
@@ -92,19 +91,12 @@ const adminHandler = createMcpHandler(
       toolDefs.save_search.name,
       toolDefs.save_search.description,
       toolDefs.save_search.inputShape,
-      async (args) => {
-        // MCP authenticates with MCP_SECRET — a machine caller with no human
-        // actor. On the Neon path that write is declared blocked until ledger
-        // step 007 (the system write path) is applied; it stays on Supabase
-        // only while the AI layer itself is still on Supabase.
-        if (deploymentAiPath() === 'neon') {
-          return asText(
-            'save_search is unavailable: MCP has no signed-in member to write as, ' +
-              'and the system write path (ledger step 007) has not been applied yet.'
-          )
-        }
-        return asText(await executeSaveSearch(args))
-      }
+      // MCP authenticates with MCP_SECRET — a machine caller with no human
+      // actor, and none is invented. On the Neon path the write runs as
+      // `app_system` under ledger step 007's system write path; on the Supabase
+      // path it runs through the service-role client, as it always has. Same
+      // row either way; the gate is MCP_SECRET on both.
+      async (args) => asText(await executeSaveSearchAsSystem(args))
     )
   },
   serverOptions,
