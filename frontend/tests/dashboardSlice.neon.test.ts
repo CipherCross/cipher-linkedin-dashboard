@@ -746,6 +746,10 @@ describe('S13 — the auth deny matrix over every new read', () => {
     'messages.outboundRecent',
     'instances.overview',
     'campaigns.performance',
+    // The roster joined this list with the roster slice. It is the one read here
+    // that returns people rather than work, so it is the one where a credential
+    // check quietly not running would matter most.
+    'identity.teamRoster',
   ] as const
 
   it('fails unauthenticated requests closed, with the real verifier', async () => {
@@ -861,9 +865,17 @@ describe('S13 — the auth deny matrix over every new read', () => {
   it('rejects malformed input before it reaches the database', async () => {
     // An operation that is not allowlisted, whatever the registry holds.
     expect((await call({ op: 'leads.everything' })).status).toBe(400)
-    expect((await call({ op: 'identity.teamRoster' })).status).toBe(400)
+    // `identity.teamRoster` used to be here, as the proof that the roster could
+    // not be reached from the dashboard endpoint. It is allowlisted now — see
+    // `dashboardSlice.test.ts`'s header for why the premise inverted — so what
+    // remains asserted is that widening it to one *read* widened it to nothing
+    // else: the actor resolver and the three admin commands are still refused,
+    // and they are registered operations, so this is the dispatcher's allowlist
+    // refusing rather than the registry.
     expect((await call({ op: 'identity.resolveActor' })).status).toBe(400)
     expect((await call({ op: 'identity.admin.invite' })).status).toBe(400)
+    expect((await call({ op: 'identity.admin.setActive' })).status).toBe(400)
+    expect((await call({ op: 'identity.admin.setRole' })).status).toBe(400)
 
     // Limits outside the shared cap.
     expect((await call({ op: 'leads.directory', limit: '1001' })).status).toBe(400)

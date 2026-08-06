@@ -111,9 +111,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names twenty-two reads, which is the endpoint slice S13 built', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(22)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(22)
+  it('names twenty-three reads: S13\'s slice plus the roster', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(23)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(23)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -123,12 +123,23 @@ describe('the read vocabulary', () => {
     expect(READ_OPERATION_NAMES).not.toContain(READ_PATH_OPERATION)
   })
 
-  it('has no operation for the roster, on either side', () => {
-    // `leads.assigned_to` crosses in whichever provider's id space the leads
-    // came from, and the two spaces name different people. A roster served
-    // beside it would mislabel every owner chip without failing anything.
-    const names = [...Object.values(READ_OPS), ...READ_OPERATION_NAMES].join(' ')
-    expect(names).not.toMatch(/roster|team_members|team\./)
+  it('reads the roster under one name, and no other identity name at all', () => {
+    // **Narrowed, not dropped.** This assertion used to read "no name anywhere
+    // matches `roster|team_members|team.`", written when the roster could not
+    // cross because `leads` came from the other provider. It does now — both
+    // ends of every member-id join arrive from one database — so what the
+    // invariant protects is no longer "no roster" but "exactly one, and nothing
+    // else identity-shaped". A second roster read, a `team_members` table read
+    // or an admin operation appearing in this client still fails here.
+    const names = [...Object.values(READ_OPS), ...READ_OPERATION_NAMES]
+    const rosterNames = names.filter((name) =>
+      /roster|team_members|team\.|identity/i.test(name),
+    )
+    expect([...new Set(rosterNames)]).toEqual(['identity.teamRoster'])
+    expect(READ_OPS.teamRoster).toBe('identity.teamRoster')
+    // The table, under either spelling, is never asked for directly: the
+    // function is the only thing that returns more than the caller's own row.
+    expect(names.join(' ')).not.toMatch(/team_members/)
   })
 })
 
@@ -283,14 +294,19 @@ describe('the dashboard load', () => {
     const rec = recorder()
     await fetchNeonDashboard({ since: SINCE, updatedSince: null, fetchImpl: rec.fetchImpl })
     const requested = rec.ops().sort()
-    // Nineteen of the twenty-two; the other three are the on-demand component
+    // Twenty of the twenty-three; the other three are the on-demand component
     // reads and are asserted below.
     const componentReads = [READ_OPS.thread, READ_OPS.leadNotes, READ_OPS.followUpHistory]
     const expected = Object.values(READ_OPS)
       .filter((op) => !componentReads.includes(op as never))
       .sort()
     expect(requested).toEqual(expected)
-    expect(requested).toHaveLength(19)
+    expect(requested).toHaveLength(20)
+    // The twentieth is the roster, and it is part of the *load* rather than an
+    // on-demand read: `memberName(lead.assigned_to)` runs on the first render of
+    // the Pipeline board, so a roster fetched later would render a page of
+    // nameless owners first.
+    expect(requested).toContain(READ_OPS.teamRoster)
   })
 
   it('preserves the inbound/outbound fetch asymmetry', async () => {
@@ -365,6 +381,136 @@ describe('the dashboard load', () => {
     // The server said there is more and this read deliberately does not follow
     // it: the Health page renders the newest 200 runs, not every run ever.
     expect(result.syncRuns).toHaveLength(1)
+  })
+
+  it('projects roster rows onto the shape the SPA already renders', async () => {
+    // Every field crossed, because the two identifiers on a roster row name
+    // different things — `id` is `team_members.id` (bigint), `userId` is
+    // `users.id` (uuid) — and crossing them type-checks and is silent.
+    const rec = recorder((url) =>
+      url.searchParams.get('op') === READ_OPS.teamRoster
+        ? jsonResponse(
+            emptyPage([
+              {
+                id: 7,
+                userId: '00000000-0000-0000-0000-0000000000aa',
+                name: 'Active One',
+                email: 'active-one@example.test',
+                role: 'admin',
+                active: true,
+                createdAt: '2026-02-03T04:05:06.000Z',
+              },
+            ]),
+          )
+        : jsonResponse(emptyPage()),
+    )
+    const result = await fetchNeonDashboard({
+      since: SINCE,
+      updatedSince: null,
+      fetchImpl: rec.fetchImpl,
+    })
+
+    expect(result.teamMembers).toEqual([
+      {
+        id: 7,
+        name: 'Active One',
+        active: true,
+        created_at: '2026-02-03T04:05:06.000Z',
+        // Null, and deliberately so: there is no Supabase Auth user behind a
+        // `team_roster()` row. Filling it with the canonical uuid would make an
+        // id from one space answer a question about another — and the Team page
+        // reads this field to mean "has a Supabase login", which would then be
+        // wrong in both directions. `Team.tsx` gets "is a login" from the
+        // baseline's `user_id NOT NULL` instead, keyed on `rosterPath`.
+        auth_user_id: null,
+        email: 'active-one@example.test',
+        role: 'admin',
+      },
+    ])
+    // The bigint reached `id`, and the uuid reached nothing.
+    expect(JSON.stringify(result.teamMembers)).not.toContain(
+      '00000000-0000-0000-0000-0000000000aa',
+    )
+  })
+
+  it('labels the roster it returns with the provider it came from', async () => {
+    // The marker every write surface consults. It lives on this result rather
+    // than being written by `DataContext.tsx` because a literal in a `.tsx` file
+    // is one no test here can reach — a mutation setting it to `'supabase'` in
+    // that file reddened nothing, which is how it ended up here.
+    const rec = recorder()
+    const result = await fetchNeonDashboard({
+      since: SINCE,
+      updatedSince: null,
+      fetchImpl: rec.fetchImpl,
+    })
+    expect(result.rosterPath).toBe('neon')
+  })
+
+  it('walks the roster rather than taking its first page', async () => {
+    // `/api/identity?op=team.roster` caps at one page of 200 and reports
+    // `hasMore` (N-S18's stated limit). Here the whole roster is the answer:
+    // `memberName` resolves *any* `assigned_to`, so a truncated roster would
+    // leave the owners past the cap nameless — which is the failure this slice
+    // exists to end, one page further down.
+    // Counted per operation, not per request: the recorder's index is the global
+    // request number and the roster's second page arrives after nineteen others.
+    let rosterPage = 0
+    const rec = recorder((url) => {
+      if (url.searchParams.get('op') !== READ_OPS.teamRoster) {
+        return jsonResponse(emptyPage())
+      }
+      const page = rosterPage++
+      return jsonResponse({
+        items: [
+          {
+            id: page + 1,
+            userId: `0000000${page}-0000-0000-0000-00000000000${page}`,
+            name: `Member ${page}`,
+            email: null,
+            role: 'member',
+            active: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        nextCursor: page === 0 ? 'page-2' : null,
+        hasMore: page === 0,
+      })
+    })
+    const result = await fetchNeonDashboard({
+      since: SINCE,
+      updatedSince: null,
+      fetchImpl: rec.fetchImpl,
+    })
+    expect(result.teamMembers.map((m) => m.id)).toEqual([1, 2])
+    const rosterQueries = rec.queriesFor(READ_OPS.teamRoster)
+    expect(rosterQueries).toHaveLength(2)
+    // The second page carries the server's cursor; a walk that resent its first
+    // query would loop on page one and return the same member twice.
+    expect(rosterQueries[0].has('cursor')).toBe(false)
+    expect(rosterQueries[1].get('cursor')).toBe('page-2')
+  })
+
+  it('fails the load when the roster read fails, rather than emptying the team', async () => {
+    // The roster is not tolerated on the endpoint and is not tolerated here.
+    // `team_members` is in the baseline's first artifact, so an absent relation
+    // is a broken deployment — and answering it with `[]` is exactly the
+    // "0 Active teammates" this slice removed.
+    const rec = recorder((url) =>
+      url.searchParams.get('op') === READ_OPS.teamRoster
+        ? jsonResponse({ error: 'Could not load dashboard data' }, 500)
+        : jsonResponse(emptyPage()),
+    )
+    await expect(
+      fetchNeonDashboard({ since: SINCE, updatedSince: null, fetchImpl: rec.fetchImpl }),
+    ).rejects.toThrow(/identity\.teamRoster/)
+  })
+
+  it('asks the roster for nothing: no window, no watermark, no scope', async () => {
+    const rec = recorder()
+    await fetchNeonDashboard({ since: SINCE, updatedSince: WATERMARK, fetchImpl: rec.fetchImpl })
+    const roster = onlyQuery(rec, READ_OPS.teamRoster)
+    expect([...roster.keys()]).toEqual(['op'])
   })
 
   it('merges the two message directions newest first', async () => {

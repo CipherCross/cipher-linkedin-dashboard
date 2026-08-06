@@ -1,18 +1,32 @@
 /**
- * The dashboard read slice must not be able to name a person.
+ * The dashboard read slice must not be able to name the *wrong* person.
  *
  * The hazard this file exists for does not throw, does not log and does not fail
- * a parity check. `leads.assigned_to` is a Supabase `team_members.id`; the same
- * integers on Neon denote different people (source 1 is the real admin, target 1
- * is the immutable S06 fixture "Active One" — N-B2 has the map). While `leads`
- * and `team_members` are read from different providers, any join between them —
- * `usePipelineActions.memberName(lead.assigned_to)`, the Pipeline owner chip, the
- * CSV `assigned_to` column — renders a confident wrong name.
+ * a parity check. `leads.assigned_to` is a `team_members.id`; the same integers
+ * denote different people on the two providers (source 1 is the real admin,
+ * target 1 is the immutable S06 fixture "Active One" — N-B2 has the map). While
+ * `leads` and `team_members` are read from *different* providers, any join
+ * between them — `usePipelineActions.memberName(lead.assigned_to)`, the Pipeline
+ * owner chip, the CSV `assigned_to` column — renders a confident wrong name.
  *
- * N-S12 pre-decided that S13 could use the B4 roster for exactly those joins.
- * That premise is retired, and these assertions are what retires it: the roster
- * is not on the dashboard read path, and no operation on that path resolves a
- * member id.
+ * **The clause that matters is "different providers", and the roster slice
+ * removed it.** Until then, the invariant these assertions carried was "no
+ * roster on this endpoint at all", which was the right shape while `leads` came
+ * from Supabase and this endpoint answered from Neon. Once `leads.directory`
+ * feeds `DataContext`, both ends of the join arrive from one database and the
+ * integers agree — while a dashboard with no roster prints "0 Active teammates",
+ * which is the same class of defect pointed at a different number.
+ *
+ * So the ban became a **named permission**, exactly as `assigned_to` and
+ * `owner_id` did before it: `identity.teamRoster` may read the roster, through
+ * `public.team_roster()` and never through `public.team_members` directly, and
+ * no other read may mention either. Widening that is one line in this file and
+ * has to be written as a decision.
+ *
+ * N-S12 pre-decided that S13 could use the B4 roster for those joins *while the
+ * leads still came from Supabase*. That premise stays retired: what makes the
+ * join legitimate now is not a roster to borrow, it is both sides being read
+ * from one place.
  *
  * **The `assigned_to` assertion was deliberately narrowed in S13's second part.**
  * It used to be "no operation's SQL contains the string `assigned_to`", which was
@@ -95,6 +109,7 @@ import {
   savedSearchesOperation,
 } from '../api/_lib/data/operations/library.js'
 import { pipelineEventLogOperation } from '../api/_lib/data/operations/pipeline.js'
+import { teamRosterOperation } from '../api/_lib/data/operations/identity.js'
 
 /**
  * Every operation asserted below either ignores its context or reads it through
@@ -153,6 +168,7 @@ const READ_SLICE = [
   [LIBRARY_OPERATIONS.icpIndustries, icpIndustriesOperation],
   [LIBRARY_OPERATIONS.hypotheses, hypothesesOperation],
   [LIBRARY_OPERATIONS.hypothesisCampaigns, hypothesisCampaignsOperation],
+  [IDENTITY_OPERATIONS.teamRoster, teamRosterOperation],
 ] as unknown as Slice
 
 /**
@@ -171,16 +187,24 @@ const ROSTER_FREE_SLICE = READ_SLICE.filter(
   ([name]) => !MEMBER_ID_BEARING.includes(name),
 )
 
+/**
+ * The one read permitted to touch the roster. Named rather than pattern-matched,
+ * for the same reason `MEMBER_ID_BEARING` is: a second one has to be written
+ * here as a decision.
+ */
+const ROSTER_READING = [IDENTITY_OPERATIONS.teamRoster] as readonly string[]
+
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists twenty-two reads and no more', () => {
+  it('allowlists twenty-three reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
     // It said *nine* until S13's third part, which added the four medium
     // relations, the six tolerated library reads and the three reads that used to
-    // live inside a component. Deliberately edited, and this is the record of it:
-    // the number in a test name is the cheapest possible tripwire on the surface
-    // area of the whole read path.
+    // live inside a component, and *twenty-two* until the roster slice added
+    // `identity.teamRoster`. Deliberately edited each time, and this is the
+    // record of it: the number in a test name is the cheapest possible tripwire
+    // on the surface area of the whole read path.
     expect([...READ_OPERATION_NAMES].sort()).toEqual([
       'activity.dailySeries',
       'annotations.timeline',
@@ -195,6 +219,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'icp.industries',
       'icp.personas',
       'icp.profiles',
+      'identity.teamRoster',
       'instances.overview',
       'leads.directory',
       'leads.notes',
@@ -254,13 +279,32 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
     ]) {
       expect(TOLERANT_OPERATION_NAMES).not.toContain(onDemand)
     }
+
+    // Nor the roster, and this one is the newest and the easiest to get wrong.
+    // `team_members` is in the baseline's first artifact — it cannot be "not yet
+    // migrated" on a database that answered anything else here — so tolerating
+    // its absence would convert a broken deployment straight back into
+    // "0 Active teammates", the defect the roster slice exists to end.
+    expect(TOLERANT_OPERATION_NAMES).not.toContain(IDENTITY_OPERATIONS.teamRoster)
   })
 
-  it('does not offer the team roster', () => {
-    expect(READ_OPERATION_NAMES).not.toContain(IDENTITY_OPERATIONS.teamRoster)
-    // Under any name. The endpoint's surface holds nothing identity-shaped.
+  it('offers the roster under exactly one name', () => {
+    // Narrowed from "offers no roster at all", which held only while `leads` was
+    // read from the other provider — see this file's header. What replaces it is
+    // a named permission: the roster is here, it is `identity.teamRoster`, and
+    // nothing else on this endpoint is identity-shaped.
+    expect(READ_OPERATION_NAMES).toContain(IDENTITY_OPERATIONS.teamRoster)
     for (const name of READ_OPERATION_NAMES) {
+      if (ROSTER_READING.includes(name)) continue
       expect(name).not.toMatch(/roster|member|identity|team/i)
+    }
+    expect(ROSTER_READING).toHaveLength(1)
+
+    // And the endpoint still offers none of the identity *writes*, which live on
+    // `/api/identity` and are the reason this allowlist is a list rather than a
+    // pass-through to the registry.
+    for (const command of ['identity.admin.invite', 'identity.admin.setActive', 'identity.admin.setRole']) {
+      expect(READ_OPERATION_NAMES).not.toContain(command)
     }
   })
 
@@ -272,10 +316,40 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
 })
 
 describe('no operation on the read path resolves a member id', () => {
-  it.each(READ_SLICE)('%s reads no roster relation', (_name, operation) => {
+  const NON_ROSTER_SLICE = READ_SLICE.filter(
+    ([name]) => !ROSTER_READING.includes(name),
+  )
+
+  it.each(NON_ROSTER_SLICE)('%s reads no roster relation', (_name, operation) => {
     const sql = sqlOf(operation).toLowerCase()
     expect(sql).not.toContain('team_members')
     expect(sql).not.toContain('team_roster')
+  })
+
+  it('reads the roster through the function and never through the table', () => {
+    // The permission is `public.team_roster()` specifically, and the difference
+    // is not stylistic. `team_members_active_actor_select` restricts
+    // `app_runtime` to the caller's **own row**, so `SELECT … FROM
+    // public.team_members` under an ordinary actor returns exactly one member —
+    // and the Team page would state "1 Active teammate", which is a wrong number
+    // wearing the shape of a right one. Making the table readable would need an
+    // RLS widening in a new ledger step; the `SECURITY DEFINER` function is
+    // already granted and already membership-gated.
+    const sql = sqlOf(inspectable(teamRosterOperation)).toLowerCase()
+    expect(sql).toContain('public.team_roster()')
+    expect(sql).not.toMatch(/from\s+public\.team_members/)
+    // No join to anything, on the read that is allowed to name people: the
+    // function's own seven columns are the whole projection.
+    expect(sql).not.toMatch(/\bjoin\b/)
+    expect(sql.match(/\bfrom\b/g) ?? []).toHaveLength(1)
+  })
+
+  it('orders the roster on a unique column so an offset walk cannot skip', () => {
+    // It has no keyset, so the driver pages it with LIMIT/OFFSET — which is only
+    // correct over a **total** order. `name` alone is not unique; `id` is the
+    // primary key, and it is the tiebreak.
+    const sql = sqlOf(inspectable(teamRosterOperation)).toLowerCase()
+    expect(sql).toMatch(/order by\s+r\.name,\s*r\.id/)
   })
 
   it.each(ROSTER_FREE_SLICE)('%s carries no member id at all', (_name, operation) => {

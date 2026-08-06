@@ -235,6 +235,96 @@ describe('the dashboard load, end to end', () => {
   it('takes the newest sync runs as a single bounded page', async () => {
     expect(dashboard.syncRuns.length).toBeLessThanOrEqual(SYNC_RUN_LIMIT)
   })
+
+  /**
+   * The roster, through `public.team_roster()` and the real RLS policies.
+   *
+   * Asserted on the **three S06 identity fixtures**, which are immutable and
+   * whose ids, names and canonical uuids are already committed in
+   * `postgres/tests/portable_identity_roles_rls_fixture_seed.sql`. The project
+   * also holds S17's real admin; nothing here asserts, prints or counts that
+   * row — a count would make this test fail the day a real teammate is added,
+   * and printing a real person's name into a repository test is exactly what B2
+   * refused to do.
+   */
+  describe('the roster', () => {
+    const FIXTURE_IDS = {
+      activeOne: '00000000-0000-0000-0000-000000000001',
+      activeTwo: '00000000-0000-0000-0000-000000000002',
+      inactiveThree: '00000000-0000-0000-0000-000000000003',
+    } as const
+
+    it('returns the whole team to an ordinary member, not just the caller', async () => {
+      // The point of the function. `team_members_active_actor_select` restricts
+      // `app_runtime` to the caller's own row, so a direct table read here would
+      // answer with **one** member — and the Team page would state "1 Active
+      // teammate". Three distinct fixtures coming back is what proves the read
+      // goes through the `SECURITY DEFINER` function instead.
+      const names = dashboard.teamMembers.map((member) => member.name)
+      expect(names).toContain('Active One')
+      expect(names).toContain('Active Two')
+      expect(names).toContain('Inactive Three')
+    })
+
+    it('includes inactive members, so the directory can say so', async () => {
+      const inactive = dashboard.teamMembers.find((m) => m.name === 'Inactive Three')
+      expect(inactive?.active).toBe(false)
+      const active = dashboard.teamMembers.find((m) => m.name === 'Active One')
+      expect(active?.active).toBe(true)
+    })
+
+    it('carries the role the fixtures declare', async () => {
+      // "Active Two" is the admin, and `portable_identity_atomic_invite_assertions`
+      // asserts fixture 1 is *not* one. A roster that mislabelled either would
+      // put a shield on the wrong row.
+      expect(dashboard.teamMembers.find((m) => m.name === 'Active Two')?.role).toBe('admin')
+      expect(dashboard.teamMembers.find((m) => m.name === 'Active One')?.role).toBe('member')
+    })
+
+    it('hands the browser the bigint and never the uuid', async () => {
+      // The silent-mistake guard. A roster row carries `team_members.id`
+      // (bigint) and `users.id` (uuid), the admin functions take the uuid and
+      // the Supabase-shaped `TeamMember` keys on the bigint; crossing them
+      // type-checks. `toTeamMember` drops the uuid, and this is what proves the
+      // real payload does too.
+      const serialized = JSON.stringify(dashboard.teamMembers)
+      for (const uuid of Object.values(FIXTURE_IDS)) {
+        expect(serialized).not.toContain(uuid)
+      }
+      for (const row of dashboard.teamMembers) {
+        expect(Number.isInteger(row.id)).toBe(true)
+        // Null on this path by construction: there is no Supabase Auth user
+        // behind a `team_roster()` row, and the Team page reads "is a login"
+        // from the baseline's `user_id NOT NULL` instead.
+        expect(row.auth_user_id).toBeNull()
+      }
+    })
+
+    it('is ordered totally, which is what makes an offset walk safe', async () => {
+      // No keyset, so the driver pages it with LIMIT/OFFSET — correct only over
+      // a total order. `name` alone is not unique; the tiebreak is `id`.
+      const rows = dashboard.teamMembers
+      for (let i = 1; i < rows.length; i++) {
+        const previous = rows[i - 1]
+        const current = rows[i]
+        expect(
+          previous.name < current.name ||
+            (previous.name === current.name && previous.id < current.id),
+        ).toBe(true)
+      }
+      expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length)
+    })
+
+    it('refuses the roster to a caller with no credential', async () => {
+      // The flag lookup is the *only* unauthenticated operation on this
+      // endpoint, and the roster is the read where that mattering is easiest to
+      // see: it returns people.
+      const denied = await anonymousFetch(
+        `/api/activity-daily?op=${encodeURIComponent(READ_OPS.teamRoster)}`,
+      )
+      expect(denied.status).toBe(401)
+    })
+  })
 })
 
 describe('the parameters the endpoint actually parses', () => {
