@@ -57,9 +57,11 @@ import { CONTRACT_ACTORS } from './support/dataStoreContract'
 import {
   READ_OPS,
   SYNC_RUN_LIMIT,
+  fetchNeonCoachingDigests,
   fetchNeonDashboard,
   fetchNeonFollowUpHistory,
   fetchNeonLeadNotes,
+  fetchNeonPlaybook,
   fetchNeonThread,
   fetchReadPath,
   readAll,
@@ -323,6 +325,102 @@ describe('the dashboard load, end to end', () => {
         `/api/activity-daily?op=${encodeURIComponent(READ_OPS.teamRoster)}`,
       )
       expect(denied.status).toBe(401)
+    })
+  })
+
+  /**
+   * The coaching pair — the two page-local reads that finish the read slice.
+   *
+   * Seeded here rather than in `dashboardRestFixture`, because neither is part of
+   * the shared load: the digest is one row scoped to this fixture's instance, and
+   * the playbook is a **singleton with nothing to scope by**. The playbook is
+   * therefore written and put back exactly as `librarySlice.neon.test.ts` does
+   * with the same row — this suite must leave the project's one playbook as it
+   * found it.
+   */
+  describe('the coaching pair', () => {
+    const DIGEST_SUMMARY = 'S13R digest: ask before pitching'
+    const DIGEST_PATTERNS = [{ issue: 'stacked asks', count: 4, advice: 'one ask per message' }]
+    const PLAYBOOK_MARKER = '# S13R playbook\n\nA marker this suite restores.'
+    let priorPlaybook: string | null = null
+
+    beforeAll(async () => {
+      await fixtures.asActor(CONTRACT_ACTORS.activeMember.actorId, async (client) => {
+        await client.query(
+          `INSERT INTO public.coaching_digest
+                 (instance_id, summary, patterns, computed_at, model)
+           VALUES ($1, $2, $3::jsonb, now(), 'fixture-model')
+           ON CONFLICT (instance_id) DO UPDATE
+              SET summary = EXCLUDED.summary,
+                  patterns = EXCLUDED.patterns,
+                  computed_at = EXCLUDED.computed_at,
+                  model = EXCLUDED.model`,
+          [REST_SCOPE, DIGEST_SUMMARY, JSON.stringify(DIGEST_PATTERNS)],
+        )
+
+        const existing = await client.query<{ content: string }>(
+          `SELECT content FROM public.playbook WHERE id`,
+        )
+        priorPlaybook = existing.rows[0]?.content ?? null
+        await client.query(
+          `INSERT INTO public.playbook (id, content, updated_at)
+           VALUES (true, $1, now())
+           ON CONFLICT (id) DO UPDATE
+              SET content = EXCLUDED.content, updated_at = EXCLUDED.updated_at`,
+          [PLAYBOOK_MARKER],
+        )
+      })
+    })
+
+    afterAll(async () => {
+      await fixtures.asActor(CONTRACT_ACTORS.activeMember.actorId, async (client) => {
+        await client.query(`DELETE FROM public.coaching_digest WHERE instance_id = $1`, [
+          REST_SCOPE,
+        ])
+        // Put the singleton back. Deleting it would be wrong: the row's absence
+        // and its emptiness mean different things to the page, and the project
+        // may well have had one.
+        if (priorPlaybook === null) {
+          await client.query(`DELETE FROM public.playbook WHERE id`)
+        } else {
+          await client.query(
+            `UPDATE public.playbook SET content = $1, updated_at = now() WHERE id`,
+            [priorPlaybook],
+          )
+        }
+      })
+    })
+
+    it('reads the playbook singleton with its stamp', async () => {
+      const doc = await fetchNeonPlaybook(handlerFetch)
+      expect(doc?.content).toBe(PLAYBOOK_MARKER)
+      // `updated_at` is the column the page's "last saved" line renders, and it
+      // is the one thing this read adds over `/api/coach`'s use of the same
+      // operation. A projection that dropped it would still pass every offline
+      // assertion.
+      expect(typeof doc?.updated_at).toBe('string')
+      expect(Number.isNaN(Date.parse(String(doc?.updated_at)))).toBe(false)
+    })
+
+    it('reads the digest with its jsonb patterns intact', async () => {
+      const rows = await fetchNeonCoachingDigests(handlerFetch)
+      const ours = rows.find((row) => row.instance_id === REST_SCOPE)
+      expect(ours?.summary).toBe(DIGEST_SUMMARY)
+      expect(ours?.model).toBe('fixture-model')
+      // `jsonb` crosses as the array `CoachingPattern[]` the panel maps over —
+      // not as a string, which is what a driver without JSON parsing would give
+      // and what `.map` would throw on.
+      expect(Array.isArray(ours?.patterns)).toBe(true)
+      expect(ours?.patterns).toEqual(DIGEST_PATTERNS)
+    })
+
+    it('refuses both to a caller with no credential', async () => {
+      for (const op of [READ_OPS.playbook, READ_OPS.coachingDigests]) {
+        const denied = await anonymousFetch(
+          `/api/activity-daily?op=${encodeURIComponent(op)}`,
+        )
+        expect(denied.status).toBe(401)
+      }
     })
   })
 })

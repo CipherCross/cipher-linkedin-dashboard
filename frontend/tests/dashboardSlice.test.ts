@@ -69,6 +69,8 @@ import type {
 import type { DataStoreParams } from '../api/_lib/data/contracts.js'
 import {
   ACTIVITY_OPERATIONS,
+  AI_WRITE_OPERATIONS,
+  COACHING_OPERATIONS,
   CONVERSATION_OPERATIONS,
   DASHBOARD_OPERATIONS,
   IDENTITY_OPERATIONS,
@@ -110,6 +112,8 @@ import {
 } from '../api/_lib/data/operations/library.js'
 import { pipelineEventLogOperation } from '../api/_lib/data/operations/pipeline.js'
 import { teamRosterOperation } from '../api/_lib/data/operations/identity.js'
+import { coachingDigestsOperation } from '../api/_lib/data/operations/coaching.js'
+import { coachPlaybookOperation } from '../api/_lib/data/operations/aiWrites.js'
 
 /**
  * Every operation asserted below either ignores its context or reads it through
@@ -169,6 +173,8 @@ const READ_SLICE = [
   [LIBRARY_OPERATIONS.hypotheses, hypothesesOperation],
   [LIBRARY_OPERATIONS.hypothesisCampaigns, hypothesisCampaignsOperation],
   [IDENTITY_OPERATIONS.teamRoster, teamRosterOperation],
+  [AI_WRITE_OPERATIONS.coachPlaybook, coachPlaybookOperation],
+  [COACHING_OPERATIONS.digests, coachingDigestsOperation],
 ] as unknown as Slice
 
 /**
@@ -195,21 +201,24 @@ const ROSTER_FREE_SLICE = READ_SLICE.filter(
 const ROSTER_READING = [IDENTITY_OPERATIONS.teamRoster] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists twenty-three reads and no more', () => {
+  it('allowlists twenty-five reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
     // It said *nine* until S13's third part, which added the four medium
     // relations, the six tolerated library reads and the three reads that used to
-    // live inside a component, and *twenty-two* until the roster slice added
-    // `identity.teamRoster`. Deliberately edited each time, and this is the
-    // record of it: the number in a test name is the cheapest possible tripwire
-    // on the surface area of the whole read path.
+    // live inside a component, *twenty-two* until the roster slice added
+    // `identity.teamRoster`, and *twenty-three* until the coaching slice added
+    // the last two page-local reads. Deliberately edited each time, and this is
+    // the record of it: the number in a test name is the cheapest possible
+    // tripwire on the surface area of the whole read path.
     expect([...READ_OPERATION_NAMES].sort()).toEqual([
       'activity.dailySeries',
       'annotations.timeline',
       'campaigns.performance',
       'campaigns.sequenceSteps',
+      'coach.playbook',
+      'coaching.digests',
       'conversations.followUpHistory',
       'conversations.followUpState',
       'conversations.latestMessage',
@@ -233,7 +242,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
   })
 
   it('covers every allowlisted name with an inspected definition', () => {
-    // Otherwise a twenty-third read could be added to the endpoint and skip every
+    // Otherwise a twenty-sixth read could be added to the endpoint and skip every
     // assertion in this file by simply not appearing in `READ_SLICE`.
     expect(READ_SLICE.map(([name]) => name).sort()).toEqual(
       [...READ_OPERATION_NAMES].sort(),
@@ -269,13 +278,18 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       expect(TOLERANT_OPERATION_NAMES).not.toContain(funnelRead)
     }
 
-    // And the on-demand component reads are not tolerant either: each is behind a
-    // panel with its own error state, so an empty answer would hide a message the
-    // user would otherwise see.
+    // And the on-demand page-local reads are not tolerant either: each is behind
+    // a panel with its own error state, so an empty answer would hide a message
+    // the user would otherwise see. The playbook is the sharpest case — the
+    // editor unlocks on a successful load, so answering an absent relation with
+    // an empty document would invite an admin to type into a blank box and Save
+    // it over the real playbook.
     for (const onDemand of [
       CONVERSATION_OPERATIONS.followUpHistory,
       MESSAGES_OPERATIONS.thread,
       LEADS_OPERATIONS.notes,
+      AI_WRITE_OPERATIONS.coachPlaybook,
+      COACHING_OPERATIONS.digests,
     ]) {
       expect(TOLERANT_OPERATION_NAMES).not.toContain(onDemand)
     }

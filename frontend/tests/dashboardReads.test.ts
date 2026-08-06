@@ -33,7 +33,9 @@ import {
   SYNC_RUN_LIMIT,
   fetchNeonDashboard,
   fetchNeonFollowUpHistory,
+  fetchNeonCoachingDigests,
   fetchNeonLeadNotes,
+  fetchNeonPlaybook,
   fetchNeonThread,
   fetchReadPath,
   readAll,
@@ -111,9 +113,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names twenty-three reads: S13\'s slice plus the roster', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(23)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(23)
+  it('names twenty-five reads: S13\'s slice, the roster and the coaching pair', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(25)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(25)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -294,11 +296,20 @@ describe('the dashboard load', () => {
     const rec = recorder()
     await fetchNeonDashboard({ since: SINCE, updatedSince: null, fetchImpl: rec.fetchImpl })
     const requested = rec.ops().sort()
-    // Twenty of the twenty-three; the other three are the on-demand component
-    // reads and are asserted below.
-    const componentReads = [READ_OPS.thread, READ_OPS.leadNotes, READ_OPS.followUpHistory]
+    // Twenty of the twenty-five; the other five are the page-local reads and are
+    // asserted below. The coaching pair belongs with them rather than with the
+    // load: the playbook is one page's whole content, and the digest panel is
+    // collapsed by default on another, so folding either into the first load
+    // would pay for a request nobody is looking at on every dashboard open.
+    const pageLocalReads = [
+      READ_OPS.thread,
+      READ_OPS.leadNotes,
+      READ_OPS.followUpHistory,
+      READ_OPS.playbook,
+      READ_OPS.coachingDigests,
+    ]
     const expected = Object.values(READ_OPS)
-      .filter((op) => !componentReads.includes(op as never))
+      .filter((op) => !pageLocalReads.includes(op as never))
       .sort()
     expect(requested).toEqual(expected)
     expect(requested).toHaveLength(20)
@@ -583,6 +594,52 @@ describe('the dashboard load', () => {
         fetchNeonDashboard({ since: SINCE, updatedSince: null, fetchImpl: rec.fetchImpl }),
       ).rejects.toThrow(new RegExp(`${op.replace('.', '\\.')}: Could not load`))
     }
+  })
+})
+
+describe('the coaching pair', () => {
+  it('returns the playbook row when there is one', async () => {
+    const rec = recorder(() =>
+      jsonResponse(emptyPage([{ content: '# Playbook', updated_at: '2026-08-06T10:00:00Z' }])),
+    )
+    const doc = await fetchNeonPlaybook(rec.fetchImpl)
+    expect(doc).toEqual({ content: '# Playbook', updated_at: '2026-08-06T10:00:00Z' })
+    // No parameters at all: it is a singleton, and there is nothing to scope.
+    expect([...onlyQuery(rec, READ_OPS.playbook).keys()]).toEqual(['op'])
+  })
+
+  it('answers null — not an empty document — when the singleton is unwritten', async () => {
+    // The page renders `null` as an empty editor on its placeholder, which is
+    // what `maybeSingle()` produces on the other path. It may only do that
+    // because the *failure* case cannot reach here: it throws.
+    const rec = recorder(() => jsonResponse(emptyPage([])))
+    expect(await fetchNeonPlaybook(rec.fetchImpl)).toBeNull()
+  })
+
+  it('throws on a failed playbook read rather than answering with a blank one', async () => {
+    // The assertion this pair exists for. `loadError` locks the editor, and it
+    // is only set because this rejects — an empty string here would unlock a
+    // blank box that an admin can Save over the real playbook.
+    const rec = recorder(() => jsonResponse({ error: 'Could not load dashboard data' }, 500))
+    await expect(fetchNeonPlaybook(rec.fetchImpl)).rejects.toThrow(
+      /coach\.playbook: Could not load dashboard data/,
+    )
+  })
+
+  it('walks every account’s digest rather than taking the first page', async () => {
+    const rec = recorder((_url, index) =>
+      index === 0
+        ? jsonResponse({
+            items: [{ instance_id: 'notebook-1' }],
+            nextCursor: 'c1',
+            hasMore: true,
+          })
+        : jsonResponse(emptyPage([{ instance_id: 'notebook-2' }])),
+    )
+    const rows = await fetchNeonCoachingDigests(rec.fetchImpl)
+    // A truncated read would leave the accounts past the cap indistinguishable
+    // from ones whose digest has never been computed.
+    expect(rows.map((r) => r.instance_id)).toEqual(['notebook-1', 'notebook-2'])
   })
 })
 
