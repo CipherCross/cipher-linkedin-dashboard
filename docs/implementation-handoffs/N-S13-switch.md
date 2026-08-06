@@ -13,7 +13,11 @@ exists.** `frontend/api/activity-daily.ts` has been exactly that since S13 part
 `config.readPath` flag lookup. Nothing under `frontend/api/` changed this
 session and the function count never moved off 12. See "The correction" below.
 
-Nothing is deployed, nothing is pushed, no flag is set. `NEON_READS_DEFAULT` is
+The four call sites the test run cannot reach were driven in a real browser on a
+throwaway local harness — 154 requests, every operation, zero failures, and one
+finding that escalates a known limit rather than confirming it.
+
+Nothing is deployed, nothing is pushed, no flag is set anywhere that persists. `NEON_READS_DEFAULT` is
 unset everywhere, so every deployment still reads Supabase and the code path
 that does so is byte-for-byte the queries it was.
 
@@ -338,6 +342,78 @@ silently. Only a real endpoint can refuse it.
 | `leads.notes` | 26 rows, the NULL-`created_at` note first, the rest strictly descending |
 | `conversations.followUpHistory` paged on the cursor | `[50, 50, 20]` = 120, no duplicates, strictly descending across the fixture's planted `(occurred_at, id)` inversion |
 
+### The browser run — 154 requests, every operation, zero failures
+
+Performed after the suites, at the owner's instruction, on a **throwaway local
+harness kept entirely outside the repository** (session scratchpad; the working
+tree was verified unchanged afterwards). `vercel dev` was deliberately not used
+— see "Why the obvious setup does not work" below.
+
+The harness is a Vite dev server rooted at `frontend/` whose middleware answers
+`/api/activity-daily` by calling `createActivityDailyHandler` directly. So the
+SPA, the endpoint, the operation registry, the driver and the baseline RLS
+policies are all real and same-origin, over the `s13-rest` fixture, with
+`NEON_READS_DEFAULT=neon`.
+
+**Three substitutions, stated so the evidence is not overclaimed:**
+
+| stubbed | why it is not what this run looks at |
+|---|---|
+| `api/_lib/auth.ts#requireUser` → the baseline's `subject-one` fixture | the same stub `dashboardSliceRest.neon.test.ts` applies; verifying a real Supabase JWT is not the read path |
+| `src/lib/AuthContext.tsx` → a provider already `ready` as an admin | the authenticator is S18's slice and was smoked live against the deployment (C5) |
+| `src/lib/api.ts#authFetch` → a placeholder bearer | there is no Supabase session in the harness, and the legacy branch needs *a* bearer, not a valid one |
+
+**Not stubbed, and therefore what the run actually exercised:**
+`dashboardReads.ts`, `DataContext.tsx`, `ConversationDrawer.tsx`,
+`FollowUpPanel.tsx`, `LeadNotesPanel.tsx`, every page, and the endpoint.
+
+| observation | result |
+|---|---|
+| total API requests | **154**, **0** non-200 |
+| distinct operations exercised | **23** — all twenty-two reads **plus** `config.readPath` |
+| browser console | **no errors or exceptions**, across every page visited |
+| Overview | 4,443 leads, 5 instances, 560 replies, P1/P2/P3 = 182/189/189, follow-up queue populated |
+| Leads | "1 of 4,443" under a client-side filter — the full walk reached the client |
+| `messages.thread` | the drawer rendered an inbound message **with its intent chip**, which is the column the Supabase ladder's middle rung silently drops |
+| `leads.notes` | fired on first expand |
+| `conversations.followUpHistory` | "Load more" twice → three cursor pages of 50 / 50 / 20, ending exactly at the fixture's oldest event (1 Jan 2026), button then gone |
+| Searches | `text[]` rendered as chips, `jsonb` filters as rows |
+| Pipeline | 2,142 untriaged, no crash on an empty roster |
+| Team | renders, and see the finding below |
+
+**The run produced one finding that changes a known limit rather than
+confirming it.** The Team page on the Neon read path reads
+`DataContext.teamMembers`, which is `[]` by design — and renders **"0 Active
+teammates · 0 Login-enabled · 0 Active admins"** over an empty table. That is
+not a missing label, which is what design call 4 traded for; it is a **wrong
+number stated confidently**, the exact class this chain refuses everywhere else.
+Known limit 2 is escalated accordingly. The fix is not more code here — it is
+either the roster migration, or an interim in which `teamMembers` carries an
+availability marker the way `followUpsAvailable` does, so the page can say
+"unavailable on this read path" instead of "zero".
+
+### Why the obvious setup does not work
+
+`vercel dev` would not have produced this run, and the reason is worth recording
+because it will be the next person's first idea too.
+
+`activity-daily.ts` resolves a Supabase bearer's subject through
+`identity_resolve_actor` **on Neon**, under `provider = 'supabase'`. A real
+sign-in therefore needs a `user_identities` row on the Neon project carrying the
+owner's Supabase `sub`. B2's copy was deleted the day it landed and S17 created
+its admin under `better-auth`, so that row almost certainly does not exist and
+every read would answer **403**. Creating it is a write of identity data to a
+shared project — an owner decision, not a setup step.
+
+**And a gap no handoff in this chain has recorded:** `VITE_AUTH_PATH=identity`
+and `NEON_READS_DEFAULT=neon` cannot be enabled together today.
+`activity-daily.ts` passes no `identity` provider to `resolveRequestActor` — on
+purpose, so the endpoint needs no identity credential, and its own comment says
+so — therefore it accepts **only** the transitional Supabase bearer. A browser on
+the identity path attaches no bearer, so every dashboard read would be **401**.
+The cutover needs that endpoint to accept the identity cookie as well. See Known
+limit 4.
+
 ### The mutation pass — including the two that measured nothing
 
 Each mutation applied alone, the suite run, the file restored, `git diff` empty
@@ -422,26 +498,37 @@ observable only in the request the client builds.
 
 ## Known limits
 
-1. **No browser was run, and the four call sites are the uncovered half.**
-   Everything the path decides is in `dashboardReads.ts` and is measured; the
-   branches inside `DataContext.tsx`, `ConversationDrawer.tsx`,
-   `FollowUpPanel.tsx` and `LeadNotesPanel.tsx` are covered by `tsc -b` and by
-   reading, nothing more. This repo cannot render a component in its test run
-   (design call 1). This is the weakest evidence in the session.
-2. **The Neon path shows no teammate names.** `teamMembers: []` — design call 4.
-   Owner chips, assignee filters and the Supabase Team page lose their labels
-   until the roster session migrates `team_members` with `leads` and applies
-   N-B2's id map to the four columns that carry a member id.
+1. **The browser run happened, but on a harness with three stubs and no
+   regression net.** The four call sites did render, against the real endpoint
+   and live fixtures (see "The browser run"), so this is no longer the session's
+   weakest evidence. What remains uncovered: the authenticator was replaced
+   wholesale, the run was manual and is not repeatable by a suite, and no page
+   was driven on the *Supabase* path afterwards to confirm the refactored
+   `fetchSupabaseDashboard` renders — that path is covered by `tsc -b`, by being
+   moved verbatim, and by nothing else.
+2. **The Neon path reports the team as empty, and that is worse than a missing
+   name.** `teamMembers: []` — design call 4 — costs owner chips and assignee
+   filters their labels, which was the accepted trade. The browser run showed it
+   also makes the **Team page state "0 Active teammates"**, which is a confident
+   wrong number rather than a visible gap. Until the roster migrates, either that
+   page needs an availability marker (the shape `followUpsAvailable` already
+   uses) or the flag must not be flipped. This is now the strongest single reason
+   not to flip it.
 3. **`playbook` and `coaching_digest` have no operation and are not switched.**
    `Playbook.tsx:63` and `LeadsExplorer.tsx:244` read Supabase unconditionally,
    on both paths. They are outside S13's scope row and outside the endpoint's
    twenty-two-name vocabulary; a cutover needs two more operations, two
    allowlist entries and their own tolerance decisions.
-4. **`AuthContext.tsx:389` still reads `team_members` from Supabase.** Correct
-   as it stands — it is the Supabase authenticator's membership link and the
-   identity path already has `session.current` — but it means
-   `VITE_AUTH_PATH=identity` and `NEON_READS_DEFAULT=neon` remain independently
-   gated, and the combination has never been exercised anywhere.
+4. **`VITE_AUTH_PATH=identity` and `NEON_READS_DEFAULT=neon` are not merely
+   untested together — they are currently incompatible.** `activity-daily.ts`
+   constructs no identity provider, so it accepts only the transitional Supabase
+   bearer; an identity-path browser sends none and every read 401s. Found while
+   scoping the browser run, and recorded in no previous handoff. The cutover
+   needs that endpoint to accept the identity cookie, which makes the identity
+   pool credential a deployment prerequisite for it — the exact cost S13
+   deliberately avoided paying early. Separately, `AuthContext.tsx:389` still
+   reads `team_members` from Supabase, which is correct for the authenticator it
+   belongs to.
 5. **The flag costs one round trip before the first load.** Unavoidable while the
    flag is server-side by design: the answer decides which fetcher runs. One
    request per session, memoized, and it 404s harmlessly under `npm run dev`.
@@ -491,10 +578,12 @@ observable only in the request the client builds.
 4. **Flipping `NEON_READS_DEFAULT` is an owner decision and is not takeable
    yet** — not because of a defect here, but because the Neon project holds only
    synthetic fixtures. B2's tenant copy was deleted the day it landed.
-5. **The first browser evidence for any of this is still owed** (Known limit 1).
-   The cheapest useful version is `vercel dev` with `NEON_READS_DEFAULT=neon`
-   against the fixture project: it would exercise the four call sites, the
-   nineteen-way fan-out and the empty-roster rendering in one pass.
+5. **Browser evidence exists but is not repeatable.** The harness that produced
+   it lives in a session scratchpad and is gone. If it is wanted again, the shape
+   is in "The browser run": a Vite dev server rooted at `frontend/` whose
+   middleware calls `createActivityDailyHandler`, plus three plugin-level module
+   substitutions. Do not reach for `vercel dev` first — see "Why the obvious
+   setup does not work".
 6. **Ledger step `008` remains written and unapplied**, declined by the owner on
    2026-08-06. When applied: through the ledger runner as `app_migration`, then
    promoted to `PROTECTED_PATHS` **and** `IMMUTABLE_BASELINE` in the same edit,
