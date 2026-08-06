@@ -1,3 +1,34 @@
+/**
+ * Who is signed in, on either of the two authenticators.
+ *
+ * `deploymentAuthPath()` picks one at startup and the choice is a build-time
+ * deployment decision — see `authPath.ts` for why the two must coexist rather
+ * than one replacing the other in place. Everything below the context sees one
+ * `AuthContextValue` and cannot tell which path produced it; that is the whole
+ * point, and it is why `user` is a neutral `{id, email}` rather than Supabase's
+ * `User`.
+ *
+ * What genuinely differs between the two, and is not smoothed over:
+ *
+ * - **Where `role` comes from.** On the identity path it is the resolver's
+ *   answer in `session.current`, read from `public.team_members` — never the
+ *   cookie, never the roster row the UI happens to be showing. `isAdmin` is
+ *   derived from the session for that reason, so a stale or unreadable roster
+ *   cannot widen anyone's access.
+ * - **`setting_password`.** A Supabase invite/recovery link lands back on the
+ *   SPA with `token_hash` in the query string and the person sets a password
+ *   there. The identity path has no such callback and no email delivery — SMTP
+ *   is the external gate the spec names for this slice — so that state is
+ *   unreachable there and `setPassword` says so instead of pretending.
+ * - **`unavailable`.** New, and it belongs to both paths conceptually but only
+ *   the identity path can currently reach it: the auth service being down is not
+ *   the same as being signed out, and rendering it as a sign-in form asks
+ *   someone to retype their password at a server that will not answer. On a
+ *   revalidation it is softer still — an already-ready session stays ready and
+ *   the error is surfaced beside it, because a blip must not evict a working
+ *   session.
+ */
+
 import {
   createContext,
   useCallback,
@@ -9,8 +40,19 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
-import type { EmailOtpType, Session, User } from '@supabase/supabase-js'
+import type { EmailOtpType, Session } from '@supabase/supabase-js'
 import { Logo } from '../components/Logo'
+import { deploymentAuthPath, type AuthPath } from './authPath'
+import {
+  currentSession as fetchCurrentSession,
+  findSelf,
+  requestPasswordReset as identityRequestReset,
+  signIn as identitySignIn,
+  signOut as identitySignOut,
+  teamRoster,
+  toTeamMember,
+  type IdentitySession,
+} from './identityAuth'
 import { leadPhotoUrls } from './leadPhotos'
 import { supabase } from './supabase'
 import type { TeamMember } from './types'
@@ -20,11 +62,22 @@ export type AuthStatus =
   | 'signed_out'
   | 'setting_password'
   | 'unauthorized'
+  | 'unavailable'
   | 'ready'
+
+/** Provider-neutral. `id` is the authenticator's own subject — a Supabase auth
+ *  uuid on one path, the identity provider's subject on the other — and is
+ *  never a canonical `public.users.id`. */
+export interface AuthUser {
+  readonly id: string
+  readonly email: string | null
+}
 
 interface AuthContextValue {
   status: AuthStatus
-  user: User | null
+  /** Which authenticator answered. Read by `authFetch` and the Team page. */
+  authPath: AuthPath
+  user: AuthUser | null
   member: TeamMember | null
   isAdmin: boolean
   error: string | null
@@ -82,7 +135,207 @@ function clearCallbackParams() {
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
 }
 
+/**
+ * Re-check the session every minute and whenever the tab is looked at again.
+ *
+ * Shared by both providers because the reason is the same on both: membership
+ * and role live in the database and can be revoked while a tab sits open, and
+ * neither a Supabase JWT nor a session cookie notices that on its own.
+ */
+function useSessionHeartbeat(status: AuthStatus, revalidate: () => Promise<void>) {
+  useEffect(() => {
+    if (status !== 'ready') return
+    const interval = window.setInterval(() => {
+      void revalidate()
+    }, 60_000)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void revalidate()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [revalidate, status])
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Read once per mount: the flag is a build-time constant, and re-reading it
+  // per render would only invite the two providers to swap under a live session.
+  const [path] = useState<AuthPath>(() => deploymentAuthPath())
+  return path === 'identity' ? (
+    <IdentityAuthProvider>{children}</IdentityAuthProvider>
+  ) : (
+    <SupabaseAuthProvider>{children}</SupabaseAuthProvider>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The identity path — `/api/identity`, an HttpOnly cookie, nothing held here.
+// ---------------------------------------------------------------------------
+
+function IdentityAuthProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<AuthStatus>('initializing')
+  const [session, setSession] = useState<IdentitySession | null>(null)
+  const [member, setMember] = useState<TeamMember | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const mounted = useRef(true)
+  const statusRef = useRef<AuthStatus>('initializing')
+  const subjectRef = useRef<string | null>(null)
+
+  /**
+   * Which hydration is current.
+   *
+   * Two things make a stale answer possible, and both are ordinary rather than
+   * exotic: the heartbeat and the visibility handler can overlap, and — the one
+   * that matters — a sign-out can land while a revalidation issued *before* the
+   * cookie was cleared is still in flight. That request returns 200, and
+   * without this it would re-ready a UI the person has just left. Every write
+   * below checks that its own run is still the current one.
+   */
+  const generation = useRef(0)
+
+  const applyStatus = useCallback((next: AuthStatus) => {
+    statusRef.current = next
+    setStatus(next)
+  }, [])
+
+  const hydrate = useCallback(async () => {
+    const run = ++generation.current
+    const outcome = await fetchCurrentSession()
+    if (!mounted.current || run !== generation.current) return
+
+    if (outcome.kind === 'unavailable') {
+      // A live session is not evicted by a service blip; only a first load,
+      // which has no session to protect, renders the fault as its own state.
+      setError(outcome.message)
+      if (statusRef.current !== 'ready') applyStatus('unavailable')
+      return
+    }
+
+    if (outcome.kind === 'anonymous' || outcome.kind === 'removed') {
+      if (subjectRef.current !== null) leadPhotoUrls.clear()
+      subjectRef.current = null
+      setSession(null)
+      setMember(null)
+      setError(outcome.kind === 'removed' ? outcome.message : null)
+      applyStatus(outcome.kind === 'removed' ? 'unauthorized' : 'signed_out')
+      return
+    }
+
+    const next = outcome.session
+    // A different person in the same tab must not inherit the previous one's
+    // signed photo URLs.
+    if (subjectRef.current !== null && subjectRef.current !== next.subject) {
+      leadPhotoUrls.clear()
+      setMember(null)
+    }
+    subjectRef.current = next.subject
+    setSession(next)
+    setError(null)
+    applyStatus('ready')
+
+    // The roster carries the display name; the session carries the authority.
+    // A roster failure therefore costs a name in the sidebar and nothing else,
+    // so it is reported rather than escalated into a sign-out.
+    const roster = await teamRoster()
+    if (!mounted.current || run !== generation.current) return
+    if (roster.kind === 'error') {
+      setError(`Signed in, but the team directory could not be read: ${roster.message}`)
+      return
+    }
+    const self = findSelf(roster.members, next.actorId)
+    setMember(self ? toTeamMember(self) : null)
+  }, [applyStatus])
+
+  useEffect(() => {
+    mounted.current = true
+    void hydrate()
+    return () => {
+      mounted.current = false
+    }
+  }, [hydrate])
+
+  const revalidate = useCallback(async () => {
+    await hydrate()
+  }, [hydrate])
+
+  useSessionHeartbeat(status, revalidate)
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      setError(null)
+      const result = await identitySignIn(email, password)
+      if (result.kind === 'refused') throw new Error(result.message)
+      await hydrate()
+    },
+    [hydrate],
+  )
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const result = await identityRequestReset(email, window.location.origin)
+    if (result.kind === 'refused') throw new Error(result.message)
+  }, [])
+
+  const setPassword = useCallback(async (_password: string) => {
+    void _password
+    // Not a stub: there is no recovery session to set a password against on
+    // this path, because there is no delivered link to create one. Saying so is
+    // the honest surface; silently resolving would look like it had worked.
+    throw new Error(
+      'Setting a password from a link needs email delivery, which this deployment does not have yet.',
+    )
+  }, [])
+
+  const signOut = useCallback(async () => {
+    // Abandons any hydration already in flight — see `generation`.
+    generation.current += 1
+    leadPhotoUrls.clear()
+    subjectRef.current = null
+    setSession(null)
+    setMember(null)
+    setError(null)
+    applyStatus('signed_out')
+    await identitySignOut()
+  }, [applyStatus])
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      status,
+      authPath: 'identity',
+      user: session ? { id: session.subject, email: null } : null,
+      member,
+      // From the session, never from `member`: the roster is display data and
+      // may be stale or absent, while this is the resolver's own answer.
+      isAdmin: session?.role === 'admin',
+      error,
+      signIn,
+      requestPasswordReset,
+      setPassword,
+      signOut,
+      revalidate,
+    }),
+    [
+      error,
+      member,
+      requestPasswordReset,
+      revalidate,
+      session,
+      setPassword,
+      signIn,
+      signOut,
+      status,
+    ],
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+// ---------------------------------------------------------------------------
+// The Supabase path — unchanged behaviour, and the default everywhere today.
+// ---------------------------------------------------------------------------
+
+function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('initializing')
   const [session, setSession] = useState<Session | null>(null)
   const [member, setMember] = useState<TeamMember | null>(null)
@@ -233,20 +486,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await hydrate(session)
   }, [hydrate, session])
 
-  useEffect(() => {
-    if (status !== 'ready') return
-    const interval = window.setInterval(() => {
-      void revalidate()
-    }, 60_000)
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void revalidate()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [revalidate, status])
+  useSessionHeartbeat(status, revalidate)
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -297,7 +537,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
-      user: session?.user ?? null,
+      authPath: 'supabase',
+      user: session?.user
+        ? { id: session.user.id, email: session.user.email ?? null }
+        : null,
       member,
       isAdmin: member?.role === 'admin',
       error,
@@ -406,6 +649,21 @@ function AuthScreen() {
           <div className="auth-state">
             <div className="auth-spinner" aria-hidden="true" />
             <h1>Checking your session…</h1>
+          </div>
+        )}
+
+        {auth.status === 'unavailable' && (
+          <div className="auth-state">
+            <h1>Sign-in is unavailable</h1>
+            <p>
+              The service that verifies your session could not be reached, so we
+              can’t tell whether you are signed in. Nothing has changed about
+              your access — try again in a moment.
+            </p>
+            {auth.error && <div className="auth-error" role="alert">{auth.error}</div>}
+            <button className="btn" type="button" onClick={() => void auth.revalidate()}>
+              Try again
+            </button>
           </div>
         )}
 
@@ -519,6 +777,12 @@ function AuthScreen() {
                 required
               />
             </label>
+            {auth.authPath === 'identity' && (
+              <p className="muted small">
+                This deployment has no email delivery configured yet, so no
+                message will arrive. Ask an admin to set your password directly.
+              </p>
+            )}
             {message && <div className="auth-success">{message}</div>}
             {localError && <div className="auth-error" role="alert">{localError}</div>}
             <button className="btn accent" disabled={busy} type="submit">
