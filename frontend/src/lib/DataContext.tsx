@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import { fetchConversationReplyIntents, isMissingRelation } from './conversationPaging'
 import { fetchNeonDashboard, resolveReadPath } from './dashboardReads'
+import type { RosterPath } from './rosterWrites'
 import type {
   Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
   ConversationReplyIntent, DailyActivity, DashboardData, FollowUpState,
@@ -21,6 +22,10 @@ const EMPTY: DashboardData = {
   annotations: [],
   steps: [],
   teamMembers: [],
+  // The safe default while nothing has been read: the ids of an empty roster
+  // belong to no space, and `supabase` is the value every write surface treats
+  // as permissive — but the list is empty, so nothing is offered either way.
+  rosterPath: 'supabase',
   pipelineEvents: [],
   followUpStates: [],
   latestConversationMessages: [],
@@ -282,6 +287,16 @@ function stableSlice<T>(prev: T, next: T): T {
  * the dashboard shows, only the part that decides where the rows come from.
  */
 interface Fetched {
+  /**
+   * Which provider's id space `teamMembers` — and therefore every
+   * `leads.assigned_to` and `owner_id` beside it — belongs to.
+   *
+   * On the shape rather than inferred by a consumer, because the two fetchers
+   * are the only code that knows, and because the answer decides more than a
+   * label: `rosterWrites.ts` reads it to refuse sending a member id to a writer
+   * that would resolve it against the other database.
+   */
+  rosterPath: RosterPath
   instances: Instance[]
   campaigns: CampaignMetrics[]
   activity: DailyActivity[]
@@ -392,6 +407,7 @@ async function fetchSupabaseDashboard(
     instances.error ?? campaigns.error ?? activity.error ??
     syncRuns.error ?? annotations.error ?? steps.error
   return {
+    rosterPath: 'supabase',
     instances: (instances.data ?? []) as Instance[],
     campaigns: (campaigns.data ?? []) as CampaignMetrics[],
     activity: (activity.data ?? []) as DailyActivity[],
@@ -421,13 +437,17 @@ async function fetchSupabaseDashboard(
  * flag. Everything it decides lives in `dashboardReads.ts`; this is the adapter
  * from that module's result to `Fetched`, and it is two facts long.
  *
- * **The roster is empty, and that is the honest answer rather than a gap.**
- * `leads.assigned_to` arriving from Neon is a Neon `team_members.id`, and the
- * Supabase roster's integers name different people (`N-B2.md` has the map). So
- * carrying the Supabase roster across would not fail anything — it would put the
- * wrong name on every owner chip and in every CSV export. A missing name is
- * visible; a wrong one is not. Until `team_members` migrates with `leads`, this
- * path shows no names, which is also why the flag cannot be flipped yet.
+ * **The roster arrives with the leads, and `rosterPath` says whose ids these
+ * are.** S13's switch left `teamMembers` empty here, on the argument that a
+ * Supabase roster beside Neon leads would put a confidently wrong name on every
+ * owner chip. That argument was right and it expired with its premise: both ends
+ * of the join now come from the same database. What it left behind was a worse
+ * artefact — a Team page stating "0 Active teammates" — so the roster moves on
+ * the same flag rather than a second one.
+ *
+ * The marker is not decoration. The ids in these rows are this provider's, and
+ * `/api/pipeline`'s member-keyed actions resolve ids against the *other* one; it
+ * is what `rosterWrites.ts` reads to refuse the round trip.
  */
 async function fetchNeonDashboardData(
   since: string,
@@ -438,9 +458,12 @@ async function fetchNeonDashboardData(
     since,
     updatedSince: delta ? cursor : null,
   })
+  // `rosterPath` arrives inside `fetched` rather than being written here, and
+  // that is a correction the mutation pass forced: a literal in this file is a
+  // literal no test can reach, and this one decides whether a member id may be
+  // written back to the other provider.
   return {
     ...fetched,
-    teamMembers: [],
     // Never set: on this path a read either answers or throws, and the throw is
     // reported by `load()`'s outer catch.
     error: null,
@@ -836,6 +859,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
               annotations: stableSlice(base.annotations, annotations),
               steps: stableSlice(base.steps, steps),
               teamMembers: stableSlice(base.teamMembers, teamMembers),
+              // Committed beside the roster it describes, never carried over
+              // from `base`: the two must move together or a refresh could leave
+              // one provider's ids labelled as the other's.
+              rosterPath: fetched.rosterPath,
               savedSearches: stableSlice(base.savedSearches, savedSearches),
               icps: stableSlice(base.icps, icps),
               icpPersonas: stableSlice(base.icpPersonas, icpPersonas),

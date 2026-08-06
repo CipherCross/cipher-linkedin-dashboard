@@ -1,3 +1,10 @@
+/**
+ * Which database a slice of dashboard data — and every member id in it — was
+ * read from. Declared here rather than in `rosterWrites.ts` so the rule module
+ * can depend on the types and not the other way round.
+ */
+export type RosterPath = 'supabase' | 'neon'
+
 export interface Instance {
   id: string
   label: string
@@ -436,6 +443,17 @@ export interface DashboardData {
   annotations: Annotation[]
   steps: CampaignStep[]
   teamMembers: TeamMember[]
+  /**
+   * Which provider's id space `teamMembers` belongs to — and with it every
+   * `leads.assigned_to` and `owner_id` in this slice.
+   *
+   * `supabase` on the path every deployment runs today. `neon` when
+   * `NEON_READS_DEFAULT=neon` served the load, in which case the ids are safe to
+   * display beside these leads and must not be sent back to `/api/pipeline`,
+   * whose member-keyed actions resolve ids against Supabase unconditionally.
+   * `rosterWrites.ts` holds the rule; this field is what it reads.
+   */
+  rosterPath: RosterPath
   pipelineEvents: PipelineEvent[]
   followUpStates: FollowUpState[]
   latestConversationMessages: ConversationLatestMessage[]

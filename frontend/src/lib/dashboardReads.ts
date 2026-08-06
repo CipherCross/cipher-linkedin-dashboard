@@ -36,20 +36,25 @@
  *    endpoint refuses `from`/`to` on `messages.inboundHistory` by not declaring
  *    it `ranged`, so the asymmetry is enforced on both sides rather than
  *    remembered on one.
- * 4. **The roster does not cross.** `team_members` has no operation, on purpose:
+ * 4. **The roster crosses with the leads, on the same flag, or not at all.**
  *    `leads.assigned_to` and `conversation_follow_up_state.owner_id` are member
- *    ids in whichever provider's id space the leads came from, and the two
- *    spaces name different people (`N-B2.md`). So on this path the roster is
- *    empty rather than fetched from the other provider — a nameless owner chip
- *    instead of a confidently wrong name. See `fetchNeonDashboard`.
+ *    ids in whichever provider's id space the rows came from, and the two spaces
+ *    name different people (`N-B2.md`). S13 answered that by serving no roster
+ *    here, which was right while `leads` came from Supabase and wrong the moment
+ *    it did not: a Neon dashboard beside an empty roster states "0 Active
+ *    teammates". So `identity.teamRoster` is one of the reads below, both ends
+ *    of every member-id join arrive from one database, and the *writes* that
+ *    would carry an id back to the other one are refused — see
+ *    `rosterWrites.ts`, which is where that rule lives.
  */
 
 import { authFetch } from './api'
+import { toTeamMember, type RosterMember } from './identityAuth'
 import type {
   Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
   ConversationReplyIntent, DailyActivity, FollowUpEvent, FollowUpState,
   Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Instance,
-  Lead, LeadNote, Message, PipelineEvent, SavedSearch, SyncRun,
+  Lead, LeadNote, Message, PipelineEvent, SavedSearch, SyncRun, TeamMember,
 } from './types'
 
 /**
@@ -92,6 +97,14 @@ export const READ_OPS = {
   icpIndustries: 'icp.industries',
   hypotheses: 'hypotheses.list',
   hypothesisCampaigns: 'hypotheses.campaigns',
+  /**
+   * The roster. Named `identity.teamRoster` because it is the identity
+   * surface's operation, served here as well rather than duplicated: the
+   * dashboard needs the same seven columns `/api/identity?op=team.roster`
+   * already returns, and a second spelling of one read is a second thing to
+   * keep correct.
+   */
+  teamRoster: 'identity.teamRoster',
 } as const
 
 /** The flag lookup. Dispatched before authentication and reads no database. */
@@ -277,9 +290,23 @@ export async function readAll<T>(
 /**
  * Everything `DataContext` commits, in the browser's own types.
  *
- * `teamMembers` is absent, deliberately — see `fetchNeonDashboard`.
+ * `teamMembers` is here as of the roster slice, and it is the same
+ * `TeamMember[]` the Supabase path commits — see `fetchNeonDashboard` for what
+ * differs *inside* those rows and why the difference is rendered rather than
+ * smoothed.
  */
 export interface NeonDashboardFetch {
+  /**
+   * Whose id space `teamMembers` — and every `assigned_to` and `owner_id` beside
+   * it — belongs to. Constant `'neon'`, and it is here rather than written by
+   * the caller for a measured reason: a mutation that set it to `'supabase'` in
+   * `DataContext.tsx` reddened **no test**, because a `.tsx` file cannot be
+   * imported by this repo's node-environment suite. It decides whether
+   * `rosterWrites.ts` lets a member id be written back, so an untestable literal
+   * was the wrong place for it.
+   */
+  readonly rosterPath: 'neon'
+  readonly teamMembers: TeamMember[]
   readonly instances: Instance[]
   readonly campaigns: CampaignMetrics[]
   readonly activity: DailyActivity[]
@@ -329,13 +356,25 @@ export const SYNC_RUN_LIMIT = 200
  *
  * ## Three differences from the Supabase path, all deliberate
  *
- * **1. The roster is empty.** There is no `team_members` operation and there
- * must not be one while `leads` is read from Neon: `assigned_to` would be a Neon
- * member id and any roster served beside it from Supabase would name a different
- * person for the same integer (`N-B2.md` has the map). An owner chip with no
- * name is a visible gap; an owner chip with the wrong name is not. This is the
- * single largest known limit of this path and it is why the flag cannot be
- * flipped until the roster session lands.
+ * **1. The roster comes from here too, and its rows mean something slightly
+ * different.** Both ends of every member-id join now arrive from one database,
+ * which is what makes the join correct and what makes serving the roster from
+ * the *other* provider forbidden rather than merely untidy. Two consequences
+ * this module does not paper over:
+ *
+ *   * **`auth_user_id` is `null` on every row**, and that is a statement, not a
+ *     placeholder — `toTeamMember` in `identityAuth.ts` records the argument.
+ *     There is no Supabase Auth user behind a `team_roster()` row. The field
+ *     means "there is a Supabase login", the answer is no, and filling it with
+ *     the canonical uuid would make an id from one space answer a question about
+ *     another. What replaces it as the page's source of truth is the schema:
+ *     `team_members.user_id` is `NOT NULL` in the portable baseline, so on this
+ *     path every member *is* a login and "assignment only" is a state that
+ *     cannot exist. `Team.tsx` renders that from the roster's provenance rather
+ *     than from a fabricated column.
+ *   * **The ids are this provider's.** They are safe to *display* beside leads
+ *     read here and unsafe to *send* to a writer that is not here. The refusal
+ *     lives in `rosterWrites.ts`.
  *
  * **2. No column ladders.** The two retry ladders (`LEAD_COLUMN_LADDER`,
  * `MESSAGE_COLUMN_LADDER`) exist because the Supabase schema drifted under a
@@ -363,11 +402,18 @@ export async function fetchNeonDashboard(
     readAll<T>(operation, query, fetchImpl)
 
   const [
+    teamMembers,
     instances, campaigns, activity, syncRuns, annotations, steps,
     savedSearches, icps, icpPersonas, icpIndustries, hypotheses, hypothesisCampaigns,
     leads, inbound, outbound, pipelineEvents,
     followUpStates, latestMessages, replyIntents,
   ] = await Promise.all([
+    // Walked, not capped. `/api/identity?op=team.roster` takes one page of 200
+    // and reports `hasMore` (N-S18's stated limit); here the whole roster is the
+    // answer, because `usePipelineActions.memberName` resolves *any*
+    // `leads.assigned_to` against it and a truncated roster would leave the
+    // owners past row 200 nameless — the failure this slice exists to end.
+    all<RosterMember>(READ_OPS.teamRoster),
     all<Instance>(READ_OPS.instances),
     all<CampaignMetrics>(READ_OPS.campaigns),
     // `from` only: the Supabase path filters `day >= since` with no upper bound,
@@ -400,6 +446,12 @@ export async function fetchNeonDashboard(
   ])
 
   return {
+    rosterPath: 'neon',
+    // The same projection the identity path applies to the same rows, reused
+    // rather than restated: one mapping, one place where `auth_user_id` is
+    // decided, and no chance of the two paths disagreeing about what a roster
+    // row means.
+    teamMembers: teamMembers.items.map(toTeamMember),
     instances: instances.items,
     campaigns: campaigns.items,
     activity: activity.items,

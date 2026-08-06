@@ -26,13 +26,29 @@
  * direction is explicit that this allowlist is the application API's first
  * vocabulary rather than a shim to be replaced later.
  *
- * `team.roster` is **not** here on purpose, and the reason is stronger than
- * tidiness. It is served by `/api/identity?op=` where the rest of the identity
- * surface lives — but it is also kept off the *dashboard* read path because
- * `DataContext` joins its roster against `leads.assigned_to`, which is still a
- * Supabase `team_members.id`. The two id spaces name different people, so that
- * join mislabels owners without failing. See the header of
- * `_lib/data/operations/dashboard.ts`; `tests/dashboardSlice.test.ts` asserts it.
+ * **`identity.teamRoster` is here now, and the reason it was absent has
+ * inverted.** Until S13's switch, the argument against it was that
+ * `DataContext` joins its roster against `leads.assigned_to`, which was a
+ * *Supabase* `team_members.id` while this endpoint would answer with a Neon one;
+ * the two id spaces name different people (`N-B2.md` has the map), so the join
+ * mislabels owners without failing anything. That argument held exactly as long
+ * as `leads` came from the other provider. Once `leads.directory` answers the
+ * dashboard, both ends of the join arrive from *this* database and the integers
+ * agree — so the roster must move on the same flag rather than a separate one,
+ * and a dashboard reading Neon leads beside no roster at all is the thing that
+ * now misreports (it renders "0 Active teammates").
+ *
+ * Two properties keep the inversion from being a loosening:
+ *
+ *   * it is `public.team_roster()`, never `public.team_members`. The baseline's
+ *     `team_members_active_actor_select` policy restricts `app_runtime` to the
+ *     caller's **own row**, so a direct table read would answer with exactly one
+ *     member and the page would state "1 Active teammate" — a different
+ *     confident lie, purchased with an RLS widening. The function is
+ *     `SECURITY DEFINER`, membership-gated, and already granted;
+ *   * every other read on this endpoint still may not so much as mention a
+ *     roster relation. `tests/dashboardSlice.test.ts` asserts the permission by
+ *     name rather than dropping the invariant.
  *
  * Read-only end to end. Every operation reachable from this file is a registered
  * *query*; the store's `query()` runs inside `BEGIN READ ONLY`, and no command
@@ -52,6 +68,7 @@ import {
   ACTIVITY_OPERATIONS,
   CONVERSATION_OPERATIONS,
   DASHBOARD_OPERATIONS,
+  IDENTITY_OPERATIONS,
   LEADS_OPERATIONS,
   LIBRARY_OPERATIONS,
   MESSAGES_OPERATIONS,
@@ -288,6 +305,25 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     operation: MESSAGES_OPERATIONS.outboundRecent,
     ranged: true,
     params: (url) => ({ updatedSince: readOptionalInstant(url) }),
+  },
+
+  /**
+   * The roster, and the only read on this endpoint that can name a person.
+   *
+   * **Not tolerant, and that is the decision this operation exists to make.**
+   * `public.team_members` is in the baseline's first artifact — it cannot be
+   * "not yet migrated" on a database that answered any other read here — so an
+   * absent relation would mean something is deeply wrong, and answering it with
+   * an empty roster would restore precisely the "0 Active teammates" the move
+   * fixes. It fails, loudly, like the funnel reads.
+   *
+   * No parameters. The function projects the same seven columns for every
+   * caller and refuses a non-member by returning zero rows, so there is nothing
+   * for this endpoint to filter, scope or validate; adding a parameter here
+   * would only create a way to ask for less than the page needs.
+   */
+  [IDENTITY_OPERATIONS.teamRoster]: {
+    operation: IDENTITY_OPERATIONS.teamRoster,
   },
 
   // --- the medium relations ------------------------------------------------
