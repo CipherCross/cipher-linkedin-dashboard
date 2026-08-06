@@ -11,12 +11,18 @@
  * callers.
  *
  * It is a plain module rather than logic inside `DataContext.tsx` for the reason
- * `conversationPaging.ts` records: `tsconfig.api.json` type-checks `tests/` and
- * declares no `jsx`, so a test that imports a `.tsx` file fails to compile even
- * though vitest would happily run it. Everything this path *decides* — which
- * operation, which parameters, when a walk stops, what an `unavailable` marker
- * means — therefore lives here and is covered by `tests/dashboardReads.test.ts`.
- * `DataContext.tsx` and the three components keep a call site each.
+ * `conversationPaging.ts` records — originally a toolchain constraint
+ * (`tsconfig.api.json` type-checked `tests/` and declared no `jsx`, so a test
+ * importing a `.tsx` file could not compile), and now a straightforward one:
+ * everything this path *decides* — which operation, which parameters, when a walk
+ * stops, what an `unavailable` marker means — is provable here without mounting
+ * anything, and is covered by `tests/dashboardReads.test.ts`.
+ *
+ * The call sites in `DataContext.tsx` and the five components are no longer
+ * uncovered: `tests/dataContext.test.tsx`, `tests/playbookPage.test.tsx` and
+ * `tests/leadsExplorerDigest.test.tsx` render them against a mocked transport.
+ * Which branch a component takes is a different question from what the branch
+ * asks for, and the two halves are tested in the two places accordingly.
  *
  * ## The rules this client keeps, and where each comes from
  *

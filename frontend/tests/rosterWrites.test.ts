@@ -10,11 +10,16 @@
  * `team_members.id` sent there is an integer that names a different person, on a
  * request that succeeds.
  *
- * These are pure functions for the reason `dashboardReads.ts` is a module: the
- * hooks and pages that consult them are `.tsx` or React hooks and this repo's
- * node-environment test run cannot drive either. What is provable here is the
- * decision; the call sites are covered by `tsc -b`, by the browser run, and by
- * nothing else.
+ * These are pure functions for the reason `dashboardReads.ts` is a module. What is
+ * provable here is the **decision**. Whether the hooks that must consult it
+ * actually do was, for three sessions, covered by `tsc -b`, by a browser run and
+ * by nothing else — and `N-ROSTER.md`'s mutations 9 and 10 measured exactly that
+ * by deleting both calls without reddening anything.
+ *
+ * `tests/writeRefusals.test.tsx` now covers the call sites with jsdom. Keep the
+ * two files apart: this one can enumerate rosters and paths cheaply, that one
+ * proves the refusal reaches the network boundary. A single file doing both would
+ * do neither thoroughly.
  */
 
 import { describe, expect, it } from 'vitest'

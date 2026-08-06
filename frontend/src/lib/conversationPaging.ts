@@ -5,12 +5,19 @@
  * ## Why this file exists at all
  *
  * Everything it holds used to live inside `DataContext.tsx` and
- * `components/FollowUpPanel.tsx`. Both are `.tsx`, and `tsconfig.api.json` —
- * which is what type-checks `tests/` — declares no `jsx`, so a test importing
- * either of them fails to compile. `src/lib/*.ts` is already covered from
- * `tests/` (`leads.ts`, `csvImport.ts`, `demographics.ts`), so moving the two
- * pieces that carry real logic into a plain module puts them inside the coverage
- * that already exists rather than inventing a second test setup.
+ * `components/FollowUpPanel.tsx`. Both are `.tsx`, and at the time
+ * `tsconfig.api.json` — which is what type-checks `tests/` — declared no `jsx`,
+ * so a test importing either of them failed to compile. `src/lib/*.ts` was
+ * already covered from `tests/` (`leads.ts`, `csvImport.ts`, `demographics.ts`),
+ * so moving the two pieces that carry real logic into a plain module put them
+ * inside the coverage that already existed.
+ *
+ * **That compile barrier is gone** — `tsconfig.api.json` now sets `jsx` and the
+ * `tests/**\/*.test.tsx` suites render components with jsdom. The extraction
+ * stays anyway, and the reason is no longer the toolchain: paging logic that is
+ * reachable without mounting a component is cheaper to test exhaustively than the
+ * same logic behind a render, and these are the functions where an off-by-one
+ * silently truncates a relation.
  *
  * The two pieces are here together because they are one subject: how a
  * conversation-scoped PostgREST read walks past the server's 1,000-row response

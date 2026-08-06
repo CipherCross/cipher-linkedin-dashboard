@@ -46,11 +46,18 @@
  *
  * ## Why a module for one predicate
  *
- * The same reason `dashboardReads.ts` and `conversationPaging.ts` are modules:
- * `tsconfig.api.json` type-checks `tests/` and declares no `jsx`, so a rule that
- * lives inside a `.tsx` component is a rule this repo cannot test. The predicate
- * and the sentence shown to the user live here; the hooks and the pages hold a
- * call site each.
+ * The same reason `dashboardReads.ts` and `conversationPaging.ts` are modules.
+ * When this was written `tsconfig.api.json` type-checked `tests/` and declared no
+ * `jsx`, so a rule living inside a `.tsx` component was a rule the repository
+ * could not test at all. That is no longer true — and it turned out not to be the
+ * important half. A predicate proved in isolation says nothing about whether its
+ * *call sites* consult it, and `N-ROSTER.md`'s mutations 9 and 10 deleted both
+ * calls with every suite still green.
+ *
+ * So the split is now deliberate on both sides: the predicate and the sentence
+ * shown to the user live here and are covered by `tests/rosterWrites.test.ts`,
+ * and the two hooks that must *ask* are covered by
+ * `tests/writeRefusals.test.tsx`. Neither file is sufficient alone.
  */
 
 import type { RosterPath, TeamMember } from './types'

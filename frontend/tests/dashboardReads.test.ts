@@ -3,14 +3,17 @@
  *
  * ## Why this file is where the evidence is
  *
- * The default vitest run is `environment: 'node'` over `tests/**` and nothing
- * renders; `tsconfig.api.json` declares no `jsx`, so a test cannot even import a
- * `.tsx` file without failing the typecheck. Everything the switch *decides* was
- * therefore put in `src/lib/dashboardReads.ts` — which operation is called with
- * which parameters, when a walk stops, what an `unavailable` marker means, what
- * happens to a failed page — and `DataContext.tsx` and the three components hold
- * a call site each. This file is the whole of the new path's coverage; the call
- * sites are covered by `tsc -b` and by reading (see the handoff's known limits).
+ * Everything the switch *decides* lives in `src/lib/dashboardReads.ts` — which
+ * operation is called with which parameters, when a walk stops, what an
+ * `unavailable` marker means, what happens to a failed page — and `DataContext.tsx`
+ * and the five components hold a call site each. This file proves the decisions.
+ *
+ * It was written when it was also the *only* coverage the new path had, because
+ * the default vitest run is `environment: 'node'` and `tsconfig.api.json` declared
+ * no `jsx`, so a test could not import a `.tsx` file at all. Both of those changed
+ * with the rendering suites (`*.test.tsx`, jsdom per file), so the call sites are
+ * covered too — but by different files, deliberately. This one stays `node` and
+ * stays fast.
  *
  * ## The assertion worth reading first
  *
