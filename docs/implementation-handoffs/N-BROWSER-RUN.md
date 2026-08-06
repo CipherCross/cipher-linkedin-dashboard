@@ -348,7 +348,7 @@ existing entries, `PROTECTED_PATHS`, `IMMUTABLE_BASELINE`, or any file under
 
 | SHA | Subject |
 |---|---|
-| *(1)* | `docs(neon): record the browser run and the mutation pass` — this file, the session's only commit; a commit cannot carry its own hash |
+| `b74e976` | `docs(neon): record the browser run and the mutation pass` — this file, the session's only commit |
 
 **Not pushed and not merged.** No code changed, nothing is deployed, and
 `NEON_READS_DEFAULT` is set in no Vercel environment.
