@@ -7,18 +7,36 @@
 //   GET  — the daily Vercel cron (guarded by CRON_SECRET).
 //   POST — the admin-only "Classify replies" button on the Leads page.
 //
-// AI-path split, by actor: the POST branches (batch, ?mode=demographics,
-// ?mode=reclassify) have a human and move with `NEON_AI_PATH_DEFAULT=neon` —
-// the actor resolves against Neon and the admin role is re-checked there, so
-// the database being written decides membership. The GET cron has no human to
-// publish and stays on Supabase, declared blocked, until ledger step 007 (the
-// system write path) is applied.
+// AI-path split, by actor — and since ledger step 007 was applied, both halves
+// move with `NEON_AI_PATH_DEFAULT=neon`:
+//
+//   POST (batch, ?mode=demographics, ?mode=reclassify) — has a human. The actor
+//     resolves against Neon and the admin role is re-checked there, so the
+//     database being written decides membership; the store is the shared one and
+//     the principal is `app_runtime`.
+//   GET (the daily cron) — has no human and never will. It runs on the AI store
+//     as `app_system` under `SYSTEM_ACTOR`, the nil uuid step 007's policies
+//     gate on. No human actor is invented: there is none, and a synthetic member
+//     id would be a lie the audit trail would carry forever.
+//
+// The two share one body (`runClassifyOnNeon`) because the difference between
+// them is the principal and nothing else — same batch sizes, same prompts, same
+// ref-validation, same response shape.
+//
+// ONE exception, and it is a real one: pipeline auto-advance. `app_system` holds
+// no EXECUTE on `public.pipeline_auto_advance()`; ledger step 008 grants it and
+// is written but NOT applied. The guard is not a way around that — it is
+// SELECT-only and `app_ai_runner` holds no EXECUTE either — so the cron reports
+// `auto_advance_blocked` in its response instead of quietly answering as though
+// it had done the work. A cron run that labelled replies but could not advance
+// the pipeline is a PARTIAL run and says so.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { db } from './_lib/core.js'
 import { guardAdmin, guardMachine, authorizationResponse } from './_lib/auth.js'
 import { deploymentAiPath } from './_lib/data/aiPath.js'
+import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
   DataStoreContractError,
   MAX_PAGE_SIZE,
@@ -195,9 +213,10 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
   if (req.method === 'GET') {
     const denied = await guardMachine(req, 'CRON_SECRET')
     if (denied) return denied
-    // The cron stays on Supabase whatever NEON_AI_PATH_DEFAULT says: it has no
-    // human actor, and the system write path (ledger step 007) is written but
-    // not applied yet. Declared blocked, not silently routed.
+    // The cron half. Step 007 gave the server-owned principal its own write
+    // path, so this no longer has to stay behind: it runs on the AI store as
+    // `app_system`, with auto-advance declared blocked rather than attempted.
+    if (deploymentAiPath() === 'neon') return classifyCronOnNeon(mode)
   } else if (deploymentAiPath() === 'neon') {
     return classifyOnNeon(req, mode, deps)
   } else {
@@ -621,13 +640,18 @@ async function runDemographics(sb: ReturnType<typeof db>): Promise<DemographicsR
 }
 
 // ---------------------------------------------------------------------------
-// The Neon branches of the POST paths (batch, demographics, reclassify).
+// The Neon branches: the POST paths (batch, demographics, reclassify) under a
+// human actor, and the GET cron under the system one.
 //
-// Same authorization argument as `neonWrites.ts`: the actor resolves against
-// the database being written, and the admin role is re-checked from that
-// resolution — the Supabase guardAdmin answer is not carried over. Same
-// response bodies as the Supabase path, because the client cannot tell which
-// provider answered.
+// Same authorization argument as `neonWrites.ts` for the POST paths: the actor
+// resolves against the database being written, and the admin role is re-checked
+// from that resolution — the Supabase guardAdmin answer is not carried over.
+// Same response bodies as the Supabase path, because the client cannot tell
+// which provider answered.
+//
+// The cron has no actor to resolve and resolves none. Its principal is
+// `app_system` and its published actor is the nil uuid, which is a value that
+// belongs to nobody and unlocks exactly the five relations step 007 named.
 // ---------------------------------------------------------------------------
 
 /** Log a failure by class, never by message — the driver composes connection
@@ -656,6 +680,50 @@ async function autoAdvanceNeon(
     console.warn('pipeline_auto_advance skipped:', safeErrorLabel(e))
     return undefined
   }
+}
+
+/**
+ * Whether the caller's principal may run `public.pipeline_auto_advance()`.
+ *
+ * A capability rather than a boolean because a blocked run must be able to SAY
+ * why. `app_runtime` (the admin POST) holds the EXECUTE and advances the
+ * pipeline as it always has; `app_system` (the cron) does not, and the reason
+ * is a ledger step that exists and has not been applied. Reporting that in the
+ * response body is the difference between a partial run and a run that looks
+ * complete — nothing else in this file distinguishes the two, because
+ * `auto_advanced` is simply omitted when the RPC is unavailable.
+ *
+ * The blocked branch does NOT reach for the guard. The guard is SELECT-only,
+ * `app_ai_runner` holds no EXECUTE on the function either, and giving
+ * `ai_execute_sql` a write path to work around a missing grant would trade the
+ * one property that makes arbitrary SQL safe for a pipeline column.
+ */
+type AutoAdvanceCapability =
+  | { readonly kind: 'available' }
+  | { readonly kind: 'blocked'; readonly reason: string }
+
+const AUTO_ADVANCE_BLOCKED: AutoAdvanceCapability = {
+  kind: 'blocked',
+  reason:
+    'app_system holds no EXECUTE on pipeline_auto_advance(); ledger step 008 is written and not applied',
+}
+
+/**
+ * The auto-advance fragment of a response body. Exactly one of three shapes:
+ * `auto_advanced` when it ran, `auto_advance_blocked` when the principal may
+ * not run it, and nothing at all when it was attempted and failed — which is
+ * the pre-existing contract for a missing migration 028 and is left alone.
+ */
+async function autoAdvanceReport(
+  capability: AutoAdvanceCapability,
+  store: DataStore,
+  actor: ActorContext
+): Promise<Record<string, unknown>> {
+  if (capability.kind === 'blocked') {
+    return { auto_advance_blocked: capability.reason }
+  }
+  const advanced = await autoAdvanceNeon(store, actor)
+  return advanced !== undefined ? { auto_advanced: advanced } : {}
 }
 
 /** The demographics phase on Neon. The baseline carries migration 048's v2
@@ -825,8 +893,42 @@ async function classifyOnNeon(
   if (writer.actor.role !== 'admin') {
     return json({ error: 'Admin access required' }, 403)
   }
-  const { store, actor } = writer
+  return runClassifyOnNeon(writer.store, writer.actor, mode, { kind: 'available' })
+}
 
+/**
+ * The cron on Neon. No actor is resolved and no admin is checked, because there
+ * is no human on either side of the call: `guardMachine` already verified the
+ * shared `CRON_SECRET`, and the principal is the server's own.
+ *
+ * `getAiDataStore()` is read here rather than passed in, exactly as
+ * `notify-replies.ts` does it — the AI store is process-wide and lazy, so the
+ * credential is required only when a flagged deployment actually runs the cron.
+ */
+function classifyCronOnNeon(mode: string | null): Promise<Response> {
+  return runClassifyOnNeon(
+    getAiDataStore(),
+    SYSTEM_ACTOR,
+    mode,
+    AUTO_ADVANCE_BLOCKED
+  )
+}
+
+/**
+ * Everything both Neon halves do, once.
+ *
+ * The store and the actor are the ONLY things the two callers disagree about —
+ * plus what each of them may do about auto-advance. Batch sizes, the context
+ * fetch, the prompts, the ref-validation, the manual-sentiment protection and
+ * the response bodies are all shared by construction, so a change to any of
+ * them cannot land on one principal and miss the other.
+ */
+async function runClassifyOnNeon(
+  store: DataStore,
+  actor: ActorContext,
+  mode: string | null,
+  autoAdvance: AutoAdvanceCapability
+): Promise<Response> {
   try {
     // Dedicated mode: drain the gender backlog without spending the invocation
     // budget on reply classification — same shape as the Supabase branch.
@@ -847,12 +949,12 @@ async function classifyOnNeon(
     if (!replies.length) {
       // No backlog, but auto-advance and demographics still run — same contract
       // as the Supabase path's empty-batch branch.
-      const auto_advanced = await autoAdvanceNeon(store, actor)
+      const advance = await autoAdvanceReport(autoAdvance, store, actor)
       const demographics = await runDemographicsOnNeon(store, actor)
       return json({
         classified: 0,
         remaining: 0,
-        ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+        ...advance,
         demographics,
       })
     }
@@ -951,13 +1053,13 @@ async function classifyOnNeon(
       page: { limit: 1 },
     })
 
-    const auto_advanced = await autoAdvanceNeon(store, actor)
+    const advance = await autoAdvanceReport(autoAdvance, store, actor)
     const demographics = await runDemographicsOnNeon(store, actor)
 
     return json({
       classified,
       remaining: remainingPage.items[0]?.remaining ?? 0,
-      ...(auto_advanced !== undefined ? { auto_advanced } : {}),
+      ...advance,
       demographics,
     })
   } catch (error) {

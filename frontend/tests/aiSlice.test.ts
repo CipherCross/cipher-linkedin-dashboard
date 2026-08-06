@@ -5,7 +5,7 @@
  * the adapter STATES, not what a database answers. The live counterpart (the
  * guard actually refusing, actually serving) is `aiStore.neon.test.ts`.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { deploymentAiPath, NEON_AI_PATH_ENV } from '../api/_lib/data/aiPath.js'
 import {
@@ -26,11 +26,23 @@ import {
 } from '../api/_lib/data/operations/ai.js'
 import {
   SYSTEM_COMMAND_OPERATIONS,
+  SYSTEM_CRON_COMMAND_OPERATIONS,
+  SYSTEM_CRON_QUERY_OPERATIONS,
   SYSTEM_GUARD_OPERATIONS,
   SYSTEM_GUARD_SQL,
   SYSTEM_OPERATIONS,
   SYSTEM_QUERY_OPERATIONS,
 } from '../api/_lib/data/operations/aiSystem.js'
+import { AI_WRITE_OPERATIONS } from '../api/_lib/data/operations/aiWrites.js'
+import {
+  BRIEFING_CONTEXT_GUARD_SQL,
+  briefingAssignmentsOperation,
+  briefingCampaignsContextOperation,
+  briefingHypothesesListOperation,
+  briefingRecentAnnotationsOperation,
+} from '../api/_lib/data/operations/briefingWrites.js'
+import { GET as classifyCron } from '../api/classify.js'
+import { GET as briefingCron } from '../api/briefing.js'
 import { POST as notifyReplies } from '../api/notify-replies.js'
 
 describe('deploymentAiPath', () => {
@@ -319,6 +331,178 @@ describe('the system operation allowlist', () => {
 })
 
 // ---------------------------------------------------------------------------
+// The cron vocabulary — the classify and briefing operations the AI store
+// admits now that step 007 is applied, and the one it must never admit.
+// ---------------------------------------------------------------------------
+
+describe('the cron half of classify and briefing', () => {
+  const registry = buildAiRegistry()
+
+  const queryContext = (params?: DataStoreParams) => ({
+    actor: SYSTEM_ACTOR,
+    params,
+    page: { limit: 20, cursor: null },
+    range: undefined,
+    after: undefined,
+  })
+  const commandContext = (params?: DataStoreParams) => ({
+    actor: SYSTEM_ACTOR,
+    params,
+  })
+
+  /** Enough parameters to build any cron statement, so one loop covers them all. */
+  const EVERY_PARAM: DataStoreParams = {
+    taxonomyVersion: 'p123-v1',
+    genderVersion: 'name-headline-v1',
+    bucketLimit: 100,
+    batchLimit: 100,
+    instances: ['notebook-1'],
+    profiles: ['/in/someone'],
+    messageId: 1,
+    applySentiment: true,
+    sentiment: 'positive',
+    reason: 'r',
+    intentLevel: 'p3',
+    intentReason: 'r',
+    now: '2026-08-06T00:00:00.000Z',
+    model: 'claude-haiku-4-5',
+    instanceId: 'notebook-1',
+    profileUrl: '/in/someone',
+    gender: 'unknown',
+    confidence: 0,
+    briefingDate: '2026-08-06',
+    briefingKind: 'daily',
+    expectedStatus: 'pending',
+    expectedVersion: 0,
+    nextStatus: 'investigating',
+    patch: '{}',
+    message: 'm',
+    periodStart: '2026-08-06',
+    periodEnd: '2026-08-06',
+    headline: 'h',
+    summary: 's',
+    changes: '[]',
+    sections: '[]',
+    actions: '[]',
+    risks: '[]',
+    metrics: '[]',
+    createdAt: '2026-08-06T00:00:00.000Z',
+  }
+
+  it('serves every cron read and write from the AI store’s registry', () => {
+    for (const operation of SYSTEM_CRON_QUERY_OPERATIONS) {
+      expect(() => registry.lookupQuery(operation)).not.toThrow()
+    }
+    for (const operation of SYSTEM_CRON_COMMAND_OPERATIONS) {
+      expect(() => registry.lookupCommand(operation)).not.toThrow()
+    }
+  })
+
+  it('does NOT admit classify.autoAdvance, by either kind', () => {
+    // The whole reason ledger step 008 exists as an unapplied artifact. If this
+    // ever passes, the cron will call `pipeline_auto_advance()` as `app_system`
+    // and either be refused at run time or — worse — succeed because someone
+    // widened the grant without widening the review.
+    expect(() =>
+      registry.lookupCommand(AI_WRITE_OPERATIONS.classifyAutoAdvance),
+    ).toThrow(DataStoreAuthorizationError)
+    expect(() =>
+      registry.lookupQuery(AI_WRITE_OPERATIONS.classifyAutoAdvance),
+    ).toThrow(DataStoreAuthorizationError)
+  })
+
+  it('keeps every cron statement direct: no guard call, no auto-advance', () => {
+    // These relations are all inside step 007's grant, so routing any of them
+    // through the guard would be both unnecessary and — for the writes —
+    // impossible, since the guard is SELECT-only.
+    const statements = [
+      ...SYSTEM_CRON_QUERY_OPERATIONS.map((operation) =>
+        registry.lookupQuery(operation).build(queryContext(EVERY_PARAM)),
+      ),
+      ...SYSTEM_CRON_COMMAND_OPERATIONS.map((operation) =>
+        registry.lookupCommand(operation).build(commandContext(EVERY_PARAM)),
+      ),
+    ]
+    for (const statement of statements) {
+      expect(statement.text).not.toContain('ai_execute_sql')
+      expect(statement.text).not.toContain('pipeline_auto_advance')
+      expect(statement.text).not.toContain(';')
+    }
+  })
+
+  it('carries the optimistic version predicate in every job-machine write', () => {
+    // The claim, the two stage transitions, the reset and the stale sweep all
+    // key on the version the caller READ. A statement that lost its predicate
+    // would let two workers progress the same briefing in parallel, and nothing
+    // else in the machine would notice.
+    for (const operation of [
+      AI_WRITE_OPERATIONS.briefingClaimJob,
+      AI_WRITE_OPERATIONS.briefingFinishStage,
+      AI_WRITE_OPERATIONS.briefingFailStage,
+      AI_WRITE_OPERATIONS.briefingResetJob,
+      AI_WRITE_OPERATIONS.briefingStaleError,
+    ]) {
+      const statement = registry
+        .lookupCommand(operation)
+        .build(commandContext(EVERY_PARAM))
+      expect(statement.text).toMatch(/AND version = \$\d+::bigint/)
+      // And it bumps the version itself rather than taking a caller's guess at
+      // what the next one is.
+      expect(statement.text).toContain('version = version + 1')
+      expect(statement.values).toContain(EVERY_PARAM.expectedVersion)
+    }
+  })
+
+  it('reads the four out-of-grant briefing relations through the guard', () => {
+    for (const [key, sql] of Object.entries(BRIEFING_CONTEXT_GUARD_SQL)) {
+      expect(sql).toMatch(/^\s*select\b/i)
+      expect(sql).not.toContain(';')
+      // Registered, and registered with exactly this text.
+      const operation = ({
+        campaignsContext: SYSTEM_OPERATIONS.briefingCampaignsContext,
+        hypothesesList: SYSTEM_OPERATIONS.briefingHypothesesList,
+        assignments: SYSTEM_OPERATIONS.briefingAssignments,
+        recentAnnotations: SYSTEM_OPERATIONS.briefingRecentAnnotations,
+      } as Record<string, string>)[key]
+      const statement = registry.lookupQuery(operation).build(queryContext())
+      expect(statement.text).toBe('SELECT public.ai_execute_sql($1) AS result')
+      expect(statement.values).toEqual([sql])
+    }
+    // The one that could grow without bound bounds itself, well under the
+    // guard's 1000-row cap.
+    expect(BRIEFING_CONTEXT_GUARD_SQL.recentAnnotations).toContain('limit 100')
+  })
+
+  it('selects the same columns through the guard as the direct statement does', () => {
+    /** The base column names of a SELECT list, minus casts and aliases. */
+    const selectedColumns = (sql: string): string[] => {
+      const list = /select\s+([\s\S]+?)\s+from\s/i.exec(sql)?.[1] ?? ''
+      return list
+        .split(',')
+        .map((part) => part.trim().split(/::|\s+as\s+/i)[0].trim())
+        .filter(Boolean)
+    }
+    const build = (operation: { build: (context: never) => { text: string } }) =>
+      operation.build({ params: { since: 'x' } } as never).text
+
+    const pairs: [string, string][] = [
+      [build(briefingCampaignsContextOperation), BRIEFING_CONTEXT_GUARD_SQL.campaignsContext],
+      [build(briefingHypothesesListOperation), BRIEFING_CONTEXT_GUARD_SQL.hypothesesList],
+      [build(briefingAssignmentsOperation), BRIEFING_CONTEXT_GUARD_SQL.assignments],
+      [build(briefingRecentAnnotationsOperation), BRIEFING_CONTEXT_GUARD_SQL.recentAnnotations],
+    ]
+    for (const [direct, guarded] of pairs) {
+      const wanted = selectedColumns(direct)
+      expect(wanted.length).toBeGreaterThan(0)
+      // The anti-drift assertion the two texts exist for: a column added to one
+      // provider's read and forgotten in the other's would hand the two
+      // principals different team context for the same briefing.
+      expect(selectedColumns(guarded)).toEqual(wanted)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // notify-replies: which provider answers, and what decides it.
 // ---------------------------------------------------------------------------
 
@@ -376,5 +560,102 @@ describe('notify-replies picks its provider from the AI path flag', () => {
     process.env[NEON_AI_PATH_ENV] = 'neon'
     const denied = await notifyReplies(ping('wrong'))
     expect(denied.status).toBe(401)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The two cron GETs: which provider answers them, now that they are no longer
+// declared blocked. Same technique as the notify block above — no provider is
+// configured, so the branch that ran names its own missing variable.
+// ---------------------------------------------------------------------------
+
+describe('the classify and briefing crons pick their provider from the flag', () => {
+  const SECRET = 'cron-secret-for-this-unit-test'
+  const TOUCHED = [
+    NEON_AI_PATH_ENV,
+    'CRON_SECRET',
+    'NEON_AI_DATABASE_URL',
+    'NEON_DATABASE_URL',
+    'SUPABASE_URL',
+    'VITE_SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+  ] as const
+  const saved = new Map<string, string | undefined>()
+
+  const cron = (path: string, bearer = SECRET) =>
+    new Request(`https://example.test${path}`, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${bearer}` },
+    })
+
+  beforeEach(() => {
+    for (const name of TOUCHED) {
+      saved.set(name, process.env[name])
+      delete process.env[name]
+    }
+    process.env.CRON_SECRET = SECRET
+    // The RUNTIME credential is present throughout, so a branch that quietly
+    // fell back to `app_runtime` would succeed instead of refusing by name.
+    process.env.NEON_DATABASE_URL = 'postgres://runtime-principal@example.test/neon'
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    saved.clear()
+  })
+
+  it('runs classify’s cron on Supabase when the flag is unset', async () => {
+    await expect(classifyCron(cron('/api/classify'))).rejects.toThrow(/SUPABASE_URL/)
+  })
+
+  it('runs classify’s cron on the app_system store when the flag is on', async () => {
+    process.env[NEON_AI_PATH_ENV] = 'neon'
+    await expect(classifyCron(cron('/api/classify'))).rejects.toThrow(
+      /NEON_AI_DATABASE_URL/,
+    )
+  })
+
+  it('checks CRON_SECRET before choosing a provider at all', async () => {
+    process.env[NEON_AI_PATH_ENV] = 'neon'
+    expect((await classifyCron(cron('/api/classify', 'wrong'))).status).toBe(401)
+    expect((await briefingCron(cron('/api/briefing', 'wrong'))).status).toBe(401)
+  })
+
+  /**
+   * The briefing handler swallows every failure into one generic 500 — it must,
+   * because the caller is not entitled to the text — so the provider it chose is
+   * read off the log line it writes on the way out. That text is the endpoint's
+   * own plus `neonConfig.ts`'s own; no driver message and therefore no hostname
+   * can reach it, which is why asserting on it here is safe where asserting on a
+   * driver message would not be.
+   *
+   * The clock is pinned to a Wednesday because the daily cron declines to run
+   * outside Monday-Friday, and a test whose meaning depends on the day it is
+   * run on is not a test.
+   */
+  async function briefingProviderLog(): Promise<string> {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-05T07:00:00.000Z'))
+    const logged: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
+      logged.push(parts.map(String).join(' '))
+    })
+    const response = await briefingCron(cron('/api/briefing?kind=daily'))
+    expect(response.status).toBe(500)
+    return logged.join('\n')
+  }
+
+  it('runs briefing’s cron on Supabase when the flag is unset', async () => {
+    expect(await briefingProviderLog()).toMatch(/SUPABASE_URL/)
+  })
+
+  it('runs briefing’s cron on the app_system store when the flag is on', async () => {
+    process.env[NEON_AI_PATH_ENV] = 'neon'
+    expect(await briefingProviderLog()).toMatch(/NEON_AI_DATABASE_URL/)
   })
 })

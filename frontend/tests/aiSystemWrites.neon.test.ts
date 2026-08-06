@@ -24,13 +24,17 @@
  *
  * ## Two things this file deliberately does not do
  *
- * It never invokes `notify-replies.ts`'s handler. That handler claims whatever
- * the *unscoped* backlog read returns and posts it to Slack; on a project
- * holding real tenant data that would announce, and mutate, rows this suite did
- * not create. So the endpoint's operations are driven through the store with
- * explicit fixture ids, and the endpoint's own composition stays covered by the
- * unit tests in `aiSlice.test.ts`. That is a real gap and it is named here
- * rather than papered over.
+ * It never invokes a cron handler end to end — not `notify-replies.ts`, not
+ * `classify.ts`'s GET, not `briefing.ts`'s GET. Every one of them acts on what
+ * an *unscoped* backlog read returns: the notifier would claim and announce
+ * real replies to Slack, the classifier would send real conversations to
+ * Anthropic and stamp real rows, and the briefing would generate and post a
+ * real briefing. On a project holding real tenant data none of that is a test.
+ * So the endpoints' operations are driven through the store with explicit
+ * fixture ids and fixture keys, and the handlers' own composition — which
+ * provider is chosen, what the response body says — stays covered by the unit
+ * tests in `aiSlice.test.ts`. That is a real gap and it is named here rather
+ * than papered over.
  *
  * And it asserts refusals **by class**, never by message: `42501` arrives as
  * `DataStoreAuthorizationError` and that is what is checked, because driver text
@@ -81,21 +85,31 @@ import {
   type NotifyCandidateRow,
   type NotifyLeadRow,
 } from '../api/_lib/data/operations/aiSystem.js'
-import type {
-  EntityWriteResult,
-  SavedSearchRow,
+import {
+  AI_WRITE_OPERATIONS,
+  type BriefingJobRowShape,
+  type EntityWriteResult,
+  type GenderBatchRow,
+  type PendingReplyRow,
+  type PriorBriefingRow,
+  type SavedSearchRow,
+  type ThreadContextRow,
 } from '../api/_lib/data/operations/index.js'
 import { CONTRACT_ACTORS } from './support/dataStoreContract.js'
 import {
   dropAiSystemFixture,
   readNotifiedAt,
   seedAiSystemFixture,
+  SYSTEM_ANNOTATION_NOTE,
   SYSTEM_BRIEFING_DATE,
   SYSTEM_CAMPAIGN_ID,
+  SYSTEM_HYPOTHESIS_NAME,
   SYSTEM_LEAD_NAME,
+  SYSTEM_PRIOR_BRIEFING_DATE,
   SYSTEM_PROFILE_URL,
   SYSTEM_REPLY_BODIES,
   SYSTEM_SCOPE,
+  SYSTEM_SEARCH_NAME,
   SYSTEM_SEARCH_PLATFORM,
 } from './support/aiSystemFixture.js'
 import {
@@ -162,6 +176,7 @@ async function guard(
 }
 
 let messageIds: readonly number[] = []
+let hypothesisId = 0
 
 /** Claim the given ids as the given actor, through the registered operation. */
 function claimAs(
@@ -197,8 +212,39 @@ beforeAll(async () => {
 beforeEach(async () => {
   const seeded = await outOfBand(seedAiSystemFixture)
   messageIds = seeded.messageIds
+  hypothesisId = seeded.hypothesisId
   expect(messageIds).toHaveLength(SYSTEM_REPLY_BODIES.length)
+  expect(hypothesisId).toBeGreaterThan(0)
 })
+
+/** The briefing job machine's key, as both operations spell it. */
+const jobKey = (briefingKind: 'daily' | 'weekly' = 'daily') => ({
+  briefingDate: SYSTEM_BRIEFING_DATE,
+  briefingKind,
+})
+
+/** One command on the AI store, as the given actor. */
+function systemCommand<TResult>(
+  operation: string,
+  params?: Record<string, string | number | boolean | null>,
+  actor: ActorContext = SYSTEM_ACTOR,
+): Promise<TResult> {
+  return ai().transaction(actor, (transaction) =>
+    transaction.execute<TResult>({ operation, params }),
+  )
+}
+
+/** The job row as the machine reads it, out of the registry rather than by hand. */
+async function readJob(
+  briefingKind: 'daily' | 'weekly' = 'daily',
+): Promise<BriefingJobRowShape | null> {
+  const page = await ai().query<BriefingJobRowShape>(SYSTEM_ACTOR, {
+    operation: AI_WRITE_OPERATIONS.briefingJobRow,
+    params: jobKey(briefingKind),
+    page: { limit: 1 },
+  })
+  return page.items[0] ?? null
+}
 
 afterAll(async () => {
   await outOfBand(dropAiSystemFixture)
@@ -399,76 +445,6 @@ describe('step 007 admits the system statements, and the rows really change', ()
     })
   })
 
-  it('writes briefing_jobs and briefings, the two granted relations no operation names yet', async () => {
-    // These two are in step 007's grant because the briefing job machine will
-    // need them when its cron half moves, but `registerSystemOperations` has no
-    // entry for either — the briefing endpoint's POST runs under a human actor
-    // on the runtime path today. An untested grant is an unproven grant, so the
-    // statements are put through a probe registry rather than left to the
-    // privilege matrix alone: `has_table_privilege` reports the GRANT, and only
-    // a real statement reports the POLICY.
-    const probe = probeStore((registry) => {
-      registry.registerCommand<{ rowCount: number }>('probe.insertBriefingJob', {
-        build: () => ({
-          text: `INSERT INTO public.briefing_jobs (briefing_date, status, seed)
-                 VALUES ($1::date, 'pending', 'S15 system write proof')`,
-          values: [SYSTEM_BRIEFING_DATE],
-        }),
-        mapResult: (_rows, rowCount) => ({ rowCount }),
-      })
-      registry.registerCommand<{ rowCount: number }>('probe.claimBriefingJob', {
-        build: () => ({
-          // The optimistic predicate the briefing machine's own operations
-          // carry, so what is proven is the shape that will actually run.
-          text: `UPDATE public.briefing_jobs
-                    SET status = 'running', version = version + 1
-                  WHERE briefing_date = $1::date AND version = 0`,
-          values: [SYSTEM_BRIEFING_DATE],
-        }),
-        mapResult: (_rows, rowCount) => ({ rowCount }),
-      })
-      registry.registerCommand<{ rowCount: number }>('probe.insertBriefing', {
-        build: () => ({
-          text: `INSERT INTO public.briefings (briefing_date, headline, model)
-                 VALUES ($1::date, 'S15 system write proof', 'none')`,
-          values: [SYSTEM_BRIEFING_DATE],
-        }),
-        mapResult: (_rows, rowCount) => ({ rowCount }),
-      })
-    }, 's15-briefing-probe')
-
-    try {
-      for (const operation of [
-        'probe.insertBriefingJob',
-        'probe.claimBriefingJob',
-        'probe.insertBriefing',
-      ]) {
-        const result = await probe.transaction(SYSTEM_ACTOR, (transaction) =>
-          transaction.execute<{ rowCount: number }>({ operation }),
-        )
-        expect(result.rowCount).toBe(1)
-      }
-    } finally {
-      await probe.close()
-    }
-
-    const job = await outOfBand((client) =>
-      client.query(
-        `SELECT status, version FROM public.briefing_jobs WHERE briefing_date = $1::date`,
-        [SYSTEM_BRIEFING_DATE],
-      ),
-    )
-    expect(job.rows[0]).toMatchObject({ status: 'running', version: 1 })
-
-    const briefing = await outOfBand((client) =>
-      client.query(
-        `SELECT headline FROM public.briefings WHERE briefing_date = $1::date`,
-        [SYSTEM_BRIEFING_DATE],
-      ),
-    )
-    expect(briefing.rows[0]?.headline).toBe('S15 system write proof')
-  })
-
   it('writes through the MCP save_search surface end to end, on the flagged path', async () => {
     // The flag is overridden inside this process only, for this test only —
     // never in a deployment, and never on disk.
@@ -503,7 +479,453 @@ describe('step 007 admits the system statements, and the rows really change', ()
 })
 
 // ---------------------------------------------------------------------------
-// 2. The actor gate. The single most important section in the file: if these
+// 2. The classify cron's vocabulary, under the system principal.
+//
+//    Every statement here is the one the ADMIN path already runs — the same
+//    operation object, registered a second time against the AI store's registry
+//    — so what is measured is not "does this SQL work" but "does `app_system`
+//    get to run it, and does the row move". The handler itself is never called:
+//    its batch would send real conversations to a model. See the file header.
+// ---------------------------------------------------------------------------
+
+const TAXONOMY_VERSION = 'p123-v1'
+const GENDER_VERSION = 'name-headline-v1'
+
+describe('classify.* runs as app_system, and the labels really land', () => {
+  /** The label columns, read out of band as a different principal. */
+  async function readLabels(id: number) {
+    const result = await outOfBand((client) =>
+      client.query(
+        `SELECT sentiment, reason, classified_model, intent_level, intent_reason,
+                intent_taxonomy_version
+           FROM public.messages WHERE id = $1::bigint`,
+        [id],
+      ),
+    )
+    return result.rows[0]
+  }
+
+  /** The unclassified backlog count, through the registered operation. */
+  async function remainingToClassify(): Promise<number> {
+    const page = await ai().query<{ remaining: number }>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.classifyRemainingCount,
+      params: { taxonomyVersion: TAXONOMY_VERSION },
+      page: { limit: 1 },
+    })
+    return page.items[0]?.remaining ?? -1
+  }
+
+  /** Label one reply exactly as the cron would. */
+  function writeLabels(
+    id: number,
+    options: { applySentiment: boolean; actor?: ActorContext },
+  ) {
+    return systemCommand<{ updated: number }>(
+      AI_WRITE_OPERATIONS.classifyWriteLabels,
+      {
+        messageId: id,
+        applySentiment: options.applySentiment,
+        sentiment: 'positive',
+        reason: 'S15 system classify proof',
+        intentLevel: 'p3',
+        intentReason: 'S15 system intent proof',
+        now: new Date().toISOString(),
+        model: 'claude-haiku-4-5',
+        taxonomyVersion: TAXONOMY_VERSION,
+      },
+      options.actor,
+    )
+  }
+
+  it('sees the fixture replies in the unclassified backlog', async () => {
+    // The operation is fleet-wide and ordered newest-first, and the fixture's
+    // replies are dated 2026-01-02, so this walks pages rather than assuming
+    // they land on the first one. A read only — nothing here labels a row it
+    // did not create.
+    const seen = new Set<number>()
+    let cursor: string | null = null
+    for (let page = 0; page < 50; page += 1) {
+      const result: Page<PendingReplyRow> = await ai().query<PendingReplyRow>(
+        SYSTEM_ACTOR,
+        {
+          operation: AI_WRITE_OPERATIONS.classifyPendingReplies,
+          params: { taxonomyVersion: TAXONOMY_VERSION },
+          page: { limit: MAX_PAGE_SIZE, cursor },
+        },
+      )
+      for (const item of result.items) seen.add(item.id)
+      if (!result.hasMore || result.nextCursor === null) break
+      cursor = result.nextCursor
+    }
+    for (const id of messageIds) expect(seen.has(id)).toBe(true)
+  })
+
+  it('reads the conversation context the prompt is rendered from', async () => {
+    const page = await ai().query<ThreadContextRow>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.classifyThreadContext,
+      params: { instances: [SYSTEM_SCOPE], profiles: [SYSTEM_PROFILE_URL] },
+      page: { limit: MAX_PAGE_SIZE },
+    })
+    expect(page.items).toHaveLength(SYSTEM_REPLY_BODIES.length)
+    // Newest first, which is what lets the handler's 5000-row ceiling drop the
+    // OLDEST context rather than the messages around the reply being labelled.
+    const sentAt = page.items.map((row) => row.sent_at)
+    expect([...sentAt].sort().reverse()).toEqual(sentAt)
+    for (const row of page.items) {
+      expect(row.direction).toBe('in')
+      expect(SYSTEM_REPLY_BODIES).toContain(row.body)
+    }
+  })
+
+  it('writes sentiment and intent, and the backlog moves by exactly the batch', async () => {
+    // Absolute numbers belong to the tenant; the DELTA is this suite's doing.
+    const before = await remainingToClassify()
+    expect(before).toBeGreaterThanOrEqual(messageIds.length)
+
+    for (const id of messageIds) {
+      const result = await writeLabels(id, { applySentiment: true })
+      expect(result.updated).toBe(1)
+    }
+
+    // Committed, and visible to another principal on another connection.
+    expect(await readLabels(messageIds[0])).toMatchObject({
+      sentiment: 'positive',
+      reason: 'S15 system classify proof',
+      classified_model: 'claude-haiku-4-5',
+      intent_level: 'p3',
+      intent_taxonomy_version: TAXONOMY_VERSION,
+    })
+
+    expect(before - (await remainingToClassify())).toBe(messageIds.length)
+  })
+
+  it('never overwrites a human sentiment, but still stamps the intent', async () => {
+    // The one asymmetry in the statement, and the reason it is a CASE rather
+    // than two operations: a historical manual row must receive an AI intent
+    // level while its human-corrected sentiment stays untouched.
+    const victim = messageIds[0]
+    await outOfBand((client) =>
+      client.query(
+        `UPDATE public.messages
+            SET sentiment = 'negative', reason = 'human correction',
+                classified_model = 'manual'
+          WHERE id = $1::bigint`,
+        [victim],
+      ),
+    )
+
+    const result = await writeLabels(victim, { applySentiment: false })
+    expect(result.updated).toBe(1)
+    expect(await readLabels(victim)).toMatchObject({
+      sentiment: 'negative',
+      reason: 'human correction',
+      classified_model: 'manual',
+      intent_level: 'p3',
+      intent_taxonomy_version: TAXONOMY_VERSION,
+    })
+  })
+
+  it('selects the fixture lead into the fair gender batch and writes its inference', async () => {
+    // The batch interleaves accounts by within-account position, so a lead that
+    // is its account's ONLY candidate sits at rn = 1 and is therefore in the
+    // first round-robin round — it can only be missed if the fleet has more
+    // than `batchLimit` accounts, which is three orders of magnitude away.
+    const batch = await ai().query<GenderBatchRow>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.classifyGenderBatch,
+      params: {
+        genderVersion: GENDER_VERSION,
+        bucketLimit: 100,
+        batchLimit: 100,
+      },
+      page: { limit: 100 },
+    })
+    const mine = batch.items.find((row) => row.instance_id === SYSTEM_SCOPE)
+    expect(mine).toMatchObject({
+      profile_url: SYSTEM_PROFILE_URL,
+      full_name: SYSTEM_LEAD_NAME,
+    })
+
+    const backlogBefore = await ai().query<{ remaining: number }>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.classifyGenderBacklog,
+      params: { genderVersion: GENDER_VERSION },
+      page: { limit: 1 },
+    })
+
+    const written = await systemCommand<{ updated: number }>(
+      AI_WRITE_OPERATIONS.classifyWriteGender,
+      {
+        instanceId: SYSTEM_SCOPE,
+        profileUrl: SYSTEM_PROFILE_URL,
+        gender: 'unknown',
+        confidence: 0.25,
+        now: new Date().toISOString(),
+        model: 'claude-haiku-4-5',
+        genderVersion: GENDER_VERSION,
+      },
+    )
+    expect(written.updated).toBe(1)
+
+    const stored = await outOfBand((client) =>
+      client.query(
+        `SELECT gender, gender_confidence, gender_model_version, demo_model
+           FROM public.leads WHERE instance_id = $1 AND profile_url = $2`,
+        [SYSTEM_SCOPE, SYSTEM_PROFILE_URL],
+      ),
+    )
+    expect(stored.rows[0]).toMatchObject({
+      gender: 'unknown',
+      gender_confidence: 0.25,
+      gender_model_version: GENDER_VERSION,
+      demo_model: 'claude-haiku-4-5',
+    })
+
+    const backlogAfter = await ai().query<{ remaining: number }>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.classifyGenderBacklog,
+      params: { genderVersion: GENDER_VERSION },
+      page: { limit: 1 },
+    })
+    expect(
+      (backlogBefore.items[0]?.remaining ?? 0) -
+        (backlogAfter.items[0]?.remaining ?? 0),
+    ).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 3. The briefing job machine, under the system principal — and the optimistic
+//    predicate that is the whole reason a resumed job is safe.
+// ---------------------------------------------------------------------------
+
+describe('the briefing job machine runs as app_system', () => {
+  /** Put the fixture job into a known state: pending, version 0. */
+  async function ensureJob(briefingKind: 'daily' | 'weekly' = 'daily') {
+    await systemCommand<void>(AI_WRITE_OPERATIONS.briefingEnsureJob, jobKey(briefingKind))
+    const row = await readJob(briefingKind)
+    if (!row) throw new Error('briefing.ensureJob did not create the job row')
+    return row
+  }
+
+  function claim(
+    expectedStatus: string,
+    expectedVersion: number,
+    nextStatus: string,
+    actor: ActorContext = SYSTEM_ACTOR,
+  ) {
+    return systemCommand<BriefingJobRowShape | null>(
+      AI_WRITE_OPERATIONS.briefingClaimJob,
+      { ...jobKey(), expectedStatus, expectedVersion, nextStatus },
+      actor,
+    )
+  }
+
+  it('creates the job idempotently, pending at version 0', async () => {
+    const first = await ensureJob()
+    expect(first).toMatchObject({
+      briefing_date: SYSTEM_BRIEFING_DATE,
+      briefing_kind: 'daily',
+      status: 'pending',
+      version: 0,
+      attempt: 0,
+    })
+    // `ON CONFLICT DO NOTHING`: a second cron tick on the same day must not
+    // reset a job that is already several stages in.
+    const again = await ensureJob()
+    expect(again.version).toBe(0)
+    expect(again.status).toBe('pending')
+  })
+
+  it('claims the job — and a claim at a stale version takes ZERO rows', async () => {
+    const job = await ensureJob()
+
+    const claimed = await claim('pending', job.version, 'investigating')
+    expect(claimed).toMatchObject({
+      status: 'investigating',
+      version: job.version + 1,
+      attempt: job.attempt + 1,
+    })
+
+    // The property the whole machine rests on. A second worker that read the
+    // row BEFORE the claim above still holds version 0, and its claim must take
+    // nothing — otherwise two workers investigate the same day in parallel,
+    // each overwriting the other's stage artefacts.
+    expect(await claim('pending', job.version, 'investigating')).toBeNull()
+
+    // …and the row is exactly as the winner left it. `null` above is a lost
+    // race, not a silent second write.
+    expect(await readJob()).toMatchObject({
+      status: 'investigating',
+      version: job.version + 1,
+    })
+
+    // The status half of the predicate is load-bearing too: the right version
+    // with the wrong expected status also takes nothing.
+    expect(await claim('pending', job.version + 1, 'verifying')).toBeNull()
+  })
+
+  it('finishes a stage by key presence, and only at the expected version', async () => {
+    const job = await ensureJob()
+    const claimed = await claim('pending', job.version, 'investigating')
+    expect(claimed).not.toBeNull()
+    const version = claimed?.version ?? -1
+
+    const drafts = [{ label: 'operational', text: 'S15 draft' }]
+    const finished = await systemCommand<{ updated: number }>(
+      AI_WRITE_OPERATIONS.briefingFinishStage,
+      {
+        ...jobKey(),
+        nextStatus: 'investigated',
+        expectedVersion: version,
+        patch: JSON.stringify({ seed: 'S15 seed', drafts }),
+      },
+    )
+    expect(finished.updated).toBe(1)
+
+    const after = await readJob()
+    expect(after).toMatchObject({
+      status: 'investigated',
+      version: version + 1,
+      attempt: 0,
+      seed: 'S15 seed',
+      drafts,
+    })
+    // Absent keys mean "leave it alone", which is what lets one statement serve
+    // three stages that each store different columns.
+    expect(after?.verified_text).toBeNull()
+    expect(after?.signals_block).toBeNull()
+
+    // Replaying the same finish — a retry after a lost response — changes
+    // nothing, because its version is now stale.
+    const replay = await systemCommand<{ updated: number }>(
+      AI_WRITE_OPERATIONS.briefingFinishStage,
+      {
+        ...jobKey(),
+        nextStatus: 'investigated',
+        expectedVersion: version,
+        patch: JSON.stringify({ seed: 'REPLAYED' }),
+      },
+    )
+    expect(replay.updated).toBe(0)
+    expect((await readJob())?.seed).toBe('S15 seed')
+  })
+
+  it('fails, resets and stale-errors a stage, each bumping the version once', async () => {
+    const job = await ensureJob()
+    const claimed = await claim('pending', job.version, 'investigating')
+    const version = claimed?.version ?? -1
+
+    const failed = await systemCommand<{ updated: number }>(
+      AI_WRITE_OPERATIONS.briefingFailStage,
+      {
+        ...jobKey(),
+        nextStatus: 'pending',
+        message: 'S15 stage failure',
+        expectedVersion: version,
+      },
+    )
+    expect(failed.updated).toBe(1)
+    expect(await readJob()).toMatchObject({
+      status: 'pending',
+      error: 'S15 stage failure',
+      version: version + 1,
+    })
+
+    const stale = await systemCommand<{ updated: number }>(
+      AI_WRITE_OPERATIONS.briefingStaleError,
+      {
+        ...jobKey(),
+        message: 'S15 kept timing out',
+        expectedVersion: version + 1,
+      },
+    )
+    expect(stale.updated).toBe(1)
+    expect(await readJob()).toMatchObject({
+      status: 'error',
+      error: 'S15 kept timing out',
+      version: version + 2,
+    })
+
+    const reset = await systemCommand<BriefingJobRowShape | null>(
+      AI_WRITE_OPERATIONS.briefingResetJob,
+      { ...jobKey(), expectedVersion: version + 2 },
+    )
+    expect(reset).toMatchObject({
+      status: 'pending',
+      attempt: 0,
+      version: version + 3,
+      seed: null,
+      drafts: null,
+      error: null,
+    })
+    // And the reset is optimistic too: replaying it takes nothing.
+    expect(
+      await systemCommand<BriefingJobRowShape | null>(
+        AI_WRITE_OPERATIONS.briefingResetJob,
+        { ...jobKey(), expectedVersion: version + 2 },
+      ),
+    ).toBeNull()
+  })
+
+  it('upserts the delivered briefing and reads it back as prior and reference', async () => {
+    const upsert = (briefingDate: string, kind: 'daily' | 'weekly', headline: string) =>
+      systemCommand<void>(AI_WRITE_OPERATIONS.briefingUpsertBriefing, {
+        briefingDate,
+        briefingKind: kind,
+        periodStart: briefingDate,
+        periodEnd: briefingDate,
+        headline,
+        summary: 'S15 system briefing summary',
+        changes: JSON.stringify([{ text: 'S15 change' }]),
+        sections: JSON.stringify([]),
+        actions: JSON.stringify([]),
+        risks: JSON.stringify([]),
+        metrics: JSON.stringify([]),
+        model: 'none',
+        createdAt: new Date().toISOString(),
+      })
+
+    await upsert(SYSTEM_PRIOR_BRIEFING_DATE, 'daily', 'S15 prior daily')
+    await upsert(SYSTEM_BRIEFING_DATE, 'daily', 'S15 today daily')
+    await upsert(SYSTEM_BRIEFING_DATE, 'weekly', 'S15 weekly reference')
+
+    // The conflict target is (briefing_date, briefing_kind): a re-run of the
+    // structure stage replaces the row rather than adding a second one.
+    await upsert(SYSTEM_BRIEFING_DATE, 'daily', 'S15 today daily, corrected')
+    const stored = await outOfBand((client) =>
+      client.query(
+        `SELECT briefing_kind, headline FROM public.briefings
+          WHERE briefing_date = $1::date ORDER BY briefing_kind`,
+        [SYSTEM_BRIEFING_DATE],
+      ),
+    )
+    expect(stored.rows).toEqual([
+      { briefing_kind: 'daily', headline: 'S15 today daily, corrected' },
+      { briefing_kind: 'weekly', headline: 'S15 weekly reference' },
+    ])
+
+    // `briefing.prior` is a fleet-wide `briefing_date < $1` read, so the
+    // fixture's far-future dates are what make its answer deterministic here.
+    const prior = await ai().query<PriorBriefingRow>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.briefingPrior,
+      params: { briefingDate: SYSTEM_BRIEFING_DATE, briefingKind: 'daily' },
+      page: { limit: 1 },
+    })
+    expect(prior.items[0]).toMatchObject({
+      briefing_date: SYSTEM_PRIOR_BRIEFING_DATE,
+      headline: 'S15 prior daily',
+      changes: [{ text: 'S15 change' }],
+    })
+
+    const weekly = await ai().query<PriorBriefingRow>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.briefingWeeklyReference,
+      params: { briefingDate: SYSTEM_BRIEFING_DATE, briefingKind: 'weekly' },
+      page: { limit: 1 },
+    })
+    expect(weekly.items[0]?.headline).toBe('S15 weekly reference')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 4. The actor gate. The single most important section in the file: if these
 //    pass with any published actor, step 007's `USING`/`WITH CHECK` does
 //    nothing and every grant above is unconditional.
 // ---------------------------------------------------------------------------
@@ -599,6 +1021,106 @@ describe('the nil-uuid actor gate is load-bearing, not ceremony', () => {
       )
       expect(after.rows[0]?.n).toBe(before.rows[0]?.n)
     })
+
+    it(`cannot label a reply as ${label}, and the columns stay NULL`, async () => {
+      const victim = messageIds[0]
+      const denied = await systemCommand<{ updated: number }>(
+        AI_WRITE_OPERATIONS.classifyWriteLabels,
+        {
+          messageId: victim,
+          applySentiment: true,
+          sentiment: 'positive',
+          reason: `S15 forbidden ${label}`,
+          intentLevel: 'p3',
+          intentReason: `S15 forbidden ${label}`,
+          now: new Date().toISOString(),
+          model: 'claude-haiku-4-5',
+          taxonomyVersion: TAXONOMY_VERSION,
+        },
+        actor,
+      )
+      // Zero rows, not a throw — the USING clause hid the row from the UPDATE.
+      expect(denied.updated).toBe(0)
+
+      const stored = await outOfBand((client) =>
+        client.query(
+          `SELECT sentiment, intent_level, intent_taxonomy_version
+             FROM public.messages WHERE id = $1::bigint`,
+          [victim],
+        ),
+      )
+      expect(stored.rows[0]).toEqual({
+        sentiment: null,
+        intent_level: null,
+        intent_taxonomy_version: null,
+      })
+    })
+
+    it(`cannot create a briefing job as ${label}`, async () => {
+      // An INSERT again, so this one raises. The fixture reset ran in
+      // `beforeEach`, so there is no row for `ON CONFLICT DO NOTHING` to hide
+      // behind — the WITH CHECK is genuinely evaluated.
+      await expect(
+        systemCommand<void>(
+          AI_WRITE_OPERATIONS.briefingEnsureJob,
+          jobKey(),
+          actor,
+        ),
+      ).rejects.toBeInstanceOf(DataStoreAuthorizationError)
+
+      const rows = await outOfBand((client) =>
+        client.query(
+          `SELECT count(*)::int AS n FROM public.briefing_jobs
+            WHERE briefing_date = $1::date`,
+          [SYSTEM_BRIEFING_DATE],
+        ),
+      )
+      expect(rows.rows[0]?.n).toBe(0)
+    })
+
+    it(`cannot claim a briefing job as ${label}`, async () => {
+      await systemCommand<void>(AI_WRITE_OPERATIONS.briefingEnsureJob, jobKey())
+
+      const denied = await systemCommand<BriefingJobRowShape | null>(
+        AI_WRITE_OPERATIONS.briefingClaimJob,
+        {
+          ...jobKey(),
+          expectedStatus: 'pending',
+          expectedVersion: 0,
+          nextStatus: 'investigating',
+        },
+        actor,
+      )
+      // A lost race and a denied actor look the same to the caller — both are
+      // `null` — which is exactly why the row state is asserted next.
+      expect(denied).toBeNull()
+      expect(await readJob()).toMatchObject({ status: 'pending', version: 0 })
+
+      // The control: the same statement, the same store, the nil uuid.
+      expect(
+        await systemCommand<BriefingJobRowShape | null>(
+          AI_WRITE_OPERATIONS.briefingClaimJob,
+          {
+            ...jobKey(),
+            expectedStatus: 'pending',
+            expectedVersion: 0,
+            nextStatus: 'investigating',
+          },
+        ),
+      ).toMatchObject({ status: 'investigating', version: 1 })
+    })
+
+    it(`sees no briefing_jobs row at all as ${label}`, async () => {
+      await systemCommand<void>(AI_WRITE_OPERATIONS.briefingEnsureJob, jobKey())
+
+      const page = await ai().query<BriefingJobRowShape>(actor, {
+        operation: AI_WRITE_OPERATIONS.briefingJobRow,
+        params: jobKey(),
+        page: { limit: 1 },
+      })
+      expect(page.items).toHaveLength(0)
+      expect(await readJob()).not.toBeNull()
+    })
   }
 
   it('admits the very same statements again once the nil uuid is published', async () => {
@@ -610,15 +1132,21 @@ describe('the nil-uuid actor gate is load-bearing, not ceremony', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 3. What step 007 did NOT open. This is what makes the guard-vs-direct split
+// 5. What step 007 did NOT open. This is what makes the guard-vs-direct split
 //    in `aiSystem.ts` a fact rather than a comment.
 // ---------------------------------------------------------------------------
 
 describe('the empty grant set still holds outside the five relations', () => {
+  // Exactly the five relations the briefing's team-context preload reads and
+  // step 007 did not grant. Each has a guard-backed twin asserted below, so the
+  // pair is a genuine contrast: same principal, same store, same session — one
+  // route refused, the other serving.
   const DIRECT_PROBES = {
     campaigns: 'probe.campaignsDirect',
     instances: 'probe.instancesDirect',
     annotations: 'probe.annotationsDirect',
+    hypotheses: 'probe.hypothesesDirect',
+    hypothesis_campaigns: 'probe.hypothesisCampaignsDirect',
   } as const
 
   let probe: NeonDataStore
@@ -674,10 +1202,83 @@ describe('the empty grant set still holds outside the five relations', () => {
     ) as readonly { id: string; account_name: string | null }[]
     expect(instances.some((row) => row.id === SYSTEM_SCOPE)).toBe(true)
   })
+
+  it('reaches the briefing team context through the guard, row shape included', async () => {
+    const guardRows = async <TRow>(operation: string): Promise<readonly TRow[]> =>
+      firstGuardResult(
+        await ai().query<unknown[]>(SYSTEM_ACTOR, { operation, page: { limit: 1 } }),
+      ) as readonly TRow[]
+
+    const campaigns = await guardRows<{
+      id: string
+      name: string
+      instance_id: string
+      briefing_context: string | null
+    }>(SYSTEM_OPERATIONS.briefingCampaignsContext)
+    expect(campaigns.find((row) => row.id === SYSTEM_CAMPAIGN_ID)).toMatchObject({
+      instance_id: SYSTEM_SCOPE,
+      name: 'S15 AI system campaign',
+    })
+
+    const hypotheses = await guardRows<{ id: number; name: string }>(
+      SYSTEM_OPERATIONS.briefingHypothesesList,
+    )
+    const mine = hypotheses.find((row) => row.name === SYSTEM_HYPOTHESIS_NAME)
+    expect(mine?.id).toBe(hypothesisId)
+    // Load-bearing, not incidental: the direct operation maps this column with
+    // `Number`, and `composeTeamContext` keys a Map on it. A guard read that
+    // handed back the id as a string would silently drop every campaign's
+    // hypothesis from the briefing's context block without failing anything.
+    expect(typeof mine?.id).toBe('number')
+
+    const assignments = await guardRows<{
+      hypothesis_id: number
+      campaign_id: string
+    }>(SYSTEM_OPERATIONS.briefingAssignments)
+    expect(
+      assignments.find((row) => row.campaign_id === SYSTEM_CAMPAIGN_ID),
+    ).toEqual({ hypothesis_id: hypothesisId, campaign_id: SYSTEM_CAMPAIGN_ID })
+
+    const annotations = await guardRows<{
+      instance_id: string | null
+      campaign_id: string | null
+      note: string
+      noted_at: string
+    }>(SYSTEM_OPERATIONS.briefingRecentAnnotations)
+    // The only one of the five whose relation grows without bound, and the only
+    // one carrying its own LIMIT — so the guard's 1000-row cap is unreachable
+    // by construction, and this asserts the smaller bound rather than the cap.
+    expect(annotations.length).toBeLessThanOrEqual(100)
+    expect(
+      annotations.find((row) => row.note === SYSTEM_ANNOTATION_NOTE),
+    ).toMatchObject({
+      instance_id: SYSTEM_SCOPE,
+      campaign_id: SYSTEM_CAMPAIGN_ID,
+    })
+  })
+
+  it('reads the sixth context relation DIRECTLY — saved_searches is in the grant', async () => {
+    // The control for the section: `briefing.assignedSearches` has no guard
+    // twin because it needs none, and it is the same direct statement the human
+    // path runs. If step 007's saved_searches grant ever went away, this fails
+    // while every guard read above keeps passing.
+    const page = await ai().query<{
+      name: string
+      hypothesis_id: number | null
+      notes: string | null
+    }>(SYSTEM_ACTOR, {
+      operation: AI_WRITE_OPERATIONS.briefingAssignedSearches,
+      page: { limit: MAX_PAGE_SIZE },
+    })
+    expect(page.items.find((row) => row.name === SYSTEM_SEARCH_NAME)).toMatchObject({
+      hypothesis_id: hypothesisId,
+      notes: 'S15 system assigned-search context',
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------
-// 4. No DELETE. Anywhere.
+// 6. No DELETE. Anywhere.
 // ---------------------------------------------------------------------------
 
 describe('app_system holds SELECT, INSERT, UPDATE — and never DELETE', () => {
@@ -780,7 +1381,7 @@ describe('app_system holds SELECT, INSERT, UPDATE — and never DELETE', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 5. `pipeline_auto_advance()` is out of reach — which is the entire
+// 7. `pipeline_auto_advance()` is out of reach — which is the entire
 //    justification for step 008 existing as an unapplied artifact rather than
 //    the cron quietly finding a way to call it.
 // ---------------------------------------------------------------------------
@@ -848,7 +1449,7 @@ describe('pipeline_auto_advance is unreachable, by both routes', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 6. The claim under real concurrency.
+// 8. The claim under real concurrency.
 // ---------------------------------------------------------------------------
 
 /**

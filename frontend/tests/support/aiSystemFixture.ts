@@ -47,8 +47,32 @@ export const SYSTEM_SEARCH_PLATFORM = SYSTEM_SCOPE
  * and carry no scope column at all, so the namespace has to be the date itself.
  * A date this far out cannot collide with a briefing the tenant will ever have,
  * and the teardown names it exactly.
+ *
+ * The PRIOR date is the day before, and it exists so `briefing.prior` — which
+ * reads `briefing_date < $1` fleet-wide and would otherwise answer with the
+ * tenant's real briefings — has a deterministic newest row to find.
  */
 export const SYSTEM_BRIEFING_DATE = '2099-12-31'
+export const SYSTEM_PRIOR_BRIEFING_DATE = '2099-12-30'
+const SYSTEM_BRIEFING_DATES = [
+  SYSTEM_BRIEFING_DATE,
+  SYSTEM_PRIOR_BRIEFING_DATE,
+] as const
+
+/**
+ * The team-context rows the briefing cron reads through the guard.
+ *
+ * `hypotheses` is unique on `name` and `annotations` has no natural key, so both
+ * are namespaced by a literal this file owns and both teardowns name it exactly.
+ * The annotation is dated TODAY because the guard query's window is
+ * `noted_at >= now() - interval '30 days'` — a fixture outside the window would
+ * make the read look empty for the wrong reason.
+ */
+export const SYSTEM_HYPOTHESIS_NAME = 'S15 AI system hypothesis'
+export const SYSTEM_ANNOTATION_NOTE =
+  'S15 system path — team context annotation.'
+/** Namespaced by platform like every other library row this fixture writes. */
+export const SYSTEM_SEARCH_NAME = 'S15 system assigned search'
 
 /**
  * Three unannounced inbound replies. Three rather than one because the
@@ -68,7 +92,13 @@ const SYSTEM_REPLY_SENT_AT = [
   '2026-01-02T11:00:00.000Z',
 ] as const
 
-/** Every row this fixture and its tests can have written, namespace by namespace. */
+/**
+ * Every row this fixture and its tests can have written, namespace by namespace.
+ *
+ * The order is a dependency order, not a preference: `saved_searches` points at
+ * `hypotheses`, `hypothesis_campaigns` points at both `hypotheses` and the
+ * fixture campaign, and `dropAiSystemFixture` removes that campaign afterwards.
+ */
 export async function resetAiSystemFixture(client: PoolClient): Promise<void> {
   await client.query(`DELETE FROM public.messages WHERE instance_id = $1`, [
     SYSTEM_SCOPE,
@@ -80,12 +110,23 @@ export async function resetAiSystemFixture(client: PoolClient): Promise<void> {
     SYSTEM_SEARCH_PLATFORM,
   ])
   await client.query(
-    `DELETE FROM public.briefing_jobs WHERE briefing_date = $1::date`,
-    [SYSTEM_BRIEFING_DATE],
+    `DELETE FROM public.hypothesis_campaigns
+      WHERE hypothesis_id IN (SELECT id FROM public.hypotheses WHERE name = $1)`,
+    [SYSTEM_HYPOTHESIS_NAME],
+  )
+  await client.query(`DELETE FROM public.hypotheses WHERE name = $1`, [
+    SYSTEM_HYPOTHESIS_NAME,
+  ])
+  await client.query(`DELETE FROM public.annotations WHERE instance_id = $1`, [
+    SYSTEM_SCOPE,
+  ])
+  await client.query(
+    `DELETE FROM public.briefing_jobs WHERE briefing_date = ANY($1::date[])`,
+    [[...SYSTEM_BRIEFING_DATES]],
   )
   await client.query(
-    `DELETE FROM public.briefings WHERE briefing_date = $1::date`,
-    [SYSTEM_BRIEFING_DATE],
+    `DELETE FROM public.briefings WHERE briefing_date = ANY($1::date[])`,
+    [[...SYSTEM_BRIEFING_DATES]],
   )
 }
 
@@ -101,6 +142,8 @@ export async function dropAiSystemFixture(client: PoolClient): Promise<void> {
 export interface SeededAiSystemFixture {
   /** The three reply ids, oldest first — the order the notifier drains in. */
   readonly messageIds: readonly number[]
+  /** The fixture hypothesis, whose id the assignment and search rows carry. */
+  readonly hypothesisId: number
 }
 
 export async function seedAiSystemFixture(
@@ -153,7 +196,37 @@ export async function seedAiSystemFixture(
     ],
   )
 
-  return { messageIds: inserted.rows.map((row) => Number(row.id)) }
+  // The team-context rows the briefing cron reads. `annotations.noted_at` is a
+  // calendar date and is set to today so it falls inside the guard query's
+  // 30-day window; the saved search carries `hypothesis_id` because
+  // `briefing.assignedSearches` selects only assigned, non-archived rows.
+  const hypothesis = await client.query<{ id: string }>(
+    `INSERT INTO public.hypotheses (name, description)
+     VALUES ($1, 'S15 AI system fixture hypothesis')
+     RETURNING id::text AS id`,
+    [SYSTEM_HYPOTHESIS_NAME],
+  )
+  const hypothesisId = Number(hypothesis.rows[0]?.id ?? 0)
+  await client.query(
+    `INSERT INTO public.hypothesis_campaigns (hypothesis_id, campaign_id)
+     VALUES ($1::bigint, $2)`,
+    [hypothesisId, SYSTEM_CAMPAIGN_ID],
+  )
+  await client.query(
+    `INSERT INTO public.annotations (instance_id, campaign_id, note, noted_at)
+     VALUES ($1, $2, $3, current_date)`,
+    [SYSTEM_SCOPE, SYSTEM_CAMPAIGN_ID, SYSTEM_ANNOTATION_NOTE],
+  )
+  await client.query(
+    `INSERT INTO public.saved_searches (name, platform, hypothesis_id, notes)
+     VALUES ($1, $2, $3::bigint, 'S15 system assigned-search context')`,
+    [SYSTEM_SEARCH_NAME, SYSTEM_SEARCH_PLATFORM, hypothesisId],
+  )
+
+  return {
+    messageIds: inserted.rows.map((row) => Number(row.id)),
+    hypothesisId,
+  }
 }
 
 /** Read the claim state of the fixture's replies, out of band. */

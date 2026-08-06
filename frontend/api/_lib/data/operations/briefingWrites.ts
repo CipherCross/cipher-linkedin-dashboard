@@ -500,6 +500,73 @@ export const briefingRecentAnnotationsOperation: NeonQueryOperation<
   }),
 }
 
+/**
+ * The four context reads again, as guard SQL — and the reason they exist twice.
+ *
+ * The operations above are direct statements, and they are correct for the
+ * human path: `app_runtime` holds `SELECT` on `campaigns`, `hypotheses`,
+ * `hypothesis_campaigns` and `annotations`. The cron half has no human and runs
+ * as `app_system`, which ledger step 007 gave **no** privilege on any of those
+ * four — a direct statement is refused with 42501. Their only route is
+ * `public.ai_execute_sql`, whose owner `app_ai_runner` reads every business
+ * table SELECT-only, and the guard takes its query as text.
+ *
+ * So the text lives here rather than in `aiSystem.ts`: a column added to the
+ * direct read and forgotten in the guard read would give the two principals
+ * different team context for the same briefing, and the only defence against
+ * that is the two statements sitting where one edit sees both. `saved_searches`
+ * needs no twin — it is inside the 007 grant, so both principals run the direct
+ * `briefingAssignedSearchesOperation`.
+ *
+ * **The 1000-row cap**, stated per query rather than assumed away. The guard
+ * aggregates at most 1000 rows and does not say it truncated:
+ *
+ * - `campaigns` — one row per campaign per account. Dozens fleet-wide; three
+ *   orders of magnitude of headroom.
+ * - `hypotheses` — live (non-archived) go-to-market hypotheses, a hand-curated
+ *   list in the tens.
+ * - `hypothesis_campaigns` — unique on `campaign_id`, so it is bounded ABOVE by
+ *   the campaign count. It cannot reach the cap before `campaigns` does.
+ * - `annotations` — the only one that could grow without bound, and the only
+ *   one carrying its own `LIMIT 100`. The cap is unreachable by construction.
+ *
+ * Two representational notes, because these rows reach a model. The direct
+ * operations cast bigint ids to text and map them with `Number`; the guard
+ * leaves them as jsonb numbers, which is the same JavaScript number, so the
+ * `hypothesis_id` joins in `composeTeamContext` behave identically. And
+ * `briefing_context_updated_at` crosses as an ISO string either way — the
+ * driver normalizes `timestamptz`, and `to_jsonb` renders it — differing only
+ * in the `Z`/`+00:00` spelling of a value the model reads as prose.
+ */
+export const BRIEFING_CONTEXT_GUARD_SQL = {
+  campaignsContext: `
+select id, name, instance_id, briefing_context, briefing_context_updated_at
+from campaigns
+order by name
+`.trim(),
+  hypothesesList: `
+select id, name, description
+from hypotheses
+where archived = false
+order by name
+`.trim(),
+  assignments: `
+select hypothesis_id, campaign_id
+from hypothesis_campaigns
+`.trim(),
+  // `now() - interval '30 days'` rather than a bound parameter, because the
+  // guard's signature is `ai_execute_sql(text)` and there is nowhere to bind
+  // one. The window is the same 30 days the Supabase and direct paths compute
+  // in JavaScript, evaluated one layer down instead.
+  recentAnnotations: `
+select instance_id, campaign_id, note, noted_at
+from annotations
+where noted_at >= now() - interval '30 days'
+order by noted_at desc
+limit 100
+`.trim(),
+} as const
+
 export const BRIEFING_WRITE_COMMANDS = {
   ensureJob: AI_WRITE_OPERATIONS.briefingEnsureJob,
   claimJob: AI_WRITE_OPERATIONS.briefingClaimJob,

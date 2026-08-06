@@ -7,12 +7,23 @@
 // path. Campaign context is always preloaded and attributed as team-provided
 // background so the model does not invent causal explanations from funnel data.
 //
-// AI-path split, by actor: the admin POST moves with `NEON_AI_PATH_DEFAULT=neon`
-// — actor and admin role resolve against Neon, and the whole job machine
-// (claims, stages, the briefing upsert) runs there, because a briefing cannot
-// investigate Neon while recording its job state in Supabase. The GET cron has
-// no human actor and stays on Supabase, declared blocked, until ledger step
-// 007 (the system write path) is applied.
+// AI-path split, by actor — and since ledger step 007 was applied, both halves
+// move with `NEON_AI_PATH_DEFAULT=neon`. Actor and admin role resolve against
+// Neon for the POST; the GET cron has no human actor and runs on the AI store as
+// `app_system` under `SYSTEM_ACTOR`. Either way the WHOLE job machine (claims,
+// stages, the briefing upsert) runs on the same database the investigation
+// reads, because a briefing cannot investigate Neon while recording its job
+// state in Supabase.
+//
+// What differs between the two principals is exactly one method of the seam.
+// Step 007 granted `app_system` `briefing_jobs`, `briefings` and
+// `saved_searches`, so the job machine and the assigned-search context read are
+// direct statements for both. It granted nothing on `campaigns`, `instances`,
+// `hypotheses`, `hypothesis_campaigns` or `annotations` — the other five
+// team-context relations — so the cron reads those through the SELECT-only
+// guard, which is the only route to them. See `loadTeamContext` below and
+// `BRIEFING_CONTEXT_GUARD_SQL`, where each guard query sits beside the direct
+// statement it must stay equivalent to.
 import { generateObject, generateText, stepCountIs } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import {
@@ -40,6 +51,7 @@ import {
 import type { BriefingKind, BriefingPeriod, StructuredBriefing } from './_lib/briefing.js'
 import { guardAdmin, guardMachine, authorizationResponse, AuthorizationError } from './_lib/auth.js'
 import { deploymentAiPath } from './_lib/data/aiPath.js'
+import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
   DataStoreContractError,
   MAX_PAGE_SIZE,
@@ -51,6 +63,10 @@ import {
   AI_WRITE_OPERATIONS,
   type BriefingJobRowShape,
 } from './_lib/data/operations/index.js'
+import {
+  firstGuardResult,
+  SYSTEM_OPERATIONS,
+} from './_lib/data/operations/aiSystem.js'
 import { neonWriter, type NeonWriteDeps } from './_lib/neonWrites.js'
 
 export const maxDuration = 300
@@ -1173,10 +1189,30 @@ async function runToCompletion(
   return result
 }
 
+/**
+ * How the five out-of-grant team-context relations are read.
+ *
+ * `direct` is the human path: `app_runtime` holds `SELECT` on all of them and
+ * runs the statements in `briefingWrites.ts`. `guard` is the cron: `app_system`
+ * holds no privilege on any of them, so a direct statement is refused with
+ * 42501, and `public.ai_execute_sql` — whose owner reads every business table,
+ * SELECT-only, 1000 rows, 10 seconds — is the only route.
+ *
+ * It is a parameter of ONE method rather than a second implementation of the
+ * seam because everything else is identical: the job machine writes the three
+ * relations step 007 did grant, with the same statements and the same
+ * optimistic `WHERE version = $n` predicates.
+ */
+type TeamContextRoute = 'direct' | 'guard'
+
 /** The Neon implementation of the seam — registered operations under the
  *  caller's resolved actor. Driver failures are sanitized at this boundary:
  *  whatever is rethrown carries no driver text (and therefore no hostname). */
-function neonBriefingData(store: DataStore, actor: ActorContext): BriefingData {
+function neonBriefingData(
+  store: DataStore,
+  actor: ActorContext,
+  contextRoute: TeamContextRoute = 'direct',
+): BriefingData {
   const toJobRow = (shape: BriefingJobRowShape): BriefingJobRow => ({
     ...shape,
     status: shape.status as JobStatus,
@@ -1228,6 +1264,35 @@ function neonBriefingData(store: DataStore, actor: ActorContext): BriefingData {
       cursor = page.nextCursor
     }
     return rows
+  }
+
+  /**
+   * One guard call, which answers in a different SHAPE from a direct read: the
+   * statement returns a single row whose one jsonb column is the whole result
+   * set, so there is exactly one page and `firstGuardResult` unwraps it. That is
+   * also why these queries take no parameter — the guard's signature is
+   * `ai_execute_sql(text)` and there is nothing to bind — and why each is a
+   * whole-relation read of a small relation, filtered nowhere or filtered in
+   * SQL. The row-count headroom against the 1000-row cap is recorded per query
+   * beside the SQL.
+   */
+  async function guardRows<TRow>(operation: string): Promise<TRow[]> {
+    const page = await guarded(() =>
+      store.query<unknown[]>(actor, { operation, page: { limit: 1 } }),
+    )
+    return firstGuardResult(page) as TRow[]
+  }
+
+  /**
+   * A team-context relation, by whichever route this principal has to it. Both
+   * operation names are named at the call site rather than resolved from a
+   * table, so a reader sees which statement each principal runs without leaving
+   * the line.
+   */
+  function contextRows<TRow>(direct: string, guard: string): Promise<TRow[]> {
+    return contextRoute === 'guard'
+      ? guardRows<TRow>(guard)
+      : allPages<TRow>(direct)
   }
 
   const jobParams = (kind: BriefingKind, briefingDate: string) => ({
@@ -1317,21 +1382,60 @@ function neonBriefingData(store: DataStore, actor: ActorContext): BriefingData {
       })
     },
     async loadTeamContext() {
+      // The direct annotations read takes the window as a bound parameter; the
+      // guard one cannot take a parameter at all and spells the same 30 days as
+      // `now() - interval '30 days'`. Computing it here anyway keeps the direct
+      // branch identical to what it was.
       const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
       const [campaigns, instances, hypotheses, assignments, searches, annotations] =
         await Promise.all([
-          allPages<CampaignContextRow>(AI_WRITE_OPERATIONS.briefingCampaignsContext),
-          allPages<TeamContextRows['instances'][number]>(
-            AI_WRITE_OPERATIONS.briefingInstancesList,
+          contextRows<CampaignContextRow>(
+            AI_WRITE_OPERATIONS.briefingCampaignsContext,
+            SYSTEM_OPERATIONS.briefingCampaignsContext,
           ),
-          allPages<HypothesisRow>(AI_WRITE_OPERATIONS.briefingHypothesesList),
-          allPages<HypothesisCampaignRow>(AI_WRITE_OPERATIONS.briefingAssignments),
+          contextRows<TeamContextRows['instances'][number]>(
+            AI_WRITE_OPERATIONS.briefingInstancesList,
+            // The notifier's account read: same relation, same three columns,
+            // so one guard entry serves both machine callers.
+            SYSTEM_OPERATIONS.instanceNames,
+          ),
+          contextRows<HypothesisRow>(
+            AI_WRITE_OPERATIONS.briefingHypothesesList,
+            SYSTEM_OPERATIONS.briefingHypothesesList,
+          ),
+          contextRows<HypothesisCampaignRow>(
+            AI_WRITE_OPERATIONS.briefingAssignments,
+            SYSTEM_OPERATIONS.briefingAssignments,
+          ),
+          // `saved_searches` is inside step 007's grant, so this one is direct
+          // for both principals and has no guard twin.
           allPages<SearchContextRow>(AI_WRITE_OPERATIONS.briefingAssignedSearches),
-          allPages<AnnotationRow>(AI_WRITE_OPERATIONS.briefingRecentAnnotations, { since }),
+          contextRoute === 'guard'
+            ? guardRows<AnnotationRow>(SYSTEM_OPERATIONS.briefingRecentAnnotations)
+            : allPages<AnnotationRow>(AI_WRITE_OPERATIONS.briefingRecentAnnotations, {
+                since,
+              }),
         ])
       return { campaigns, instances, hypotheses, assignments, searches, annotations }
     },
   }
+}
+
+/**
+ * The cron's seam: the AI store as `app_system`, with the out-of-grant context
+ * relations routed through the guard.
+ *
+ * One consequence worth stating, because it is a behaviour change and not a
+ * detail. On the human path the seed queries go to the AI store while the job
+ * machine goes to the shared runtime store; here EVERYTHING — eight seed
+ * queries, six context reads, the job reads and writes — shares the AI store's
+ * two-connection pool and is therefore serialized two at a time rather than run
+ * wide. These are sub-second reads and the handler's budget is 300 s, so the
+ * cost is latency, not correctness; raising the ceiling would trade a scarce
+ * shared connection budget for it and is deliberately not done here.
+ */
+function systemBriefingData(): BriefingData {
+  return neonBriefingData(getAiDataStore(), SYSTEM_ACTOR, 'guard')
 }
 
 /** The Neon branch of the admin POST. Actor and admin role resolve against
@@ -1393,9 +1497,9 @@ export async function handleBriefing(
   if (req.method === 'GET') {
     const denied = await guardMachine(req, 'CRON_SECRET')
     if (denied) return denied
-    // The cron stays on Supabase whatever NEON_AI_PATH_DEFAULT says: it has no
-    // human actor, and the system write path (ledger step 007) is written but
-    // not applied yet. Declared blocked, not silently routed.
+    // The cron's provider is chosen below, after the scheduled-weekday check —
+    // it has no actor to resolve, so the flag is the whole decision and there
+    // is nothing to do here that the shared code below does not already do.
   } else if (deploymentAiPath() === 'neon') {
     return briefingOnNeon(req, kind, deps)
   } else {
@@ -1409,11 +1513,17 @@ export async function handleBriefing(
   }
 
   try {
-    const data = supabaseBriefingData(db())
     if (req.method === 'GET') {
-      return json(await runToCompletion(data, kind, now, false, true, buildTools()))
+      // The cron half. `buildTools()` needs no request either way: its read-only
+      // tools go through `executeSql`/`executeNamedSql`, which already pick the
+      // AI store when the flag is on, and the machine caller has no member to
+      // write a saved search as.
+      const cron =
+        deploymentAiPath() === 'neon' ? systemBriefingData() : supabaseBriefingData(db())
+      return json(await runToCompletion(cron, kind, now, false, true, buildTools()))
     }
 
+    const data = supabaseBriefingData(db())
     const options = await req.json().catch(() => null) as {
       full?: unknown
       send_slack?: unknown
