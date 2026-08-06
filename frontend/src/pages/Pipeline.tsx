@@ -27,7 +27,8 @@ const INTAKE = 'untriaged'
 export function Pipeline() {
   const { data } = useData()
   const { openConversation } = useConversation()
-  const { setStage, assign, actor, members, memberName } = usePipelineActions()
+  const { setStage, assign, actor, members, memberName, memberWritesBlockedReason } =
+    usePipelineActions()
   const [params, setParams] = useSearchParams()
 
   const inst = params.get('inst') ?? 'all'
@@ -264,6 +265,7 @@ export function Pipeline() {
                     }}
                     onSubstatus={(sub) => void setStage(l, l.pipeline_stage, { substatus: sub })}
                     onAssign={(memberId) => void assign(l, memberId)}
+                    assignBlockedReason={memberWritesBlockedReason}
                     draggingRef={draggingId}
                   />
                 ))}
@@ -300,6 +302,7 @@ function PipeCard({
   followUpOwnerName,
   latestMessage,
   members,
+  assignBlockedReason,
   onOpen,
   onDragStart,
   onDragEnd,
@@ -318,6 +321,12 @@ function PipeCard({
   followUpOwnerName: string
   latestMessage?: ConversationLatestMessage
   members: { id: number; name: string }[]
+  /**
+   * Why the owner cannot be changed, or `null` when it can. The select keeps its
+   * options either way — it displays the current owner, and a value with no
+   * matching option would read as "Unassigned".
+   */
+  assignBlockedReason: string | null
   onOpen: () => void
   onDragStart: (e: React.DragEvent) => void
   onDragEnd: () => void
@@ -447,6 +456,8 @@ function PipeCard({
             onMouseDown={stopControl}
             onClick={stopControl}
             onChange={(e) => onAssign(e.target.value ? Number(e.target.value) : null)}
+            disabled={assignBlockedReason !== null}
+            title={assignBlockedReason ?? undefined}
           >
             <option value="">Unassigned</option>
             {members.map((m) => (

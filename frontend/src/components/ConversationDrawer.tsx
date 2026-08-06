@@ -60,7 +60,8 @@ export function ConversationDrawer({
   const { isAdmin } = useAuth()
   const { data, refetch, patchLead } = useData()
   const toast = useToast()
-  const { setStage, assign, members } = usePipelineActions()
+  const { setStage, assign, members, memberWritesBlockedReason } =
+    usePipelineActions()
   const [pendingLost, setPendingLost] = useState(false)
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -642,9 +643,17 @@ export function ConversationDrawer({
             )}
             <label className="filter-field">
               <span className="filter-label">Owner</span>
+              {/* Disabled rather than emptied. This control *displays* the
+                  current owner as well as changing them, and a select whose
+                  value matches no option renders as "Unassigned" — so dropping
+                  the options would turn a blocked write into a wrong reading.
+                  The chooser in `FollowUpPanel`, which displays nothing, empties
+                  its list instead. */}
               <select
                 value={String(live.assigned_to ?? '')}
                 onChange={(e) => void assign(live, e.target.value ? Number(e.target.value) : null)}
+                disabled={memberWritesBlockedReason !== null}
+                title={memberWritesBlockedReason ?? undefined}
               >
                 <option value="">Unassigned</option>
                 {members.map((m) => (

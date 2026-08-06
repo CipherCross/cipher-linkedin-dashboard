@@ -2,10 +2,15 @@
 // authoritative on the server. Every write patches the shared lead in place first (so the board /
 // drawer / leads table all update instantly), then POSTs to /api/pipeline; a
 // failure reverts and surfaces via the app-wide toast.
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { authPost } from './api'
 import { useAuth } from './AuthContext'
 import { useData } from './DataContext'
+import {
+  MEMBER_WRITES_BLOCKED,
+  assignableMembers,
+  memberWritesAllowed,
+} from './rosterWrites'
 import { useToast } from './ToastContext'
 import type { Lead, LeadNote, TeamMember } from './types'
 
@@ -32,6 +37,24 @@ export function usePipelineActions() {
   const actor = member?.name ?? ''
 
   const members: TeamMember[] = data?.teamMembers ?? []
+  /**
+   * The roster's provenance, and with it whether a member id may be written
+   * back. `supabase` on every deployment today, and on that value nothing below
+   * behaves differently from the way it always has.
+   */
+  const rosterPath = data?.rosterPath ?? 'supabase'
+  const canWriteMembers = memberWritesAllowed(rosterPath)
+  /**
+   * The display roster and the assignment roster are deliberately two lists.
+   * `memberName` must resolve `lead.assigned_to` on both paths — that is the
+   * whole point of reading the roster from wherever the leads came from — while
+   * the dropdowns that send an id *back* must offer nobody when the writer would
+   * resolve it against the other database. See `rosterWrites.ts`.
+   */
+  const assignable = useMemo(
+    () => assignableMembers(members, rosterPath),
+    [members, rosterPath],
+  )
   const memberName = useCallback(
     (id: number | null | undefined): string =>
       (id != null && members.find((m) => m.id === id)?.name) || '',
@@ -97,6 +120,15 @@ export function usePipelineActions() {
 
   const assign = useCallback(
     async (lead: Lead, memberId: number | null) => {
+      // The refusal is here as well as in the dropdowns, because a control that
+      // offers nobody is a convention and this is the guarantee: `member_id`
+      // reaches a writer that resolves it against Supabase whatever the read
+      // path is, so a Neon id would commit against a different person.
+      // Unassigning (`null`) names nobody and stays available.
+      if (memberId !== null && !canWriteMembers) {
+        toast.error(MEMBER_WRITES_BLOCKED)
+        return
+      }
       const snapshot: Partial<Lead> = { assigned_to: lead.assigned_to }
       patchLead(lead.id, { assigned_to: memberId })
       try {
@@ -108,7 +140,7 @@ export function usePipelineActions() {
         toast.error(`Couldn't assign lead: ${e instanceof Error ? e.message : String(e)}`)
       }
     },
-    [patchLead, toast],
+    [canWriteMembers, patchLead, toast],
   )
 
   const addNote = useCallback(
@@ -124,28 +156,44 @@ export function usePipelineActions() {
     await post({ action: 'delete_note', note_id: noteId })
   }, [])
 
+  // `add_member` and `set_member_active` write Supabase's `team_members` and
+  // have no caller in the SPA today — the Team page posts `update_member`
+  // instead. They are guarded anyway rather than left as the one unguarded way
+  // back to the wrong roster.
   const addMember = useCallback(
     async (name: string): Promise<TeamMember> => {
+      if (!canWriteMembers) throw new Error(MEMBER_WRITES_BLOCKED)
       const j = await post({ action: 'add_member', name })
       // team_members is tiny; refetch to surface the new member globally.
       refetch()
       return ((j.member as TeamMember) ?? (j as unknown as TeamMember))
     },
-    [refetch],
+    [canWriteMembers, refetch],
   )
 
   const setMemberActive = useCallback(
     async (memberId: number, active: boolean) => {
+      if (!canWriteMembers) throw new Error(MEMBER_WRITES_BLOCKED)
       await post({ action: 'set_member_active', member_id: memberId, active })
       refetch()
     },
-    [refetch],
+    [canWriteMembers, refetch],
   )
 
   return {
     actor,
     isAdmin,
+    /** Every member, for display and for resolving an id to a name. */
     members,
+    /**
+     * The subset whose ids may be sent to `/api/pipeline` — all of `members`
+     * today, and none of them while the roster is Neon's. Every owner dropdown
+     * builds its options from this one.
+     */
+    assignableMembers: assignable,
+    /** Why the dropdowns are empty, or `null` when they are not. */
+    memberWritesBlockedReason: canWriteMembers ? null : MEMBER_WRITES_BLOCKED,
+    rosterPath,
     memberName,
     setStage,
     assign,

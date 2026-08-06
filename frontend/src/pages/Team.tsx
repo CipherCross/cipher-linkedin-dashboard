@@ -1,13 +1,37 @@
 /**
- * The team directory, on both authenticators.
+ * The team directory, on both authenticators — and, inside the Supabase one, on
+ * either read path.
  *
- * The two are not the same page with a different transport, and pretending they
- * were would misreport what an admin is looking at:
+ * The two authenticators are not the same page with a different transport, and
+ * pretending they were would misreport what an admin is looking at:
  *
  * - **Where the roster comes from.** Supabase reads `team_members` through
  *   `DataContext`; the identity path calls `team.roster`, which is
  *   `public.team_roster()` — membership-gated, seven columns, the same for every
  *   caller.
+ *
+ * **A third case sits inside `SupabaseTeam`, and it is why this file changed
+ * again.** With `NEON_READS_DEFAULT=neon` the Supabase *authenticator* is still
+ * what gates the app, but `DataContext` fills `teamMembers` from
+ * `public.team_roster()` on the other database. S13's switch left that list
+ * empty, and the page dutifully rendered **"0 Active teammates"** over an empty
+ * table — a confidently wrong number, which is the one thing this chain refuses
+ * everywhere. The roster now arrives, and `data.rosterPath` says whose it is.
+ * Three things follow, and each is rendered rather than smoothed:
+ *
+ * - **Every member is a login.** `team_members.user_id` is `NOT NULL` in the
+ *   portable baseline, so "assignment only" is not a rare row there — it is a
+ *   state that cannot exist. The count and the per-row label come from the
+ *   schema on that path, not from `auth_user_id`, which is `null` on every row
+ *   because there is no Supabase Auth user behind it (`toTeamMember` records
+ *   the argument for not filling it in).
+ * - **Nothing here may be written.** `invite_member` and `update_member` are
+ *   keyed on `team_members.id` and resolve it against Supabase whatever the read
+ *   path is, so an "Edit" would rename a different person. The controls are
+ *   absent, with the reason stated, rather than present and wrong.
+ * - **"You" is not marked.** `currentMember.id` comes from the Supabase
+ *   authenticator and the rows' ids come from Neon; the same integer names two
+ *   people, so the badge would land on the wrong row.
  * - **Assignment-only teammates.** The Supabase schema lets a `team_members` row
  *   exist with no `auth_user_id`, so a person can be assignable without being
  *   able to sign in, and the invite form can link one to a new login. The
@@ -36,6 +60,7 @@ import {
   teamRoster,
   type RosterMember,
 } from '../lib/identityAuth'
+import { teamAdminWritesAllowed } from '../lib/rosterWrites'
 import { useToast } from '../lib/ToastContext'
 import type { TeamMember } from '../lib/types'
 
@@ -376,9 +401,27 @@ function SupabaseTeam() {
   const { member: currentMember, isAdmin, revalidate } = useAuth()
   const toast = useToast()
   const members = data?.teamMembers ?? []
+  /**
+   * Whose ids these are. `supabase` on every deployment today, in which case
+   * every branch below behaves exactly as it always has.
+   */
+  const rosterPath = data?.rosterPath ?? 'supabase'
+  const canManage = teamAdminWritesAllowed(rosterPath)
+  /**
+   * Whether a row means "can sign in".
+   *
+   * On the Supabase roster that is `auth_user_id`, a nullable column with real
+   * nulls in it. On the portable baseline it is the schema: `user_id uuid NOT
+   * NULL`, so the answer is yes for every row and the column that would have
+   * said so does not exist there. Reading `auth_user_id` on that path would
+   * report the whole team as assignment-only — a different wrong number in place
+   * of the one this page just stopped printing.
+   */
+  const hasLogin = (member: TeamMember): boolean =>
+    canManage ? member.auth_user_id !== null : true
   const assignmentOnly = useMemo(
-    () => members.filter((member) => !member.auth_user_id),
-    [members],
+    () => (canManage ? members.filter((member) => !member.auth_user_id) : []),
+    [canManage, members],
   )
 
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -473,10 +516,13 @@ function SupabaseTeam() {
         <div>
           <h1>Team</h1>
           <div className="muted small">
-            Everyone can view the directory. Admins manage login access and roles.
+            {canManage
+              ? 'Everyone can view the directory. Admins manage login access and roles.'
+              : 'Read-only directory: this dashboard is reading the team from the application API, ' +
+                'whose member ids are not the ones the team writer resolves. Every member here can sign in.'}
           </div>
         </div>
-        {isAdmin && (
+        {isAdmin && canManage && (
           <button className="btn accent" type="button" onClick={() => setInviteOpen(true)}>
             <UserPlus size={15} />
             Invite teammate
@@ -490,18 +536,18 @@ function SupabaseTeam() {
           <span className="metric-label">Active teammates</span>
         </div>
         <div>
-          <span className="metric-value">{members.filter((member) => member.auth_user_id).length}</span>
+          <span className="metric-value">{members.filter(hasLogin).length}</span>
           <span className="metric-label">Login-enabled</span>
         </div>
         <div>
           <span className="metric-value">
-            {members.filter((member) => member.role === 'admin' && member.active && member.auth_user_id).length}
+            {members.filter((member) => member.role === 'admin' && member.active && hasLogin(member)).length}
           </span>
           <span className="metric-label">Active admins</span>
         </div>
       </div>
 
-      {inviteOpen && isAdmin && (
+      {inviteOpen && isAdmin && canManage && (
         <section className="card team-form" aria-label="Invite teammate">
           <div className="team-form-head">
             <div>
@@ -570,13 +616,17 @@ function SupabaseTeam() {
               <th>Email / login</th>
               <th>Role</th>
               <th>Status</th>
-              {isAdmin && <th aria-label="Actions" />}
+              {isAdmin && canManage && <th aria-label="Actions" />}
             </tr>
           </thead>
           <tbody>
             {members.map((teamMember) => {
               const editing = editingId === teamMember.id
-              const isCurrent = currentMember?.id === teamMember.id
+              // Only when both sides of the comparison are in one id space.
+              // `currentMember` is the Supabase authenticator's row; on the Neon
+              // roster the same integer names somebody else, so no badge at all
+              // beats a badge on the wrong person.
+              const isCurrent = canManage && currentMember?.id === teamMember.id
               return (
                 <tr key={teamMember.id}>
                   <td>
@@ -596,7 +646,7 @@ function SupabaseTeam() {
                   <td>
                     <div>{teamMember.email || <span className="muted">No login email</span>}</div>
                     <div className="muted small">
-                      {teamMember.auth_user_id ? 'Login enabled' : 'Assignment only'}
+                      {hasLogin(teamMember) ? 'Login enabled' : 'Assignment only'}
                     </div>
                   </td>
                   <td>
@@ -632,7 +682,7 @@ function SupabaseTeam() {
                       </span>
                     )}
                   </td>
-                  {isAdmin && (
+                  {isAdmin && canManage && (
                     <td className="team-actions">
                       {editing ? (
                         <>
@@ -653,6 +703,13 @@ function SupabaseTeam() {
                 </tr>
               )
             })}
+            {members.length === 0 && (
+              <tr>
+                <td colSpan={isAdmin && canManage ? 5 : 4} className="muted">
+                  No teammates to show.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </section>

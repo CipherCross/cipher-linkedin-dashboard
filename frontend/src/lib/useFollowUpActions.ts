@@ -88,7 +88,12 @@ function optimisticState(
 
 export function useFollowUpActions() {
   const { data, patchFollowUpState, refetch } = useData()
-  const { actor, members } = usePipelineActions()
+  const {
+    actor,
+    members,
+    assignableMembers,
+    memberWritesBlockedReason,
+  } = usePipelineActions()
   const toast = useToast()
   const states = useMemo(
     () => followUpStateMap(data?.followUpStates ?? []),
@@ -104,6 +109,15 @@ export function useFollowUpActions() {
       nextDate,
       reason,
     }: MutationOptions): Promise<FollowUpMutationResult> => {
+      // `owner_id` is a `team_members.id`, and `/api/pipeline` resolves it
+      // against Supabase on every read path. So no owner may cross while the
+      // roster is another provider's — including the one `reschedule` echoes
+      // back out of the state it just read, which is the case a per-control
+      // check would miss. Actions carrying no owner are not this rule's.
+      if (ownerId != null && memberWritesBlockedReason !== null) {
+        toast.error(memberWritesBlockedReason)
+        throw new Error(memberWritesBlockedReason)
+      }
       const key = followUpKey(lead.instance_id, lead.profile_url)
       const current = suppliedState === undefined ? states.get(key) ?? null : suppliedState
       const snapshot = current
@@ -153,12 +167,14 @@ export function useFollowUpActions() {
         throw error
       }
     },
-    [actor, patchFollowUpState, refetch, states, toast],
+    [actor, memberWritesBlockedReason, patchFollowUpState, refetch, states, toast],
   )
 
   return {
     actor,
     members,
+    assignableMembers,
+    memberWritesBlockedReason,
     states,
     schedule: (lead: Lead, ownerId: number, nextDate: string) =>
       mutate({ action: 'schedule_follow_up', lead, ownerId, nextDate }),

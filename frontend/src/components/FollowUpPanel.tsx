@@ -83,7 +83,12 @@ export function FollowUpPanel({
     [data?.followUpStates, key],
   )
   const members = actions.members
-  const activeMembers = members.filter((member) => member.active)
+  // Owner *options* come from the assignable roster, never from the display one:
+  // an `owner_id` chosen here is written back through `/api/pipeline`, which
+  // resolves it against the other provider when the roster is Neon's.
+  // `members` below still resolves the current owner's name, which is the read
+  // this slice fixed.
+  const activeMembers = actions.assignableMembers.filter((member) => member.active)
   const owner = state?.owner_id != null
     ? members.find((member) => member.id === state.owner_id)
     : undefined
@@ -374,6 +379,9 @@ export function FollowUpPanel({
                   <option key={member.id} value={String(member.id)}>{member.name}</option>
                 ))}
               </select>
+              {actions.memberWritesBlockedReason && (
+                <span className="muted small">{actions.memberWritesBlockedReason}</span>
+              )}
             </label>
           )}
 
