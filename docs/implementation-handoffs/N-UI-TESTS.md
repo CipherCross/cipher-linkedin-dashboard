@@ -11,8 +11,9 @@ large to smuggle in under a migration slice.
 It is taken here, on its own, deliberately.
 
 **Five rendering suites, +36 tests, and twenty-one mutations that previously
-reddened nothing now all redden.** No production code changed except four
-comments that had become false.
+reddened nothing now all redden.** No behaviour changed: the only edits outside
+the new test files are two configs and five comments that had become false — three
+of them in `src/`, two in `tests/`.
 
 ## Identity
 
@@ -23,7 +24,7 @@ comments that had become false.
 | Pushed | **no.** `origin/main` is still `e7741f3`; **twenty** commits from five sessions are unpushed. A push deploys production |
 | Ledger step | none. `008` remains written and unapplied |
 | Migration | none. No DDL, no schema change, no Neon write |
-| Behaviour changed | **none.** Two config files, four comments, five new test files, three new devDependencies |
+| Behaviour changed | **none.** Two config files, five comments, five new test files, three new devDependencies |
 
 ## Preflight: all six baselines matched
 
@@ -125,7 +126,7 @@ fill an error slot instead. That asymmetry is now a passing test with a comment
 saying it is pinned rather than endorsed — so that someone fixing it discovers the
 divergence was written down, not overlooked.
 
-### 10. Four comments were corrected, because they had become false
+### 10. Five comments were corrected, because they had become false
 
 Five files asserted, in prose, that this repository cannot test a component. Leaving
 that in place after changing it is worse than never having written it: the next
@@ -317,12 +318,12 @@ existing entries, `PROTECTED_PATHS`, `IMMUTABLE_BASELINE`, or any file under
 
 | SHA | Subject |
 |---|---|
-| *(1)* | `chore(frontend): add jsdom and testing-library, and let a test import a component` |
-| *(2)* | `test: cover the two write refusals at their call sites` |
-| *(3)* | `test: cover the Playbook editor lock and the digest error slot` |
-| *(4)* | `test: cover DataContext's dispatch and its rosterPath marker` |
-| *(5)* | `test: cover the notes panel and the follow-up history walk` |
-| *(6)* | `docs: correct five comments that said a test cannot import a component` |
-| *(7)* | `docs(neon): record the UI test harness slice` — a commit cannot carry its own hash; `git log --oneline main..HEAD` resolves all seven |
+| `b4c848b` | `chore(frontend): add jsdom and testing-library, and let a test import a component` |
+| `86311e3` | `test: cover the two write refusals at their call sites` |
+| `f94f5b4` | `test: cover the Playbook editor lock and the digest error slot` |
+| `834e371` | `test: cover DataContext's dispatch and its rosterPath marker` |
+| `0e737d2` | `test: cover the notes panel and the follow-up history walk` |
+| `0f0b4ed` | `docs: correct five comments that said a test cannot import a component` |
+| `caa7de7` | `docs(neon): record the UI test harness slice` |
 
 **Not pushed and not merged.** No behaviour changed and nothing is deployed.
