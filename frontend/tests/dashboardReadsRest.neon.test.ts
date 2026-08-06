@@ -259,23 +259,30 @@ describe('the parameters the endpoint actually parses', () => {
     expect(mine(inbound.items)).toHaveLength(REST_INBOUND_COUNT)
   })
 
-  it('binds the delta watermark, so a misspelled parameter cannot pass', async () => {
-    // The failure this catches is silent by nature: an unparsed `updated_since`
-    // simply returns the whole relation, and every row the caller expected is
-    // present. Only a watermark that excludes everything makes it visible.
-    const leads = await readAll<{ instance_id: string }>(
-      READ_OPS.leads,
-      { updated_since: FUTURE },
-      handlerFetch,
-    )
-    expect(mine(leads.items)).toHaveLength(0)
+  it('binds the delta watermark the endpoint reads, not one it ignores', async () => {
+    // The failure this catches is silent by nature: an unparsed watermark simply
+    // returns the whole relation, and every row the caller expected is present.
+    // Only a watermark that excludes everything makes it visible.
+    //
+    // Driven through `fetchNeonDashboard` rather than through `readAll` with the
+    // parameter written out here, and that is the whole point of the test: a
+    // hand-written `updated_since` would prove the *endpoint* parses it while
+    // leaving the client free to send `updatedSince` and refetch the world on
+    // every five-minute tick. The mutation pass confirms this reddens for that.
+    const nothingNew = await fetchNeonDashboard({
+      since: ALL_TIME,
+      updatedSince: FUTURE,
+      fetchImpl: handlerFetch,
+    })
+    expect(mine(nothingNew.leads)).toHaveLength(0)
+    expect(mine(nothingNew.messages)).toHaveLength(0)
+    expect(
+      nothingNew.pipelineEvents.filter((e) => e.actor === REST_SCOPE),
+    ).toHaveLength(0)
 
-    const events = await readAll<{ actor: string | null }>(
-      READ_OPS.pipelineEvents,
-      { occurred_since: FUTURE },
-      handlerFetch,
-    )
-    expect(events.items.filter((e) => e.actor === REST_SCOPE)).toHaveLength(0)
+    // And the relations that carry no watermark are re-read whole, exactly as
+    // the Supabase path re-reads them on every cycle.
+    expect(mine(nothingNew.followUpStates)).toHaveLength(FOLLOW_UP_STATE_COUNT)
   })
 })
 
