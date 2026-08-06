@@ -1,3 +1,10 @@
+// The serverless API surface and the test suites. `npm run build` (tsc -b) covers
+// `src` only, so this is the only type check either of them gets.
+//
+// `jsx` is here for the `tests/**/*.test.tsx` rendering suites, which import
+// components from `src`. It was previously absent, and its absence was itself a
+// limit three handoffs recorded ("a test cannot import a component"). Nothing
+// under `api/` contains JSX, so the option is inert for the API half.
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -13,6 +20,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
     "types": ["node", "vite/client"]
   },
   "include": ["api", "tests"]
