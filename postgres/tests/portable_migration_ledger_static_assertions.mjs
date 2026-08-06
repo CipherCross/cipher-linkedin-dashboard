@@ -41,10 +41,10 @@ const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 // session's own new file would flag itself. The session after adds it. S17 is
 // that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS.
 //
-// 005 graduated on that schedule under B2, and 006 under S14 — every step 001..006
-// is now in both lists. Promotion happens only once the owner has applied the step,
-// because PROTECTED_PATHS means "already applied, never touch again" and an
-// unapplied step may still need a correction.
+// 005 graduated on that schedule under B2, 006 under S14 and 007 under S18 — every
+// step 001..007 is now in both lists. Promotion happens only once the owner has
+// applied the step, because PROTECTED_PATHS means "already applied, never touch
+// again" and an unapplied step may still need a correction.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -58,6 +58,8 @@ const IMMUTABLE_BASELINE = {
     '229442570c0440d5a6f0d1ae336e9e80924155d9437bab5347855eaed3ee27e8',
   '006_messages_direction_seek_index.sql':
     '87991430eca2ffc22a69a0570d6d4f45e9b852dc4274a4828f84306dfa37bf47',
+  '007_ai_system_write_path.sql':
+    'cf99c5a2c06b9b1c11305b9d1d6e23880e9d64efe3fddc6e7c299372a9d47e77',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -102,6 +104,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/000_ai_execution_role_bootstrap.sql',
   'postgres/tenant-baseline/v1/007_ai_system_write_path.sql',
   'docs/implementation-handoffs/N-S15.md',
+  // S18 (step 008, the auto-advance EXECUTE grant the classify cron waits on).
+  'postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -140,6 +144,13 @@ const PROTECTED_PATHS = [
   // is now as immutable as 001..005. N-S13-consolidation Known limit 7 explains
   // why the session that wrote it could not promote it itself.
   'postgres/tenant-baseline/v1/006_messages_direction_seek_index.sql',
+  // Added by S18, the session after S15, on the same schedule for the same
+  // reason: 007 is applied to the live project (ledger 7/7, applied as
+  // app_migration under the owner's explicit authorisation), so it is now as
+  // immutable as 001..006. S15 could not promote it — it had written the step
+  // but the owner had not yet authorised the apply, and PROTECTED_PATHS means
+  // "already applied, never touch again".
+  'postgres/tenant-baseline/v1/007_ai_system_write_path.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
@@ -279,8 +290,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares seven steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7',
-  manifest.steps.length === 7 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares eight steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8',
+  manifest.steps.length === 8 && manifest.steps.every((s, i) => s.step === i + 1));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index

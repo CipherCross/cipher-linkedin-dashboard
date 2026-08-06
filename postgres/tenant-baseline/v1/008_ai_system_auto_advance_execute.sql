@@ -1,0 +1,46 @@
+-- One EXECUTE grant: the system principal may run the pipeline auto-advance.
+-- Apply after 007 in a tenant database that has received the full baseline.
+--
+-- Why this step exists. The reply classifier has two halves. Its admin half is
+-- driven by a signed-in human and runs as app_runtime, which step 003 already
+-- granted EXECUTE on public.pipeline_auto_advance(); its scheduled half is
+-- driven by a machine credential, has no human to publish, and runs as
+-- app_system. Step 007 gave that principal the DML it needed to write labels
+-- (messages) and demographics (leads), but auto-advance is not a statement the
+-- application composes — it is one fixed, self-contained procedure in step 003
+-- that takes an advisory lock, re-asserts its stage gate under concurrency and
+-- writes a pipeline_event per row it moved. app_system cannot call it, so the
+-- scheduled classifier labels replies and then stops one step short of the
+-- triage the human half performs. This step closes exactly that gap.
+--
+-- What an EXECUTE grant is, here, and why it is the whole of this step. The
+-- function is SECURITY DEFINER, owned by app_owner, with search_path pinned to
+-- public, and step 003 revoked it from PUBLIC. It therefore executes with its
+-- owner's rights and its effects are bounded by its own body rather than by
+-- the caller's grants: the caller does not gain, and does not need, any
+-- privilege on leads or pipeline_events. That is why no GRANT on a table
+-- appears below. Granting EXECUTE on a definer function is a decision about
+-- one named, reviewed procedure; granting the tables would be a decision about
+-- everything anyone could ever write to them.
+--
+-- What this step deliberately does NOT do:
+--
+--   * It grants nothing to any role other than app_system, and nothing else to
+--     app_system. It opens no relation, no sequence, no policy and no other
+--     function -- not apply_follow_up_action, not delete_manual_message, not
+--     the identity write path.
+--   * It does not touch the AI SQL guard, which stays SELECT-only. This
+--     function has side effects and must never be reachable through
+--     public.ai_execute_sql: the guard's whole contract is that whatever text
+--     reaches it can only read. The application therefore calls this function
+--     as a named operation on a direct connection, never as guard SQL.
+--   * It adds no DELETE anywhere. The function itself only inserts and
+--     updates, and the system principal's DML surface is unchanged by this
+--     step.
+--   * It requires no control-plane prerequisite. app_system belongs to the
+--     seven-role contract and already carries the LOGIN attribute the AI
+--     execution role bootstrap gave it for step 007; a grant needs neither.
+
+SET ROLE app_owner;
+
+GRANT EXECUTE ON FUNCTION public.pipeline_auto_advance() TO app_system;

@@ -143,6 +143,14 @@
       "owner_role_entered_by": "artifact",
       "session": "S15",
       "description": "The system write path: SELECT, INSERT and UPDATE on the five relations the server-owned jobs own (briefing_jobs, briefings, messages, leads, saved_searches), sequence usage for the two identity sequences among them, and one FOR ALL policy per relation gated on the published system actor - the nil uuid, well-formed but unassignable, because step 005 is the only user creator and accepts no caller-supplied id. Grants app_system its first table privileges; gives no DELETE, touches no other role, leaves the AI SQL guard SELECT-only. Written under the owner's role-only decision: applied only by explicit owner approval, never automatically."
+    },
+    {
+      "step": 8,
+      "artifact": "008_ai_system_auto_advance_execute.sql",
+      "sha256": "cf3db7c6713ed53489120cdafecaa36154bddf45104e3daa574c7b15988a0796",
+      "owner_role_entered_by": "artifact",
+      "session": "S18",
+      "description": "One EXECUTE grant on public.pipeline_auto_advance() to app_system, and nothing else. The scheduled half of the reply classifier has no human actor and runs as the system principal, which step 007 gave DML on messages and leads but no way to run the fixed auto-advance procedure step 003 granted to app_runtime alone; it therefore labelled replies and stopped one step short of triage. The function is SECURITY DEFINER owned by app_owner with a pinned search_path, so the grant is the whole capability - the caller gains no privilege on leads or pipeline_events, and no table grant appears here. Opens no relation, no sequence, no policy and no other function; adds no DELETE; needs no control-plane prerequisite, because app_system is a seven-role contract member that already carries LOGIN. The AI SQL guard is untouched and stays SELECT-only: this function has side effects and is called as a named operation on a direct connection, never as guard SQL. Written under the same owner decision as step 007: applied only by explicit owner approval, never automatically."
     }
   ]
 }
