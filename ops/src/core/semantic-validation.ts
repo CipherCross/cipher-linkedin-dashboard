@@ -181,14 +181,14 @@ function validateOnboarding(
   const workspaceClass = string(inputs.workspace_class, "workspace_class");
   const expectedName = `lh2-${workspaceClass}-${slug}`;
   assertOps(
-    resources.supabase_project_name === expectedName,
+    resources.data_project_name === expectedName,
     "invalid_plan",
-    "Supabase project name is not deterministic",
+    "Data project name is not deterministic",
   );
   assertOps(
-    resources.vercel_project_name === expectedName,
+    resources.hosting_project_name === expectedName,
     "invalid_plan",
-    "Vercel project name is not deterministic",
+    "Hosting project name is not deterministic",
   );
   const hostname = string(resources.production_hostname, "production_hostname");
   assertOps(
@@ -252,13 +252,13 @@ function validateOnboarding(
   const capabilities = catalogs.get("capabilities")!;
   const subprocessors = catalogs.get("subprocessors")!;
 
-  for (const idField of ["residency_policy_id", "supabase_region_id"] as const) {
+  for (const idField of ["residency_policy_id", "region_id"] as const) {
     activeEntry(regions, string(inputs[idField], idField), now);
   }
   for (const idField of [
-    "supabase_tier_id",
-    "supabase_compute_id",
-    "vercel_tier_id",
+    "data_tier_id",
+    "data_compute_id",
+    "hosting_tier_id",
   ] as const) {
     const entry = activeEntry(tiers, string(inputs[idField], idField), now);
     if (entry.billable === true) {

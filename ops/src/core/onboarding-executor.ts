@@ -26,13 +26,13 @@ export interface OnboardingExecutionContext {
   readonly companyName: string;
   readonly workspaceClass: "internal" | "disposable" | "external";
   readonly adminEmail: string;
-  readonly supabaseOrganizationId: string;
-  readonly supabaseProjectName: string;
-  readonly supabaseRegionId: string;
-  readonly supabaseTierId: string;
-  readonly supabaseComputeId: string;
-  readonly vercelTeamId: string;
-  readonly vercelProjectName: string;
+  readonly dataOwnerScope: string;
+  readonly dataProjectName: string;
+  readonly dataRegionId: string;
+  readonly dataTierId: string;
+  readonly dataComputeId: string;
+  readonly hostingOwnerScope: string;
+  readonly hostingProjectName: string;
   readonly productionHostname: string;
   readonly sourceGitSha: string;
   readonly migrationVersions: readonly number[];
@@ -45,10 +45,7 @@ export interface OnboardingExecutionContext {
   readonly templateSetId: string;
   readonly smtpSecretLabels: readonly string[];
   readonly integrationSecretLabels: readonly string[];
-  readonly publicBuildValueNames: readonly (
-    | "VITE_SUPABASE_URL"
-    | "VITE_SUPABASE_ANON_KEY"
-  )[];
+  readonly publicBuildValueNames: readonly string[];
   readonly smokeTestIds: readonly string[];
   readonly ownership: OwnershipMarker;
 }
@@ -213,17 +210,14 @@ export class OnboardingExecutor {
     context: OnboardingExecutionContext,
     ordinal: number,
   ): Promise<string | undefined> {
-    const supabaseProject = this.#registry.getResourceReference(
+    const dataProject = this.#registry.getResourceReference(
       context.tenantId,
-      "supabase",
+      "data",
       "project",
     );
-    // `providerKind` stays "vercel" and `resourceKind` stays "project": the
-    // registry vocabulary and the persisted rows belong to S24, not here. What
-    // the row now holds is a canonical target handle, not a provider project ID.
     const hostingTarget = this.#registry.getResourceReference(
       context.tenantId,
-      "vercel",
+      "hosting",
       "project",
     );
     switch (ordinal) {
@@ -231,18 +225,18 @@ export class OnboardingExecutor {
       case 13:
         return undefined;
       case 2: {
-        const resource = await this.#providerCall("supabase.createOrAdoptProject", () => this.#providers.supabase.createOrAdoptProject({
-          organizationId: context.supabaseOrganizationId,
-          deterministicName: context.supabaseProjectName,
-          regionId: context.supabaseRegionId,
-          tierId: context.supabaseTierId,
-          computeId: context.supabaseComputeId,
+        const resource = await this.#providerCall("data.createOrAdoptProject", () => this.#providers.data.createOrAdoptProject({
+          organizationId: context.dataOwnerScope,
+          deterministicName: context.dataProjectName,
+          regionId: context.dataRegionId,
+          tierId: context.dataTierId,
+          computeId: context.dataComputeId,
           ownership: context.ownership,
         }));
         this.#registry.saveResourceReference(
           {
             tenantId: context.tenantId,
-            providerKind: "supabase",
+            providerKind: "data",
             resourceKind: "project",
             providerOwnerId: resource.providerOwnerId,
             resourceId: resource.resourceId,
@@ -257,13 +251,13 @@ export class OnboardingExecutor {
         return resource.providerRequestId;
       }
       case 3: {
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
-        await this.#providerCall("supabase.waitUntilReady", () =>
-          this.#providers.supabase.waitUntilReady(supabaseProject.resourceId),
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
+        await this.#providerCall("data.waitUntilReady", () =>
+          this.#providers.data.waitUntilReady(dataProject.resourceId),
         );
         return (
-          await this.#providerCall("supabase.applySchema", () => this.#providers.supabase.applySchema({
-            projectId: supabaseProject.resourceId,
+          await this.#providerCall("data.applySchema", () => this.#providers.data.applySchema({
+            projectId: dataProject.resourceId,
             baselineVersion: 53,
             migrationVersions: context.migrationVersions,
             targetSchemaVersion: context.targetSchemaVersion,
@@ -271,27 +265,27 @@ export class OnboardingExecutor {
         ).providerRequestId;
       }
       case 4: {
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
         await this.#providerCall(
-          "supabase.configurePrivateStorage",
-          () => this.#providers.supabase.configurePrivateStorage({
-            projectId: supabaseProject.resourceId,
+          "objectStorage.configurePrivateStorage",
+          () => this.#providers.objectStorage.configurePrivateStorage({
+            projectId: dataProject.resourceId,
             bucketId: "lead-photos",
             visibility: "private",
           }),
         );
         await this.#providerCall(
-          "auth.configure",
-          () => this.#providers.auth.configure({
-            projectId: supabaseProject.resourceId,
+          "identity.configure",
+          () => this.#providers.identity.configure({
+            projectId: dataProject.resourceId,
             siteUrl: context.siteUrl,
             redirectUrls: context.redirectUrls,
             templateSetId: context.templateSetId,
           }),
         );
         return (
-          await this.#providerCall("smtp.configure", () => this.#providers.smtp.configure({
-            projectId: supabaseProject.resourceId,
+          await this.#providerCall("email.configure", () => this.#providers.email.configure({
+            projectId: dataProject.resourceId,
             smtpProfileId: context.smtpProfileId,
             senderDomain: context.senderDomain,
             fromIdentity: context.fromIdentity,
@@ -300,17 +294,17 @@ export class OnboardingExecutor {
         ).providerRequestId;
       }
       case 5:
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
         return (
-          await this.#providerCall("supabase.createDisabledSupportMembership", () =>
-            this.#providers.auth.createDisabledSupportMembership(supabaseProject.resourceId),
+          await this.#providerCall("identity.createDisabledSupportMembership", () =>
+            this.#providers.identity.createDisabledSupportMembership(dataProject.resourceId),
           )
         ).providerRequestId;
       case 6: {
         const target = await this.#providerCall(
           "hosting.createDeploymentTarget",
           () => this.#providers.hosting.createDeploymentTarget({
-            deterministicName: context.vercelProjectName,
+            deterministicName: context.hostingProjectName,
             workspaceClass: context.workspaceClass,
             runtimeProfileId: CANONICAL_RUNTIME_PROFILE_ID,
             ownership: context.ownership,
@@ -321,9 +315,9 @@ export class OnboardingExecutor {
         this.#registry.saveResourceReference(
           {
             tenantId: context.tenantId,
-            providerKind: "vercel",
+            providerKind: "hosting",
             resourceKind: "project",
-            providerOwnerId: context.vercelTeamId,
+            providerOwnerId: context.hostingOwnerScope,
             resourceId: target.targetHandle,
             deterministicName: target.deterministicName,
             ownershipMarkerDigest: target.ownershipMarkerDigest,
@@ -337,12 +331,12 @@ export class OnboardingExecutor {
       }
       case 7: {
         assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
         // Ties the plan's declared public build values to the canonical
-        // environment contract without changing the plan's vocabulary.
+        // environment contract; legacy names are adapter-only transition data.
         assertOps(
           JSON.stringify([...context.publicBuildValueNames].sort()) ===
-            JSON.stringify([...LEGACY_PUBLIC_BUILD_VALUE_NAMES].sort()),
+            JSON.stringify([...CANONICAL_PUBLIC_BUILD_VALUE_NAMES].sort()),
           "invalid_plan",
           "Plan public build values do not match the canonical environment contract",
         );
@@ -372,7 +366,7 @@ export class OnboardingExecutor {
         ).hostingRequestId;
       case 9: {
         assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
         const manifestDigest = scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES);
         const release = await this.#providerCall("hosting.buildRelease", () =>
           this.#providers.hosting.buildRelease({
@@ -386,11 +380,11 @@ export class OnboardingExecutor {
         this.#registry.saveResourceReference(
           {
             tenantId: context.tenantId,
-            providerKind: "vercel",
+            providerKind: "hosting",
             resourceKind: "build",
-            providerOwnerId: context.vercelTeamId,
+            providerOwnerId: context.hostingOwnerScope,
             resourceId: release.releaseHandle,
-            deterministicName: `${context.vercelProjectName}@${context.sourceGitSha}`,
+            deterministicName: `${context.hostingProjectName}@${context.sourceGitSha}`,
             ownershipMarkerDigest: context.ownership.digest,
             observedLifecycle: "verified",
           },
@@ -416,7 +410,7 @@ export class OnboardingExecutor {
         assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
         const release = this.#registry.getResourceReference(
           context.tenantId,
-          "vercel",
+          "hosting",
           "build",
         );
         assertOps(release, "invalid_plan", "Verified tenant build is missing");
@@ -429,11 +423,11 @@ export class OnboardingExecutor {
         this.#registry.saveResourceReference(
           {
             tenantId: context.tenantId,
-            providerKind: "vercel",
+            providerKind: "hosting",
             resourceKind: "deployment",
-            providerOwnerId: context.vercelTeamId,
+            providerOwnerId: context.hostingOwnerScope,
             resourceId: rollout.rolloutHandle,
-            deterministicName: `${context.vercelProjectName}@production`,
+            deterministicName: `${context.hostingProjectName}@production`,
             ownershipMarkerDigest: context.ownership.digest,
             observedLifecycle: "promoted",
           },
@@ -444,17 +438,17 @@ export class OnboardingExecutor {
         return rollout.hostingRequestId;
       }
       case 11: {
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
         assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
         const release = this.#registry.getResourceReference(
           context.tenantId,
-          "vercel",
+          "hosting",
           "build",
         );
         assertOps(release, "invalid_plan", "Verified tenant build is missing");
-        await this.#providerCall("supabase.runSmokeTests", () =>
-          this.#providers.supabase.runSmokeTests(
-            supabaseProject.resourceId,
+        await this.#providerCall("data.runSmokeTests", () =>
+          this.#providers.data.runSmokeTests(
+            dataProject.resourceId,
             context.smokeTestIds.filter((id) =>
               [
                 "schema_ledger",
@@ -464,9 +458,9 @@ export class OnboardingExecutor {
             ),
           ),
         );
-        await this.#providerCall("auth.runSmokeTests", () =>
-          this.#providers.auth.runSmokeTests(
-            supabaseProject.resourceId,
+        await this.#providerCall("identity.runSmokeTests", () =>
+          this.#providers.identity.runSmokeTests(
+            dataProject.resourceId,
             context.smokeTestIds.filter((id) =>
               [
                 "auth_anonymous_denied",
@@ -476,9 +470,9 @@ export class OnboardingExecutor {
             ),
           ),
         );
-        await this.#providerCall("smtp.runSmokeTests", () =>
-          this.#providers.smtp.runSmokeTests(
-            supabaseProject.resourceId,
+        await this.#providerCall("email.runSmokeTests", () =>
+          this.#providers.email.runSmokeTests(
+            dataProject.resourceId,
             context.smokeTestIds.filter((id) => id === "smtp_delivery"),
           ),
         );
@@ -503,11 +497,11 @@ export class OnboardingExecutor {
         return verification.hostingRequestId;
       }
       case 12:
-        assertOps(supabaseProject, "invalid_plan", "Supabase resource reference is missing");
+        assertOps(dataProject, "invalid_plan", "Data resource reference is missing");
         return (
-          await this.#providerCall("supabase.inviteCompanyAdmin", () =>
-            this.#providers.auth.createCompanyAdminAndInvite({
-              projectId: supabaseProject.resourceId,
+          await this.#providerCall("identity.inviteCompanyAdmin", () =>
+            this.#providers.identity.createCompanyAdminAndInvite({
+              projectId: dataProject.resourceId,
               adminEmail: context.adminEmail,
             }),
           )

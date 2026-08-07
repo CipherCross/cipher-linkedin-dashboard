@@ -25,7 +25,11 @@ import {
   type StepState,
   type TenantLifecycle,
 } from "../core/types.js";
-import { REGISTRY_SCHEMA_SQL, REGISTRY_SCHEMA_VERSION } from "./schema.js";
+import {
+  REGISTRY_MIGRATIONS,
+  REGISTRY_SCHEMA_SQL,
+  REGISTRY_SCHEMA_VERSION,
+} from "./schema.js";
 
 const GENESIS_HASH = `sha256:${"0".repeat(64)}`;
 const DEFAULT_LOCK_TTL_MS = 5 * 60 * 1_000;
@@ -69,7 +73,14 @@ export interface StepRecord {
 
 export interface ResourceReference {
   readonly tenantId: string;
-  readonly providerKind: "supabase" | "vercel" | "dns" | "smtp" | "source_repository";
+  readonly providerKind:
+    | "data"
+    | "identity"
+    | "object_storage"
+    | "hosting"
+    | "domain"
+    | "email"
+    | "source_repository";
   readonly resourceKind: string;
   readonly providerOwnerId: string;
   readonly resourceId: string;
@@ -90,9 +101,9 @@ export interface TenantRecord extends TenantReference {
   readonly observedLifecycle: TenantLifecycle;
   readonly releaseChannel: "internal" | "canary" | "stable";
   readonly regionId: string;
-  readonly supabaseTierId: string;
-  readonly supabaseComputeId: string;
-  readonly vercelTierId: string;
+  readonly dataTierId: string;
+  readonly dataComputeId: string;
+  readonly hostingTierId: string;
   readonly backupProfileId: string;
   readonly cronSlot: number;
   readonly createdAt: string;
@@ -131,7 +142,12 @@ export class Registry {
       this.#database.exec("PRAGMA journal_mode = WAL");
       this.#database.exec("PRAGMA synchronous = FULL");
     }
-    this.#database.exec(REGISTRY_SCHEMA_SQL);
+    const hasMeta = this.#tableExists("registry_meta");
+    if (!hasMeta) {
+      this.#database.exec(REGISTRY_SCHEMA_SQL);
+    } else {
+      this.#migrateSchema();
+    }
     this.#database
       .prepare(
         `INSERT OR IGNORE INTO registry_meta
@@ -150,6 +166,39 @@ export class Registry {
       "invalid_plan",
       "Registry owner UUID does not match",
     );
+  }
+
+  #tableExists(name: string): boolean {
+    return this.#selectOne(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      name,
+    ) !== undefined;
+  }
+
+  #migrateSchema(): void {
+    const current = this.#selectOne(
+      "SELECT schema_version FROM registry_meta WHERE singleton_id = 1",
+    );
+    assertOps(current, "unsupported_contract", "Registry metadata is missing");
+    let version = Number(current.schema_version);
+    assertOps(
+      version <= REGISTRY_SCHEMA_VERSION,
+      "unsupported_contract",
+      `Unsupported registry schema ${String(version)}`,
+    );
+    while (version < REGISTRY_SCHEMA_VERSION) {
+      const migration = REGISTRY_MIGRATIONS.find((candidate) => candidate.from === version);
+      assertOps(migration, "unsupported_contract", `No registry migration from ${String(version)}`);
+      this.#database.exec("BEGIN IMMEDIATE");
+      try {
+        this.#database.exec(migration.sql);
+        this.#database.exec("COMMIT");
+      } catch (error) {
+        this.#database.exec("ROLLBACK");
+        throw error;
+      }
+      version = migration.to;
+    }
   }
 
   close(): void {
@@ -1016,8 +1065,8 @@ export class Registry {
       .prepare(
         `INSERT INTO tenants (
           tenant_id, slug, company_name, workspace_class, desired_lifecycle,
-          observed_lifecycle, release_channel, region_id, supabase_tier_id,
-          supabase_compute_id, vercel_tier_id, backup_profile_id, catalog_refs_json,
+          observed_lifecycle, release_channel, region_id, data_tier_id,
+          data_compute_id, hosting_tier_id, backup_profile_id, catalog_refs_json,
           cron_slot, created_at, updated_at
         ) VALUES (?, ?, ?, ?, 'planned', 'planned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
@@ -1027,10 +1076,10 @@ export class Registry {
         String(inputs.company_name),
         String(inputs.workspace_class),
         String(inputs.release_channel),
-        String(inputs.supabase_region_id),
-        String(inputs.supabase_tier_id),
-        String(inputs.supabase_compute_id),
-        String(inputs.vercel_tier_id),
+        String(inputs.region_id),
+        String(inputs.data_tier_id),
+        String(inputs.data_compute_id),
+        String(inputs.hosting_tier_id),
         String(inputs.backup_profile_id),
         canonicalJson(spec.catalogs as JsonValue),
         Number(resources.cron_slot),
@@ -1174,9 +1223,9 @@ export class Registry {
       observedLifecycle: String(row.observed_lifecycle) as TenantLifecycle,
       releaseChannel: String(row.release_channel) as TenantRecord["releaseChannel"],
       regionId: String(row.region_id),
-      supabaseTierId: String(row.supabase_tier_id),
-      supabaseComputeId: String(row.supabase_compute_id),
-      vercelTierId: String(row.vercel_tier_id),
+      dataTierId: String(row.data_tier_id),
+      dataComputeId: String(row.data_compute_id),
+      hostingTierId: String(row.hosting_tier_id),
       backupProfileId: String(row.backup_profile_id),
       cronSlot: Number(row.cron_slot),
       createdAt: String(row.created_at),

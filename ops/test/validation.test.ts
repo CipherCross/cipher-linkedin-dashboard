@@ -5,6 +5,8 @@ import {
   InMemoryCatalogResolver,
   OpsError,
   Registry,
+  validateCatalogSchema,
+  validateCatalogSnapshot,
   validatePlanSchema,
   validatePlanSemantics,
 } from "../src/index.js";
@@ -88,6 +90,21 @@ test("semantic validation rejects cost ordering, migration gaps and reserved slu
 
 test("unknown, expired and unapproved catalogs block a plan", () => {
   const plan = makeOnboardingPlan();
+  const unknownEntry = makeOnboardingPlan({
+    mutateSpec(spec) {
+      const inputs = spec.inputs as Record<string, unknown>;
+      inputs.data_tier_id = "data-unknown";
+    },
+  });
+  validatePlanSchema("tenant_onboarding", unknownEntry);
+  expectCode("catalog_invalid", () =>
+    validatePlanSemantics(unknownEntry, {
+      catalogs: catalogResolver(),
+      now: TEST_NOW,
+      registryOwnerId: OWNER_UUID,
+    }),
+  );
+
   const missingCatalogs = makeCatalogs().filter(
     (catalog) => catalog.catalog_kind !== "pricing",
   );
@@ -111,6 +128,18 @@ test("unknown, expired and unapproved catalogs block a plan", () => {
       registryOwnerId: OWNER_UUID,
     }),
   );
+});
+
+test("catalog snapshots are closed records and unknown fields fail before planning", () => {
+  const catalog = { ...makeCatalogs()[0]!, entries: [{ id: "eu-west", availability: "available", approved: true }] };
+  validateCatalogSchema(catalog);
+  validateCatalogSnapshot(catalog);
+  const withUnknown = {
+    ...catalog,
+    entries: [{ ...catalog.entries[0], provider_response_fragment: "forbidden" }],
+  };
+  expectCode("catalog_invalid", () => validateCatalogSnapshot(withUnknown));
+  expectCode("schema_validation_failed", () => validateCatalogSchema(withUnknown));
 });
 
 test("plan persistence rejects a stale expected registry version", () => {

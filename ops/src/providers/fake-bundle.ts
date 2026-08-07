@@ -22,6 +22,10 @@ import {
 import type { OnboardingProviders } from "./interfaces.js";
 
 export interface FakeProviderFailureRules {
+  readonly data?: readonly FailureRule[];
+  readonly identity?: readonly FailureRule[];
+  readonly objectStorage?: readonly FailureRule[];
+  readonly email?: readonly FailureRule[];
   readonly supabase?: readonly FailureRule[];
   readonly hosting?: readonly FailureRule[];
   readonly auth?: readonly FailureRule[];
@@ -31,10 +35,11 @@ export interface FakeProviderFailureRules {
 }
 
 export class FakeOnboardingProviderBundle implements OnboardingProviders {
-  readonly supabase: FakeSupabaseProvider;
+  readonly data: FakeSupabaseProvider;
+  readonly identity: FakeAuthProvider;
+  readonly objectStorage: FakeSupabaseProvider;
   readonly hosting: FakeHostingProvider;
-  readonly auth: FakeAuthProvider;
-  readonly smtp: FakeSmtpProvider;
+  readonly email: FakeSmtpProvider;
   readonly domain: FakeDomainProvider;
   readonly sourceRepository: FakeSourceRepositoryProvider;
 
@@ -42,10 +47,13 @@ export class FakeOnboardingProviderBundle implements OnboardingProviders {
     rules: FakeProviderFailureRules = {},
     hostingOptions: FakeHostingProviderOptions = {},
   ) {
-    this.supabase = new FakeSupabaseProvider(rules.supabase);
+    this.data = new FakeSupabaseProvider(rules.data ?? rules.supabase);
+    this.identity = new FakeAuthProvider(rules.identity ?? rules.auth);
+    this.objectStorage = new FakeSupabaseProvider(
+      rules.objectStorage ?? rules.data ?? rules.supabase,
+    );
     this.hosting = new FakeHostingProvider(rules.hosting, hostingOptions);
-    this.auth = new FakeAuthProvider(rules.auth);
-    this.smtp = new FakeSmtpProvider(rules.smtp);
+    this.email = new FakeSmtpProvider(rules.email ?? rules.smtp);
     this.domain = new FakeDomainProvider(rules.domain);
     this.sourceRepository = new FakeSourceRepositoryProvider(
       rules.sourceRepository,

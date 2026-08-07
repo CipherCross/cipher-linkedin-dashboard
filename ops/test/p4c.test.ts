@@ -71,7 +71,7 @@ test("P4-C reviewed SDK ports keep the owner boundary closed", () => {
   assert.match(sdkSource, /supabase\.runAQuery/);
   assert.equal(
     MCP_TOOL_CONTRACT_DIGEST,
-    "sha256:7d213fd503eed1d50ff601deff4cbfae608073fdbf0f23a61bc26c0e81e12cc7",
+    "sha256:55771543b381922330bb1dcdf957759d7287667026b55a259835bc688283c183",
   );
   assert.match(mcpPolicy, /tenant_preflight/);
 });
@@ -80,10 +80,11 @@ test("P4-C plan is pinned to one disposable tenant and disabled integrations", a
   const registry = new Registry(":memory:", OWNER_UUID);
   try {
     const providers = {
-      supabase: new FakeSupabaseProvider(),
+      data: new FakeSupabaseProvider(),
+      identity: new FakeAuthProvider(),
+      objectStorage: new FakeSupabaseProvider(),
       hosting: new FakeHostingProvider(),
-      auth: new FakeAuthProvider(),
-      smtp: new FakeSmtpProvider(),
+      email: new FakeSmtpProvider(),
       domain: new FakeDomainProvider(),
       sourceRepository: new FakeSourceRepositoryProvider(),
     };
@@ -108,8 +109,8 @@ test("P4-C plan is pinned to one disposable tenant and disabled integrations", a
       unknown
     >[];
     assert.equal(resources.production_hostname, "p4c-lab.app.ciphercross.dev");
-    assert.equal(resources.supabase_project_name, "lh2-disposable-p4c-lab");
-    assert.equal(resources.vercel_project_name, "lh2-disposable-p4c-lab");
+    assert.equal(resources.data_project_name, "lh2-disposable-p4c-lab");
+    assert.equal(resources.hosting_project_name, "lh2-disposable-p4c-lab");
     assert.deepEqual(environment.preview_secret_names, []);
     assert.equal(environment.production_secret_scope, "production_only");
     assert.ok(capabilities.every((candidate) => candidate.enabled === false));
@@ -162,10 +163,11 @@ test("smoke ownership is complete and admin invite remains the following step", 
   const registry = new Registry(":memory:", OWNER_UUID);
   try {
     const providers: OnboardingProviders = {
-      supabase: new RecordingSupabase(),
+      data: new RecordingSupabase(),
+      identity: new RecordingAuth(),
+      objectStorage: new RecordingSupabase(),
       hosting: new RecordingHosting(),
-      auth: new RecordingAuth(),
-      smtp: new RecordingSmtp(),
+      email: new RecordingSmtp(),
       domain: new FakeDomainProvider(),
       sourceRepository: new FakeSourceRepositoryProvider(),
     };

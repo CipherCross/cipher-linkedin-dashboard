@@ -1,9 +1,80 @@
-export const REGISTRY_SCHEMA_VERSION = 1;
+export const REGISTRY_SCHEMA_VERSION = 2;
+
+/**
+ * v1 used provider names as registry vocabulary. v2 keeps provider IDs opaque
+ * while storing the capability boundary that owns each resource. The migration
+ * is local SQLite-only and never calls a provider.
+ */
+export const REGISTRY_MIGRATIONS = Object.freeze([
+  {
+    from: 1,
+    to: 2,
+    sql: `
+      ALTER TABLE tenants RENAME COLUMN supabase_tier_id TO data_tier_id;
+      ALTER TABLE tenants RENAME COLUMN supabase_compute_id TO data_compute_id;
+      ALTER TABLE tenants RENAME COLUMN vercel_tier_id TO hosting_tier_id;
+
+      ALTER TABLE resource_refs RENAME TO resource_refs_v1;
+      CREATE TABLE resource_refs (
+        tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id),
+        provider_kind TEXT NOT NULL CHECK (provider_kind IN (
+          'data','identity','object_storage','hosting','domain','email','source_repository'
+        )),
+        resource_kind TEXT NOT NULL,
+        provider_owner_id TEXT NOT NULL,
+        resource_id TEXT NOT NULL,
+        deterministic_name TEXT NOT NULL,
+        ownership_marker_digest TEXT NOT NULL,
+        observed_lifecycle TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        PRIMARY KEY(provider_kind, provider_owner_id, resource_id),
+        UNIQUE(tenant_id, provider_kind, resource_kind)
+      );
+      INSERT INTO resource_refs (
+        tenant_id, provider_kind, resource_kind, provider_owner_id, resource_id,
+        deterministic_name, ownership_marker_digest, observed_lifecycle, observed_at
+      )
+      SELECT tenant_id,
+        CASE provider_kind
+          WHEN 'supabase' THEN 'data'
+          WHEN 'vercel' THEN 'hosting'
+          WHEN 'dns' THEN 'domain'
+          WHEN 'smtp' THEN 'email'
+          WHEN 'source_repository' THEN 'source_repository'
+          ELSE NULL
+        END,
+        resource_kind, provider_owner_id, resource_id, deterministic_name,
+        ownership_marker_digest, observed_lifecycle, observed_at
+      FROM resource_refs_v1;
+      DROP TABLE resource_refs_v1;
+
+      ALTER TABLE registry_meta RENAME TO registry_meta_v1;
+      CREATE TABLE registry_meta (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+        registry_version INTEGER NOT NULL CHECK (registry_version >= 0),
+        owner_uuid TEXT NOT NULL UNIQUE,
+        last_backup_digest TEXT,
+        last_backup_at TEXT,
+        CHECK (last_backup_digest IS NULL OR last_backup_digest GLOB 'sha256:[0-9a-f]*')
+      );
+      INSERT INTO registry_meta (
+        singleton_id, schema_version, registry_version, owner_uuid,
+        last_backup_digest, last_backup_at
+      )
+      SELECT singleton_id, 2, registry_version, owner_uuid,
+        last_backup_digest, last_backup_at
+      FROM registry_meta_v1;
+      DROP TABLE registry_meta_v1;
+      CREATE INDEX IF NOT EXISTS refs_tenant_idx ON resource_refs(tenant_id);
+    `,
+  },
+] as const);
 
 export const REGISTRY_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS registry_meta (
   singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-  schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+  schema_version INTEGER NOT NULL CHECK (schema_version = 2),
   registry_version INTEGER NOT NULL CHECK (registry_version >= 0),
   owner_uuid TEXT NOT NULL UNIQUE,
   last_backup_digest TEXT,
@@ -20,9 +91,9 @@ CREATE TABLE IF NOT EXISTS tenants (
   observed_lifecycle TEXT NOT NULL,
   release_channel TEXT NOT NULL CHECK (release_channel IN ('internal','canary','stable')),
   region_id TEXT NOT NULL,
-  supabase_tier_id TEXT NOT NULL,
-  supabase_compute_id TEXT NOT NULL,
-  vercel_tier_id TEXT NOT NULL,
+  data_tier_id TEXT NOT NULL,
+  data_compute_id TEXT NOT NULL,
+  hosting_tier_id TEXT NOT NULL,
   backup_profile_id TEXT NOT NULL,
   catalog_refs_json TEXT NOT NULL,
   cron_slot INTEGER NOT NULL CHECK (cron_slot BETWEEN 0 AND 4),
@@ -84,8 +155,8 @@ CREATE TABLE IF NOT EXISTS operation_steps (
   operation_id TEXT NOT NULL REFERENCES operations(operation_id),
   ordinal INTEGER NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN (
-    'reserve_tenant','supabase_project','tenant_schema','storage_auth_smtp',
-    'platform_support','vercel_project','production_env','domain_binding',
+    'reserve_tenant','data_project','tenant_schema','object_storage_identity_email',
+    'platform_support','hosting_project','production_env','domain_binding',
     'tenant_build','production_deployment','smoke_suite','company_admin',
     'finalize_tenant'
   )),
@@ -104,7 +175,9 @@ CREATE TABLE IF NOT EXISTS operation_steps (
 
 CREATE TABLE IF NOT EXISTS resource_refs (
   tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id),
-  provider_kind TEXT NOT NULL CHECK (provider_kind IN ('supabase','vercel','dns','smtp','source_repository')),
+  provider_kind TEXT NOT NULL CHECK (provider_kind IN (
+    'data','identity','object_storage','hosting','domain','email','source_repository'
+  )),
   resource_kind TEXT NOT NULL,
   provider_owner_id TEXT NOT NULL,
   resource_id TEXT NOT NULL,

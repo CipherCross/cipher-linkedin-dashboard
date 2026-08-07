@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.lh2-platform.invalid/contracts/catalog-snapshot.v1.schema.json",
+  "title": "Platform operations catalog snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "catalog_kind",
+    "catalog_version",
+    "source_revision",
+    "published_at",
+    "valid_until",
+    "digest",
+    "review_status",
+    "entries"
+  ],
+  "properties": {
+    "catalog_kind": {
+      "enum": [
+        "regions",
+        "provider_tiers",
+        "pricing",
+        "backup_profiles",
+        "release_compatibility",
+        "capabilities",
+        "subprocessors"
+      ]
+    },
+    "catalog_version": { "$ref": "#/$defs/identifier" },
+    "source_revision": { "$ref": "#/$defs/sourceRevision" },
+    "published_at": { "$ref": "#/$defs/timestamp" },
+    "valid_until": { "$ref": "#/$defs/timestamp" },
+    "digest": { "$ref": "#/$defs/digest" },
+    "review_status": { "enum": ["approved", "draft", "rejected"] },
+    "entries": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80,
+      "pattern": "^[a-z][a-z0-9._-]{1,79}$"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._:/-]+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "availability", "approved"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "availability": { "enum": ["available", "deprecated", "unavailable"] },
+        "approved": { "type": "boolean" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "provider": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "kind": { "enum": ["plan", "compute"] },
+        "provider_region_code": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "jurisdiction": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "residency_policy_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+        "allowed_workspace_classes": { "type": "array", "uniqueItems": true, "items": { "enum": ["internal", "disposable", "external"] } },
+        "allowed_channels": { "type": "array", "uniqueItems": true, "items": { "enum": ["internal", "canary", "stable"] } },
+        "legal_review_status": { "enum": ["approved", "pending", "rejected"] },
+        "capacity_limits": { "type": "object", "additionalProperties": { "type": ["string", "integer", "number", "boolean", "null"] } },
+        "feature_limits": { "type": "object", "additionalProperties": { "type": ["string", "integer", "number", "boolean", "null"] } },
+        "backup_capability_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+        "billable": { "type": "boolean" },
+        "pricing_sku_id": { "$ref": "#/$defs/identifier" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "minor_unit_price": { "type": "integer", "minimum": 0 },
+        "pricing_unit": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "tax_treatment": { "enum": ["included", "excluded", "not_applicable"] },
+        "effective_at": { "$ref": "#/$defs/timestamp" },
+        "source_reference": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "maximum_rpo_hours": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "maximum_rto_business_hours": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "provider_backup_interval_hours": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "export_interval_hours": { "type": "integer", "minimum": 1, "maximum": 168 },
+        "drill_interval_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "retention_choices": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+        "required_coverage": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+        "compatible_tier_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+        "baseline_version": { "type": "integer", "minimum": 1 },
+        "schema_min": { "type": "integer", "minimum": 1 },
+        "schema_max": { "type": "integer", "minimum": 1 },
+        "application_min": { "$ref": "#/$defs/identifier" },
+        "application_max": { "$ref": "#/$defs/identifier" },
+        "agent_min": { "$ref": "#/$defs/identifier" },
+        "agent_max": { "$ref": "#/$defs/identifier" },
+        "launcher_min": { "$ref": "#/$defs/identifier" },
+        "launcher_max": { "$ref": "#/$defs/identifier" },
+        "protocol_min": { "$ref": "#/$defs/identifier" },
+        "protocol_max": { "$ref": "#/$defs/identifier" },
+        "approved_migration_digests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } },
+        "verification_bundle_digests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } },
+        "metering_unit": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "required_secret_names": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+        "cost_sku_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+        "allowed_overage_actions": { "type": "array", "uniqueItems": true, "items": { "enum": ["pause_and_alert", "queue_and_alert", "disable_and_alert"] } },
+        "approved_processors": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+        "data_flows": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+        "region_restrictions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } }
+      }
+    },
+    "entryBase": {
+      "type": "object",
+      "required": ["id", "availability", "approved"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "availability": { "enum": ["available", "deprecated", "unavailable"] },
+        "approved": { "type": "boolean" },
+        "expires_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "regionEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "provider_region_code": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "jurisdiction": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "residency_policy_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+            "allowed_workspace_classes": { "type": "array", "uniqueItems": true, "items": { "enum": ["internal", "disposable", "external"] } },
+            "legal_review_status": { "enum": ["approved", "pending", "rejected"] }
+          }
+        }
+      ]
+    },
+    "providerTierEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "provider": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "kind": { "enum": ["plan", "compute"] },
+            "capacity_limits": { "type": "object", "additionalProperties": { "type": ["string", "integer", "number", "boolean", "null"] } },
+            "feature_limits": { "type": "object", "additionalProperties": { "type": ["string", "integer", "number", "boolean", "null"] } },
+            "backup_capability_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+            "billable": { "type": "boolean" },
+            "pricing_sku_id": { "$ref": "#/$defs/identifier" }
+          }
+        }
+      ]
+    },
+    "pricingEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "provider": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "minor_unit_price": { "type": "integer", "minimum": 0 },
+            "pricing_unit": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "tax_treatment": { "enum": ["included", "excluded", "not_applicable"] },
+            "effective_at": { "$ref": "#/$defs/timestamp" },
+            "source_reference": { "type": "string", "minLength": 1, "maxLength": 240 }
+          }
+        }
+      ]
+    },
+    "backupProfileEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "maximum_rpo_hours": { "type": "integer", "minimum": 1, "maximum": 24 },
+            "maximum_rto_business_hours": { "type": "integer", "minimum": 1, "maximum": 8 },
+            "provider_backup_interval_hours": { "type": "integer", "minimum": 1, "maximum": 24 },
+            "export_interval_hours": { "type": "integer", "minimum": 1, "maximum": 168 },
+            "drill_interval_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+            "retention_choices": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+            "required_coverage": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+            "compatible_tier_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } }
+          }
+        }
+      ]
+    },
+    "releaseCompatibilityEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "baseline_version": { "type": "integer", "minimum": 1 },
+            "schema_min": { "type": "integer", "minimum": 1 },
+            "schema_max": { "type": "integer", "minimum": 1 },
+            "application_min": { "$ref": "#/$defs/identifier" },
+            "application_max": { "$ref": "#/$defs/identifier" },
+            "agent_min": { "$ref": "#/$defs/identifier" },
+            "agent_max": { "$ref": "#/$defs/identifier" },
+            "launcher_min": { "$ref": "#/$defs/identifier" },
+            "launcher_max": { "$ref": "#/$defs/identifier" },
+            "protocol_min": { "$ref": "#/$defs/identifier" },
+            "protocol_max": { "$ref": "#/$defs/identifier" },
+            "allowed_workspace_classes": { "type": "array", "uniqueItems": true, "items": { "enum": ["internal", "disposable", "external"] } },
+            "allowed_channels": { "type": "array", "uniqueItems": true, "items": { "enum": ["internal", "canary", "stable"] } },
+            "approved_migration_digests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } },
+            "verification_bundle_digests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } }
+          }
+        }
+      ]
+    },
+    "capabilityEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "metering_unit": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "required_secret_names": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+            "cost_sku_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+            "allowed_overage_actions": { "type": "array", "uniqueItems": true, "items": { "enum": ["pause_and_alert", "queue_and_alert", "disable_and_alert"] } },
+            "pricing_sku_id": { "$ref": "#/$defs/identifier" }
+          }
+        }
+      ]
+    },
+    "subprocessorEntry": {
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "approved_processors": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+            "data_flows": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+            "region_restrictions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+            "legal_review_status": { "enum": ["approved", "pending", "rejected"] },
+            "effective_at": { "$ref": "#/$defs/timestamp" }
+          }
+        }
+      ]
+    }
+  }
+}

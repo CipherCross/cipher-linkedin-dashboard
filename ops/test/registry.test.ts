@@ -146,7 +146,7 @@ test("provider snapshot drift blocks apply without changing registry", () => {
     const plan = makeOnboardingPlan();
     registry.savePlan(plan, { catalogs: catalogResolver(), now: TEST_NOW });
     const drifted = observedSnapshots().map((snapshot) =>
-      snapshot.provider === "vercel"
+      snapshot.provider === "hosting"
         ? { ...snapshot, digest: `sha256:${"f".repeat(64)}` }
         : snapshot,
     );

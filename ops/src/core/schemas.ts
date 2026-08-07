@@ -44,6 +44,10 @@ const validators: Readonly<Record<PlanKind | "apply", ValidateFunction>> = {
   apply: ajv.compile(loadSchema("apply-request.v1.schema.json")),
 };
 
+const catalogValidator = ajv.compile(
+  loadSchema("catalog-snapshot.v1.schema.json"),
+);
+
 function safeErrors(errors: ErrorObject[] | null | undefined): readonly object[] {
   return (errors ?? []).map((error) => ({
     instancePath: error.instancePath,
@@ -74,4 +78,14 @@ export function validateApplyRequestSchema(
   value: unknown,
 ): asserts value is ApplyRequest {
   validate<ApplyRequest>("apply", value);
+}
+
+export function validateCatalogSchema(value: unknown): void {
+  if (!catalogValidator(value)) {
+    throw new OpsError(
+      "schema_validation_failed",
+      "catalog contract schema validation failed",
+      { errors: safeErrors(catalogValidator.errors) },
+    );
+  }
 }

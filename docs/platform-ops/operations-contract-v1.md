@@ -11,6 +11,7 @@ Machine-readable schemas:
 - `contracts/onboarding-plan.v1.schema.json`
 - `contracts/release-plan.v1.schema.json`
 - `contracts/apply-request.v1.schema.json`
+- `contracts/catalog-snapshot.v1.schema.json`
 
 This document fixes the inputs, state, cost, recovery, and safety boundaries that
 P3 and later sessions must implement. It does not authorize provider writes and
@@ -93,8 +94,8 @@ Given slug `<slug>`:
 | Resource | Name |
 |---|---|
 | Logical tenant | `tenant/<slug>` |
-| Supabase project display name | `lh2-<workspace-class>-<slug>` |
-| Vercel project | `lh2-<workspace-class>-<slug>` |
+| Data project | `lh2-<workspace-class>-<slug>` |
+| Hosting project | `lh2-<workspace-class>-<slug>` |
 | Production hostname | `<slug>.<platform-domain>` |
 | Keychain tenant namespace | `lh2-platform/tenant/<slug>/<secret-name>` |
 | Operation lock | `tenant:<slug>` |
@@ -128,8 +129,8 @@ An onboarding plan is not applicable until all required prerequisites are `passe
 
 ### Organization and access
 
-- Approved Supabase organization ID and Vercel team ID are selected from local
-  platform configuration.
+- Approved data and hosting owner scopes are selected from local platform
+  configuration. Provider-specific owner IDs remain adapter/registry data.
 - Read-only preflight proves provider credentials can inspect the selected
   organization/team. Secret values are neither accepted nor returned.
 - Domain zone and the exact tenant hostname are owner-controlled and available.
@@ -147,7 +148,7 @@ An onboarding plan is not applicable until all required prerequisites are `passe
 
 ### Provider tier and capacity
 
-- Supabase plan, compute size, and Vercel plan are explicit catalog IDs.
+- Data plan, data compute size, and hosting plan are explicit catalog IDs.
 - The selected entries must expose backup capabilities, function count/body/time
   limits, Auth/SMTP compatibility, and expected recurring price.
 - Preflight counts the repository's current serverless functions and scheduled
@@ -161,7 +162,7 @@ An onboarding plan is not applicable until all required prerequisites are `passe
   allowlist are required.
 - SMTP provider access and DNS ownership are preflighted without sending an admin
   invite. Delivery smoke testing occurs during apply before the invite step.
-- Default Supabase SMTP is not production-eligible.
+- A provider-default email relay is not production-eligible.
 - The first admin receives a personal invite and sets their own password. A
   generated/shared password is forbidden.
 
@@ -177,7 +178,7 @@ An onboarding plan is not applicable until all required prerequisites are `passe
 
 External onboarding remains blocked until the pinned release compatibility entry
 includes a machine-scoped, revocable ingest protocol that does not place a
-Supabase service-role key or shared `NOTIFY_SECRET` on a client machine. The
+data-provider service-role key or shared `NOTIFY_SECRET` on a client machine. The
 current direct transport is `internal` only.
 
 ## Plan envelope and digest
@@ -228,7 +229,7 @@ Safe business inputs are limited to:
 
 - company name, immutable slug, workspace class, admin email;
 - expected instance count and release channel;
-- residency, region, Supabase/Vercel tier, compute, pricing, backup, retention,
+- residency, region, data plan, data compute, hosting plan, pricing, backup, retention,
   and subprocessor profile IDs;
 - SMTP and integration Keychain labels, never values;
 - support-access policy;
@@ -236,13 +237,13 @@ Safe business inputs are limited to:
 
 The resulting plan completely describes:
 
-1. exact logical/provider names, hostname, tags, owner organization/team, and
+1. exact logical capability names, hostname, tags, owner scopes, and
    stable cron slot;
 2. pinned Git SHA, baseline version `053`, ordered shared migrations beginning
    with `054`, application version, agent release, and ingest protocol;
 3. redacted provider snapshots and their digests;
-4. ordered typed effects for Supabase, schema, private Storage, Auth/SMTP,
-   support identity, Vercel, env scopes, domain, build, deployment, smoke tests,
+4. ordered typed effects for data, schema, private object storage, identity/email,
+   support identity, hosting, env scopes, domain, build, deployment, smoke tests,
    company-admin row, and invite;
 5. Production and Preview policy;
 6. itemized recurring/one-time cost and usage ceiling;
@@ -259,11 +260,11 @@ The only allowed onboarding sequence is:
 | Step | Transition gate |
 |---:|---|
 | 1 | Reserve slug and operation under `tenant:<slug>` lock |
-| 2 | Create or strictly adopt owner-marked Supabase project; persist ID |
+| 2 | Create or strictly adopt owner-marked data project; persist opaque ID |
 | 3 | Wait ready; apply immutable v053 baseline and ordered shared deltas |
-| 4 | Verify private Storage; configure Auth URLs/templates/custom SMTP |
+| 4 | Verify private object storage; configure identity URLs/templates/email |
 | 5 | Create disabled/expired `platform_support` membership |
-| 6 | Create or adopt Vercel project; disable Git auto-promotion |
+| 6 | Create or adopt hosting project; disable Git auto-promotion |
 | 7 | Write allowlisted Production-only env values from Keychain/generated refs |
 | 8 | Bind the pre-approved hostname |
 | 9 | Build the pinned SHA with tenant-specific public values |
@@ -395,7 +396,7 @@ outcome_unknown`. A step cannot be skipped unless its plan marks it
 `not_applicable`; that value is fixed before apply. Provider references are written
 before a step becomes `succeeded`.
 
-## Logical registry schema v1
+## Logical registry schema v1 (SQLite implementation v2)
 
 P3-A implements this logical model in SQLite. Column types and indexes may be
 adapted to SQLite, but fields, uniqueness, and secret boundaries are contractual.
@@ -407,7 +408,7 @@ adapted to SQLite, but fields, uniqueness, and secret boundaries are contractual
 | `plans` | plan ID, kind, schema/contract versions, digest, immutable canonical spec JSON, generated/expiry time, expected registry version, state, consumed operation/key; unique digest is not required |
 | `operations` | operation ID, kind, scope, plan ID/digest, idempotency key, state, actor, approval time, error code/redacted summary, created/updated/completed time; unique `(kind, scope, idempotency_key)` |
 | `operation_steps` | operation ID, ordinal, closed step kind, state, attempt, provider request ID, started/updated/completed time, redacted error; unique `(operation_id, ordinal)` |
-| `resource_refs` | tenant ID, provider kind, resource kind, provider organization/team ID, resource ID, deterministic name, ownership-marker digest, observed lifecycle/time; unique provider resource identity |
+| `resource_refs` | tenant ID, capability kind (`data`, `identity`, `object_storage`, `hosting`, `domain`, `email`, `source_repository`), resource kind, opaque provider owner ID, opaque resource ID, deterministic name, ownership-marker digest, observed lifecycle/time; unique provider resource identity |
 | `locks` | lock name, owner operation ID, fencing token, acquired/expires/heartbeat time; unique lock name |
 | `releases` | release ID, bundle digest, Git SHA, version compatibility IDs, channel, state, created/completed time |
 | `release_targets` | release ID, tenant ID, observed/target version tuple, state, last step/error; unique `(release_id, tenant_id)` |
@@ -489,7 +490,7 @@ profile because it depends on the client data policy.
 
 ### Enhanced/PITR profiles
 
-A stricter profile is eligible only when the pinned Supabase tier/compute and
+A stricter profile is eligible only when the pinned data plan/compute and
 backup catalogs prove the requested RPO/RTO, its recurring cost is priced, and an
 approved restore procedure covers the same recovery surface. “PITR enabled”
 without a successful restore drill is not a met recovery objective.
@@ -517,7 +518,7 @@ The operations core, CLI, and MCP must not expose or internally route:
 - apply of a blocked, stale, expired, unknown-version, or digest-mismatched plan;
 - company-admin invite before all required smoke tests pass;
 - production secrets in Preview, external auto-preview, or Git auto-promotion;
-- a shared build artifact across tenants when public Supabase values differ;
+- a shared build artifact across tenants when public data values differ;
 - service-role or shared notification secrets on external client machines;
 - overwrite of immutable baseline/release/agent artifacts;
 - stable rollout before a successful designated canary gate;

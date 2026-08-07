@@ -1027,7 +1027,7 @@ test("canonical digests are stable and no existing schema version moved", () => 
   assert.equal(plan.contract_version, "p2.v1");
   assert.equal(plan.plan_schema_version, 1);
   assert.equal(plan.plan_digest, planDigest(asJsonValue(plan.spec)));
-  assert.equal(plan.plan_digest, "sha256:60c003918ec508fb3136c51cd827b4778bfa5f9dfd2b6c5a3b597a0243c3e045");
+  assert.equal(plan.plan_digest, "sha256:7122a07d85042b8eb3d0a0d8a3d0a48e06ce5a1a58c5409b7c75425db5484bb0");
 });
 
 /* ------------------------------------------------------------------ *

@@ -47,8 +47,8 @@ export type PreflightKind = (typeof PREFLIGHT_KINDS)[number];
 export interface DisposableOnboardingProfile {
   readonly allowedTenantSlug: string;
   readonly platformDomain: string;
-  readonly supabaseOrganizationId: string;
-  readonly vercelTeamId: string;
+  readonly dataOwnerScopeId: string;
+  readonly hostingOwnerScopeId: string;
   readonly sourceGitSha: string;
   readonly applicationVersion: string;
   readonly compatibilityEntryId: string;
@@ -172,19 +172,19 @@ export class ProviderPreflightService {
     const redirectUrls = [`${siteUrl}/auth/callback`];
 
     const [
-      supabase,
+      data,
       hosting,
-      auth,
-      smtp,
+      identity,
+      email,
       domain,
       sourceRepository,
     ] = await Promise.all([
-      this.#providers.supabase.inspect({
-        organizationId: this.#profile.supabaseOrganizationId,
+      this.#providers.data.inspect({
+        organizationId: this.#profile.dataOwnerScopeId,
         deterministicName: projectName,
-        regionId: inputs.supabase_region_id,
-        tierId: inputs.supabase_tier_id,
-        computeId: inputs.supabase_compute_id,
+        regionId: inputs.region_id,
+        tierId: inputs.data_tier_id,
+        computeId: inputs.data_compute_id,
         backupProfileId: inputs.backup_profile_id,
         ownership,
       }),
@@ -197,13 +197,13 @@ export class ProviderPreflightService {
         requiredPublicValueCount: REQUIRED_PUBLIC_VALUE_COUNT,
         ownership,
       }),
-      this.#providers.auth.inspect({
+      this.#providers.identity.inspect({
         templateSetId: this.#profile.templateSetId,
         siteUrl,
         redirectUrls,
         releaseCompatibilityId: this.#profile.compatibilityEntryId,
       }),
-      this.#providers.smtp.inspect({
+      this.#providers.email.inspect({
         smtpProfileId: inputs.smtp_profile_id,
         senderDomain: this.#profile.senderDomain,
         fromIdentity: this.#profile.fromIdentity,
@@ -221,7 +221,7 @@ export class ProviderPreflightService {
       }),
     ]);
 
-    const raw = { supabase, hosting, auth, smtp, domain, sourceRepository };
+    const raw = { data, hosting, identity, email, domain, sourceRepository };
     this.#redactor.assertSecretFree(raw, "provider preflight responses");
     const snapshots = this.#snapshots(observedAt, raw);
     const now = Date.parse(observedAt);
@@ -253,42 +253,39 @@ export class ProviderPreflightService {
   #snapshots(
     observedAt: string,
     observations: {
-      readonly supabase: SupabaseInspection;
+      readonly data: SupabaseInspection;
       readonly hosting: HostingCapabilityInspection;
-      readonly auth: AuthInspection;
-      readonly smtp: SmtpInspection;
+      readonly identity: AuthInspection;
+      readonly email: SmtpInspection;
       readonly domain: DomainInspection;
       readonly sourceRepository: SourceRepositoryInspection;
     },
   ): readonly DetailedProviderSnapshot[] {
-    const { supabase, hosting, auth, smtp, domain, sourceRepository } = observations;
+    const { data, hosting, identity, email, domain, sourceRepository } = observations;
     return [
       snapshot(
-        "supabase",
+        "data",
         observedAt,
-        [supabase.validUntil, auth.validUntil].sort()[0]!,
+        [data.validUntil, identity.validUntil].sort()[0]!,
         {
-          provider: "supabase",
-          organization_accessible: supabase.organizationAccessible,
+          provider: "data",
+          organization_accessible: data.organizationAccessible,
           deterministic_name_usable:
-            supabase.deterministicNameAvailable ||
-            supabase.existingResourceOwned,
-          region_available: supabase.regionAvailable,
-          tier_available: supabase.tierAvailable,
-          compute_available: supabase.computeAvailable,
-          backup_compatible: supabase.backupCompatible,
-          auth_configuration_supported: supabase.authConfigurationSupported,
-          auth_template_set_approved: auth.templateSetApproved,
-          auth_production_urls_valid: auth.productionUrlsValid,
-          auth_invite_flow_supported: auth.inviteFlowSupported,
-          auth_release_compatible: auth.releaseCompatible,
+            data.deterministicNameAvailable ||
+            data.existingResourceOwned,
+          region_available: data.regionAvailable,
+          tier_available: data.tierAvailable,
+          compute_available: data.computeAvailable,
+          backup_compatible: data.backupCompatible,
+          auth_configuration_supported: data.authConfigurationSupported,
+          auth_template_set_approved: identity.templateSetApproved,
+          auth_production_urls_valid: identity.productionUrlsValid,
+          auth_invite_flow_supported: identity.inviteFlowSupported,
+          auth_release_compatible: identity.releaseCompatible,
         },
       ),
-      // The snapshot's provider key stays "vercel" because `ProviderKind` and
-      // the persisted registry rows are S24's to migrate. What the snapshot
-      // records is now capability state, not vendor resource state.
-      snapshot("vercel", observedAt, hosting.validUntil, {
-        provider: "vercel",
+      snapshot("hosting", observedAt, hosting.validUntil, {
+        provider: "hosting",
         control_plane_accessible: hosting.controlPlaneAccessible,
         deterministic_name_usable:
           hosting.deterministicNameAvailable || hosting.existingTargetOwned,
@@ -303,20 +300,20 @@ export class ProviderPreflightService {
           hosting.automaticPromotionCanBeDisabled,
         isolated_previews_supported: hosting.isolatedPreviewsSupported,
       }),
-      snapshot("dns", observedAt, domain.validUntil, {
-        provider: "dns",
+      snapshot("domain", observedAt, domain.validUntil, {
+        provider: "domain",
         zone_owned: domain.zoneOwned,
         hostname_usable:
           domain.hostnameAvailable || domain.existingBindingOwned,
         sender_domain_verified: domain.senderDomainVerified,
         legal_review_approved: domain.legalReviewApproved,
       }),
-      snapshot("smtp", observedAt, smtp.validUntil, {
-        provider: "smtp",
-        provider_accessible: smtp.providerAccessible,
-        custom_smtp: smtp.customSmtp,
-        sender_identity_verified: smtp.senderIdentityVerified,
-        credentials_available: smtp.credentialsAvailable,
+      snapshot("email", observedAt, email.validUntil, {
+        provider: "email",
+        provider_accessible: email.providerAccessible,
+        custom_smtp: email.customSmtp,
+        sender_identity_verified: email.senderIdentityVerified,
+        credentials_available: email.credentialsAvailable,
       }),
       snapshot("source_repository", observedAt, sourceRepository.validUntil, {
         provider: "source_repository",
@@ -330,16 +327,16 @@ export class ProviderPreflightService {
   #prerequisites(
     inputs: OnboardingBusinessInputs,
     observations: {
-      readonly supabase: SupabaseInspection;
+      readonly data: SupabaseInspection;
       readonly hosting: HostingCapabilityInspection;
-      readonly auth: AuthInspection;
-      readonly smtp: SmtpInspection;
+      readonly identity: AuthInspection;
+      readonly email: SmtpInspection;
       readonly domain: DomainInspection;
       readonly sourceRepository: SourceRepositoryInspection;
     },
     validSnapshots: boolean,
   ): readonly PreflightPrerequisite[] {
-    const { supabase, hosting, auth, smtp, domain, sourceRepository } = observations;
+    const { data, hosting, identity, email, domain, sourceRepository } = observations;
     const disposableScope =
       inputs.workspace_class === "disposable" &&
       inputs.release_channel === "canary" &&
@@ -347,19 +344,19 @@ export class ProviderPreflightService {
     const checks: Record<PreflightKind, boolean> = {
       provider_access:
         validSnapshots &&
-        supabase.organizationAccessible &&
-        (supabase.deterministicNameAvailable ||
-          supabase.existingResourceOwned) &&
+        data.organizationAccessible &&
+        (data.deterministicNameAvailable ||
+          data.existingResourceOwned) &&
         hosting.controlPlaneAccessible &&
         (hosting.deterministicNameAvailable || hosting.existingTargetOwned) &&
-        smtp.providerAccessible,
+        email.providerAccessible,
       domain:
         domain.zoneOwned &&
         (domain.hostnameAvailable || domain.existingBindingOwned),
-      region_residency: supabase.regionAvailable && disposableScope,
+      region_residency: data.regionAvailable && disposableScope,
       tier_capacity: allTrue([
-        supabase.tierAvailable,
-        supabase.computeAvailable,
+        data.tierAvailable,
+        data.computeAvailable,
         hosting.runtimeProfileAvailable,
         hosting.scheduleCapacityAvailable,
         hosting.serverValueBindingSupported,
@@ -371,18 +368,18 @@ export class ProviderPreflightService {
         hosting.isolatedPreviewsSupported,
       ]),
       smtp_dns: allTrue([
-        smtp.customSmtp,
-        smtp.senderIdentityVerified,
-        smtp.credentialsAvailable,
+        email.customSmtp,
+        email.senderIdentityVerified,
+        email.credentialsAvailable,
         domain.senderDomainVerified,
       ]),
-      backup_coverage: supabase.backupCompatible,
+      backup_coverage: data.backupCompatible,
       release_compatibility: allTrue([
-        supabase.authConfigurationSupported,
-        auth.templateSetApproved,
-        auth.productionUrlsValid,
-        auth.inviteFlowSupported,
-        auth.releaseCompatible,
+        data.authConfigurationSupported,
+        identity.templateSetApproved,
+        identity.productionUrlsValid,
+        identity.inviteFlowSupported,
+        identity.releaseCompatible,
         sourceRepository.revisionPresent,
         sourceRepository.releaseCompatible,
         sourceRepository.artifactPinned,

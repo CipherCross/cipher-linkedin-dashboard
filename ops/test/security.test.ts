@@ -117,10 +117,11 @@ test("canary values are removed from provider error and success paths", async ()
       const executor = new OnboardingExecutor(
         registry,
         {
-          supabase,
+          data: supabase,
+          identity: new FakeAuthProvider(),
+          objectStorage: new FakeSupabaseProvider(),
           hosting: new FakeHostingProvider(),
-          auth: new FakeAuthProvider(),
-          smtp: new FakeSmtpProvider(),
+          email: new FakeSmtpProvider(),
           domain: new FakeDomainProvider(),
           sourceRepository: new FakeSourceRepositoryProvider(),
         },

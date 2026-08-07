@@ -173,8 +173,8 @@ export function p4cProfile(): DisposableOnboardingProfile {
   return {
     allowedTenantSlug: "p4c-lab",
     platformDomain: "app.ciphercross.dev",
-    supabaseOrganizationId: "dzfikwgcfdbgxpejzfnk",
-    vercelTeamId: "team_AB0nAOId1mR7gHxPldsG9f2u",
+    dataOwnerScopeId: "dzfikwgcfdbgxpejzfnk",
+    hostingOwnerScopeId: "team_AB0nAOId1mR7gHxPldsG9f2u",
     sourceGitSha: P4C_SOURCE_GIT_SHA,
     applicationVersion: "p4c-app-v1",
     compatibilityEntryId: "p4c-release-v1",
@@ -198,7 +198,7 @@ export function p4cProfile(): DisposableOnboardingProfile {
       one_time_minor: 0,
       components: [
         {
-          provider: "supabase",
+          provider: "data",
           sku_id: "supabase-pro-month",
           quantity: 1,
           unit: "tenant_month",
@@ -208,7 +208,7 @@ export function p4cProfile(): DisposableOnboardingProfile {
             "Supabase Pro organization with one included Micro project; usage overages are excluded from the recurring estimate",
         },
         {
-          provider: "vercel",
+          provider: "hosting",
           sku_id: "vercel-existing-team",
           quantity: 1,
           unit: "tenant_month",
@@ -218,7 +218,7 @@ export function p4cProfile(): DisposableOnboardingProfile {
             "Disposable project uses the owner's existing Vercel team without adding a paid seat",
         },
         {
-          provider: "smtp",
+          provider: "email",
           sku_id: "resend-existing-account",
           quantity: 1,
           unit: "email",
@@ -271,10 +271,10 @@ export function p4cBusinessInputs() {
     expected_instances: 1,
     release_channel: "canary" as const,
     residency_policy_id: "eu-eea-reviewed",
-    supabase_region_id: "eu-west-1",
-    supabase_tier_id: "supabase-pro",
-    supabase_compute_id: "supabase-micro",
-    vercel_tier_id: "vercel-pro",
+    region_id: "eu-west-1",
+    data_tier_id: "supabase-pro",
+    data_compute_id: "supabase-micro",
+    hosting_tier_id: "vercel-pro",
     backup_profile_id: "supabase-pro-daily-7d",
     pricing_catalog_id: "p4c-pricing-2026-07-29",
     retention_policy_id: "p4c-disposable-retention",
@@ -303,8 +303,8 @@ export async function createP4COwnerOperations(
     {
       repositoryRoot: resolve(repositoryRoot),
       allowedTenantSlug: "p4c-lab",
-      supabaseOrganizationSlug: profile.supabaseOrganizationId,
-      vercelTeamId: profile.vercelTeamId,
+      supabaseOrganizationSlug: profile.dataOwnerScopeId,
+      vercelTeamId: profile.hostingOwnerScopeId,
       apexDomain: "ciphercross.dev",
       platformDomain: "app.ciphercross.dev",
       senderDomain: "mail.ciphercross.dev",
@@ -319,10 +319,11 @@ export async function createP4COwnerOperations(
     redactor,
   );
   const providers = {
-    supabase: new StrictSupabaseAdapter(ports.supabase, redactor),
+    data: new StrictSupabaseAdapter(ports.supabase, redactor),
+    objectStorage: new StrictSupabaseAdapter(ports.supabase, redactor),
     hosting: new StrictHostingAdapter(ports.hosting, redactor),
-    auth: new StrictAuthAdapter(ports.auth, redactor),
-    smtp: new StrictSmtpAdapter(ports.smtp, redactor),
+    identity: new StrictAuthAdapter(ports.auth, redactor),
+    email: new StrictSmtpAdapter(ports.smtp, redactor),
     domain: new StrictDomainAdapter(ports.domain, redactor),
     sourceRepository: new StrictSourceRepositoryAdapter(
       ports.sourceRepository,

@@ -469,12 +469,9 @@ function walk(value: unknown, path = "$", key: string | null = null): {
 }
 
 /**
- * The registry's `providerKind` and the preflight snapshot's `provider` still
- * read "vercel". That is registry vocabulary, and the session map assigns
- * provider-neutral catalogs, plans and registry migration to S24; renaming it
- * here would move a pinned plan digest. Those two fields are therefore asserted
- * explicitly rather than swept, so the retained vocabulary is a stated decision
- * and not an oversight.
+ * Registry provider kinds and preflight snapshot providers are canonical
+ * capability vocabulary. They are removed from the generic structural sweep
+ * only because the sweep is specifically about vendor-shaped values.
  */
 function withoutRegistryVocabulary(value: unknown): unknown {
   return JSON.parse(
@@ -1134,10 +1131,11 @@ test("no canary reaches an adapter result, error or verification report", async 
 
 function bundleWith(hosting: HostingProvider): OnboardingProviders {
   return {
-    supabase: new FakeSupabaseProvider(),
+    data: new FakeSupabaseProvider(),
+    identity: new FakeAuthProvider(),
+    objectStorage: new FakeSupabaseProvider(),
     hosting,
-    auth: new FakeAuthProvider(),
-    smtp: new FakeSmtpProvider(),
+    email: new FakeSmtpProvider(),
     domain: new FakeDomainProvider(),
     sourceRepository: new FakeSourceRepositoryProvider(),
   };
@@ -1169,10 +1167,10 @@ async function runOnboarding(
     registry.verifyAuditChain();
     return (
       [
-        ["supabase", "project"],
-        ["vercel", "project"],
-        ["vercel", "build"],
-        ["vercel", "deployment"],
+        ["data", "project"],
+        ["hosting", "project"],
+        ["hosting", "build"],
+        ["hosting", "deployment"],
       ] as const
     ).map((entry) => {
       const reference = registry.getResourceReference(
@@ -1202,13 +1200,12 @@ test("the adapter and the fake are interchangeable in the onboarding executor", 
       `resource reference ${reference.resourceKind}`,
     );
   }
-  // Only the registry vocabulary still names the vendor; every value the
-  // adapter produced — the handles, the deterministic name, the ownership
-  // marker — is canonical.
+  // Resource kind is a capability boundary; handles and ownership markers are
+  // canonical and contain no vendor response fragments.
   assert.deepEqual(
     fromAdapter.map((reference) => reference.providerKind),
-    ["supabase", "vercel", "vercel", "vercel"],
-    "registry provider vocabulary is unchanged; S24 owns renaming it",
+    ["data", "hosting", "hosting", "hosting"],
+    "registry provider vocabulary is capability-neutral",
   );
   for (const reference of fromAdapter.slice(1)) {
     assert.match(
@@ -1261,8 +1258,8 @@ test("preflight and planning run identically over the adapter and the fake", asy
   );
   assert.deepEqual(
     fromAdapter.snapshots.map((snapshot) => snapshot.provider),
-    ["supabase", "vercel", "dns", "smtp", "source_repository"],
-    "registry provider vocabulary is unchanged; S24 owns renaming it",
+    ["data", "hosting", "domain", "email", "source_repository"],
+    "preflight snapshot vocabulary is capability-neutral",
   );
 });
 

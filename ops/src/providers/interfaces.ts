@@ -2,10 +2,12 @@ import type { HostingProvider } from "./hosting.js";
 
 export type WorkspaceClass = "internal" | "disposable" | "external";
 export type ProviderKind =
-  | "supabase"
-  | "vercel"
-  | "dns"
-  | "smtp"
+  | "data"
+  | "identity"
+  | "object_storage"
+  | "hosting"
+  | "domain"
+  | "email"
   | "source_repository";
 
 export interface OwnershipMarker {
@@ -216,15 +218,20 @@ export interface DomainProvider extends DomainControlPlanePort {}
 export interface SourceRepositoryProvider extends SourceRepositoryReadPort {}
 
 export interface OnboardingProviders {
-  readonly supabase: SupabaseProvider;
+  /** Data-plane capability; the concrete implementation may be Neon. */
+  readonly data: SupabaseProvider;
+  /** Identity capability; the concrete implementation may be Better Auth. */
+  readonly identity: AuthProvider;
+  /** Object capability; the concrete implementation may be Cloudflare R2. */
+  readonly objectStorage: SupabaseProvider;
   /**
    * The canonical hosting capability port. Any adapter satisfying it —
    * the in-memory fake or the concrete Vercel adapter — drives the same plan
    * to the same canonical results.
    */
   readonly hosting: HostingProvider;
-  readonly auth: AuthProvider;
-  readonly smtp: SmtpProvider;
+  /** Email delivery capability, independent of SMTP vendor. */
+  readonly email: SmtpProvider;
   readonly domain: DomainProvider;
   readonly sourceRepository: SourceRepositoryProvider;
 }

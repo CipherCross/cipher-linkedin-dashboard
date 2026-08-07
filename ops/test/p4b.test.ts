@@ -60,10 +60,11 @@ function strictProviders(
   ports: FakeOnboardingProviderBundle,
 ): OnboardingProviders {
   return {
-    supabase: new StrictSupabaseAdapter(ports.supabase),
+    data: new StrictSupabaseAdapter(ports.data),
+    objectStorage: new StrictSupabaseAdapter(ports.objectStorage),
     hosting: new StrictHostingAdapter(ports.hosting),
-    auth: new StrictAuthAdapter(ports.auth),
-    smtp: new StrictSmtpAdapter(ports.smtp),
+    identity: new StrictAuthAdapter(ports.identity),
+    email: new StrictSmtpAdapter(ports.email),
     domain: new StrictDomainAdapter(ports.domain),
     sourceRepository: new StrictSourceRepositoryAdapter(
       ports.sourceRepository,
@@ -130,9 +131,9 @@ test("strict provider adapters reject non-allowlisted provider response fields",
   const request = {
     organizationId: "sb-org-1",
     deterministicName: "lh2-disposable-disposable-lab",
-    regionId: inputs.supabase_region_id,
-    tierId: inputs.supabase_tier_id,
-    computeId: inputs.supabase_compute_id,
+    regionId: inputs.region_id,
+    tierId: inputs.data_tier_id,
+    computeId: inputs.data_compute_id,
     backupProfileId: inputs.backup_profile_id,
     ownership: {
       managedBy: "lh2-platform-ops" as const,
@@ -164,10 +165,10 @@ test("disposable dry-run is deterministic and provider snapshots are read-only",
     assert.equal(first.preflight.snapshots.length, 5);
     assert.deepEqual(
       first.preflight.snapshots.map((snapshot) => snapshot.provider),
-      ["supabase", "vercel", "dns", "smtp", "source_repository"],
+      ["data", "hosting", "domain", "email", "source_repository"],
     );
     assert.equal(registry.registryVersion, 0);
-    assert.equal(providerPorts.supabase.projectCount, 0);
+    assert.equal(providerPorts.data.projectCount, 0);
     assert.equal(providerPorts.hosting.targetCount, 0);
   } finally {
     registry.close();
@@ -177,7 +178,7 @@ test("disposable dry-run is deterministic and provider snapshots are read-only",
 test("fixed MCP schemas drive preflight, plan and resumable disposable onboarding", async () => {
   assert.equal(
     MCP_TOOL_CONTRACT_DIGEST,
-    "sha256:7d213fd503eed1d50ff601deff4cbfae608073fdbf0f23a61bc26c0e81e12cc7",
+    "sha256:55771543b381922330bb1dcdf957759d7287667026b55a259835bc688283c183",
   );
   const registry = new Registry(":memory:", OWNER_UUID);
   try {
@@ -226,10 +227,10 @@ test("fixed MCP schemas drive preflight, plan and resumable disposable onboardin
       );
     }
     assert.equal(result?.state, "succeeded");
-    assert.equal(providerPorts.supabase.projectCount, 1);
+    assert.equal(providerPorts.data.projectCount, 1);
     assert.equal(providerPorts.hosting.targetCount, 1);
     assert.equal(
-      providerPorts.auth.effectCount("createCompanyAdminAndInvite"),
+      providerPorts.identity.effectCount("createCompanyAdminAndInvite"),
       1,
     );
   } finally {
@@ -238,24 +239,24 @@ test("fixed MCP schemas drive preflight, plan and resumable disposable onboardin
 });
 
 const injectedEffects = [
-  ["supabase", "createOrAdoptProject"],
-  ["supabase", "waitUntilReady"],
-  ["supabase", "applySchema"],
-  ["supabase", "configurePrivateStorage"],
-  ["auth", "configure"],
-  ["smtp", "configure"],
-  ["auth", "createDisabledSupportMembership"],
+  ["data", "createOrAdoptProject"],
+  ["data", "waitUntilReady"],
+  ["data", "applySchema"],
+  ["objectStorage", "configurePrivateStorage"],
+  ["identity", "configure"],
+  ["email", "configure"],
+  ["identity", "createDisabledSupportMembership"],
   ["hosting", "createDeploymentTarget"],
   ["hosting", "bindEnvironment"],
   ["hosting", "assignDomain"],
   ["hosting", "buildRelease"],
   ["hosting", "registerSchedules"],
   ["hosting", "promoteRelease"],
-  ["supabase", "runSmokeTests"],
-  ["auth", "runSmokeTests"],
-  ["smtp", "runSmokeTests"],
+  ["data", "runSmokeTests"],
+  ["identity", "runSmokeTests"],
+  ["email", "runSmokeTests"],
   ["hosting", "verifyDeployment"],
-  ["auth", "createCompanyAdminAndInvite"],
+  ["identity", "createCompanyAdminAndInvite"],
 ] as const;
 
 test("failure after every provider effect quarantines and resumes without duplicates", async () => {
@@ -311,10 +312,10 @@ test("failure after every provider effect quarantines and resumes without duplic
         if (resumed.state === "succeeded") break;
       }
       assert.equal(registry.getOperation(operationId)?.state, "succeeded");
-      assert.equal(providerPorts.supabase.projectCount, 1);
+      assert.equal(providerPorts.data.projectCount, 1);
       assert.equal(providerPorts.hosting.targetCount, 1);
       assert.ok(
-        providerPorts.auth.effectCount("createCompanyAdminAndInvite") <= 1,
+        providerPorts.identity.effectCount("createCompanyAdminAndInvite") <= 1,
       );
       registry.verifyAuditChain();
     } finally {

@@ -164,10 +164,10 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/providerSnapshot" },
           "allOf": [
-            { "contains": { "properties": { "provider": { "const": "supabase" } }, "required": ["provider"] } },
-            { "contains": { "properties": { "provider": { "const": "vercel" } }, "required": ["provider"] } },
-            { "contains": { "properties": { "provider": { "const": "dns" } }, "required": ["provider"] } },
-            { "contains": { "properties": { "provider": { "const": "smtp" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "data" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "hosting" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "domain" } }, "required": ["provider"] } },
+            { "contains": { "properties": { "provider": { "const": "email" } }, "required": ["provider"] } },
             { "contains": { "properties": { "provider": { "const": "source_repository" } }, "required": ["provider"] } }
           ]
         },
@@ -181,11 +181,11 @@
           "maxItems": 13,
           "prefixItems": [
             { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 1 }, "kind": { "const": "reserve_tenant" }, "action": { "const": "reserve" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 2 }, "kind": { "const": "supabase_project" }, "action": { "const": "create_or_adopt" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 2 }, "kind": { "const": "data_project" }, "action": { "const": "create_or_adopt" } } }] },
             { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 3 }, "kind": { "const": "tenant_schema" }, "action": { "const": "apply" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 4 }, "kind": { "const": "storage_auth_smtp" }, "action": { "const": "configure" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 4 }, "kind": { "const": "object_storage_identity_email" }, "action": { "const": "configure" } } }] },
             { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 5 }, "kind": { "const": "platform_support" }, "action": { "const": "configure" } } }] },
-            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 6 }, "kind": { "const": "vercel_project" }, "action": { "const": "create_or_adopt" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 6 }, "kind": { "const": "hosting_project" }, "action": { "const": "create_or_adopt" } } }] },
             { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 7 }, "kind": { "const": "production_env" }, "action": { "const": "configure" } } }] },
             { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 8 }, "kind": { "const": "domain_binding" }, "action": { "const": "configure" } } }] },
             { "allOf": [{ "$ref": "#/$defs/effect" }, { "properties": { "ordinal": { "const": 9 }, "kind": { "const": "tenant_build" }, "action": { "const": "build" } } }] },
@@ -246,10 +246,10 @@
         "expected_instances",
         "release_channel",
         "residency_policy_id",
-        "supabase_region_id",
-        "supabase_tier_id",
-        "supabase_compute_id",
-        "vercel_tier_id",
+        "region_id",
+        "data_tier_id",
+        "data_compute_id",
+        "hosting_tier_id",
         "backup_profile_id",
         "pricing_catalog_id",
         "retention_policy_id",
@@ -286,10 +286,10 @@
           "enum": ["internal", "canary", "stable"]
         },
         "residency_policy_id": { "$ref": "#/$defs/catalogEntryId" },
-        "supabase_region_id": { "$ref": "#/$defs/catalogEntryId" },
-        "supabase_tier_id": { "$ref": "#/$defs/catalogEntryId" },
-        "supabase_compute_id": { "$ref": "#/$defs/catalogEntryId" },
-        "vercel_tier_id": { "$ref": "#/$defs/catalogEntryId" },
+        "region_id": { "$ref": "#/$defs/catalogEntryId" },
+        "data_tier_id": { "$ref": "#/$defs/catalogEntryId" },
+        "data_compute_id": { "$ref": "#/$defs/catalogEntryId" },
+        "hosting_tier_id": { "$ref": "#/$defs/catalogEntryId" },
         "backup_profile_id": { "$ref": "#/$defs/catalogEntryId" },
         "pricing_catalog_id": { "$ref": "#/$defs/catalogEntryId" },
         "retention_policy_id": { "$ref": "#/$defs/catalogEntryId" },
@@ -370,7 +370,7 @@
       ],
       "properties": {
         "provider": {
-          "enum": ["supabase", "vercel", "dns", "smtp", "source_repository"]
+          "enum": ["data", "identity", "object_storage", "hosting", "domain", "email", "source_repository"]
         },
         "snapshot_id": {
           "type": "string",
@@ -386,10 +386,8 @@
       "additionalProperties": false,
       "required": [
         "tenant_id",
-        "supabase_organization_id",
-        "supabase_project_name",
-        "vercel_team_id",
-        "vercel_project_name",
+        "data_project_name",
+        "hosting_project_name",
         "production_hostname",
         "cron_slot",
         "tags"
@@ -399,10 +397,8 @@
           "type": "string",
           "format": "uuid"
         },
-        "supabase_organization_id": { "$ref": "#/$defs/providerId" },
-        "supabase_project_name": { "$ref": "#/$defs/resourceName" },
-        "vercel_team_id": { "$ref": "#/$defs/providerId" },
-        "vercel_project_name": { "$ref": "#/$defs/resourceName" },
+        "data_project_name": { "$ref": "#/$defs/resourceName" },
+        "hosting_project_name": { "$ref": "#/$defs/resourceName" },
         "production_hostname": {
           "type": "string",
           "format": "hostname",
@@ -440,10 +436,6 @@
           }
         }
       }
-    },
-    "providerId": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{2,128}$"
     },
     "resourceName": {
       "type": "string",
@@ -514,7 +506,7 @@
           "type": "array",
           "uniqueItems": true,
           "items": {
-            "enum": ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
+            "enum": ["PUBLIC_DATA_API_URL", "PUBLIC_DATA_API_KEY"]
           }
         }
       }
@@ -585,11 +577,11 @@
         "kind": {
           "enum": [
             "reserve_tenant",
-            "supabase_project",
+            "data_project",
             "tenant_schema",
-            "storage_auth_smtp",
+            "object_storage_identity_email",
             "platform_support",
-            "vercel_project",
+            "hosting_project",
             "production_env",
             "domain_binding",
             "tenant_build",
@@ -690,8 +682,8 @@
         "assumption"
       ],
       "properties": {
-        "provider": {
-          "enum": ["supabase", "vercel", "smtp", "anthropic", "slack", "airtable", "dns", "platform"]
+            "provider": {
+              "enum": ["data", "hosting", "email", "identity", "object_storage", "anthropic", "slack", "airtable", "domain", "platform"]
         },
         "sku_id": { "$ref": "#/$defs/catalogEntryId" },
         "quantity": {

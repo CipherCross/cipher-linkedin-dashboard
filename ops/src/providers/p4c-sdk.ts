@@ -237,7 +237,7 @@ class P4CSupabaseSdkPort implements SupabaseControlPlanePort {
     );
     const owned = existing === undefined
       ? false
-      : this.#registryOwns("supabase", "project", existing.ref, request.ownership.digest);
+      : this.#registryOwns("data", "project", existing.ref, request.ownership.digest);
     const regionCodes = regions.data.all.specific.map((candidate) => candidate.code);
     const paidPlan = ["pro", "team", "enterprise", "platform"].includes(
       organization.data.plan ?? "",
@@ -270,7 +270,7 @@ class P4CSupabaseSdkPort implements SupabaseControlPlanePort {
       if (existing !== undefined) {
         assertOps(
           this.#registryOwns(
-            "supabase",
+            "data",
             "project",
             existing.ref,
             request.ownership.digest,
@@ -460,7 +460,7 @@ class P4CSupabaseSdkPort implements SupabaseControlPlanePort {
   }
 
   #registryOwns(
-    provider: "supabase",
+    provider: "data",
     kind: "project",
     resourceId: string,
     ownershipDigest: string,
@@ -828,7 +828,7 @@ function registryOwnershipDigest(
   if (tenant === undefined) return null;
   const resource = state.registry.getResourceReference(
     tenant.tenantId,
-    "vercel",
+    "hosting",
     "project",
   );
   if (resource === undefined || resource.deterministicName !== deterministicName) {
@@ -1245,7 +1245,7 @@ class P4CHostingValueResolver implements HostingValueResolver {
         ? undefined
         : this.#state.registry.getResourceReference(
             tenant.tenantId,
-            "supabase",
+            "data",
             "project",
           );
     assertOps(

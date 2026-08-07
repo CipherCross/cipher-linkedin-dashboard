@@ -74,7 +74,7 @@ test("outcome-unknown create reconciles by deterministic identity without duplic
       TEST_NOW,
     );
     const providers = new FakeOnboardingProviderBundle({
-      supabase: [
+    supabase: [
         {
           method: "createOrAdoptProject",
           call: 1,
@@ -90,7 +90,7 @@ test("outcome-unknown create reconciles by deterministic identity without duplic
       executor.executeNext(context),
       (error: unknown) => error instanceof OpsError && error.code === "outcome_unknown",
     );
-    assert.equal(providers.supabase.projectCount, 1);
+    assert.equal(providers.data.projectCount, 1);
     assert.equal(registry.countResourceReferences(TENANT_UUID), 0);
     assert.equal(registry.getOperation(started.operationId)?.state, "failed");
     assert.equal(registry.getTenantLifecycle(TENANT_UUID), "quarantined");
@@ -108,7 +108,7 @@ test("outcome-unknown create reconciles by deterministic identity without duplic
     assert.equal(resumed.fencingToken, 2);
     context = executionContext(plan, resumed.operationId, resumed.fencingToken);
     assert.equal((await executor.executeNext(context)).ordinal, 2);
-    assert.equal(providers.supabase.projectCount, 1, "retry must adopt, not create a second project");
+    assert.equal(providers.data.projectCount, 1, "retry must adopt, not create a second project");
     assert.equal(registry.countResourceReferences(TENANT_UUID), 1);
 
     assert.throws(
@@ -151,7 +151,7 @@ test("full fake onboarding finishes in order and invites admin only after smoke 
       }
       if (ordinal < 12) {
         assert.equal(
-          providers.auth.callCount("createCompanyAdminAndInvite"),
+          providers.identity.callCount("createCompanyAdminAndInvite"),
           0,
         );
       }
@@ -159,9 +159,9 @@ test("full fake onboarding finishes in order and invites admin only after smoke 
 
     assert.equal(registry.getOperation(started.operationId)?.state, "succeeded");
     assert.equal(registry.getTenantLifecycle(TENANT_UUID), "active");
-    assert.equal(providers.supabase.projectCount, 1);
+    assert.equal(providers.data.projectCount, 1);
     assert.equal(providers.hosting.targetCount, 1);
-    assert.equal(providers.auth.callCount("createCompanyAdminAndInvite"), 1);
+    assert.equal(providers.identity.callCount("createCompanyAdminAndInvite"), 1);
     assert.equal(registry.countResourceReferences(TENANT_UUID), 4);
     assert.ok(
       registry.listSteps(started.operationId).every((step) => step.state === "succeeded"),
