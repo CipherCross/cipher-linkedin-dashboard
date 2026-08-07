@@ -41,10 +41,12 @@ const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 // session's own new file would flag itself. The session after adds it. S17 is
 // that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS.
 //
-// 005 graduated on that schedule under B2, 006 under S14 and 007 under S18 — every
-// step 001..007 is now in both lists. Promotion happens only once the owner has
-// applied the step, because PROTECTED_PATHS means "already applied, never touch
-// again" and an unapplied step may still need a correction.
+// 005 graduated on that schedule under B2, 006 under S14, 007 under S18 and 008
+// under S21 — every step 001..008 is now in both lists. Promotion happens only
+// once the owner has applied the step, because PROTECTED_PATHS means "already
+// applied, never touch again" and an unapplied step may still need a correction.
+// 008 spent one session written-but-unapplied for exactly that reason, and S21
+// promotes it in the same edit that applied it.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -60,6 +62,8 @@ const IMMUTABLE_BASELINE = {
     '87991430eca2ffc22a69a0570d6d4f45e9b852dc4274a4828f84306dfa37bf47',
   '007_ai_system_write_path.sql':
     'cf99c5a2c06b9b1c11305b9d1d6e23880e9d64efe3fddc6e7c299372a9d47e77',
+  '008_ai_system_auto_advance_execute.sql':
+    'cf3db7c6713ed53489120cdafecaa36154bddf45104e3daa574c7b15988a0796',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -151,6 +155,13 @@ const PROTECTED_PATHS = [
   // but the owner had not yet authorised the apply, and PROTECTED_PATHS means
   // "already applied, never touch again".
   'postgres/tenant-baseline/v1/007_ai_system_write_path.sql',
+  // Added by S21, the session after S18, on the same schedule for the same
+  // reason: 008 is applied to the live project (ledger 8/8, applied as
+  // app_migration under the owner's explicit authorisation), so it is now as
+  // immutable as 001..007. S18 could not promote it — it wrote the step and the
+  // owner declined the apply on 2026-08-06, and PROTECTED_PATHS means "already
+  // applied, never touch again" rather than "written".
+  'postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
