@@ -74,9 +74,10 @@ export interface TenantRecoveryRestoreResult {
  */
 export function toTenantRecoveryManifest(snapshot: TenantRecoverySnapshot): object {
   const artifact = (value: RecoveryArtifact) => ({
-    provider_request_id: value.providerRequestId,
-    artifact_id: value.artifactId,
-    manifest_digest: value.manifestDigest,
+      provider_request_id: value.providerRequestId,
+      artifact_id: value.artifactId,
+      manifest_digest: value.manifestDigest,
+      ownership_marker_digest: value.ownershipMarkerDigest,
     coverage: value.coverage,
     item_count: value.itemCount,
     captured_at: value.capturedAt,
@@ -136,10 +137,10 @@ export class TenantRecoveryService {
       hosting: this.#captureRequest(input, input.sourceResourceIds.hosting),
     };
     const [data, identity, objectStorage, hosting] = await Promise.all([
-      this.#capture("data", () => this.#providers.data.captureRecovery(requests.data)),
-      this.#capture("identity", () => this.#providers.identity.captureRecovery(requests.identity)),
-      this.#capture("objectStorage", () => this.#providers.objectStorage.captureRecovery(requests.objectStorage)),
-      this.#capture("hosting", () => this.#providers.hosting.captureRecovery(requests.hosting)),
+      this.#capture("data", input.ownership, ["database_schema_data"], () => this.#providers.data.captureRecovery(requests.data)),
+      this.#capture("identity", input.ownership, ["auth_configuration_identities"], () => this.#providers.identity.captureRecovery(requests.identity)),
+      this.#capture("objectStorage", input.ownership, ["storage_metadata", "private_storage_objects_or_reconstruction"], () => this.#providers.objectStorage.captureRecovery(requests.objectStorage)),
+      this.#capture("hosting", input.ownership, ["deployment_configuration_metadata"], () => this.#providers.hosting.captureRecovery(requests.hosting)),
     ]);
     const coverage = coverageOf([data, identity, objectStorage, hosting]);
     assertCoverage(coverage);
@@ -178,10 +179,10 @@ export class TenantRecoveryService {
     await this.#restore("objectStorage", () => this.#providers.objectStorage.restoreRecovery(requests.objectStorage));
     await this.#restore("hosting", () => this.#providers.hosting.restoreRecovery(requests.hosting));
     const reports = await Promise.all([
-      this.#verify("data", () => this.#providers.data.verifyRecovery(requests.data)),
-      this.#verify("identity", () => this.#providers.identity.verifyRecovery(requests.identity)),
-      this.#verify("objectStorage", () => this.#providers.objectStorage.verifyRecovery(requests.objectStorage)),
-      this.#verify("hosting", () => this.#providers.hosting.verifyRecovery(requests.hosting)),
+      this.#verify("data", ["database_schema_data"], () => this.#providers.data.verifyRecovery(requests.data)),
+      this.#verify("identity", ["auth_configuration_identities"], () => this.#providers.identity.verifyRecovery(requests.identity)),
+      this.#verify("objectStorage", ["storage_metadata", "private_storage_objects_or_reconstruction"], () => this.#providers.objectStorage.verifyRecovery(requests.objectStorage)),
+      this.#verify("hosting", ["deployment_configuration_metadata"], () => this.#providers.hosting.verifyRecovery(requests.hosting)),
     ]);
     assertOps(reports.every((report) => report.passed), "provider_error", "Tenant recovery verification failed");
     const recovered = coverageOf(reports);
@@ -201,10 +202,25 @@ export class TenantRecoveryService {
     return { tenantSlug: snapshot.tenantSlug, targetResourceId, artifact, ownership };
   }
 
-  async #capture(label: string, action: () => Promise<RecoveryArtifact>): Promise<RecoveryArtifact> {
+  async #capture(
+    label: string,
+    ownership: OwnershipMarker,
+    requiredCoverage: readonly RecoveryCoverage[],
+    action: () => Promise<RecoveryArtifact>,
+  ): Promise<RecoveryArtifact> {
     try {
       const artifact = await action();
       this.#redactor.assertSecretFree(artifact, `${label} recovery artifact`);
+      assertOps(
+        artifact.ownershipMarkerDigest === ownership.digest,
+        "recovery_conflict",
+        `${label} recovery artifact ownership marker does not match`,
+      );
+      assertOps(
+        requiredCoverage.every((coverage) => artifact.coverage.includes(coverage)),
+        "backup_invalid",
+        `${label} recovery artifact coverage is incomplete`,
+      );
       return artifact;
     } catch (error) {
       throw this.#redactor.sanitizeError(error);
@@ -220,10 +236,19 @@ export class TenantRecoveryService {
     }
   }
 
-  async #verify(label: string, action: () => Promise<{ readonly coverage: readonly RecoveryCoverage[]; readonly passed: boolean; readonly checkedAt: string }>): Promise<{ readonly coverage: readonly RecoveryCoverage[]; readonly passed: boolean; readonly checkedAt: string }> {
+  async #verify(
+    label: string,
+    requiredCoverage: readonly RecoveryCoverage[],
+    action: () => Promise<{ readonly coverage: readonly RecoveryCoverage[]; readonly passed: boolean; readonly checkedAt: string }>,
+  ): Promise<{ readonly coverage: readonly RecoveryCoverage[]; readonly passed: boolean; readonly checkedAt: string }> {
     try {
       const report = await action();
       this.#redactor.assertSecretFree(report, `${label} recovery verification`);
+      assertOps(
+        requiredCoverage.every((coverage) => report.coverage.includes(coverage)),
+        "backup_invalid",
+        `${label} recovery verification coverage is incomplete`,
+      );
       return report;
     } catch (error) {
       throw this.#redactor.sanitizeError(error);

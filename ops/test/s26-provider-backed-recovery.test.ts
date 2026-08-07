@@ -52,6 +52,7 @@ abstract class RecoveryContract {
       providerRequestId: `req_capture_${this.captured.length}`,
       artifactId: `artifact_${this.captured.length}`,
       manifestDigest: DIGEST,
+      ownershipMarkerDigest: request.ownership.digest,
       coverage: this.#coverage,
       itemCount: 1,
       capturedAt: CAPTURED_AT,
@@ -220,4 +221,24 @@ test("S26 provider-neutral recovery captures and restores every tenant surface w
     assert.equal(backend.restored.length, 1);
     assert.equal(backend.verified.length, 1);
   }
+});
+
+test("S26 recovery rejects an ownership-mismatched artifact before any restore", async () => {
+  class WrongOwnerNeon extends RecoverableNeonApi {
+    override async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> {
+      return { ...(await super.captureRecovery(request)), ownershipMarkerDigest: `sha256:${"b".repeat(64)}` };
+    }
+  }
+  const contracts = providerContracts();
+  const service = new TenantRecoveryService(new S26ProviderBackedOperations({ ...contracts, data: new WrongOwnerNeon() }).recovery);
+  await assert.rejects(
+    service.capture({
+      tenantSlug: "disposable-lab",
+      sourceResourceIds: { data: "data", identity: "identity", objectStorage: "storage", hosting: "hosting" },
+      recoveryTargetName: "lh2-disposable-disposable-lab-recovery",
+      ownership: ownership(),
+      registry: { digest: DIGEST, registryVersion: 42, createdAt: CAPTURED_AT },
+    }),
+    (error: unknown) => error instanceof Error && "code" in error && (error as { code: string }).code === "recovery_conflict",
+  );
 });

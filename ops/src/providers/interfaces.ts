@@ -242,6 +242,12 @@ export interface RecoveryArtifact {
   readonly providerRequestId: string;
   readonly artifactId: string;
   readonly manifestDigest: string;
+  /**
+   * The same deterministic ownership marker required for creation/adoption.
+   * A recovery artifact cannot be replayed into another tenant merely because
+   * it has a valid checksum.
+   */
+  readonly ownershipMarkerDigest: string;
   readonly coverage: readonly RecoveryCoverage[];
   readonly itemCount: number;
   readonly capturedAt: string;

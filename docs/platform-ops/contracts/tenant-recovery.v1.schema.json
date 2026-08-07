@@ -59,11 +59,12 @@
     },
     "artifact": {
       "type": "object", "additionalProperties": false,
-      "required": ["provider_request_id", "artifact_id", "manifest_digest", "coverage", "item_count", "captured_at", "reconstruction_approved"],
+      "required": ["provider_request_id", "artifact_id", "manifest_digest", "ownership_marker_digest", "coverage", "item_count", "captured_at", "reconstruction_approved"],
       "properties": {
         "provider_request_id": { "$ref": "#/$defs/opaque" },
         "artifact_id": { "$ref": "#/$defs/opaque" },
         "manifest_digest": { "$ref": "#/$defs/digest" },
+        "ownership_marker_digest": { "$ref": "#/$defs/digest" },
         "coverage": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/coverage" } },
         "item_count": { "type": "integer", "minimum": 0 },
         "captured_at": { "type": "string", "format": "date-time" },

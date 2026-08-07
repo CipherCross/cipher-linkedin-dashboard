@@ -1,5 +1,6 @@
 import * as z from "zod/v4";
 
+import { OpsError } from "../core/errors.js";
 import { Redactor } from "../core/redaction.js";
 import type {
   DeploymentTargetRequest,
@@ -311,13 +312,17 @@ export class NeonDataAdapter extends StrictAdapter implements DataProvider {
     return this.call("data.inspect", () => this.#api.inspect(request), dataInspection);
   }
 
-  createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
+  async createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
     this.requestIsSafe(request, "data.createOrAdoptProject");
-    return this.call(
+    const resource = await this.call(
       "data.createOrAdoptProject",
       () => this.#api.createOrAdoptProject(request),
       resourceResult,
     );
+    if (resource.ownershipMarkerDigest !== request.ownership.digest) {
+      throw new OpsError("provider_error", "Data project ownership marker mismatch");
+    }
+    return resource;
   }
 
   waitUntilReady(projectId: string): Promise<ProviderActionResult> {
@@ -505,14 +510,18 @@ export class StrictHostingAdapter extends StrictAdapter implements HostingProvid
     );
   }
 
-  createDeploymentTarget(
+  async createDeploymentTarget(
     request: DeploymentTargetRequest,
   ): Promise<DeploymentTargetResult> {
-    return this.call(
+    const target = await this.call(
       "hosting.createDeploymentTarget",
       () => this.#port.createDeploymentTarget(request),
       deploymentTargetResult,
     );
+    if (target.ownershipMarkerDigest !== request.ownership.digest) {
+      throw new OpsError("provider_error", "Hosting target ownership marker mismatch");
+    }
+    return target;
   }
 
   bindEnvironment(
@@ -533,14 +542,18 @@ export class StrictHostingAdapter extends StrictAdapter implements HostingProvid
     );
   }
 
-  assignDomain(
+  async assignDomain(
     request: DomainAssignmentRequest,
   ): Promise<DomainAssignmentResult> {
-    return this.call(
+    const assignment = await this.call(
       "hosting.assignDomain",
       () => this.#port.assignDomain(request),
       domainAssignmentResult,
     );
+    if (assignment.ownershipMarkerDigest !== request.ownership.digest) {
+      throw new OpsError("provider_error", "Domain ownership marker mismatch");
+    }
+    return assignment;
   }
 
   registerSchedules(
