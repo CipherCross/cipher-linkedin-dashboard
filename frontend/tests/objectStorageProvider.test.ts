@@ -382,6 +382,10 @@ describe('the R2 adapter', () => {
       sizeBytes: 2048,
       contentType: 'image/jpeg',
       etag: '"abc123"',
+      // S20 widened `ObjectStat` with the stored SHA-256. This response carries
+      // no checksum header, and `null` is the answer rather than the `ETag` —
+      // which is an MD5. `leadPhotoApi.test.ts` covers both directions.
+      checksumSha256: null,
     })
     expect(calls[0].method).toBe('HEAD')
   })

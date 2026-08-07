@@ -218,6 +218,73 @@ export function parseTenantObjectKey(key: unknown): TenantObjectKey {
   return { tenantId, objectClass: objectClass as ObjectClass, segments }
 }
 
+/** The prefix every one of a tenant's objects lives under, with its separator. */
+export function tenantObjectPrefix(
+  tenantId: string,
+  objectClass?: ObjectClass,
+): string {
+  assertTenantId(tenantId)
+  if (objectClass === undefined) {
+    return `${TENANT_KEY_PREFIX}/${tenantId}/`
+  }
+  if (!OBJECT_CLASSES.includes(objectClass)) {
+    throw new ObjectKeyError(
+      `Object class ${JSON.stringify(objectClass)} is not an allowed class`,
+    )
+  }
+  return `${TENANT_KEY_PREFIX}/${tenantId}/${objectClass}/`
+}
+
+/**
+ * The check a *listing* runs — the prefix equivalent of
+ * `assertKeyBelongsToTenant`.
+ *
+ * A listing is the one operation that can enumerate objects without naming one,
+ * so it needs its own guard: a `prefix` of `t/` would walk every tenant in a
+ * shared bucket, and `t/acme` (no trailing separator) would walk `acme-evil` as
+ * well. This demands the prefix be the tenant's own prefix or something strictly
+ * beneath it, which makes both of those impossible rather than checked for.
+ *
+ * The returned value is the prefix to use, normalized: a caller may pass the
+ * tenant's prefix with or without its trailing separator.
+ */
+export function assertPrefixBelongsToTenant(
+  prefix: unknown,
+  tenantId: string,
+): string {
+  const base = tenantObjectPrefix(tenantId)
+  if (typeof prefix !== 'string' || prefix === '') {
+    throw new ObjectKeyError('A listing prefix must be a non-empty string')
+  }
+  if (prefix.length > MAX_OBJECT_KEY_LENGTH) {
+    throw new ObjectKeyError(
+      `A listing prefix may not exceed the ${MAX_OBJECT_KEY_LENGTH}-byte key limit`,
+    )
+  }
+
+  // The tenant's own prefix, spelled either way.
+  if (prefix === base || `${prefix}/` === base) return base
+
+  if (!prefix.startsWith(base)) {
+    throw new ObjectKeyError(
+      `A listing prefix must be inside tenant ${JSON.stringify(tenantId)}`,
+    )
+  }
+  // Beneath the tenant's prefix, the remainder is checked against the same
+  // segment grammar keys use — a partial trailing segment is allowed, because
+  // narrowing a listing by a filename prefix is a legitimate thing to want.
+  const remainder = prefix.slice(base.length)
+  for (const segment of remainder.split('/')) {
+    if (segment === '') continue
+    if (!/^[A-Za-z0-9_.-]+$/.test(segment)) {
+      throw new ObjectKeyError(
+        `Listing prefix segment ${JSON.stringify(segment)} is not accepted`,
+      )
+    }
+  }
+  return prefix
+}
+
 /**
  * The check a provider runs on every operation.
  *

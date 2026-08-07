@@ -25,11 +25,25 @@
  * - It never touches bytes on the read path. `presignGet` returns a URL for the
  *   browser to fetch directly; object bytes do not pass through a function.
  *
- * **What is not here, and whose job it is.** There is no `listObjects`, no
- * `copyObject` and no manifest. The spec gives the object manifest, checksum
- * reconciliation and copy tooling to `S20`, and adding a listing method now
- * would be an unused surface that the first real caller would probably want
- * shaped differently.
+ * **What S19 left out, and what S20 added.** S19 shipped no `listObjects` and no
+ * byte-level write, on the stated ground that an unused surface would probably be
+ * the wrong shape for its first real caller. S20 is that caller, and the shape it
+ * wanted differs from the guess in two ways worth recording:
+ *
+ * - `putObject` takes an **optional SHA-256** and, when given one, the store is
+ *   asked to verify it. A copy tool that hashes the bytes itself and then trusts
+ *   its own upload has proved that it read the source correctly and nothing about
+ *   what arrived; see `copy.ts`.
+ * - `listObjects` answers `ObservedObject`, not `ObjectStat`, and its checksums
+ *   are `null`. A listing cannot carry them — `ListObjectsV2` returns size and
+ *   `ETag` and no checksum value — and a method that filled the field in from the
+ *   `ETag` would be reporting an MD5 as a SHA-256. Reconciliation asks for each
+ *   object's checksum separately, and `manifest.ts` has a distinct status for the
+ *   case where it comes back unknown.
+ *
+ * Still absent: `copyObject` (server-side copy within one bucket, which nothing
+ * needs) and the agent-artifact bucket, which G0 scopes separately and the spec
+ * gives to `S23`.
  */
 
 import { DataStoreContractError } from '../data/contracts.js'
@@ -77,6 +91,18 @@ export interface ObjectStat {
   readonly sizeBytes: number
   readonly contentType: string | null
   readonly etag: string | null
+  /**
+   * The stored SHA-256 as lowercase hex, or `null` when the store does not
+   * report one.
+   *
+   * **`null` is a real answer and must not be smoothed away.** An object written
+   * without a checksum has none to return, and a store may decline to return one
+   * it holds. The field is not the `ETag`: for a single-part upload an `ETag` is
+   * an MD5, for a multipart one it is a hash of hashes, and presenting either as
+   * a SHA-256 would make a reconciliation report claim a comparison it never
+   * made. `manifest.ts` carries `checksumUnverified` for exactly this case.
+   */
+  readonly checksumSha256: string | null
 }
 
 export interface PresignGetInput {
@@ -133,7 +159,64 @@ export interface ObjectStorageProvider {
    */
   deleteObject(key: string): Promise<void>
 
+  /**
+   * Write bytes from the server, with the store verifying the checksum.
+   *
+   * **Not signable, for the reason `delete` is not.** An upload the *server*
+   * performs is a different operation from an upload a browser performs: this one
+   * carries the whole object through the process, so it is only ever used by
+   * tooling running outside a request (`copy.ts`), and handing a browser a
+   * capability to write arbitrary bytes under any key in the class would defeat
+   * the exact-`content-length` mechanism `presignPut` exists for.
+   *
+   * `checksumSha256` is base64, which is the encoding the store's own header
+   * takes; `manifest.ts` holds hex and `hexToBase64` converts. When it is
+   * supplied the store recomputes the hash and refuses a body that does not
+   * match, which is what makes a copy *verified* rather than merely attempted.
+   */
+  putObject(input: PutObjectInput): Promise<ObjectStat>
+
+  /**
+   * One page of the objects under a prefix.
+   *
+   * The prefix must be inside this provider's tenant — a listing is the one
+   * operation that could otherwise enumerate a neighbour's keys without ever
+   * naming one, so `assertKeyBelongsToTenant`'s protection has a prefix-shaped
+   * equivalent (`assertPrefixBelongsToTenant`) rather than an exception.
+   */
+  listObjects(input: ListObjectsInput): Promise<ListObjectsPage>
+
   close(): Promise<void>
+}
+
+export interface PutObjectInput {
+  readonly key: string
+  readonly body: Uint8Array
+  readonly contentType: string
+  /** Base64 SHA-256. Omitted only by callers that have no hash to offer. */
+  readonly checksumSha256?: string
+}
+
+export interface ListObjectsInput {
+  /** Tenant-scoped. `t/<tenantId>/` at minimum; deeper narrows the walk. */
+  readonly prefix: string
+  readonly cursor?: string | null
+  readonly limit?: number
+}
+
+export interface ListObjectsPage {
+  /**
+   * What the listing saw. `sha256` is always `null` — see the note in this
+   * file's header on why a listing cannot answer it.
+   */
+  readonly objects: readonly ListedObject[]
+  readonly nextCursor: string | null
+}
+
+export interface ListedObject {
+  readonly key: string
+  readonly sizeBytes: number
+  readonly etag: string | null
 }
 
 /** Where an object of a given class lives, for callers building keys. */

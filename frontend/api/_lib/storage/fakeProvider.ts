@@ -26,7 +26,8 @@
 
 import { randomUUID } from 'node:crypto'
 
-import { assertKeyBelongsToTenant } from './keys.js'
+import { assertKeyBelongsToTenant, assertPrefixBelongsToTenant } from './keys.js'
+import { sha256Base64, sha256Hex } from './manifest.js'
 import {
   assertSignedUrlTtl,
   assertUploadContentType,
@@ -35,10 +36,13 @@ import {
 import {
   ObjectStorageError,
   ObjectStorageUnavailableError,
+  type ListObjectsInput,
+  type ListObjectsPage,
   type ObjectStat,
   type ObjectStorageProvider,
   type PresignGetInput,
   type PresignPutInput,
+  type PutObjectInput,
   type SignedObjectUrl,
 } from './provider.js'
 
@@ -49,6 +53,15 @@ interface StoredObject {
   readonly sizeBytes: number
   readonly contentType: string
   readonly etag: string
+  /**
+   * Hex SHA-256, or `null` for an object written without one.
+   *
+   * The fake keeps the distinction the real store makes rather than hashing
+   * everything it holds: an object seeded by a test or uploaded through a signed
+   * PUT has no checksum, and `manifest.ts`'s `checksumUnverified` status is only
+   * exercisable if some path can actually produce it.
+   */
+  readonly checksumSha256: string | null
 }
 
 interface IssuedGrant {
@@ -96,12 +109,15 @@ export class FakeObjectStorageProvider implements ObjectStorageProvider {
     readonly key: string
     readonly sizeBytes: number
     readonly contentType: string
+    /** Hex SHA-256, when a test needs the destination to report one. */
+    readonly checksumSha256?: string
   }): void {
     assertKeyBelongsToTenant(input.key, this.tenantId)
     this.objects.set(input.key, {
       sizeBytes: input.sizeBytes,
       contentType: input.contentType,
       etag: randomUUID().replace(/-/g, ''),
+      checksumSha256: input.checksumSha256 ?? null,
     })
   }
 
@@ -137,12 +153,7 @@ export class FakeObjectStorageProvider implements ObjectStorageProvider {
     assertKeyBelongsToTenant(key, this.tenantId)
     const stored = this.objects.get(key)
     if (!stored) return null
-    return {
-      key,
-      sizeBytes: stored.sizeBytes,
-      contentType: stored.contentType,
-      etag: stored.etag,
-    }
+    return this.statOf(key, stored)
   }
 
   async deleteObject(key: string): Promise<void> {
@@ -150,6 +161,83 @@ export class FakeObjectStorageProvider implements ObjectStorageProvider {
     assertKeyBelongsToTenant(key, this.tenantId)
     // Idempotent, like the real thing: no complaint when it was already gone.
     this.objects.delete(key)
+  }
+
+  /**
+   * A server-performed write that **verifies the checksum it was given**.
+   *
+   * The refusal is the point of implementing this in the fake at all: a copy tool
+   * that hashes a file, sends the hash, and is never contradicted has proved
+   * nothing about the bytes that arrived. So a mismatch here fails the way the
+   * real store fails — `ObjectStorageError`, object not written — and `copy.ts`'s
+   * "verified" claim is a claim about a check that can come back negative.
+   */
+  async putObject(input: PutObjectInput): Promise<ObjectStat> {
+    this.assertOpen()
+    const parsed = assertKeyBelongsToTenant(input.key, this.tenantId)
+    const contentType = assertUploadContentType(
+      parsed.objectClass,
+      input.contentType,
+    )
+    const sizeBytes = assertUploadSize(parsed.objectClass, input.body.byteLength)
+
+    const actual = sha256Base64(input.body)
+    if (input.checksumSha256 !== undefined && input.checksumSha256 !== actual) {
+      throw new ObjectStorageError(
+        'OBJECT_STORAGE_CHECKSUM_MISMATCH',
+        `The body does not match the declared SHA-256 for ${input.key}`,
+      )
+    }
+
+    const stored: StoredObject = {
+      sizeBytes,
+      contentType,
+      etag: randomUUID().replace(/-/g, ''),
+      // Recorded only when the caller declared one, so the store reports back a
+      // checksum it verified rather than one it computed for itself.
+      checksumSha256:
+        input.checksumSha256 === undefined ? null : sha256Hex(input.body),
+    }
+    this.objects.set(input.key, stored)
+    return this.statOf(input.key, stored)
+  }
+
+  /**
+   * One page of keys under a prefix, in lexicographic order.
+   *
+   * Sorted and cursored even though the whole map is in memory, because the
+   * property callers depend on is the *paging contract* — a walk that follows
+   * `nextCursor` must not skip or repeat — and a fake that answered everything at
+   * once would let a broken walk pass.
+   */
+  async listObjects(input: ListObjectsInput): Promise<ListObjectsPage> {
+    this.assertOpen()
+    const prefix = assertPrefixBelongsToTenant(input.prefix, this.tenantId)
+    const limit = input.limit ?? 1000
+
+    const keys = [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .filter((key) => input.cursor == null || key > input.cursor)
+      .sort()
+
+    const page = keys.slice(0, limit)
+    return {
+      objects: page.map((key) => {
+        const stored = this.objects.get(key) as StoredObject
+        return { key, sizeBytes: stored.sizeBytes, etag: stored.etag }
+      }),
+      nextCursor: keys.length > page.length ? page[page.length - 1] : null,
+    }
+  }
+
+  private statOf(key: string, stored: StoredObject): ObjectStat {
+    return {
+      key,
+      sizeBytes: stored.sizeBytes,
+      contentType: stored.contentType,
+      etag: stored.etag,
+      checksumSha256: stored.checksumSha256,
+    }
   }
 
   async close(): Promise<void> {
@@ -222,6 +310,10 @@ export class FakeObjectStorageProvider implements ObjectStorageProvider {
       sizeBytes: sent,
       contentType: grant.requiredHeaders['content-type'],
       etag: randomUUID().replace(/-/g, ''),
+      // A signed browser upload declares no checksum — the URL signs the length
+      // and the type, not the content — so this object has none to report. That
+      // is the case `manifest.ts` calls `checksumUnverified`.
+      checksumSha256: null,
     })
     return { status: 200 }
   }
