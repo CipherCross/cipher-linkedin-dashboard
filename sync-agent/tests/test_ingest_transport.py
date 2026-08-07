@@ -40,6 +40,7 @@ REPO_DIR = os.path.dirname(AGENT_DIR)
 INGEST_TS = os.path.join(REPO_DIR, "frontend", "api", "_lib", "agent", "ingest.ts")
 CREDENTIALS_TS = os.path.join(REPO_DIR, "frontend", "api", "_lib", "agent",
                               "credentials.ts")
+PIPELINE_TS = os.path.join(REPO_DIR, "frontend", "api", "pipeline.ts")
 
 sys.path.insert(0, AGENT_DIR)
 import agent  # noqa: E402
@@ -275,6 +276,22 @@ class RemoteConfigTest(unittest.TestCase):
         # Honoured — this is the rollout lever and it must still work.
         self.assertEqual(merged["ingest_mode"], "dual")
         self.assertEqual(merged["ingest_url"], "https://gateway")
+
+    def test_the_dashboard_refuses_to_STORE_a_credential_either(self):
+        """The other half of the same rule, in the other language.
+
+        The agent already refuses to read a credential back out of the remote
+        blob, so one stored there would be inert — but it would be a machine
+        credential at rest in a row every admin can read, put there by somebody
+        who believed it was being delivered. The writer strips it on the way in,
+        and this is what keeps the two lists from drifting apart."""
+        with open(PIPELINE_TS, encoding="utf-8") as f:
+            source = f.read()
+        m = re.search(r"FORBIDDEN_CONFIG_KEYS = new Set\(\[(.*?)\]\)", source, re.S)
+        self.assertIsNotNone(m, "the dashboard's config denylist was not found")
+        denied = set(re.findall(r"'([^']+)'", m.group(1)))
+        for key in ("ingest_token", "notify_secret"):
+            self.assertIn(key, denied, f"{key} may be stored in instances.config")
 
     def test_the_allowlist_subtraction_is_what_refuses_it(self):
         """Not the spelling of the allowlist: even if a later session adds the

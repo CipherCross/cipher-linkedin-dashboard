@@ -59,12 +59,23 @@ const nowIso = () => new Date().toISOString()
 // Bootstrap keys are needed locally just to connect/identify a notebook; a remote
 // blob must never set them. The agent ignores them too, but we strip here so they
 // never even land in the database.
+//
+// The two credentials are here for a stronger reason than the bootstrap keys. The
+// agent's own `LOCAL_ONLY_CONFIG_KEYS` already refuses to read either back, so a
+// stored one would be inert — but it would be a machine credential at rest in a
+// row that is readable through the AI SQL guard and by every admin, written there
+// by somebody who believed it was being delivered. Stripping on the way in means
+// it is never stored, rather than stored and ignored.
+//
+// This set must stay a superset of the agent's `LOCAL_ONLY_CONFIG_KEYS` minus the
+// keys the agent needs locally to exist at all.
 const FORBIDDEN_CONFIG_KEYS = new Set([
   'supabase_url',
   'supabase_service_key',
   'instance_id',
   'ignore_remote_config',
   'notify_secret',
+  'ingest_token',
 ])
 
 const MAX_CONFIG_BYTES = 64_000
