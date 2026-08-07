@@ -841,6 +841,74 @@ class CmdSyncWiringTest(unittest.TestCase):
         updated.assert_not_called()
 
 
+class SwallowTest(unittest.TestCase):
+    """The swallow starts at the projection, not at the POST.
+
+    `push_ingest` never raises, but the build and the chunking that feed it are
+    ordinary code — a mapping producing a row shape nobody expected is the
+    realistic failure — and an exception escaping THEM would reach `cmd_sync`'s
+    outer handler and turn a completed Supabase push into a failed run."""
+
+    def cfg(self):
+        return {"instance_id": "nb", "ingest_url": "https://dash.example/x",
+                "ingest_token": a_token(), "ingest_mode": "dual"}
+
+    def test_a_broken_projection_is_a_note_not_an_exception(self):
+        cs, ls, ms, ss, demo = extraction(leads=3)
+        del ls[0]["profile_url"]  # the shape the projection assumes
+        with mock.patch.object(agent.requests, "post") as post:
+            ok, note = agent.run_ingest_transport(self.cfg(), "dual", cs, ls, ms,
+                                                  [], ss, demo, "ok", "")
+        self.assertFalse(ok)
+        self.assertIn("transport error", note)
+        post.assert_not_called()
+
+    def test_a_broken_projection_leaves_the_supabase_run_green_ish(self):
+        """'partial', because dual reports it — never 'error', which is what an
+        escaping exception would have made it.
+
+        The projection is made to raise directly rather than through a malformed
+        row: a row malformed enough to break the projection breaks `derive_events`
+        first, which is the OLD path and is correctly allowed to fail a sync. The
+        claim under test is narrower — that a fault on the new path alone cannot."""
+        cs, ls, ms, ss, demo = extraction(leads=3)
+        cfg = dict(self.cfg(), supabase_url="https://sb.example",
+                   supabase_service_key="k")
+        holder = {}
+
+        def make_sb(config):
+            holder["sb"] = FakeSupabase(config)
+            return holder["sb"]
+
+        with mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update", return_value=False), \
+                mock.patch.object(agent, "extract_local",
+                                  return_value=(cs, ls, ms, ss, {}, demo)), \
+                mock.patch.object(agent, "Supabase", side_effect=make_sb), \
+                mock.patch.object(agent, "notify_new_replies"), \
+                mock.patch.object(agent, "build_ingest_payload",
+                                  side_effect=TypeError("row shape changed")), \
+                mock.patch.object(agent.requests, "post") as post:
+            agent.cmd_sync(mock.Mock(dry_run=False))
+        run_patch = next(p for t, p in holder["sb"].updates if t == "sync_runs")
+        self.assertEqual(run_patch["status"], "partial")
+        self.assertIn("transport error", run_patch["error"])
+        post.assert_not_called()
+        # And the old transport still did its whole job.
+        self.assertIn("campaign_steps", [t for t, _ in holder["sb"].upserts])
+
+    def test_a_broken_preview_does_not_take_the_dry_run_with_it(self):
+        cs, ls, ms, ss, demo = extraction(leads=3)
+        del ls[0]["profile_url"]
+        lines = []
+        with mock.patch("builtins.print",
+                        side_effect=lambda *a, **k: lines.append(str(a))):
+            agent.preview_ingest_transport(self.cfg(), "shadow", cs, ls, ms, [],
+                                           ss, demo, "ok", "")
+        self.assertTrue(any("preview failed" in line for line in lines), lines)
+
+
 class SupabasePathTest(unittest.TestCase):
     """The old transport is preserved, and these are the ways that could stop
     being true without anybody noticing."""

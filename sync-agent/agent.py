@@ -840,6 +840,43 @@ def push_ingest(cfg, mode, chunks, problems):
     return True, None
 
 
+def run_ingest_transport(cfg, mode, campaigns, leads, messages, events, steps,
+                         demo, status, error):
+    """Build, chunk, verify and deliver — the whole transport behind ONE except.
+
+    The swallow has to start here rather than at the POST. `push_ingest` already
+    never raises, but the projection and the chunking that feed it are ordinary
+    code with ordinary ways to fail (a mapping that produced a row shape nobody
+    expected is the realistic one), and an exception escaping them would reach
+    `cmd_sync`'s outer handler and turn a completed Supabase push into a failed
+    run. The invariant is that this transport cannot fail a sync, and it is only
+    true if it holds for every line, not for the network call."""
+    try:
+        payload = build_ingest_payload(cfg, campaigns, leads, messages, events,
+                                       steps, demo, status, error)
+        chunks, problems = plan_ingest(cfg, payload, campaigns, leads, messages,
+                                       events, steps, demo)
+        return push_ingest(cfg, mode, chunks, problems)
+    except Exception as e:
+        print(f"ingest: transport failed before delivery ({type(e).__name__}: {e})")
+        return False, f"ingest transport error: {type(e).__name__}: {e}"
+
+
+def preview_ingest_transport(cfg, mode, campaigns, leads, messages, events,
+                             steps, demo, status, error):
+    """The dry run's half, swallowing for the same reason: a preview that
+    crashes takes the whole `--dry-run` with it, and the LH2 comparison it exists
+    to support is the more important half of that command."""
+    try:
+        payload = build_ingest_payload(cfg, campaigns, leads, messages, events,
+                                       steps, demo, status, error)
+        chunks, problems = plan_ingest(cfg, payload, campaigns, leads, messages,
+                                       events, steps, demo)
+        print_ingest_dry_run(cfg, mode, chunks, problems)
+    except Exception as e:
+        print(f"\ningest gateway — preview failed ({type(e).__name__}: {e})")
+
+
 def print_ingest_dry_run(cfg, mode, chunks, problems):
     """What a dry run says about the second transport.
 
@@ -1897,12 +1934,9 @@ def cmd_sync(args):
         # real sync would present today.
         sent_messages = dedupe_messages(messages)
         sent_events = dedupe_events(derive_events(instance_id, leads))
-        payload = build_ingest_payload(
-            cfg, campaigns, leads, sent_messages, sent_events, steps, demo,
+        preview_ingest_transport(
+            cfg, mode, campaigns, leads, sent_messages, sent_events, steps, demo,
             "partial" if warnings else "ok", "; ".join(warnings)[:500])
-        chunks, problems = plan_ingest(cfg, payload, campaigns, leads,
-                                       sent_messages, sent_events, steps, demo)
-        print_ingest_dry_run(cfg, mode, chunks, problems)
         if warnings:
             print("\nWARNING: a real sync would report status 'partial' — "
                   "these sections failed and returned empty:")
@@ -1981,12 +2015,9 @@ def cmd_sync(args):
         # error field instead of the next one's. It never raises, so the outer
         # except below cannot be reached from here and a green run stays green.
         if mode != "off":
-            payload = build_ingest_payload(
-                cfg, campaigns, leads, sent_messages, sent_events, steps, demo,
-                status, "; ".join(warnings)[:500])
-            chunks, problems = plan_ingest(cfg, payload, campaigns, leads,
-                                           sent_messages, sent_events, steps, demo)
-            ok, note = push_ingest(cfg, mode, chunks, problems)
+            ok, note = run_ingest_transport(
+                cfg, mode, campaigns, leads, sent_messages, sent_events, steps,
+                demo, status, "; ".join(warnings)[:500])
             if not ok and mode == "dual":
                 warnings.append(f"ingest: {note}")
                 status = "partial"
