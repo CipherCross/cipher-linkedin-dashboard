@@ -4,9 +4,15 @@
  *
  * ## The token is two halves, and both are required
  *
- * `lha_<credential id>_<secret>` — a fixed prefix, the credential's uuid, and 32
+ * `lha.<credential id>.<secret>` — a fixed prefix, the credential's uuid, and 32
  * bytes of CSPRNG output in base64url. The database stores a SHA-256 of the
  * secret half and never the secret itself.
+ *
+ * The separator is a dot because base64url's alphabet is `[A-Za-z0-9_-]`: an
+ * underscore separator was written first, and a test issuing real secrets caught
+ * it immediately — roughly three tokens in four carry an underscore or a hyphen
+ * of their own, so the parse split into four parts and refused a token this
+ * process had just minted. A dot cannot occur in either half.
  *
  * Carrying the id in the token rather than looking a credential up by its secret
  * buys two things. A request can be *logged* by credential id, which is what an
@@ -43,6 +49,8 @@ import {
 
 /** Recognisable, greppable, and not a word that appears in ordinary text. */
 export const AGENT_TOKEN_PREFIX = 'lha'
+/** Outside base64url's alphabet, which is the whole reason it is this and not `_`. */
+const TOKEN_SEPARATOR = '.'
 
 /** 32 bytes. Base64url, so the token survives a header and a shell alike. */
 const SECRET_BYTES = 32
@@ -66,7 +74,7 @@ export function generateAgentSecret(): string {
 }
 
 export function formatAgentToken(credentialId: string, secret: string): string {
-  return `${AGENT_TOKEN_PREFIX}_${credentialId}_${secret}`
+  return [AGENT_TOKEN_PREFIX, credentialId, secret].join(TOKEN_SEPARATOR)
 }
 
 /**
@@ -80,7 +88,7 @@ export function formatAgentToken(credentialId: string, secret: string): string {
 export function parseAgentToken(raw: unknown): ParsedAgentToken | null {
   if (typeof raw !== 'string') return null
   const value = raw.trim()
-  const parts = value.split('_')
+  const parts = value.split(TOKEN_SEPARATOR)
   if (parts.length !== 3) return null
   const [prefix, credentialId, secret] = parts
   if (prefix !== AGENT_TOKEN_PREFIX) return null

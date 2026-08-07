@@ -110,9 +110,11 @@ const S08_ARTIFACTS = [
   'docs/implementation-handoffs/N-S15.md',
   // S18 (step 008, the auto-advance EXECUTE grant the classify cron waits on).
   'postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql',
-  // S21 (the machine ingest role bootstrap and step 009, the machine write path).
+  // S21 (the machine ingest role bootstrap, step 009's write path and step 010,
+  // the schema grant 009 omitted).
   'postgres/tenant-baseline/v1/000_machine_ingest_role_bootstrap.sql',
   'postgres/tenant-baseline/v1/009_machine_ingest_path.sql',
+  'postgres/tenant-baseline/v1/010_machine_schema_usage.sql',
   'docs/implementation-handoffs/N-S21.md',
 ];
 
@@ -307,8 +309,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares nine steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9',
-  manifest.steps.length === 9 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares ten steps in order 1 -> 2 -> ... -> 10',
+  manifest.steps.length === 10 && manifest.steps.every((s, i) => s.step === i + 1));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index
