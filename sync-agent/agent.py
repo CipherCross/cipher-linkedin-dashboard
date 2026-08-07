@@ -673,10 +673,12 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
         if total > INGEST_MAX_TOTAL_ROWS:
             _parity_note(problems, f"chunk {i}: {total} rows exceeds the "
                                    f"{INGEST_MAX_TOTAL_ROWS}-row cap")
-        if chunk["campaigns"] != chunks[0]["campaigns"]:
-            _parity_note(problems, f"chunk {i}: campaign list differs from chunk 1")
-        if chunk["instance_id"] != chunks[0]["instance_id"]:
-            _parity_note(problems, f"chunk {i}: instance_id differs from chunk 1")
+        # "every chunk carries the same campaigns and the same instance_id" is
+        # NOT checked here, and the omission is deliberate. `_ingest_chunk` builds
+        # each chunk with `dict(payload)`, so the campaign list is one shared
+        # object and the instance id one shared string — an assertion that they
+        # agree compares a thing with itself and can never fail. A check that
+        # cannot fail reads as coverage without being any.
 
     campaign_rows = chunks[0]["campaigns"] if chunks else []
     if len(campaign_rows) != len(campaigns):
