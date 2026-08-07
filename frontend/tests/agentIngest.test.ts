@@ -26,6 +26,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { DataStoreConstraintError } from '../api/_lib/data/contracts.js'
 import { FakeDataStore } from '../api/_lib/data/fake.js'
+import { NeonDataStore } from '../api/_lib/data/neon.js'
 import {
   MACHINE_COMMANDS,
   MACHINE_OPERATIONS,
@@ -64,6 +65,7 @@ import {
 import {
   AGENT_ADMIN_COMMANDS,
   AGENT_ADMIN_OPERATIONS,
+  buildMachineRegistry,
 } from '../api/_lib/data/operations/index.js'
 
 const TENANT = 'acme'
@@ -981,5 +983,58 @@ describe('the credential lifecycle', () => {
     expect(
       parseRevokeInput({ credential_id: CREDENTIAL_ID, reason: 'r'.repeat(600) }).reason,
     ).toHaveLength(500)
+  })
+})
+
+/**
+ * The driver's own screens on a machine token, exercised without a database.
+ *
+ * `resolveMachineActor` refuses a malformed credential id, a hash that is not
+ * 64 hex characters and a blank tenant **before** it acquires a connection, so
+ * these run against a store whose connection string points at nothing. If one of
+ * the screens were removed the store would try to connect and the test would
+ * fail on the attempt rather than on the assertion — which is exactly the
+ * failure that means the screen is gone.
+ */
+describe('the driver screens a malformed token before it connects', () => {
+  const store = new NeonDataStore({
+    connectionString: 'postgresql://nobody@127.0.0.1:1/none',
+    operations: buildMachineRegistry(),
+    localRole: 'app_machine',
+    maxConnections: 1,
+    applicationName: 'lh2-s21-offline-screen',
+  })
+
+  const good = {
+    credentialId: CREDENTIAL_ID,
+    secretHash: hashAgentSecret(SECRET),
+    tenantId: TENANT,
+  }
+
+  it('refuses a credential id that is not a uuid', async () => {
+    await expect(
+      store.resolveMachineActor({ ...good, credentialId: 'not-a-uuid' }),
+    ).resolves.toBeNull()
+  })
+
+  it('refuses a secret hash that is not 64 hex characters', async () => {
+    await expect(
+      store.resolveMachineActor({ ...good, secretHash: 'abc' }),
+    ).resolves.toBeNull()
+    await expect(
+      store.resolveMachineActor({ ...good, secretHash: 'z'.repeat(64) }),
+    ).resolves.toBeNull()
+  })
+
+  it('refuses a blank tenant', async () => {
+    await expect(
+      store.resolveMachineActor({ ...good, tenantId: '   ' }),
+    ).resolves.toBeNull()
+  })
+
+  it('refuses a request that is not an object', async () => {
+    await expect(
+      store.resolveMachineActor(null as unknown as typeof good),
+    ).resolves.toBeNull()
   })
 })
