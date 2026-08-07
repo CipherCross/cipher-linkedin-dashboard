@@ -162,11 +162,13 @@ function batch(overrides: Record<string, unknown> = {}): Record<string, unknown>
  *
  * `agent_credential` and `agent_ingest_batch` are deliberately NOT dropped here:
  * step 009 grants no role a `DELETE` on either, because a removed credential
- * takes its batch history with it. What keeps that from accumulating into a
- * problem is the per-run suffix above — every run's rows name a notebook no
- * other run uses — and every assertion below is scoped to this run's credential
- * or its idempotency key rather than to a table-wide count. The handoff records
- * the residue as a known limit rather than opening a delete path for a test.
+ * takes its batch history with it. So every run leaves both tables' rows behind
+ * and the residue only ever grows — which means an assertion about either table
+ * MUST be scoped to this run's credential id. The idempotency keys are fixed
+ * literals and are NOT run-scoped: `(credential_id, idempotency_key)` is the
+ * unique key, so counting by the key alone counts every previous run too. The
+ * first run of this file passed on an empty table and the second did not; that
+ * is the whole failure, and the credential predicate is the whole fix.
  */
 async function dropFixture(): Promise<void> {
   await fixtures.asActor(CONTRACT_ACTORS.activeAdmin.actorId, async (client) => {
@@ -350,8 +352,8 @@ describe.skipIf(!hasMachineCredential)(
       ).toBe(1)
       expect(
         await countRows(
-          'SELECT count(*)::int AS n FROM public.agent_ingest_batch WHERE idempotency_key = $1',
-          ['s21-batch-000001'],
+          'SELECT count(*)::int AS n FROM public.agent_ingest_batch WHERE credential_id = $1::uuid AND idempotency_key = $2',
+          [credentialId, 's21-batch-000001'],
         ),
       ).toBe(1)
     })
@@ -398,8 +400,8 @@ describe.skipIf(!hasMachineCredential)(
       expect(second.rowCounts).toEqual(first.rowCounts)
       expect(
         await countRows(
-          'SELECT count(*)::int AS n FROM public.agent_ingest_batch WHERE idempotency_key = $1',
-          ['s21-batch-000020'],
+          'SELECT count(*)::int AS n FROM public.agent_ingest_batch WHERE credential_id = $1::uuid AND idempotency_key = $2',
+          [credentialId, 's21-batch-000020'],
         ),
       ).toBe(1)
       expect(

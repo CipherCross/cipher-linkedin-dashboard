@@ -1381,67 +1381,60 @@ describe('app_system holds SELECT, INSERT, UPDATE — and never DELETE', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 7. `pipeline_auto_advance()` is out of reach — which is the entire
-//    justification for step 008 existing as an unapplied artifact rather than
-//    the cron quietly finding a way to call it.
+// 7. `pipeline_auto_advance()` after step 008: reachable by exactly one
+//    principal, and still unreachable through the guard.
+//
+//    S15 wrote this section to prove the opposite — that neither route worked —
+//    because step 008 was then a written, unapplied artifact and "the cron
+//    cannot call this" was the fact that justified it. S21 applied 008, so the
+//    assertion that made this section true became the assertion that makes it
+//    false, and it is inverted here rather than deleted: what is worth pinning
+//    now is that the grant landed on ONE role and widened nothing else.
+//
+//    The direct call is deliberately NOT attempted any more. It was a positive
+//    control while it was guaranteed to be refused; now that `app_system` holds
+//    EXECUTE, issuing it would run a real auto-advance over the tenant's
+//    pipeline — moving live leads and writing live pipeline_events — which is
+//    not something a test suite may do. `has_function_privilege` is the whole
+//    of what step 008 changed, so measuring it is measuring the step.
 // ---------------------------------------------------------------------------
 
-describe('pipeline_auto_advance is unreachable, by both routes', () => {
-  const DIRECT_CALL = 'probe.autoAdvanceDirect'
-
-  let probe: NeonDataStore
-
-  beforeAll(() => {
-    probe = probeStore((registry) => {
-      registry.registerQuery(DIRECT_CALL, {
-        build: () => ({
-          text: 'SELECT public.pipeline_auto_advance() AS advanced',
-          values: [],
-        }),
-        mapRow: (row) => ({ advanced: Number(row.advanced) }),
-      })
-    }, 's15-auto-advance-probe')
-  })
-
-  afterAll(async () => {
-    await probe?.close()
-  })
-
-  it('neither app_system nor the guard owner holds EXECUTE, so neither route works', async () => {
-    // The order in this test is load-bearing and not stylistic. The privilege
-    // is MEASURED first and the calls are attempted only after; if a future
-    // step granted EXECUTE, the assertion below fails and the test stops before
-    // running a real auto-advance over the tenant's pipeline. Never reorder
-    // these.
+describe('pipeline_auto_advance is reachable only by app_system', () => {
+  it('step 008 granted EXECUTE to app_system alone, and not through the guard', async () => {
     const [privileges] = (await guard(
       ai(),
       `select has_function_privilege('app_system', 'public.pipeline_auto_advance()', 'EXECUTE') as system_advance,
               has_function_privilege('app_ai_runner', 'public.pipeline_auto_advance()', 'EXECUTE') as runner_advance,
+              has_function_privilege('app_machine', 'public.pipeline_auto_advance()', 'EXECUTE') as machine_advance,
               has_function_privilege('app_system', 'public.ai_execute_sql(text)', 'EXECUTE') as system_guard`,
     )) as readonly {
       system_advance: boolean
       runner_advance: boolean
+      machine_advance: boolean
       system_guard: boolean
     }[]
 
-    expect(privileges.system_advance).toBe(false)
+    // The grant step 008 exists to make. Before it was applied this was false,
+    // and the scheduled classifier labelled replies and then stopped one step
+    // short of the triage the human half performs.
+    expect(privileges.system_advance).toBe(true)
+
+    // Step 008's own words are "it grants nothing to any role other than
+    // app_system", and these are that sentence measured. `app_machine` is in the
+    // list because S21 is the slice that gave that role any grant at all — step
+    // 009 opened a write surface and step 010 opened the schema — and a
+    // side-effecting definer function is exactly what it must never reach.
     expect(privileges.runner_advance).toBe(false)
+    expect(privileges.machine_advance).toBe(false)
+
     // The contrast that makes the two above mean something: the AI principal
     // does hold EXECUTE on the guard, so "no privilege" is not "no principal".
     expect(privileges.system_guard).toBe(true)
 
-    // Route one: a direct statement as `app_system`. Its positive control is
-    // every guard call in this file — `SELECT public.ai_execute_sql($1)` is the
-    // same shape of statement, issued the same way by the same principal, and
-    // it succeeds. So the refusal below is about this function, not about
-    // calling functions.
-    await expect(
-      probe.query(SYSTEM_ACTOR, { operation: DIRECT_CALL, page: { limit: 1 } }),
-    ).rejects.toBeInstanceOf(DataStoreAuthorizationError)
-
-    // Route two: through the guard, where the executing role is `app_ai_runner`.
-    // A `SELECT f()` passes the guard's single-statement rule, so what stops it
-    // is the grant graph and nothing else.
+    // The route that must stay shut regardless of who gains EXECUTE. The guard
+    // executes as `app_ai_runner`, and `SELECT f()` passes its single-statement
+    // rule, so what stops it is the grant graph and nothing else — which is the
+    // guard's contract that whatever text reaches it can only read.
     await expect(
       guard(ai(), 'select public.pipeline_auto_advance() as advanced'),
     ).rejects.toThrow()
