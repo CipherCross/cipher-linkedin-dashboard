@@ -18,6 +18,7 @@ import {
   createP4COwnerOperations,
   p4cBusinessInputs,
 } from "../runtime/p4c-runtime.js";
+import { createConfiguredS26Runtime } from "../runtime/s26-config.js";
 import { MacOsKeychainSecretStore } from "../secrets/keychain.js";
 import { readSecretNoEcho } from "../secrets/no-echo.js";
 import { SecretBootstrapService } from "../secrets/service.js";
@@ -218,13 +219,8 @@ export async function runCli(
         }
         case "tenant:preflight":
         case "tenant:plan": {
-          assertOnly(parsed, ["registry", "owner-id"]);
-          const operations = await createP4COwnerOperations(
-            repositoryRoot(),
-            registry,
-            redactor,
-            makeSecretStore(redactor),
-          );
+          assertOnly(parsed, runtimeOptions());
+          const operations = await ownerOperations(parsed, registry, redactor, makeSecretStore(redactor));
           const toolName =
             parsed.command === "tenant:preflight"
               ? "tenant_preflight"
@@ -239,8 +235,7 @@ export async function runCli(
         case "tenant:apply":
         case "tenant:resume": {
           assertOnly(parsed, [
-            "registry",
-            "owner-id",
+            ...runtimeOptions(),
             "plan-id",
             "plan-digest",
             "expected-registry-version",
@@ -264,12 +259,7 @@ export async function runCli(
             expected_registry_version: expectedRegistryVersion,
             idempotency_key: requiredOption(parsed, "idempotency-key"),
           };
-          const operations = await createP4COwnerOperations(
-            repositoryRoot(),
-            registry,
-            redactor,
-            makeSecretStore(redactor),
-          );
+          const operations = await ownerOperations(parsed, registry, redactor, makeSecretStore(redactor));
           const input =
             parsed.command === "tenant:apply"
               ? { authorization }
@@ -290,14 +280,9 @@ export async function runCli(
           return 0;
         }
         case "tenant:verify": {
-          assertOnly(parsed, ["registry", "owner-id", "operation-id"]);
+          assertOnly(parsed, [...runtimeOptions(), "operation-id"]);
           const operationId = requiredOption(parsed, "operation-id");
-          const operations = await createP4COwnerOperations(
-            repositoryRoot(),
-            registry,
-            redactor,
-            makeSecretStore(redactor),
-          );
+          const operations = await ownerOperations(parsed, registry, redactor, makeSecretStore(redactor));
           emit(stdout, redactor, {
             operation: await operations.call("operation_get", {
               operation_id: operationId,
@@ -344,8 +329,15 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   assertOps(argv.length >= 2, "cli_usage", "A command group and action are required");
   const command = `${argv[0]}:${argv[1]}`;
   const options = new Map<string, string>();
-  for (let index = 2; index < argv.length; index += 2) {
+  for (let index = 2; index < argv.length;) {
     const flag = argv[index];
+    if (flag === "--p4c" || flag === "--s26") {
+      const name = flag.slice(2);
+      assertOps(!options.has(name), "cli_usage", `Duplicate --${name} option`);
+      options.set(name, "true");
+      index += 1;
+      continue;
+    }
     const value = argv[index + 1];
     assertOps(
       flag?.startsWith("--") && flag.length > 2 && value !== undefined,
@@ -355,6 +347,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     const name = flag!.slice(2);
     assertOps(!options.has(name), "cli_usage", `Duplicate --${name} option`);
     options.set(name, value);
+    index += 2;
   }
   return { command, options };
 }
@@ -369,6 +362,27 @@ function requiredOption(parsed: ParsedArgs, name: string): string {
   const value = parsed.options.get(name);
   assertOps(value !== undefined && value.length > 0, "cli_usage", `--${name} is required`);
   return value;
+}
+
+function runtimeOptions(): readonly string[] {
+  return ["registry", "owner-id", "p4c", "s26", "s26-config"];
+}
+
+async function ownerOperations(
+  parsed: ParsedArgs,
+  registry: Registry,
+  redactor: Redactor,
+  store: SecretStore,
+) {
+  const p4c = parsed.options.has("p4c");
+  const s26 = parsed.options.has("s26");
+  assertOps(!(p4c && s26), "cli_usage", "--p4c and --s26 are mutually exclusive");
+  assertOps(p4c || s26, "cli_usage", "An explicit --p4c or --s26 runtime is required");
+  if (s26) {
+    return createConfiguredS26Runtime(registry, requiredOption(parsed, "s26-config"), redactor, store).ownerOperations;
+  }
+  assertOps(parsed.options.get("s26-config") === undefined, "cli_usage", "--s26-config requires --s26");
+  return createP4COwnerOperations(repositoryRoot(), registry, redactor, store);
 }
 
 function secretLocator(parsed: ParsedArgs): {
@@ -428,11 +442,11 @@ function usage(): string {
     "lh2-ops secrets check --scope platform|tenant --name NAME [--tenant SLUG]",
     "lh2-ops operation get --id OPERATION_ID [--registry PATH]",
     "lh2-ops operation start --request FILE [--snapshots FILE] [--registry PATH]",
-    "lh2-ops tenant preflight [--registry PATH]",
-    "lh2-ops tenant plan [--registry PATH]",
-    "lh2-ops tenant apply --plan-id ID --plan-digest SHA256 --expected-registry-version N --idempotency-key KEY",
-    "lh2-ops tenant resume --operation-id ID --plan-id ID --plan-digest SHA256 --expected-registry-version N --idempotency-key KEY",
-    "lh2-ops tenant verify --operation-id ID [--registry PATH]",
+    "lh2-ops tenant preflight --p4c|--s26 --s26-config PATH [--registry PATH]",
+    "lh2-ops tenant plan --p4c|--s26 --s26-config PATH [--registry PATH]",
+    "lh2-ops tenant apply --p4c|--s26 --s26-config PATH --plan-id ID --plan-digest SHA256 --expected-registry-version N --idempotency-key KEY",
+    "lh2-ops tenant resume --p4c|--s26 --s26-config PATH --operation-id ID --plan-id ID --plan-digest SHA256 --expected-registry-version N --idempotency-key KEY",
+    "lh2-ops tenant verify --p4c|--s26 --s26-config PATH --operation-id ID [--registry PATH]",
     "",
     "Secret values are accepted only through an interactive no-echo prompt.",
   ].join("\n");

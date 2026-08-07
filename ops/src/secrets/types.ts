@@ -2,9 +2,13 @@ import { OpsError } from "../core/errors.js";
 
 export const PLATFORM_SECRET_NAMES = [
   "registry.backup_passphrase",
+  "neon.operations_token",
+  "r2.operations_token",
+  "s26.bridge_token",
   "smtp.password",
   "smtp.username",
   "supabase.management_token",
+  "vercel.operations_token",
   "vercel.team_token",
 ] as const;
 

@@ -1,6 +1,6 @@
 # Local owner MCP setup
 
-Status: **P4-C local-only setup; live provisioning deferred**
+Status: **P4-C/S26 local-only setup; live provisioning deferred**
 
 The owner operations MCP is a local STDIO process. It does not listen on a
 network port, does not ship with tenant deployments, and does not accept
@@ -52,7 +52,9 @@ args = [
   "<ABSOLUTE_TRUSTED_RELEASE>/ops/dist/src/mcp/main.js",
   "--registry",
   "<ABSOLUTE_REGISTRY_PATH>",
-  "--p4c",
+  "--s26",
+  "--s26-config",
+  "<ABSOLUTE_S26_CONFIG_PATH>",
 ]
 enabled = true
 required = true
@@ -146,6 +148,22 @@ Release, enrollment, external-company, support-enable, suspension, deletion,
 migration repair/down, raw provider, and other later-phase effects remain
 unavailable. There is no fallback external effect.
 
+## S26 provider-backed runtime boundary
+
+`--s26 --s26-config <absolute-path>` is mutually exclusive with `--p4c`. The
+configuration is a strict, credential-free JSON document: it pins the
+disposable profile, approved catalog snapshots, HTTPS provider/bridge bases,
+provider owner scopes, and Keychain **label names**. Credentials are resolved
+inside the named S26 adapters only; neither the MCP arguments nor the
+configuration can carry a secret value.
+
+The S26 runtime assembles `createS26Runtime` and its reviewed concrete bundle.
+Its Better Auth, SMTP, domain, and source-inspection capability slots require a
+reviewed S26 control-plane bridge. A missing, invalid, or non-HTTPS bridge
+configuration fails closed before an operation can start. `tenant_preflight`
+and `tenant_plan_onboarding` remain the only allowed next S26 actions; a fresh
+plan must stop for exact G4 approval before apply/resume/verify or recovery.
+
 Live provisioning is currently `blocked/incomplete`, not accepted. The
 2026-07-30 read-only preflight passed provider access, domain, region/residency,
 SMTP/DNS, release compatibility, legal review, and pricing, but correctly
@@ -167,8 +185,9 @@ After restarting Codex:
 2. Call `tenant_list {}` and compare server version and tool-contract digest with
    the accepted handoff.
 3. Confirm an unknown input property is rejected.
-4. Confirm packaged `tenant_preflight` fails with `unsupported_contract`
-   without `--p4c`, and performs only read-only inspection with `--p4c`.
+4. Confirm packaged `tenant_preflight` fails without an explicit provider
+   runtime, performs only read-only inspection with `--p4c`, and accepts S26
+   startup only with `--s26 --s26-config <absolute-path>`.
 5. Confirm a mutating call produces a Codex approval prompt.
 6. Confirm `machine_revoke`, `support_access_disable`, and `tenant_suspend` are
    shown as destructive and require an explicit prompt.

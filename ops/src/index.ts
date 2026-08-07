@@ -38,3 +38,4 @@ export * from "./state/location.js";
 export * from "./state/schema.js";
 export * from "./runtime/p4c-runtime.js";
 export * from "./runtime/s26-runtime.js";
+export * from "./runtime/s26-config.js";

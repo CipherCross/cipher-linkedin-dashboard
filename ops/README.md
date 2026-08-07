@@ -38,7 +38,10 @@ for exactly one disposable tenant, `p4c-lab`. The runtime pins the provider
 owners, domains, region/tier/compute/backup catalog, immutable v053 baseline,
 054 delta, source SHA, Production-only environment names, disabled integration
 budgets, and complete smoke ownership. The default MCP startup remains
-fail-closed unless `--p4c` is present.
+provider-free and fail-closed. `--p4c` and the S26-only
+`--s26 --s26-config /absolute/path/to/config.json` selectors are mutually
+exclusive. The S26 configuration contains approved non-secret provider scopes,
+catalogs, profile data, HTTPS bases, and Keychain label names only.
 
 The local P4-C implementation is checkpointed, but live provisioning is
 currently `blocked/incomplete`; it is not P4-C acceptance. See
@@ -91,10 +94,11 @@ The built entrypoint is:
 dist/src/mcp/main.js
 ```
 
-It accepts an optional registry path and the explicit P4-C runtime selector:
+It accepts an optional registry path and an explicit provider runtime selector:
 
 ```bash
 node dist/src/mcp/main.js --registry "/absolute/path/registry.sqlite" --p4c
+node dist/src/mcp/main.js --registry "/absolute/path/registry.sqlite" --s26 --s26-config "/absolute/path/s26-owner-runtime.json"
 ```
 
 STDOUT is reserved for MCP protocol messages. Errors are redacted and written to
@@ -105,7 +109,7 @@ migration surface.
 Follow
 [`docs/platform-ops/local-owner-mcp.md`](../docs/platform-ops/local-owner-mcp.md)
 for the user-global Codex allowlist and approval policy. Provider-dependent tools
-without `--p4c` fail closed. The P4-B library binds
+without an explicit provider runtime fail closed. The P4-B library binds
 `tenant_preflight`, `tenant_plan_onboarding`, `tenant_apply_onboarding`, and
 `tenant_resume_operation` to the fixed P4-A schemas without adding tools. P4-C
 uses those same tools and schemas; it does not widen the 17-tool MCP allowlist or
