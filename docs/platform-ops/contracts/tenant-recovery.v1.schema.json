@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lh2-platform.example/contracts/tenant-recovery.v1.schema.json",
+  "title": "Tenant recovery manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "tenant_slug", "source_resource_ids", "artifacts", "registry", "coverage", "captured_at", "manifest_digest"],
+  "properties": {
+    "format": { "const": "tenant-recovery.v1" },
+    "tenant_slug": { "$ref": "#/$defs/slug" },
+    "source_resource_ids": { "$ref": "#/$defs/resourceIds" },
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["data", "identity", "object_storage", "hosting"],
+      "properties": {
+        "data": { "$ref": "#/$defs/artifact" },
+        "identity": { "$ref": "#/$defs/artifact" },
+        "object_storage": { "$ref": "#/$defs/artifact" },
+        "hosting": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "registry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["digest", "registry_version", "created_at"],
+      "properties": {
+        "digest": { "$ref": "#/$defs/digest" },
+        "registry_version": { "type": "integer", "minimum": 0 },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "coverage": {
+      "type": "array", "uniqueItems": true, "minItems": 5,
+      "items": { "$ref": "#/$defs/coverage" },
+      "allOf": [
+        { "contains": { "const": "database_schema_data" }, "minContains": 1 },
+        { "contains": { "const": "auth_configuration_identities" }, "minContains": 1 },
+        { "contains": { "const": "storage_metadata" }, "minContains": 1 },
+        { "contains": { "const": "private_storage_objects_or_reconstruction" }, "minContains": 1 },
+        { "contains": { "const": "deployment_configuration_metadata" }, "minContains": 1 }
+      ]
+    },
+    "captured_at": { "type": "string", "format": "date-time" },
+    "manifest_digest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}[a-z0-9]$" },
+    "opaque": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._:@/-]+$" },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "coverage": { "enum": ["database_schema_data", "auth_configuration_identities", "storage_metadata", "private_storage_objects_or_reconstruction", "deployment_configuration_metadata"] },
+    "resourceIds": {
+      "type": "object", "additionalProperties": false,
+      "required": ["data", "identity", "object_storage", "hosting"],
+      "properties": {
+        "data": { "$ref": "#/$defs/opaque" },
+        "identity": { "$ref": "#/$defs/opaque" },
+        "object_storage": { "$ref": "#/$defs/opaque" },
+        "hosting": { "$ref": "#/$defs/opaque" }
+      }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider_request_id", "artifact_id", "manifest_digest", "coverage", "item_count", "captured_at", "reconstruction_approved"],
+      "properties": {
+        "provider_request_id": { "$ref": "#/$defs/opaque" },
+        "artifact_id": { "$ref": "#/$defs/opaque" },
+        "manifest_digest": { "$ref": "#/$defs/digest" },
+        "coverage": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/coverage" } },
+        "item_count": { "type": "integer", "minimum": 0 },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "reconstruction_approved": { "type": "boolean" }
+      }
+    }
+  }
+}

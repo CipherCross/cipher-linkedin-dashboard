@@ -218,6 +218,82 @@ export interface ObjectStorageControlPlanePort {
   ): Promise<ProviderActionResult>;
 }
 
+/**
+ * Recovery is deliberately a second, narrow capability surface.  It is not a
+ * generic export/import escape hatch: every artifact is an opaque provider
+ * reference plus a checksum/count manifest, and the only permitted restore is
+ * into the reviewed disposable recovery target.
+ */
+export type RecoveryCoverage =
+  | "database_schema_data"
+  | "auth_configuration_identities"
+  | "storage_metadata"
+  | "private_storage_objects_or_reconstruction"
+  | "deployment_configuration_metadata";
+
+export interface RecoveryCaptureRequest {
+  readonly tenantSlug: string;
+  readonly sourceResourceId: string;
+  readonly recoveryTargetName: string;
+  readonly ownership: OwnershipMarker;
+}
+
+export interface RecoveryArtifact {
+  readonly providerRequestId: string;
+  readonly artifactId: string;
+  readonly manifestDigest: string;
+  readonly coverage: readonly RecoveryCoverage[];
+  readonly itemCount: number;
+  readonly capturedAt: string;
+  /** Object bytes may be reconstructed only through a plan-approved source. */
+  readonly reconstructionApproved: boolean;
+}
+
+export interface RecoveryRestoreRequest {
+  readonly tenantSlug: string;
+  readonly targetResourceId: string;
+  readonly artifact: RecoveryArtifact;
+  readonly ownership: OwnershipMarker;
+}
+
+export interface RecoveryVerification {
+  readonly providerRequestId: string;
+  readonly coverage: readonly RecoveryCoverage[];
+  readonly passed: boolean;
+  readonly checkedAt: string;
+}
+
+export interface DataRecoveryPort {
+  captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact>;
+  restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult>;
+  verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification>;
+}
+
+export interface IdentityRecoveryPort {
+  captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact>;
+  restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult>;
+  verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification>;
+}
+
+export interface ObjectStorageRecoveryPort {
+  captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact>;
+  restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult>;
+  verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification>;
+}
+
+export interface HostingRecoveryPort {
+  captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact>;
+  restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult>;
+  verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification>;
+}
+
+export interface TenantRecoveryProviders {
+  readonly data: DataRecoveryPort;
+  readonly identity: IdentityRecoveryPort;
+  readonly objectStorage: ObjectStorageRecoveryPort;
+  readonly hosting: HostingRecoveryPort;
+}
+
 export interface DataProvider extends DataControlPlanePort {}
 export interface IdentityProvider extends IdentityControlPlanePort {}
 export interface ObjectStorageProvider extends ObjectStorageControlPlanePort {}

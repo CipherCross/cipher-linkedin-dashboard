@@ -12,6 +12,7 @@ Machine-readable schemas:
 - `contracts/release-plan.v1.schema.json`
 - `contracts/apply-request.v1.schema.json`
 - `contracts/catalog-snapshot.v1.schema.json`
+- `contracts/tenant-recovery.v1.schema.json`
 
 This document fixes the inputs, state, cost, recovery, and safety boundaries that
 P3 and later sessions must implement. It does not authorize provider writes and
@@ -502,6 +503,26 @@ recovery restores the registry, rotates platform provider tokens, relinks Keycha
 labels through no-echo input, and read-only reconciles deterministic provider
 resources. Reconcile may restore observed references but cannot read secret env
 values, adopt ambiguous resources, or perform writes.
+
+### Provider-neutral tenant recovery manifest
+
+S26 recovery uses `tenant-recovery.v1`, a closed, secret-free manifest that
+ties four typed provider artifacts to the encrypted local registry-backup
+evidence. Its mandatory coverage is database schema/data, Better Auth
+configuration and identities, R2 storage metadata plus private objects or the
+approved reconstruction source, and Vercel deployment/configuration metadata.
+The manifest contains only opaque artifact/resource references, checksums,
+counts, timestamps, ownership marker digest, and the encrypted registry backup
+digest/version/timestamp. It never contains bytes, database URLs, identity
+credentials, environment values, SMTP credentials, raw provider responses, or
+provider request payloads.
+
+Capture and restore are separate reviewed operations. Restore accepts only an
+intact manifest and restores into the approved disposable recovery target;
+verification must pass every coverage component, including RLS/access checks
+for restored private storage. A partial capture, failed verification, ownership
+mismatch, or unknown provider outcome is quarantined and requires reviewed
+resume; the recovery surface must not auto-delete or replace resources.
 
 ## Forbidden and destructive actions
 

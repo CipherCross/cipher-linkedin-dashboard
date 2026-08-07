@@ -47,6 +47,9 @@ const validators: Readonly<Record<PlanKind | "apply", ValidateFunction>> = {
 const catalogValidator = ajv.compile(
   loadSchema("catalog-snapshot.v1.schema.json"),
 );
+const tenantRecoveryValidator = ajv.compile(
+  loadSchema("tenant-recovery.v1.schema.json"),
+);
 
 function safeErrors(errors: ErrorObject[] | null | undefined): readonly object[] {
   return (errors ?? []).map((error) => ({
@@ -86,6 +89,16 @@ export function validateCatalogSchema(value: unknown): void {
       "schema_validation_failed",
       "catalog contract schema validation failed",
       { errors: safeErrors(catalogValidator.errors) },
+    );
+  }
+}
+
+export function validateTenantRecoverySchema(value: unknown): void {
+  if (!tenantRecoveryValidator(value)) {
+    throw new OpsError(
+      "schema_validation_failed",
+      "tenant recovery contract schema validation failed",
+      { errors: safeErrors(tenantRecoveryValidator.errors) },
     );
   }
 }
