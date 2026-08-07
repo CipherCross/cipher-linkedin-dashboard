@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Sync agent: pushes Linked Helper 2 local data into Supabase.
 
+A second transport also exists, off by default: the same extraction can be
+delivered to the dashboard's machine ingest gateway, which authenticates a
+per-notebook credential instead of the shared service key. It is additive —
+the Supabase push is unchanged, runs first, and stays authoritative. See the
+"ingest gateway transport" section and `ingest_mode` in config.example.yaml.
+
 Runs on each notebook. Three commands:
 
   python3 agent.py inspect                 # discover LH2 data dirs + SQLite schemas
@@ -36,7 +42,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.12.2"
+AGENT_VERSION = "1.13.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -225,13 +231,34 @@ def reexec():
 # bootstrap keys — supabase_url, supabase_service_key, instance_id — are
 # deliberately absent: they're needed locally just to connect/identify, so a
 # remote blob can never change where the agent points or who it claims to be.
+#
+# ingest_url and ingest_mode ARE here, because the rollout of the second
+# transport has to be steerable per notebook without an SSH session: turning one
+# notebook to 'shadow', watching it, then the rest, is the whole rollout.
 REMOTE_CONFIG_KEYS = {
     "instance_label",
     "account_name", "account_url", "account_avatar",
     "auto_update", "sync_steps", "sync_messages", "sync_photos",
     "lh2_db_path", "mapping", "local_timezone",
     "notify_url", "exclude_campaigns",
+    "ingest_url", "ingest_mode",
 }
+
+# Keys a remote blob may NEVER set, whatever the allowlist above says. Two kinds
+# live here: the bootstrap keys (where the agent points and who it claims to be)
+# and the credentials (notify_secret, ingest_token).
+#
+# This is a subtraction rather than a comment because the failure it prevents is
+# somebody adding a credential to REMOTE_CONFIG_KEYS "so it can be rotated from
+# the Health page". That would mean a machine token travelling through, and
+# resting in, a table every dashboard admin can edit — and an attacker who could
+# write instances.config could then hand every notebook a credential of their
+# choosing. The token is a credential, so it is treated the way notify_secret is:
+# local file only, never remote, never printed.
+LOCAL_ONLY_CONFIG_KEYS = frozenset({
+    "supabase_url", "supabase_service_key", "instance_id",
+    "notify_secret", "ingest_token",
+})
 
 
 def fetch_remote_config(cfg):
@@ -264,7 +291,7 @@ def apply_remote_config(cfg):
         return cfg
     remote = fetch_remote_config(cfg)
     applied = []
-    for key in REMOTE_CONFIG_KEYS:
+    for key in REMOTE_CONFIG_KEYS - LOCAL_ONLY_CONFIG_KEYS:
         if key not in remote:
             continue
         val = remote[key]
@@ -310,6 +337,547 @@ def notify_new_replies(cfg):
         print(f"notify-replies: HTTP {r.status_code} {r.text[:200]}")
     except Exception as e:
         print(f"notify-replies ping failed ({e}) — will retry after next sync")
+
+
+# ------------------------------------------------ ingest gateway transport
+#
+# The second transport. It delivers the SAME extraction the Supabase push just
+# consumed to `POST <ingest_url>` (the dashboard's `/api/import?op=agent.ingest`),
+# authenticating with a per-notebook machine credential instead of the shared
+# service key. Everything here is additive: the Supabase push runs first, is
+# unchanged, and remains authoritative. Nothing in this section can make a sync
+# fail — the strongest thing it does is mark a run 'partial'.
+#
+# Three rollout modes, set per notebook by `ingest_mode` (remote-overridable, so
+# a rollout is one Health-page edit per notebook):
+#
+#   off     the default. No payload is built, no request is made.
+#   shadow  deliver, and treat every failure as noise. This is the stage where
+#           the gateway is being proved and nobody should be paged for it.
+#   dual    deliver, and record a failure as a run warning, so a gateway that
+#           stops working is visible on the Health page instead of silent.
+#
+# There is deliberately no mode that stops writing to Supabase. Making the new
+# store authoritative is a whole-cutover decision about the whole dashboard, not
+# a flag on one notebook, and a mode that existed here would be an untested way
+# to take the fleet down.
+
+INGEST_MODES = ("off", "shadow", "dual")
+
+# The endpoint's own caps, restated here so a payload that would be refused is
+# refused locally with a legible message instead of costing a round trip. They
+# are pinned against `frontend/api/_lib/agent/ingest.ts` by the transport tests;
+# if that file's constants move, those tests fail rather than these drifting.
+INGEST_MAX_ROWS_PER_COLLECTION = 5_000
+INGEST_MAX_TOTAL_ROWS = 20_000
+INGEST_MAX_BYTES = 2_000_000
+INGEST_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$")
+
+# What one batch is allowed to be, which is well under what one batch is allowed
+# to be. A notebook with four thousand leads and three times as many messages
+# does not fit in one request, and the gateway's design expects that: each chunk
+# carries its own idempotency key and is independently retriable.
+INGEST_CHUNK_ROWS = 2_000
+INGEST_CHUNK_BYTES = 1_500_000
+
+# `lha.<credential uuid>.<43 base64url characters>`, exactly as minted by
+# `frontend/api/_lib/agent/credentials.ts`. The separator is a dot because
+# base64url's own alphabet contains `_` and `-`.
+INGEST_TOKEN_RE = re.compile(
+    r"^lha\.([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+    r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.([A-Za-z0-9_-]{43})$"
+)
+
+# The collections a chunk may be sliced along. `campaigns` is absent on purpose:
+# every chunk carries the full campaign list, because campaign_steps join their
+# campaign and leads reference one, and a chunk that arrived without its
+# campaigns would be silently short rows rather than loudly wrong.
+INGEST_CHUNKABLE = ("campaign_steps", "leads", "messages", "events")
+
+
+def resolve_ingest_mode(cfg):
+    """The rollout mode for this notebook. An unrecognised value is 'off'.
+
+    Fail-closed matters here because `ingest_mode` is remote-overridable: a typo
+    on the Health page must leave the notebook exactly as it was, not enable a
+    transport nobody chose."""
+    raw = str(cfg.get("ingest_mode") or "off").strip().lower()
+    if raw not in INGEST_MODES:
+        print(f"ingest_mode {raw!r} is not one of {'/'.join(INGEST_MODES)} — "
+              "treating it as 'off'")
+        return "off"
+    return raw
+
+
+def parse_ingest_token(raw):
+    """Return the credential id of a well-formed token, else None.
+
+    The agent screens the token's SHAPE locally for two reasons. A typo'd token
+    otherwise costs a round trip and comes back as an opaque 401, which reads
+    like a revoked credential rather than a mistyped one. And the credential id
+    is the half that is safe to print — it identifies which notebook a batch came
+    from without carrying anything that authenticates — so parsing is what lets
+    the dry run name the credential at all. The secret half is never printed,
+    never logged, and never leaves this process except in an Authorization
+    header."""
+    m = INGEST_TOKEN_RE.match(str(raw or "").strip())
+    return m.group(1).lower() if m else None
+
+
+# ------------------------------ the payload ---------------------------------
+
+def _ingest_campaigns(campaigns):
+    return [{"id": c["id"],
+             "lh_campaign_id": c["lh_campaign_id"],
+             "name": c["name"],
+             "status": c.get("status")} for c in campaigns]
+
+
+def _ingest_steps(steps):
+    return [{"campaign_id": s["campaign_id"],
+             "step_index": s["step_index"],
+             "step_label": s.get("step_label"),
+             "step_type": s.get("step_type"),
+             "template_body": s.get("template_body"),
+             "sent_count": s.get("sent_count", 0),
+             "replied_count": s.get("replied_count", 0),
+             "current_count": s.get("current_count", 0)} for s in steps]
+
+
+def _ingest_leads(leads, edu_map, job_map):
+    """Leads, with the start years merged INLINE rather than sent as a second
+    pass.
+
+    The Supabase path pushes years as separate bucketed upserts because
+    PostgREST rejects a batch with a mixed key set and a NULL year would clobber
+    a stored one. Neither constraint exists here: the gateway takes one row shape
+    and COALESCEs both year columns, so a NULL leaves the stored value alone.
+    Same values, one statement — and `verify_ingest_parity` compares them against
+    exactly what `build_year_updates` would have sent.
+
+    photo_path and photo_synced_at are always NULL from this path. The photo
+    mirror writes them directly to its own store after the push, and the gateway
+    COALESCEs both, so sending NULL is a no-op rather than an erasure."""
+    out = []
+    for lead in leads:
+        out.append({
+            "campaign_id": lead["campaign_id"],
+            "profile_url": lead["profile_url"],
+            "full_name": lead.get("full_name"),
+            "headline": lead.get("headline"),
+            "company": lead.get("company"),
+            "status": lead.get("status"),
+            "invited_at": lead.get("invited_at"),
+            "connected_at": lead.get("connected_at"),
+            "first_message_at": lead.get("first_message_at"),
+            "replied_at": lead.get("replied_at"),
+            "last_action_at": lead.get("last_action_at"),
+            "added_at": lead.get("added_at"),
+            "photo_path": None,
+            "photo_synced_at": None,
+            "education_start_year": edu_map.get(lead["profile_url"]),
+            "first_job_start_year": job_map.get(lead["profile_url"]),
+        })
+    return out
+
+
+def _ingest_messages(messages):
+    return [{"campaign_id": m.get("campaign_id"),
+             "profile_url": m["profile_url"],
+             "direction": m["direction"],
+             "body": m.get("body"),
+             "sent_at": m["sent_at"],
+             "content_hash": m.get("content_hash") or ""} for m in messages]
+
+
+def _ingest_events(events):
+    return [{"campaign_id": e.get("campaign_id"),
+             "profile_url": e.get("profile_url"),
+             "event_type": e["event_type"],
+             "occurred_at": e["occurred_at"]} for e in events]
+
+
+def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
+                         status, error):
+    """Project ONE extraction into the gateway's IngestPayload contract.
+
+    This is a projection, never a second extraction. `cmd_sync` reads the LH2
+    database once, hands the same in-memory lists to the Supabase upserts and to
+    this function, and passes the ALREADY-DEDUPED messages and events — the same
+    objects the Supabase push sent, not a fresh dedupe of the same inputs. That
+    is what makes "extraction parity" a structural property rather than a hope:
+    there is one extraction, and `verify_ingest_parity` proves the projection of
+    it loses nothing.
+
+    Only contract fields are emitted. The internal `updated_at` and the per-row
+    `instance_id` that PostgREST needs are deliberately absent: the gateway
+    stamps its own `updated_at` and takes the instance from the credential, and a
+    field it would ignore must not be in the payload, because the idempotency key
+    is a digest of the payload and a field nobody stores would make an inert
+    change look like new data."""
+    return {
+        "instance_id": cfg["instance_id"],
+        "agent_version": AGENT_VERSION,
+        "instance": {
+            "label": cfg.get("instance_label") or cfg["instance_id"],
+            "account_name": cfg.get("account_name") or "",
+            "account_url": cfg.get("account_url") or "",
+            "account_avatar": cfg.get("account_avatar") or "",
+        },
+        "campaigns": _ingest_campaigns(campaigns),
+        "campaign_steps": _ingest_steps(steps),
+        "leads": _ingest_leads(leads, demo["edu_map"], demo["job_map"]),
+        "messages": _ingest_messages(messages),
+        "events": _ingest_events(events),
+        "sync_run": {"status": status, "error": (error or "")[:2000]},
+    }
+
+
+def ingest_idempotency_key(payload, day=None):
+    """The key for one batch: `sync.<UTC date>.<32 hex of the content digest>`.
+
+    The key is a function of WHAT is being sent, and of nothing else. That is the
+    whole of the retry property:
+
+      * A retry — the same extraction delivered again after a failed attempt, by
+        this process or by the next cron run — hashes the same bytes and produces
+        the same key, so the gateway recognises it. If the first attempt did
+        commit, the retry is answered as a replay and writes nothing; if it
+        rolled back it left no trace, so the retry is an ordinary first attempt.
+      * A genuinely new sync has moved milestones, new leads or new messages in
+        it, so it hashes differently and gets its own key.
+
+    Two alternatives were rejected. A random key per run makes every retry a
+    fresh batch, which is what the gateway's ledger exists to prevent. A purely
+    time-bucketed key ('this hour') makes two different payloads share a key,
+    which the gateway correctly refuses with a 409 that only a human can clear.
+    Content-addressing is the only rule under which a conflict is unreachable
+    from an honest agent — this agent cannot produce the 409 branch at all.
+
+    The date component is not part of the identity; it makes the key legible in a
+    log and gives an otherwise-unchanged notebook one fresh batch a day rather
+    than an unbroken run of replays. Its cost is that a retry that crosses
+    midnight is a new key: harmless, because every write behind it is an upsert.
+
+    The digest need not agree with the gateway's own — the gateway compares its
+    digest against its stored one, never against this. What it must be is a
+    stable function of the payload, which sorted keys and fixed separators give."""
+    body = {k: v for k, v in payload.items() if k != "idempotency_key"}
+    digest = hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":"),
+                   ensure_ascii=False, default=str).encode("utf-8")
+    ).hexdigest()
+    day = day or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
+    return f"sync.{day}.{digest[:32]}"
+
+
+def _ingest_chunk(payload, group, day=None):
+    """One chunk: every scalar, the FULL campaign list, and this slice of rows."""
+    chunk = dict(payload)
+    for name in INGEST_CHUNKABLE:
+        chunk[name] = [row for collection, row in group if collection == name]
+    chunk["idempotency_key"] = ingest_idempotency_key(chunk, day)
+    return chunk
+
+
+def ingest_chunk_bytes(chunk):
+    return len(json.dumps(chunk, ensure_ascii=False, default=str).encode("utf-8"))
+
+
+def _split_by_bytes(payload, group, max_bytes, day=None):
+    chunk = _ingest_chunk(payload, group, day)
+    if len(group) <= 1 or ingest_chunk_bytes(chunk) <= max_bytes:
+        return [chunk]
+    mid = len(group) // 2
+    return (_split_by_bytes(payload, group[:mid], max_bytes, day)
+            + _split_by_bytes(payload, group[mid:], max_bytes, day))
+
+
+def chunk_ingest_payload(payload, max_rows=INGEST_CHUNK_ROWS,
+                         max_bytes=INGEST_CHUNK_BYTES, day=None):
+    """Split one payload into independently deliverable batches.
+
+    Row count is bounded first, then serialized size, because a chunk of two
+    thousand leads is small and a chunk of two thousand messages carrying
+    two-kilobyte bodies is not. The byte split is a halving recursion so a single
+    oversized row cannot loop: it stops at one row, which is always sendable.
+
+    An empty extraction still produces ONE chunk. A notebook with nothing new to
+    say must still record that it ran — the instance row and the sync_run row are
+    written by a batch, so producing no batch at all would make a quiet notebook
+    indistinguishable from a dead one."""
+    flat = [(name, row) for name in INGEST_CHUNKABLE for row in payload[name]]
+    groups = [flat[i:i + max_rows] for i in range(0, len(flat), max_rows)] or [[]]
+    chunks = []
+    for group in groups:
+        chunks.extend(_split_by_bytes(payload, group, max_bytes, day))
+    return chunks
+
+
+# ------------------------------ parity --------------------------------------
+
+_PARITY_LEAD_FIELDS = ("full_name", "headline", "company", "status",
+                       "invited_at", "connected_at", "first_message_at",
+                       "replied_at", "last_action_at", "added_at")
+_PARITY_STEP_FIELDS = ("step_label", "step_type", "template_body",
+                       "sent_count", "replied_count", "current_count")
+_PARITY_MAX_REPORTED = 8
+
+
+def _parity_note(problems, text):
+    if len(problems) < _PARITY_MAX_REPORTED:
+        problems.append(text)
+    elif len(problems) == _PARITY_MAX_REPORTED:
+        problems.append("… further parity problems suppressed")
+
+
+def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
+                         edu_map, job_map):
+    """Compare what the chunks WOULD deliver against what the Supabase push just
+    sent, and return a list of discrepancies (empty means parity).
+
+    This is the graded property, and it is deliberately checked against the same
+    lists rather than against a second read of LH2 — a second read would be
+    testing that LH2 is stable, which is not the claim. The claim is that the
+    projection into the contract, and the chunking of it, are lossless: every row
+    survives, every value survives, and no chunk exceeds a cap the gateway would
+    refuse.
+
+    A non-empty result REFUSES the delivery. Sending a batch already known to
+    disagree with the authoritative store would put a wrong number in a second
+    place, and a wrong number in two places is worse than a missing one in one."""
+    problems = []
+    seen = {name: [] for name in ("campaigns",) + INGEST_CHUNKABLE}
+    keys = set()
+
+    for i, chunk in enumerate(chunks, 1):
+        key = chunk.get("idempotency_key")
+        if not key or not INGEST_KEY_RE.match(key):
+            _parity_note(problems, f"chunk {i}: idempotency_key {key!r} is malformed")
+        if key in keys:
+            _parity_note(problems, f"chunk {i}: idempotency_key {key} is not unique")
+        keys.add(key)
+        size = ingest_chunk_bytes(chunk)
+        if size > INGEST_MAX_BYTES:
+            _parity_note(problems, f"chunk {i}: {size} bytes exceeds the "
+                                   f"{INGEST_MAX_BYTES}-byte cap")
+        total = 0
+        for name in seen:
+            rows = chunk[name]
+            total += len(rows)
+            if len(rows) > INGEST_MAX_ROWS_PER_COLLECTION:
+                _parity_note(problems, f"chunk {i}: {len(rows)} {name} exceeds the "
+                                       f"{INGEST_MAX_ROWS_PER_COLLECTION}-row cap")
+            if name != "campaigns":
+                seen[name].extend(rows)
+        if total > INGEST_MAX_TOTAL_ROWS:
+            _parity_note(problems, f"chunk {i}: {total} rows exceeds the "
+                                   f"{INGEST_MAX_TOTAL_ROWS}-row cap")
+        if chunk["campaigns"] != chunks[0]["campaigns"]:
+            _parity_note(problems, f"chunk {i}: campaign list differs from chunk 1")
+        if chunk["instance_id"] != chunks[0]["instance_id"]:
+            _parity_note(problems, f"chunk {i}: instance_id differs from chunk 1")
+
+    campaign_rows = chunks[0]["campaigns"] if chunks else []
+    if len(campaign_rows) != len(campaigns):
+        _parity_note(problems, f"campaigns: {len(campaign_rows)} sent vs "
+                               f"{len(campaigns)} extracted")
+    sent = {c["id"]: c for c in campaign_rows}
+    for c in campaigns:
+        got = sent.get(c["id"])
+        if got is None:
+            _parity_note(problems, f"campaigns: {c['id']} is missing")
+        elif got["name"] != c["name"] or got["status"] != c.get("status"):
+            _parity_note(problems, f"campaigns: {c['id']} name/status differs")
+
+    for name, source, key_of in (
+        ("campaign_steps", steps, lambda r: (r["campaign_id"], r["step_index"])),
+        ("leads", leads, lambda r: (r["campaign_id"], r["profile_url"])),
+        ("messages", messages, lambda r: (r["profile_url"], r["direction"],
+                                          r["sent_at"], r["content_hash"])),
+        ("events", events, lambda r: (r["campaign_id"], r["profile_url"],
+                                      r["event_type"])),
+    ):
+        rows = seen[name]
+        if len(rows) != len(source):
+            _parity_note(problems, f"{name}: {len(rows)} sent vs "
+                                   f"{len(source)} extracted")
+        by_key = {key_of(r): r for r in rows}
+        for row in source:
+            got = by_key.get(key_of(row))
+            if got is None:
+                _parity_note(problems, f"{name}: {key_of(row)} is missing")
+                continue
+            fields = (_PARITY_LEAD_FIELDS if name == "leads"
+                      else _PARITY_STEP_FIELDS if name == "campaign_steps"
+                      else ("body",) if name == "messages"
+                      else ("occurred_at",))
+            for field in fields:
+                if got.get(field) != row.get(field):
+                    _parity_note(problems, f"{name}: {key_of(row)} {field} "
+                                           f"{got.get(field)!r} != {row.get(field)!r}")
+            if name == "leads":
+                for field, source_map in (("education_start_year", edu_map),
+                                          ("first_job_start_year", job_map)):
+                    if got.get(field) != source_map.get(row["profile_url"]):
+                        _parity_note(problems, f"leads: {key_of(row)} {field} "
+                                               "differs from the extracted signal")
+    return problems
+
+
+def plan_ingest(cfg, payload, campaigns, leads, messages, events, steps, demo,
+                day=None):
+    """Chunk and verify, without sending. Shared by the dry run and the push, so
+    the dry run previews the exact batches a real sync would deliver rather than
+    an approximation of them."""
+    chunks = chunk_ingest_payload(payload, day=day)
+    problems = verify_ingest_parity(chunks, campaigns, leads, messages, events,
+                                    steps, demo["edu_map"], demo["job_map"])
+    return chunks, problems
+
+
+# ------------------------------ delivery ------------------------------------
+
+def post_ingest_chunk(url, token, chunk, timeout=60):
+    """POST one batch. Returns the decoded response body, or raises.
+
+    Retried like the Supabase writes and for the same reasons, with one addition
+    that is specific to this endpoint: the retry is safe BECAUSE the batch is
+    keyed. A timeout after the gateway committed is answered on the retry as a
+    replay, so the ambiguity a non-idempotent write has here simply does not
+    exist. A 4xx other than 429 is never retried — a malformed batch, a revoked
+    credential and a key already used for different data are all answers, not
+    blips, and retrying them only delays the log line that explains the run."""
+    backoffs = (2, 8)
+    body = json.dumps(chunk, ensure_ascii=False, default=str).encode("utf-8")
+    headers = {"Authorization": f"Bearer {token}",
+               "Content-Type": "application/json"}
+    for attempt in range(len(backoffs) + 1):
+        try:
+            r = requests.post(url, headers=headers, data=body, timeout=timeout)
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as e:
+            if attempt == len(backoffs):
+                raise
+            print(f"ingest: {type(e).__name__} (attempt {attempt + 1}/"
+                  f"{len(backoffs) + 1}) — retrying in {backoffs[attempt]}s")
+            time.sleep(backoffs[attempt])
+            continue
+        if (r.status_code == 429 or r.status_code >= 500) \
+                and attempt < len(backoffs):
+            print(f"ingest: HTTP {r.status_code} (attempt {attempt + 1}/"
+                  f"{len(backoffs) + 1}) — retrying in {backoffs[attempt]}s")
+            time.sleep(backoffs[attempt])
+            continue
+        r.raise_for_status()
+        try:
+            return r.json()
+        except ValueError:
+            return {}
+
+
+def _ingest_outcome(answer):
+    """Read one gateway answer as 'replay' or 'accepted'.
+
+    The gateway reports a replay two ways, and they must agree: `replayed` is
+    true, and `batch_id` names the batch already on record — a first attempt
+    returns `replayed: false` and a NULL batch id, because its own row is written
+    last and has no id to report yet. Cross-checking them costs nothing and is
+    the only local signal that would catch a gateway answering something other
+    than what this agent believes it is talking to."""
+    replayed = bool(answer.get("replayed"))
+    batch_id = answer.get("batch_id")
+    if replayed != (batch_id is not None):
+        print(f"ingest: WARNING inconsistent answer replayed={replayed} "
+              f"batch_id={batch_id!r}")
+    return "replay" if replayed else "accepted"
+
+
+def push_ingest(cfg, mode, chunks, problems):
+    """Deliver the batches. Returns (ok, note); NEVER raises.
+
+    Called after the Supabase push has already been recorded, so nothing here can
+    turn a green run red. `shadow` swallows the note, `dual` hands it to the run
+    warnings, and `off` never gets here."""
+    url = (cfg.get("ingest_url") or "").strip()
+    token = (cfg.get("ingest_token") or "").strip()
+    if not url or not token:
+        print("ingest: ingest_url or ingest_token is missing — "
+              f"mode {mode!r} has nothing to deliver to")
+        return False, "ingest transport is enabled but not configured"
+    credential_id = parse_ingest_token(token)
+    if not credential_id:
+        print("ingest: ingest_token is not a well-formed lha token — skipped")
+        return False, "ingest_token is malformed"
+    if problems:
+        print(f"ingest: refusing to deliver — {len(problems)} parity problem(s):")
+        for p in problems:
+            print(f"  - {p}")
+        return False, f"ingest parity check failed ({problems[0]})"
+
+    accepted = replayed = 0
+    for i, chunk in enumerate(chunks, 1):
+        rows = sum(len(chunk[name]) for name in ("campaigns",) + INGEST_CHUNKABLE)
+        try:
+            answer = post_ingest_chunk(url, token, chunk)
+        except Exception as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            detail = f"HTTP {status}" if status else type(e).__name__
+            print(f"ingest {i}/{len(chunks)}: FAILED ({detail}) {e} — "
+                  f"{accepted} accepted, {replayed} replayed before this")
+            return False, (f"ingest batch {i}/{len(chunks)} failed: {detail}")
+        outcome = _ingest_outcome(answer)
+        if outcome == "replay":
+            replayed += 1
+        else:
+            accepted += 1
+        print(f"ingest {i}/{len(chunks)}: {outcome:<8} {rows:>5} rows  "
+              f"key {chunk['idempotency_key']}"
+              + (f"  batch {answer.get('batch_id')}" if outcome == "replay"
+                 else f"  written {answer.get('rows_written')}"))
+    print(f"ingest: {len(chunks)} batch(es) delivered as credential "
+          f"{credential_id} — {accepted} accepted, {replayed} replayed")
+    return True, None
+
+
+def print_ingest_dry_run(cfg, mode, chunks, problems):
+    """What a dry run says about the second transport.
+
+    It prints the batches a real sync would deliver — their keys, their row
+    counts, their sizes — and it sends nothing. That is not a shortcut: the
+    gateway has no non-writing POST, so any request that could answer "is this a
+    replay?" would BE the first attempt if it were not. The honest form is to
+    show the keys and say plainly that the replay question is the gateway's to
+    answer. The keys shown are the real ones, so the answer a real run prints
+    lines up with this preview key for key."""
+    url = (cfg.get("ingest_url") or "").strip()
+    token = (cfg.get("ingest_token") or "").strip()
+    credential_id = parse_ingest_token(token)
+    rows = sum(sum(len(c[name]) for name in INGEST_CHUNKABLE) for c in chunks)
+    print(f"\ningest gateway — mode {mode!r}, nothing sent")
+    print(f"  endpoint    {url or '<ingest_url is not set>'}")
+    print(f"  credential  {credential_id or ('<ingest_token is not set>' if not token else '<ingest_token is malformed>')}")
+    print(f"  batches     {len(chunks)} covering {rows} chunkable rows "
+          f"+ {len(chunks[0]['campaigns'])} campaigns per batch")
+    for i, chunk in enumerate(chunks, 1):
+        counts = " ".join(f"{name.split('_')[-1]}={len(chunk[name])}"
+                          for name in ("campaigns",) + INGEST_CHUNKABLE)
+        print(f"    {i:>3}  {chunk['idempotency_key']}  "
+              f"{ingest_chunk_bytes(chunk) // 1024:>5} KB  {counts}")
+    if problems:
+        print(f"  parity      {len(problems)} PROBLEM(S) — a real sync would "
+              "refuse to deliver:")
+        for p in problems:
+            print(f"                - {p}")
+    else:
+        print("  parity      ok — every extracted row appears exactly once "
+              "across the batches, with the same values")
+    print("  Each key is a digest of that batch's own content, so re-running "
+          "this extraction\n  today produces these same keys. Whether a key is "
+          "a first attempt or a replay is\n  the gateway's answer and cannot be "
+          "known from a dry run, which sends nothing.")
+    if mode == "off":
+        print("  ingest_mode is 'off', so a real sync would deliver none of this.")
 
 
 # Per-run cap on photo uploads so the initial backfill (potentially thousands of
@@ -1318,10 +1886,23 @@ def cmd_sync(args):
     if not args.dry_run and self_update(cfg):
         reexec()
 
+    mode = resolve_ingest_mode(cfg)
+
     if args.dry_run:
         warnings = []
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
         print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo)
+        # The second transport previews off the SAME lists, deduped exactly as the
+        # real push dedupes them, so the batch keys printed here are the keys a
+        # real sync would present today.
+        sent_messages = dedupe_messages(messages)
+        sent_events = dedupe_events(derive_events(instance_id, leads))
+        payload = build_ingest_payload(
+            cfg, campaigns, leads, sent_messages, sent_events, steps, demo,
+            "partial" if warnings else "ok", "; ".join(warnings)[:500])
+        chunks, problems = plan_ingest(cfg, payload, campaigns, leads,
+                                       sent_messages, sent_events, steps, demo)
+        print_ingest_dry_run(cfg, mode, chunks, problems)
         if warnings:
             print("\nWARNING: a real sync would report status 'partial' — "
                   "these sections failed and returned empty:")
@@ -1377,15 +1958,41 @@ def cmd_sync(args):
         # duplicate). DEPLOY ORDER: migration 035 must be applied BEFORE this agent
         # version rolls out — until then this key has no unique constraint and
         # PostgREST rejects the on_conflict loudly (visible, not silent).
-        total += sb.upsert("events", dedupe_events(derive_events(instance_id, leads)),
+        # Bound once, then upserted, so the ingest transport below delivers the
+        # SAME objects rather than a second dedupe of the same inputs. Two dedupes
+        # is two places for the tie-breaking rule to be, which is one more than a
+        # rule can be maintained in — and it would make the parity check compare a
+        # list against itself computed twice instead of against what was sent.
+        sent_events = dedupe_events(derive_events(instance_id, leads))
+        sent_messages = dedupe_messages(messages)
+        total += sb.upsert("events", sent_events,
                            on_conflict="instance_id,campaign_id,profile_url,event_type")
-        total += sb.upsert("messages", dedupe_messages(messages),
+        total += sb.upsert("messages", sent_messages,
                            on_conflict="instance_id,profile_url,direction,sent_at,content_hash")
         total += sb.upsert("campaign_steps", steps,
                            on_conflict="campaign_id,step_index")
 
         # A successful push with swallowed per-section failures is 'partial', not 'ok'.
         status = "partial" if warnings else "ok"
+
+        # The second transport, after the authoritative push and before the run is
+        # recorded — after, so it can never delay or endanger the Supabase write;
+        # before, so a 'dual' failure reaches the Health page in this run's own
+        # error field instead of the next one's. It never raises, so the outer
+        # except below cannot be reached from here and a green run stays green.
+        if mode != "off":
+            payload = build_ingest_payload(
+                cfg, campaigns, leads, sent_messages, sent_events, steps, demo,
+                status, "; ".join(warnings)[:500])
+            chunks, problems = plan_ingest(cfg, payload, campaigns, leads,
+                                           sent_messages, sent_events, steps, demo)
+            ok, note = push_ingest(cfg, mode, chunks, problems)
+            if not ok and mode == "dual":
+                warnings.append(f"ingest: {note}")
+                status = "partial"
+            elif not ok:
+                print(f"ingest: {note} — mode 'shadow', not reported on the run")
+
         run_patch = {
             "status": status, "rows_upserted": total,
             "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()}

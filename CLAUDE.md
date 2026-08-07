@@ -36,8 +36,13 @@ python3 agent.py sync                     # real sync (self-updates from storage
 python3 agent.py ingest-csv FILE --campaign "Name" --kind successes|replies|queue
 python3 agent.py annotate "note" [--date YYYY-MM-DD] [--campaign ID] [--instance]
 sync-agent/deploy.sh                       # publish agent.py to 'agent' bucket; notebooks self-update ≤30 min
+sync-agent/.venv/bin/python3 sync-agent/tests/test_ingest_transport.py   # 62 tests, no pytest
 ```
 Always `sync --dry-run` and compare to LH2's own numbers before a first real sync.
+The transport tests need the agent's own virtualenv (`agent.py` imports `requests`
+and `yaml` at module scope); they read the endpoint's caps and field names out of
+`frontend/api/_lib/agent/ingest.ts`, so they are what stops the two halves of the
+ingest contract drifting apart.
 
 ## Architecture
 
@@ -92,6 +97,18 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
   inbound replies to Slack. It authenticates with local-only `notify_secret`; all failures
   are swallowed and never break a sync.
+- **Dual transport (`ingest_mode`)**: the same extraction can also go to
+  `POST /api/import?op=agent.ingest` with a per-notebook machine credential. Additive —
+  the Supabase push runs first and stays authoritative; `off` (default) / `shadow` (deliver,
+  failures are noise) / `dual` (deliver, a failure marks the run `partial`). There is no
+  Supabase-off mode; that is a whole-cutover decision, not a per-notebook flag. The
+  idempotency key is `sync.<UTC date>.<digest of the batch's own content>`, so a retry
+  repeats a key and a changed extraction does not. `ingest_url`/`ingest_mode` are
+  remote-config keys; **`ingest_token` is local-only**, like `notify_secret` —
+  `LOCAL_ONLY_CONFIG_KEYS` is subtracted from the allowlist so adding it there changes
+  nothing. Big notebooks are chunked (each chunk carries the full campaign list and its
+  own key); a parity check against the rows Supabase just received refuses to deliver on
+  any disagreement.
 
 ### AI layer (`frontend/api/`)
 Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `frontend/api/_lib/`:

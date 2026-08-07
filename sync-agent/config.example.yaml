@@ -57,6 +57,33 @@ sync_photos: false
 # notify_url: "https://<your-app>.vercel.app/api/notify-replies"
 # notify_secret: "generate-a-long-random-secret"
 
+# ---------------------------------------------------------------------------
+# Second transport: the machine ingest gateway. OFF by default.
+#
+# The agent can deliver the same extraction it just pushed to Supabase to the
+# dashboard's ingest endpoint as well, authenticating with a credential issued
+# for THIS notebook rather than the shared service key. The Supabase push is
+# unchanged, runs first, and stays authoritative; nothing in this transport can
+# make a sync fail.
+#
+#   ingest_mode: off     nothing is built and nothing is sent (default)
+#                shadow  delivered; every failure is noise and is not reported
+#                dual    delivered; a failure marks the run 'partial' so it shows
+#                        on the Health page
+#
+# Roll out one notebook at a time: set ingest_mode to 'shadow' remotely from the
+# Health page, read the run's log, then move it to 'dual'.
+#
+# ingest_url and ingest_mode are remote-config keys. ingest_token is NOT, and
+# never will be: it is a credential, exactly like notify_secret, and a remote
+# blob that could set it would be a way to hand every notebook a token of
+# somebody else's choosing. Mint one per notebook through the dashboard's
+# admin.agentCredentialIssue operation; the plaintext is shown exactly once.
+#
+# ingest_url: "https://<your-app>.vercel.app/api/import?op=agent.ingest"
+# ingest_mode: "off"
+# ingest_token: "lha.<credential-uuid>.<secret>"
+
 # LH2 campaign ids this notebook must NEVER sync (test campaigns, etc.).
 # Archiving in LH2 is not enough — archived campaigns stay in lh.db and would
 # be re-created in Supabase on the next sync. Also settable remotely from the
