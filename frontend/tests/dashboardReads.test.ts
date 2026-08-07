@@ -40,10 +40,12 @@ import {
   fetchNeonLeadNotes,
   fetchNeonPlaybook,
   fetchNeonThread,
+  fetchDeploymentPaths,
   fetchReadPath,
   readAll,
   readPage,
   resetReadPath,
+  resolvePhotoPath,
   resolveReadPath,
 } from '../src/lib/dashboardReads'
 import type { ApiFetch, ReadPage } from '../src/lib/dashboardReads'
@@ -195,6 +197,71 @@ describe('the path flag', () => {
       const rec = recorder(respond)
       expect(await fetchReadPath(rec.fetchImpl)).toBe('supabase')
     }
+  })
+
+  /**
+   * The photo flag, and the rule that is enforced on both sides of the wire.
+   *
+   * The browser asks for photos by `lead.id`, and the two providers' lead ids name
+   * different rows (`N-B2.md`). So a deployment answering `photoPath: 'neon'` while
+   * its read path is Supabase would have the dashboard render one person's face
+   * against another's name — and it would look like a caching bug. The server
+   * refuses to *report* that combination and this refuses to *believe* it; a
+   * mutation removing either was silent until this test existed.
+   */
+  it('never takes the photo path without the read path', async () => {
+    const rec = recorder(() =>
+      jsonResponse({ readPath: 'supabase', photoPath: 'neon' }),
+    )
+    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
+      readPath: 'supabase',
+      photoPath: 'supabase',
+    })
+  })
+
+  it('takes the photo path when both are neon', async () => {
+    const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath: 'neon' }))
+    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
+      readPath: 'neon',
+      photoPath: 'neon',
+    })
+  })
+
+  it.each([
+    ['absent', { readPath: 'neon' }],
+    ['null', { readPath: 'neon', photoPath: null }],
+    ['a near miss', { readPath: 'neon', photoPath: 'Neon' }],
+    ['true', { readPath: 'neon', photoPath: true }],
+  ])('leaves the photo path on supabase when it is %s', async (_label, body) => {
+    const rec = recorder(() => jsonResponse(body))
+    expect((await fetchDeploymentPaths(rec.fetchImpl)).photoPath).toBe('supabase')
+  })
+
+  it('resolves both paths to supabase when the lookup fails', async () => {
+    const failures: Responder[] = [
+      () => jsonResponse({ readPath: 'neon', photoPath: 'neon' }, 500),
+      () => new Response('<html>', { status: 200 }),
+      () => {
+        throw new TypeError('Failed to fetch')
+      },
+    ]
+    for (const respond of failures) {
+      const rec = recorder(respond)
+      // Both halves, and the photo half is the one that matters: a failed flag
+      // lookup must not enable a path the deployment may not even be able to serve.
+      expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
+        readPath: 'supabase',
+        photoPath: 'supabase',
+      })
+    }
+  })
+
+  it('answers both flags from one request', async () => {
+    const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath: 'neon' }))
+    expect(await resolveReadPath(rec.fetchImpl)).toBe('neon')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
+    // One lookup for both, so the two can never disagree about one deployment.
+    expect(rec.urls).toHaveLength(1)
   })
 
   it('asks once per page load and caches the answer, including a failed one', async () => {

@@ -127,6 +127,14 @@ export const READ_PATH_OPERATION = 'config.readPath'
 
 export type ReadPath = 'supabase' | 'neon'
 
+/** Which provider serves lead photos. Reported by the same lookup. */
+export type PhotoPath = 'supabase' | 'neon'
+
+export interface DeploymentPaths {
+  readonly readPath: ReadPath
+  readonly photoPath: PhotoPath
+}
+
 /**
  * The injectable transport. Defaults to `authFetch`, which attaches the
  * signed-in browser's credential — a Supabase bearer today, the identity cookie
@@ -153,7 +161,41 @@ export const MAX_PAGES = 1000
 // The path flag
 // ---------------------------------------------------------------------------
 
-let readPathPromise: Promise<ReadPath> | null = null
+let pathsPromise: Promise<DeploymentPaths> | null = null
+
+/**
+ * Ask the deployment which paths it serves — reads and photos, in one request.
+ *
+ * **Every failure resolves to `supabase` for both**, for the reason
+ * `fetchReadPath` below states. The photo path carries one extra rule the server
+ * also applies: it can only be `neon` when the read path is. The browser asks for
+ * photos by `lead.id` and the two providers' lead ids name different rows, so a
+ * dashboard reading Supabase leads while asking Neon for their photos would render
+ * one person's face against another's name. Enforced on both sides rather than
+ * trusted from one, because the failure is silent and not recoverable by a reload.
+ */
+export async function fetchDeploymentPaths(
+  fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
+): Promise<DeploymentPaths> {
+  try {
+    const res = await fetchImpl(
+      `${READ_ENDPOINT}?op=${encodeURIComponent(READ_PATH_OPERATION)}`,
+    )
+    if (!res.ok) return { readPath: 'supabase', photoPath: 'supabase' }
+    const body = (await res.json()) as {
+      readPath?: unknown
+      photoPath?: unknown
+    } | null
+    const readPath: ReadPath = body?.readPath === 'neon' ? 'neon' : 'supabase'
+    return {
+      readPath,
+      photoPath:
+        readPath === 'neon' && body?.photoPath === 'neon' ? 'neon' : 'supabase',
+    }
+  } catch {
+    return { readPath: 'supabase', photoPath: 'supabase' }
+  }
+}
 
 /**
  * Ask the deployment which read path it serves.
@@ -173,16 +215,7 @@ let readPathPromise: Promise<ReadPath> | null = null
 export async function fetchReadPath(
   fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
 ): Promise<ReadPath> {
-  try {
-    const res = await fetchImpl(
-      `${READ_ENDPOINT}?op=${encodeURIComponent(READ_PATH_OPERATION)}`,
-    )
-    if (!res.ok) return 'supabase'
-    const body = (await res.json()) as { readPath?: unknown } | null
-    return body?.readPath === 'neon' ? 'neon' : 'supabase'
-  } catch {
-    return 'supabase'
-  }
+  return (await fetchDeploymentPaths(fetchImpl)).readPath
 }
 
 /**
@@ -196,13 +229,29 @@ export async function fetchReadPath(
  * path that works.
  */
 export function resolveReadPath(fetchImpl?: ApiFetch): Promise<ReadPath> {
-  readPathPromise ??= fetchReadPath(fetchImpl)
-  return readPathPromise
+  return resolveDeploymentPaths(fetchImpl).then((paths) => paths.readPath)
 }
 
-/** Drop the memoized flag. For tests; nothing in the app calls it. */
+/**
+ * The photo path, from the same memoized lookup.
+ *
+ * One request answers both, so an avatar rendering before `DataContext`'s first
+ * load does not add a second startup round trip — and the two answers cannot
+ * disagree, which they could if each were fetched separately and a deployment
+ * changed between the two.
+ */
+export function resolvePhotoPath(fetchImpl?: ApiFetch): Promise<PhotoPath> {
+  return resolveDeploymentPaths(fetchImpl).then((paths) => paths.photoPath)
+}
+
+function resolveDeploymentPaths(fetchImpl?: ApiFetch): Promise<DeploymentPaths> {
+  pathsPromise ??= fetchDeploymentPaths(fetchImpl)
+  return pathsPromise
+}
+
+/** Drop the memoized flags. For tests; nothing in the app calls it. */
 export function resetReadPath(): void {
-  readPathPromise = null
+  pathsPromise = null
 }
 
 // ---------------------------------------------------------------------------
