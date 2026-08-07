@@ -92,7 +92,12 @@ export class DisposableOnboardingCore {
         executedOrdinal: null,
       };
     }
-    const executor = new OnboardingExecutor(this.#registry, this.#providers);
+    const executor = new OnboardingExecutor(
+      this.#registry,
+      this.#providers,
+      undefined,
+      this.#clock,
+    );
     const result = await executor.executeNext(
       executionContextFromPlan(
         plan,

@@ -77,15 +77,18 @@ export class OnboardingExecutor {
   readonly #registry: Registry;
   readonly #providers: OnboardingProviders;
   readonly #redactor: Redactor;
+  readonly #clock: () => Date;
 
   constructor(
     registry: Registry,
     providers: OnboardingProviders,
     redactor = new Redactor(),
+    clock: () => Date = () => new Date(),
   ) {
     this.#registry = registry;
     this.#providers = providers;
     this.#redactor = redactor;
+    this.#clock = clock;
   }
 
   async executeNext(context: OnboardingExecutionContext): Promise<ExecuteNextResult> {
@@ -117,6 +120,7 @@ export class OnboardingExecutor {
           next.ordinal >= 11 ? "verifying" : "provisioning",
           context.operationId,
           context.fencingToken,
+          this.#clock(),
         );
       }
     }
@@ -125,6 +129,7 @@ export class OnboardingExecutor {
       next.ordinal,
       "running",
       context.fencingToken,
+      { now: this.#clock() },
     );
 
     try {
@@ -135,6 +140,7 @@ export class OnboardingExecutor {
           "provisioning",
           context.operationId,
           context.fencingToken,
+          this.#clock(),
         );
       } else if (next.ordinal === 11) {
         if (this.#registry.getTenantLifecycle(context.tenantId) !== "verifying") {
@@ -143,6 +149,7 @@ export class OnboardingExecutor {
             "verifying",
             context.operationId,
             context.fencingToken,
+            this.#clock(),
           );
         }
       }
@@ -151,7 +158,10 @@ export class OnboardingExecutor {
         next.ordinal,
         "succeeded",
         context.fencingToken,
-        providerRequestId === undefined ? {} : { providerRequestId },
+        {
+          ...(providerRequestId === undefined ? {} : { providerRequestId }),
+          now: this.#clock(),
+        },
       );
       if (next.ordinal === 13) {
         this.#registry.transitionTenant(
@@ -159,11 +169,13 @@ export class OnboardingExecutor {
           "active",
           context.operationId,
           context.fencingToken,
+          this.#clock(),
         );
         this.#registry.transitionOperation(
           context.operationId,
           "succeeded",
           context.fencingToken,
+          { now: this.#clock() },
         );
       }
       return {
@@ -187,6 +199,7 @@ export class OnboardingExecutor {
           ...(providerRequestId === undefined ? {} : { providerRequestId }),
           redactedError:
             `${safeError.code}: ${safeError.message}`,
+          now: this.#clock(),
         },
       );
       const lifecycle = this.#registry.getTenantLifecycle(context.tenantId);
@@ -196,6 +209,7 @@ export class OnboardingExecutor {
           "quarantined",
           context.operationId,
           context.fencingToken,
+          this.#clock(),
         );
       }
       this.#registry.transitionOperation(
@@ -205,6 +219,7 @@ export class OnboardingExecutor {
         {
           errorCode: safeError.code,
           redactedErrorSummary: safeError.message,
+          now: this.#clock(),
         },
       );
       throw safeError;
@@ -252,6 +267,7 @@ export class OnboardingExecutor {
           context.operationId,
           context.fencingToken,
           resource.providerRequestId,
+          this.#clock(),
         );
         return resource.providerRequestId;
       }
@@ -331,6 +347,7 @@ export class OnboardingExecutor {
           context.operationId,
           context.fencingToken,
           target.hostingRequestId,
+          this.#clock(),
         );
         return target.hostingRequestId;
       }
@@ -396,6 +413,7 @@ export class OnboardingExecutor {
           context.operationId,
           context.fencingToken,
           release.hostingRequestId,
+          this.#clock(),
         );
         // Schedules are pinned to the release they belong to, so they are
         // registered as part of building it rather than as a free-standing step
@@ -439,6 +457,7 @@ export class OnboardingExecutor {
           context.operationId,
           context.fencingToken,
           rollout.hostingRequestId,
+          this.#clock(),
         );
         return rollout.hostingRequestId;
       }
