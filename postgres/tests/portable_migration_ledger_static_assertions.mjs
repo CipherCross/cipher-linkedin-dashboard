@@ -110,6 +110,10 @@ const S08_ARTIFACTS = [
   'docs/implementation-handoffs/N-S15.md',
   // S18 (step 008, the auto-advance EXECUTE grant the classify cron waits on).
   'postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql',
+  // S21 (the machine ingest role bootstrap and step 009, the machine write path).
+  'postgres/tenant-baseline/v1/000_machine_ingest_role_bootstrap.sql',
+  'postgres/tenant-baseline/v1/009_machine_ingest_path.sql',
+  'docs/implementation-handoffs/N-S21.md',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -199,6 +203,8 @@ const MARKER_SWEEP_EXEMPT = {
     'is a handoff document, not executable content; the two defects it fixes are in the provider-specific read path and the step it writes is for the provider being migrated to, so naming both is its subject. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
   'docs/implementation-handoffs/N-S15.md':
     'is a handoff document, not executable content; it names the provider the AI layer is migrating to, the one it is leaving, and the identity provider the transitional bearer resolves under. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
+  'docs/implementation-handoffs/N-S21.md':
+    'is a handoff document, not executable content; it names the provider whose apply it records, the transport the sync agent keeps using meanwhile, and the object store whose gate is still shut. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
 };
 
 // Provider RESOURCE identifiers, as opposed to provider names. These must not
@@ -301,8 +307,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares eight steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8',
-  manifest.steps.length === 8 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares nine steps in order 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9',
+  manifest.steps.length === 9 && manifest.steps.every((s, i) => s.step === i + 1));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index
@@ -338,9 +344,16 @@ check('step 005 declares the identity_store prerequisite it inherits from 004',
 // claimed a contract role without declaring enables_login would be a stealthy
 // re-creation of the pinned seven-role set, so the two lists are checked
 // against each other.
+//
+// S21 adds the third: LOGIN on app_machine, the ingest principal step 009 opens
+// a write surface for. That makes "exactly one enables login" false, and the
+// assertion below moved rather than being deleted — what it was protecting is
+// the CREATE/ENABLE distinction, not the number two. Exactly one extension may
+// still create a role; every other one may only enable login on a role the
+// seven-role contract already pins.
 const extensions = manifest.role_bootstrap_extensions ?? [];
 check('every role-bootstrap extension declares its roles and the step that needs them',
-  extensions.length === 2
+  extensions.length === 3
   && extensions.every((e) =>
     Array.isArray(e.required_roles) && e.required_roles.length > 0
     && e.is_ledger_step === false
@@ -352,9 +365,9 @@ check('no extension role is also claimed by the seven-role bootstrap unless it o
       manifest.role_bootstrap.required_roles.includes(r)
         ? e.enables_login === true
         : e.enables_login !== true)));
-check('exactly one extension creates a role and exactly one enables login on a contract role',
-  extensions.filter((e) => e.enables_login === true).length === 1
-  && extensions.filter((e) => e.enables_login !== true).length === 1);
+check('exactly one extension creates a role and every other only enables login',
+  extensions.filter((e) => e.enables_login !== true).length === 1
+  && extensions.filter((e) => e.enables_login === true).length === extensions.length - 1);
 check('no extension role is claimed by two extensions',
   extensions.flatMap((e) => e.required_roles).length
     === new Set(extensions.flatMap((e) => e.required_roles)).size);

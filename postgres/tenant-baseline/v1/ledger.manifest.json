@@ -63,6 +63,18 @@
       ],
       "required_by_step": 7,
       "note": "Additive control-plane prerequisite of the AI execution path. Creates NO role: app_system belongs to the seven-role contract and already exists in every prepared cluster. The artifact changes exactly one attribute - ALTER ROLE app_system LOGIN - so the AI layer connects as the principal the guard was designed around. Separate file for the same append-only-digest reason as the identity store extension. Step 007 applies either way (its grants and policies need no login); the login is what lets the AI path CONNECT, which is why this extension is declared against step 7 rather than carried inside it - roles are cluster objects a dump does not carry. The credential is assigned out of band, as for app_migration and app_runtime."
+    },
+    {
+      "artifact": "000_machine_ingest_role_bootstrap.sql",
+      "sha256": "1e6d20f7b287d3cc69071f022bbb0326cad21bd146f8f393c6444f89ebc756bc",
+      "applied_by": "control-plane",
+      "is_ledger_step": false,
+      "enables_login": true,
+      "required_roles": [
+        "app_machine"
+      ],
+      "required_by_step": 9,
+      "note": "Additive control-plane prerequisite, deliberately NOT an edit to 000_control_plane_role_bootstrap.sql. app_machine is a seven-role contract member and already exists in every prepared cluster; this artifact changes exactly one attribute, LOGIN, so the ingest endpoint can connect as the principal step 009's policies were written for. A role is a cluster-level object that pg_dump does not carry and that app_migration, being NOCREATEROLE, cannot alter, so the attribute cannot live in the step itself. Step 009 applies correctly without it and simply has no principal to enter what it opens until the control plane has run this."
     }
   ],
   "ledger_bootstrap": {
@@ -151,6 +163,14 @@
       "owner_role_entered_by": "artifact",
       "session": "S18",
       "description": "One EXECUTE grant on public.pipeline_auto_advance() to app_system, and nothing else. The scheduled half of the reply classifier has no human actor and runs as the system principal, which step 007 gave DML on messages and leads but no way to run the fixed auto-advance procedure step 003 granted to app_runtime alone; it therefore labelled replies and stopped one step short of triage. The function is SECURITY DEFINER owned by app_owner with a pinned search_path, so the grant is the whole capability - the caller gains no privilege on leads or pipeline_events, and no table grant appears here. Opens no relation, no sequence, no policy and no other function; adds no DELETE; needs no control-plane prerequisite, because app_system is a seven-role contract member that already carries LOGIN. The AI SQL guard is untouched and stays SELECT-only: this function has side effects and is called as a named operation on a direct connection, never as guard SQL. Written under the same owner decision as step 007: applied only by explicit owner approval, never automatically."
+    },
+    {
+      "step": 9,
+      "artifact": "009_machine_ingest_path.sql",
+      "sha256": "ae8e9fb9ad11aef10e58a773451bafb8aae5b35ec58d438a8047c6d888dd8267",
+      "owner_role_entered_by": "artifact",
+      "session": "S21",
+      "description": "The machine ingest path: public.agent_credential (one row per machine that may ingest, storing a SHA-256 of a 256-bit secret and never the secret), public.agent_ingest_batch (one row per credential and idempotency key, written in the same transaction as the rows it describes, with no status column because a failed batch rolls back and leaves no trace), and the write surface of app_machine - the seven-role contract's ingest principal, which until now held no grant of any kind. It gains SELECT/INSERT/UPDATE on the seven relations the agent writes plus the two created here, no DELETE anywhere, and a column-level UPDATE on last_used_at alone of the credential table. Each FOR ALL policy is gated on public.machine_actor_instance(), which resolves the published actor to a live credential's instance and returns NULL for an absent, malformed, unknown, revoked or expired one - so revocation is enforced by the database on every statement, and a credential cannot write another notebook's rows. Section E adds the actorless resolver (the machine equivalent of identity_resolve_actor, refusing a foreign tenant before an actor is published) and three admin functions gated on public.is_app_admin() and granted to app_runtime alone, so no role holds raw DML on the credential table. Creates no role and changes no role attribute; the LOGIN a production deployment needs arrives through the pinned control-plane extension 000_machine_ingest_role_bootstrap.sql. Leaves the AI SQL guard SELECT-only and touches no other role's grants or policies. Written under the same owner decision as steps 007 and 008: applied only by explicit owner approval, never automatically."
     }
   ]
 }
