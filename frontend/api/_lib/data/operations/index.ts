@@ -37,6 +37,12 @@
 
 import { NeonOperationRegistry } from '../neon.js'
 
+import {
+  AGENT_ADMIN_COMMANDS,
+  AGENT_ADMIN_OPERATIONS,
+  registerAgentAdminOperations,
+} from './agentIngest.js'
+
 import { ACTIVITY_OPERATIONS, dailySeriesOperation } from './activity.js'
 import {
   DASHBOARD_OPERATIONS,
@@ -175,6 +181,17 @@ import {
 } from './briefingWrites.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
+export {
+  AGENT_ADMIN_COMMANDS,
+  AGENT_ADMIN_OPERATIONS,
+  MACHINE_COMMANDS,
+  MACHINE_OPERATIONS,
+  buildMachineRegistry,
+  type CredentialDirectoryRow,
+  type IngestBatchRow,
+  type IssuedCredential,
+  type RevokedCredential,
+} from './agentIngest.js'
 export {
   LEADS_OPERATIONS,
   type LeadNoteRow,
@@ -702,11 +719,17 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     briefingUpsertBriefingOperation,
   )
 
+  // S21's admin half. The machine's own vocabulary is a separate registry on a
+  // separate principal (`operations/agentIngest.ts`); what belongs here is only
+  // what a signed-in admin performs: mint a credential, retire one, list them.
+  registerAgentAdminOperations(registry)
+
   return registry
 }
 
 /** Every actor-scoped read the application may perform, for assertions. */
 export const APPLICATION_QUERY_OPERATIONS = [
+  AGENT_ADMIN_OPERATIONS.credentialDirectory,
   IDENTITY_OPERATIONS.teamRoster,
   ACTIVITY_OPERATIONS.dailySeries,
   DASHBOARD_OPERATIONS.instancesOverview,
@@ -765,6 +788,8 @@ export const APPLICATION_QUERY_OPERATIONS = [
  * writes; the rest are S14's business writes.
  */
 export const APPLICATION_COMMAND_OPERATIONS = [
+  AGENT_ADMIN_COMMANDS.issueCredential,
+  AGENT_ADMIN_COMMANDS.revokeCredential,
   IDENTITY_ADMIN_COMMANDS.invite,
   IDENTITY_ADMIN_COMMANDS.setActive,
   IDENTITY_ADMIN_COMMANDS.setRole,
@@ -816,9 +841,16 @@ export const APPLICATION_COMMAND_OPERATIONS = [
 ] as const
 
 /**
- * The complete actorless surface. One entry, and a test asserts the count — a
- * read that runs with no actor published is the sharpest tool in the driver and
- * it exists for exactly one reason.
+ * The complete actorless surface of the *application* registry. One entry, and
+ * a test asserts the count — a read that runs with no actor published is the
+ * sharpest tool in the driver and it exists for exactly one reason.
+ *
+ * S21's `agent.resolveCredential` is the second such read in the project and it
+ * is deliberately not here: it belongs to the machine registry, which this
+ * registry never merges. Keeping the two apart is what stops the application's
+ * runtime principal from being able to establish a machine actor at all — the
+ * assertion below therefore still reads "one", and it means one *per registry*
+ * rather than one in existence.
  */
 export const APPLICATION_ACTORLESS_OPERATIONS = [
   IDENTITY_OPERATIONS.resolveActor,

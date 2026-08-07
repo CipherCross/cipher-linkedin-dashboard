@@ -19,6 +19,8 @@ import {
   type QueryRequest,
   type ResolveActorRequest,
   type ResolvedActor,
+  type ResolveMachineActorRequest,
+  type ResolvedMachineActor,
   type UtcRange,
 } from './contracts.js'
 
@@ -149,6 +151,7 @@ export class FakeDataStore implements DataStore {
   private readonly commands = new Map<string, StoredCommand>()
   private readonly cursors = new Map<string, CursorState>()
   private readonly actors = new Map<string, ResolvedActor | null>()
+  private readonly machineActors = new Map<string, ResolvedMachineActor | null>()
   private nextCursorId = 1
   private transactionActive = false
 
@@ -227,6 +230,63 @@ export class FakeDataStore implements DataStore {
       this.actors.get(`${request.provider.trim()}|${request.subject.trim()}`) ??
       null
     )
+  }
+
+  /**
+   * Register a machine token's resolution: the triple the database would match
+   * on, mapped to the actor it would return, or absent for "resolves to
+   * nobody".
+   *
+   * All three parts are in the key rather than only the credential id, because
+   * the properties the ingest tests are about — a wrong secret, a foreign
+   * tenant — are exactly the ones a fake keyed on the id alone could not model.
+   * A revoked or expired credential is seeded by *not* seeding it, which is
+   * what the database does too: the resolver's `WHERE` excludes it, and every
+   * refusal is the same zero rows.
+   */
+  seedMachineActor(
+    credentialId: string,
+    secretHash: string,
+    tenantId: string,
+    resolved: ResolvedMachineActor | null,
+  ): void {
+    this.machineActors.set(
+      `${credentialId}|${secretHash.toLowerCase()}|${tenantId}`,
+      resolved,
+    )
+  }
+
+  /** Withdraw a seeded machine token — a revoke, as the database performs it. */
+  revokeMachineActor(
+    credentialId: string,
+    secretHash: string,
+    tenantId: string,
+  ): void {
+    this.machineActors.delete(
+      `${credentialId}|${secretHash.toLowerCase()}|${tenantId}`,
+    )
+  }
+
+  async resolveMachineActor(
+    request: ResolveMachineActorRequest,
+  ): Promise<ResolvedMachineActor | null> {
+    if (
+      !request ||
+      typeof request.credentialId !== 'string' ||
+      request.credentialId.trim() === '' ||
+      typeof request.secretHash !== 'string' ||
+      request.secretHash.trim() === '' ||
+      typeof request.tenantId !== 'string' ||
+      request.tenantId.trim() === ''
+    ) {
+      return null
+    }
+    const key = [
+      request.credentialId.trim(),
+      request.secretHash.trim().toLowerCase(),
+      request.tenantId.trim(),
+    ].join('|')
+    return this.machineActors.get(key) ?? null
   }
 
   async transaction<TResult>(

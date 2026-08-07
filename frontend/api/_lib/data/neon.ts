@@ -41,6 +41,7 @@ import {
   normalizeUtcRange,
   PaginationError,
   RESOLVE_ACTOR_OPERATION,
+  RESOLVE_MACHINE_ACTOR_OPERATION,
   type ActorContext,
   type DataStore,
   type DataStoreCommand,
@@ -52,6 +53,8 @@ import {
   type QueryRequest,
   type ResolveActorRequest,
   type ResolvedActor,
+  type ResolveMachineActorRequest,
+  type ResolvedMachineActor,
   type UtcRange,
 } from './contracts.js'
 
@@ -89,6 +92,16 @@ const SQLSTATE_UNIQUE_VIOLATION = '23505'
 const SQLSTATE_FOREIGN_KEY_VIOLATION = '23503'
 
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 10_000
+
+/**
+ * Shapes the machine resolver screens for before a statement is built. Both are
+ * the shape of a value this code produced, not an authorization decision — the
+ * database decides that, and a token failing either of these could not have been
+ * issued by `agent_credential_issue` in the first place.
+ */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/i
 
 /** Row shape handed to an operation's `mapRow`; column names are as selected. */
 export type NeonRow = Record<string, unknown>
@@ -795,12 +808,73 @@ export class NeonDataStore implements DataStore {
       return null
     }
 
+    return this.runActorlessQuery<ResolvedActor>(
+      RESOLVE_ACTOR_OPERATION,
+      {
+        provider: request.provider.trim(),
+        subject: request.subject.trim(),
+      },
+      'Resolving the actor',
+    )
+  }
+
+  /**
+   * The machine half of the pre-actor read. See `DataStore.resolveMachineActor`.
+   *
+   * The same transaction shape as `resolveActor` — `BEGIN READ ONLY`, an empty
+   * `app.actor_id`, one `SECURITY DEFINER` call — because the property that
+   * makes that shape safe is the same one: with no actor published, every
+   * actor-scoped policy in the baseline matches nothing, and the only thing that
+   * answers is a definer function that consults no actor at all.
+   *
+   * The three inputs are checked before the database is reached, and the checks
+   * are shape rather than authorization: a malformed credential id would reach
+   * `::uuid` and raise 22P02, and a hash that is not 64 hex characters cannot be
+   * the SHA-256 of anything this code produced. Both are `null` here — a
+   * malformed token identifies nobody, exactly as a blank subject does above.
+   */
+  async resolveMachineActor(
+    request: ResolveMachineActorRequest,
+  ): Promise<ResolvedMachineActor | null> {
+    if (
+      !request ||
+      typeof request.credentialId !== 'string' ||
+      !UUID_PATTERN.test(request.credentialId.trim()) ||
+      typeof request.secretHash !== 'string' ||
+      !SHA256_HEX_PATTERN.test(request.secretHash.trim()) ||
+      typeof request.tenantId !== 'string' ||
+      request.tenantId.trim() === ''
+    ) {
+      return null
+    }
+
+    return this.runActorlessQuery<ResolvedMachineActor>(
+      RESOLVE_MACHINE_ACTOR_OPERATION,
+      {
+        credentialId: request.credentialId.trim(),
+        secretHash: request.secretHash.trim().toLowerCase(),
+        tenantId: request.tenantId.trim(),
+      },
+      'Resolving the machine actor',
+    )
+  }
+
+  /**
+   * The transaction both pre-actor reads share. Extracted when the second one
+   * arrived rather than copied: the properties that make it safe — read-only,
+   * an explicitly published empty actor, a single allowlisted operation, one row
+   * or nothing — are the same properties in both cases, and two copies is two
+   * places for one of them to be dropped.
+   */
+  private async runActorlessQuery<TResolved>(
+    operation: string,
+    params: Readonly<Record<string, string>>,
+    failureLabel: string,
+  ): Promise<TResolved | null> {
     if (this.closed) {
       throw new DataStoreTransactionError('Data store is closed')
     }
-    const definition = this.config.operations.lookupActorlessQuery(
-      RESOLVE_ACTOR_OPERATION,
-    )
+    const definition = this.config.operations.lookupActorlessQuery(operation)
 
     await this.ensureRuntimePrincipal()
 
@@ -818,23 +892,21 @@ export class NeonDataStore implements DataStore {
       opened = true
       await client.query(this.preambleSql(), this.preambleValues(''))
 
-      const statement = definition.build({
-        provider: request.provider.trim(),
-        subject: request.subject.trim(),
-      } as unknown as DataStoreParams)
+      const statement = definition.build(params as unknown as DataStoreParams)
 
       const result = await client.query<NeonRow>(statement.text, [
         ...(statement.values ?? []),
       ])
       await client.query('COMMIT')
 
-      // More than one row would mean the baseline's uniqueness on
-      // (provider, provider_subject) was violated. Refuse rather than pick one.
+      // More than one row would mean a uniqueness the baseline declares was
+      // violated — (provider, provider_subject) for the human resolver, the
+      // credential's primary key for the machine one. Refuse rather than pick.
       if (result.rows.length !== 1) return null
       const mapped = definition.mapRow
         ? definition.mapRow(result.rows[0])
         : result.rows[0]
-      return mapped as ResolvedActor
+      return mapped as TResolved
     } catch (error) {
       if (opened) {
         try {
@@ -843,7 +915,7 @@ export class NeonDataStore implements DataStore {
           poisoned = rollbackError
         }
       }
-      throw toContractError(error, 'Resolving the actor')
+      throw toContractError(error, failureLabel)
     } finally {
       client.release(poisoned ? (poisoned as Error) : undefined)
     }

@@ -26,6 +26,18 @@ export const NEON_DIRECT_DATABASE_URL_ENV = 'NEON_DATABASE_URL_UNPOOLED'
  * the runtime role's write surface.
  */
 export const NEON_AI_DATABASE_URL_ENV = 'NEON_AI_DATABASE_URL'
+/**
+ * The machine ingest principal's own connection string — `app_machine`, or a
+ * login able to become it. A third name for the third principal, and not
+ * derivable from either of the other two for the reason the AI one gives: the
+ * three are authorized by different policies, and a deployment that reused one
+ * credential for two of them would run the ingest with a surface the ingest was
+ * never granted.
+ *
+ * Unset in every environment today. Its absence is what keeps the ingest
+ * operation answering 503 rather than half-working — see `agentIngest.ts`.
+ */
+export const NEON_MACHINE_DATABASE_URL_ENV = 'NEON_MACHINE_DATABASE_URL'
 
 export type EnvSource = Readonly<Record<string, string | undefined>>
 
@@ -79,6 +91,22 @@ export function readNeonAiConnectionString(
     NEON_AI_DATABASE_URL_ENV,
     'The Neon AI store (the app_system execution principal)',
   )
+}
+
+export function readNeonMachineConnectionString(
+  env: EnvSource = process.env,
+): string {
+  return readRequired(
+    env,
+    NEON_MACHINE_DATABASE_URL_ENV,
+    'The Neon machine store (the app_machine ingest principal)',
+  )
+}
+
+/** True when a machine connection string is configured, without reading it. */
+export function machineStoreConfigured(env: EnvSource = process.env): boolean {
+  const value = env[NEON_MACHINE_DATABASE_URL_ENV]
+  return typeof value === 'string' && value.trim() !== ''
 }
 
 export function readNeonDirectConnectionString(

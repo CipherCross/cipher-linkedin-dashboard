@@ -369,11 +369,19 @@ export interface ResolvedActor {
 }
 
 /**
- * The single allowlisted actorless operation name.
+ * The two allowlisted actorless operation names.
  *
  * Defined here rather than in the operations registry because both the adapter
- * and the registry need it, and the adapter must not import the application's
+ * and the registry need them, and the adapter must not import the application's
  * operation modules — they import it.
+ *
+ * There were one of these until S21, and the second is the same category rather
+ * than a widening of it: an operation may run with no actor published **only if
+ * running it is what establishes the actor**. `identity.resolveActor` turns a
+ * verified provider subject into a human actor; `agent.resolveCredential` turns
+ * a presented machine token into a machine actor. Both are `SECURITY DEFINER`
+ * reads that authorize themselves, neither can write, and neither distinguishes
+ * "unknown" from "not allowed".
  */
 export const RESOLVE_ACTOR_OPERATION = 'identity.resolveActor'
 
@@ -382,6 +390,35 @@ export interface ResolveActorRequest {
   readonly provider: string
   /** The identity-provider subject, never a canonical user id. */
   readonly subject: string
+}
+
+export const RESOLVE_MACHINE_ACTOR_OPERATION = 'agent.resolveCredential'
+
+export interface ResolveMachineActorRequest {
+  /** `public.agent_credential.id`, the public half of the presented token. */
+  readonly credentialId: string
+  /**
+   * The SHA-256 of the secret half, lowercase hex. The secret itself never
+   * reaches the data layer, and nothing here can turn this back into one.
+   */
+  readonly secretHash: string
+  /**
+   * The tenant the *deployment* claims to serve. A credential belonging to
+   * another tenant resolves to `null` here rather than being refused later by a
+   * handler, so the check cannot be forgotten by a caller.
+   */
+  readonly tenantId: string
+}
+
+/**
+ * A machine actor, established. `instanceId` is the notebook the credential was
+ * issued for and is the only instance its writes may touch — enforced by the
+ * step-`009` policies, not by whoever reads this field.
+ */
+export interface ResolvedMachineActor {
+  readonly credentialId: string
+  readonly instanceId: string
+  readonly tenantId: string
 }
 
 export interface DataStore {
@@ -404,6 +441,24 @@ export interface DataStore {
    * primitive.
    */
   resolveActor(request: ResolveActorRequest): Promise<ResolvedActor | null>
+
+  /**
+   * Turn a presented machine token into a machine actor, or `null`.
+   *
+   * The machine half of `resolveActor`, and it runs with no actor published for
+   * the same reason: it is what establishes one. `null` covers an unknown
+   * credential, a wrong secret, a foreign tenant, a revoked credential and an
+   * expired one without distinguishing between them, so a caller holding a bad
+   * token learns only that it is bad.
+   *
+   * It is on this interface rather than on a machine-only sub-interface because
+   * the contract already declares a `machine` actor kind: a store that served
+   * machines but could not establish one would be a store whose actor kinds
+   * disagree with its methods.
+   */
+  resolveMachineActor(
+    request: ResolveMachineActorRequest,
+  ): Promise<ResolvedMachineActor | null>
 
   transaction<TResult>(
     actor: ActorContext,

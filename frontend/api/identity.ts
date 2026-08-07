@@ -46,6 +46,15 @@
  * checked twice, by us and by it.
  */
 
+import {
+  AgentCredentialError,
+  issueAgentCredential,
+  listAgentCredentials,
+  parseIssueInput,
+  parseRevokeInput,
+  revokeAgentCredential,
+  type IssueCredentialInput,
+} from './_lib/agent/credentials.js'
 import { authorizationResponse, requireMachineSecret } from './_lib/auth.js'
 import {
   DataStoreContractError,
@@ -107,13 +116,19 @@ const CANDIDATE_ROUTES: Readonly<Record<string, string>> = {
 }
 
 /** The only operations reachable with GET, and every one is a pure read. */
-const READ_OPERATIONS: readonly string[] = ['session.current', 'team.roster']
+const READ_OPERATIONS: readonly string[] = [
+  'session.current',
+  'team.roster',
+  'admin.agentCredentials',
+]
 
 /** Product-served operations that change state. All POST, all origin-checked. */
 const WRITE_OPERATIONS: readonly string[] = [
   'admin.invite',
   'admin.setActive',
   'admin.setRole',
+  'admin.agentCredentialIssue',
+  'admin.agentCredentialRevoke',
   'maintenance.pruneSessions',
 ]
 
@@ -246,6 +261,12 @@ export function createIdentityHandler(
         return adminSetActive(request, resolved, deps)
       case 'admin.setRole':
         return adminSetRole(request, resolved, deps)
+      case 'admin.agentCredentials':
+        return agentCredentials(resolved, deps)
+      case 'admin.agentCredentialIssue':
+        return agentCredentialIssue(request, resolved, deps)
+      case 'admin.agentCredentialRevoke':
+        return agentCredentialRevoke(request, resolved, deps)
       case 'maintenance.pruneSessions':
         return pruneSessions(request, resolved, deps)
       default:
@@ -519,6 +540,120 @@ async function adminSetActive(
 function readOptionalSubject(result: unknown): string | null {
   const subject = (result as { provider_subject?: unknown } | null)?.provider_subject
   return typeof subject === 'string' && subject.trim() !== '' ? subject.trim() : null
+}
+
+/**
+ * The machine credentials' lifecycle: list, issue, revoke.
+ *
+ * They live on `/api/identity` rather than beside the ingest operation they mint
+ * tokens for, and the split is by **who authenticates**. This file already owns
+ * every principal-shaped decision the product makes — sessions, membership,
+ * revocation — and it is the one endpoint built by a dependency-injected factory,
+ * so the whole surface is exercised offline against a fake store and a fake
+ * identity provider. The ingest itself belongs where the batches go
+ * (`/api/import?op=agent.ingest`), authenticates with a machine token, and never
+ * meets a human session.
+ *
+ * The admin gate is asserted twice on purpose and neither is decorative: the
+ * `requireAdminActor` below shapes a clean 403, and the SQL functions in step
+ * 009 raise `42501` unless `is_app_admin()` holds — so an ordinary member who
+ * reached this code anyway still mints nothing.
+ */
+async function agentCredentials(
+  resolved: RequestActor,
+  deps: IdentityHandlerDeps,
+): Promise<Response> {
+  try {
+    requireAdminActor(resolved)
+  } catch (error) {
+    return authorizationResponse(error) ?? json({ error: 'Forbidden' }, 403)
+  }
+
+  try {
+    const credentials = await listAgentCredentials(deps.store, resolved.actor)
+    return json({ credentials })
+  } catch (error) {
+    return adminFailure(error, 'list machine credentials')
+  }
+}
+
+async function agentCredentialIssue(
+  request: Request,
+  resolved: RequestActor,
+  deps: IdentityHandlerDeps,
+): Promise<Response> {
+  try {
+    requireAdminActor(resolved)
+  } catch (error) {
+    return authorizationResponse(error) ?? json({ error: 'Forbidden' }, 403)
+  }
+
+  const body = await readJson(request)
+  if (!body) return json({ error: 'invalid JSON body' }, 400)
+
+  let input: IssueCredentialInput
+  try {
+    input = parseIssueInput(body)
+  } catch (error) {
+    if (error instanceof AgentCredentialError) {
+      return json({ error: error.message }, error.status)
+    }
+    throw error
+  }
+
+  try {
+    const issued = await issueAgentCredential(deps.store, resolved.actor, input)
+    // The token is in this response and in no other place, ever. It is not
+    // logged, not stored and not recoverable: a lost one is replaced by issuing
+    // another and revoking this one.
+    return json({ ok: true, credential: issued.credential, token: issued.token })
+  } catch (error) {
+    if (error instanceof AgentCredentialError) {
+      return json({ error: error.message }, error.status)
+    }
+    return adminFailure(error, 'issue a machine credential')
+  }
+}
+
+async function agentCredentialRevoke(
+  request: Request,
+  resolved: RequestActor,
+  deps: IdentityHandlerDeps,
+): Promise<Response> {
+  try {
+    requireAdminActor(resolved)
+  } catch (error) {
+    return authorizationResponse(error) ?? json({ error: 'Forbidden' }, 403)
+  }
+
+  const body = await readJson(request)
+  if (!body) return json({ error: 'invalid JSON body' }, 400)
+
+  let input: { credentialId: string; reason: string }
+  try {
+    input = parseRevokeInput(body)
+  } catch (error) {
+    if (error instanceof AgentCredentialError) {
+      return json({ error: error.message }, error.status)
+    }
+    throw error
+  }
+
+  try {
+    const revoked = await revokeAgentCredential(
+      deps.store,
+      resolved.actor,
+      input.credentialId,
+      input.reason,
+    )
+    // Zero rows is an id that names no credential. Reported as a 404 rather
+    // than as a success, because "revoked" and "there was nothing to revoke"
+    // are different answers to an operator retiring a notebook.
+    if (!revoked) return json({ error: 'no such credential' }, 404)
+    return json({ ok: true, credential: revoked })
+  } catch (error) {
+    return adminFailure(error, 'revoke a machine credential')
+  }
 }
 
 async function adminSetRole(
