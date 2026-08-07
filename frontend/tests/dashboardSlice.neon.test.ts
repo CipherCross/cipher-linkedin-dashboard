@@ -291,9 +291,17 @@ describe('S13 part 1 — the five small reads, live', () => {
       request({ op: 'config.readPath' }, ''),
     )
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ readPath: 'supabase' })
+    // S20 added `photoPath` to the same lookup, and the equality is kept strict
+    // rather than relaxed to `toMatchObject`: what this pins is that a deployment
+    // which has set nothing reports **both** paths off, and a third flag appearing
+    // here unannounced should fail a test.
+    expect(await response.json()).toEqual({
+      readPath: 'supabase',
+      photoPath: 'supabase',
+    })
   })
 })
+
 
 // ---------------------------------------------------------------------------
 // leads.directory
@@ -938,5 +946,186 @@ describe('S13 — the auth deny matrix over every new read', () => {
       }),
     )
     expect(response.status).toBe(405)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// S20 — the lead photo read
+// ---------------------------------------------------------------------------
+
+/**
+ * `leads.photoUrls` against the live database.
+ *
+ * **Why this is worth six minutes of suite time.** The operation carries the only
+ * new SQL in S20 and it is the registry's first **array-valued** parameter —
+ * `= ANY($1::uuid[])`, fed a JavaScript array through `pg`. Every other operation
+ * passes scalars. Nothing offline can tell whether that combination survives the
+ * driver, the cast and the RLS policy; the answer is either "it returns the rows"
+ * or "production 500s on the first avatar", and only a real query distinguishes
+ * them.
+ *
+ * The storage credentials here are **fabricated on purpose and reach nothing**:
+ * `presignGet` is HMAC arithmetic over a URL and makes no request, so a signature
+ * can be produced against a bucket that does not exist. What is being exercised is
+ * the database read and the handler's wiring; whether R2 would accept the URL is
+ * S20's first known limit and needs the owner's bucket.
+ *
+ * **It seeds its own notebook and drops it again**, rather than writing
+ * `photo_path` onto the S13 fixture's leads. The first version did the latter and
+ * broke a test 400 lines above it: `touch_updated_at` bumps `updated_at` whenever
+ * any other column changes, which moved two leads into the delta cohort
+ * `leads.directory`'s refresh test counts — 232 where it expects 230. That damage
+ * outlives the run, because the trigger makes the original timestamp
+ * unrecoverable by UPDATE and the fixture only inserts rows it finds missing. The
+ * lesson generalises past this file: on a shared project, a test that mutates
+ * another test's rows is a test that fails on a different line, later, for
+ * somebody else.
+ */
+describe('S20 — lead photo URLs, live', () => {
+  const PHOTO_ENV = {
+    OBJECT_STORAGE_ENDPOINT: 'https://fixture.r2.cloudflarestorage.com',
+    OBJECT_STORAGE_BUCKET: 'fixture-bucket',
+    OBJECT_STORAGE_ACCESS_KEY_ID: 'fixture-access-key-id',
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: 'fixture-secret-access-key',
+    OBJECT_STORAGE_TENANT_ID: 'fixture-tenant',
+  } as const
+
+  /** This block's own notebook, so nothing it writes is another test's row. */
+  const PHOTO_SCOPE = 's20-photos'
+  const PHOTO_CAMPAIGN = `${PHOTO_SCOPE}:1`
+
+  const photoLeadId = (index: number): string =>
+    `20d00000-0000-4000-8000-${String(index).padStart(12, '0')}`
+
+  const PHOTOGRAPHED = photoLeadId(1)
+  const UNPHOTOGRAPHED = photoLeadId(2)
+  const MALFORMED = photoLeadId(3)
+  /** A well-formed uuid that names no row. */
+  const ABSENT = '20d00000-0000-4000-8000-999999999999'
+
+  interface PhotoBody {
+    photos?: { leadId: string; url: string; expiresAt: string }[]
+    ttlSeconds?: number
+    error?: string
+  }
+
+  const photoCall = async (
+    params: Record<string, string>,
+  ): Promise<{ status: number; body: PhotoBody }> => {
+    const response = await GET(request({ op: 'leads.photoUrls', ...params }))
+    return { status: response.status, body: (await response.json()) as PhotoBody }
+  }
+
+  beforeAll(async () => {
+    // Restored explicitly: earlier blocks in this file leave the stub pointing at
+    // whichever subject their denial cases needed.
+    stubbedSubject = SUBJECTS.activeMember
+
+    await fixtures.asActor(CONTRACT_ACTORS.activeMember.actorId, async (client) => {
+      await client.query(
+        `INSERT INTO public.instances (id, label)
+         VALUES ($1, 'S20 lead photo fixture') ON CONFLICT (id) DO NOTHING`,
+        [PHOTO_SCOPE],
+      )
+      await client.query(
+        `INSERT INTO public.campaigns (id, instance_id, lh_campaign_id, name, status)
+         VALUES ($1, $2, '1', 'S20 photos', 'active') ON CONFLICT (id) DO NOTHING`,
+        [PHOTO_CAMPAIGN, PHOTO_SCOPE],
+      )
+      // Three leads: one with the agent's own path layout, one with none, and one
+      // carrying a path the key grammar must refuse. `photo_path` is
+      // service-written in production, so an INSERT is the only way to produce the
+      // refusal case — and an INSERT rather than an UPDATE, so no trigger moves a
+      // timestamp anywhere.
+      await client.query(
+        `INSERT INTO public.leads (id, instance_id, campaign_id, profile_url,
+                                   full_name, added_at, photo_path, updated_at)
+         SELECT f.id::uuid, $1, $2, f.profile_url, f.full_name,
+                '2026-01-01T00:00:00Z'::timestamptz, f.photo_path,
+                '2026-01-01T00:00:00Z'::timestamptz
+           FROM unnest($3::text[], $4::text[], $5::text[], $6::text[])
+                AS f(id, profile_url, full_name, photo_path)
+         ON CONFLICT (campaign_id, profile_url) DO NOTHING`,
+        [
+          PHOTO_SCOPE,
+          PHOTO_CAMPAIGN,
+          [PHOTOGRAPHED, UNPHOTOGRAPHED, MALFORMED],
+          [
+            `${PHOTO_SCOPE}/lead/1`,
+            `${PHOTO_SCOPE}/lead/2`,
+            `${PHOTO_SCOPE}/lead/3`,
+          ],
+          ['Photo One', 'Photo Two', 'Photo Three'],
+          [`${PHOTO_SCOPE}/lead-1.jpg`, null, '../escape/lead-3.jpg'],
+        ],
+      )
+    })
+    Object.assign(process.env, PHOTO_ENV)
+  }, 120_000)
+
+  afterAll(async () => {
+    for (const name of Object.keys(PHOTO_ENV)) delete process.env[name]
+    // Dropped, so a second run of this suite starts from the same state as the
+    // first. Leads before campaigns before the notebook: the references point
+    // that way.
+    await fixtures.asActor(CONTRACT_ACTORS.activeMember.actorId, async (client) => {
+      await client.query(`DELETE FROM public.leads WHERE instance_id = $1`, [
+        PHOTO_SCOPE,
+      ])
+      await client.query(`DELETE FROM public.campaigns WHERE instance_id = $1`, [
+        PHOTO_SCOPE,
+      ])
+      await client.query(`DELETE FROM public.instances WHERE id = $1`, [PHOTO_SCOPE])
+    })
+  }, 120_000)
+
+  it('signs a URL for a lead that has a photo, and omits ones that do not', async () => {
+    const { status, body } = await photoCall({
+      lead_ids: [PHOTOGRAPHED, UNPHOTOGRAPHED, ABSENT].join(','),
+    })
+
+    expect(status).toBe(200)
+    expect(body.photos?.map((photo) => photo.leadId)).toEqual([PHOTOGRAPHED])
+    expect(body.ttlSeconds).toBe(300)
+
+    const signed = new URL(body.photos?.[0].url ?? '')
+    // The key the browser never named: derived from the column, under the tenant.
+    expect(signed.pathname).toBe(
+      `/fixture-bucket/t/fixture-tenant/lead-photos/${PHOTO_SCOPE}/lead-1.jpg`,
+    )
+    expect(signed.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/)
+    expect(signed.searchParams.get('X-Amz-Expires')).toBe('300')
+  })
+
+  it('answers a lead whose photo_path does not map with no URL, not an error', async () => {
+    const { status, body } = await photoCall({ lead_ids: MALFORMED })
+    expect(status).toBe(200)
+    expect(body.photos).toEqual([])
+  })
+
+  it('refuses a malformed id, an empty list and an oversized batch', async () => {
+    expect((await photoCall({ lead_ids: 'not-a-uuid' })).status).toBe(400)
+    expect((await photoCall({ lead_ids: '' })).status).toBe(400)
+    const many = Array.from({ length: 101 }, (_unused, index) => photoLeadId(index + 1))
+    expect((await photoCall({ lead_ids: many.join(',') })).status).toBe(400)
+  })
+
+  it('requires a session, like every other read here', async () => {
+    const response = await GET(
+      request({ op: 'leads.photoUrls', lead_ids: PHOTOGRAPHED }, ''),
+    )
+    expect(response.status).toBe(401)
+  })
+
+  it('fails closed when the deployment has no storage configuration', async () => {
+    const saved = process.env.OBJECT_STORAGE_TENANT_ID
+    delete process.env.OBJECT_STORAGE_TENANT_ID
+    try {
+      // 503, not 500: the request is well formed and the deployment cannot serve
+      // it yet. The browser's loader turns this into initials.
+      expect((await photoCall({ lead_ids: PHOTOGRAPHED })).status).toBe(503)
+    } finally {
+      process.env.OBJECT_STORAGE_TENANT_ID = saved
+    }
   })
 })

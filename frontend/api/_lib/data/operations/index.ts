@@ -66,6 +66,7 @@ import { COACHING_OPERATIONS, coachingDigestsOperation } from './coaching.js'
 import {
   LEADS_OPERATIONS,
   leadNotesOperation,
+  leadPhotoObjectsOperation,
   leadsDirectoryOperation,
 } from './leads.js'
 import {
@@ -388,6 +389,15 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   )
   registry.registerQuery(MESSAGES_OPERATIONS.thread, threadOperation)
   registry.registerQuery(LEADS_OPERATIONS.notes, leadNotesOperation)
+
+  // S20 — the lead-photo path's authorization step. A read, like everything else
+  // here: the object write it enables is performed by the storage provider, not by
+  // the database, and this operation exists so the *path* comes from a row the
+  // actor was permitted to see.
+  registry.registerQuery(
+    LEADS_OPERATIONS.photoObjects,
+    leadPhotoObjectsOperation,
+  )
   registry.registerQuery(
     LIBRARY_OPERATIONS.savedSearches,
     savedSearchesOperation,
@@ -714,6 +724,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   CONVERSATION_OPERATIONS.followUpHistory,
   MESSAGES_OPERATIONS.thread,
   LEADS_OPERATIONS.notes,
+  LEADS_OPERATIONS.photoObjects,
   LIBRARY_OPERATIONS.savedSearches,
   LIBRARY_OPERATIONS.icpProfiles,
   LIBRARY_OPERATIONS.icpPersonas,

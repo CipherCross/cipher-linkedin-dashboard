@@ -78,6 +78,19 @@ import {
 } from './_lib/data/operations/index.js'
 import { getDataStore } from './_lib/data/store.js'
 import { resolveRequestActor } from './_lib/identity/session.js'
+import {
+  objectStorageConfigured,
+  readObjectStorageTenantId,
+} from './_lib/storage/config.js'
+import {
+  LEAD_PHOTO_URL_TTL_SECONDS,
+  LeadPhotoRequestError,
+  MAX_PHOTO_BATCH,
+  parseLeadPhotoRequest,
+  signLeadPhotoUrls,
+  type LeadPhotoRow,
+} from './_lib/storage/leadPhotoService.js'
+import { getObjectStorageProvider } from './_lib/storage/runtime.js'
 
 export const maxDuration = 10
 
@@ -194,6 +207,43 @@ export function deploymentReadPath(env = process.env): ReadPath {
   return (env.NEON_READS_DEFAULT ?? '').trim() === 'neon' ? 'neon' : 'supabase'
 }
 
+// ---------------------------------------------------------------------------
+// The photo-path flag (S20)
+// ---------------------------------------------------------------------------
+
+export type PhotoPath = 'supabase' | 'neon'
+
+/**
+ * Which lead-photo path this deployment serves. Reported beside `readPath` by the
+ * same unauthenticated lookup.
+ *
+ * **Three conditions, all required, each for a different reason.** This is more
+ * than the other flags ask for, and the extra conditions are not belt-and-braces:
+ *
+ * 1. **`NEON_PHOTOS_DEFAULT=neon`** — the explicit opt-in, in the shape every
+ *    other seam uses. Only the exact string counts; a typo keeps the path that
+ *    works.
+ * 2. **The read path is already `neon`.** Not a policy, a *correctness*
+ *    requirement, and the subtlest thing in this file. The browser asks for photos
+ *    by `lead.id`, and a lead id means different rows in the two providers —
+ *    `N-B2.md` records that the id spaces name different people. A dashboard
+ *    reading Supabase leads while asking Neon for their photos would therefore
+ *    render other people's faces against the wrong names. It would look like a
+ *    caching bug and it would be a privacy incident.
+ * 3. **Object storage resolves.** Checked rather than assumed, because the flag's
+ *    whole job is to keep a working dashboard working: a deployment that sets the
+ *    opt-in before the bucket exists reports `supabase` and renders initials from
+ *    Supabase, instead of asking an endpoint that can only 503.
+ *
+ * The flag is *not* `neon` merely because storage is configured, and not merely
+ * because reads are — an owner enables it deliberately, once both hold.
+ */
+export function deploymentPhotoPath(env = process.env): PhotoPath {
+  if ((env.NEON_PHOTOS_DEFAULT ?? '').trim() !== 'neon') return 'supabase'
+  if (deploymentReadPath(env) !== 'neon') return 'supabase'
+  return objectStorageConfigured(env) ? 'neon' : 'supabase'
+}
+
 /**
  * `config.readPath` is the one operation on this endpoint that is **not**
  * authenticated, and that is a decision rather than an oversight.
@@ -209,7 +259,100 @@ export function deploymentReadPath(env = process.env): ReadPath {
  * secret, it is not a capability, and it is inferable from timing anyway.
  */
 function readPathResponse(): Response {
-  return json({ readPath: deploymentReadPath() })
+  // `photoPath` rides along on the same lookup rather than taking an operation of
+  // its own. The browser needs both before it renders anything, they are decided
+  // by the same deployment, and a second unauthenticated round trip at startup
+  // would buy nothing — the field is additive, so a browser built before S20
+  // ignores it and keeps the Supabase photo path.
+  return json({
+    readPath: deploymentReadPath(),
+    photoPath: deploymentPhotoPath(),
+  })
+}
+
+/**
+ * `leads.photoUrls` — the one operation on this endpoint that is not a plain
+ * registered read, and the shape of that exception.
+ *
+ * It is dispatched separately rather than added to `READ_OPERATIONS` because it
+ * does something no entry in that table does: it runs a registered read *and then*
+ * calls an object-storage provider, and answers with signed URLs instead of a page
+ * of rows. Folding it into the generic path would have meant giving every read a
+ * post-processing hook, which is a larger and vaguer change than one branch.
+ *
+ * What it keeps from the generic path, deliberately: the same resolved actor, the
+ * same store, and a registered operation name for its SQL. The only thing it adds
+ * is what happens to the rows afterwards.
+ */
+export const LEAD_PHOTO_URLS_OPERATION = 'leads.photoUrls'
+
+async function leadPhotoUrlsResponse(
+  url: URL,
+  actor: Awaited<ReturnType<typeof resolveRequestActor>>['actor'],
+): Promise<Response> {
+  let leadIds: readonly string[]
+  try {
+    leadIds = parseLeadPhotoRequest(url).leadIds
+  } catch (error) {
+    if (error instanceof LeadPhotoRequestError) {
+      return json({ error: error.message }, 400)
+    }
+    throw error
+  }
+
+  // Resolved before the database is touched: an unconfigured storage layer is a
+  // deployment fault, and reading rows we cannot sign a URL for would be work
+  // thrown away. 503 rather than 500 — the request is well-formed and the server
+  // is not able to serve it yet, which is also what tells the browser's loader to
+  // fall back to initials rather than to retry.
+  let tenantId: string
+  let provider
+  try {
+    tenantId = readObjectStorageTenantId()
+    provider = getObjectStorageProvider(tenantId)
+  } catch (error) {
+    console.error('Object storage is not configured:', safeErrorLabel(error))
+    return json({ error: 'Object storage is not configured' }, 503)
+  }
+
+  let rows: readonly LeadPhotoRow[]
+  try {
+    const page = await getDataStore().query<LeadPhotoRow>(actor, {
+      operation: LEADS_OPERATIONS.photoObjects,
+      // The array parameter this registry's only non-scalar. See the operation.
+      params: { leadIds } as unknown as DataStoreParams,
+      page: { limit: MAX_PHOTO_BATCH, cursor: null },
+    })
+    rows = page.items
+  } catch (error) {
+    if (error instanceof DataStoreContractError) {
+      console.error('Lead photo read failed:', safeErrorLabel(error))
+      return json({ error: 'Could not load lead photos' }, 500)
+    }
+    throw error
+  }
+
+  try {
+    const { photos, refused } = await signLeadPhotoUrls({
+      rows,
+      provider,
+      tenantId,
+    })
+    if (refused.length > 0) {
+      // A count, never the paths: this is a log line and the values came from a
+      // column. That some rows are unmappable is the fact worth seeing; which
+      // ones is a query somebody runs deliberately.
+      console.warn(
+        `Lead photo paths refused by the key grammar: ${refused.length}`,
+      )
+    }
+    // `photos`, not `items`: the response is not a page and does not paginate, so
+    // borrowing the paged shape would advertise a cursor that will never exist.
+    return json({ photos, ttlSeconds: LEAD_PHOTO_URL_TTL_SECONDS })
+  } catch (error) {
+    console.error('Lead photo signing failed:', safeErrorLabel(error))
+    return json({ error: 'Could not sign lead photo URLs' }, 503)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -566,7 +709,7 @@ async function handle(
    */
   const legacy = op === ''
   const spec = legacy ? READ_OPERATIONS[ACTIVITY_OPERATIONS.dailySeries] : READ_OPERATIONS[op]
-  if (!spec) {
+  if (!spec && op !== LEAD_PHOTO_URLS_OPERATION) {
     // Names the refusal without enumerating the vocabulary.
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }
@@ -598,6 +741,18 @@ async function handle(
     console.error('Neon actor resolution failed:', safeErrorLabel(error))
     return json({ error: 'Could not verify team access' }, 500)
   }
+
+  // After authentication, before the generic read machinery — this operation
+  // parses its own parameters and does not page.
+  if (op === LEAD_PHOTO_URLS_OPERATION) {
+    return leadPhotoUrlsResponse(url, actor)
+  }
+
+  // Unreachable: the allowlist check above already refused everything except an
+  // allowlisted read and the photo operation, and the photo operation returned on
+  // the line above. Written as a check rather than a non-null assertion so the
+  // narrowing comes from the fact itself.
+  if (!spec) return json({ error: `operation is not allowlisted: ${op}` }, 400)
 
   let params: DataStoreParams | undefined
   let range: UtcRange | undefined

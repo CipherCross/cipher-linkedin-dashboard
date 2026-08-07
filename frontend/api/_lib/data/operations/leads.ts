@@ -62,6 +62,18 @@ export const LEADS_OPERATIONS = {
   directory: 'leads.directory',
   /** The free-text notes an operator pinned to one lead, newest first. */
   notes: 'leads.notes',
+  /**
+   * Where a named set of leads' photos live — the object-storage read's only
+   * database access.
+   *
+   * Two columns and nothing else, for a reason that is the whole point of it
+   * being a separate operation: it is the *authorization* step of the photo path.
+   * `leads.directory` already carries `photo_path`, so this projection is
+   * redundant as data — but a signed URL must be minted from a path the database
+   * handed this actor just now, not from one a client sent back. See
+   * `storage/leadPhotoService.ts`.
+   */
+  photoObjects: 'leads.photoObjects',
 } as const
 
 /**
@@ -315,3 +327,76 @@ export const leadNotesOperation: NeonQueryOperation<LeadNoteRow, LeadNotesParams
       created_at: nullableText(row.created_at),
     }),
   }
+
+// ---------------------------------------------------------------------------
+// leads.photoObjects — the photo path's authorization step
+// ---------------------------------------------------------------------------
+
+/**
+ * The photo location of a named set of leads.
+ *
+ * ## Why the ids arrive as one array parameter
+ *
+ * `= ANY($1::uuid[])` rather than a generated `IN (…)` list. A per-id placeholder
+ * list would make the *SQL text* depend on the batch size, which defeats the
+ * statement cache and puts caller-controlled arity into a query string — the two
+ * things this registry exists to keep out of handlers. One array parameter of any
+ * length is one prepared statement.
+ *
+ * The endpoint validates each id as a uuid before this runs, so the cast cannot
+ * raise 22P02 on caller input. That is a status-code decision, not a safety one:
+ * the values are parameters and a malformed one would simply match nothing.
+ *
+ * ## Why rows with no photo come back at all
+ *
+ * `photo_path IS NULL` is not filtered out here. The caller needs to distinguish
+ * "this lead has no photo" from "this lead is not visible to you" — the first is
+ * ordinary and the second is a refusal — and a query that dropped both would make
+ * them the same empty answer. The service treats a NULL path as absent; the
+ * *missing row* is what a denial looks like.
+ *
+ * RLS does the deciding. `app_runtime` reads `public.leads` under the baseline's
+ * membership policy with `app.actor_id` set by the transaction wrapper, so a lead
+ * the actor may not see produces no row here regardless of what was asked for.
+ */
+export interface LeadPhotoObjectRow {
+  readonly lead_id: string
+  readonly photo_path: string | null
+}
+
+export interface LeadPhotoObjectsParams {
+  /**
+   * The lead ids, as a single comma-free array value.
+   *
+   * Typed as a string array rather than `DataStoreParams`' scalar union, which is
+   * why this interface does not carry the index signature the others do — see
+   * `leadPhotoObjectsOperation`'s `build`.
+   */
+  readonly leadIds: readonly string[]
+}
+
+const LEAD_PHOTO_OBJECTS_SQL = `SELECT l.id::text AS lead_id,
+          l.photo_path
+     FROM public.leads l
+    WHERE l.id = ANY($1::uuid[])
+    ORDER BY l.id`
+
+export const leadPhotoObjectsOperation: NeonQueryOperation<
+  LeadPhotoObjectRow,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see below
+  any
+> = {
+  // The params type is widened here rather than in `LeadPhotoObjectsParams`
+  // because `DataStoreParams` values are scalars: every other operation passes
+  // strings, and an array-valued parameter is the first exception. Widening at the
+  // registration point keeps the exception visible at exactly one line instead of
+  // loosening the shared contract type for every operation that does not need it.
+  build: ({ params }) => ({
+    text: LEAD_PHOTO_OBJECTS_SQL,
+    values: [(params?.leadIds as readonly string[] | undefined) ?? []],
+  }),
+  mapRow: (row: NeonRow): LeadPhotoObjectRow => ({
+    lead_id: String(row.lead_id),
+    photo_path: nullableText(row.photo_path),
+  }),
+}
