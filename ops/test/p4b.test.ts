@@ -16,6 +16,7 @@ import {
   RegistryOwnerOperationsAdapter,
   SERVER_VERSION,
   StrictSupabaseAdapter,
+  R2ObjectStorageAdapter,
   StrictAuthAdapter,
   StrictDomainAdapter,
   StrictHostingAdapter,
@@ -61,7 +62,7 @@ function strictProviders(
 ): OnboardingProviders {
   return {
     data: new StrictSupabaseAdapter(ports.data),
-    objectStorage: new StrictSupabaseAdapter(ports.objectStorage),
+    objectStorage: new R2ObjectStorageAdapter(ports.objectStorage),
     hosting: new StrictHostingAdapter(ports.hosting),
     identity: new StrictAuthAdapter(ports.identity),
     email: new StrictSmtpAdapter(ports.email),

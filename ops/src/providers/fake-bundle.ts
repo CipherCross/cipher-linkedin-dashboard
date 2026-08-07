@@ -8,11 +8,12 @@
  */
 
 import {
-  FakeAuthProvider,
+  FakeIdentityProvider,
   FakeDomainProvider,
   FakeSmtpProvider,
   FakeSourceRepositoryProvider,
-  FakeSupabaseProvider,
+  FakeNeonDataProvider,
+  FakeObjectStorageProvider,
   type FailureRule,
 } from "./fakes.js";
 import {
@@ -35,9 +36,9 @@ export interface FakeProviderFailureRules {
 }
 
 export class FakeOnboardingProviderBundle implements OnboardingProviders {
-  readonly data: FakeSupabaseProvider;
-  readonly identity: FakeAuthProvider;
-  readonly objectStorage: FakeSupabaseProvider;
+  readonly data: FakeNeonDataProvider;
+  readonly identity: FakeIdentityProvider;
+  readonly objectStorage: FakeObjectStorageProvider;
   readonly hosting: FakeHostingProvider;
   readonly email: FakeSmtpProvider;
   readonly domain: FakeDomainProvider;
@@ -47,9 +48,9 @@ export class FakeOnboardingProviderBundle implements OnboardingProviders {
     rules: FakeProviderFailureRules = {},
     hostingOptions: FakeHostingProviderOptions = {},
   ) {
-    this.data = new FakeSupabaseProvider(rules.data ?? rules.supabase);
-    this.identity = new FakeAuthProvider(rules.identity ?? rules.auth);
-    this.objectStorage = new FakeSupabaseProvider(
+    this.data = new FakeNeonDataProvider(rules.data ?? rules.supabase);
+    this.identity = new FakeIdentityProvider(rules.identity ?? rules.auth);
+    this.objectStorage = new FakeObjectStorageProvider(
       rules.objectStorage ?? rules.data ?? rules.supabase,
     );
     this.hosting = new FakeHostingProvider(rules.hosting, hostingOptions);

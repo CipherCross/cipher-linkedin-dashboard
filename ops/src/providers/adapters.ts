@@ -28,6 +28,10 @@ import type {
   AuthInspection,
   AuthInspectionRequest,
   AuthProvider,
+  IdentityControlPlanePort,
+  IdentityInspection,
+  IdentityInspectionRequest,
+  IdentityProvider,
   CompanyAdminRequest,
   DomainControlPlanePort,
   DomainInspection,
@@ -36,6 +40,13 @@ import type {
   PrivateStorageRequest,
   ProviderActionResult,
   ProviderResource,
+  DataControlPlanePort,
+  DataInspection,
+  DataInspectionRequest,
+  DataProjectRequest,
+  DataProvider,
+  ObjectStorageControlPlanePort,
+  ObjectStorageProvider,
   SmtpConfigurationRequest,
   SmtpControlPlanePort,
   SmtpInspection,
@@ -220,7 +231,7 @@ export const HOSTING_RESULT_SCHEMAS = {
   verifyDeployment: verificationReport,
 } as const;
 
-const supabaseInspection = z.strictObject({
+const dataInspection = z.strictObject({
   organizationAccessible: z.boolean(),
   deterministicNameAvailable: z.boolean(),
   existingResourceOwned: z.boolean(),
@@ -231,7 +242,7 @@ const supabaseInspection = z.strictObject({
   authConfigurationSupported: z.boolean(),
   validUntil: timestamp,
 });
-const authInspection = z.strictObject({
+const identityInspection = z.strictObject({
   templateSetApproved: z.boolean(),
   productionUrlsValid: z.boolean(),
   inviteFlowSupported: z.boolean(),
@@ -280,7 +291,137 @@ abstract class StrictAdapter {
       throw this.redactor.sanitizeError(error);
     }
   }
+
+  protected requestIsSafe(value: unknown, label: string): void {
+    this.redactor.assertSecretFree(value, `${label} request`);
+  }
 }
+
+/** Canonical data adapter. The injected API is the only provider-specific seam. */
+export class NeonDataAdapter extends StrictAdapter implements DataProvider {
+  readonly #api: DataControlPlanePort;
+
+  constructor(api: DataControlPlanePort, redactor = new Redactor()) {
+    super(redactor);
+    this.#api = api;
+  }
+
+  inspect(request: DataInspectionRequest): Promise<DataInspection> {
+    this.requestIsSafe(request, "data.inspect");
+    return this.call("data.inspect", () => this.#api.inspect(request), dataInspection);
+  }
+
+  createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
+    this.requestIsSafe(request, "data.createOrAdoptProject");
+    return this.call(
+      "data.createOrAdoptProject",
+      () => this.#api.createOrAdoptProject(request),
+      resourceResult,
+    );
+  }
+
+  waitUntilReady(projectId: string): Promise<ProviderActionResult> {
+    this.requestIsSafe(projectId, "data.waitUntilReady");
+    return this.call("data.waitUntilReady", () => this.#api.waitUntilReady(projectId), requestResult);
+  }
+
+  applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> {
+    this.requestIsSafe(request, "data.applySchema");
+    return this.call("data.applySchema", () => this.#api.applySchema(request), requestResult);
+  }
+
+  runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> {
+    this.requestIsSafe({ projectId, smokeTestIds }, "data.runSmokeTests");
+    return this.call(
+      "data.runSmokeTests",
+      () => this.#api.runSmokeTests(projectId, smokeTestIds),
+      requestResult,
+    );
+  }
+}
+
+/** Canonical identity adapter; provider subject IDs never cross this boundary. */
+export class IdentityOperationsAdapter extends StrictAdapter implements IdentityProvider {
+  readonly #api: IdentityControlPlanePort;
+
+  constructor(api: IdentityControlPlanePort, redactor = new Redactor()) {
+    super(redactor);
+    this.#api = api;
+  }
+
+  inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> {
+    this.requestIsSafe(request, "identity.inspect");
+    return this.call("identity.inspect", () => this.#api.inspect(request), identityInspection);
+  }
+
+  configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> {
+    this.requestIsSafe(request, "identity.configure");
+    return this.call("identity.configure", () => this.#api.configure(request), requestResult);
+  }
+
+  createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult> {
+    this.requestIsSafe(projectId, "identity.createDisabledSupportMembership");
+    return this.call(
+      "identity.createDisabledSupportMembership",
+      () => this.#api.createDisabledSupportMembership(projectId),
+      requestResult,
+    );
+  }
+
+  createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> {
+    this.requestIsSafe(request, "identity.createCompanyAdminAndInvite");
+    return this.call(
+      "identity.createCompanyAdminAndInvite",
+      () => this.#api.createCompanyAdminAndInvite(request),
+      requestResult,
+    );
+  }
+
+  runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> {
+    this.requestIsSafe({ projectId, smokeTestIds }, "identity.runSmokeTests");
+    return this.call(
+      "identity.runSmokeTests",
+      () => this.#api.runSmokeTests(projectId, smokeTestIds),
+      requestResult,
+    );
+  }
+}
+
+/** Canonical private object-storage adapter; it never exposes bytes or URLs. */
+export class R2ObjectStorageAdapter
+  extends StrictAdapter
+  implements ObjectStorageProvider
+{
+  readonly #api: ObjectStorageControlPlanePort;
+
+  constructor(api: ObjectStorageControlPlanePort, redactor = new Redactor()) {
+    super(redactor);
+    this.#api = api;
+  }
+
+  configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> {
+    this.requestIsSafe(request, "object_storage.configurePrivateStorage");
+    return this.call(
+      "object_storage.configurePrivateStorage",
+      () => this.#api.configurePrivateStorage(request),
+      requestResult,
+    );
+  }
+
+  runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> {
+    this.requestIsSafe({ projectId, smokeTestIds }, "object_storage.runSmokeTests");
+    return this.call(
+      "object_storage.runSmokeTests",
+      () => this.#api.runSmokeTests(projectId, smokeTestIds),
+      requestResult,
+    );
+  }
+}
+
+/** Explicit canonical aliases for callers that prefer the strict naming. */
+export class StrictDataAdapter extends NeonDataAdapter {}
+export class StrictIdentityAdapter extends IdentityOperationsAdapter {}
+export class StrictObjectStorageAdapter extends R2ObjectStorageAdapter {}
 
 export class StrictSupabaseAdapter
   extends StrictAdapter
@@ -294,7 +435,7 @@ export class StrictSupabaseAdapter
   }
 
   inspect(request: SupabaseInspectionRequest): Promise<SupabaseInspection> {
-    return this.call("supabase.inspect", () => this.#port.inspect(request), supabaseInspection);
+    return this.call("supabase.inspect", () => this.#port.inspect(request), dataInspection);
   }
 
   createOrAdoptProject(request: SupabaseProjectRequest): Promise<ProviderResource> {
@@ -448,7 +589,7 @@ export class StrictAuthAdapter extends StrictAdapter implements AuthProvider {
   }
 
   inspect(request: AuthInspectionRequest): Promise<AuthInspection> {
-    return this.call("auth.inspect", () => this.#port.inspect(request), authInspection);
+    return this.call("auth.inspect", () => this.#port.inspect(request), identityInspection);
   }
 
   configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> {

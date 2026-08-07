@@ -12,12 +12,13 @@ import { asJsonValue } from "../core/semantic-validation.js";
 import type { CatalogSnapshot } from "../core/types.js";
 import { RegistryOwnerOperationsAdapter } from "../mcp/adapter.js";
 import {
-  StrictAuthAdapter,
+  IdentityOperationsAdapter,
+  NeonDataAdapter,
+  R2ObjectStorageAdapter,
   StrictDomainAdapter,
   StrictSmtpAdapter,
   StrictHostingAdapter,
   StrictSourceRepositoryAdapter,
-  StrictSupabaseAdapter,
 } from "../providers/adapters.js";
 import { CANONICAL_RUNTIME_PROFILE_ID } from "../providers/hosting-tenant.js";
 import { createP4CSdkPorts } from "../providers/p4c-sdk.js";
@@ -319,10 +320,10 @@ export async function createP4COwnerOperations(
     redactor,
   );
   const providers = {
-    data: new StrictSupabaseAdapter(ports.supabase, redactor),
-    objectStorage: new StrictSupabaseAdapter(ports.supabase, redactor),
+    data: new NeonDataAdapter(ports.data, redactor),
+    objectStorage: new R2ObjectStorageAdapter(ports.objectStorage, redactor),
     hosting: new StrictHostingAdapter(ports.hosting, redactor),
-    identity: new StrictAuthAdapter(ports.auth, redactor),
+    identity: new IdentityOperationsAdapter(ports.identity, redactor),
     email: new StrictSmtpAdapter(ports.smtp, redactor),
     domain: new StrictDomainAdapter(ports.domain, redactor),
     sourceRepository: new StrictSourceRepositoryAdapter(

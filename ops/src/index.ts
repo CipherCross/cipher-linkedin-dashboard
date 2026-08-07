@@ -13,6 +13,7 @@ export * from "./core/types.js";
 export * from "./providers/fakes.js";
 export * from "./providers/fake-bundle.js";
 export * from "./providers/adapters.js";
+export * from "./providers/apis.js";
 export * from "./providers/hosting.js";
 export * from "./providers/hosting-fake.js";
 export * from "./providers/hosting-tenant.js";

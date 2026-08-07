@@ -20,6 +20,8 @@ import type {
   SupabaseProjectRequest,
   SupabaseProvider,
   TenantSchemaRequest,
+  DataProvider,
+  ObjectStorageProvider,
 } from "./interfaces.js";
 
 export type FailureTiming = "before_effect" | "after_effect" | "outcome_unknown";
@@ -184,6 +186,46 @@ export class FakeSupabaseProvider extends FakeProviderBase implements SupabasePr
   }
 }
 
+/** Canonical fake names used by S25 contract tests. */
+export class FakeNeonDataProvider extends FakeSupabaseProvider implements DataProvider {}
+
+/** Private object storage fake: no project discovery or database methods. */
+export class FakeObjectStorageProvider
+  extends FakeProviderBase
+  implements ObjectStorageProvider
+{
+  async configurePrivateStorage(
+    request: PrivateStorageRequest,
+  ): Promise<ProviderActionResult> {
+    return this.idempotentEffect(
+      "configurePrivateStorage",
+      JSON.stringify(request),
+      () => ({
+        providerRequestId: requestId(
+          "configurePrivateStorage",
+          this.callCount("configurePrivateStorage"),
+        ),
+      }),
+    );
+  }
+
+  async runSmokeTests(
+    projectId: string,
+    smokeTestIds: readonly string[],
+  ): Promise<ProviderActionResult> {
+    return this.idempotentEffect(
+      "runSmokeTests",
+      `${projectId}:${smokeTestIds.join(",")}`,
+      () => ({
+        providerRequestId: requestId(
+          "runSmokeTests",
+          this.callCount("runSmokeTests"),
+        ),
+      }),
+    );
+  }
+}
+
 export class FakeAuthProvider extends FakeProviderBase implements AuthProvider {
   async inspect(_request: AuthInspectionRequest) {
     return this.effect("inspect", () => ({
@@ -229,6 +271,8 @@ export class FakeAuthProvider extends FakeProviderBase implements AuthProvider {
     }));
   }
 }
+
+export class FakeIdentityProvider extends FakeAuthProvider {}
 
 export class FakeSmtpProvider extends FakeProviderBase implements SmtpProvider {
   async inspect(_request: SmtpInspectionRequest) {

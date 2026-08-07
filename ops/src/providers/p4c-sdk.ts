@@ -50,6 +50,9 @@ import type {
   CompanyAdminRequest,
   DomainControlPlanePort,
   DomainInspectionRequest,
+  DataControlPlanePort,
+  IdentityControlPlanePort,
+  ObjectStorageControlPlanePort,
   PrivateStorageRequest,
   ProviderActionResult,
   ProviderResource,
@@ -115,9 +118,12 @@ export interface P4CSdkConfiguration {
 }
 
 export interface P4CSdkPorts {
-  readonly supabase: SupabaseControlPlanePort;
+  /** Canonical capability ports. The legacy SDK implementation is retained
+   * behind this seam until the live Neon/identity/storage clients are enabled. */
+  readonly data: DataControlPlanePort;
+  readonly objectStorage: ObjectStorageControlPlanePort;
   readonly hosting: HostingProvider;
-  readonly auth: AuthControlPlanePort;
+  readonly identity: IdentityControlPlanePort;
   readonly smtp: SmtpControlPlanePort;
   readonly domain: DomainControlPlanePort;
   readonly sourceRepository: SourceRepositoryReadPort;
@@ -182,13 +188,14 @@ export async function createP4CSdkPorts(
     credentials: new Map(),
   };
   return {
-    supabase: new P4CSupabaseSdkPort(state),
+    data: new P4CSupabaseSdkPort(state),
+    objectStorage: new P4CSupabaseSdkPort(state),
     hosting: new VercelHostingAdapter(
       options.hostingClient ?? new VercelHostingVendorClient(state),
       options.hostingResolver ?? new P4CHostingValueResolver(state),
       { redactor },
     ),
-    auth: new P4CAuthSdkPort(state),
+    identity: new P4CAuthSdkPort(state),
     smtp: new P4CSmtpSdkPort(state),
     domain: new P4CDomainSdkPort(state),
     sourceRepository: new P4CSourceRepositoryPort(state),

@@ -33,7 +33,7 @@ export interface ProviderActionResult {
   readonly providerRequestId: string;
 }
 
-export interface SupabaseProjectRequest {
+export interface DataProjectRequest {
   readonly organizationId: string;
   readonly deterministicName: string;
   readonly regionId: string;
@@ -75,7 +75,7 @@ export interface CompanyAdminRequest {
   readonly adminEmail: string;
 }
 
-export interface SupabaseInspectionRequest {
+export interface DataInspectionRequest {
   readonly organizationId: string;
   readonly deterministicName: string;
   readonly regionId: string;
@@ -85,7 +85,7 @@ export interface SupabaseInspectionRequest {
   readonly ownership: OwnershipMarker;
 }
 
-export interface SupabaseInspection {
+export interface DataInspection {
   readonly organizationAccessible: boolean;
   readonly deterministicNameAvailable: boolean;
   readonly existingResourceOwned: boolean;
@@ -97,14 +97,14 @@ export interface SupabaseInspection {
   readonly validUntil: string;
 }
 
-export interface AuthInspectionRequest {
+export interface IdentityInspectionRequest {
   readonly templateSetId: string;
   readonly siteUrl: string;
   readonly redirectUrls: readonly string[];
   readonly releaseCompatibilityId: string;
 }
 
-export interface AuthInspection {
+export interface IdentityInspection {
   readonly templateSetApproved: boolean;
   readonly productionUrlsValid: boolean;
   readonly inviteFlowSupported: boolean;
@@ -161,20 +161,19 @@ export interface SourceRepositoryInspection {
  * request, URL, payload, command, query, DNS record, or environment operation can
  * cross this boundary.
  */
-export interface SupabaseControlPlanePort {
-  inspect(request: SupabaseInspectionRequest): Promise<SupabaseInspection>;
-  createOrAdoptProject(request: SupabaseProjectRequest): Promise<ProviderResource>;
+export interface DataControlPlanePort {
+  inspect(request: DataInspectionRequest): Promise<DataInspection>;
+  createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource>;
   waitUntilReady(projectId: string): Promise<ProviderActionResult>;
   applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult>;
-  configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult>;
   runSmokeTests(
     projectId: string,
     smokeTestIds: readonly string[],
   ): Promise<ProviderActionResult>;
 }
 
-export interface AuthControlPlanePort {
-  inspect(request: AuthInspectionRequest): Promise<AuthInspection>;
+export interface IdentityControlPlanePort {
+  inspect(request: IdentityInspectionRequest): Promise<IdentityInspection>;
   configure(request: AuthConfigurationRequest): Promise<ProviderActionResult>;
   createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult>;
   createCompanyAdminAndInvite(
@@ -211,19 +210,52 @@ export interface SourceRepositoryReadPort {
   ): Promise<SourceRepositoryInspection>;
 }
 
-export interface SupabaseProvider extends SupabaseControlPlanePort {}
-export interface AuthProvider extends AuthControlPlanePort {}
+export interface ObjectStorageControlPlanePort {
+  configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult>;
+  runSmokeTests(
+    projectId: string,
+    smokeTestIds: readonly string[],
+  ): Promise<ProviderActionResult>;
+}
+
+export interface DataProvider extends DataControlPlanePort {}
+export interface IdentityProvider extends IdentityControlPlanePort {}
+export interface ObjectStorageProvider extends ObjectStorageControlPlanePort {}
+export interface EmailProvider extends SmtpControlPlanePort {}
 export interface SmtpProvider extends SmtpControlPlanePort {}
 export interface DomainProvider extends DomainControlPlanePort {}
 export interface SourceRepositoryProvider extends SourceRepositoryReadPort {}
 
+/** Legacy P4-C names remain source-compatible while callers migrate to the
+ * capability vocabulary. They do not define an additional runtime path. */
+/** @deprecated use DataProjectRequest */
+export type SupabaseProjectRequest = DataProjectRequest;
+/** @deprecated use DataInspectionRequest */
+export type SupabaseInspectionRequest = DataInspectionRequest;
+/** @deprecated use DataInspection */
+export type SupabaseInspection = DataInspection;
+/** @deprecated use IdentityInspectionRequest */
+export type AuthInspectionRequest = IdentityInspectionRequest;
+/** @deprecated use IdentityInspection */
+export type AuthInspection = IdentityInspection;
+/** @deprecated use DataControlPlanePort */
+export interface SupabaseControlPlanePort extends DataControlPlanePort {
+  configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult>;
+}
+/** @deprecated use IdentityControlPlanePort */
+export interface AuthControlPlanePort extends IdentityControlPlanePort {}
+/** @deprecated use DataProvider */
+export interface SupabaseProvider extends SupabaseControlPlanePort {}
+/** @deprecated use IdentityProvider */
+export interface AuthProvider extends AuthControlPlanePort {}
+
 export interface OnboardingProviders {
-  /** Data-plane capability; the concrete implementation may be Neon. */
-  readonly data: SupabaseProvider;
-  /** Identity capability; the concrete implementation may be Better Auth. */
-  readonly identity: AuthProvider;
-  /** Object capability; the concrete implementation may be Cloudflare R2. */
-  readonly objectStorage: SupabaseProvider;
+  /** Data-plane capability; the production adapter is Neon-backed. */
+  readonly data: DataProvider;
+  /** Identity capability; the production adapter is provider-neutral. */
+  readonly identity: IdentityProvider;
+  /** Object capability; the production adapter is S3-compatible/R2-backed. */
+  readonly objectStorage: ObjectStorageProvider;
   /**
    * The canonical hosting capability port. Any adapter satisfying it —
    * the in-memory fake or the concrete Vercel adapter — drives the same plan
@@ -231,7 +263,7 @@ export interface OnboardingProviders {
    */
   readonly hosting: HostingProvider;
   /** Email delivery capability, independent of SMTP vendor. */
-  readonly email: SmtpProvider;
+  readonly email: EmailProvider;
   readonly domain: DomainProvider;
   readonly sourceRepository: SourceRepositoryProvider;
 }

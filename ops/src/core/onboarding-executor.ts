@@ -174,12 +174,17 @@ export class OnboardingExecutor {
     } catch (error) {
       const safeError = this.#redactor.sanitizeError(error);
       const unknown = safeError.code === "outcome_unknown";
+      const providerRequestId =
+        typeof safeError.details.provider_request_id === "string"
+          ? safeError.details.provider_request_id
+          : undefined;
       this.#registry.transitionStep(
         context.operationId,
         next.ordinal,
         unknown ? "outcome_unknown" : "failed",
         context.fencingToken,
         {
+          ...(providerRequestId === undefined ? {} : { providerRequestId }),
           redactedError:
             `${safeError.code}: ${safeError.message}`,
         },
