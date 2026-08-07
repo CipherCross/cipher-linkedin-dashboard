@@ -9,6 +9,7 @@
  */
 import { OpsError } from "../core/errors.js";
 import { Redactor } from "../core/redaction.js";
+import { s26BridgePath } from "./s26-bridge-contract.js";
 import type {
   AuthConfigurationRequest, CompanyAdminRequest, DataInspection, DataInspectionRequest,
   DataProjectRequest, DomainInspection, DomainInspectionRequest, IdentityInspection,
@@ -148,13 +149,16 @@ export class NeonPostgresOperationsClient extends ConcreteRecoveryClient impleme
 /** Better Auth is application-hosted; its reviewed admin bridge has named operations only. */
 export class BetterAuthOperationsClient extends ConcreteRecoveryClient implements IdentityOperationsApi, IdentityRecoveryPort {
   protected readonly http: PrivateProviderHttp;
-  protected readonly prefix = "/s26/better-auth/tenants";
+  protected readonly prefix = "s26/control-plane/v1/identity";
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> { return result(await this.http.invoke("POST", "/s26/better-auth/inspect", { template_set_id: request.templateSetId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, release_compatibility_id: request.releaseCompatibilityId }), "Better Auth inspect"); }
-  async configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.projectId)}/configure`, { site_url: request.siteUrl, redirect_urls: request.redirectUrls, template_set_id: request.templateSetId }), "Better Auth configure"); }
-  async createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(projectId)}/support-membership`), "Better Auth support membership"); }
-  async createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.projectId)}/company-admin-invite`, { admin_email: request.adminEmail }), "Better Auth company invite"); }
-  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(projectId)}/smoke`, { smoke_test_ids: smokeTestIds }), "Better Auth smoke"); }
+  async inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> { return result(await this.http.invoke("POST", s26BridgePath("identity", "inspect"), { template_set_id: request.templateSetId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, release_compatibility_id: request.releaseCompatibilityId }), "Better Auth inspect"); }
+  async configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "configure"), { project_id: request.projectId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, template_set_id: request.templateSetId }), "Better Auth configure"); }
+  async createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "support-membership"), { project_id: projectId }), "Better Auth support membership"); }
+  async createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "company-admin-invite"), { project_id: request.projectId, admin_email: request.adminEmail }), "Better Auth company invite"); }
+  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Better Auth smoke"); }
+  override async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-capture"), { source_resource_id: request.sourceResourceId, tenant_slug: request.tenantSlug, recovery_target_name: request.recoveryTargetName, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery capture"); }
+  override async restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-restore"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, artifact_manifest_digest: request.artifact.manifestDigest, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery restore"); }
+  override async verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-verify"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery verification"); }
 }
 
 /** Cloudflare R2 private-bucket and object-recovery client. */
@@ -185,22 +189,22 @@ export class VercelOperationsClient extends ConcreteRecoveryClient implements Ho
 export class SmtpEmailOperationsClient implements EmailOperationsApi {
   readonly #http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.#http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: SmtpInspectionRequest): Promise<SmtpInspection> { return result(await this.#http.invoke("POST", "/s26/smtp/inspect", { smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP inspect"); }
-  async configure(request: SmtpConfigurationRequest): Promise<ProviderActionResult> { return result(await this.#http.invoke("POST", "/s26/smtp/configure", { project_id: request.projectId, smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP configure"); }
-  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.#http.invoke("POST", `/s26/smtp/${id(projectId)}/smoke`, { smoke_test_ids: smokeTestIds }), "SMTP smoke"); }
+  async inspect(request: SmtpInspectionRequest): Promise<SmtpInspection> { return result(await this.#http.invoke("POST", s26BridgePath("smtp", "inspect"), { smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP inspect"); }
+  async configure(request: SmtpConfigurationRequest): Promise<ProviderActionResult> { return result(await this.#http.invoke("POST", s26BridgePath("smtp", "configure"), { project_id: request.projectId, smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP configure"); }
+  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.#http.invoke("POST", s26BridgePath("smtp", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "SMTP smoke"); }
 }
 
 export class DomainOperationsClient implements DomainOperationsApi {
   readonly #http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.#http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: DomainInspectionRequest): Promise<DomainInspection> { return result(await this.#http.invoke("POST", "/client/v4/zones/domain-inspection", { hostname: request.hostname, sender_domain: request.senderDomain, workspace_class: request.workspaceClass }), "Domain inspect"); }
+  async inspect(request: DomainInspectionRequest): Promise<DomainInspection> { return result(await this.#http.invoke("POST", s26BridgePath("domain", "inspect"), { hostname: request.hostname, sender_domain: request.senderDomain, workspace_class: request.workspaceClass }), "Domain inspect"); }
 }
 
 /** Read-only source release inspection; no Git mutation or remote request is exposed. */
 export class SourceRepositoryOperationsClient implements SourceRepositoryOperationsApi {
   readonly #http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.#http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: SourceRepositoryInspectionRequest): Promise<SourceRepositoryInspection> { return result(await this.#http.invoke("POST", "/s26/source-repository/inspect", { source_git_sha: request.sourceGitSha, compatibility_entry_id: request.compatibilityEntryId, application_version: request.applicationVersion }), "Source repository inspect"); }
+  async inspect(request: SourceRepositoryInspectionRequest): Promise<SourceRepositoryInspection> { return result(await this.#http.invoke("POST", s26BridgePath("sourceRepository", "inspect"), { source_git_sha: request.sourceGitSha, compatibility_entry_id: request.compatibilityEntryId, application_version: request.applicationVersion }), "Source repository inspect"); }
 }
 
 export interface S26ConcreteClientConfiguration {

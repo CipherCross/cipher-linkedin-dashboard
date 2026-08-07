@@ -29,6 +29,11 @@ provide. `ops/src/runtime/s26-runtime.ts` wires the composition into
 `preflight → plan → owner approval → apply/resume → verify` rather than calling
 providers from a CLI or recovery helper.
 
+Better Auth, SMTP, domain, and source-repository operations are carried through
+the closed [`s26-control-plane.v1` bridge contract](./s26-control-plane-bridge.md).
+The bridge is not deployed by this contract; an absent bridge blocks concrete
+preflight rather than falling back to a raw request or legacy provider path.
+
 ## Recovery behavior
 
 `TenantRecoveryService` captures opaque, secret-free provider artifacts and

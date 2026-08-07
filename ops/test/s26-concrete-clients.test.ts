@@ -64,12 +64,12 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
     "POST /v2/projects",
     "POST /v2/projects/neon-project/portable-postgres/apply",
-    "POST /s26/better-auth/tenants/tenant-auth/company-admin-invite",
+    "POST /s26/control-plane/v1/identity/company-admin-invite",
     "POST /client/v4/accounts/r2/buckets/r2-bucket/private-storage",
     "POST /v13/projects/target/promote",
-    "POST /s26/smtp/configure",
-    "POST /client/v4/zones/domain-inspection",
-    "POST /s26/source-repository/inspect",
+    "POST /s26/control-plane/v1/smtp/configure",
+    "POST /s26/control-plane/v1/domain/inspect",
+    "POST /s26/control-plane/v1/source-repository/inspect",
   ]);
   for (const call of calls) {
     assert.equal(call.url.includes("credential"), false);
@@ -101,6 +101,29 @@ test("S26 concrete clients reject non-HTTPS transport configuration", () => {
     () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", credential: { resolve: async () => "unused" } }),
     (error: unknown) => error instanceof OpsError && error.code === "provider_error",
   );
+});
+
+test("Better Auth recovery uses the fixed S26 bridge paths", async () => {
+  const calls: Call[] = [];
+  const identity = new BetterAuthOperationsClient(configuration(calls, {
+    providerRequestId: "req_recovery",
+    artifactId: "artifact",
+    manifestDigest: DIGEST,
+    ownershipMarkerDigest: ownership.digest,
+    coverage: ["auth_configuration_identities"],
+    itemCount: 1,
+    capturedAt: "2030-01-01T00:00:00.000Z",
+    reconstructionApproved: false,
+  }));
+  await identity.captureRecovery({
+    tenantSlug: "disposable-lab",
+    sourceResourceId: "identity-source",
+    recoveryTargetName: "identity-recovery",
+    ownership,
+  });
+  assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
+    "POST /s26/control-plane/v1/identity/recovery-capture",
+  ]);
 });
 
 test("S26 core-facing adapters fail closed when a concrete client reports foreign ownership", async () => {
