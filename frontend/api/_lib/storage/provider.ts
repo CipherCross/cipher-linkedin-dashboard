@@ -42,8 +42,9 @@
  *   case where it comes back unknown.
  *
  * Still absent: `copyObject` (server-side copy within one bucket, which nothing
- * needs) and the agent-artifact bucket, which G0 scopes separately and the spec
- * gives to `S23`.
+ * needs). S23's authenticated machine photo path is now a server-side caller of
+ * `putObject`, and its separate release-artifact bucket is intentionally owned
+ * by `releaseArtifacts.ts`, not by this tenant-object contract.
  */
 
 import { DataStoreContractError } from '../data/contracts.js'

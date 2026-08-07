@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Deploy the sync agent to all notebooks: upload agent.py to the private
-# 'agent' Supabase Storage bucket. Each notebook self-updates from it at the
-# start of its next scheduled sync (i.e. within 30 minutes), then re-runs
-# itself — no manual copying. Verify the rollout on the dashboard's Health
-# page, which shows each instance's agent_version.
+# Publish the sync agent to the separate, private, versioned release bucket.
+# Each notebook receives a short-lived signed download URL through the
+# authenticated machine API, verifies the Ed25519 signature and SHA-256 hash,
+# then self-updates at the start of its next scheduled sync.
 #
-# Requires the Supabase CLI logged in and linked (supabase login / link).
+# This is an operator-side release action. It requires the write-scoped release
+# token and signing key below; the dashboard only holds a separate read-scoped
+# token and can never publish a release.
 set -euo pipefail
 cd "$(dirname "$0")/.."   # repo root — supabase CLI needs the linked project
 
@@ -22,11 +23,10 @@ else
   echo "WARNING: sync-agent/.venv is missing — transport tests NOT run" >&2
 fi
 
-# storage cp refuses to overwrite (409), so replace: notebooks that poll in
-# the brief gap see a 404 and harmlessly skip that update cycle. rm prompts
-# for confirmation, hence the piped yes.
-echo y | supabase storage rm ss:///agent/agent.py --experimental || true
-supabase storage cp ./sync-agent/agent.py ss:///agent/agent.py --experimental
+: "${AGENT_RELEASE_ENDPOINT:?Set the release bucket's S3-compatible endpoint}"
+: "${AGENT_RELEASE_BUCKET:?Set the separate agent release bucket name}"
+: "${AGENT_RELEASE_WRITE_ACCESS_KEY_ID:?Set the write-scoped release access key}"
+: "${AGENT_RELEASE_WRITE_SECRET_ACCESS_KEY:?Set the write-scoped release secret}"
+: "${AGENT_RELEASE_SIGNING_KEY_FILE:?Set the Ed25519 signing-key PEM path}"
 
-version=$(grep -m1 'AGENT_VERSION = ' sync-agent/agent.py)
-echo "deployed: ${version} — notebooks pick it up within 30 min"
+python3 sync-agent/publish_release.py sync-agent/agent.py

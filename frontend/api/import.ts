@@ -2,14 +2,12 @@
 // functions, so conversation history and Airtable CSV imports share one
 // route while retaining separate validation and authorization rules.
 //
-// S21 adds a second authentication model to this file: `?op=agent.ingest` is the
-// notebooks' machine-authenticated batch endpoint, and it is dispatched at the
-// top of `handle` — before the body is read and before `guardAdmin` runs — so
-// the human actions below are untouched, in the same order, behind the same
-// guard, with the same error text. The two never share a code path; they share
-// a serverless slot, which is the whole reason this file has more than one
-// subject (see `_lib/agent/ingest.ts` on why there is no free slot for a
-// twelfth function and why this file is the right host).
+// S21 added the first machine operation to this file, and S23 adds the
+// authenticated config/photo/release operations. They are dispatched at the top
+// of `handle` — before the body is read and before `guardAdmin` runs — so the
+// human actions below are untouched, in the same order, behind the same guard,
+// with the same error text. The subjects never share a code path; they share a
+// serverless slot, which is the whole reason this file has more than one subject.
 import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
@@ -18,6 +16,15 @@ import {
   AGENT_INGEST_OP,
   createAgentIngestHandler,
 } from './_lib/agent/ingest.js'
+import {
+  AGENT_CONFIG_OP,
+  AGENT_PHOTO_UPLOAD_OP,
+  AGENT_RELEASE_OP,
+  createAgentConfigHandler,
+  createAgentPhotoUploadHandler,
+  createAgentReleaseHandler,
+  type MachineApiDeps,
+} from './_lib/agent/machineOps.js'
 import { readDeploymentTenantId } from './_lib/agent/tenant.js'
 import { getMachineDataStore } from './_lib/data/machineStore.js'
 import { machineStoreConfigured } from './_lib/data/neonConfig.js'
@@ -59,21 +66,50 @@ const json = (body: unknown, status = 200) =>
  * today — resolves `store: null`, and the handler answers 503 rather than
  * throwing on import and taking the human import actions down with it.
  */
+let machineDeps: MachineApiDeps | null = null
 let agentIngest: ((request: Request) => Promise<Response>) | null = null
+let agentConfig: ((request: Request) => Promise<Response>) | null = null
+let agentPhotoUpload: ((request: Request) => Promise<Response>) | null = null
+let agentRelease: ((request: Request) => Promise<Response>) | null = null
 
-function agentIngestHandler(): (request: Request) => Promise<Response> {
-  if (!agentIngest) {
-    agentIngest = createAgentIngestHandler({
+function getMachineDeps(): MachineApiDeps {
+  if (!machineDeps) {
+    machineDeps = {
       store: machineStoreConfigured() ? getMachineDataStore() : null,
       tenantId: readDeploymentTenantId(),
-    })
+    }
   }
+  return machineDeps
+}
+
+function agentIngestHandler(): (request: Request) => Promise<Response> {
+  if (!agentIngest) agentIngest = createAgentIngestHandler(getMachineDeps())
   return agentIngest
+}
+
+function agentConfigHandler(): (request: Request) => Promise<Response> {
+  if (!agentConfig) agentConfig = createAgentConfigHandler(getMachineDeps())
+  return agentConfig
+}
+
+function agentPhotoUploadHandler(): (request: Request) => Promise<Response> {
+  if (!agentPhotoUpload) {
+    agentPhotoUpload = createAgentPhotoUploadHandler(getMachineDeps())
+  }
+  return agentPhotoUpload
+}
+
+function agentReleaseHandler(): (request: Request) => Promise<Response> {
+  if (!agentRelease) agentRelease = createAgentReleaseHandler(getMachineDeps())
+  return agentRelease
 }
 
 async function handle(req: Request): Promise<Response> {
   const op = (new URL(req.url).searchParams.get('op') ?? '').trim()
   if (op === AGENT_INGEST_OP) return agentIngestHandler()(req)
+  if (op === AGENT_CONFIG_OP) return agentConfigHandler()(req)
+  if (op === AGENT_PHOTO_UPLOAD_OP) return agentPhotoUploadHandler()(req)
+  if (op === AGENT_RELEASE_OP) return agentReleaseHandler()(req)
   if (op !== '') {
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }

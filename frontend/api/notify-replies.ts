@@ -4,7 +4,9 @@
 //
 // Triggers:
 //   POST — the sync-agent pings after every successful push (see agent.py's
-//          notify_new_replies) with the dedicated NOTIFY_SECRET bearer token.
+//          notify_new_replies) with its per-notebook machine bearer token.
+//          The old NOTIFY_SECRET remains a server-side compatibility path for
+//          pre-S23 agents only.
 //   GET  — a daily Vercel cron sweep (guarded by CRON_SECRET) that catches
 //          backlog left by pings lost to Slack/Vercel outages.
 //
@@ -39,6 +41,11 @@
 import { db } from './_lib/core.js'
 import { postNewRepliesToSlack, type NewReplyForSlack } from './_lib/slack.js'
 import { guardMachine } from './_lib/auth.js'
+import { authenticateMachine, presentsMachineToken } from './_lib/agent/machineAuth.js'
+import { readDeploymentTenantId } from './_lib/agent/tenant.js'
+import { getMachineDataStore } from './_lib/data/machineStore.js'
+import { machineStoreConfigured } from './_lib/data/neonConfig.js'
+import type { DataStore } from './_lib/data/contracts.js'
 import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
@@ -55,6 +62,17 @@ import {
 } from './_lib/data/operations/aiSystem.js'
 
 export const maxDuration = 30
+
+let machineStore: DataStore | null | undefined
+let machineTenant: string | null | undefined
+
+function notifyMachineDeps(): { readonly store: DataStore | null; readonly tenantId: string | null } {
+  if (machineStore === undefined) {
+    machineStore = machineStoreConfigured() ? getMachineDataStore() : null
+    machineTenant = readDeploymentTenantId()
+  }
+  return { store: machineStore, tenantId: machineTenant ?? null }
+}
 
 const BATCH = 20 // max messages claimed per invocation
 const WINDOW_DAYS = 14 // sent_at older than this: mark, never post (history dumps)
@@ -477,8 +495,29 @@ async function handle(req: Request): Promise<Response> {
     const denied = await guardMachine(req, 'CRON_SECRET')
     if (denied) return denied
   } else {
-    const denied = await guardMachine(req, 'NOTIFY_SECRET')
-    if (denied) return denied
+    // New notebooks authenticate with their per-notebook machine credential.
+    // Keep the old shared secret for already-installed agents during the dual
+    // period; it is no longer emitted in the S23 config and is not the new
+    // authorization path.
+    if (presentsMachineToken(req.headers.get('authorization'))) {
+      try {
+        const authenticated = await authenticateMachine(
+          req,
+          notifyMachineDeps(),
+          'notify-replies',
+        )
+        if (authenticated.response) return authenticated.response
+      } catch (error) {
+        console.error(
+          'machine notify authentication failed',
+          error instanceof Error ? error.name : 'unknown',
+        )
+        return json({ error: 'machine authentication failed' }, 500)
+      }
+    } else {
+      const denied = await guardMachine(req, 'NOTIFY_SECRET')
+      if (denied) return denied
+    }
   }
 
   // The provider decision, taken once per invocation. Both triggers are

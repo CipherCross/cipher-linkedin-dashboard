@@ -32,10 +32,10 @@ Sync agent (from `sync-agent/`, after `pip install -r requirements.txt`):
 ```bash
 python3 agent.py inspect                 # discover LH2 SQLite DBs + table/column names
 python3 agent.py sync --dry-run          # extract + print per-campaign counts, push nothing
-python3 agent.py sync                     # real sync (self-updates from storage bucket first)
+python3 agent.py sync                     # real sync (self-updates through signed machine API)
 python3 agent.py ingest-csv FILE --campaign "Name" --kind successes|replies|queue
 python3 agent.py annotate "note" [--date YYYY-MM-DD] [--campaign ID] [--instance]
-sync-agent/deploy.sh                       # publish agent.py to 'agent' bucket; notebooks self-update ≤30 min
+sync-agent/deploy.sh                       # publish signed agent release; notebooks self-update ≤30 min
 ```
 Always `sync --dry-run` and compare to LH2's own numbers before a first real sync.
 
@@ -87,11 +87,11 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
 - **Remote config**: `apply_remote_config` merges `instances.config` (edited on Health page via
   `/api/config`) over local `config.yaml`; **remote wins** for allowlisted `REMOTE_CONFIG_KEYS`.
   Bootstrap keys (`supabase_url`, `supabase_service_key`, `instance_id`) and
-  the machine credential `notify_secret` are local-only.
+  the machine credential `ingest_token` and release trust anchor `release_public_key` are local-only.
 - **Post-sync notify ping**: after a successful push, `notify_new_replies` POSTs to the
   `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
-  inbound replies to Slack. It authenticates with local-only `notify_secret`; all failures
-  are swallowed and never break a sync.
+  inbound replies to Slack. Current agents authenticate with their local-only `ingest_token`;
+  the old `notify_secret` is compatibility-only. All failures are swallowed and never break a sync.
 
 ### AI layer (`frontend/api/`)
 Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `frontend/api/_lib/`:
@@ -145,7 +145,8 @@ it does not authorize entering credentials or making data-changing actions.
 - `service_role` lives only in notebooks' `config.yaml` (gitignored) and Vercel
   server env; it bypasses RLS, so Vercel handlers must authorize before `db()`.
 - `lead-photos` is private; active authenticated members receive short-lived
-  signed URLs through Storage RLS. The self-update `agent` bucket is also private.
+  signed URLs through Storage RLS. Signed agent releases live in a separate
+  private bucket with read-only server credentials and an operator-only signing key.
 
 ## Environment variables
 - Browser (`VITE_`-prefixed, safe to expose): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.

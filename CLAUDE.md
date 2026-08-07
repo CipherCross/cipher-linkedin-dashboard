@@ -32,11 +32,11 @@ Sync agent (from `sync-agent/`, after `pip install -r requirements.txt`):
 ```bash
 python3 agent.py inspect                 # discover LH2 SQLite DBs + table/column names
 python3 agent.py sync --dry-run          # extract + print per-campaign counts, push nothing
-python3 agent.py sync                     # real sync (self-updates from storage bucket first)
+python3 agent.py sync                     # real sync (self-updates through signed machine API)
 python3 agent.py ingest-csv FILE --campaign "Name" --kind successes|replies|queue
 python3 agent.py annotate "note" [--date YYYY-MM-DD] [--campaign ID] [--instance]
-sync-agent/deploy.sh                       # publish agent.py to 'agent' bucket; notebooks self-update ≤30 min
-sync-agent/.venv/bin/python3 sync-agent/tests/test_ingest_transport.py   # 62 tests, no pytest
+sync-agent/deploy.sh                       # publish signed agent release; notebooks self-update ≤30 min
+sync-agent/.venv/bin/python3 sync-agent/tests/test_ingest_transport.py   # transport tests, no pytest
 ```
 Always `sync --dry-run` and compare to LH2's own numbers before a first real sync.
 The transport tests need the agent's own virtualenv (`agent.py` imports `requests`
@@ -92,11 +92,11 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
 - **Remote config**: `apply_remote_config` merges `instances.config` (edited on Health page via
   `/api/config`) over local `config.yaml`; **remote wins** for allowlisted `REMOTE_CONFIG_KEYS`.
   Bootstrap keys (`supabase_url`, `supabase_service_key`, `instance_id`) and
-  the machine credential `notify_secret` are local-only.
+  the machine credential `ingest_token` and release trust anchor `release_public_key` are local-only.
 - **Post-sync notify ping**: after a successful push, `notify_new_replies` POSTs to the
   `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
-  inbound replies to Slack. It authenticates with local-only `notify_secret`; all failures
-  are swallowed and never break a sync.
+  inbound replies to Slack. Current agents authenticate with their local-only `ingest_token`;
+  the old `notify_secret` is compatibility-only. All failures are swallowed and never break a sync.
 - **Dual transport (`ingest_mode`)**: the same extraction can also go to
   `POST /api/import?op=agent.ingest` with a per-notebook machine credential. Additive —
   the Supabase push runs first and stays authoritative; `off` (default) / `shadow` (deliver,
@@ -104,7 +104,7 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   Supabase-off mode; that is a whole-cutover decision, not a per-notebook flag. The
   idempotency key is `sync.<UTC date>.<digest of the batch's own content>`, so a retry
   repeats a key and a changed extraction does not. `ingest_url`/`ingest_mode` are
-  remote-config keys; **`ingest_token` is local-only**, like `notify_secret` —
+  remote-config keys; **`ingest_token` and `release_public_key` are local-only** —
   `LOCAL_ONLY_CONFIG_KEYS` is subtracted from the allowlist so adding it there changes
   nothing. Big notebooks are chunked (each chunk carries the full campaign list and its
   own key); a parity check against the rows Supabase just received refuses to deliver on

@@ -66,13 +66,12 @@ import {
   type DataStore,
   type DataStoreTransaction,
 } from '../data/contracts.js'
-import { machineActor } from '../data/machineStore.js'
 import {
   MACHINE_COMMANDS,
   MACHINE_OPERATIONS,
   type IngestBatchRow,
 } from '../data/operations/index.js'
-import { tokenFromAuthorization, hashAgentSecret } from './credentials.js'
+import { authenticateMachine } from './machineAuth.js'
 
 /** The operation name on `/api/import`. One spelling, exported for the caller. */
 export const AGENT_INGEST_OP = 'agent.ingest'
@@ -677,21 +676,6 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   })
 
-/**
- * `WWW-Authenticate` on every 401, because the caller is a program: a notebook
- * that gets an opaque 401 retries forever, and one that is told the scheme has
- * something to log.
- */
-const unauthorized = () =>
-  new Response(JSON.stringify({ error: 'Unauthorized' }), {
-    status: 401,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-      'www-authenticate': 'Bearer realm="agent-ingest"',
-    },
-  })
-
 export function createAgentIngestHandler(
   deps: AgentIngestDeps,
 ): (request: Request) => Promise<Response> {
@@ -700,26 +684,15 @@ export function createAgentIngestHandler(
       return json({ error: 'method not allowed' }, 405)
     }
 
-    // The token is parsed before anything else is read, so a request with no
-    // credential costs this endpoint one regex rather than a body.
-    const token = tokenFromAuthorization(request.headers.get('authorization'))
-    if (!token) return unauthorized()
-
-    if (!deps.store || !deps.tenantId) {
-      // Not a 401: the caller may hold a perfectly good credential, and telling
-      // it "unauthorized" would send an operator looking at the wrong thing.
-      return json(
-        { error: 'the ingest path is not configured on this deployment' },
-        503,
-      )
-    }
-
-    const resolved = await deps.store.resolveMachineActor({
-      credentialId: token.credentialId,
-      secretHash: hashAgentSecret(token.secret),
-      tenantId: deps.tenantId,
-    })
-    if (!resolved) return unauthorized()
+    // The shared helper parses before body access, returns 503 for an
+    // unconfigured deployment, and makes revoke/expiry a database decision.
+    const authenticated = await authenticateMachine(
+      request,
+      deps,
+      'agent-ingest',
+    )
+    if (authenticated.response) return authenticated.response
+    const { principal } = authenticated
 
     const contentLength = Number(request.headers.get('content-length') ?? 0)
     if (Number.isFinite(contentLength) && contentLength > MAX_INGEST_BYTES) {
@@ -748,18 +721,22 @@ export function createAgentIngestHandler(
     // step 009's policies scope every relation to the credential's instance —
     // but a 403 here is a diagnosis, where the policy version is a batch that
     // writes zero rows and looks like a working sync of an empty notebook.
-    if (payload.instanceId !== resolved.instanceId) {
+    if (payload.instanceId !== principal.instanceId) {
       return json(
         { error: 'the credential is not issued for this instance_id' },
         403,
       )
     }
 
-    const actor = machineActor(resolved.credentialId, resolved.tenantId)
     const digest = payloadDigest(payload)
 
     try {
-      const result = await ingestBatch(deps.store, actor, payload, digest)
+      const result = await ingestBatch(
+        principal.store,
+        principal.actor,
+        payload,
+        digest,
+      )
       return json({
         ok: true,
         replayed: result.replayed,
@@ -774,7 +751,7 @@ export function createAgentIngestHandler(
       if (conflict) return json({ error: conflict.message }, conflict.status)
       console.error(
         'agent ingest failed for credential',
-        resolved.credentialId,
+        principal.credentialId,
         error instanceof Error ? error.name : 'unknown error',
       )
       return json({ error: 'the batch could not be ingested' }, 500)

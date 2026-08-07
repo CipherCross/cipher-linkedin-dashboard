@@ -59,6 +59,8 @@ import type {
 export const MACHINE_OPERATIONS = {
   /** The batch already recorded under this key, if there is one. */
   batchByKey: 'agent.batchByKey',
+  /** This notebook's own remote-config blob. See `instanceConfigOperation`. */
+  instanceConfig: 'agent.instanceConfig',
 } as const
 
 export const MACHINE_COMMANDS = {
@@ -71,6 +73,10 @@ export const MACHINE_COMMANDS = {
   recordSyncRun: 'agent.recordSyncRun',
   recordBatch: 'agent.recordBatch',
   stampCredentialUse: 'agent.stampCredentialUse',
+  /** Record that this notebook checked a lead and found no avatar. */
+  stampLeadPhotoCheck: 'agent.stampLeadPhotoCheck',
+  /** Persist the source photo path after the authenticated object upload. */
+  upsertLeadPhoto: 'agent.upsertLeadPhoto',
 } as const
 
 export const AGENT_ADMIN_OPERATIONS = {
@@ -175,6 +181,52 @@ export const batchByKeyOperation: NeonQueryOperation<
   }),
 }
 
+export interface InstanceConfigRow {
+  readonly id: string
+  readonly config: Record<string, unknown>
+  readonly config_updated_at: string | null
+}
+
+/**
+ * The notebook's own remote-config blob — S23's replacement for the agent's
+ * direct PostgREST read of `instances?select=config` with the service key.
+ *
+ * **No `WHERE id = …` clause, and that is the point.** `instances_machine_actor`
+ * (step 009 section D) restricts every `app_machine` statement on this relation
+ * to `id = public.machine_actor_instance()`, and that function re-derives
+ * "exists, not revoked, not expired" on every statement. So an unrestricted
+ * `SELECT` here returns exactly one row — this credential's notebook — or zero
+ * rows for a credential that has been revoked or has expired *since the handler
+ * resolved it*.
+ *
+ * Writing the filter here as well would have been the defensive-looking choice
+ * and is the weaker one: it would compare a value this process carries against a
+ * column, which is a check the handler can get wrong, in place of a check the
+ * database re-derives per statement and the handler cannot influence at all. The
+ * `LIMIT 2` is the assertion — see the mapper's caller in `machineOps.ts`, which
+ * treats a second row as a fault rather than picking one.
+ */
+export const instanceConfigOperation: NeonQueryOperation<
+  InstanceConfigRow,
+  Record<string, never>
+> = {
+  build: () => ({
+    text:
+      'SELECT i.id, i.config, i.config_updated_at' +
+      '  FROM public.instances i' +
+      ' LIMIT 2',
+    values: [],
+  }),
+  mapRow: (row: NeonRow): InstanceConfigRow => ({
+    id: String(row.id),
+    config:
+      row.config && typeof row.config === 'object' && !Array.isArray(row.config)
+        ? (row.config as Record<string, unknown>)
+        : {},
+    config_updated_at: text(row.config_updated_at),
+  }),
+}
+
 export interface RecordBatchParams {
   readonly credentialId: string
   readonly instanceId: string
@@ -219,6 +271,62 @@ export const recordBatchOperation: NeonCommandOperation<number, RecordBatchParam
 export interface CredentialIdParams {
   readonly credentialId: string
   readonly [key: string]: string
+}
+
+export interface LeadPhotoCheckParams {
+  readonly instanceId: string
+  readonly campaignId: string
+  readonly profileUrl: string
+  readonly [key: string]: string
+}
+
+/**
+ * The no-avatar half of the photo API. The agent must be able to converge a
+ * checked lead without inventing an object path; `photo_synced_at` with a NULL
+ * path is the existing meaning on both providers.
+ */
+export const stampLeadPhotoCheckOperation: NeonCommandOperation<
+  number,
+  LeadPhotoCheckParams
+> = {
+  build: ({ params }) => ({
+    text:
+      'UPDATE public.leads SET photo_synced_at = now(), updated_at = now()' +
+      ' WHERE instance_id = $1 AND campaign_id = $2 AND profile_url = $3',
+    values: [
+      params?.instanceId ?? '',
+      params?.campaignId ?? '',
+      params?.profileUrl ?? '',
+    ],
+  }),
+  mapResult: (_rows, rowCount) => rowCount,
+}
+
+export interface LeadPhotoUploadParams extends LeadPhotoCheckParams {
+  readonly photoPath: string
+}
+
+/**
+ * Store the application path only after the object upload has succeeded. The
+ * storage key is derived by the API, not accepted as a machine parameter, so a
+ * credential for one notebook cannot name another notebook's object.
+ */
+export const upsertLeadPhotoOperation: NeonCommandOperation<
+  number,
+  LeadPhotoUploadParams
+> = {
+  build: ({ params }) => ({
+    text:
+      'UPDATE public.leads SET photo_path = $4, photo_synced_at = now(), updated_at = now()' +
+      ' WHERE instance_id = $1 AND campaign_id = $2 AND profile_url = $3',
+    values: [
+      params?.instanceId ?? '',
+      params?.campaignId ?? '',
+      params?.profileUrl ?? '',
+      params?.photoPath ?? '',
+    ],
+  }),
+  mapResult: (_rows, rowCount) => rowCount,
 }
 
 /**
@@ -626,7 +734,7 @@ export const credentialDirectoryOperation: NeonQueryOperation<
 // ---------------------------------------------------------------------------
 
 /**
- * The machine store's whole vocabulary. Nine commands, one query and one
+ * The machine store's whole vocabulary. Eleven commands, two queries and one
  * actorless resolver — and deliberately nothing else: no read of another
  * notebook, no read of the dashboard's own tables, no AI guard. A notebook that
  * wanted to know what the dashboard thinks of its leads would have to ask
@@ -641,11 +749,23 @@ export function buildMachineRegistry(): NeonOperationRegistry {
   )
 
   registry.registerQuery(MACHINE_OPERATIONS.batchByKey, batchByKeyOperation)
+  registry.registerQuery(
+    MACHINE_OPERATIONS.instanceConfig,
+    instanceConfigOperation,
+  )
 
   registry.registerCommand(MACHINE_COMMANDS.recordBatch, recordBatchOperation)
   registry.registerCommand(
     MACHINE_COMMANDS.stampCredentialUse,
     stampCredentialUseOperation,
+  )
+  registry.registerCommand(
+    MACHINE_COMMANDS.stampLeadPhotoCheck,
+    stampLeadPhotoCheckOperation,
+  )
+  registry.registerCommand(
+    MACHINE_COMMANDS.upsertLeadPhoto,
+    upsertLeadPhotoOperation,
   )
   registry.registerCommand(
     MACHINE_COMMANDS.upsertInstance,

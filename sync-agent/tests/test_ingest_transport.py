@@ -249,17 +249,17 @@ class RemoteConfigTest(unittest.TestCase):
 
     def test_the_two_key_sets_disagree_about_nothing_by_accident(self):
         self.assertTrue(agent.LOCAL_ONLY_CONFIG_KEYS & agent.REMOTE_CONFIG_KEYS
-                        <= {"ingest_token", "notify_secret", "supabase_url",
+                        <= {"ingest_token", "supabase_url",
                             "supabase_service_key", "instance_id"})
         self.assertIn("ingest_token", agent.LOCAL_ONLY_CONFIG_KEYS)
-        self.assertIn("notify_secret", agent.LOCAL_ONLY_CONFIG_KEYS)
+        self.assertIn("release_public_key", agent.LOCAL_ONLY_CONFIG_KEYS)
 
     def test_remote_config_cannot_set_a_credential(self):
         local = {"instance_id": "nb", "supabase_url": "https://local",
                  "supabase_service_key": "local-key",
-                 "ingest_token": "lha.local", "notify_secret": "local-secret",
+                 "ingest_token": "lha.local", "release_public_key": "local-key",
                  "ingest_mode": "off"}
-        hostile = {"ingest_token": "lha.attacker", "notify_secret": "attacker",
+        hostile = {"ingest_token": "lha.attacker", "release_public_key": "attacker",
                    "supabase_url": "https://attacker",
                    "supabase_service_key": "attacker-key",
                    "instance_id": "someone-else",
@@ -269,7 +269,7 @@ class RemoteConfigTest(unittest.TestCase):
             merged = agent.apply_remote_config(dict(local))
         # Refused.
         self.assertEqual(merged["ingest_token"], "lha.local")
-        self.assertEqual(merged["notify_secret"], "local-secret")
+        self.assertEqual(merged["release_public_key"], "local-key")
         self.assertEqual(merged["supabase_url"], "https://local")
         self.assertEqual(merged["supabase_service_key"], "local-key")
         self.assertEqual(merged["instance_id"], "nb")
@@ -290,8 +290,8 @@ class RemoteConfigTest(unittest.TestCase):
         m = re.search(r"FORBIDDEN_CONFIG_KEYS = new Set\(\[(.*?)\]\)", source, re.S)
         self.assertIsNotNone(m, "the dashboard's config denylist was not found")
         denied = set(re.findall(r"'([^']+)'", m.group(1)))
-        for key in ("ingest_token", "notify_secret"):
-            self.assertIn(key, denied, f"{key} may be stored in instances.config")
+        self.assertIn("ingest_token", denied)
+        self.assertNotIn("release_public_key", denied)
 
     def test_the_allowlist_subtraction_is_what_refuses_it(self):
         """Not the spelling of the allowlist: even if a later session adds the
@@ -303,6 +303,27 @@ class RemoteConfigTest(unittest.TestCase):
                 merged = agent.apply_remote_config({"instance_id": "nb",
                                                     "ingest_token": "lha.local"})
         self.assertEqual(merged["ingest_token"], "lha.local")
+
+
+class S23MachineApiTest(unittest.TestCase):
+    def test_one_configured_url_selects_each_authenticated_operation(self):
+        cfg = {"ingest_url": "https://dash.example/api/import?op=agent.ingest"}
+        self.assertEqual(
+            agent.machine_api_url(cfg, "agent.config"),
+            "https://dash.example/api/import?op=agent.config",
+        )
+        self.assertEqual(
+            agent.machine_api_url(cfg, "agent.release"),
+            "https://dash.example/api/import?op=agent.release",
+        )
+
+    def test_notify_failure_is_non_fatal_with_the_machine_credential(self):
+        cfg = {"instance_id": "notebook-1",
+               "notify_url": "https://dash.example/api/notify-replies",
+               "ingest_token": a_token()}
+        with mock.patch.object(agent.requests, "post",
+                               side_effect=RuntimeError("network")):
+            agent.notify_new_replies(cfg)
 
 
 class ModeTest(unittest.TestCase):
@@ -916,7 +937,7 @@ class SupabasePathTest(unittest.TestCase):
     def test_the_supabase_class_is_untouched_by_the_new_transport(self):
         with open(os.path.join(AGENT_DIR, "agent.py"), encoding="utf-8") as f:
             source = f.read()
-        body = source[source.index("class Supabase:"):source.index("def self_update")]
+        body = source[source.index("class Supabase:"):source.index("RELEASE_PUBLIC_KEY_CONFIG")]
         self.assertNotIn("ingest", body)
 
     def test_dedupe_still_collapses_the_supabase_unique_keys(self):

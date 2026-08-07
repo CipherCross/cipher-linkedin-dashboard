@@ -25,6 +25,7 @@ Dependencies: requests, pyyaml  (pip install -r requirements.txt)
 """
 
 import argparse
+import base64
 import csv
 import datetime as dt
 import glob
@@ -35,6 +36,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -42,7 +44,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.13.0"
+AGENT_VERSION = "1.14.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -165,59 +167,192 @@ class Supabase:
                       timeout=60)
 
 
+RELEASE_PUBLIC_KEY_CONFIG = "release_public_key"
+RELEASE_MIN_BYTES = 10_000
+RELEASE_MAX_BYTES = 4 * 1024 * 1024
+
+
+def machine_api_url(cfg, operation):
+    """Reuse the configured ingest URL while selecting one allowlisted op."""
+    raw = (cfg.get("ingest_url") or "").strip()
+    if not raw:
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(raw)
+        query = [(key, value) for key, value in urllib.parse.parse_qsl(parts.query)
+                 if key != "op"]
+        query.append(("op", operation))
+        return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+    except ValueError:
+        return ""
+
+
+def machine_api_headers(cfg):
+    token = (cfg.get("ingest_token") or "").strip()
+    return {"Authorization": f"Bearer {token}"}
+
+
+def canonical_release_manifest(manifest):
+    """The exact five-line Ed25519 message defined by releaseArtifacts.ts."""
+    return "\n".join((
+        "lh2-agent-release/1",
+        str(manifest["version"]),
+        str(manifest["sha256"]),
+        str(manifest["size_bytes"]),
+        str(manifest["released_at"]),
+    )).encode("utf-8")
+
+
+def verify_release_signature(public_key, manifest):
+    """Verify the operator signature, returning False on any malformed input.
+
+    Ed25519 is intentionally an optional import at module load time: a missing
+    crypto wheel must make self-update skip rather than make the scheduled sync
+    fail. `requirements.txt` installs it on managed notebooks; the guard keeps
+    an older notebook safe while that dependency is rolling out.
+    """
+    try:
+        key_text = str(public_key or "").strip()
+        key_bytes = base64.urlsafe_b64decode(key_text + "=" * (-len(key_text) % 4))
+        signature = base64.b64decode(str(manifest["signature"]), validate=True)
+        if len(key_bytes) != 32 or len(signature) != 64:
+            return False
+        message = canonical_release_manifest(manifest)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.exceptions import InvalidSignature
+        try:
+            Ed25519PublicKey.from_public_bytes(key_bytes).verify(signature, message)
+            return True
+        except InvalidSignature:
+            return False
+    except ImportError:
+        # The managed venv installs cryptography, but this fallback keeps a
+        # freshly copied agent able to verify a release before its next venv
+        # refresh. OpenSSL 3's Ed25519 verifier consumes the standard
+        # SubjectPublicKeyInfo wrapper around the raw 32-byte public key.
+        try:
+            spki = bytes.fromhex("302a300506032b6570032100") + key_bytes
+            with tempfile.TemporaryDirectory(prefix="lh2-release-") as directory:
+                public_path = os.path.join(directory, "public.der")
+                signature_path = os.path.join(directory, "signature.bin")
+                message_path = os.path.join(directory, "message.bin")
+                with open(public_path, "wb") as f:
+                    f.write(spki)
+                with open(signature_path, "wb") as f:
+                    f.write(signature)
+                with open(message_path, "wb") as f:
+                    f.write(message)
+                result = subprocess.run(
+                    ["openssl", "pkeyutl", "-verify", "-pubin",
+                     "-inkey", public_path, "-rawin",
+                     "-sigfile", signature_path, "-in", message_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    timeout=5,
+                )
+                return result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+
+def release_version(value):
+    match = re.fullmatch(r"(\d{1,4})\.(\d{1,4})\.(\d{1,4})", str(value or ""))
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
 def self_update(cfg):
-    """Pull the latest agent.py from the private 'agent' storage bucket and
-    swap ourselves out (deployed there by sync-agent/deploy.sh). Returns True
-    when a new build was installed and the caller should re-exec. Any failure
-    just means we keep running the current version — updates must never
-    break the scheduled sync."""
-    if not cfg.get("auto_update", True):
-        return False
-    if os.environ.get("LH2_AGENT_REEXEC"):  # already updated during this run
-        return False
-    url = cfg["supabase_url"].rstrip("/") + "/storage/v1/object/agent/agent.py"
-    headers = {"apikey": cfg["supabase_service_key"],
-               "Authorization": f"Bearer {cfg['supabase_service_key']}"}
+    """Fetch and verify a signed release through the authenticated machine API.
+
+    The old Supabase Storage read is intentionally gone. A missing machine
+    credential, missing release bucket, bad signature, bad hash or any I/O error
+    all leave the current file in place and return to the scheduled sync.
+    """
+    tmp = None
     try:
-        r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code in (400, 404):
-            return False  # nothing deployed yet
-        r.raise_for_status()
-        new = r.content
-    except requests.RequestException as e:
-        print(f"self-update check failed ({e}) — continuing with v{AGENT_VERSION}")
+        if not cfg.get("auto_update", True) or os.environ.get("LH2_AGENT_REEXEC"):
+            return False
+        api_url = machine_api_url(cfg, "agent.release")
+        token = (cfg.get("ingest_token") or "").strip()
+        public_key = (cfg.get(RELEASE_PUBLIC_KEY_CONFIG) or "").strip()
+        if not api_url or not token or not public_key:
+            print("self-update: authenticated release path is not configured — continuing")
+            return False
+        if not parse_ingest_token(token):
+            print("self-update: ingest_token is malformed — skipping release check")
+            return False
+
+        response = requests.get(
+            api_url, headers=machine_api_headers(cfg), timeout=30
+        )
+        if response.status_code in (400, 404, 503):
+            return False
+        response.raise_for_status()
+        answer = response.json()
+        manifest = answer.get("manifest") if isinstance(answer, dict) else None
+        if not isinstance(manifest, dict):
+            print("self-update: release response has no manifest — skipping")
+            return False
+        version = release_version(manifest.get("version"))
+        current_version = release_version(AGENT_VERSION)
+        if not version or not current_version or version <= current_version:
+            return False
+        size = manifest.get("size_bytes")
+        digest = str(manifest.get("sha256") or "")
+        if (not isinstance(size, int) or isinstance(size, bool) or
+                size < RELEASE_MIN_BYTES or size > RELEASE_MAX_BYTES or
+                not re.fullmatch(r"[0-9a-f]{64}", digest)):
+            print("self-update: release manifest fields are invalid — skipping")
+            return False
+        if not verify_release_signature(public_key, manifest):
+            print("self-update: release signature did not verify — keeping current build")
+            return False
+
+        download_url = answer.get("download_url")
+        if not isinstance(download_url, str) or not download_url.startswith("https://"):
+            print("self-update: release download URL is invalid — skipping")
+            return False
+        download = requests.get(download_url, timeout=30)
+        download.raise_for_status()
+        new = download.content
+        clen = download.headers.get("Content-Length")
+        if (clen is not None and clen.isdigit() and int(clen) != len(new)) or len(new) != size:
+            print("self-update: release size does not match its signed manifest — skipping")
+            return False
+        if hashlib.sha256(new).hexdigest() != digest:
+            print("self-update: release hash did not verify — keeping current build")
+            return False
+
+        me = os.path.abspath(__file__)
+        with open(me, "rb") as f:
+            current = f.read()
+        if hashlib.sha256(current).digest() == hashlib.sha256(new).digest():
+            return False
+        if b'AGENT_VERSION = "' not in new or len(new) < len(current) // 2:
+            print("self-update: downloaded release is not a plausible agent — skipping")
+            return False
+        compile(new, me, "exec")
+        tmp = me + ".new"
+        with open(tmp, "wb") as f:
+            f.write(new)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, me)
+        print(f"self-update: installed signed v{manifest['version']} (was v{AGENT_VERSION}), restarting")
+        return True
+    except Exception as error:
+        # Never print the exception: either URL may carry a bearer capability.
+        print(f"self-update failed ({type(error).__name__}) — continuing with v{AGENT_VERSION}")
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
         return False
-    # Integrity gate: a truncated/corrupt download must NEVER overwrite a working
-    # agent (that would brick the notebook's scheduled sync). Verify the transfer
-    # completed and the bytes are a plausible, parseable agent before swapping.
-    clen = r.headers.get("Content-Length")
-    if clen is not None and clen.isdigit() and int(clen) != len(new):
-        print(f"self-update: truncated download ({len(new)}/{clen} bytes) — skipping")
-        return False
-    me = os.path.abspath(__file__)
-    with open(me, "rb") as f:
-        current = f.read()
-    if hashlib.sha256(current).digest() == hashlib.sha256(new).digest():
-        return False
-    if b'AGENT_VERSION = "' not in new:
-        print("self-update: downloaded file doesn't look like agent.py — skipping")
-        return False
-    if len(new) < len(current) // 2:
-        print(f"self-update: download suspiciously small ({len(new)} bytes) — skipping")
-        return False
-    try:
-        compile(new, me, "exec")  # reject a syntactically broken build
-    except (SyntaxError, ValueError) as e:
-        print(f"self-update: downloaded agent does not parse ({e}) — skipping")
-        return False
-    tmp = me + ".new"
-    with open(tmp, "wb") as f:
-        f.write(new)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, me)  # atomic swap once we've validated the bytes
-    print(f"self-update: installed new agent build (was v{AGENT_VERSION}), restarting")
-    return True
 
 
 def reexec():
@@ -246,25 +381,45 @@ REMOTE_CONFIG_KEYS = {
 
 # Keys a remote blob may NEVER set, whatever the allowlist above says. Two kinds
 # live here: the bootstrap keys (where the agent points and who it claims to be)
-# and the credentials (notify_secret, ingest_token).
+# and the machine credential (ingest_token).
 #
 # This is a subtraction rather than a comment because the failure it prevents is
 # somebody adding a credential to REMOTE_CONFIG_KEYS "so it can be rotated from
 # the Health page". That would mean a machine token travelling through, and
 # resting in, a table every dashboard admin can edit — and an attacker who could
 # write instances.config could then hand every notebook a credential of their
-# choosing. The token is a credential, so it is treated the way notify_secret is:
-# local file only, never remote, never printed.
+# choosing. The token is a credential, so it is local-file-only, never remote,
+# never printed. The release public key is also local-only: it is a trust anchor,
+# not a rollout setting.
 LOCAL_ONLY_CONFIG_KEYS = frozenset({
     "supabase_url", "supabase_service_key", "instance_id",
-    "notify_secret", "ingest_token",
+    "ingest_token", RELEASE_PUBLIC_KEY_CONFIG,
 })
 
 
 def fetch_remote_config(cfg):
-    """Pull this instance's overrides from the instances.config blob in Supabase
-    (edited on the Health page). Returns a dict, or {} on any failure — like
-    self_update, a config-fetch problem must never break a scheduled sync."""
+    """Read this notebook's config through the authenticated machine API.
+
+    A pre-S23 config without a machine token retains the legacy read as a
+    migration bridge. Once a token is present, an API failure never falls back
+    to service-role PostgREST: revoke/expiry must actually stop config access.
+    """
+    token = (cfg.get("ingest_token") or "").strip()
+    api_url = machine_api_url(cfg, "agent.config")
+    if token or api_url:
+        if not token or not api_url or not parse_ingest_token(token):
+            print("remote-config: authenticated API is not configured — using local config.yaml only")
+            return {}
+        try:
+            r = requests.get(api_url, headers=machine_api_headers(cfg), timeout=30)
+            r.raise_for_status()
+            answer = r.json()
+            remote = answer.get("config") if isinstance(answer, dict) else None
+            return remote if isinstance(remote, dict) else {}
+        except (requests.RequestException, ValueError) as e:
+            print(f"remote-config API failed ({type(e).__name__}) — using local config.yaml only")
+            return {}
+
     url = cfg["supabase_url"].rstrip("/") + "/rest/v1/instances"
     headers = {"apikey": cfg["supabase_service_key"],
                "Authorization": f"Bearer {cfg['supabase_service_key']}"}
@@ -274,7 +429,7 @@ def fetch_remote_config(cfg):
         r.raise_for_status()
         rows = r.json()
     except (requests.RequestException, ValueError) as e:
-        print(f"remote-config fetch failed ({e}) — using local config.yaml only")
+        print(f"remote-config legacy fetch failed ({type(e).__name__}) — using local config.yaml only")
         return {}
     remote = rows[0].get("config") if rows else None
     return remote if isinstance(remote, dict) else {}
@@ -312,7 +467,7 @@ def notify_new_replies(cfg):
     """Fire-and-forget ping to the dashboard's /api/notify-replies after a
     successful push, so a new inbound reply reaches Slack within one sync cycle
     instead of waiting for the daily cron sweep. The endpoint requires the
-    local-only notify_secret bearer credential; unlike notify_url, that secret
+    local-only per-notebook ingest_token; unlike notify_url, that credential
     is never accepted from remote config. Pings unconditionally when both are
     set: the no-work case is a cheap no-op, and gating on "messages extracted"
     would strand backlog left by a previously failed ping. ANY failure is
@@ -321,20 +476,20 @@ def notify_new_replies(cfg):
     url = (cfg.get("notify_url") or "").strip()
     if not url:
         return
-    secret = (cfg.get("notify_secret") or "").strip()
-    if not secret:
-        print("notify-replies: notify_secret is missing — ping skipped")
+    token = (cfg.get("ingest_token") or "").strip()
+    if not token or not parse_ingest_token(token):
+        print("notify-replies: ingest_token is missing or malformed — ping skipped")
         return
     try:
         # instance_id is informational only (shows who pinged in the Vercel
         # logs) — the endpoint drains ALL instances' backlog regardless.
         r = requests.post(
             url,
-            headers={"Authorization": f"Bearer {secret}"},
+            headers=machine_api_headers(cfg),
             json={"instance_id": cfg["instance_id"]},
             timeout=15,
         )
-        print(f"notify-replies: HTTP {r.status_code} {r.text[:200]}")
+        print(f"notify-replies: HTTP {r.status_code}")
     except Exception as e:
         print(f"notify-replies ping failed ({e}) — will retry after next sync")
 
@@ -924,7 +1079,30 @@ def print_ingest_dry_run(cfg, mode, chunks, problems):
 PHOTO_CAP = 200
 
 
-def sync_photos(cfg, sb, avatar_map):
+def agent_photo_request(cfg, campaign_id, profile_url, photo_path, body=b"",
+                        content_type="application/octet-stream", absent=False):
+    """Send one photo/check to the authenticated object-storage API."""
+    url = machine_api_url(cfg, "agent.photoUpload")
+    token = (cfg.get("ingest_token") or "").strip()
+    if not url or not parse_ingest_token(token):
+        return False
+    headers = dict(machine_api_headers(cfg),
+                   **{"x-agent-campaign-id": str(campaign_id),
+                      "x-agent-profile-url": str(profile_url),
+                      "x-agent-photo-path": str(photo_path),
+                      "content-type": content_type})
+    if absent:
+        headers["x-agent-photo-absent"] = "1"
+    try:
+        response = requests.post(url, headers=headers, data=body, timeout=30)
+        response.raise_for_status()
+        return True
+    except Exception as error:
+        print(f"photo sync: authenticated object API failed ({type(error).__name__})")
+        return False
+
+
+def sync_photos(cfg, sb, avatar_map, machine_mode="off"):
     """Mirror each lead's LinkedIn avatar into the private `lead-photos` Storage
     bucket for authenticated/signed UI display — display-only, NEVER used for
     any inference. Runs after the leads push, only when config `sync_photos` is
@@ -972,7 +1150,7 @@ def sync_photos(cfg, sb, avatar_map):
             return
 
         now = dt.datetime.now(dt.timezone.utc).isoformat()
-        uploaded = no_avatar = retryable = 0
+        uploaded = no_avatar = retryable = machine_uploaded = 0
         for cand in candidates:
             cid = cand.get("campaign_id")
             purl = cand.get("profile_url")
@@ -989,6 +1167,11 @@ def sync_photos(cfg, sb, avatar_map):
             # never upload in either case.
             if not avatar_url or not sanitized:
                 try:
+                    if machine_mode != "off" and not agent_photo_request(
+                            cfg, cid, purl, f"{instance_id}/{sanitized}.jpg",
+                            absent=True):
+                        retryable += 1
+                        continue
                     sb.update("leads", match, {"photo_synced_at": now})
                     no_avatar += 1
                 except Exception:
@@ -1005,6 +1188,11 @@ def sync_photos(cfg, sb, avatar_map):
                 # ANY 4xx is permanent (expired/forbidden/gone signed URL, auth) ->
                 # converge (mark synced, no photo) so it can never pin a backfill slot.
                 try:
+                    if machine_mode != "off" and not agent_photo_request(
+                            cfg, cid, purl, f"{instance_id}/{sanitized}.jpg",
+                            absent=True):
+                        retryable += 1
+                        continue
                     sb.update("leads", match, {"photo_synced_at": now})
                     no_avatar += 1
                 except Exception:
@@ -1029,6 +1217,16 @@ def sync_photos(cfg, sb, avatar_map):
                 retryable += 1  # upload failed — retry next run, lead untouched
                 continue
 
+            if machine_mode != "off":
+                if not agent_photo_request(
+                        cfg, cid, purl, path, resp.content, ctype):
+                    # The old bucket may have the bytes, but the authenticated
+                    # destination still needs a retry before this candidate can
+                    # be marked complete in Supabase.
+                    retryable += 1
+                    continue
+                machine_uploaded += 1
+
             try:
                 sb.update("leads", match,
                           {"photo_path": path, "photo_synced_at": now})
@@ -1036,7 +1234,8 @@ def sync_photos(cfg, sb, avatar_map):
             except Exception:
                 retryable += 1  # storage has the object; PATCH retries next run
 
-        print(f"photo sync: {uploaded} uploaded, {no_avatar} no-avatar, "
+        print(f"photo sync: {uploaded} uploaded, {machine_uploaded} authenticated, "
+              f"{no_avatar} no-avatar, "
               f"{retryable} retryable (of {len(candidates)} candidates)")
     except Exception as e:
         print(f"photo sync failed ({e}) — will retry after next sync")
@@ -2042,7 +2241,7 @@ def cmd_sync(args):
         # Photo mirroring runs after the leads push, opt-in per notebook. Off by
         # default so the first backfill is a deliberate rollout, not an ambush.
         if cfg.get("sync_photos"):
-            sync_photos(cfg, sb, demo["avatar_map"])
+            sync_photos(cfg, sb, demo["avatar_map"], mode)
     except Exception as e:
         sb.update("sync_runs", {"id": run["id"]}, {
             "status": "error", "error": str(e)[:2000],
