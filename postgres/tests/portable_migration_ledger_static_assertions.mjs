@@ -41,12 +41,12 @@ const MANIFEST_PATH = join(BASELINE_DIR, 'ledger.manifest.json');
 // session's own new file would flag itself. The session after adds it. S17 is
 // that session for 004, which is why 004 appears below *and* in PROTECTED_PATHS.
 //
-// 005 graduated on that schedule under B2, 006 under S14, 007 under S18 and 008
-// under S21 — every step 001..008 is now in both lists. Promotion happens only
-// once the owner has applied the step, because PROTECTED_PATHS means "already
-// applied, never touch again" and an unapplied step may still need a correction.
-// 008 spent one session written-but-unapplied for exactly that reason, and S21
-// promotes it in the same edit that applied it.
+// 005 graduated on that schedule under B2, 006 under S14, 007 under S18, 008
+// under S21, and 009 and 010 under S22 — every step 001..010 is now in both
+// lists. Promotion happens only once the owner has applied the step, because
+// PROTECTED_PATHS means "already applied, never touch again" and an unapplied
+// step may still need a correction. 008 spent one session written-but-unapplied
+// for exactly that reason, and S21 promotes it in the same edit that applied it.
 const IMMUTABLE_BASELINE = {
   '001_portable_business_baseline.sql':
     '4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415',
@@ -64,6 +64,10 @@ const IMMUTABLE_BASELINE = {
     'cf99c5a2c06b9b1c11305b9d1d6e23880e9d64efe3fddc6e7c299372a9d47e77',
   '008_ai_system_auto_advance_execute.sql':
     'cf3db7c6713ed53489120cdafecaa36154bddf45104e3daa574c7b15988a0796',
+  '009_machine_ingest_path.sql':
+    'ae8e9fb9ad11aef10e58a773451bafb8aae5b35ec58d438a8047c6d888dd8267',
+  '010_machine_schema_usage.sql':
+    'b993324b7b741754284cdea213e5f7aa79a842706dfbf32e6a94df67e0f939c2',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -168,6 +172,19 @@ const PROTECTED_PATHS = [
   // owner declined the apply on 2026-08-06, and PROTECTED_PATHS means "already
   // applied, never touch again" rather than "written".
   'postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql',
+  // Added by S22, the session after S21, on the same schedule for the same
+  // reason: 009 and 010 are both applied to the live project (ledger 10/10,
+  // applied as app_migration under the owner's explicit authorisation), so they
+  // are now as immutable as 001..008. S21 could not promote either — this list
+  // is checked against the diff since the merge base, so the session that
+  // introduces an artifact would have its own new file flagged as a violation.
+  //
+  // 010 is the correction to 009's omitted schema grant, and it is a separate
+  // step precisely because 009 was already applied when the omission surfaced.
+  // Both are frozen here for the same reason: an applied step's bytes are pinned
+  // in app_ledger.applied_migration on every database that received it.
+  'postgres/tenant-baseline/v1/009_machine_ingest_path.sql',
+  'postgres/tenant-baseline/v1/010_machine_schema_usage.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
