@@ -29,6 +29,23 @@ provide. `ops/src/runtime/s26-runtime.ts` wires the composition into
 `preflight → plan → owner approval → apply/resume → verify` rather than calling
 providers from a CLI or recovery helper.
 
+## Reviewed direct-control-plane mappings
+
+Only provider capabilities with a bounded, documented official REST operation
+are called directly by the S26 adapters. The code contains no generic provider
+request surface.
+
+| Provider | Direct official mapping | Deliberately bridged |
+|---|---|---|
+| Neon | `POST /v2/projects` creates the deterministic project with `org_id` and `project.name`/`project.region_id`; `GET /v2/projects/{project_id}` observes readiness. | Inspection that combines catalog/ownership evidence, portable baseline and ordered migration application, SQL/RLS smoke checks, and schema/data recovery. Neon’s project API is not a portable migration or recovery API. |
+| Cloudflare R2 | `POST /client/v4/accounts/{account_id}/r2/buckets` creates the fixed `lead-photos` bucket. R2 buckets are private by default. | Object/RLS smoke checks and metadata/private-object recovery, which need server-held data-plane access and recovery controls. |
+| Vercel | `POST /v11/projects?teamId=…` and `POST /v10/projects/{id}/domains?teamId=…`. | Inspection, environment-value resolution, pinned build/promotion/schedule evidence, rollback/verification, and deployment recovery. These require source/value/recovery evidence that is not accepted from an owner caller. |
+
+The adapter privately normalizes official responses to the canonical operation
+results and derives ownership evidence only from the deterministic name,
+approved scope, and registry marker. An existing resource is never adopted from
+a direct response alone; mismatched or incomplete ownership stays quarantined.
+
 Better Auth, SMTP, domain, and source-repository operations are carried through
 the closed [`s26-control-plane.v1` bridge contract](./s26-control-plane-bridge.md).
 The bridge is not deployed by this contract; an absent bridge blocks concrete

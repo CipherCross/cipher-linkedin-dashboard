@@ -17,6 +17,7 @@ export * from "./providers/apis.js";
 export * from "./providers/s26-provider-backed.js";
 export * from "./providers/s26-concrete-clients.js";
 export * from "./providers/s26-bridge-contract.js";
+export * from "./bridge/s26-control-plane-service.js";
 export * from "./providers/hosting.js";
 export * from "./providers/hosting-fake.js";
 export * from "./providers/hosting-tenant.js";

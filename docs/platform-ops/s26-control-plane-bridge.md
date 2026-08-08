@@ -5,9 +5,11 @@ Status: **local contract only; no bridge deployment or provider request has occu
 ## Purpose
 
 The S26 bridge supplies the application-owned provider capabilities that do not
-have a safe, complete direct control-plane mapping: Better Auth configuration
-and identity recovery, custom SMTP verification, domain authority inspection,
-and pinned source-repository inspection. It is not a general HTTP proxy and
+have a safe, complete direct control-plane mapping: portable Postgres schema,
+RLS, smoke, and recovery work; Better Auth configuration and identity recovery;
+R2 object/recovery checks; hosting evidence/value/recovery work; custom SMTP
+verification; domain authority inspection; and pinned source-repository
+inspection. It is not a general HTTP proxy and
 never accepts caller-selected URLs, headers, SQL, shell commands, environment
 maps, credential values, or arbitrary provider payloads.
 
@@ -20,7 +22,10 @@ uses them.
 
 | Capability | Allowed operations |
 |---|---|
+| Data | `inspect`, `portable-schema-apply`, `smoke`, `recovery-capture`, `recovery-restore`, `recovery-verify` |
 | Better Auth identity | `inspect`, `configure`, `support-membership`, `company-admin-invite`, `smoke`, `recovery-capture`, `recovery-restore`, `recovery-verify` |
+| Object storage | `smoke`, `recovery-capture`, `recovery-restore`, `recovery-verify` |
+| Hosting evidence | `inspect`, `environment-bind`, `build`, `schedules`, `promote`, `rollback`, `verify`, `recovery-capture`, `recovery-restore`, `recovery-verify` |
 | SMTP | `inspect`, `configure`, `smoke` |
 | Domain | `inspect` |
 | Source repository | `inspect` |
@@ -35,6 +40,20 @@ The endpoint base is an approved HTTPS-only configuration value. Its bearer
 credential is resolved only from the closed `s26.bridge_token` macOS Keychain
 label and is redacted before any error or output reaches the registry, MCP, or
 CLI.
+
+## Local service implementation
+
+`ops/src/bridge/s26-control-plane-service.ts` implements this contract as a
+local request handler. It opens no listener, resolves no configuration, and
+contacts no provider. A separately approved deployment may mount this handler
+later. The handler accepts POST requests on only the paths above, validates
+closed per-route request and response schemas, passes a named route plus typed
+input to a server-side backend, redacts failures, and rejects mismatched
+ownership-marker evidence. Timeouts, throttling, and 5xx-equivalent backend
+errors are returned as `outcome_unknown` with only an opaque provider request
+ID. Provider credentials remain in that future server-side backend; the owner
+runtime can supply only the bridge bearer credential from its closed Keychain
+label.
 
 ## Deployment and implementation gate
 

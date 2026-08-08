@@ -30,13 +30,22 @@ interface Call { readonly url: string; readonly method: string; readonly body: s
 function recordingFetch(calls: Call[], body: unknown = { providerRequestId: "req_s26" }): ProviderFetch {
   return async (url, init) => {
     calls.push({ url, method: init.method, body: init.body });
-    return { ok: true, status: 200, headers: { get: () => "req_s26" }, json: async () => body };
+    const pathname = new URL(url).pathname;
+    const mapped = pathname === "/v2/projects"
+      ? { project: { id: "neon-project", name: "lh2-disposable-disposable-lab" } }
+      : pathname === "/v11/projects"
+        ? { id: "target", name: "lh2-disposable-disposable-lab" }
+        : pathname.endsWith("/domains")
+          ? { name: "disposable.example.test", verified: true }
+          : body;
+    return { ok: true, status: 200, headers: { get: () => "req_s26" }, json: async () => mapped };
   };
 }
 
 function configuration(calls: Call[], body?: unknown) {
   return {
     baseUrl: "https://provider.example.test",
+    scopeId: "provider-scope",
     credential: { resolve: async () => "local-test-credential" },
     fetch: recordingFetch(calls, body),
   };
@@ -56,6 +65,8 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   await neon.applySchema({ projectId: "neon-project", baselineVersion: 53, migrationVersions: [54], targetSchemaVersion: 54 });
   await betterAuth.createCompanyAdminAndInvite({ projectId: "tenant-auth", adminEmail: "admin@example.test" });
   await r2.configurePrivateStorage({ projectId: "r2-bucket", bucketId: "lead-photos", visibility: "private" });
+  await vercel.createDeploymentTarget({ deterministicName: "lh2-disposable-disposable-lab", workspaceClass: "disposable", runtimeProfileId: "runtime-v1", ownership, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false });
+  await vercel.assignDomain({ targetHandle: "target", hostname: "disposable.example.test", ownership, certificateMode: "provider_managed" });
   await vercel.promoteRelease({ targetHandle: "target", releaseHandle: "release" });
   await smtp.configure({ projectId: "tenant-auth", smtpProfileId: "smtp-v1", senderDomain: "example.test", fromIdentity: "ops@example.test", smtpSecretLabels: ["label-a"] });
   await domain.inspect({ hostname: "disposable.example.test", senderDomain: "example.test", workspaceClass: "disposable" });
@@ -63,10 +74,12 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
 
   assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
     "POST /v2/projects",
-    "POST /v2/projects/neon-project/portable-postgres/apply",
+    "POST /s26/control-plane/v1/data/portable-schema-apply",
     "POST /s26/control-plane/v1/identity/company-admin-invite",
-    "POST /client/v4/accounts/r2/buckets/r2-bucket/private-storage",
-    "POST /v13/projects/target/promote",
+    "POST /client/v4/accounts/provider-scope/r2/buckets",
+    "POST /v11/projects",
+    "POST /v10/projects/target/domains",
+    "POST /s26/control-plane/v1/hosting/promote",
     "POST /s26/control-plane/v1/smtp/configure",
     "POST /s26/control-plane/v1/domain/inspect",
     "POST /s26/control-plane/v1/source-repository/inspect",
@@ -75,6 +88,10 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
     assert.equal(call.url.includes("credential"), false);
     assert.equal(call.body?.includes("authorization"), false);
   }
+  assert.equal(calls.find((call) => new URL(call.url).pathname === "/v11/projects")?.url.includes("teamId=provider-scope"), true);
+  assert.equal(calls.find((call) => new URL(call.url).pathname === "/v10/projects/target/domains")?.url.includes("teamId=provider-scope"), true);
+  assert.deepEqual(JSON.parse(calls[0]!.body!), { org_id: "neon-owner", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
+  assert.deepEqual(JSON.parse(calls[3]!.body!), { name: "lead-photos" });
 });
 
 test("S26 concrete transport quarantines unknown outcomes and redacts credentials", async () => {
@@ -126,24 +143,10 @@ test("Better Auth recovery uses the fixed S26 bridge paths", async () => {
   ]);
 });
 
-test("S26 core-facing adapters fail closed when a concrete client reports foreign ownership", async () => {
+test("direct mappings return only canonical ownership evidence", async () => {
   const calls: Call[] = [];
-  const data = new NeonPostgresOperationsClient(configuration(calls, {
-    providerRequestId: "req", providerOwnerId: "owner", resourceId: "project",
-    deterministicName: "lh2-disposable-disposable-lab", ownershipMarkerDigest: `sha256:${"b".repeat(64)}`,
-    lifecycle: "ready", adopted: false,
-  }));
-  const wrapper = new S26ProviderBackedOperations({
-    data,
-    identity: new BetterAuthOperationsClient(configuration(calls)),
-    objectStorage: new CloudflareR2OperationsClient(configuration(calls)),
-    hosting: new VercelOperationsClient(configuration(calls)),
-    email: new SmtpEmailOperationsClient(configuration(calls)),
-    domain: new DomainOperationsClient(configuration(calls)),
-    sourceRepository: new SourceRepositoryOperationsClient(configuration(calls)),
-  });
-  await assert.rejects(
-    wrapper.onboarding.data.createOrAdoptProject({ organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab", regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership }),
-    (error: unknown) => error instanceof OpsError && error.code === "provider_error",
-  );
+  const data = new NeonPostgresOperationsClient(configuration(calls));
+  const resource = await data.createOrAdoptProject({ organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab", regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership });
+  assert.equal(resource.ownershipMarkerDigest, ownership.digest);
+  assert.equal(JSON.stringify(resource).includes("local-test-credential"), false);
 });

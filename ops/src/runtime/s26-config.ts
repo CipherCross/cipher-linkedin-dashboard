@@ -35,6 +35,7 @@ const platformSecretName = z.enum([
 const providerConfig = z.strictObject({
   base_url: HTTPS_URL,
   credential_name: platformSecretName,
+  scope_id: identifier.optional(),
 });
 
 const catalogEntry = z.strictObject({
@@ -129,8 +130,8 @@ const s26ConfigSchema = z.strictObject({
   config_version: z.literal("s26-owner-runtime.v1"),
   providers: z.strictObject({
     neon: providerConfig.extend({ credential_name: z.literal("neon.operations_token") }),
-    r2: providerConfig.extend({ credential_name: z.literal("r2.operations_token") }),
-    vercel: providerConfig.extend({ credential_name: z.literal("vercel.operations_token") }),
+    r2: providerConfig.extend({ credential_name: z.literal("r2.operations_token"), scope_id: identifier }),
+    vercel: providerConfig.extend({ credential_name: z.literal("vercel.operations_token"), scope_id: identifier }),
     bridge: providerConfig.extend({ credential_name: z.literal("s26.bridge_token") }),
   }),
   profile,
@@ -169,13 +170,14 @@ function resolver(
 }
 
 function providerHttp(
-  config: { readonly base_url: string; readonly credential_name: PlatformSecretName },
+  config: { readonly base_url: string; readonly credential_name: PlatformSecretName; readonly scope_id?: string | undefined },
   store: SecretStore,
   redactor: Redactor,
 ): ProviderHttpConfiguration {
   return {
     baseUrl: config.base_url,
     credential: resolver(store, config.credential_name, redactor),
+    ...(config.scope_id === undefined ? {} : { scopeId: config.scope_id }),
   };
 }
 

@@ -49,6 +49,8 @@ export type ProviderFetch = (url: string, init: Readonly<{ method: string; heade
 export interface ProviderHttpConfiguration {
   readonly baseUrl: string;
   readonly credential: ProviderCredentialResolver;
+  /** Adapter-private owner/account scope; never a caller-selected URL component. */
+  readonly scopeId?: string;
   /** Test-only replacement for the platform fetch implementation. */
   readonly fetch?: ProviderFetch;
 }
@@ -94,7 +96,10 @@ class PrivateProviderHttp {
       }
       const body = await response.json();
       this.#redactor.assertSecretFree(body, "provider response");
-      return body;
+      if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+        return { ...body, providerRequestId: requestId };
+      }
+      return { providerRequestId: requestId };
     } catch (error) {
       throw this.#redactor.sanitizeError(error);
     }
@@ -109,81 +114,89 @@ function result<T>(value: unknown, label: string): T {
   return value as T;
 }
 
-abstract class ConcreteRecoveryClient {
+abstract class BridgeRecoveryClient {
   protected abstract readonly http: PrivateProviderHttp;
-  protected abstract readonly prefix: string;
 
   async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> {
-    return result(await this.http.invoke("POST", `${this.prefix}/${id(request.sourceResourceId)}/recovery/capture`, {
-      tenant_slug: request.tenantSlug, recovery_target_name: request.recoveryTargetName,
-      ownership_marker_digest: request.ownership.digest,
+    return result(await this.http.invoke("POST", s26BridgePath(this.capability, "recovery-capture"), {
+      source_resource_id: request.sourceResourceId, tenant_slug: request.tenantSlug,
+      recovery_target_name: request.recoveryTargetName, ownership_marker_digest: request.ownership.digest,
     }), "recovery capture");
   }
   async restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult> {
-    return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetResourceId)}/recovery/restore`, {
-      tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId,
+    return result(await this.http.invoke("POST", s26BridgePath(this.capability, "recovery-restore"), {
+      target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId,
       artifact_manifest_digest: request.artifact.manifestDigest,
       ownership_marker_digest: request.ownership.digest,
     }), "recovery restore");
   }
   async verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification> {
-    return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetResourceId)}/recovery/verify`, {
-      tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId,
+    return result(await this.http.invoke("POST", s26BridgePath(this.capability, "recovery-verify"), {
+      target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId,
       ownership_marker_digest: request.ownership.digest,
     }), "recovery verification");
   }
+
+  protected abstract readonly capability: "data" | "objectStorage" | "hosting";
 }
 
-/** Neon control-plane plus the fixed portable-Postgres migration/recovery protocol. */
-export class NeonPostgresOperationsClient extends ConcreteRecoveryClient implements NeonOperationsApi, DataRecoveryPort {
+/** Direct Neon project control-plane mapping; portable Postgres work is bridged. */
+export class NeonPostgresOperationsClient extends BridgeRecoveryClient implements NeonOperationsApi, DataRecoveryPort {
   protected readonly http: PrivateProviderHttp;
+  protected readonly capability = "data" as const;
   protected readonly prefix = "/v2/projects";
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: DataInspectionRequest): Promise<DataInspection> { return result(await this.http.invoke("POST", "/v2/projects/inspect", { organization_id: request.organizationId, deterministic_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, backup_profile_id: request.backupProfileId, ownership_marker_digest: request.ownership.digest }), "Neon inspect"); }
-  async createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> { return result(await this.http.invoke("POST", this.prefix, { organization_id: request.organizationId, project_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, ownership_marker_digest: request.ownership.digest }), "Neon project"); }
-  async waitUntilReady(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(projectId)}/wait-ready`), "Neon readiness"); }
-  async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.projectId)}/portable-postgres/apply`, { baseline_version: request.baselineVersion, migration_versions: request.migrationVersions, target_schema_version: request.targetSchemaVersion }), "Postgres migration"); }
-  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(projectId)}/portable-postgres/smoke`, { smoke_test_ids: smokeTestIds }), "Postgres smoke"); }
+  async inspect(request: DataInspectionRequest): Promise<DataInspection> { return result(await this.http.invoke("POST", s26BridgePath("data", "inspect"), { organization_id: request.organizationId, deterministic_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, backup_profile_id: request.backupProfileId, ownership_marker_digest: request.ownership.digest }), "Neon inspection bridge"); }
+  async createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
+    const value = result<{ readonly providerRequestId: string; readonly project?: { readonly id?: string; readonly name?: string } }>(await this.http.invoke("POST", this.prefix, { org_id: request.organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
+    if (!value.project?.id || value.project.name !== request.deterministicName) throw new OpsError("provider_error", "Neon project response is incomplete");
+    return { providerRequestId: value.providerRequestId, providerOwnerId: request.organizationId, resourceId: value.project.id, deterministicName: request.deterministicName, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false };
+  }
+  async waitUntilReady(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("GET", `${this.prefix}/${id(projectId)}`), "Neon project readiness"); }
+  async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("data", "portable-schema-apply"), { project_id: request.projectId, baseline_version: request.baselineVersion, migration_versions: request.migrationVersions, target_schema_version: request.targetSchemaVersion }), "Postgres migration bridge"); }
+  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("data", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Postgres smoke bridge"); }
 }
 
 /** Better Auth is application-hosted; its reviewed admin bridge has named operations only. */
-export class BetterAuthOperationsClient extends ConcreteRecoveryClient implements IdentityOperationsApi, IdentityRecoveryPort {
+export class BetterAuthOperationsClient implements IdentityOperationsApi, IdentityRecoveryPort {
   protected readonly http: PrivateProviderHttp;
-  protected readonly prefix = "s26/control-plane/v1/identity";
-  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); }
+  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.http = new PrivateProviderHttp(configuration, redactor); }
   async inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> { return result(await this.http.invoke("POST", s26BridgePath("identity", "inspect"), { template_set_id: request.templateSetId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, release_compatibility_id: request.releaseCompatibilityId }), "Better Auth inspect"); }
   async configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "configure"), { project_id: request.projectId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, template_set_id: request.templateSetId }), "Better Auth configure"); }
   async createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "support-membership"), { project_id: projectId }), "Better Auth support membership"); }
   async createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "company-admin-invite"), { project_id: request.projectId, admin_email: request.adminEmail }), "Better Auth company invite"); }
   async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Better Auth smoke"); }
-  override async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-capture"), { source_resource_id: request.sourceResourceId, tenant_slug: request.tenantSlug, recovery_target_name: request.recoveryTargetName, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery capture"); }
-  override async restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-restore"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, artifact_manifest_digest: request.artifact.manifestDigest, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery restore"); }
-  override async verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-verify"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery verification"); }
+  async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-capture"), { source_resource_id: request.sourceResourceId, tenant_slug: request.tenantSlug, recovery_target_name: request.recoveryTargetName, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery capture"); }
+  async restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-restore"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, artifact_manifest_digest: request.artifact.manifestDigest, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery restore"); }
+  async verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-verify"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery verification"); }
 }
 
 /** Cloudflare R2 private-bucket and object-recovery client. */
-export class CloudflareR2OperationsClient extends ConcreteRecoveryClient implements ObjectStorageOperationsApi, ObjectStorageRecoveryPort {
+export class CloudflareR2OperationsClient extends BridgeRecoveryClient implements ObjectStorageOperationsApi, ObjectStorageRecoveryPort {
   protected readonly http: PrivateProviderHttp;
-  protected readonly prefix = "/client/v4/accounts/r2/buckets";
-  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); }
-  async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.projectId)}/private-storage`, { bucket_id: request.bucketId, visibility: request.visibility }), "R2 private storage"); }
-  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(projectId)}/smoke`, { smoke_test_ids: smokeTestIds, require_private_access_checks: true }), "R2 smoke"); }
+  protected readonly capability = "objectStorage" as const;
+  readonly #accountId: string;
+  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Cloudflare account scope is required"); this.#accountId = configuration.scopeId; }
+  async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket"); }
+  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("objectStorage", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds, require_private_access_checks: true }), "R2 smoke bridge"); }
 }
 
 /** Vercel deployment/configuration client. Every operation maps to one fixed route. */
-export class VercelOperationsClient extends ConcreteRecoveryClient implements HostingOperationsApi, HostingRecoveryPort {
+export class VercelOperationsClient extends BridgeRecoveryClient implements HostingOperationsApi, HostingRecoveryPort {
   protected readonly http: PrivateProviderHttp;
-  protected readonly prefix = "/v13/projects";
-  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return result(await this.http.invoke("POST", "/v13/projects/inspect", { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspect"); }
-  async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> { return result(await this.http.invoke("POST", this.prefix, { name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, ownership_marker_digest: request.ownership.digest, automatic_promotion_enabled: false, isolated_previews_enabled: false }), "Vercel deployment target"); }
-  async bindEnvironment(request: EnvironmentBindingRequest): Promise<EnvironmentBindingResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/env/production`, { bindings: request.bindings.map((binding) => ({ name: binding.name, value_class: binding.valueClass, source_kind: binding.source.kind })) }), "Vercel environment binding"); }
-  async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/deployments`, { revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build"); }
-  async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/domains`, { hostname: request.hostname, certificate_mode: request.certificateMode, ownership_marker_digest: request.ownership.digest }), "Vercel domain"); }
-  async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/release-schedules`, { release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules"); }
-  async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/promote`, { release_handle: request.releaseHandle }), "Vercel promotion"); }
-  async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/rollback`, { release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback"); }
-  async verifyDeployment(request: DeploymentVerificationRequest): Promise<HostingVerificationReport> { return result(await this.http.invoke("POST", `${this.prefix}/${id(request.targetHandle)}/verify`, { expected_active_release_handle: request.expectedActiveReleaseHandle, expected_revision_id: request.expectedRevisionId, expected_hostname: request.expectedHostname, expected_schedules: request.expectedSchedules, runtime_check_ids: request.runtimeCheckIds }), "Vercel verification"); }
+  protected readonly capability = "hosting" as const;
+  readonly #teamId: string;
+  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Vercel team scope is required"); this.#teamId = configuration.scopeId; }
+  #projectPath(version: string, handle?: string, suffix = ""): string { return `/v${version}/projects${handle ? `/${id(handle)}` : ""}${suffix}?teamId=${id(this.#teamId)}`; }
+  async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "inspect"), { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspection bridge"); }
+  async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> { const value = result<{ readonly providerRequestId: string; readonly id?: string; readonly name?: string }>(await this.http.invoke("POST", this.#projectPath("11"), { name: request.deterministicName }), "Vercel project"); if (!value.id || value.name !== request.deterministicName) throw new OpsError("provider_error", "Vercel project response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: value.id, deterministicName: request.deterministicName, workspaceClass: request.workspaceClass, runtimeProfileId: request.runtimeProfileId, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false }; }
+  async bindEnvironment(request: EnvironmentBindingRequest): Promise<EnvironmentBindingResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "environment-bind"), { target_handle: request.targetHandle, scope: request.scope, bindings: request.bindings.map((binding) => ({ name: binding.name, value_class: binding.valueClass, source_kind: binding.source.kind })) }), "Vercel environment bridge"); }
+  async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
+  async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> { const value = result<{ readonly providerRequestId: string; readonly name?: string; readonly verified?: boolean }>(await this.http.invoke("POST", this.#projectPath("10", request.targetHandle, "/domains"), { name: request.hostname }), "Vercel domain"); if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest }; }
+  async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
+  async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "promote"), { target_handle: request.targetHandle, release_handle: request.releaseHandle }), "Vercel promotion bridge"); }
+  async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "rollback"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback bridge"); }
+  async verifyDeployment(request: DeploymentVerificationRequest): Promise<HostingVerificationReport> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "verify"), { target_handle: request.targetHandle, expected_active_release_handle: request.expectedActiveReleaseHandle, expected_revision_id: request.expectedRevisionId, expected_hostname: request.expectedHostname, expected_schedules: request.expectedSchedules, runtime_check_ids: request.runtimeCheckIds }), "Vercel verification bridge"); }
 }
 
 export class SmtpEmailOperationsClient implements EmailOperationsApi {
