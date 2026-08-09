@@ -92,6 +92,15 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   assert.equal(calls.find((call) => new URL(call.url).pathname === "/v10/projects/target/domains")?.url.includes("teamId=provider-scope"), true);
   assert.deepEqual(JSON.parse(calls[0]!.body!), { org_id: "neon-owner", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
   assert.deepEqual(JSON.parse(calls[3]!.body!), { name: "lead-photos" });
+  assert.deepEqual(JSON.parse(calls[4]!.body!), {
+    name: "lh2-disposable-disposable-lab",
+    environmentVariables: [{
+      key: "LH2_OWNERSHIP_MARKER_DIGEST",
+      value: ownership.digest,
+      type: "plain",
+      target: ["production", "preview"],
+    }],
+  });
 });
 
 test("S26 concrete transport quarantines unknown outcomes and redacts credentials", async () => {

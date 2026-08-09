@@ -1,0 +1,80 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "lh2-s26-control-plane",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "minify": true,
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.sql", "**/*.json"],
+      "fallthrough": true
+    }
+  ],
+  "vars": {
+    "NEON_API_BASE_URL": "https://console.neon.tech/api/v2",
+    "NEON_ORGANIZATION_ID": "org-damp-hill-86577285",
+    "NEON_DATABASE_NAME": "neondb",
+    "NEON_OWNER_ROLE_NAME": "neondb_owner",
+    "VERCEL_API_BASE_URL": "https://api.vercel.com",
+    "VERCEL_TEAM_ID": "team_AB0nAOId1mR7gHxPldsG9f2u",
+    "VERCEL_BUILD_RECIPE_ID": "spa-plus-http-handlers-v1",
+    "RESEND_API_BASE_URL": "https://api.resend.com",
+    "RESEND_SMTP_PROFILE_ID": "resend-eu-west-1",
+    "RESEND_SENDER_DOMAIN": "ciphercross.dev",
+    "RESEND_FROM_EMAIL": "noreply@ciphercross.dev",
+    "RESEND_FROM_IDENTITY": "CipherCross <noreply@ciphercross.dev>",
+    "BETTER_AUTH_BASE_URL": "https://s26-disposable-lab.app.ciphercross.dev",
+    "SOURCE_REPOSITORY_API_BASE_URL": "https://api.github.com",
+    "SOURCE_REPOSITORY_OWNER": "CipherCross",
+    "SOURCE_REPOSITORY_NAME": "cipher-linkedin-dashboard",
+    "APPROVED_SOURCE_GIT_SHA": "51f7eefaff62edb7e5c5c4bef5a2cab254a532a0",
+    "RECOVERY_OBJECT_PREFIX": "s26-control-plane/recovery/v1"
+  },
+  "secrets": {
+    "required": [
+      "BRIDGE_BEARER_SECRET",
+      "NEON_API_TOKEN",
+      "NEON_REGION_ID",
+      "NEON_TIER_ID",
+      "NEON_COMPUTE_ID",
+      "NEON_BACKUP_PROFILE_ID",
+      "VERCEL_API_TOKEN",
+      "RESEND_API_KEY",
+      "RESEND_SMOKE_RECIPIENT",
+      "BETTER_AUTH_SESSION_SECRET",
+      "BETTER_AUTH_TEMPLATE_SET_ID",
+      "RELEASE_COMPATIBILITY_ID",
+      "APPROVED_APPLICATION_VERSION",
+      "APPROVED_SCHEDULE_MANIFEST_DIGEST",
+      "TENANT_DATABASE_URL",
+      "TENANT_DATA_API_PUBLIC_KEY",
+      "TENANT_DATA_API_ADMIN_KEY",
+      "TENANT_SCHEDULE_INVOKE_SECRET",
+      "TENANT_INGEST_INVOKE_SECRET",
+      "TENANT_TOOL_BRIDGE_SECRET",
+      "SOURCE_REPOSITORY_TOKEN"
+    ]
+  },
+  "r2_buckets": [
+    {
+      "binding": "CONTROL_PLANE_OBJECTS",
+      "bucket_name": "linkedin-campaign-dashboard"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  }
+}

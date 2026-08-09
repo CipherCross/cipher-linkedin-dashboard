@@ -118,7 +118,7 @@ export interface S26BridgeRequest {
   readonly body: unknown;
 }
 
-export interface S26BridgeResponse { readonly status: 200 | 400 | 401 | 404 | 409 | 502; readonly body: unknown; }
+export interface S26BridgeResponse { readonly status: 200 | 400 | 401 | 404 | 409 | 502 | 503; readonly body: unknown; }
 
 export class S26ControlPlaneBridgeService {
   constructor(
@@ -146,7 +146,13 @@ export class S26ControlPlaneBridgeService {
         return { status: 400, body: { code: "schema_validation_failed" } };
       }
       const safe = this.redactor.sanitizeError(error);
-      const status = safe.code === "outcome_unknown" ? 502 : safe.code === "provider_error" ? 409 : 400;
+      const status = safe.code === "outcome_unknown"
+        ? 502
+        : safe.code === "secret_input_required" || safe.code === "secret_store_error"
+          ? 503
+          : safe.code === "provider_error"
+            ? 409
+            : 400;
       return { status, body: { code: safe.code, provider_request_id: typeof safe.details.provider_request_id === "string" ? safe.details.provider_request_id : undefined } };
     }
   }
