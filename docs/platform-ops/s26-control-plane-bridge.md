@@ -1,6 +1,6 @@
 # S26 control-plane bridge contract
 
-Status: **local contract only; no bridge deployment or provider request has occurred**
+Status: **deployable Worker implemented locally; no bridge deployment or provider request has occurred**
 
 ## Purpose
 
@@ -41,34 +41,50 @@ credential is resolved only from the closed `s26.bridge_token` macOS Keychain
 label and is redacted before any error or output reaches the registry, MCP, or
 CLI.
 
-## Local service implementation
+## Local Worker implementation
 
 `ops/src/bridge/s26-control-plane-service.ts` implements this contract as a
-local request handler. It opens no listener, resolves no configuration, and
-contacts no provider. A separately approved deployment may mount this handler
-later. The handler accepts POST requests on only the paths above, validates
-closed per-route request and response schemas, passes a named route plus typed
-input to a server-side backend, redacts failures, and rejects mismatched
-ownership-marker evidence. Timeouts, throttling, and 5xx-equivalent backend
-errors are returned as `outcome_unknown` with only an opaque provider request
-ID. Provider credentials remain in that future server-side backend; the owner
-runtime can supply only the bridge bearer credential from its closed Keychain
-label.
+local request handler. `ops/src/worker/index.ts` mounts it as the fixed
+`lh2-s26-control-plane` Cloudflare Worker, and
+`ops/src/worker/backend.ts` implements only the named operations above. The
+HTTP boundary accepts POST only, authenticates with the single
+`BRIDGE_BEARER_SECRET` binding using a timing-safe comparison, rejects bodies
+over 64 KiB, and never logs a body or authorization value.
+
+Provider credentials, approved catalog IDs, database connections, and generated
+tenant values are server-side Worker bindings. Their types are generated from
+`ops/wrangler.jsonc`; there is no hand-written Worker environment interface.
+The configuration pins the Neon organization, Vercel team, Resend profile,
+source repository, full application Git SHA, Worker name, R2 binding,
+compatibility date/flags, and production observability.
+
+Portable PostgreSQL operations import only the repository's immutable ledger,
+migration, smoke, and recovery SQL. Every pinned digest is checked before a
+database connection is used, and callers can never supply SQL. Better Auth is
+application-hosted against Neon Postgres. R2 recovery copies a bounded snapshot
+through the Worker binding. Vercel values resolve only through a fixed
+name/class/source allowlist, and build/schedule/rollout verification reads
+provider state instead of manufacturing evidence. Timeouts, throttling, 5xx
+responses, and ambiguous database or R2 mutations return `outcome_unknown`
+with only an opaque request ID.
+
+The Worker has been type-checked, tested in workerd, schema-validated, and
+bundled with a local Wrangler deployment dry run. None of those checks deploys
+or contacts a provider control plane.
 
 ## Deployment and implementation gate
 
-The bridge must be implemented and deployed through a separately approved
-provider change before a live S26 preflight can use it. Its implementation must:
+The bridge must be deployed through a separately approved provider change
+before a live S26 preflight can use it. Before deployment, the owner must verify:
 
-1. authenticate and authorize the owner-local bridge credential;
-2. validate each request and response against the named operation contract;
-3. keep provider credentials server-side and redact provider failures;
-4. classify timeout, throttling, and 5xx outcomes as `outcome_unknown` with an
-   opaque provider request ID;
-5. verify ownership markers before returning an adoption, recovery, or domain
-   result; and
-6. expose no apply/restore behavior until the operations core reaches that
-   owner-approved effect.
+1. the exact Worker source commit and generated bindings;
+2. every required secret and catalog binding listed in `ops/wrangler.jsonc`;
+3. the fixed Neon, Vercel, Resend, R2, Better Auth, and source-repository scopes;
+4. that the pinned application release implements the approved Neon/Better Auth
+   and fixed hosting-value profile; and
+5. that the resulting `workers.dev` base is installed under the closed
+   owner-local `s26.bridge_base_url` configuration and its bearer value is
+   installed separately under the `s26.bridge_token` Keychain label.
 
 Bridge deployment alone does not authorize tenant creation, schema application,
 environment binding, an invite, recovery restore, or any S27/S28 work. After it
