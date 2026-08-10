@@ -136,6 +136,15 @@ function requiredSecret(value: string | undefined): string {
   return typeof value === "string" ? value : "";
 }
 
+export function s26WorkerRequestLog(request: Request, response: Response): Readonly<Record<string, unknown>> {
+  return {
+    event: "s26_bridge_request",
+    method: request.method,
+    path: new URL(request.url).pathname,
+    status: response.status,
+  };
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const response = await handleS26WorkerRequest(request, {
@@ -143,33 +152,12 @@ export default {
       backend: new S26WorkerBackend(env),
       redactorSecrets: [
         requiredSecret(env.NEON_API_TOKEN),
-        requiredSecret(env.NEON_REGION_ID),
-        requiredSecret(env.NEON_TIER_ID),
-        requiredSecret(env.NEON_COMPUTE_ID),
-        requiredSecret(env.NEON_BACKUP_PROFILE_ID),
         requiredSecret(env.VERCEL_API_TOKEN),
         requiredSecret(env.RESEND_API_KEY),
-        requiredSecret(env.RESEND_SMOKE_RECIPIENT),
-        requiredSecret(env.BETTER_AUTH_SESSION_SECRET),
-        requiredSecret(env.BETTER_AUTH_TEMPLATE_SET_ID),
-        requiredSecret(env.RELEASE_COMPATIBILITY_ID),
-        requiredSecret(env.APPROVED_APPLICATION_VERSION),
-        requiredSecret(env.APPROVED_SCHEDULE_MANIFEST_DIGEST),
-        requiredSecret(env.TENANT_DATABASE_URL),
-        requiredSecret(env.TENANT_DATA_API_PUBLIC_KEY),
-        requiredSecret(env.TENANT_DATA_API_ADMIN_KEY),
-        requiredSecret(env.TENANT_SCHEDULE_INVOKE_SECRET),
-        requiredSecret(env.TENANT_INGEST_INVOKE_SECRET),
-        requiredSecret(env.TENANT_TOOL_BRIDGE_SECRET),
         requiredSecret(env.SOURCE_REPOSITORY_TOKEN),
       ],
     });
-    console.log(JSON.stringify({
-      event: "s26_bridge_request",
-      method: request.method,
-      path: new URL(request.url).pathname,
-      status: response.status,
-    }));
+    console.log(JSON.stringify(s26WorkerRequestLog(request, response)));
     return response;
   },
 } satisfies ExportedHandler<Env>;

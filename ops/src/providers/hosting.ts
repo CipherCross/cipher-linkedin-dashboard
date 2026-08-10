@@ -150,7 +150,8 @@ export type HostingValueClass = "server_secret" | "server_public" | "public_buil
 export type HostingValueSourceKind =
   | "secret_label"
   | "generated_secret"
-  | "derived_from_plan";
+  | "derived_from_plan"
+  | "derived_from_owned_resource";
 
 /**
  * A binding declares *where a value comes from*, never the value. A
@@ -173,6 +174,10 @@ export interface EnvironmentBindingRequest {
   readonly targetHandle: HostingTargetHandle;
   readonly scope: "production";
   readonly bindings: readonly HostingValueBinding[];
+  /** S26 supplies the already-created, registry-owned data resource here. */
+  readonly dataProjectHandle?: string;
+  readonly dataProjectName?: string;
+  readonly ownership?: OwnershipMarker;
 }
 
 /** Carries names, classes and source *kinds* only — never a value or a label. */

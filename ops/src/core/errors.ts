@@ -15,6 +15,7 @@ export type OpsErrorCode =
   | "plan_expired"
   | "plan_invalidated"
   | "provider_error"
+  | "provider_readiness_blocked"
   | "provider_snapshot_drift"
   | "recovery_conflict"
   | "redaction_violation"

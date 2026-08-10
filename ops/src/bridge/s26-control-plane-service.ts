@@ -55,7 +55,18 @@ const requestSchemas = {
   "domain.inspect": z.strictObject({ hostname: z.string().min(1).max(253), sender_domain: z.string().min(1).max(253), workspace_class: workspaceClass }),
   "sourceRepository.inspect": z.strictObject({ source_git_sha: z.string().regex(/^[0-9a-f]{40}$/), compatibility_entry_id: identifier, application_version: identifier }),
   "hosting.inspect": z.strictObject({ deterministic_name: z.string().min(1).max(200), workspace_class: workspaceClass, runtime_profile_id: identifier, required_schedule_count: z.number().int().nonnegative(), required_server_value_count: z.number().int().nonnegative(), required_public_value_count: z.number().int().nonnegative(), ownership_marker_digest: digest }),
-  "hosting.environment-bind": z.strictObject({ target_handle: identifier, scope: z.literal("production"), bindings: z.array(z.strictObject({ name: z.string().min(1).max(120), value_class: z.enum(["server_secret", "server_public", "public_build"]), source_kind: z.enum(["secret_label", "generated_secret", "derived_from_plan"]) })).min(1) }),
+  "hosting.environment-bind": z.strictObject({
+    target_handle: identifier,
+    data_project_id: identifier,
+    data_project_name: z.string().min(1).max(200),
+    ownership_marker_digest: digest,
+    scope: z.literal("production"),
+    bindings: z.array(z.strictObject({
+      name: z.string().min(1).max(120),
+      value_class: z.enum(["server_secret", "server_public", "public_build"]),
+      source_kind: z.enum(["secret_label", "generated_secret", "derived_from_plan", "derived_from_owned_resource"]),
+    })).min(1),
+  }),
   "hosting.build": z.strictObject({ target_handle: identifier, revision_id: z.string().regex(/^[0-9a-f]{40}$/), build_recipe_id: identifier, public_value_names: z.array(identifier), schedule_manifest_digest: digest }),
   "hosting.schedules": z.strictObject({ target_handle: identifier, release_handle: identifier, schedules: z.array(schedule), manifest_digest: digest }),
   "hosting.promote": z.strictObject({ target_handle: identifier, release_handle: identifier }),
@@ -150,7 +161,7 @@ export class S26ControlPlaneBridgeService {
         ? 502
         : safe.code === "secret_input_required" || safe.code === "secret_store_error"
           ? 503
-          : safe.code === "provider_error"
+          : safe.code === "provider_error" || safe.code === "provider_readiness_blocked"
             ? 409
             : 400;
       return { status, body: { code: safe.code, provider_request_id: typeof safe.details.provider_request_id === "string" ? safe.details.provider_request_id : undefined } };

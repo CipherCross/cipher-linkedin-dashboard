@@ -367,6 +367,9 @@ export class OnboardingExecutor {
             this.#providers.hosting.bindEnvironment({
               targetHandle: hostingTarget.resourceId,
               scope: "production",
+              dataProjectHandle: dataProject.resourceId,
+              dataProjectName: context.dataProjectName,
+              ownership: context.ownership,
               bindings: buildTenantEnvironmentBindings({
                 tenantSlug: context.tenantSlug,
               }),

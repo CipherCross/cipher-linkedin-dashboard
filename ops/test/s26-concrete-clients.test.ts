@@ -129,6 +129,36 @@ test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   );
 });
 
+test("S26 environment binding adds only fixed apply-time data connection and session descriptors", async () => {
+  const calls: Call[] = [];
+  const hosting = new VercelOperationsClient(configuration(calls));
+  await hosting.bindEnvironment({
+    targetHandle: "target",
+    dataProjectHandle: "neon-project",
+    dataProjectName: "lh2-disposable-disposable-lab",
+    ownership,
+    scope: "production",
+    bindings: [{
+      name: "APP_BASE_URL",
+      valueClass: "server_public",
+      source: { kind: "derived_from_plan", planFieldRef: "domain.hostname" },
+    }],
+  });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0]!.body!), {
+    target_handle: "target",
+    data_project_id: "neon-project",
+    data_project_name: "lh2-disposable-disposable-lab",
+    ownership_marker_digest: ownership.digest,
+    scope: "production",
+    bindings: [
+      { name: "APP_BASE_URL", value_class: "server_public", source_kind: "derived_from_plan" },
+      { name: "DATABASE_URL", value_class: "server_secret", source_kind: "derived_from_owned_resource" },
+      { name: "AUTH_SESSION_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
+    ],
+  });
+});
+
 test("Better Auth recovery uses the fixed S26 bridge paths", async () => {
   const calls: Call[] = [];
   const identity = new BetterAuthOperationsClient(configuration(calls, {

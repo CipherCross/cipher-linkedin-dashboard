@@ -65,11 +65,28 @@ function numberArray(value: JsonRecord, name: string): readonly number[] {
   return field;
 }
 
-function requireBinding(value: string, name: string): string {
-  if (value.trim() === "") {
+function requireBinding(value: string | undefined, name: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
     throw new OpsError("secret_input_required", `Required Worker binding ${name} is not installed`);
   }
   return value;
+}
+
+function configured(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function requireConfigured(value: string | undefined, name: string): string {
+  if (!configured(value)) {
+    throw new OpsError("provider_readiness_blocked", `Required non-secret Worker configuration ${name} is not approved`);
+  }
+  return value;
+}
+
+function generateHighEntropySecret(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function validUntil(): string {
@@ -172,12 +189,13 @@ async function providerJson(input: {
   readonly token: string;
   readonly method?: "GET" | "POST" | "PATCH";
   readonly body?: JsonRecord;
+  readonly fetcher?: typeof fetch;
 }): Promise<{ readonly id: string; readonly value: JsonRecord; readonly status: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   let response: Response;
   try {
-    response = await fetch(input.url, {
+    response = await (input.fetcher ?? fetch)(input.url, {
       method: input.method ?? "GET",
       headers: {
         authorization: `Bearer ${input.token}`,
@@ -274,7 +292,19 @@ function sqlLiteral(value: string): string {
 }
 
 export class S26WorkerBackend implements S26BridgeBackend {
-  constructor(private readonly env: Env) {}
+  readonly #fetch: typeof fetch;
+  readonly #generateSecret: () => string;
+
+  constructor(
+    private readonly env: Env,
+    options: {
+      readonly fetch?: typeof fetch;
+      readonly generateSecret?: () => string;
+    } = {},
+  ) {
+    this.#fetch = options.fetch ?? fetch;
+    this.#generateSecret = options.generateSecret ?? generateHighEntropySecret;
+  }
 
   async invoke(route: S26BridgeRoute, request: unknown): Promise<unknown> {
     const input = record(request, "bridge request");
@@ -323,19 +353,24 @@ export class S26WorkerBackend implements S26BridgeBackend {
       url: `${this.env.NEON_API_BASE_URL}${path}`,
       token: requireBinding(this.env.NEON_API_TOKEN, "NEON_API_TOKEN"),
       method,
+      fetcher: this.#fetch,
       ...(body === undefined ? {} : { body }),
     });
   }
 
-  async #ownerConnectionUri(projectId: string, branchId?: string): Promise<string> {
+  async #connectionUri(projectId: string, roleName: string, branchId?: string): Promise<string> {
     const query = new URLSearchParams({
       database_name: this.env.NEON_DATABASE_NAME,
-      role_name: this.env.NEON_OWNER_ROLE_NAME,
+      role_name: roleName,
       pooled: "false",
       ...(branchId === undefined ? {} : { branch_id: branchId }),
     });
     const response = await this.#neon(`/projects/${encodeURIComponent(projectId)}/connection_uri?${query.toString()}`);
     return stringField(response.value, "uri");
+  }
+
+  #ownerConnectionUri(projectId: string, branchId?: string): Promise<string> {
+    return this.#connectionUri(projectId, this.env.NEON_OWNER_ROLE_NAME, branchId);
   }
 
   async #dataInspect(input: JsonRecord): Promise<unknown> {
@@ -355,11 +390,14 @@ export class S26WorkerBackend implements S26BridgeBackend {
       organizationAccessible: true,
       deterministicNameAvailable: existing === undefined,
       existingResourceOwned: owned,
-      regionAvailable: stringField(input, "region_id") === requireBinding(this.env.NEON_REGION_ID, "NEON_REGION_ID") && (existing === undefined || existing.region_id === input.region_id),
-      tierAvailable: stringField(input, "tier_id") === requireBinding(this.env.NEON_TIER_ID, "NEON_TIER_ID"),
-      computeAvailable: stringField(input, "compute_id") === requireBinding(this.env.NEON_COMPUTE_ID, "NEON_COMPUTE_ID"),
-      backupCompatible: stringField(input, "backup_profile_id") === requireBinding(this.env.NEON_BACKUP_PROFILE_ID, "NEON_BACKUP_PROFILE_ID"),
-      authConfigurationSupported: true,
+      regionAvailable: configured(this.env.NEON_REGION_ID) && stringField(input, "region_id") === this.env.NEON_REGION_ID && (existing === undefined || existing.region_id === input.region_id),
+      tierAvailable: configured(this.env.NEON_TIER_ID) && stringField(input, "tier_id") === this.env.NEON_TIER_ID,
+      computeAvailable: configured(this.env.NEON_COMPUTE_ID) && stringField(input, "compute_id") === this.env.NEON_COMPUTE_ID,
+      backupCompatible: configured(this.env.NEON_BACKUP_PROFILE_ID) && stringField(input, "backup_profile_id") === this.env.NEON_BACKUP_PROFILE_ID,
+      // The pinned application still requires Supabase-shaped public/admin
+      // data API credentials. Neon exposes no approved capability from which
+      // this Worker can derive those values, so readiness must remain blocked.
+      authConfigurationSupported: false,
       validUntil: validUntil(),
     };
   }
@@ -434,21 +472,19 @@ export class S26WorkerBackend implements S26BridgeBackend {
   }
 
   async #identityInspect(input: JsonRecord): Promise<unknown> {
-    requireBinding(this.env.BETTER_AUTH_SESSION_SECRET, "BETTER_AUTH_SESSION_SECRET");
     const site = new URL(stringField(input, "site_url"));
     const redirects = stringArray(input, "redirect_urls").map((value) => new URL(value));
     return {
-      templateSetApproved: stringField(input, "template_set_id") === requireBinding(this.env.BETTER_AUTH_TEMPLATE_SET_ID, "BETTER_AUTH_TEMPLATE_SET_ID"),
+      templateSetApproved: configured(this.env.BETTER_AUTH_TEMPLATE_SET_ID) && stringField(input, "template_set_id") === this.env.BETTER_AUTH_TEMPLATE_SET_ID,
       productionUrlsValid: site.protocol === "https:" && redirects.every((url) => url.protocol === "https:" && url.origin === site.origin),
       inviteFlowSupported: true,
-      releaseCompatible: stringField(input, "release_compatibility_id") === requireBinding(this.env.RELEASE_COMPATIBILITY_ID, "RELEASE_COMPATIBILITY_ID"),
+      releaseCompatible: configured(this.env.RELEASE_COMPATIBILITY_ID) && stringField(input, "release_compatibility_id") === this.env.RELEASE_COMPATIBILITY_ID,
       validUntil: validUntil(),
     };
   }
 
   async #identityConfigure(input: JsonRecord): Promise<unknown> {
     const projectId = stringField(input, "project_id");
-    requireBinding(this.env.BETTER_AUTH_SESSION_SECRET, "BETTER_AUTH_SESSION_SECRET");
     const configured = await databaseQuery(
       await this.#ownerConnectionUri(projectId),
       "SELECT to_regclass('identity.\"user\"') IS NOT NULL AS configured",
@@ -602,7 +638,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
 
   async #vercel(path: string, method: "GET" | "POST" | "PATCH" = "GET", body?: JsonRecord) {
     const separator = path.includes("?") ? "&" : "?";
-    return providerJson({ provider: "vercel", url: `${this.env.VERCEL_API_BASE_URL}${path}${separator}teamId=${encodeURIComponent(this.env.VERCEL_TEAM_ID)}`, token: requireBinding(this.env.VERCEL_API_TOKEN, "VERCEL_API_TOKEN"), method, ...(body === undefined ? {} : { body }) });
+    return providerJson({ provider: "vercel", url: `${this.env.VERCEL_API_BASE_URL}${path}${separator}teamId=${encodeURIComponent(this.env.VERCEL_TEAM_ID)}`, token: requireBinding(this.env.VERCEL_API_TOKEN, "VERCEL_API_TOKEN"), method, fetcher: this.#fetch, ...(body === undefined ? {} : { body }) });
   }
 
   async #hostingInspect(input: JsonRecord): Promise<unknown> {
@@ -623,6 +659,35 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return { controlPlaneAccessible: true, deterministicNameAvailable: existingProject === null, existingTargetOwned: owned, runtimeProfileAvailable: input.runtime_profile_id === "web-node22-1x", serverValueBindingSupported: true, publicValueBindingSupported: true, pinnedRevisionBuildSupported: true, customDomainSupported: true, scheduleCapacityAvailable: numberField(input, "required_schedule_count") <= 4, rollbackSupported: true, automaticPromotionCanBeDisabled: true, isolatedPreviewsSupported: true, validUntil: validUntil() };
   }
 
+  async #assertOwnedDataProject(projectId: string, deterministicName: string): Promise<void> {
+    const response = await this.#neon(`/projects/${encodeURIComponent(projectId)}`);
+    const project = record(response.value.project, "Neon project");
+    if (
+      stringField(project, "id") !== projectId
+      || stringField(project, "name") !== deterministicName
+      || stringField(project, "org_id") !== this.env.NEON_ORGANIZATION_ID
+    ) {
+      throw new OpsError("provider_error", "Neon project ownership or deterministic identity mismatch");
+    }
+  }
+
+  async #ownedHostingEnvironment(
+    target: string,
+    ownershipMarkerDigest: string,
+  ): Promise<{ readonly id: string; readonly value: JsonRecord; readonly status: number }> {
+    const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
+    if (stringField(project.value, "id") !== target) {
+      throw new OpsError("provider_error", "Vercel target identity mismatch");
+    }
+    const environment = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}/env`);
+    const entries = Array.isArray(environment.value.envs) ? environment.value.envs : [];
+    const owned = entries
+      .map((entry) => record(entry, "Vercel environment entry"))
+      .some((entry) => entry.key === "LH2_OWNERSHIP_MARKER_DIGEST" && entry.value === ownershipMarkerDigest);
+    if (!owned) throw new OpsError("provider_error", "Vercel target ownership marker mismatch");
+    return environment;
+  }
+
   async #hostingEnvironment(input: JsonRecord): Promise<unknown> {
     const target = stringField(input, "target_handle");
     const descriptors = Array.isArray(input.bindings)
@@ -630,7 +695,51 @@ export class S26WorkerBackend implements S26BridgeBackend {
       : [];
     if (descriptors.length === 0) throw new OpsError("unsupported_contract", "Vercel binding descriptors are absent");
 
-    const existingResponse = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}/env`);
+    const names = new Set<string>();
+    for (const descriptor of descriptors) {
+      const name = stringField(descriptor, "name");
+      if (names.has(name)) throw new OpsError("unsupported_contract", `Vercel binding descriptor ${name} is duplicated`);
+      names.add(name);
+      const approved = this.#hostingValueSpec(name);
+      if (approved.valueClass !== stringField(descriptor, "value_class") || approved.sourceKind !== stringField(descriptor, "source_kind")) {
+        throw new OpsError("unsupported_contract", `Vercel binding descriptor ${name} does not match the fixed profile`);
+      }
+    }
+
+    const unavailableDataApiNames = new Set([
+      "PUBLIC_DATA_API_KEY",
+      "VITE_SUPABASE_ANON_KEY",
+      "DATA_API_KEY",
+      "SUPABASE_ANON_KEY",
+      "DATA_API_ADMIN_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+    ]);
+    if (descriptors.some((descriptor) => unavailableDataApiNames.has(stringField(descriptor, "name")))) {
+      throw new OpsError(
+        "provider_readiness_blocked",
+        "The pinned application requires data API credentials that no approved official Neon capability can derive",
+      );
+    }
+
+    const dataProjectId = stringField(input, "data_project_id");
+    await this.#assertOwnedDataProject(dataProjectId, stringField(input, "data_project_name"));
+    const existingResponse = await this.#ownedHostingEnvironment(
+      target,
+      stringField(input, "ownership_marker_digest"),
+    );
+    const applicationConnectionUri = await this.#connectionUri(
+      dataProjectId,
+      requireConfigured(this.env.NEON_APPLICATION_ROLE_NAME, "NEON_APPLICATION_ROLE_NAME"),
+    );
+    const generated = new Map<string, string>();
+    const generatedValue = (id: string): string => {
+      const existing = generated.get(id);
+      if (existing !== undefined) return existing;
+      const value = this.#generateSecret();
+      generated.set(id, value);
+      return value;
+    };
+
     const existingValues = Array.isArray(existingResponse.value.envs) ? existingResponse.value.envs : [];
     const existingByName = new Map(
       existingValues.map((entry) => {
@@ -644,10 +753,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       const name = stringField(descriptor, "name");
       const valueClass = stringField(descriptor, "value_class");
       const sourceKind = stringField(descriptor, "source_kind");
-      const approved = this.#hostingValue(name);
-      if (approved.valueClass !== valueClass || approved.sourceKind !== sourceKind) {
-        throw new OpsError("unsupported_contract", `Vercel binding descriptor ${name} does not match the fixed profile`);
-      }
+      const approved = this.#hostingValue(name, applicationConnectionUri, generatedValue);
       const current = existingByName.get(name);
       const body = {
         key: name,
@@ -675,33 +781,55 @@ export class S26WorkerBackend implements S26BridgeBackend {
     };
   }
 
-  #hostingValue(name: string): { readonly value: string; readonly valueClass: string; readonly sourceKind: string } {
+  #hostingValueSpec(name: string): { readonly valueClass: string; readonly sourceKind: string } {
+    const fixed: Readonly<Record<string, { readonly valueClass: string; readonly sourceKind: string }>> = {
+      DATABASE_URL: { valueClass: "server_secret", sourceKind: "derived_from_owned_resource" },
+      AUTH_SESSION_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      SCHEDULE_INVOKE_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      CRON_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      INGEST_INVOKE_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      NOTIFY_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      TOOL_BRIDGE_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      MCP_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
+      PUBLIC_DATA_API_URL: { valueClass: "public_build", sourceKind: "derived_from_plan" },
+      VITE_SUPABASE_URL: { valueClass: "public_build", sourceKind: "derived_from_plan" },
+      DATA_API_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
+      SUPABASE_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
+      APP_BASE_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
+      DASHBOARD_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
+      PUBLIC_DATA_API_KEY: { valueClass: "public_build", sourceKind: "secret_label" },
+      VITE_SUPABASE_ANON_KEY: { valueClass: "public_build", sourceKind: "secret_label" },
+      DATA_API_KEY: { valueClass: "server_public", sourceKind: "secret_label" },
+      SUPABASE_ANON_KEY: { valueClass: "server_public", sourceKind: "secret_label" },
+      DATA_API_ADMIN_KEY: { valueClass: "server_secret", sourceKind: "secret_label" },
+      SUPABASE_SERVICE_ROLE_KEY: { valueClass: "server_secret", sourceKind: "secret_label" },
+    };
+    const selected = fixed[name];
+    if (selected === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
+    return selected;
+  }
+
+  #hostingValue(
+    name: string,
+    applicationConnectionUri: string,
+    generatedValue: (id: string) => string,
+  ): { readonly value: string; readonly valueClass: string; readonly sourceKind: string } {
     const baseUrl = this.env.BETTER_AUTH_BASE_URL;
     const fixed: Readonly<Record<string, { readonly value: string; readonly valueClass: string; readonly sourceKind: string }>> = {
-      DATABASE_URL: { value: requireBinding(this.env.TENANT_DATABASE_URL, "TENANT_DATABASE_URL"), valueClass: "server_secret", sourceKind: "secret_label" },
-      AUTH_SESSION_SECRET: { value: requireBinding(this.env.BETTER_AUTH_SESSION_SECRET, "BETTER_AUTH_SESSION_SECRET"), valueClass: "server_secret", sourceKind: "secret_label" },
-      SCHEDULE_INVOKE_TOKEN: { value: requireBinding(this.env.TENANT_SCHEDULE_INVOKE_SECRET, "TENANT_SCHEDULE_INVOKE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      SCHEDULE_INVOKE_SECRET: { value: requireBinding(this.env.TENANT_SCHEDULE_INVOKE_SECRET, "TENANT_SCHEDULE_INVOKE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      CRON_SECRET: { value: requireBinding(this.env.TENANT_SCHEDULE_INVOKE_SECRET, "TENANT_SCHEDULE_INVOKE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      INGEST_INVOKE_SECRET: { value: requireBinding(this.env.TENANT_INGEST_INVOKE_SECRET, "TENANT_INGEST_INVOKE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      NOTIFY_SECRET: { value: requireBinding(this.env.TENANT_INGEST_INVOKE_SECRET, "TENANT_INGEST_INVOKE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      TOOL_BRIDGE_SECRET: { value: requireBinding(this.env.TENANT_TOOL_BRIDGE_SECRET, "TENANT_TOOL_BRIDGE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      MCP_SECRET: { value: requireBinding(this.env.TENANT_TOOL_BRIDGE_SECRET, "TENANT_TOOL_BRIDGE_SECRET"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      DATABASE_URL: { value: applicationConnectionUri, valueClass: "server_secret", sourceKind: "derived_from_owned_resource" },
+      AUTH_SESSION_SECRET: { value: generatedValue("tenant.better_auth_session_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      SCHEDULE_INVOKE_SECRET: { value: generatedValue("tenant.schedule_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      CRON_SECRET: { value: generatedValue("tenant.schedule_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      INGEST_INVOKE_SECRET: { value: generatedValue("tenant.ingest_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      NOTIFY_SECRET: { value: generatedValue("tenant.ingest_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      TOOL_BRIDGE_SECRET: { value: generatedValue("tenant.tool_bridge_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
+      MCP_SECRET: { value: generatedValue("tenant.tool_bridge_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
       PUBLIC_DATA_API_URL: { value: baseUrl, valueClass: "public_build", sourceKind: "derived_from_plan" },
       VITE_SUPABASE_URL: { value: baseUrl, valueClass: "public_build", sourceKind: "derived_from_plan" },
       DATA_API_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
       SUPABASE_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
-      PUBLIC_API_BASE_URL: { value: baseUrl, valueClass: "public_build", sourceKind: "derived_from_plan" },
       APP_BASE_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
       DASHBOARD_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
-      PUBLIC_DATA_API_KEY: { value: requireBinding(this.env.TENANT_DATA_API_PUBLIC_KEY, "TENANT_DATA_API_PUBLIC_KEY"), valueClass: "public_build", sourceKind: "secret_label" },
-      VITE_SUPABASE_ANON_KEY: { value: requireBinding(this.env.TENANT_DATA_API_PUBLIC_KEY, "TENANT_DATA_API_PUBLIC_KEY"), valueClass: "public_build", sourceKind: "secret_label" },
-      DATA_API_KEY: { value: requireBinding(this.env.TENANT_DATA_API_PUBLIC_KEY, "TENANT_DATA_API_PUBLIC_KEY"), valueClass: "server_public", sourceKind: "secret_label" },
-      SUPABASE_ANON_KEY: { value: requireBinding(this.env.TENANT_DATA_API_PUBLIC_KEY, "TENANT_DATA_API_PUBLIC_KEY"), valueClass: "server_public", sourceKind: "secret_label" },
-      DATA_API_ADMIN_KEY: { value: requireBinding(this.env.TENANT_DATA_API_ADMIN_KEY, "TENANT_DATA_API_ADMIN_KEY"), valueClass: "server_secret", sourceKind: "secret_label" },
-      SUPABASE_SERVICE_ROLE_KEY: { value: requireBinding(this.env.TENANT_DATA_API_ADMIN_KEY, "TENANT_DATA_API_ADMIN_KEY"), valueClass: "server_secret", sourceKind: "secret_label" },
-      RESEND_API_KEY: { value: requireBinding(this.env.RESEND_API_KEY, "RESEND_API_KEY"), valueClass: "server_secret", sourceKind: "secret_label" },
-      EMAIL_FROM: { value: this.env.RESEND_FROM_EMAIL, valueClass: "server_public", sourceKind: "derived_from_plan" },
     };
     const selected = fixed[name];
     if (selected === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
@@ -710,7 +838,11 @@ export class S26WorkerBackend implements S26BridgeBackend {
 
   async #hostingBuild(input: JsonRecord): Promise<unknown> {
     const revision = stringField(input, "revision_id");
-    if (revision !== this.env.APPROVED_SOURCE_GIT_SHA) throw new OpsError("provider_snapshot_drift", "Source revision is not the approved pinned SHA");
+    const approvedRevision = requireConfigured(this.env.APPROVED_SOURCE_GIT_SHA, "APPROVED_SOURCE_GIT_SHA");
+    if (!/^[0-9a-f]{40}$/.test(approvedRevision)) {
+      throw new OpsError("provider_readiness_blocked", "Approved source revision is not a full owner-approved Git SHA");
+    }
+    if (revision !== approvedRevision) throw new OpsError("provider_snapshot_drift", "Source revision is not the approved pinned SHA");
     const buildRecipe = stringField(input, "build_recipe_id");
     if (buildRecipe !== this.env.VERCEL_BUILD_RECIPE_ID) throw new OpsError("unsupported_contract", "Vercel build recipe is not the fixed profile");
     const publicNames = [...stringArray(input, "public_value_names")].sort();
@@ -719,7 +851,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       throw new OpsError("unsupported_contract", "Vercel public build values are not the fixed profile");
     }
     const scheduleDigest = stringField(input, "schedule_manifest_digest");
-    if (scheduleDigest !== requireBinding(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")) {
+    if (scheduleDigest !== requireConfigured(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")) {
       throw new OpsError("provider_snapshot_drift", "Vercel schedule manifest digest is not approved");
     }
     const response = await this.#vercel("/v13/deployments", "POST", {
@@ -744,7 +876,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const manifestDigest = stringField(input, "manifest_digest");
     if (
       scheduleManifestDigestOf(expected) !== manifestDigest
-      || manifestDigest !== requireBinding(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")
+      || manifestDigest !== requireConfigured(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")
     ) {
       throw new OpsError("provider_snapshot_drift", "Vercel schedule manifest digest is not the fixed approved set");
     }
@@ -926,7 +1058,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
   }
 
   async #resend(path: string, method: "GET" | "POST" = "GET", body?: JsonRecord) {
-    return providerJson({ provider: "resend", url: `${this.env.RESEND_API_BASE_URL}${path}`, token: requireBinding(this.env.RESEND_API_KEY, "RESEND_API_KEY"), method, ...(body === undefined ? {} : { body }) });
+    return providerJson({ provider: "resend", url: `${this.env.RESEND_API_BASE_URL}${path}`, token: requireBinding(this.env.RESEND_API_KEY, "RESEND_API_KEY"), method, fetcher: this.#fetch, ...(body === undefined ? {} : { body }) });
   }
 
   async #smtpInspect(input: JsonRecord): Promise<unknown> {
@@ -982,9 +1114,31 @@ export class S26WorkerBackend implements S26BridgeBackend {
 
   async #sourceInspect(input: JsonRecord): Promise<unknown> {
     const sha = stringField(input, "source_git_sha");
-    if (sha !== this.env.APPROVED_SOURCE_GIT_SHA) throw new OpsError("provider_snapshot_drift", "Source inspection SHA is not approved");
-    const response = await providerJson({ provider: "source-repository", url: `${this.env.SOURCE_REPOSITORY_API_BASE_URL}/repos/${encodeURIComponent(this.env.SOURCE_REPOSITORY_OWNER)}/${encodeURIComponent(this.env.SOURCE_REPOSITORY_NAME)}/commits/${sha}`, token: requireBinding(this.env.SOURCE_REPOSITORY_TOKEN, "SOURCE_REPOSITORY_TOKEN") });
-    return { revisionPresent: response.value.sha === sha, releaseCompatible: stringField(input, "compatibility_entry_id") === requireBinding(this.env.RELEASE_COMPATIBILITY_ID, "RELEASE_COMPATIBILITY_ID") && stringField(input, "application_version") === requireBinding(this.env.APPROVED_APPLICATION_VERSION, "APPROVED_APPLICATION_VERSION"), artifactPinned: response.value.sha === sha, validUntil: validUntil() };
+    const approvedSha = this.env.APPROVED_SOURCE_GIT_SHA;
+    const releaseConfigured = configured(approvedSha)
+      && /^[0-9a-f]{40}$/.test(approvedSha)
+      && configured(this.env.RELEASE_COMPATIBILITY_ID)
+      && configured(this.env.APPROVED_APPLICATION_VERSION);
+    if (!releaseConfigured || sha !== approvedSha) {
+      return { revisionPresent: false, releaseCompatible: false, artifactPinned: false, validUntil: validUntil() };
+    }
+    try {
+      const response = await providerJson({ provider: "source-repository", url: `${this.env.SOURCE_REPOSITORY_API_BASE_URL}/repos/${encodeURIComponent(this.env.SOURCE_REPOSITORY_OWNER)}/${encodeURIComponent(this.env.SOURCE_REPOSITORY_NAME)}/commits/${sha}`, token: requireBinding(this.env.SOURCE_REPOSITORY_TOKEN, "SOURCE_REPOSITORY_TOKEN"), fetcher: this.#fetch });
+      const present = response.value.sha === sha;
+      return {
+        revisionPresent: present,
+        releaseCompatible: present
+          && stringField(input, "compatibility_entry_id") === this.env.RELEASE_COMPATIBILITY_ID
+          && stringField(input, "application_version") === this.env.APPROVED_APPLICATION_VERSION,
+        artifactPinned: present,
+        validUntil: validUntil(),
+      };
+    } catch (error) {
+      if (error instanceof OpsError && error.code === "provider_error" && error.details.status === 404) {
+        return { revisionPresent: false, releaseCompatible: false, artifactPinned: false, validUntil: validUntil() };
+      }
+      throw error;
+    }
   }
 
   async #storeRecovery(capability: StoredRecoveryArtifact["capability"], sourceResourceId: string, ownershipMarkerDigest: string, payload: JsonRecord, artifactId = crypto.randomUUID()): Promise<StoredRecoveryArtifact> {

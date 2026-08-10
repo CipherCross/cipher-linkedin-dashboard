@@ -138,6 +138,7 @@ const environmentBindingResult = hostingRequestResult.extend({
         "secret_label",
         "generated_secret",
         "derived_from_plan",
+        "derived_from_owned_resource",
       ]),
     }),
   ),

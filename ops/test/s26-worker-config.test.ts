@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+
+interface WorkerConfiguration {
+  readonly vars: Readonly<Record<string, string>>;
+  readonly secrets: { readonly required: readonly string[] };
+}
+
+function workerConfiguration(): WorkerConfiguration {
+  const path = fileURLToPath(new URL("../../wrangler.jsonc", import.meta.url));
+  return JSON.parse(readFileSync(path, "utf8")) as WorkerConfiguration;
+}
+
+test("S26 Worker deployment requires only genuine deployment and preflight credentials", () => {
+  const configuration = workerConfiguration();
+  assert.deepEqual(configuration.secrets.required, [
+    "BRIDGE_BEARER_SECRET",
+    "NEON_API_TOKEN",
+    "VERCEL_API_TOKEN",
+    "RESEND_API_KEY",
+    "SOURCE_REPOSITORY_TOKEN",
+  ]);
+  for (const forbidden of [
+    "TENANT_DATABASE_URL",
+    "TENANT_DATA_API_PUBLIC_KEY",
+    "TENANT_DATA_API_ADMIN_KEY",
+    "TENANT_SCHEDULE_INVOKE_SECRET",
+    "TENANT_INGEST_INVOKE_SECRET",
+    "TENANT_TOOL_BRIDGE_SECRET",
+    "BETTER_AUTH_SESSION_SECRET",
+  ]) {
+    assert.equal(configuration.secrets.required.includes(forbidden), false);
+    assert.equal(Object.hasOwn(configuration.vars, forbidden), false);
+  }
+});
+
+test("S26 provider, catalog, profile, and release selections are non-secret closed configuration", () => {
+  const { vars, secrets } = workerConfiguration();
+  for (const name of [
+    "NEON_ORGANIZATION_ID",
+    "NEON_REGION_ID",
+    "NEON_TIER_ID",
+    "NEON_COMPUTE_ID",
+    "NEON_BACKUP_PROFILE_ID",
+    "NEON_APPLICATION_ROLE_NAME",
+    "VERCEL_TEAM_ID",
+    "VERCEL_BUILD_RECIPE_ID",
+    "RESEND_SMTP_PROFILE_ID",
+    "BETTER_AUTH_TEMPLATE_SET_ID",
+    "RELEASE_COMPATIBILITY_ID",
+    "APPROVED_APPLICATION_VERSION",
+    "APPROVED_SCHEDULE_MANIFEST_DIGEST",
+    "APPROVED_SOURCE_GIT_SHA",
+  ]) {
+    assert.equal(Object.hasOwn(vars, name), true, `${name} must be a non-secret Worker variable`);
+    assert.equal(secrets.required.includes(name), false, `${name} must not be classified as a secret`);
+  }
+  assert.equal(vars.APPROVED_SOURCE_GIT_SHA, "", "this session must not choose a replacement release SHA");
+  assert.equal(/^[0-9a-f]{40}$/.test(vars.APPROVED_SOURCE_GIT_SHA), false);
+});

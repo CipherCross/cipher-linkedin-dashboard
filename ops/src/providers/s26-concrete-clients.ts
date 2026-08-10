@@ -24,6 +24,7 @@ import type {
   EnvironmentBindingResult, HostingCapabilityInspection, HostingCapabilityInspectionRequest,
   HostingVerificationReport, PromotionRequest, ReleaseBuildRequest, ReleaseBuildResult,
   RollbackRequest, RolloutResult, ScheduleRegistrationRequest, ScheduleRegistrationResult,
+  HostingValueClass, HostingValueSourceKind,
 } from "./hosting.js";
 import type {
   DomainOperationsApi, EmailOperationsApi, HostingOperationsApi, IdentityOperationsApi,
@@ -188,9 +189,34 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
   readonly #teamId: string;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Vercel team scope is required"); this.#teamId = configuration.scopeId; }
   #projectPath(version: string, handle?: string, suffix = ""): string { return `/v${version}/projects${handle ? `/${id(handle)}` : ""}${suffix}?teamId=${id(this.#teamId)}`; }
-  async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "inspect"), { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspection bridge"); }
+  async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "inspect"), { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount + 2, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspection bridge"); }
   async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> { const value = result<{ readonly providerRequestId: string; readonly id?: string; readonly name?: string }>(await this.http.invoke("POST", this.#projectPath("11"), { name: request.deterministicName, environmentVariables: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: request.ownership.digest, type: "plain", target: ["production", "preview"] }] }), "Vercel project"); if (!value.id || value.name !== request.deterministicName) throw new OpsError("provider_error", "Vercel project response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: value.id, deterministicName: request.deterministicName, workspaceClass: request.workspaceClass, runtimeProfileId: request.runtimeProfileId, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false }; }
-  async bindEnvironment(request: EnvironmentBindingRequest): Promise<EnvironmentBindingResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "environment-bind"), { target_handle: request.targetHandle, scope: request.scope, bindings: request.bindings.map((binding) => ({ name: binding.name, value_class: binding.valueClass, source_kind: binding.source.kind })) }), "Vercel environment bridge"); }
+  async bindEnvironment(request: EnvironmentBindingRequest): Promise<EnvironmentBindingResult> {
+    if (!request.dataProjectHandle || !request.dataProjectName || !request.ownership) {
+      throw new OpsError("invalid_plan", "S26 environment binding requires the owned data project context");
+    }
+    const bindings: Array<{
+      name: string;
+      value_class: HostingValueClass;
+      source_kind: HostingValueSourceKind;
+    }> = request.bindings.map((binding) => ({
+      name: binding.name,
+      value_class: binding.valueClass,
+      source_kind: binding.source.kind,
+    }));
+    bindings.push(
+      { name: "DATABASE_URL", value_class: "server_secret", source_kind: "derived_from_owned_resource" },
+      { name: "AUTH_SESSION_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
+    );
+    return result(await this.http.invoke("POST", s26BridgePath("hosting", "environment-bind"), {
+      target_handle: request.targetHandle,
+      data_project_id: request.dataProjectHandle,
+      data_project_name: request.dataProjectName,
+      ownership_marker_digest: request.ownership.digest,
+      scope: request.scope,
+      bindings,
+    }), "Vercel environment bridge");
+  }
   async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
   async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> { const value = result<{ readonly providerRequestId: string; readonly name?: string; readonly verified?: boolean }>(await this.http.invoke("POST", this.#projectPath("10", request.targetHandle, "/domains"), { name: request.hostname }), "Vercel domain"); if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest }; }
   async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
