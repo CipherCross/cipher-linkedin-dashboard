@@ -488,6 +488,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "hosting_value_contract",
+        "hosting_profile",
+        "environment_binding_digest",
+        "value_descriptors",
         "git_auto_promotion",
         "external_previews",
         "production_secret_scope",
@@ -495,6 +499,55 @@
         "public_build_value_names"
       ],
       "properties": {
+        "hosting_value_contract": { "const": "hosting.environment.v2" },
+        "hosting_profile": { "const": "s26.application-hosting.v1" },
+        "environment_binding_digest": { "$ref": "#/$defs/digest" },
+        "value_descriptors": {
+          "type": "array",
+          "minItems": 14,
+          "maxItems": 14,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value_class", "source"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+              "value_class": { "enum": ["server_secret", "server_public", "public_build"] },
+              "source": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "generatorId"],
+                    "properties": {
+                      "kind": { "const": "generated_secret" },
+                      "generatorId": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "planFieldRef"],
+                    "properties": {
+                      "kind": { "const": "derived_from_plan" },
+                      "planFieldRef": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "resourceRef"],
+                    "properties": {
+                      "kind": { "const": "derived_from_owned_resource" },
+                      "resourceRef": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
         "git_auto_promotion": { "const": false },
         "external_previews": { "const": false },
         "production_secret_scope": { "const": "production_only" },
@@ -505,8 +558,10 @@
         "public_build_value_names": {
           "type": "array",
           "uniqueItems": true,
+          "minItems": 1,
+          "maxItems": 1,
           "items": {
-            "enum": ["PUBLIC_DATA_API_URL", "PUBLIC_DATA_API_KEY"]
+            "const": "VITE_AUTH_PATH"
           }
         }
       }

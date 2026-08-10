@@ -129,7 +129,7 @@ test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   );
 });
 
-test("S26 environment binding adds only fixed apply-time data connection and session descriptors", async () => {
+test("S26 environment binding forwards only the already-closed application descriptors", async () => {
   const calls: Call[] = [];
   const hosting = new VercelOperationsClient(configuration(calls));
   await hosting.bindEnvironment({
@@ -139,9 +139,9 @@ test("S26 environment binding adds only fixed apply-time data connection and ses
     ownership,
     scope: "production",
     bindings: [{
-      name: "APP_BASE_URL",
-      valueClass: "server_public",
-      source: { kind: "derived_from_plan", planFieldRef: "domain.hostname" },
+      name: "VITE_AUTH_PATH",
+      valueClass: "public_build",
+      source: { kind: "derived_from_plan", planFieldRef: "application.auth_path" },
     }],
   });
   assert.equal(calls.length, 1);
@@ -152,9 +152,12 @@ test("S26 environment binding adds only fixed apply-time data connection and ses
     ownership_marker_digest: ownership.digest,
     scope: "production",
     bindings: [
-      { name: "APP_BASE_URL", value_class: "server_public", source_kind: "derived_from_plan" },
-      { name: "DATABASE_URL", value_class: "server_secret", source_kind: "derived_from_owned_resource" },
-      { name: "AUTH_SESSION_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
+      {
+        name: "VITE_AUTH_PATH",
+        value_class: "public_build",
+        source_kind: "derived_from_plan",
+        source: { kind: "derived_from_plan", planFieldRef: "application.auth_path" },
+      },
     ],
   });
 });

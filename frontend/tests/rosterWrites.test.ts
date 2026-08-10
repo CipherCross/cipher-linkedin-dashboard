@@ -1,25 +1,11 @@
 /**
- * The rule that keeps a member id from crossing providers on the way *out*.
+ * The local fail-closed decision for roster-keyed writes.
  *
- * The roster slice made reading `leads.assigned_to` correct on the Neon path by
- * serving the roster from the same database. Writing it is a separate question
- * with a different answer: `/api/pipeline`'s member-keyed actions — `assign`,
- * `invite_member`, `update_member`, `add_member`, `set_member_active` and the
- * six follow-up actions — have **no Neon branch at all** and resolve every id
- * against Supabase, whatever `NEON_WRITES_DEFAULT` says. So a Neon
- * `team_members.id` sent there is an integer that names a different person, on a
- * request that succeeds.
- *
- * These are pure functions for the reason `dashboardReads.ts` is a module. What is
- * provable here is the **decision**. Whether the hooks that must consult it
- * actually do was, for three sessions, covered by `tsc -b`, by a browser run and
- * by nothing else — and `N-ROSTER.md`'s mutations 9 and 10 measured exactly that
- * by deleting both calls without reddening anything.
- *
- * `tests/writeRefusals.test.tsx` now covers the call sites with jsdom. Keep the
- * two files apart: this one can enumerate rosters and paths cheaply, that one
- * proves the refusal reaches the network boundary. A single file doing both would
- * do neither thoroughly.
+ * The server resolves a Supabase or Neon member from its matching actor-scoped
+ * store before assignment or a follow-up action. This small pure suite covers
+ * the recognized source boundary; `writeRefusals.test.tsx` covers the hooks that
+ * carry the ID to the network boundary. The old team-administration pipeline
+ * mutations remain permanently closed because `/api/identity` owns that work.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -45,27 +31,20 @@ const member = (id: number, active = true): TeamMember => ({
 const ROSTER = [member(1), member(2), member(3, false)]
 
 describe('which roster may be written back', () => {
-  it('permits the Supabase roster and refuses the Neon one', () => {
-    // The direction is the whole assertion. `supabase` is what every deployment
-    // runs today and what `/api/pipeline` expects; `neon` is the id space it
-    // does not read.
+  it('permits the Supabase and Neon rosters through their matching write paths', () => {
     expect(memberWritesAllowed('supabase')).toBe(true)
-    expect(memberWritesAllowed('neon')).toBe(false)
+    expect(memberWritesAllowed('neon')).toBe(true)
   })
 
-  it('refuses anything that is not exactly `supabase`', () => {
-    // Fail-closed in shape as well as in fact: a third path added later must
-    // block until somebody decides it should not, rather than being permitted by
-    // a predicate written before it existed.
-    for (const path of ['', 'Supabase', ' supabase ', 'neon', 'unknown', 'true']) {
-      expect(memberWritesAllowed(path as RosterPath)).toBe(path === 'supabase')
+  it('refuses any unreviewed roster path', () => {
+    for (const path of ['', 'Supabase', ' supabase ', 'Neon', 'unknown', 'true']) {
+      expect(memberWritesAllowed(path as RosterPath)).toBe(false)
     }
   })
 
-  it('gates the Team page on the same predicate as assignment', () => {
-    // `invite_member` and `update_member` are keyed on `team_members.id` exactly
-    // as `assign` is, so a second predicate could only ever drift from this one.
-    expect(teamAdminWritesAllowed).toBe(memberWritesAllowed)
+  it('keeps the retired legacy team-administration controls closed', () => {
+    expect(teamAdminWritesAllowed('supabase')).toBe(false)
+    expect(teamAdminWritesAllowed('neon')).toBe(false)
   })
 })
 
@@ -74,11 +53,8 @@ describe('the assignment vocabulary', () => {
     expect(assignableMembers(ROSTER, 'supabase')).toEqual(ROSTER)
   })
 
-  it('offers nobody on the Neon path, while the roster itself stays whole', () => {
-    // Two lists, not one. `memberName(lead.assigned_to)` must keep resolving —
-    // that is what the roster slice bought — while nothing may be *chosen*.
-    expect(assignableMembers(ROSTER, 'neon')).toEqual([])
-    expect(ROSTER).toHaveLength(3)
+  it('offers the Neon roster to its actor-scoped Neon write path', () => {
+    expect(assignableMembers(ROSTER, 'neon')).toEqual(ROSTER)
   })
 
   it('copies rather than aliasing, so a caller cannot filter the roster in place', () => {
@@ -88,10 +64,8 @@ describe('the assignment vocabulary', () => {
     expect(ROSTER).toHaveLength(3)
   })
 
-  it('states the cause rather than the symptom', () => {
-    // "No teammates to choose" would read as an empty team, which is precisely
-    // the confidently-wrong message this slice exists to stop producing.
-    expect(MEMBER_WRITES_BLOCKED).toMatch(/wrong person/)
+  it('states the actual refusal instead of looking like an empty team', () => {
+    expect(MEMBER_WRITES_BLOCKED).toMatch(/does not recognize/)
     expect(MEMBER_WRITES_BLOCKED).not.toMatch(/^No /)
   })
 })

@@ -22,9 +22,9 @@ import {
 
 const OWNER_UUID = "11111111-1111-4111-8111-111111111111";
 const APPROVED_AT = new Date("2026-08-07T14:46:13.317Z");
-const APPROVED_PLAN_ID = "pln_66208efcb421005d5dcd6a68";
+const APPROVED_PLAN_ID = "pln_9d4a5a6591acb7c939183e1e";
 const APPROVED_PLAN_DIGEST =
-  "sha256:1db7ac7d971ff68177c7474676e31280c660d56dae60cfc22ccd7aeaa7403be4";
+  "sha256:3e883aa3cf6608aba71b7c16449070792db9d4fed470d328a3987cacab2ea420";
 const APPROVED_IDEMPOTENCY_KEY = "s26-disposable-lab-20260807-01";
 
 async function approvedCore(

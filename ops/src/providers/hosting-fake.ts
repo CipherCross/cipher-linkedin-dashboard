@@ -17,6 +17,7 @@ import { canonicalJson, sha256Digest } from "../core/canonical.js";
 import { OpsError } from "../core/errors.js";
 import { FakeProviderBase, type FailureRule } from "./fakes.js";
 import {
+  hostingEnvironmentBindingDigest,
   normalizeSchedules,
   scheduleAsJson,
   scheduleManifestDigest,
@@ -197,17 +198,7 @@ export class FakeHostingProvider extends FakeProviderBase implements HostingProv
       valueClass: binding.valueClass,
       sourceKind: binding.source.kind,
     }));
-    const bindingDigest = sha256Digest(
-      canonicalJson(
-        [...descriptors]
-          .sort((left, right) => (left.name < right.name ? -1 : 1))
-          .map((descriptor) => ({
-            name: descriptor.name,
-            value_class: descriptor.valueClass,
-            source_kind: descriptor.sourceKind,
-          })),
-      ),
-    );
+    const bindingDigest = hostingEnvironmentBindingDigest(request.bindings);
     return this.idempotentEffect(
       "bindEnvironment",
       `${request.targetHandle}:${bindingDigest}`,
@@ -241,11 +232,18 @@ export class FakeHostingProvider extends FakeProviderBase implements HostingProv
       request.targetHandle,
       request.revisionId,
       request.buildRecipeId,
+      request.environmentBindingDigest,
       request.scheduleManifestDigest,
       [...request.publicValueNames].sort().join(","),
     ].join("|");
     return this.idempotentEffect("buildRelease", key, () => {
       const state = this.#requireTarget(request.targetHandle);
+      if (state.binding?.bindingDigest !== request.environmentBindingDigest) {
+        throw new OpsError(
+          "provider_error",
+          "Pinned build environment digest does not match the bound descriptors",
+        );
+      }
       if (!/^[0-9a-f]{40}$/.test(request.revisionId)) {
         throw new OpsError(
           "provider_error",
@@ -261,6 +259,7 @@ export class FakeHostingProvider extends FakeProviderBase implements HostingProv
         revisionPinned: true,
         buildRecipeId: request.buildRecipeId,
         publicValueNames: [...request.publicValueNames].sort(),
+        environmentBindingDigest: request.environmentBindingDigest,
         scheduleManifestDigest: request.scheduleManifestDigest,
         artifactDigest: sha256Digest(key),
         status: "verified",
@@ -525,6 +524,7 @@ export class FakeHostingProvider extends FakeProviderBase implements HostingProv
           buildRecipeId: activeRelease?.buildRecipeId ?? null,
           artifactDigest: activeRelease?.artifactDigest ?? null,
           publicValueNames: activeRelease?.publicValueNames ?? [],
+          environmentBindingDigest: activeRelease?.environmentBindingDigest ?? null,
           scheduleManifestDigest: activeRelease?.scheduleManifestDigest ?? null,
         },
         rollout: {

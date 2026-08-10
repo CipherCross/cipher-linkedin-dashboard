@@ -1212,6 +1212,16 @@ class P4CHostingValueResolver implements HostingValueResolver {
       if (source.planFieldRef === "domain.hostname") {
         return `https://${slug}.${this.#state.config.platformDomain}`;
       }
+      if (source.planFieldRef === "identity.base_url") {
+        return `https://${slug}.${this.#state.config.platformDomain}`;
+      }
+      if (source.planFieldRef === "application.auth_path") return "identity";
+      if (
+        source.planFieldRef === "application.neon_reads_default" ||
+        source.planFieldRef === "application.neon_writes_default" ||
+        source.planFieldRef === "application.neon_ai_path_default"
+      ) return "neon";
+      if (source.planFieldRef === "application.neon_photos_default") return "disabled";
       if (source.planFieldRef === "resources.data_api_url") {
         return (await this.#credentials()).url;
       }
@@ -1228,6 +1238,12 @@ class P4CHostingValueResolver implements HostingValueResolver {
         `Unknown value generator ${source.generatorId}`,
       );
       return ensureTenantSecret(this.#state, slug, name);
+    }
+    if (source.kind === "derived_from_owned_resource") {
+      throw new OpsError(
+        "unsupported_contract",
+        "The legacy P4-C runtime cannot resolve an S26 role-scoped value",
+      );
     }
     const credentials = await this.#credentials();
     if (source.secretLabel === tenantSecretLabel(slug, "data.public_key")) {

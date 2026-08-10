@@ -3,6 +3,10 @@ import { Pool, type PoolClient, type QueryResult } from "@neondatabase/serverles
 
 import { OpsError } from "../core/errors.js";
 import { canonicalJson, sha256Digest, type JsonValue } from "../core/canonical.js";
+import {
+  CANONICAL_TENANT_ENVIRONMENT,
+} from "../providers/hosting-tenant.js";
+import { hostingEnvironmentBindingDigest } from "../providers/hosting.js";
 import type { S26BridgeBackend } from "../bridge/s26-control-plane-service.js";
 import type { S26BridgeRoute } from "../providers/s26-bridge-contract.js";
 import { applyPinnedPortablePostgres, runPinnedPortableSmoke, runPinnedRestoreVerification } from "./pinned-postgres.js";
@@ -394,9 +398,9 @@ export class S26WorkerBackend implements S26BridgeBackend {
       tierAvailable: configured(this.env.NEON_TIER_ID) && stringField(input, "tier_id") === this.env.NEON_TIER_ID,
       computeAvailable: configured(this.env.NEON_COMPUTE_ID) && stringField(input, "compute_id") === this.env.NEON_COMPUTE_ID,
       backupCompatible: configured(this.env.NEON_BACKUP_PROFILE_ID) && stringField(input, "backup_profile_id") === this.env.NEON_BACKUP_PROFILE_ID,
-      // The pinned application still requires Supabase-shaped public/admin
-      // data API credentials. Neon exposes no approved capability from which
-      // this Worker can derive those values, so readiness must remain blocked.
+      // A local contract is not provider-readiness evidence. Keep the live
+      // gate closed until an separately approved deployment verifies every
+      // application role, identity runtime and hosting binding.
       authConfigurationSupported: false,
       validUntil: validUntil(),
     };
@@ -701,23 +705,29 @@ export class S26WorkerBackend implements S26BridgeBackend {
       if (names.has(name)) throw new OpsError("unsupported_contract", `Vercel binding descriptor ${name} is duplicated`);
       names.add(name);
       const approved = this.#hostingValueSpec(name);
-      if (approved.valueClass !== stringField(descriptor, "value_class") || approved.sourceKind !== stringField(descriptor, "source_kind")) {
+      const source = record(descriptor.source, `Vercel binding source for ${name}`);
+      if (
+        approved.valueClass !== stringField(descriptor, "value_class") ||
+        approved.sourceKind !== stringField(descriptor, "source_kind") ||
+        canonicalJson(source as JsonValue) !== canonicalJson(approved.source as JsonValue)
+      ) {
         throw new OpsError("unsupported_contract", `Vercel binding descriptor ${name} does not match the fixed profile`);
       }
     }
-
-    const unavailableDataApiNames = new Set([
-      "PUBLIC_DATA_API_KEY",
-      "VITE_SUPABASE_ANON_KEY",
-      "DATA_API_KEY",
-      "SUPABASE_ANON_KEY",
-      "DATA_API_ADMIN_KEY",
-      "SUPABASE_SERVICE_ROLE_KEY",
-    ]);
-    if (descriptors.some((descriptor) => unavailableDataApiNames.has(stringField(descriptor, "name")))) {
+    const expectedNames = CANONICAL_TENANT_ENVIRONMENT.map((entry) => entry.name).sort();
+    if (JSON.stringify([...names].sort()) !== JSON.stringify(expectedNames)) {
+      throw new OpsError(
+        "unsupported_contract",
+        "Vercel binding descriptors must be the complete closed S26 application profile",
+      );
+    }
+    if (this.env.S26_APPLICATION_HOSTING_CONTRACT !== "hosting.environment.v2") {
+      throw new OpsError("unsupported_contract", "Worker application hosting contract is not the reviewed S26 version");
+    }
+    if (this.env.S26_APPLICATION_DATA_PLANE_READY !== "true") {
       throw new OpsError(
         "provider_readiness_blocked",
-        "The pinned application requires data API credentials that no approved official Neon capability can derive",
+        "The S26 application data-plane contract is local-only and is not approved for provider application",
       );
     }
 
@@ -727,10 +737,24 @@ export class S26WorkerBackend implements S26BridgeBackend {
       target,
       stringField(input, "ownership_marker_digest"),
     );
-    const applicationConnectionUri = await this.#connectionUri(
-      dataProjectId,
-      requireConfigured(this.env.NEON_APPLICATION_ROLE_NAME, "NEON_APPLICATION_ROLE_NAME"),
-    );
+    const applicationConnectionUris: Readonly<Record<string, string>> = {
+      NEON_DATABASE_URL: await this.#connectionUri(
+        dataProjectId,
+        requireConfigured(this.env.NEON_APPLICATION_ROLE_NAME, "NEON_APPLICATION_ROLE_NAME"),
+      ),
+      NEON_AI_DATABASE_URL: await this.#connectionUri(
+        dataProjectId,
+        requireConfigured(this.env.NEON_AI_ROLE_NAME, "NEON_AI_ROLE_NAME"),
+      ),
+      NEON_MACHINE_DATABASE_URL: await this.#connectionUri(
+        dataProjectId,
+        requireConfigured(this.env.NEON_MACHINE_ROLE_NAME, "NEON_MACHINE_ROLE_NAME"),
+      ),
+      IDENTITY_STORE_DATABASE_URL: await this.#connectionUri(
+        dataProjectId,
+        requireConfigured(this.env.NEON_IDENTITY_STORE_ROLE_NAME, "NEON_IDENTITY_STORE_ROLE_NAME"),
+      ),
+    };
     const generated = new Map<string, string>();
     const generatedValue = (id: string): string => {
       const existing = generated.get(id);
@@ -753,7 +777,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       const name = stringField(descriptor, "name");
       const valueClass = stringField(descriptor, "value_class");
       const sourceKind = stringField(descriptor, "source_kind");
-      const approved = this.#hostingValue(name, applicationConnectionUri, generatedValue);
+      const approved = this.#hostingValue(name, applicationConnectionUris, generatedValue);
       const current = existingByName.get(name);
       const body = {
         key: name,
@@ -767,73 +791,58 @@ export class S26WorkerBackend implements S26BridgeBackend {
       lastRequestId = response.id;
       resultBindings.push({ name, valueClass, sourceKind });
     }
-    const digestValue: JsonValue = resultBindings.map((entry) => ({
-      name: entry.name,
-      valueClass: entry.valueClass,
-      sourceKind: entry.sourceKind,
-    }));
     return {
       hostingRequestId: lastRequestId,
       targetHandle: target,
       scope: "production",
       bindings: resultBindings,
-      bindingDigest: sha256Digest(canonicalJson(digestValue)),
+      bindingDigest: hostingEnvironmentBindingDigest(
+        CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({
+          name: entry.name,
+          valueClass: entry.valueClass,
+          source: entry.source,
+        })),
+      ),
     };
   }
 
-  #hostingValueSpec(name: string): { readonly valueClass: string; readonly sourceKind: string } {
-    const fixed: Readonly<Record<string, { readonly valueClass: string; readonly sourceKind: string }>> = {
-      DATABASE_URL: { valueClass: "server_secret", sourceKind: "derived_from_owned_resource" },
-      AUTH_SESSION_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      SCHEDULE_INVOKE_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      CRON_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      INGEST_INVOKE_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      NOTIFY_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      TOOL_BRIDGE_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      MCP_SECRET: { valueClass: "server_secret", sourceKind: "generated_secret" },
-      PUBLIC_DATA_API_URL: { valueClass: "public_build", sourceKind: "derived_from_plan" },
-      VITE_SUPABASE_URL: { valueClass: "public_build", sourceKind: "derived_from_plan" },
-      DATA_API_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
-      SUPABASE_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
-      APP_BASE_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
-      DASHBOARD_URL: { valueClass: "server_public", sourceKind: "derived_from_plan" },
-      PUBLIC_DATA_API_KEY: { valueClass: "public_build", sourceKind: "secret_label" },
-      VITE_SUPABASE_ANON_KEY: { valueClass: "public_build", sourceKind: "secret_label" },
-      DATA_API_KEY: { valueClass: "server_public", sourceKind: "secret_label" },
-      SUPABASE_ANON_KEY: { valueClass: "server_public", sourceKind: "secret_label" },
-      DATA_API_ADMIN_KEY: { valueClass: "server_secret", sourceKind: "secret_label" },
-      SUPABASE_SERVICE_ROLE_KEY: { valueClass: "server_secret", sourceKind: "secret_label" },
-    };
-    const selected = fixed[name];
+  #hostingValueSpec(name: string): {
+    readonly valueClass: string;
+    readonly sourceKind: string;
+    readonly source: (typeof CANONICAL_TENANT_ENVIRONMENT)[number]["source"];
+  } {
+    const selected = CANONICAL_TENANT_ENVIRONMENT.find((entry) => entry.name === name);
     if (selected === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
-    return selected;
+    return {
+      valueClass: selected.valueClass,
+      sourceKind: selected.source.kind,
+      source: selected.source,
+    };
   }
 
   #hostingValue(
     name: string,
-    applicationConnectionUri: string,
+    applicationConnectionUris: Readonly<Record<string, string>>,
     generatedValue: (id: string) => string,
   ): { readonly value: string; readonly valueClass: string; readonly sourceKind: string } {
-    const baseUrl = this.env.BETTER_AUTH_BASE_URL;
-    const fixed: Readonly<Record<string, { readonly value: string; readonly valueClass: string; readonly sourceKind: string }>> = {
-      DATABASE_URL: { value: applicationConnectionUri, valueClass: "server_secret", sourceKind: "derived_from_owned_resource" },
-      AUTH_SESSION_SECRET: { value: generatedValue("tenant.better_auth_session_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      SCHEDULE_INVOKE_SECRET: { value: generatedValue("tenant.schedule_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      CRON_SECRET: { value: generatedValue("tenant.schedule_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      INGEST_INVOKE_SECRET: { value: generatedValue("tenant.ingest_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      NOTIFY_SECRET: { value: generatedValue("tenant.ingest_invoke_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      TOOL_BRIDGE_SECRET: { value: generatedValue("tenant.tool_bridge_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      MCP_SECRET: { value: generatedValue("tenant.tool_bridge_secret"), valueClass: "server_secret", sourceKind: "generated_secret" },
-      PUBLIC_DATA_API_URL: { value: baseUrl, valueClass: "public_build", sourceKind: "derived_from_plan" },
-      VITE_SUPABASE_URL: { value: baseUrl, valueClass: "public_build", sourceKind: "derived_from_plan" },
-      DATA_API_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
-      SUPABASE_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
-      APP_BASE_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
-      DASHBOARD_URL: { value: baseUrl, valueClass: "server_public", sourceKind: "derived_from_plan" },
+    const selected = this.#hostingValueSpec(name);
+    const generated: Readonly<Record<string, string>> = {
+      IDENTITY_SESSION_SECRET: generatedValue("tenant.identity_session_secret"),
+      CRON_SECRET: generatedValue("tenant.cron_secret"),
+      NOTIFY_SECRET: generatedValue("tenant.notify_secret"),
+      MCP_SECRET: generatedValue("tenant.mcp_secret"),
     };
-    const selected = fixed[name];
-    if (selected === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
-    return selected;
+    const planned: Readonly<Record<string, string>> = {
+      IDENTITY_BASE_URL: requireConfigured(this.env.BETTER_AUTH_BASE_URL, "BETTER_AUTH_BASE_URL"),
+      VITE_AUTH_PATH: "identity",
+      NEON_READS_DEFAULT: "neon",
+      NEON_WRITES_DEFAULT: "neon",
+      NEON_AI_PATH_DEFAULT: "neon",
+      NEON_PHOTOS_DEFAULT: "disabled",
+    };
+    const value = applicationConnectionUris[name] ?? generated[name] ?? planned[name];
+    if (value === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
+    return { value, ...selected };
   }
 
   async #hostingBuild(input: JsonRecord): Promise<unknown> {
@@ -846,9 +855,23 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const buildRecipe = stringField(input, "build_recipe_id");
     if (buildRecipe !== this.env.VERCEL_BUILD_RECIPE_ID) throw new OpsError("unsupported_contract", "Vercel build recipe is not the fixed profile");
     const publicNames = [...stringArray(input, "public_value_names")].sort();
-    const expectedPublicNames = ["PUBLIC_DATA_API_KEY", "PUBLIC_DATA_API_URL", "VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_URL"];
+    const expectedPublicNames = CANONICAL_TENANT_ENVIRONMENT
+      .filter((entry) => entry.valueClass === "public_build")
+      .map((entry) => entry.name)
+      .sort();
     if (JSON.stringify(publicNames) !== JSON.stringify(expectedPublicNames)) {
       throw new OpsError("unsupported_contract", "Vercel public build values are not the fixed profile");
+    }
+    const environmentBindingDigest = stringField(input, "environment_binding_digest");
+    const expectedEnvironmentBindingDigest = hostingEnvironmentBindingDigest(
+      CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({
+        name: entry.name,
+        valueClass: entry.valueClass,
+        source: entry.source,
+      })),
+    );
+    if (environmentBindingDigest !== expectedEnvironmentBindingDigest) {
+      throw new OpsError("provider_snapshot_drift", "Vercel environment binding digest is not the closed S26 profile");
     }
     const scheduleDigest = stringField(input, "schedule_manifest_digest");
     if (scheduleDigest !== requireConfigured(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")) {
@@ -866,7 +889,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     if (observedRevision !== revision) {
       throw new OpsError("provider_snapshot_drift", "Vercel built a revision other than the approved pinned SHA");
     }
-    return { hostingRequestId: deployment.id, releaseHandle: release, targetHandle: stringField(input, "target_handle"), revisionId: revision, revisionPinned: true, buildRecipeId: buildRecipe, publicValueNames: publicNames, scheduleManifestDigest: scheduleDigest, artifactDigest: sha256Digest(canonicalJson({ release, revision })), status: "verified" };
+    return { hostingRequestId: deployment.id, releaseHandle: release, targetHandle: stringField(input, "target_handle"), revisionId: revision, revisionPinned: true, buildRecipeId: buildRecipe, publicValueNames: publicNames, environmentBindingDigest, scheduleManifestDigest: scheduleDigest, artifactDigest: sha256Digest(canonicalJson({ release, revision, environment_binding_digest: environmentBindingDigest })), status: "verified" };
   }
 
   async #hostingSchedules(input: JsonRecord): Promise<unknown> {
@@ -920,6 +943,62 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return typeof latest.id === "string" ? latest.id : null;
   }
 
+  /**
+   * Recovery and verification retain only the closed descriptors and provider
+   * metadata. Environment values are neither read into an artifact nor echoed.
+   */
+  #closedHostingEnvironmentMetadata(entries: readonly unknown[]): {
+    readonly bindings: readonly {
+      readonly name: string;
+      readonly valueClass: string;
+      readonly sourceKind: string;
+      readonly type: string;
+      readonly target: readonly string[];
+    }[];
+    readonly bindingDigest: string;
+  } {
+    const expected = new Map(CANONICAL_TENANT_ENVIRONMENT.map((entry) => [entry.name, entry]));
+    const bindings = entries
+      .map((entry) => record(entry, "Vercel environment entry"))
+      .filter((entry) => entry.key !== "LH2_OWNERSHIP_MARKER_DIGEST")
+      .map((entry) => {
+        const name = stringField(entry, "key");
+        const spec = expected.get(name);
+        if (spec === undefined) {
+          throw new OpsError("unsupported_contract", "Vercel environment contains a value outside the closed S26 profile");
+        }
+        return {
+          name,
+          valueClass: spec.valueClass,
+          sourceKind: spec.source.kind,
+          type: stringField(entry, "type"),
+          target: Array.isArray(entry.target)
+            ? entry.target.filter((item): item is string => typeof item === "string").sort()
+            : [],
+        };
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
+    if (
+      JSON.stringify(bindings.map((binding) => binding.name)) !==
+      JSON.stringify([...expected.keys()].sort())
+    ) {
+      throw new OpsError("provider_error", "Vercel environment does not contain the complete closed S26 profile");
+    }
+    return {
+      bindings,
+      bindingDigest: hostingEnvironmentBindingDigest(
+        bindings.map((binding) => {
+          const spec = this.#hostingValueSpec(binding.name);
+          return {
+            name: binding.name,
+            valueClass: binding.valueClass,
+            source: spec.source,
+          };
+        }),
+      ),
+    };
+  }
+
   async #hostingVerify(input: JsonRecord): Promise<unknown> {
     const target = stringField(input, "target_handle");
     const expected = stringField(input, "expected_active_release_handle");
@@ -947,13 +1026,17 @@ export class S26WorkerBackend implements S26BridgeBackend {
       ? response.value.alias.filter((entry): entry is string => typeof entry === "string")
       : [];
     const domainMatches = aliases.includes(expectedHostname);
-    const publicValueNames = Array.isArray(environment.value.envs)
-      ? environment.value.envs
-        .map((entry) => record(entry, "Vercel environment entry"))
-        .filter((entry) => entry.type !== "sensitive")
-        .map((entry) => stringField(entry, "key"))
-      : [];
-    const passed = ready && activeMatches && revisionMatches && schedulesMatch && domainMatches;
+    const environmentMetadata = this.#closedHostingEnvironmentMetadata(
+      Array.isArray(environment.value.envs) ? environment.value.envs : [],
+    );
+    const publicValueNames = environmentMetadata.bindings
+      .filter((entry) => entry.valueClass === "public_build")
+      .map((entry) => entry.name);
+    const environmentTypesMatch = environmentMetadata.bindings.every((entry) =>
+      entry.type === (entry.valueClass === "server_secret" ? "sensitive" : "encrypted") &&
+      JSON.stringify(entry.target) === JSON.stringify(["production"]),
+    );
+    const passed = ready && activeMatches && revisionMatches && schedulesMatch && domainMatches && environmentTypesMatch;
     const checkIds = stringArray(input, "runtime_check_ids");
     const manifestDigest = scheduleManifestDigestOf(expectedScheduleSet);
     return {
@@ -990,6 +1073,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
         buildRecipeId: "spa-plus-http-handlers-v1",
         artifactDigest: sha256Digest(canonicalJson({ release: expected, revision: expectedRevision })),
         publicValueNames,
+        environmentBindingDigest: environmentMetadata.bindingDigest,
         scheduleManifestDigest: manifestDigest,
       },
       rollout: {
@@ -1005,17 +1089,13 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const response = await this.#vercel(`/v9/projects/${encodeURIComponent(source)}`);
     const environment = await this.#vercel(`/v9/projects/${encodeURIComponent(source)}/env`);
     const entries = Array.isArray(environment.value.envs) ? environment.value.envs : [];
-    const environmentMetadata = entries.map((entry) => {
-      const value = record(entry, "Vercel environment entry");
-      return {
-        key: stringField(value, "key"),
-        type: stringField(value, "type"),
-        target: Array.isArray(value.target)
-          ? value.target.filter((item): item is string => typeof item === "string")
-          : [],
-      };
+    const environmentMetadata = this.#closedHostingEnvironmentMetadata(entries);
+    const artifact = await this.#storeRecovery("hosting", source, stringField(input, "ownership_marker_digest"), {
+      project_id: source,
+      latest_deployment_id: this.#latestDeploymentId(response.value),
+      environment: environmentMetadata.bindings,
+      environment_binding_digest: environmentMetadata.bindingDigest,
     });
-    const artifact = await this.#storeRecovery("hosting", source, stringField(input, "ownership_marker_digest"), { project_id: source, latest_deployment_id: this.#latestDeploymentId(response.value), environment: environmentMetadata });
     return this.#artifactResponse(artifact, ["deployment_configuration_metadata"], response.id);
   }
 
@@ -1037,24 +1117,15 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const response = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
     const environment = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}/env`);
     const expectedEnvironment = Array.isArray(artifact.payload.environment) ? artifact.payload.environment : [];
-    const observedEnvironment = Array.isArray(environment.value.envs)
-      ? environment.value.envs.map((entry) => {
-        const value = record(entry, "Vercel environment entry");
-        return {
-          key: stringField(value, "key"),
-          type: stringField(value, "type"),
-          target: Array.isArray(value.target)
-            ? value.target.filter((item): item is string => typeof item === "string")
-            : [],
-        };
-      })
-      : [];
-    const byKey = (left: unknown, right: unknown) =>
-      stringField(record(left, "Vercel recovery environment entry"), "key")
-        .localeCompare(stringField(record(right, "Vercel recovery environment entry"), "key"));
-    const metadataMatches = canonicalJson(JSON.parse(JSON.stringify([...expectedEnvironment].sort(byKey))) as JsonValue)
-      === canonicalJson(JSON.parse(JSON.stringify([...observedEnvironment].sort(byKey))) as JsonValue);
-    return { providerRequestId: response.id, coverage: ["deployment_configuration_metadata"], passed: target === artifact.sourceResourceId && this.#latestDeploymentId(response.value) === artifact.payload.latest_deployment_id && metadataMatches, checkedAt: new Date().toISOString() };
+    const observedEnvironment = this.#closedHostingEnvironmentMetadata(
+      Array.isArray(environment.value.envs) ? environment.value.envs : [],
+    );
+    const expectedDigest = typeof artifact.payload.environment_binding_digest === "string"
+      ? artifact.payload.environment_binding_digest
+      : "";
+    const metadataMatches = canonicalJson(expectedEnvironment as JsonValue)
+      === canonicalJson(observedEnvironment.bindings as JsonValue);
+    return { providerRequestId: response.id, coverage: ["deployment_configuration_metadata"], passed: target === artifact.sourceResourceId && this.#latestDeploymentId(response.value) === artifact.payload.latest_deployment_id && metadataMatches && expectedDigest === observedEnvironment.bindingDigest, checkedAt: new Date().toISOString() };
   }
 
   async #resend(path: string, method: "GET" | "POST" = "GET", body?: JsonRecord) {

@@ -1,226 +1,188 @@
 /**
- * The canonical tenant hosting profile: which environment values a tenant
- * deployment carries, what class each one is, where each one comes from, and
- * which runtime profile, build recipe and rollback reason the platform pins.
+ * Closed S26 application-hosting value contract.
  *
- * This is the "new environment variable names" surface. It belongs to the
- * hosting port because binding environment values *is* one of the seven hosting
- * capabilities: the port owns the names it writes, and a provider-neutral port
- * cannot own names that spell a specific data vendor.
- *
- * **Dual naming.** Every canonical name carries the `legacyName` that the
- * running application reads today. `buildTenantEnvironmentBindings` emits both,
- * with the same value class and the same source, so a deployment produced
- * through this contract still satisfies every consumer that has not yet been
- * ported. The legacy column is removed when `frontend/` and `sync-agent/` stop
- * reading it — S13–S15 and S21–S23, not here.
- *
- * No value ever appears in this module. A binding declares a *source*: a
- * key-store secret name, a generator ID, or a reference to a field of the
- * approved plan. Resolution happens inside an adapter, and the resolved value
- * is written to the provider and then dropped.
+ * This is deliberately not a migration map. The old Supabase-shaped variables
+ * are absent, and every entry below is carried by the approved plan, the bind
+ * request, the pinned build, recovery metadata, and verification metadata as a
+ * name/class/source descriptor. Values and credential labels never appear.
  */
 
-import type {
-  HostingValueBinding,
-  HostingValueClass,
-  HostingValueSource,
+import {
+  hostingEnvironmentBindingDigest,
+  type HostingValueBinding,
+  type HostingValueClass,
+  type HostingValueSource,
 } from "./hosting.js";
 
-/** Version of the canonical environment binding contract. */
-export const HOSTING_ENVIRONMENT_CONTRACT = "hosting.environment.v1" as const;
+/** Versioned closed contract for the S26 application's hosting values. */
+export const HOSTING_ENVIRONMENT_CONTRACT = "hosting.environment.v2" as const;
+export const S26_APPLICATION_HOSTING_PROFILE = "s26.application-hosting.v1" as const;
 
-/**
- * Opaque catalog identifiers. They are placeholders in exactly the sense S09
- * recorded: the approved runtime-profile and build-recipe catalogs are S24's,
- * and these constants move there when they exist.
- */
 export const CANONICAL_RUNTIME_PROFILE_ID = "web-node22-1x" as const;
 export const CANONICAL_BUILD_RECIPE_ID = "spa-plus-http-handlers-v1" as const;
 export const CANONICAL_ROLLBACK_REASON_CODE = "verification_failed" as const;
 
-/**
- * Where a value comes from, stated without a tenant. `secretName` is a
- * tenant-scoped secret *name*; the tenant slug is applied by the builder, so
- * the contract itself is tenant-independent and carries no key-store label.
- */
 export type HostingEnvironmentSourceSpec =
-  | { readonly kind: "secret_label"; readonly secretName: string }
   | { readonly kind: "generated_secret"; readonly generatorId: string }
-  | { readonly kind: "derived_from_plan"; readonly planFieldRef: string };
+  | { readonly kind: "derived_from_plan"; readonly planFieldRef: string }
+  | { readonly kind: "derived_from_owned_resource"; readonly resourceRef: string };
 
 export interface HostingEnvironmentValueContract {
-  /** Canonical, provider-neutral name. */
   readonly name: string;
-  /** The name today's application reads, dual-written during the transition. */
-  readonly legacyName: string | null;
   readonly valueClass: HostingValueClass;
   readonly source: HostingEnvironmentSourceSpec;
 }
 
-/**
- * Plan-field references a caller must be able to resolve. They name fields the
- * approved plan already pins, never free-form provider output.
- */
+/** Approved plan references; the Worker resolves no caller-supplied path. */
 export const HOSTING_PLAN_FIELD_REFS = {
-  dataApiUrl: "resources.data_api_url",
-  hostname: "domain.hostname",
+  identityBaseUrl: "identity.base_url",
+  authPath: "application.auth_path",
+  neonReadsDefault: "application.neon_reads_default",
+  neonWritesDefault: "application.neon_writes_default",
+  neonAiPathDefault: "application.neon_ai_path_default",
+  neonPhotosDefault: "application.neon_photos_default",
+} as const;
+
+/** Registry-owned logical resources, not provider IDs or connection strings. */
+export const S26_ROLE_RESOURCE_REFS = {
+  appRuntime: "data.roles.app_runtime",
+  appSystem: "data.roles.app_system",
+  appMachine: "data.roles.app_machine",
+  identityStore: "data.roles.identity_store",
 } as const;
 
 /**
- * The nine values a tenant deployment needs, in canonical order.
- *
- * The database connection string a Neon-backed runtime will need is
- * deliberately absent: S11 owns the driver and is blocked on G1, and declaring
- * a binding whose source nothing can resolve would make the plan promise a
- * value the apply step could not produce.
+ * The complete S26 value list. Four URLs are least-privilege role URLs; Better
+ * Auth uses a dedicated identity store URL, session secret, base URL, and
+ * explicit public auth selector. Reads/writes/AI are exactly `neon`; photos are
+ * exactly `disabled`, so no tenant-scoped R2 application credentials exist.
  */
-export const CANONICAL_TENANT_ENVIRONMENT: readonly HostingEnvironmentValueContract[] =
-  [
-    {
-      name: "PUBLIC_DATA_API_URL",
-      legacyName: "VITE_SUPABASE_URL",
-      valueClass: "public_build",
-      source: {
-        kind: "derived_from_plan",
-        planFieldRef: HOSTING_PLAN_FIELD_REFS.dataApiUrl,
-      },
-    },
-    {
-      name: "PUBLIC_DATA_API_KEY",
-      legacyName: "VITE_SUPABASE_ANON_KEY",
-      valueClass: "public_build",
-      source: { kind: "secret_label", secretName: "data.public_key" },
-    },
-    {
-      name: "DATA_API_URL",
-      legacyName: "SUPABASE_URL",
-      valueClass: "server_public",
-      source: {
-        kind: "derived_from_plan",
-        planFieldRef: HOSTING_PLAN_FIELD_REFS.dataApiUrl,
-      },
-    },
-    {
-      name: "DATA_API_KEY",
-      legacyName: "SUPABASE_ANON_KEY",
-      valueClass: "server_public",
-      source: { kind: "secret_label", secretName: "data.public_key" },
-    },
-    {
-      name: "DATA_API_ADMIN_KEY",
-      legacyName: "SUPABASE_SERVICE_ROLE_KEY",
-      valueClass: "server_secret",
-      source: { kind: "secret_label", secretName: "data.admin_key" },
-    },
-    {
-      name: "SCHEDULE_INVOKE_SECRET",
-      legacyName: "CRON_SECRET",
-      valueClass: "server_secret",
-      source: {
-        kind: "generated_secret",
-        generatorId: "tenant.schedule_invoke_secret",
-      },
-    },
-    {
-      name: "INGEST_INVOKE_SECRET",
-      legacyName: "NOTIFY_SECRET",
-      valueClass: "server_secret",
-      source: {
-        kind: "generated_secret",
-        generatorId: "tenant.ingest_invoke_secret",
-      },
-    },
-    {
-      name: "TOOL_BRIDGE_SECRET",
-      legacyName: "MCP_SECRET",
-      valueClass: "server_secret",
-      source: {
-        kind: "generated_secret",
-        generatorId: "tenant.tool_bridge_secret",
-      },
-    },
-    {
-      name: "APP_BASE_URL",
-      legacyName: "DASHBOARD_URL",
-      valueClass: "server_public",
-      source: {
-        kind: "derived_from_plan",
-        planFieldRef: HOSTING_PLAN_FIELD_REFS.hostname,
-      },
-    },
-  ];
+export const CANONICAL_TENANT_ENVIRONMENT: readonly HostingEnvironmentValueContract[] = [
+  {
+    name: "NEON_DATABASE_URL",
+    valueClass: "server_secret",
+    source: { kind: "derived_from_owned_resource", resourceRef: S26_ROLE_RESOURCE_REFS.appRuntime },
+  },
+  {
+    name: "NEON_AI_DATABASE_URL",
+    valueClass: "server_secret",
+    source: { kind: "derived_from_owned_resource", resourceRef: S26_ROLE_RESOURCE_REFS.appSystem },
+  },
+  {
+    name: "NEON_MACHINE_DATABASE_URL",
+    valueClass: "server_secret",
+    source: { kind: "derived_from_owned_resource", resourceRef: S26_ROLE_RESOURCE_REFS.appMachine },
+  },
+  {
+    name: "IDENTITY_STORE_DATABASE_URL",
+    valueClass: "server_secret",
+    source: { kind: "derived_from_owned_resource", resourceRef: S26_ROLE_RESOURCE_REFS.identityStore },
+  },
+  {
+    name: "IDENTITY_SESSION_SECRET",
+    valueClass: "server_secret",
+    source: { kind: "generated_secret", generatorId: "tenant.identity_session_secret" },
+  },
+  {
+    name: "CRON_SECRET",
+    valueClass: "server_secret",
+    source: { kind: "generated_secret", generatorId: "tenant.cron_secret" },
+  },
+  {
+    name: "NOTIFY_SECRET",
+    valueClass: "server_secret",
+    source: { kind: "generated_secret", generatorId: "tenant.notify_secret" },
+  },
+  {
+    name: "MCP_SECRET",
+    valueClass: "server_secret",
+    source: { kind: "generated_secret", generatorId: "tenant.mcp_secret" },
+  },
+  {
+    name: "IDENTITY_BASE_URL",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.identityBaseUrl },
+  },
+  {
+    name: "NEON_READS_DEFAULT",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.neonReadsDefault },
+  },
+  {
+    name: "NEON_WRITES_DEFAULT",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.neonWritesDefault },
+  },
+  {
+    name: "NEON_AI_PATH_DEFAULT",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.neonAiPathDefault },
+  },
+  {
+    name: "NEON_PHOTOS_DEFAULT",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.neonPhotosDefault },
+  },
+  {
+    name: "VITE_AUTH_PATH",
+    valueClass: "public_build",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.authPath },
+  },
+];
 
-/** The old→new mapping, as data, so a test can assert it rather than trust prose. */
+export const CANONICAL_PUBLIC_BUILD_VALUE_NAMES: readonly string[] =
+  CANONICAL_TENANT_ENVIRONMENT
+    .filter((entry) => entry.valueClass === "public_build")
+    .map((entry) => entry.name);
+
+/** Present only for source compatibility; v2 deliberately has no legacy names. */
+export const LEGACY_PUBLIC_BUILD_VALUE_NAMES: readonly string[] = [];
 export const CANONICAL_ENVIRONMENT_NAME_MAPPING: readonly {
   readonly legacyName: string;
   readonly name: string;
-}[] = CANONICAL_TENANT_ENVIRONMENT.filter(
-  (entry): entry is HostingEnvironmentValueContract & { legacyName: string } =>
-    entry.legacyName !== null,
-).map((entry) => ({ legacyName: entry.legacyName, name: entry.name }));
+}[] = [];
 
-export const CANONICAL_PUBLIC_BUILD_VALUE_NAMES: readonly string[] =
-  CANONICAL_TENANT_ENVIRONMENT.filter(
-    (entry) => entry.valueClass === "public_build",
-  ).map((entry) => entry.name);
-
-export const LEGACY_PUBLIC_BUILD_VALUE_NAMES: readonly string[] =
-  CANONICAL_TENANT_ENVIRONMENT.filter(
-    (entry) => entry.valueClass === "public_build" && entry.legacyName !== null,
-  ).map((entry) => entry.legacyName!);
-
+/** Legacy SDK helper; v2 never calls it because the closed profile has no labels. */
 export function tenantSecretLabel(tenantSlug: string, secretName: string): string {
   return `lh2-platform/tenant/${tenantSlug}/${secretName}`;
 }
 
-function bindingSource(
-  spec: HostingEnvironmentSourceSpec,
-  tenantSlug: string,
-): HostingValueSource {
-  if (spec.kind === "secret_label") {
-    return {
-      kind: "secret_label",
-      secretLabel: tenantSecretLabel(tenantSlug, spec.secretName),
-    };
-  }
+function bindingSource(spec: HostingEnvironmentSourceSpec): HostingValueSource {
   if (spec.kind === "generated_secret") {
-    return { kind: "generated_secret", generatorId: spec.generatorId };
+    return { kind: spec.kind, generatorId: spec.generatorId };
   }
-  return { kind: "derived_from_plan", planFieldRef: spec.planFieldRef };
+  if (spec.kind === "derived_from_plan") {
+    return { kind: spec.kind, planFieldRef: spec.planFieldRef };
+  }
+  return { kind: spec.kind, resourceRef: spec.resourceRef };
 }
 
 export interface TenantEnvironmentBindingInput {
+  /** Kept to preserve the provider-neutral builder shape; never becomes a secret label. */
   readonly tenantSlug: string;
-  /**
-   * Emit the legacy name alongside each canonical name. Default true: the
-   * running application still reads the legacy names, and a deployment that
-   * dropped them would lose a value it needs.
-   */
+  /** Ignored by v2: the transition aliases have been removed. */
   readonly includeLegacyNames?: boolean;
 }
 
-/**
- * The canonical binding list for one tenant, sorted by name so the request, the
- * binding digest and the resulting registry rows are order-independent.
- */
+/** Closed, sorted descriptor list used by every lifecycle digest. */
 export function buildTenantEnvironmentBindings(
-  input: TenantEnvironmentBindingInput,
+  _input: TenantEnvironmentBindingInput,
 ): readonly HostingValueBinding[] {
-  const includeLegacy = input.includeLegacyNames ?? true;
-  const bindings: HostingValueBinding[] = [];
-  for (const entry of CANONICAL_TENANT_ENVIRONMENT) {
-    const source = bindingSource(entry.source, input.tenantSlug);
-    bindings.push({ name: entry.name, valueClass: entry.valueClass, source });
-    if (includeLegacy && entry.legacyName !== null) {
-      bindings.push({
-        name: entry.legacyName,
-        valueClass: entry.valueClass,
-        source,
-      });
-    }
-  }
-  return bindings.sort((left, right) =>
-    left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+  return CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({
+    name: entry.name,
+    valueClass: entry.valueClass,
+    source: bindingSource(entry.source),
+  })).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function tenantEnvironmentContractDigest(
+  input: TenantEnvironmentBindingInput,
+): string {
+  return hostingEnvironmentBindingDigest(
+    buildTenantEnvironmentBindings(input).map((binding) => ({
+      name: binding.name,
+      valueClass: binding.valueClass,
+      source: binding.source,
+    })),
   );
 }

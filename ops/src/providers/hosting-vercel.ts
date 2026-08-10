@@ -26,6 +26,7 @@ import { canonicalJson, sha256Digest } from "../core/canonical.js";
 import { OpsError } from "../core/errors.js";
 import type { Redactor } from "../core/redaction.js";
 import {
+  hostingEnvironmentBindingDigest,
   normalizeSchedules,
   scheduleAsJson,
   scheduleManifestDigest,
@@ -260,29 +261,10 @@ function releaseKey(request: ReleaseBuildRequest): string {
     request.targetHandle,
     request.revisionId,
     request.buildRecipeId,
+    request.environmentBindingDigest,
     request.scheduleManifestDigest,
     [...request.publicValueNames].sort().join(","),
   ].join("|");
-}
-
-function bindingDigestOf(
-  descriptors: readonly {
-    readonly name: string;
-    readonly valueClass: string;
-    readonly sourceKind: string;
-  }[],
-): string {
-  return sha256Digest(
-    canonicalJson(
-      [...descriptors]
-        .sort((left, right) => (left.name < right.name ? -1 : 1))
-        .map((descriptor) => ({
-          name: descriptor.name,
-          value_class: descriptor.valueClass,
-          source_kind: descriptor.sourceKind,
-        })),
-    ),
-  );
 }
 
 function scheduleShape(schedule: HostingSchedule): string {
@@ -440,7 +422,7 @@ export class VercelHostingAdapter implements HostingProvider {
       valueClass: binding.valueClass,
       sourceKind: binding.source.kind,
     }));
-    const bindingDigest = bindingDigestOf(descriptors);
+    const bindingDigest = hostingEnvironmentBindingDigest(request.bindings);
     return this.#idempotentEffect(
       "bindEnvironment",
       `${request.targetHandle}:${bindingDigest}`,
@@ -481,6 +463,12 @@ export class VercelHostingAdapter implements HostingProvider {
     const key = releaseKey(request);
     return this.#idempotentEffect("buildRelease", key, async () => {
       const state = this.#requireTarget(request.targetHandle);
+      if (state.binding?.bindingDigest !== request.environmentBindingDigest) {
+        throw new OpsError(
+          "provider_error",
+          "Pinned build environment digest does not match the bound descriptors",
+        );
+      }
       if (!/^[0-9a-f]{40}$/.test(request.revisionId)) {
         throw new OpsError(
           "provider_error",
@@ -517,6 +505,7 @@ export class VercelHostingAdapter implements HostingProvider {
         revisionPinned: true,
         buildRecipeId: request.buildRecipeId,
         publicValueNames: [...request.publicValueNames].sort(),
+        environmentBindingDigest: request.environmentBindingDigest,
         scheduleManifestDigest: request.scheduleManifestDigest,
         artifactDigest: built.artifactDigest,
         status: "verified",
@@ -824,6 +813,7 @@ export class VercelHostingAdapter implements HostingProvider {
           buildRecipeId: activeRelease?.buildRecipeId ?? null,
           artifactDigest: activeRelease?.artifactDigest ?? null,
           publicValueNames: activeRelease?.publicValueNames ?? [],
+          environmentBindingDigest: activeRelease?.environmentBindingDigest ?? null,
           scheduleManifestDigest: activeRelease?.scheduleManifestDigest ?? null,
         },
         rollout: {

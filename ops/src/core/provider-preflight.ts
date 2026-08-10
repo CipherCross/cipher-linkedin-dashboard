@@ -21,15 +21,14 @@ import type {
 } from "../providers/interfaces.js";
 
 /**
- * How many values of each class the canonical environment contract binds,
- * counting the legacy names that are dual-written during the transition.
+ * How many values of each class the closed environment contract binds.
  */
 const REQUIRED_SERVER_VALUE_COUNT = CANONICAL_TENANT_ENVIRONMENT.filter(
   (entry) => entry.valueClass !== "public_build",
-).reduce((total, entry) => total + (entry.legacyName === null ? 1 : 2), 0);
+).length;
 const REQUIRED_PUBLIC_VALUE_COUNT = CANONICAL_TENANT_ENVIRONMENT.filter(
   (entry) => entry.valueClass === "public_build",
-).reduce((total, entry) => total + (entry.legacyName === null ? 1 : 2), 0);
+).length;
 
 export const PREFLIGHT_KINDS = [
   "provider_access",

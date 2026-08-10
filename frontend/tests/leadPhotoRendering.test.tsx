@@ -73,7 +73,7 @@ function photoFetch(
 }
 
 const sourceOn = (
-  path: 'supabase' | 'neon',
+  path: 'disabled' | 'supabase' | 'neon',
   apiSource: LeadPhotoSource,
 ): LeadPhotoSource =>
   createLeadPhotoSource(
@@ -143,6 +143,24 @@ describe('LeadAvatar on the API photo path', () => {
     })
     // The Supabase loader was constructed with a null client, so it answers null —
     // what matters is that the API was never called on that path.
+    expect(calls).toEqual([])
+  })
+
+  it('uses initials without asking either photo delivery path when disabled', async () => {
+    const { calls, fetchImpl } = photoFetch(() => ({ body: { photos: [] } }))
+    const supabaseLoader = { get: vi.fn(async () => SIGNED), clear: vi.fn() }
+    const photos = createLeadPhotoSource(
+      supabaseLoader,
+      createApiLeadPhotoUrlLoader(fetchImpl),
+      async () => 'disabled',
+    )
+
+    render(<LeadAvatar lead={lead('lead-1')} photos={photos} />)
+
+    await waitFor(() => {
+      expect(document.querySelector('.avatar.fallback')).not.toBeNull()
+    })
+    expect(supabaseLoader.get).not.toHaveBeenCalled()
     expect(calls).toEqual([])
   })
 })

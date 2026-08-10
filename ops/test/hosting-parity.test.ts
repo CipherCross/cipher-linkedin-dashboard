@@ -53,6 +53,7 @@ import {
   normalizeSchedules,
   parseReleaseScheduleManifest,
   scheduleManifestDigest,
+  hostingEnvironmentBindingDigest,
   splitManifestPath,
   type DeploymentTargetResult,
   type DomainAssignmentResult,
@@ -125,6 +126,13 @@ const FOREIGN_OWNERSHIP: OwnershipMarker = {
 };
 
 const BINDINGS = buildTenantEnvironmentBindings({ tenantSlug: "s10-lab" });
+const ENVIRONMENT_BINDING_DIGEST = hostingEnvironmentBindingDigest(
+  BINDINGS.map((binding) => ({
+    name: binding.name,
+    valueClass: binding.valueClass,
+    source: binding.source,
+  })),
+);
 const PUBLIC_VALUE_NAMES = [
   ...CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
   ...LEGACY_PUBLIC_BUILD_VALUE_NAMES,
@@ -356,6 +364,7 @@ async function driveCapabilities(
     revisionId: REVISION_A,
     buildRecipeId: CANONICAL_BUILD_RECIPE_ID,
     publicValueNames: PUBLIC_VALUE_NAMES,
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: MANIFEST_DIGEST,
   });
   const domain = await port.assignDomain({
@@ -387,6 +396,7 @@ async function driveCapabilities(
     revisionId: REVISION_B,
     buildRecipeId: CANONICAL_BUILD_RECIPE_ID,
     publicValueNames: PUBLIC_VALUE_NAMES,
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: MANIFEST_DIGEST,
   });
   const secondPromote = await port.promoteRelease({
@@ -951,11 +961,17 @@ test("the adapter refuses to register schedules the pinned release does not decl
     automaticPromotionEnabled: false,
     isolatedPreviewsEnabled: false,
   });
+  await adapter.bindEnvironment({
+    targetHandle: target.targetHandle,
+    scope: "production",
+    bindings: BINDINGS,
+  });
   const release = await adapter.buildRelease({
     targetHandle: target.targetHandle,
     revisionId: REVISION_A,
     buildRecipeId: CANONICAL_BUILD_RECIPE_ID,
     publicValueNames: PUBLIC_VALUE_NAMES,
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: MANIFEST_DIGEST,
   });
   await assert.rejects(
@@ -975,50 +991,17 @@ test("the adapter refuses to register schedules the pinned release does not decl
  * Environment name contract
  * ================================================================== */
 
-test("the canonical environment contract dual-writes every legacy name", () => {
+test("the closed S26 environment contract emits exactly one reviewed descriptor per value", () => {
   const canonicalNames = CANONICAL_TENANT_ENVIRONMENT.map((entry) => entry.name);
   assert.equal(new Set(canonicalNames).size, canonicalNames.length);
-  // Every canonical name is provider-neutral.
-  for (const name of canonicalNames) {
-    assert.doesNotMatch(name, /supabase|vercel/i);
-  }
-  // The old→new mapping covers exactly today's production environment keys.
-  assert.deepEqual(
-    CANONICAL_ENVIRONMENT_NAME_MAPPING.map((entry) => entry.legacyName).sort(),
-    [
-      "CRON_SECRET",
-      "DASHBOARD_URL",
-      "MCP_SECRET",
-      "NOTIFY_SECRET",
-      "SUPABASE_ANON_KEY",
-      "SUPABASE_SERVICE_ROLE_KEY",
-      "SUPABASE_URL",
-      "VITE_SUPABASE_ANON_KEY",
-      "VITE_SUPABASE_URL",
-    ],
-  );
+  assert.deepEqual(CANONICAL_ENVIRONMENT_NAME_MAPPING, []);
+  assert.equal(canonicalNames.some((name) => /supabase|object_storage|r2/i.test(name)), false);
   const bindings = buildTenantEnvironmentBindings({ tenantSlug: "s10-lab" });
-  const names = new Set(bindings.map((entry) => entry.name));
-  for (const entry of CANONICAL_ENVIRONMENT_NAME_MAPPING) {
-    assert.ok(names.has(entry.name), `${entry.name} is not bound`);
-    assert.ok(names.has(entry.legacyName), `${entry.legacyName} is not bound`);
-  }
-  // A legacy name always carries the same class and source as its replacement.
-  for (const entry of CANONICAL_ENVIRONMENT_NAME_MAPPING) {
-    const canonical = bindings.find((item) => item.name === entry.name)!;
-    const legacy = bindings.find((item) => item.name === entry.legacyName)!;
-    assert.deepEqual(legacy.valueClass, canonical.valueClass);
-    assert.deepEqual(legacy.source, canonical.source);
-  }
-  // Dropping the transition window leaves only canonical names.
-  const canonicalOnly = buildTenantEnvironmentBindings({
-    tenantSlug: "s10-lab",
-    includeLegacyNames: false,
-  });
   assert.deepEqual(
-    canonicalOnly.map((entry) => entry.name).sort(),
+    bindings.map((entry) => entry.name).sort(),
     [...canonicalNames].sort(),
   );
+  assert.equal(bindings.some((entry) => entry.source.kind === "secret_label"), false);
 });
 
 test("environment binding writes values but returns none, and no label either", async () => {

@@ -30,6 +30,10 @@ test("S26 Worker deployment requires only genuine deployment and preflight crede
     "TENANT_INGEST_INVOKE_SECRET",
     "TENANT_TOOL_BRIDGE_SECRET",
     "BETTER_AUTH_SESSION_SECRET",
+    "TENANT_R2_ACCESS_KEY_ID",
+    "TENANT_R2_SECRET_ACCESS_KEY",
+    "OBJECT_STORAGE_ACCESS_KEY_ID",
+    "OBJECT_STORAGE_SECRET_ACCESS_KEY",
   ]) {
     assert.equal(configuration.secrets.required.includes(forbidden), false);
     assert.equal(Object.hasOwn(configuration.vars, forbidden), false);
@@ -45,6 +49,11 @@ test("S26 provider, catalog, profile, and release selections are non-secret clos
     "NEON_COMPUTE_ID",
     "NEON_BACKUP_PROFILE_ID",
     "NEON_APPLICATION_ROLE_NAME",
+    "NEON_AI_ROLE_NAME",
+    "NEON_MACHINE_ROLE_NAME",
+    "NEON_IDENTITY_STORE_ROLE_NAME",
+    "S26_APPLICATION_HOSTING_CONTRACT",
+    "S26_APPLICATION_DATA_PLANE_READY",
     "VERCEL_TEAM_ID",
     "VERCEL_BUILD_RECIPE_ID",
     "RESEND_SMTP_PROFILE_ID",
@@ -59,4 +68,6 @@ test("S26 provider, catalog, profile, and release selections are non-secret clos
   }
   assert.equal(vars.APPROVED_SOURCE_GIT_SHA, "", "this session must not choose a replacement release SHA");
   assert.equal(/^[0-9a-f]{40}$/.test(vars.APPROVED_SOURCE_GIT_SHA), false);
+  assert.equal(vars.S26_APPLICATION_HOSTING_CONTRACT, "hosting.environment.v2");
+  assert.equal(vars.S26_APPLICATION_DATA_PLANE_READY, "false");
 });

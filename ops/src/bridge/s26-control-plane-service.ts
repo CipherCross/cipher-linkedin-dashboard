@@ -38,6 +38,12 @@ const recoveryVerification = z.strictObject({
   passed: z.boolean(), checkedAt: timestamp,
 });
 const schedule = z.strictObject({ scheduleId: identifier, method: z.literal("GET"), routePath: z.string().min(1), queryParameters: z.record(z.string(), z.string()), expression: z.string().min(1), expressionFormat: z.literal("cron5"), timezone: z.literal("UTC") });
+const hostingValueSource = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("secret_label"), secretLabel: identifier }),
+  z.strictObject({ kind: z.literal("generated_secret"), generatorId: identifier }),
+  z.strictObject({ kind: z.literal("derived_from_plan"), planFieldRef: identifier }),
+  z.strictObject({ kind: z.literal("derived_from_owned_resource"), resourceRef: identifier }),
+]);
 
 const requestSchemas = {
   "data.inspect": z.strictObject({ organization_id: identifier, deterministic_name: z.string().min(1).max(200), region_id: identifier, tier_id: identifier, compute_id: identifier, backup_profile_id: identifier, ownership_marker_digest: digest }),
@@ -65,9 +71,10 @@ const requestSchemas = {
       name: z.string().min(1).max(120),
       value_class: z.enum(["server_secret", "server_public", "public_build"]),
       source_kind: z.enum(["secret_label", "generated_secret", "derived_from_plan", "derived_from_owned_resource"]),
+      source: hostingValueSource,
     })).min(1),
   }),
-  "hosting.build": z.strictObject({ target_handle: identifier, revision_id: z.string().regex(/^[0-9a-f]{40}$/), build_recipe_id: identifier, public_value_names: z.array(identifier), schedule_manifest_digest: digest }),
+  "hosting.build": z.strictObject({ target_handle: identifier, revision_id: z.string().regex(/^[0-9a-f]{40}$/), build_recipe_id: identifier, public_value_names: z.array(identifier), environment_binding_digest: digest, schedule_manifest_digest: digest }),
   "hosting.schedules": z.strictObject({ target_handle: identifier, release_handle: identifier, schedules: z.array(schedule), manifest_digest: digest }),
   "hosting.promote": z.strictObject({ target_handle: identifier, release_handle: identifier }),
   "hosting.rollback": z.strictObject({ target_handle: identifier, release_handle: identifier, superseded_release_handle: identifier, reason_code: identifier }),

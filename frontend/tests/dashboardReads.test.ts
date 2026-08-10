@@ -227,6 +227,16 @@ describe('the path flag', () => {
     })
   })
 
+  it('preserves the explicit initials-only photo posture', async () => {
+    const rec = recorder(() =>
+      jsonResponse({ readPath: 'neon', photoPath: 'disabled' }),
+    )
+    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
+      readPath: 'neon',
+      photoPath: 'disabled',
+    })
+  })
+
   it.each([
     ['absent', { readPath: 'neon' }],
     ['null', { readPath: 'neon', photoPath: null }],

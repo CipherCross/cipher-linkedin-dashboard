@@ -20,6 +20,13 @@ import type {
 } from "../mcp/schemas.js";
 import { onboardingBusinessInputsSchema } from "../mcp/schemas.js";
 import type { OwnershipMarker } from "../providers/interfaces.js";
+import {
+  CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
+  CANONICAL_TENANT_ENVIRONMENT,
+  HOSTING_ENVIRONMENT_CONTRACT,
+  S26_APPLICATION_HOSTING_PROFILE,
+  tenantEnvironmentContractDigest,
+} from "../providers/hosting-tenant.js";
 import type { Registry } from "../state/registry.js";
 
 const EFFECTS = [
@@ -166,14 +173,21 @@ export class DisposableOnboardingPlanner {
         compatibility_entry_id: this.#profile.compatibilityEntryId,
       },
       environment_policy: {
+        hosting_value_contract: HOSTING_ENVIRONMENT_CONTRACT,
+        hosting_profile: S26_APPLICATION_HOSTING_PROFILE,
+        environment_binding_digest: tenantEnvironmentContractDigest({
+          tenantSlug: inputs.tenant_slug,
+        }),
+        value_descriptors: CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({
+          name: entry.name,
+          value_class: entry.valueClass,
+          source: entry.source,
+        })),
         git_auto_promotion: false,
         external_previews: false,
         production_secret_scope: "production_only",
         preview_secret_names: [],
-        public_build_value_names: [
-          "PUBLIC_DATA_API_URL",
-          "PUBLIC_DATA_API_KEY",
-        ],
+        public_build_value_names: CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
       },
       auth_smtp: {
         site_url: `https://${hostname}`,
@@ -307,6 +321,8 @@ export function executionContextFromPlan(
       inputs.integration_secret_labels as unknown as readonly string[],
     publicBuildValueNames:
       environment.public_build_value_names as unknown as OnboardingExecutionContext["publicBuildValueNames"],
+    environmentContractVersion: String(environment.hosting_value_contract),
+    environmentContractDigest: String(environment.environment_binding_digest),
     smokeTestIds: smokeTests.map((candidate) => candidate.id),
     ownership: {
       managedBy: "lh2-platform-ops",

@@ -1,9 +1,13 @@
 import {
   CANONICAL_RUNTIME_PROFILE_ID,
+  CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
+  CANONICAL_TENANT_ENVIRONMENT,
+  HOSTING_ENVIRONMENT_CONTRACT,
   asJsonValue,
   InMemoryCatalogResolver,
   planDigest,
   sha256Digest,
+  tenantEnvironmentContractDigest,
   type ApplyRequest,
   type CatalogSnapshot,
   type DisposableOnboardingProfile,
@@ -350,11 +354,19 @@ export function makeOnboardingPlan(
       compatibility_entry_id: "release-compat-1",
     },
     environment_policy: {
+      hosting_value_contract: HOSTING_ENVIRONMENT_CONTRACT,
+      hosting_profile: "s26.application-hosting.v1",
+      environment_binding_digest: tenantEnvironmentContractDigest({ tenantSlug: slug }),
+      value_descriptors: CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({
+        name: entry.name,
+        value_class: entry.valueClass,
+        source: entry.source,
+      })),
       git_auto_promotion: false,
       external_previews: false,
       production_secret_scope: "production_only",
       preview_secret_names: [],
-      public_build_value_names: ["PUBLIC_DATA_API_URL", "PUBLIC_DATA_API_KEY"],
+      public_build_value_names: CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
     },
     auth_smtp: {
       site_url: `https://${slug}.example.com`,
@@ -607,6 +619,8 @@ export function executionContext(
       inputs.integration_secret_labels as unknown as readonly string[],
     publicBuildValueNames:
       environment.public_build_value_names as unknown as OnboardingExecutionContext["publicBuildValueNames"],
+    environmentContractVersion: String(environment.hosting_value_contract),
+    environmentContractDigest: String(environment.environment_binding_digest),
     smokeTestIds: smokeTests,
     ownership: {
       managedBy: "lh2-platform-ops",

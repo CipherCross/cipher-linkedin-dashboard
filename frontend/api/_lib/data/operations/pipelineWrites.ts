@@ -69,6 +69,10 @@ import type { NeonCommandOperation, NeonQueryOperation, NeonRow } from '../neon.
 export const PIPELINE_WRITE_OPERATIONS = {
   /** Current pipeline columns of one lead, read to build the audit row. */
   leadPipelineFields: 'pipeline.leadPipelineFields',
+  /** Current assignee of one lead, locked before changing assignment. */
+  leadAssignment: 'pipeline.leadAssignment',
+  /** One target assignee in this database's roster, never another provider's. */
+  teamMemberById: 'pipeline.teamMemberById',
   /** Current demographics columns, read to snapshot what the human reviewed. */
   leadDemographics: 'pipeline.leadDemographics',
   /** The acting member's own display name, for the audit row's `actor` text. */
@@ -78,6 +82,8 @@ export const PIPELINE_WRITE_OPERATIONS = {
 export const PIPELINE_WRITE_COMMANDS = {
   setStage: 'pipeline.setStage',
   appendStageEvent: 'pipeline.appendStageEvent',
+  setAssignment: 'pipeline.setAssignment',
+  appendAssignmentEvent: 'pipeline.appendAssignmentEvent',
   addNote: 'pipeline.addNote',
   deleteNote: 'pipeline.deleteNote',
   setGender: 'pipeline.setGender',
@@ -254,6 +260,124 @@ export const actorDisplayNameOperation: NeonQueryOperation<
     values: [params?.actorId ?? ''],
   }),
   mapRow: (row: NeonRow): ActorDisplayNameRow => ({ name: String(row.name) }),
+}
+
+// ---------------------------------------------------------------------------
+// assign.
+// ---------------------------------------------------------------------------
+
+/**
+ * Assignment is keyed on this database's `team_members.id`, so both the lead
+ * and the candidate member must be read through the same actor-scoped store.
+ * The lead lock serializes competing assignments before either audit event is
+ * built, preserving a truthful `from_assignee` chain just as stage moves do.
+ */
+export interface LeadAssignmentRow {
+  readonly id: string
+  readonly assigned_to: number | null
+}
+
+const LEAD_ASSIGNMENT_SQL = `SELECT l.id::text AS id, l.assigned_to
+     FROM public.leads l
+    WHERE l.id = $1::uuid
+      FOR UPDATE`
+
+export const leadAssignmentOperation: NeonQueryOperation<
+  LeadAssignmentRow,
+  LeadByIdParams
+> = {
+  build: ({ params }) => ({
+    text: LEAD_ASSIGNMENT_SQL,
+    values: [params?.leadId ?? ''],
+  }),
+  mapRow: (row: NeonRow): LeadAssignmentRow => ({
+    id: String(row.id),
+    assigned_to: nullableNumber(row.assigned_to),
+  }),
+}
+
+export interface TeamMemberByIdRow {
+  readonly id: number
+  readonly name: string
+  readonly active: boolean
+}
+
+export interface TeamMemberByIdParams {
+  readonly memberId: number
+  readonly [key: string]: number
+}
+
+const TEAM_MEMBER_BY_ID_SQL = `SELECT tm.id, tm.name, tm.active
+     FROM public.team_members tm
+    WHERE tm.id = $1::bigint`
+
+export const teamMemberByIdOperation: NeonQueryOperation<
+  TeamMemberByIdRow,
+  TeamMemberByIdParams
+> = {
+  build: ({ params }) => ({
+    text: TEAM_MEMBER_BY_ID_SQL,
+    values: [params?.memberId ?? 0],
+  }),
+  mapRow: (row: NeonRow): TeamMemberByIdRow => ({
+    id: Number(row.id),
+    name: String(row.name),
+    active: row.active === true,
+  }),
+}
+
+export interface SetAssignmentParams {
+  readonly leadId: string
+  readonly memberId: number | null
+  readonly [key: string]: string | number | null
+}
+
+const SET_ASSIGNMENT_SQL = `UPDATE public.leads
+      SET assigned_to = $2::bigint
+    WHERE id = $1::uuid
+RETURNING id`
+
+export const setAssignmentOperation: NeonCommandOperation<
+  DeleteResult,
+  SetAssignmentParams
+> = {
+  build: ({ params }) => ({
+    text: SET_ASSIGNMENT_SQL,
+    values: [params?.leadId ?? '', params?.memberId ?? null],
+  }),
+  mapResult: (_rows, rowCount): DeleteResult => ({ rowCount }),
+}
+
+export interface AppendAssignmentEventParams {
+  readonly leadId: string
+  readonly actor: string
+  readonly fromAssignee: string | null
+  readonly toAssignee: string | null
+  readonly [key: string]: string | null
+}
+
+const APPEND_ASSIGNMENT_EVENT_SQL = `INSERT INTO public.pipeline_events
+            (lead_id, kind, actor, from_assignee, to_assignee)
+     VALUES ($1::uuid, 'assignment', $2, $3, $4)
+  RETURNING id::text AS id, occurred_at`
+
+export const appendAssignmentEventOperation: NeonCommandOperation<
+  AppendEventResult,
+  AppendAssignmentEventParams
+> = {
+  build: ({ params }) => ({
+    text: APPEND_ASSIGNMENT_EVENT_SQL,
+    values: [
+      params?.leadId ?? '',
+      params?.actor ?? '',
+      params?.fromAssignee ?? null,
+      params?.toAssignee ?? null,
+    ],
+  }),
+  mapResult: (rows): AppendEventResult => ({
+    id: String(rows[0]?.id ?? ''),
+    occurred_at: String(rows[0]?.occurred_at ?? ''),
+  }),
 }
 
 // ---------------------------------------------------------------------------

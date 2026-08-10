@@ -55,21 +55,22 @@ Only five genuine deployment/preflight credentials are secret Worker bindings:
 `BRIDGE_BEARER_SECRET`, `NEON_API_TOKEN`, `VERCEL_API_TOKEN`,
 `RESEND_API_KEY`, and `SOURCE_REPOSITORY_TOKEN`. Provider scopes, approved
 catalog/profile IDs, release compatibility/version, schedule digest, source
-Git SHA, sender settings, and the fixed application database role are closed
-non-secret Worker variables. Their types are generated from
-`ops/wrangler.jsonc`; there is no hand-written Worker environment interface.
-Blank or unapproved selections fail closed and are never promoted to secret
-bindings merely to satisfy startup.
+Git SHA, sender settings, the four fixed application role names, the versioned
+hosting contract, and `S26_APPLICATION_DATA_PLANE_READY=false` are closed
+non-secret Worker variables. Blank or unapproved selections fail closed and are
+never promoted to secret bindings merely to satisfy startup.
 
 Tenant values are not deployment prerequisites. During the exact approved
 `hosting.environment-bind` apply route, the Worker first verifies the
-registry-owned Neon project and Vercel ownership marker. It then obtains the
-least-privilege application connection URI from the fixed Neon
-`connection_uri` operation and generates the Better Auth, schedule, ingest,
-and tool credentials with Web Crypto. The values are written directly to the
-owned Vercel production environment. The caller supplies only fixed
-name/class/source descriptors and owned resource identities; neither request
-nor response contains a value.
+registry-owned Neon project and Vercel ownership marker. It then obtains four
+role-specific connection URIs from the fixed Neon `connection_uri` operation,
+generates the Better Auth and machine-route secrets with Web Crypto, and binds
+only the closed `hosting.environment.v2` profile: four Neon URLs, Better Auth
+values, exact `neon` read/write/AI flags, and `NEON_PHOTOS_DEFAULT=disabled`.
+There is no tenant-scoped R2 application credential. The caller supplies the
+complete fixed name/class/source descriptors and owned resource identities;
+the Worker validates them against the profile and the digest before any provider
+write. Neither request nor response contains a resolved value.
 
 Portable PostgreSQL operations import only the repository's immutable ledger,
 migration, smoke, and recovery SQL. Every pinned digest is checked before a
@@ -85,18 +86,19 @@ The current official Neon Data API and Neon-managed Better Auth documentation
 labels both products Beta. S26 therefore rejects them under its GA-only rule.
 The selected replacement is the repository's self-hosted Better Auth plus
 actor-scoped Vercel server APIs backed by least-privilege Postgres roles; its
-identity-only request boundary is implemented locally and documented in
-`s26-application-data-plane-compatibility.md`. The closed hosting profile and
-several roster-keyed mutations are not yet migrated, so data inspection remains
-`authConfigurationSupported: false`, and the environment-binding route keeps
-returning `provider_readiness_blocked` before any provider request. The bridge
-does not accept tenant credentials, fabricate replacement values, or proxy
-application data.
+identity-only request boundary, transactional assignment, and all six
+follow-up operations are implemented locally and documented in
+`s26-application-data-plane-compatibility.md`. Provider readiness remains
+deliberately false: data inspection reports `authConfigurationSupported: false`
+and the environment-binding route returns `provider_readiness_blocked` before
+any provider request. The bridge does not accept tenant credentials, fabricate
+replacement values, or proxy application data.
 
 Recovery artifacts remain metadata-only for hosting configuration: fixed
-resource identity, ownership digest, deployment/release identity, environment
-names/classes, and counts. Database URLs, generated credentials, provider
-environment values, request bodies, logs, canonical results, and audit-shaped
+resource identity, ownership digest, deployment/release identity, closed
+environment name/class/source descriptors, provider type/target metadata, and
+the binding digest. Database URLs, generated credentials, provider environment
+values, photo objects, request bodies, logs, canonical results, and audit-shaped
 results never enter R2 recovery artifacts or bridge output.
 
 The Worker has been type-checked, tested in workerd, schema-validated, and

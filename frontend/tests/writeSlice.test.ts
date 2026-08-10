@@ -37,8 +37,10 @@ import {
   PIPELINE_WRITE_OPERATIONS,
 } from '../api/_lib/data/operations/index.js'
 import {
+  neonAssign,
   neonAddNote,
   neonDeleteNote,
+  neonFollowUp,
   neonImportConversation,
   neonSetGender,
   neonSetInstanceConfig,
@@ -73,6 +75,10 @@ interface Harness {
 
 /** What `pipeline.leadPipelineFields` answers with, per test. */
 let leadFields: Record<string, unknown> | null
+/** Current assignment row, locked by the production operation. */
+let leadAssignment: Record<string, unknown> | null
+/** The roster visible to the actor-scoped transaction. */
+let teamMembersById: Map<number, Record<string, unknown>>
 /** What `pipeline.leadDemographics` answers with, per test. */
 let leadDemographics: Record<string, unknown> | null
 /** What `conversations.leadForImport` answers with, per test. */
@@ -105,6 +111,13 @@ function harness(): Harness {
   store.registerQuery(PIPELINE_WRITE_OPERATIONS.leadPipelineFields, () =>
     leadFields ? [leadFields] : [],
   )
+  store.registerQuery(PIPELINE_WRITE_OPERATIONS.leadAssignment, () =>
+    leadAssignment ? [leadAssignment] : [],
+  )
+  store.registerQuery(PIPELINE_WRITE_OPERATIONS.teamMemberById, ({ params }) => {
+    const member = teamMembersById.get(Number(params?.memberId))
+    return member ? [member] : []
+  })
   store.registerQuery(PIPELINE_WRITE_OPERATIONS.leadDemographics, () =>
     leadDemographics ? [leadDemographics] : [],
   )
@@ -144,6 +157,25 @@ function harness(): Harness {
     id: '1',
     occurred_at: '2026-08-05T10:00:00.000Z',
   })
+  store.registerCommand(PIPELINE_WRITE_COMMANDS.setAssignment, ({ params, state }) => {
+    executed.push({
+      operation: PIPELINE_WRITE_COMMANDS.setAssignment,
+      params: (params ?? {}) as Record<string, unknown>,
+    })
+    const thrower = failing.get(PIPELINE_WRITE_COMMANDS.setAssignment)
+    if (thrower) thrower()
+    state.write('assignment', params?.memberId ?? null)
+    return { rowCount: 1 }
+  })
+  store.registerCommand(PIPELINE_WRITE_COMMANDS.appendAssignmentEvent, ({ params }) => {
+    executed.push({
+      operation: PIPELINE_WRITE_COMMANDS.appendAssignmentEvent,
+      params: (params ?? {}) as Record<string, unknown>,
+    })
+    const thrower = failing.get(PIPELINE_WRITE_COMMANDS.appendAssignmentEvent)
+    if (thrower) thrower()
+    return { id: 'assignment-event', occurred_at: '2026-08-05T10:00:00.000Z' }
+  })
   command(PIPELINE_WRITE_COMMANDS.addNote, {
     rowCount: 1,
     row: {
@@ -170,6 +202,10 @@ function harness(): Harness {
       first_message_at: null,
       connected_at: null,
     },
+  })
+  command(CONVERSATION_WRITE_COMMANDS.applyFollowUpAction, {
+    state: { revision: 1 },
+    replayed: false,
   })
   command(LIBRARY_WRITE_COMMANDS.insertIcp, {
     rowCount: 1,
@@ -223,6 +259,12 @@ beforeEach(() => {
     pipeline_substatus: null,
     lost_reason: null,
   }
+  leadAssignment = { id: LEAD_ID, assigned_to: 1 }
+  teamMembersById = new Map([
+    [1, { id: 1, name: 'Prior Owner', active: true }],
+    [7, { id: 7, name: 'New Owner', active: true }],
+    [8, { id: 8, name: 'Inactive Owner', active: false }],
+  ])
   leadDemographics = {
     id: LEAD_ID,
     instance_id: 'inst',
@@ -365,6 +407,120 @@ describe('set_stage: what the handler decides before the statement runs', () => 
     expect(body).not.toHaveProperty('event_error')
     // And no driver text.
     expect(body.error).not.toContain('injected')
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('assignment: actor-scoped transactional parity', () => {
+  it('resolves both numeric ids in Neon and pairs the update with its audit event', async () => {
+    const { executed, deps } = harness()
+    const response = await neonAssign(request(), { leadId: LEAD_ID, memberId: 7 }, deps)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true, assigned_to: 7 })
+    expect(executed.map((entry) => entry.operation)).toEqual([
+      PIPELINE_WRITE_COMMANDS.setAssignment,
+      PIPELINE_WRITE_COMMANDS.appendAssignmentEvent,
+    ])
+    expect(found(executed, PIPELINE_WRITE_COMMANDS.appendAssignmentEvent)?.params).toMatchObject({
+      leadId: LEAD_ID,
+      actor: 'Fixture Reviewer',
+      fromAssignee: 'Prior Owner',
+      toAssignee: 'New Owner',
+    })
+  })
+
+  it('refuses an inactive or unknown target before the assignment command', async () => {
+    const { executed, deps } = harness()
+    const inactive = await neonAssign(request(), { leadId: LEAD_ID, memberId: 8 }, deps)
+    expect(inactive.status).toBe(400)
+    expect(executed).toEqual([])
+
+    const unknown = await neonAssign(request(), { leadId: LEAD_ID, memberId: 999 }, deps)
+    expect(unknown.status).toBe(400)
+    expect(executed).toEqual([])
+  })
+
+  it('rolls the assignment back if its audit event fails', async () => {
+    const { executed, store, deps } = harness()
+    failing.set(PIPELINE_WRITE_COMMANDS.appendAssignmentEvent, () => {
+      throw new Error('injected assignment audit failure')
+    })
+
+    const response = await neonAssign(request(), { leadId: LEAD_ID, memberId: 7 }, deps)
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Could not save the assignment' })
+    expect(executed.map((entry) => entry.operation)).toEqual([
+      PIPELINE_WRITE_COMMANDS.setAssignment,
+      PIPELINE_WRITE_COMMANDS.appendAssignmentEvent,
+    ])
+    expect(store.read('assignment')).toBeUndefined()
+  })
+
+  it('does not write when the subject resolves to no actor in the application database', async () => {
+    const { executed, deps } = harness()
+    currentSubject = 'unmapped-subject'
+    const response = await neonAssign(request(), { leadId: LEAD_ID, memberId: 7 }, deps)
+    expect(response.status).toBe(403)
+    expect(executed).toEqual([])
+  })
+})
+
+describe('follow-up actions: one Neon transaction vocabulary for all six actions', () => {
+  const actions = ['schedule', 'reschedule', 'reassign', 'complete', 'skip', 'cancel'] as const
+
+  it.each(actions)('routes %s through applyFollowUpAction with the resolved actor', async (action) => {
+    const { executed, deps } = harness()
+    const response = await neonFollowUp(
+      request(),
+      {
+        action,
+        instanceId: 'notebook-1',
+        profileUrl: 'https://example.test/in/person',
+        expectedRevision: 4,
+        mutationId: `5a140000-0000-4000-8000-0000000000${action.length}`,
+        ownerId: action === 'schedule' || action === 'reassign' ? 7 : null,
+        nextFollowUpDate: action === 'schedule' || action === 'reschedule' ? '2026-08-12' : null,
+        reason: action === 'skip' || action === 'cancel' ? 'not now' : null,
+      },
+      deps,
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      ok: true,
+      state: { revision: 1 },
+      replayed: false,
+    })
+    expect(executed).toHaveLength(1)
+    expect(executed[0]).toMatchObject({
+      operation: CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
+      params: { action, actor: 'Fixture Reviewer' },
+    })
+  })
+
+  it('returns a closed failure when the transactional function rejects', async () => {
+    const { deps } = harness()
+    failing.set(CONVERSATION_WRITE_COMMANDS.applyFollowUpAction, () => {
+      throw new Error('driver host must not be exposed')
+    })
+    const response = await neonFollowUp(
+      request(),
+      {
+        action: 'complete',
+        instanceId: 'notebook-1',
+        profileUrl: 'https://example.test/in/person',
+        expectedRevision: 4,
+        mutationId: '5a140000-0000-4000-8000-000000000099',
+        ownerId: null,
+        nextFollowUpDate: null,
+        reason: null,
+      },
+      deps,
+    )
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Could not update the follow-up' })
   })
 })
 

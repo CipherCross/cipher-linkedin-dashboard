@@ -162,7 +162,8 @@ export type HostingValueSourceKind =
 export type HostingValueSource =
   | { readonly kind: "secret_label"; readonly secretLabel: string }
   | { readonly kind: "generated_secret"; readonly generatorId: string }
-  | { readonly kind: "derived_from_plan"; readonly planFieldRef: string };
+  | { readonly kind: "derived_from_plan"; readonly planFieldRef: string }
+  | { readonly kind: "derived_from_owned_resource"; readonly resourceRef: string };
 
 export interface HostingValueBinding {
   readonly name: string;
@@ -180,7 +181,7 @@ export interface EnvironmentBindingRequest {
   readonly ownership?: OwnershipMarker;
 }
 
-/** Carries names, classes and source *kinds* only — never a value or a label. */
+/** Carries safe binding provenance — never a resolved value. */
 export interface EnvironmentBindingResult extends HostingRequestResult {
   readonly targetHandle: HostingTargetHandle;
   readonly scope: "production";
@@ -193,6 +194,31 @@ export interface EnvironmentBindingResult extends HostingRequestResult {
   readonly bindingDigest: string;
 }
 
+/**
+ * Digest every value descriptor a deployment receives. It covers the name,
+ * classification and complete source reference (role resource, plan field, or
+ * generator). Resolved values never enter this digest or any operation output.
+ */
+export function hostingEnvironmentBindingDigest(
+  bindings: readonly {
+    readonly name: string;
+    readonly valueClass: string;
+    readonly source: HostingValueSource;
+  }[],
+): string {
+  return sha256Digest(
+    canonicalJson(
+      [...bindings]
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((binding) => ({
+          name: binding.name,
+          value_class: binding.valueClass,
+          source: binding.source,
+        })),
+    ),
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * Capability 3 — build a pinned application revision
  * ------------------------------------------------------------------ */
@@ -203,6 +229,8 @@ export interface ReleaseBuildRequest {
   readonly revisionId: string;
   readonly buildRecipeId: string;
   readonly publicValueNames: readonly string[];
+  /** The exact environment descriptor digest produced by the bind step. */
+  readonly environmentBindingDigest: string;
   /** Pins the schedule set to this release; see `scheduleManifestDigest`. */
   readonly scheduleManifestDigest: string;
 }
@@ -214,6 +242,7 @@ export interface ReleaseBuildResult extends HostingRequestResult {
   readonly revisionPinned: true;
   readonly buildRecipeId: string;
   readonly publicValueNames: readonly string[];
+  readonly environmentBindingDigest: string;
   readonly scheduleManifestDigest: string;
   readonly artifactDigest: string;
   readonly status: "verified";
@@ -424,6 +453,7 @@ export interface HostingBuildVerification {
   readonly buildRecipeId: string | null;
   readonly artifactDigest: string | null;
   readonly publicValueNames: readonly string[];
+  readonly environmentBindingDigest: string | null;
   readonly scheduleManifestDigest: string | null;
 }
 
@@ -531,6 +561,7 @@ export const HOSTING_RESULT_SHAPES: Readonly<
     "revisionPinned",
     "buildRecipeId",
     "publicValueNames",
+    "environmentBindingDigest",
     "scheduleManifestDigest",
     "artifactDigest",
     "status",
@@ -608,7 +639,9 @@ function bindingAsJson(binding: HostingValueBinding): JsonValue {
       ? { kind: binding.source.kind, secret_label: binding.source.secretLabel }
       : binding.source.kind === "generated_secret"
         ? { kind: binding.source.kind, generator_id: binding.source.generatorId }
-        : { kind: binding.source.kind, plan_field_ref: binding.source.planFieldRef };
+        : binding.source.kind === "derived_from_plan"
+          ? { kind: binding.source.kind, plan_field_ref: binding.source.planFieldRef }
+          : { kind: binding.source.kind, resource_ref: binding.source.resourceRef };
   return {
     name: binding.name,
     value_class: binding.valueClass,
@@ -660,6 +693,13 @@ export function buildHostingCapabilityPlan(input: HostingPlanInput): JsonValue {
       revision_id: input.revisionId,
       build_recipe_id: input.buildRecipeId,
       public_value_names: publicValueNames,
+      environment_binding_digest: hostingEnvironmentBindingDigest(
+        input.bindings.map((binding) => ({
+          name: binding.name,
+          valueClass: binding.valueClass,
+          source: binding.source,
+        })),
+      ),
       schedule_manifest_digest: manifestDigest,
     },
     environment: {

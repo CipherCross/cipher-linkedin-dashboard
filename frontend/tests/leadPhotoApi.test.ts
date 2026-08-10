@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createActivityDailyHandler,
   deploymentPhotoPath,
   deploymentReadPath,
 } from '../api/activity-daily.js'
@@ -272,6 +273,15 @@ describe('the request the endpoint accepts', () => {
 })
 
 describe('the photo-path flag', () => {
+  it('reports the explicit initials-only posture without checking storage', () => {
+    expect(
+      deploymentPhotoPath({
+        NEON_PHOTOS_DEFAULT: 'disabled',
+        NEON_READS_DEFAULT: 'neon',
+      }),
+    ).toBe('disabled')
+  })
+
   it('is supabase unless every condition holds', () => {
     expect(deploymentPhotoPath({})).toBe('supabase')
     // Opt-in alone is not enough.
@@ -317,6 +327,24 @@ describe('the photo-path flag', () => {
   it('leaves the read-path flag alone', () => {
     expect(deploymentReadPath({ NEON_PHOTOS_DEFAULT: 'neon' })).toBe('supabase')
     expect(deploymentReadPath({ NEON_READS_DEFAULT: 'neon' })).toBe('neon')
+  })
+
+  it('fails closed before authentication or storage when the S26 initials-only posture disables photos', async () => {
+    const handler = createActivityDailyHandler({
+      env: {
+        NEON_READS_DEFAULT: 'neon',
+        NEON_PHOTOS_DEFAULT: 'disabled',
+      },
+    })
+    const response = await handler(
+      new Request(
+        `https://dashboard.test/api/activity-daily?op=leads.photoUrls&lead_ids=${ID_A}`,
+      ),
+    )
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'Lead photo operations are disabled for this deployment',
+    })
   })
 })
 

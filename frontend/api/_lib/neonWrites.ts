@@ -52,18 +52,21 @@ import {
   PIPELINE_WRITE_COMMANDS,
   PIPELINE_WRITE_OPERATIONS,
   type ActorDisplayNameRow,
+  type ApplyFollowUpActionParams,
   type AppendEventResult,
   type BackfillMilestonesResult,
   type DeleteManualMessageResult,
   type DeleteResult,
   type EditManualMessageResult,
   type LeadDemographicsRow,
+  type LeadAssignmentRow,
   type LeadForImportRow,
   type LeadNoteResult,
   type LeadPipelineFieldsRow,
   type SetGenderResult,
   type SetStageResult,
   type StageChangedAtMode,
+  type TeamMemberByIdRow,
   type ThreadDedupKeyRow,
 } from './data/operations/index.js'
 import {
@@ -303,6 +306,142 @@ export async function neonSetStage(
     })
   } catch (error) {
     return storeFailure(error, 'save the stage change')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// assign.
+// ---------------------------------------------------------------------------
+
+/**
+ * Assign inside the same actor-scoped transaction that writes its audit event.
+ * `memberId` belongs to the Neon roster because the handler selects this branch
+ * only when both reads and writes use the application data plane; no Supabase
+ * client is constructed on this path.
+ */
+export async function neonAssign(
+  request: Request,
+  input: { readonly leadId: string; readonly memberId: number | null },
+  deps: NeonWriteDeps = {},
+): Promise<Response> {
+  let writer: NeonWriter
+  try {
+    writer = await neonWriter(request, deps)
+  } catch (error) {
+    return storeFailure(error, 'verify team access')
+  }
+
+  try {
+    return await writer.store.transaction(writer.actor, async (transaction) => {
+      const leadPage = await transaction.query<LeadAssignmentRow>({
+        operation: PIPELINE_WRITE_OPERATIONS.leadAssignment,
+        params: { leadId: input.leadId },
+        page: { limit: 1 },
+      })
+      const lead = leadPage.items[0]
+      if (!lead) return json({ error: 'unknown lead_id' }, 404)
+
+      const member = async (memberId: number) => {
+        const page = await transaction.query<TeamMemberByIdRow>({
+          operation: PIPELINE_WRITE_OPERATIONS.teamMemberById,
+          params: { memberId },
+          page: { limit: 1 },
+        })
+        return page.items[0] ?? null
+      }
+
+      let targetName: string | null = null
+      if (input.memberId !== null) {
+        const target = await member(input.memberId)
+        if (!target) return json({ error: 'unknown member_id' }, 400)
+        if (!target.active) return json({ error: 'member is inactive' }, 400)
+        targetName = target.name
+      }
+
+      // A historical reference can outlive its roster row. That is not an
+      // authorization decision and should not prevent a member from correcting
+      // the assignment; it matches the legacy path's best-effort old name.
+      const previous =
+        lead.assigned_to === null ? null : await member(lead.assigned_to)
+      const actor = await actorName(transaction)
+
+      const updated = await transaction.execute<DeleteResult>({
+        operation: PIPELINE_WRITE_COMMANDS.setAssignment,
+        params: { leadId: input.leadId, memberId: input.memberId },
+      })
+      if (updated.rowCount === 0) return json({ error: 'unknown lead_id' }, 404)
+
+      await transaction.execute<AppendEventResult>({
+        operation: PIPELINE_WRITE_COMMANDS.appendAssignmentEvent,
+        params: {
+          leadId: input.leadId,
+          actor,
+          fromAssignee: previous?.name ?? null,
+          toAssignee: targetName,
+        },
+      })
+
+      return json({ ok: true, assigned_to: input.memberId })
+    })
+  } catch (error) {
+    return storeFailure(error, 'save the assignment')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// conversation follow-ups.
+// ---------------------------------------------------------------------------
+
+export interface NeonFollowUpInput {
+  readonly action: ApplyFollowUpActionParams['action']
+  readonly instanceId: string
+  readonly profileUrl: string
+  readonly expectedRevision: number
+  readonly mutationId: string
+  readonly ownerId: number | null
+  readonly nextFollowUpDate: string | null
+  readonly reason: string | null
+}
+
+/**
+ * The baseline function owns the advisory lock, revision check, replay and the
+ * paired state/event writes. The application transaction supplies the resolved
+ * actor and the audit name from the same Neon roster, so all six actions retain
+ * those guarantees without crossing either provider's member-id space.
+ */
+export async function neonFollowUp(
+  request: Request,
+  input: NeonFollowUpInput,
+  deps: NeonWriteDeps = {},
+): Promise<Response> {
+  let writer: NeonWriter
+  try {
+    writer = await neonWriter(request, deps)
+  } catch (error) {
+    return storeFailure(error, 'verify team access')
+  }
+
+  try {
+    return await writer.store.transaction(writer.actor, async (transaction) => {
+      const actor = await actorName(transaction)
+      const result = await transaction.execute<Record<string, unknown>>({
+        operation: CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
+        params: {
+          action: input.action,
+          instanceId: input.instanceId,
+          profileUrl: input.profileUrl,
+          actor,
+          expectedRevision: input.expectedRevision,
+          mutationId: input.mutationId,
+          ownerId: input.ownerId,
+          nextFollowUpDate: input.nextFollowUpDate,
+          reason: input.reason,
+        },
+      })
+      return json({ ok: true, ...result })
+    })
+  } catch (error) {
+    return storeFailure(error, 'update the follow-up')
   }
 }
 

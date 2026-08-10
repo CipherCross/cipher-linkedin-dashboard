@@ -1,11 +1,10 @@
 /**
  * Lead photo delivery, on either provider.
  *
- * Two loaders live here and exactly one runs, chosen by the deployment's
- * `photoPath` flag (`api/activity-daily.ts` § `deploymentPhotoPath`). The Supabase
- * loader below is unchanged — same signature, same cache, same five-minute TTL —
- * because it is the only one that works today and the Neon/R2 path has to land
- * beside it rather than in place of it.
+ * Two loaders live here and exactly one runs when photo delivery is enabled,
+ * chosen by the deployment's `photoPath` flag (`api/activity-daily.ts` §
+ * `deploymentPhotoPath`). An explicit `disabled` value takes neither loader:
+ * avatars render initials and no storage or application photo request is made.
  *
  * ## What differs, and why it is not symmetrical
  *
@@ -291,11 +290,12 @@ export function toLeadPhotoSource(loader: LeadPhotoUrlLoader): LeadPhotoSource {
 /**
  * The instance the components use.
  *
- * Resolves the flag on first use and delegates from then on. `clear()` reaches
- * **both** loaders regardless of which one is active: `AuthContext` calls it on
- * every sign-out and session change, and a URL minted for one member must not
- * survive into another's session on either provider — including a loader that was
- * active earlier in the page's life.
+ * Resolves the flag on first use and delegates from then on. `disabled` returns
+ * `null` without calling a loader. `clear()` reaches **both** loaders regardless
+ * of which one is active: `AuthContext` calls it on every sign-out and session
+ * change, and a URL minted for one member must not survive into another's session
+ * on either provider — including a loader that was active earlier in the page's
+ * life.
  */
 export function createLeadPhotoSource(
   supabaseSource: LeadPhotoSource,
@@ -305,11 +305,12 @@ export function createLeadPhotoSource(
   // depend on another module's runtime export — which is how a component test that
   // partially mocks `dashboardReads` fails at import time instead of where it
   // reads. The binding is touched only when a photo is actually requested.
-  photoPath: () => Promise<'supabase' | 'neon'> = () => resolvePhotoPath(),
+  photoPath: () => Promise<'disabled' | 'supabase' | 'neon'> = () => resolvePhotoPath(),
 ): LeadPhotoSource {
   return {
     async get(lead) {
       const path = await photoPath()
+      if (path === 'disabled') return null
       return path === 'neon' ? apiSource.get(lead) : supabaseSource.get(lead)
     },
     clear() {

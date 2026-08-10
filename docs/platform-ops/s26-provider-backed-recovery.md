@@ -14,8 +14,10 @@ existing provider-neutral operations core with these fixed capabilities:
   data/RLS smoke checks, and schema/data recovery artifacts;
 - Better Auth: configuration, disabled support membership, company-admin invite,
   identity smoke checks, and configuration/identity recovery artifacts;
-- Cloudflare R2: private storage configuration, object/RLS smoke checks, and
-  storage metadata plus private-object recovery artifacts;
+- Cloudflare R2: control/recovery-only private storage configuration,
+  object/RLS smoke checks, and storage metadata plus private-object recovery
+  artifacts. It is not an application-photo credential path for the disposable
+  S26 drill;
 - Vercel: deployment target, environment descriptors, domain, pinned build,
   promotion, runtime checks, and deployment/configuration recovery artifacts;
 - approved SMTP, domain, and source-repository named capabilities required by
@@ -61,22 +63,25 @@ bindings nor preflight inputs.
 
 Only an exact approved apply may enter the fixed environment-binding route.
 That route verifies the already-created Neon project and Vercel target against
-their deterministic identities and ownership marker, derives the application
-database URI for the fixed least-privilege role, generates the Better Auth,
-schedule, ingest, and tool credentials, and binds the values directly to the
-Vercel production environment. Results expose only names, classes, source
-kinds, and a canonical digest.
+their deterministic identities and ownership marker, derives four separate
+least-privilege Neon role URLs (`app_runtime`, `app_system`, `app_machine`, and
+`identity_store`), generates only the fixed session and machine-route secrets,
+and binds the versioned `hosting.environment.v2` profile directly to the Vercel
+production environment. The profile fixes Better Auth, the exact Neon feature
+flags, and `NEON_PHOTOS_DEFAULT=disabled`; it has no tenant-scoped R2
+application credential. Results expose metadata only. Their digest covers every
+value name, classification, and complete non-secret source reference, never a
+resolved URL or secret.
 
 The official Neon Data API and Neon-managed Better Auth surfaces remain Beta
-and are excluded by S26's GA-only rule. The local application now has the
-identity-only Better Auth boundary for its existing named Neon operations, but
-the fixed hosting profile, assignment/follow-up operations, and application R2
-credential posture are unresolved as recorded in
-`s26-application-data-plane-compatibility.md`. Data preflight therefore remains
-false and apply still fails with `provider_readiness_blocked` before an
-environment write. A blank or missing owner-approved full source Git SHA
-likewise blocks release readiness; a configured SHA must be confirmed by the
-fixed read-only repository route.
+and are excluded by S26's GA-only rule. The local application has the
+identity-only Better Auth boundary and actor-scoped named Neon operations for
+assignment and all follow-up actions. The remaining boundary is provider
+readiness: `S26_APPLICATION_DATA_PLANE_READY=false` keeps data preflight false
+and apply fails with `provider_readiness_blocked` before an environment write.
+A blank or missing owner-approved full source Git SHA likewise blocks release
+readiness; a configured SHA must be confirmed by the fixed read-only repository
+route.
 
 ## Recovery behavior
 
@@ -89,10 +94,12 @@ does not expose bytes, connection strings, identity credentials, environment
 values, SMTP values, or raw provider responses.
 
 Hosting recovery is deliberately metadata-only. It records owned resource and
-release identity, environment names/classes, counts, and canonical digests,
-but never captures or reconstructs a database URL or generated tenant secret.
-Restore must re-enter the same reviewed lifecycle and cannot turn recovery
-metadata into a secret-read or arbitrary environment-write path.
+release identity plus the complete closed value descriptors (name, class,
+non-secret source reference, type, target) and the environment-binding digest.
+It never captures or reconstructs a database URL, generated tenant secret, or
+photo object. Restore and verification recompute the same closed descriptor
+digest and cannot turn recovery metadata into a secret-read or arbitrary
+environment-write path.
 
 The manifest schema is
 [`tenant-recovery.v1.schema.json`](./contracts/tenant-recovery.v1.schema.json).

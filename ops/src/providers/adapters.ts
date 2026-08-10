@@ -151,6 +151,7 @@ const releaseBuildResult = hostingRequestResult.extend({
   revisionPinned: z.literal(true),
   buildRecipeId: identifier,
   publicValueNames: z.array(valueName),
+  environmentBindingDigest: digest,
   scheduleManifestDigest: digest,
   artifactDigest: digest,
   status: z.literal("verified"),
@@ -211,6 +212,7 @@ const verificationReport = hostingRequestResult.extend({
     buildRecipeId: identifier.nullable(),
     artifactDigest: digest.nullable(),
     publicValueNames: z.array(valueName),
+    environmentBindingDigest: digest.nullable(),
     scheduleManifestDigest: digest.nullable(),
   }),
   rollout: z.strictObject({

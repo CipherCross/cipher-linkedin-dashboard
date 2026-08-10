@@ -9,8 +9,9 @@ import {
   CANONICAL_BUILD_RECIPE_ID,
   CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
   CANONICAL_RUNTIME_PROFILE_ID,
-  LEGACY_PUBLIC_BUILD_VALUE_NAMES,
+  HOSTING_ENVIRONMENT_CONTRACT,
   buildTenantEnvironmentBindings,
+  tenantEnvironmentContractDigest,
 } from "../providers/hosting-tenant.js";
 import type {
   OwnershipMarker,
@@ -46,6 +47,8 @@ export interface OnboardingExecutionContext {
   readonly smtpSecretLabels: readonly string[];
   readonly integrationSecretLabels: readonly string[];
   readonly publicBuildValueNames: readonly string[];
+  readonly environmentContractVersion: string;
+  readonly environmentContractDigest: string;
   readonly smokeTestIds: readonly string[];
   readonly ownership: OwnershipMarker;
 }
@@ -61,11 +64,8 @@ const HOSTING_RUNTIME_CHECK_IDS: readonly string[] = [
   "runtime_project_ref",
 ];
 
-/** Every public build value the release carries: canonical names plus legacy ones. */
-const PUBLIC_VALUE_NAMES: readonly string[] = [
-  ...CANONICAL_PUBLIC_BUILD_VALUE_NAMES,
-  ...LEGACY_PUBLIC_BUILD_VALUE_NAMES,
-].sort();
+/** Every public build value in the closed S26 profile. */
+const PUBLIC_VALUE_NAMES: readonly string[] = [...CANONICAL_PUBLIC_BUILD_VALUE_NAMES].sort();
 
 export interface ExecuteNextResult {
   readonly ordinal: number;
@@ -362,20 +362,30 @@ export class OnboardingExecutor {
           "invalid_plan",
           "Plan public build values do not match the canonical environment contract",
         );
-        return (
-          await this.#providerCall("hosting.bindEnvironment", () =>
-            this.#providers.hosting.bindEnvironment({
-              targetHandle: hostingTarget.resourceId,
-              scope: "production",
-              dataProjectHandle: dataProject.resourceId,
-              dataProjectName: context.dataProjectName,
-              ownership: context.ownership,
-              bindings: buildTenantEnvironmentBindings({
-                tenantSlug: context.tenantSlug,
-              }),
+        assertOps(
+          context.environmentContractVersion === HOSTING_ENVIRONMENT_CONTRACT &&
+            context.environmentContractDigest === tenantEnvironmentContractDigest({ tenantSlug: context.tenantSlug }),
+          "invalid_plan",
+          "Plan environment contract does not match the closed S26 profile",
+        );
+        const binding = await this.#providerCall("hosting.bindEnvironment", () =>
+          this.#providers.hosting.bindEnvironment({
+            targetHandle: hostingTarget.resourceId,
+            scope: "production",
+            dataProjectHandle: dataProject.resourceId,
+            dataProjectName: context.dataProjectName,
+            ownership: context.ownership,
+            bindings: buildTenantEnvironmentBindings({
+              tenantSlug: context.tenantSlug,
             }),
-          )
-        ).hostingRequestId;
+          }),
+        );
+        assertOps(
+          binding.bindingDigest === context.environmentContractDigest,
+          "provider_error",
+          "Hosting binding digest does not match the approved S26 contract",
+        );
+        return binding.hostingRequestId;
       }
       case 8:
         assertOps(hostingTarget, "invalid_plan", "Hosting target reference is missing");
@@ -399,6 +409,7 @@ export class OnboardingExecutor {
             revisionId: context.sourceGitSha,
             buildRecipeId: CANONICAL_BUILD_RECIPE_ID,
             publicValueNames: PUBLIC_VALUE_NAMES,
+            environmentBindingDigest: context.environmentContractDigest,
             scheduleManifestDigest: manifestDigest,
           }),
         );

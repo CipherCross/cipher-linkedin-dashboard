@@ -18,7 +18,9 @@ import { authorizationResponse, guardMember } from './_lib/auth.js'
 import { deploymentWritePath } from './_lib/data/writePath.js'
 import {
   neonAddNote,
+  neonAssign,
   neonDeleteNote,
+  neonFollowUp,
   neonSetGender,
   neonSetInstanceConfig,
   neonSetStage,
@@ -251,6 +253,7 @@ async function assign(
   supa: ReturnType<typeof db>,
   p: Record<string, unknown>,
   actor: string,
+  req: Request,
 ) {
   const leadId = p.lead_id
   if (typeof leadId !== 'string' || !leadId) {
@@ -260,6 +263,9 @@ async function assign(
   const memberId = p.member_id
   if (memberId !== null && (typeof memberId !== 'number' || !Number.isInteger(memberId))) {
     return json({ error: 'member_id must be an integer or null' }, 400)
+  }
+  if (deploymentWritePath() === 'neon') {
+    return neonAssign(req, { leadId, memberId })
   }
   // Resolve the new assignee (name for the event) and reject unknown/inactive.
   let newName: string | null = null
@@ -772,6 +778,7 @@ async function followUp(
   p: Record<string, unknown>,
   action: keyof typeof FOLLOW_UP_ACTIONS,
   actor: string,
+  req: Request,
 ) {
   const instanceId = typeof p.instance_id === 'string' ? p.instance_id.trim() : ''
   const profileUrl = typeof p.profile_url === 'string' ? p.profile_url.trim() : ''
@@ -839,6 +846,19 @@ async function followUp(
   }
   if (dbAction === 'cancel' && (ownerId != null || nextDate != null)) {
     return json({ error: 'cancel does not accept owner_id or next_follow_up_date' }, 400)
+  }
+
+  if (deploymentWritePath() === 'neon') {
+    return neonFollowUp(req, {
+      action: dbAction,
+      instanceId,
+      profileUrl,
+      expectedRevision,
+      mutationId,
+      ownerId: ownerId ?? null,
+      nextFollowUpDate: nextDate ?? null,
+      reason: reason ?? null,
+    })
   }
 
   const { data, error } = await supa.rpc('apply_follow_up_action', {
@@ -928,22 +948,23 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: 'Admin access required' }, 403)
   }
 
-  // These actions do not yet have a reviewed application-store operation.
-  // Refuse them before constructing a Supabase client: a Neon deployment must
-  // never reinterpret a Neon roster id in the legacy provider's id space.
+  // Team administration is a self-hosted Better Auth concern. The legacy
+  // Supabase-shaped mutations are deliberately retired on every data path: a
+  // Neon roster id must never cross into the old provider, and the identity
+  // endpoint's UUID-keyed admin functions are the only remaining vocabulary.
   if (
-    neon &&
     typeof payload.action === 'string' &&
-    new Set([
-      'assign',
-      'add_member',
-      'set_member_active',
-      'invite_member',
-      'update_member',
-      ...Object.keys(FOLLOW_UP_ACTIONS),
-    ]).has(payload.action)
+    new Set(['add_member', 'set_member_active', 'invite_member', 'update_member']).has(
+      payload.action,
+    )
   ) {
-    return json({ error: 'This action is not available on the Neon application path' }, 503)
+    return json(
+      {
+        error: 'Team administration moved to /api/identity.',
+        redirect: '/api/identity',
+      },
+      410,
+    )
   }
 
   // The five reviewed Neon branches below return before dereferencing this
@@ -954,7 +975,7 @@ async function handle(req: Request): Promise<Response> {
     case 'set_stage':
       return setStage(supa, payload, actorNameForLegacy, req)
     case 'assign':
-      return assign(supa, payload, actorNameForLegacy)
+      return assign(supa, payload, actorNameForLegacy, req)
     case 'add_note':
       return addNote(supa, payload, actorNameForLegacy, req)
     case 'delete_note':
@@ -979,7 +1000,7 @@ async function handle(req: Request): Promise<Response> {
     case 'complete_follow_up':
     case 'skip_follow_up':
     case 'cancel_follow_up':
-      return followUp(supa, payload, payload.action, actorNameForLegacy)
+      return followUp(supa, payload, payload.action, actorNameForLegacy, req)
     default:
       return json({ error: 'unknown action' }, 400)
   }

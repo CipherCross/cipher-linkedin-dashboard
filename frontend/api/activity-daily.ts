@@ -216,7 +216,13 @@ export function deploymentReadPath(env = process.env): ReadPath {
 // The photo-path flag (S20)
 // ---------------------------------------------------------------------------
 
-export type PhotoPath = 'supabase' | 'neon'
+/**
+ * `disabled` is a deliberate deployment posture, not a missing configuration.
+ * It keeps the existing objects intact while ensuring this application neither
+ * signs nor reads them. The UI renders initials for it without issuing a photo
+ * request.
+ */
+export type PhotoPath = 'disabled' | 'supabase' | 'neon'
 
 /**
  * Which lead-photo path this deployment serves. Reported beside `readPath` by the
@@ -244,6 +250,7 @@ export type PhotoPath = 'supabase' | 'neon'
  * because reads are — an owner enables it deliberately, once both hold.
  */
 export function deploymentPhotoPath(env = process.env): PhotoPath {
+  if ((env.NEON_PHOTOS_DEFAULT ?? '').trim() === 'disabled') return 'disabled'
   if ((env.NEON_PHOTOS_DEFAULT ?? '').trim() !== 'neon') return 'supabase'
   if (deploymentReadPath(env) !== 'neon') return 'supabase'
   return objectStorageConfigured(env) ? 'neon' : 'supabase'
@@ -263,15 +270,15 @@ export function deploymentPhotoPath(env = process.env): PhotoPath {
  * What it discloses is which read path a deployment defaults to. That is not a
  * secret, it is not a capability, and it is inferable from timing anyway.
  */
-function readPathResponse(): Response {
+function readPathResponse(env = process.env): Response {
   // `photoPath` rides along on the same lookup rather than taking an operation of
   // its own. The browser needs both before it renders anything, they are decided
   // by the same deployment, and a second unauthenticated round trip at startup
   // would buy nothing — the field is additive, so a browser built before S20
   // ignores it and keeps the Supabase photo path.
   return json({
-    readPath: deploymentReadPath(),
-    photoPath: deploymentPhotoPath(),
+    readPath: deploymentReadPath(env),
+    photoPath: deploymentPhotoPath(env),
   })
 }
 
@@ -678,6 +685,12 @@ function readRequiredUuid(url: URL, name: string): string {
 }
 
 export interface ActivityDailyDeps {
+  /**
+   * Explicit deployment configuration for the handler contract tests. The
+   * production entrypoint uses `process.env`; this seam prevents a disabled
+   * photo request from reaching either the actor or object-storage layers.
+   */
+  readonly env?: NodeJS.ProcessEnv
   readonly authPath?: ApplicationAuthPath
   readonly identity?: IdentityProvider
   /**
@@ -706,7 +719,7 @@ async function handle(
 
   // Before any authentication and before any store construction. See
   // `readPathResponse` for why this one operation is unauthenticated.
-  if (op === CONFIG_READ_PATH_OPERATION) return readPathResponse()
+  if (op === CONFIG_READ_PATH_OPERATION) return readPathResponse(deps.env)
 
   /**
    * No `op` is S12's request, and it is answered exactly as S12 answered it:
@@ -719,6 +732,17 @@ async function handle(
   if (!spec && op !== LEAD_PHOTO_URLS_OPERATION) {
     // Names the refusal without enumerating the vocabulary.
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
+  }
+
+  // The disposable S26 drill is initials-only. Refuse this operation before
+  // actor resolution, database reads, or object-storage construction so no
+  // request can accidentally exercise a preserved photo path. Existing photo
+  // rows and objects are intentionally not read, changed, or deleted.
+  if (
+    op === LEAD_PHOTO_URLS_OPERATION &&
+    deploymentPhotoPath(deps.env) !== 'neon'
+  ) {
+    return json({ error: 'Lead photo operations are disabled for this deployment' }, 503)
   }
 
   // The deployed SPA and this endpoint use the same explicit auth selector.

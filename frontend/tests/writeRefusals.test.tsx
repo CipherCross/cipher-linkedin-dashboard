@@ -1,33 +1,16 @@
 // @vitest-environment jsdom
 /**
- * The two write refusals, at their call sites.
+ * Roster-keyed write routing at the real hook call sites.
  *
- * `tests/rosterWrites.test.ts` proves the *predicate* — `memberWritesAllowed`
- * and `assignableMembers` — and says so in its own header: "the call sites are
- * covered by `tsc -b`, by the browser run, and by nothing else." `N-ROSTER.md`
- * then measured exactly that, and its mutations **9 and 10** deleted the refusal
- * from `usePipelineActions.assign` and `useFollowUpActions.mutate` and reddened
- * **nothing**. `N-BROWSER-RUN.md` re-measured the same hole from the other side
- * with mutations 11 and 12.
- *
- * This file closes it. The two hooks are real, the predicate they consult is
- * real, and only their four context dependencies are replaced — because what is
- * under test is *whether the hook asks* and *whether it refuses*, not what a
- * toast looks like or how a fetch is spelled.
- *
- * ## What each assertion would catch
- *
- * The refusal is not a convenience. `/api/pipeline`'s member-keyed actions have
- * no Neon branch and resolve every id against Supabase, so a Neon
- * `team_members.id` sent there names a different person on a request that
- * **succeeds**. The load-bearing assertions are therefore the negative ones: no
- * request was made. A refusal that toasts and then posts anyway would satisfy a
- * weaker test and commit the misattribution.
+ * `rosterWrites.test.ts` covers the fail-closed source predicate. This suite
+ * proves the hooks actually carry a known Neon roster ID to the transactional
+ * Neon server branch, while unknown sources remain blocked before a request.
+ * The injected context and transport make the assertion about the public hook
+ * behavior rather than a component's toast styling.
  */
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { MEMBER_WRITES_BLOCKED } from '../src/lib/rosterWrites'
 import type { FollowUpState, Lead, RosterPath, TeamMember } from '../src/lib/types'
 
 // --- the four seams ---------------------------------------------------------
@@ -111,8 +94,8 @@ afterEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe('usePipelineActions.assign — N-ROSTER mutation 9', () => {
-  it('refuses a member id while the roster is the application API’s, and sends nothing', async () => {
+describe('usePipelineActions.assign — S26 transactional parity', () => {
+  it('posts a Neon roster id to the matching actor-scoped server path', async () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => usePipelineActions())
 
@@ -120,16 +103,15 @@ describe('usePipelineActions.assign — N-ROSTER mutation 9', () => {
       await result.current.assign(LEAD, 7)
     })
 
-    expect(toastError).toHaveBeenCalledWith(MEMBER_WRITES_BLOCKED)
-    // The assertion that matters: the request that would have committed a Neon
-    // id against a Supabase row was never made.
-    expect(authPost).not.toHaveBeenCalled()
-    // And the board was not moved optimistically either — a patched lead with no
-    // write behind it is a lie the next refresh silently corrects.
-    expect(patchLead).not.toHaveBeenCalled()
+    expect(toastError).not.toHaveBeenCalled()
+    expect(authPost).toHaveBeenCalledWith('/api/pipeline', {
+      action: 'assign',
+      lead_id: LEAD.id,
+      member_id: 7,
+    })
   })
 
-  it('still allows unassigning on that roster, because null names nobody', async () => {
+  it('allows unassigning on the Neon roster', async () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => usePipelineActions())
 
@@ -161,16 +143,14 @@ describe('usePipelineActions.assign — N-ROSTER mutation 9', () => {
     })
   })
 
-  it('empties the assignment dropdowns and states why, without hiding the display roster', () => {
+  it('keeps a Neon assignment vocabulary while preserving the display roster', () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => usePipelineActions())
 
-    // Two lists on purpose: `memberName` must still resolve an id to a name, or
-    // every owner chip on the Neon path loses its label.
-    expect(result.current.assignableMembers).toEqual([])
+    expect(result.current.assignableMembers).toEqual(teamMembers)
     expect(result.current.members).toHaveLength(1)
     expect(result.current.memberName(1)).toBe('Member One')
-    expect(result.current.memberWritesBlockedReason).toBe(MEMBER_WRITES_BLOCKED)
+    expect(result.current.memberWritesBlockedReason).toBeNull()
   })
 })
 
@@ -183,7 +163,7 @@ describe('usePipelineActions.assign — N-ROSTER mutation 9', () => {
  * echoing `state.owner_id`, which is precisely the case a per-control check
  * misses.
  */
-describe('useFollowUpActions — N-ROSTER mutation 10', () => {
+describe('useFollowUpActions — S26 transactional parity', () => {
   const STATE: FollowUpState = {
     instance_id: LEAD.instance_id,
     profile_url: LEAD.profile_url,
@@ -198,45 +178,47 @@ describe('useFollowUpActions — N-ROSTER mutation 10', () => {
     archived_at: null,
   }
 
-  it('refuses `schedule`, and throws so the caller cannot report success', async () => {
+  it('posts `schedule` with the Neon roster owner', async () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => useFollowUpActions())
 
-    await expect(
-      result.current.schedule(LEAD, 7, '2026-08-10'),
-    ).rejects.toThrow(MEMBER_WRITES_BLOCKED)
-
-    expect(toastError).toHaveBeenCalledWith(MEMBER_WRITES_BLOCKED)
-    expect(authPost).not.toHaveBeenCalled()
-    // No optimistic state either: a patch before the guard paints a follow-up
-    // that never existed.
-    expect(patchFollowUpState).not.toHaveBeenCalled()
+    await act(async () => {
+      await result.current.schedule(LEAD, 7, '2026-08-10')
+    })
+    expect(authPost).toHaveBeenCalledTimes(1)
+    expect((authPost.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({
+      action: 'schedule_follow_up',
+      owner_id: 7,
+    })
   })
 
-  it('refuses `reschedule`, which carries an owner the user never chose', async () => {
-    // The sharp case. The form pre-fills from `state.owner_id`, so the id crosses
-    // on an action whose visible subject is a *date*. N-ROSTER's browser run
-    // caught this by clicking Save owner on a pre-filled panel.
+  it('posts `reschedule` with its existing Neon owner', async () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => useFollowUpActions())
 
-    await expect(
-      result.current.reschedule(LEAD, STATE, '2026-08-12'),
-    ).rejects.toThrow(MEMBER_WRITES_BLOCKED)
-    expect(authPost).not.toHaveBeenCalled()
+    await act(async () => {
+      await result.current.reschedule(LEAD, STATE, '2026-08-12')
+    })
+    expect((authPost.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({
+      action: 'reschedule_follow_up',
+      owner_id: STATE.owner_id,
+    })
   })
 
-  it('refuses `reassign`, whose whole subject is the owner', async () => {
+  it('posts `reassign` with the selected Neon owner', async () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => useFollowUpActions())
 
-    await expect(
-      result.current.reassign(LEAD, STATE, 7),
-    ).rejects.toThrow(MEMBER_WRITES_BLOCKED)
-    expect(authPost).not.toHaveBeenCalled()
+    await act(async () => {
+      await result.current.reassign(LEAD, STATE, 7)
+    })
+    expect((authPost.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({
+      action: 'reassign_follow_up',
+      owner_id: 7,
+    })
   })
 
-  it('lets an ownerless `complete` through on that same roster', async () => {
+  it('posts an ownerless `complete` on that same roster', async () => {
     rosterPath = 'neon'
     authPost.mockResolvedValue({
       ok: true,
@@ -256,16 +238,17 @@ describe('useFollowUpActions — N-ROSTER mutation 10', () => {
     expect(toastError).not.toHaveBeenCalled()
   })
 
-  it('refuses a `complete` that schedules the next one under an owner', async () => {
-    // `complete` is ownerless only when it does not chain. With a follow-up
-    // attached it carries an id like any other, and the guard must see it.
+  it('posts a chained `complete` under its next Neon owner', async () => {
     rosterPath = 'neon'
     const { result } = renderHook(() => useFollowUpActions())
 
-    await expect(
-      result.current.complete(LEAD, STATE, { ownerId: 7, date: '2026-08-20' }),
-    ).rejects.toThrow(MEMBER_WRITES_BLOCKED)
-    expect(authPost).not.toHaveBeenCalled()
+    await act(async () => {
+      await result.current.complete(LEAD, STATE, { ownerId: 7, date: '2026-08-20' })
+    })
+    expect((authPost.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({
+      action: 'complete_follow_up',
+      owner_id: 7,
+    })
   })
 
   it('carries the owner on the Supabase roster', async () => {

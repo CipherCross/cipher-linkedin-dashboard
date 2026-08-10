@@ -96,14 +96,18 @@ import {
   PIPELINE_WRITE_OPERATIONS,
   actorDisplayNameOperation,
   addNoteOperation,
+  appendAssignmentEventOperation,
   appendGenderReviewOperation,
   appendStageEventOperation,
   deleteNoteOperation,
+  leadAssignmentOperation,
   leadDemographicsOperation,
   leadPipelineFieldsOperation,
+  setAssignmentOperation,
   setGenderOperation,
   setInstanceConfigOperation,
   setStageOperation,
+  teamMemberByIdOperation,
 } from './pipelineWrites.js'
 import {
   LIBRARY_WRITE_COMMANDS,
@@ -247,12 +251,14 @@ export {
   type ActorDisplayNameParams,
   type ActorDisplayNameRow,
   type AddNoteParams,
+  type AppendAssignmentEventParams,
   type AppendEventResult,
   type AppendGenderReviewParams,
   type AppendStageEventParams,
   type DeleteNoteParams,
   type DeleteResult,
   type LeadByIdParams,
+  type LeadAssignmentRow,
   type LeadDemographicsRow,
   type LeadNoteResult,
   type LeadPipelineFieldsRow,
@@ -262,6 +268,9 @@ export {
   type SetStageParams,
   type SetStageResult,
   type StageChangedAtMode,
+  type SetAssignmentParams,
+  type TeamMemberByIdParams,
+  type TeamMemberByIdRow,
 } from './pipelineWrites.js'
 export {
   CONVERSATION_WRITE_COMMANDS,
@@ -445,6 +454,14 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     leadPipelineFieldsOperation,
   )
   registry.registerQuery(
+    PIPELINE_WRITE_OPERATIONS.leadAssignment,
+    leadAssignmentOperation,
+  )
+  registry.registerQuery(
+    PIPELINE_WRITE_OPERATIONS.teamMemberById,
+    teamMemberByIdOperation,
+  )
+  registry.registerQuery(
     PIPELINE_WRITE_OPERATIONS.leadDemographics,
     leadDemographicsOperation,
   )
@@ -476,6 +493,14 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerCommand(
     PIPELINE_WRITE_COMMANDS.appendStageEvent,
     appendStageEventOperation,
+  )
+  registry.registerCommand(
+    PIPELINE_WRITE_COMMANDS.setAssignment,
+    setAssignmentOperation,
+  )
+  registry.registerCommand(
+    PIPELINE_WRITE_COMMANDS.appendAssignmentEvent,
+    appendAssignmentEventOperation,
   )
   registry.registerCommand(PIPELINE_WRITE_COMMANDS.addNote, addNoteOperation)
   registry.registerCommand(PIPELINE_WRITE_COMMANDS.deleteNote, deleteNoteOperation)
@@ -755,6 +780,8 @@ export const APPLICATION_QUERY_OPERATIONS = [
   LIBRARY_OPERATIONS.hypotheses,
   LIBRARY_OPERATIONS.hypothesisCampaigns,
   PIPELINE_WRITE_OPERATIONS.leadPipelineFields,
+  PIPELINE_WRITE_OPERATIONS.leadAssignment,
+  PIPELINE_WRITE_OPERATIONS.teamMemberById,
   PIPELINE_WRITE_OPERATIONS.leadDemographics,
   PIPELINE_WRITE_OPERATIONS.actorDisplayName,
   CONVERSATION_WRITE_OPERATIONS.leadForImport,
@@ -795,6 +822,8 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   IDENTITY_ADMIN_COMMANDS.setRole,
   PIPELINE_WRITE_COMMANDS.setStage,
   PIPELINE_WRITE_COMMANDS.appendStageEvent,
+  PIPELINE_WRITE_COMMANDS.setAssignment,
+  PIPELINE_WRITE_COMMANDS.appendAssignmentEvent,
   PIPELINE_WRITE_COMMANDS.addNote,
   PIPELINE_WRITE_COMMANDS.deleteNote,
   PIPELINE_WRITE_COMMANDS.setGender,

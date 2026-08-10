@@ -18,6 +18,7 @@ import {
   buildHostingCapabilityPlan,
   canonicalJson,
   hostingPlanDigest,
+  hostingEnvironmentBindingDigest,
   normalizeSchedules,
   planDigest,
   scheduleManifestDigest,
@@ -89,6 +90,14 @@ const BINDINGS: readonly HostingValueBinding[] = [
     source: { kind: "derived_from_plan", planFieldRef: "domain.hostname" },
   },
 ];
+
+const ENVIRONMENT_BINDING_DIGEST = hostingEnvironmentBindingDigest(
+  BINDINGS.map((binding) => ({
+    name: binding.name,
+    valueClass: binding.valueClass,
+    source: binding.source,
+  })),
+);
 
 function planInput(): HostingPlanInput {
   return {
@@ -403,6 +412,7 @@ test("rollback is expressible and distinguishable from promote", async () => {
     revisionId: REVISION_B,
     buildRecipeId: "spa-plus-http-handlers-v1",
     publicValueNames: ["PUBLIC_API_BASE_URL"],
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
 
@@ -803,6 +813,7 @@ test("every canonical result has the provider-independent shape S10 must match",
     revisionId: REVISION_B,
     buildRecipeId: input.buildRecipeId,
     publicValueNames: ["PUBLIC_API_BASE_URL"],
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
   await provider.promoteRelease({
@@ -980,6 +991,7 @@ test("verification reports runtime, schedules, domain and build metadata", async
     revisionId: REVISION_B,
     buildRecipeId: input.buildRecipeId,
     publicValueNames: ["PUBLIC_API_BASE_URL"],
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
   await green.promoteRelease({
@@ -1013,7 +1025,7 @@ test("canonical digests are stable and no existing schema version moved", () => 
   assert.equal(canonicalJson(first), canonicalJson(second));
   assert.equal(
     hostingPlanDigest(first),
-    "sha256:5aa71612191baae630cb976b04c75b9a484a5b16bcc637cbb9e9b8d077686e6a",
+    "sha256:5691bdf93f0425e645e2e9cdfe54afddde9b618f6dfa50b875446f8a1215ed74",
   );
 
   // S09 introduces a new contract; it does not bump an existing one.
@@ -1021,13 +1033,13 @@ test("canonical digests are stable and no existing schema version moved", () => 
   assert.equal(HOSTING_PLAN_SCHEMA_VERSION, 1);
   assert.equal(scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES), "sha256:688baed28906755e59c836917b63626a44d00b2c544a7a82fe98b2cafe492ebc");
 
-  // The onboarding plan surface is untouched: same contract version, same
-  // schema version, same digest for the same inputs.
+  // The plan remains deterministically versioned; S26's new descriptor list is
+  // intentionally part of the digest.
   const plan = makeOnboardingPlan();
   assert.equal(plan.contract_version, "p2.v1");
   assert.equal(plan.plan_schema_version, 1);
   assert.equal(plan.plan_digest, planDigest(asJsonValue(plan.spec)));
-  assert.equal(plan.plan_digest, "sha256:7122a07d85042b8eb3d0a0d8a3d0a48e06ce5a1a58c5409b7c75425db5484bb0");
+  assert.equal(plan.plan_digest, "sha256:526e42289fc1afdfb438a91a094cafc8f5c6f965dae40e2b74d29924b517126a");
 });
 
 /* ------------------------------------------------------------------ *
@@ -1131,6 +1143,7 @@ async function provision(provider: FakeHostingProvider): Promise<{
     revisionId: input.revisionId,
     buildRecipeId: input.buildRecipeId,
     publicValueNames: ["PUBLIC_API_BASE_URL"],
+    environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: scheduleManifestDigest(input.schedules),
   });
   const domain = await provider.assignDomain({

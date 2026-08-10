@@ -127,8 +127,11 @@ export const READ_PATH_OPERATION = 'config.readPath'
 
 export type ReadPath = 'supabase' | 'neon'
 
-/** Which provider serves lead photos. Reported by the same lookup. */
-export type PhotoPath = 'supabase' | 'neon'
+/**
+ * Which lead-photo posture the deployment serves. `disabled` means initials
+ * only: it is a deliberate no-photo policy and never falls through to storage.
+ */
+export type PhotoPath = 'disabled' | 'supabase' | 'neon'
 
 export interface DeploymentPaths {
   readonly readPath: ReadPath
@@ -166,13 +169,14 @@ let pathsPromise: Promise<DeploymentPaths> | null = null
 /**
  * Ask the deployment which paths it serves — reads and photos, in one request.
  *
- * **Every failure resolves to `supabase` for both**, for the reason
- * `fetchReadPath` below states. The photo path carries one extra rule the server
- * also applies: it can only be `neon` when the read path is. The browser asks for
- * photos by `lead.id` and the two providers' lead ids name different rows, so a
- * dashboard reading Supabase leads while asking Neon for their photos would render
- * one person's face against another's name. Enforced on both sides rather than
- * trusted from one, because the failure is silent and not recoverable by a reload.
+ * **Every lookup failure resolves to `supabase` for both**, for the reason
+ * `fetchReadPath` below states. An explicit `disabled` answer is preserved: it
+ * means initials-only and must never fall through to a storage call. The `neon`
+ * photo path carries one extra rule the server also applies: it can only be
+ * `neon` when the read path is. The browser asks for photos by `lead.id`, and the
+ * two providers' lead ids name different rows, so a dashboard reading Supabase
+ * leads while asking Neon for their photos would render one person's face against
+ * another's name.
  */
 export async function fetchDeploymentPaths(
   fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
@@ -190,7 +194,11 @@ export async function fetchDeploymentPaths(
     return {
       readPath,
       photoPath:
-        readPath === 'neon' && body?.photoPath === 'neon' ? 'neon' : 'supabase',
+        body?.photoPath === 'disabled'
+          ? 'disabled'
+          : readPath === 'neon' && body?.photoPath === 'neon'
+            ? 'neon'
+            : 'supabase',
     }
   } catch {
     return { readPath: 'supabase', photoPath: 'supabase' }
