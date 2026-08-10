@@ -21,38 +21,38 @@ import {
 } from "./fixtures.js";
 
 const OWNER_UUID = "11111111-1111-4111-8111-111111111111";
-const APPROVED_AT = new Date("2026-08-07T14:46:13.317Z");
-const APPROVED_PLAN_ID = "pln_9d4a5a6591acb7c939183e1e";
-const APPROVED_PLAN_DIGEST =
-  "sha256:3e883aa3cf6608aba71b7c16449070792db9d4fed470d328a3987cacab2ea420";
-const APPROVED_IDEMPOTENCY_KEY = "s26-disposable-lab-20260807-01";
+const FIXTURE_NOW = new Date("2026-08-07T14:46:13.317Z");
+const FIXTURE_PLAN_ID = "pln_a5d84da5ba138b709cc5bbc6";
+const FIXTURE_PLAN_DIGEST =
+  "sha256:6ace8cfe6da09254418ecfd871d2dd1cfdb8b1f11ffb67bfaf223d8c1ef7adda";
+const FIXTURE_IDEMPOTENCY_KEY = "s26-disposable-lab-20260807-01";
 
-async function approvedCore(
+async function fixtureCore(
   rules: ConstructorParameters<typeof FakeOnboardingProviderBundle>[0] = {},
 ) {
   const registry = new Registry(":memory:", OWNER_UUID);
   const profile = disposableProfile();
   const providers = new FakeOnboardingProviderBundle(rules);
   const preflight = new ProviderPreflightService(providers, profile, {
-    clock: () => APPROVED_AT,
+    clock: () => FIXTURE_NOW,
   });
   const planner = new DisposableOnboardingPlanner(
     registry,
     profile,
     preflight,
-    () => APPROVED_AT,
+    () => FIXTURE_NOW,
   );
   const core = new DisposableOnboardingCore(
     registry,
     providers,
     planner,
-    () => APPROVED_AT,
+    () => FIXTURE_NOW,
   );
   const planned = await core.planOnboarding(disposableBusinessInputs());
   assert.equal(planned.preflight.status, "passed");
   assert.deepEqual(planned.preflight.blockers, []);
-  assert.equal(planned.envelope.plan_id, APPROVED_PLAN_ID);
-  assert.equal(planned.envelope.plan_digest, APPROVED_PLAN_DIGEST);
+  assert.equal(planned.envelope.plan_id, FIXTURE_PLAN_ID);
+  assert.equal(planned.envelope.plan_digest, FIXTURE_PLAN_DIGEST);
   assert.equal(planned.envelope.expected_registry_version, 1);
   const spec = planned.envelope.spec as Record<string, unknown>;
   return {
@@ -64,22 +64,22 @@ async function approvedCore(
   };
 }
 
-function approvedRequest(expectedRegistryVersion = 1) {
+function fixtureRequest(expectedRegistryVersion = 1) {
   return {
     contract_version: "p2.v1" as const,
     operation_kind: "tenant_onboarding" as const,
-    plan_id: APPROVED_PLAN_ID,
-    plan_digest: APPROVED_PLAN_DIGEST,
+    plan_id: FIXTURE_PLAN_ID,
+    plan_digest: FIXTURE_PLAN_DIGEST,
     expected_registry_version: expectedRegistryVersion,
-    idempotency_key: APPROVED_IDEMPOTENCY_KEY,
+    idempotency_key: FIXTURE_IDEMPOTENCY_KEY,
   };
 }
 
 async function runAllSteps(
-  bundle: Awaited<ReturnType<typeof approvedCore>>,
+  bundle: Awaited<ReturnType<typeof fixtureCore>>,
 ) {
   const results = [];
-  let request = approvedRequest();
+  let request = fixtureRequest();
   for (let ordinal = 1; ordinal <= ONBOARDING_STEP_KINDS.length; ordinal += 1) {
     const result = await bundle.core.applyOrResume(request);
     assert.equal(result.executedOrdinal, ordinal);
@@ -92,8 +92,8 @@ async function runAllSteps(
   return results;
 }
 
-test("S26 exact approved plan completes the disposable fake onboarding flow", async () => {
-  const bundle = await approvedCore();
+test("S26 deterministic fake plan completes the disposable onboarding fixture", async () => {
+  const bundle = await fixtureCore();
   try {
     const results = await runAllSteps(bundle);
     const operationId = results.at(-1)!.operationId;
@@ -137,7 +137,7 @@ test("S26 exact approved plan completes the disposable fake onboarding flow", as
 });
 
 test("S26 outcome-unknown apply quarantines and reviewed resume does not duplicate", async () => {
-  const bundle = await approvedCore({
+  const bundle = await fixtureCore({
     data: [
       {
         method: "createOrAdoptProject",
@@ -147,10 +147,10 @@ test("S26 outcome-unknown apply quarantines and reviewed resume does not duplica
     ],
   });
   try {
-    const first = await bundle.core.applyOrResume(approvedRequest());
+    const first = await bundle.core.applyOrResume(fixtureRequest());
     await assert.rejects(
       bundle.core.applyOrResume(
-        approvedRequest(bundle.registry.registryVersion),
+        fixtureRequest(bundle.registry.registryVersion),
       ),
       (error: unknown) => error instanceof OpsError && error.code === "outcome_unknown",
     );
@@ -162,13 +162,13 @@ test("S26 outcome-unknown apply quarantines and reviewed resume does not duplica
     assert.equal(bundle.providers.data.projectCount, 1);
 
     const resumed = await bundle.core.applyOrResume(
-      approvedRequest(bundle.registry.registryVersion),
+      fixtureRequest(bundle.registry.registryVersion),
     );
     assert.equal(resumed.resumed, true);
     assert.equal(resumed.executedOrdinal, 2);
     assert.equal(bundle.providers.data.projectCount, 1);
 
-    let request = approvedRequest(bundle.registry.registryVersion);
+    let request = fixtureRequest(bundle.registry.registryVersion);
     for (let ordinal = 3; ordinal <= ONBOARDING_STEP_KINDS.length; ordinal += 1) {
       const result = await bundle.core.applyOrResume(request);
       assert.equal(result.executedOrdinal, ordinal);
@@ -195,8 +195,8 @@ test("S26 outcome-unknown apply quarantines and reviewed resume does not duplica
   }
 });
 
-test("S26 registry backup restore preserves the approved tenant outcome and audit", async () => {
-  const bundle = await approvedCore();
+test("S26 registry backup restore preserves the fixture tenant outcome and audit", async () => {
+  const bundle = await fixtureCore();
   const directory = mkdtempSync(join(tmpdir(), "lh2-s26-restore-"));
   const backupPath = join(directory, "registry.lh2backup");
   const restorePath = join(directory, "replacement.sqlite");
@@ -208,7 +208,7 @@ test("S26 registry backup restore preserves the approved tenant outcome and audi
       bundle.registry,
       backupPath,
       backupPassphrase,
-      APPROVED_AT,
+      FIXTURE_NOW,
     );
     const restored = await new RegistryBackupService().restoreEncryptedBackup(
       backupPath,

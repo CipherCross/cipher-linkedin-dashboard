@@ -4,6 +4,7 @@ import {
   CANONICAL_TENANT_ENVIRONMENT,
   HOSTING_ENVIRONMENT_CONTRACT,
   asJsonValue,
+  catalogDigest,
   InMemoryCatalogResolver,
   planDigest,
   sha256Digest,
@@ -44,12 +45,11 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
     valid_until: "2030-02-01T00:00:00.000Z",
     review_status: "approved" as const,
   };
-  return [
+  const snapshots = [
     {
       ...common,
       catalog_kind: "regions",
       catalog_version: "regions-1",
-      digest: digest("regions-1"),
       entries: [
         { id: "eu-policy", availability: "available", approved: true },
         { id: "eu-west", availability: "available", approved: true },
@@ -59,7 +59,6 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "provider_tiers",
       catalog_version: "tiers-1",
-      digest: digest("tiers-1"),
       entries: [
         {
           id: "data-standard",
@@ -82,7 +81,6 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "pricing",
       catalog_version: "pricing-1",
-      digest: digest("pricing-1"),
       entries: [
         { id: "data-standard-month", availability: "available", approved: true },
         { id: "hosting-standard-month", availability: "available", approved: true },
@@ -93,7 +91,6 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "backup_profiles",
       catalog_version: "backup-1",
-      digest: digest("backup-1"),
       entries: [
         { id: "standard-daily", availability: "available", approved: true },
         { id: "retention-standard", availability: "available", approved: true },
@@ -103,7 +100,6 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "release_compatibility",
       catalog_version: "compat-1",
-      digest: digest("compat-1"),
       entries: [
         { id: "release-compat-1", availability: "available", approved: true },
         { id: "agent-1", availability: "available", approved: true },
@@ -116,7 +112,6 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "capabilities",
       catalog_version: "capabilities-1",
-      digest: digest("capabilities-1"),
       entries: [
         {
           id: "ai.classification",
@@ -141,10 +136,13 @@ export function makeCatalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "subprocessors",
       catalog_version: "subprocessors-1",
-      digest: digest("subprocessors-1"),
       entries: [{ id: "standard-processors", availability: "available", approved: true }],
     },
-  ];
+  ] satisfies readonly Omit<CatalogSnapshot, "digest">[];
+  return snapshots.map((catalog) => ({
+    ...catalog,
+    digest: catalogDigest(catalog),
+  }));
 }
 
 export function catalogResolver(): InMemoryCatalogResolver {

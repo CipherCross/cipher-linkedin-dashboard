@@ -1033,13 +1033,13 @@ test("canonical digests are stable and no existing schema version moved", () => 
   assert.equal(HOSTING_PLAN_SCHEMA_VERSION, 1);
   assert.equal(scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES), "sha256:688baed28906755e59c836917b63626a44d00b2c544a7a82fe98b2cafe492ebc");
 
-  // The plan remains deterministically versioned; S26's new descriptor list is
-  // intentionally part of the digest.
+  // The plan remains deterministically versioned; S26's descriptor list and
+  // canonical catalog-content digests are intentionally part of the digest.
   const plan = makeOnboardingPlan();
   assert.equal(plan.contract_version, "p2.v1");
   assert.equal(plan.plan_schema_version, 1);
   assert.equal(plan.plan_digest, planDigest(asJsonValue(plan.spec)));
-  assert.equal(plan.plan_digest, "sha256:526e42289fc1afdfb438a91a094cafc8f5c6f965dae40e2b74d29924b517126a");
+  assert.equal(plan.plan_digest, "sha256:29d025458fc6503b76fa083db83bb69f0e730c76237b1983bd1e75ba333164bd");
 });
 
 /* ------------------------------------------------------------------ *

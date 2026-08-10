@@ -51,7 +51,8 @@ Each catalog snapshot has:
 - `catalog_version`: immutable identifier;
 - `source_revision` and `published_at`;
 - `entries` with stable IDs and allowlisted typed fields;
-- `digest`: SHA-256 of canonical JSON;
+- `digest`: SHA-256 of RFC 8785/JCS canonical JSON for the complete snapshot
+  after removing only the top-level `digest` member;
 - `review_status`: only `approved` is plan-eligible.
 
 Required allowlisted entry fields are fixed as follows:

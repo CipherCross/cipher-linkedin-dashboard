@@ -85,6 +85,52 @@ test("S26 configuration is closed, HTTPS-only, and contains no credential value 
   });
 });
 
+test("S26 configuration rejects changed catalog content and duplicate kinds", async () => {
+  await inTemporaryDirectory((directory) => {
+    const path = join(directory, "s26.json");
+    const value = configValue();
+    const first = value.profile.catalogs[0]!;
+    const tampered = {
+      ...value,
+      profile: {
+        ...value.profile,
+        catalogs: [
+          {
+            ...first,
+            entries: [
+              { ...first.entries[0]!, approved: false },
+              ...first.entries.slice(1),
+            ],
+          },
+          ...value.profile.catalogs.slice(1),
+        ],
+      },
+    };
+    writeFileSync(path, JSON.stringify(tampered), "utf8");
+    assert.throws(
+      () => loadS26OwnerRuntimeConfig(path),
+      (error: unknown) => error instanceof OpsError && error.code === "catalog_invalid",
+    );
+
+    const duplicateKinds = {
+      ...value,
+      profile: {
+        ...value.profile,
+        catalogs: [
+          value.profile.catalogs[0]!,
+          value.profile.catalogs[0]!,
+          ...value.profile.catalogs.slice(2),
+        ],
+      },
+    };
+    writeFileSync(path, JSON.stringify(duplicateKinds), "utf8");
+    assert.throws(
+      () => loadS26OwnerRuntimeConfig(path),
+      (error: unknown) => error instanceof OpsError && error.code === "catalog_invalid",
+    );
+  });
+});
+
 test("S26 runtime construction does not resolve Keychain values or instantiate P4-C", async () => {
   await inTemporaryDirectory((directory) => {
     const path = join(directory, "s26.json");

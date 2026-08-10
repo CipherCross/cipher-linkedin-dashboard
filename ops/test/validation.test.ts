@@ -5,6 +5,7 @@ import {
   InMemoryCatalogResolver,
   OpsError,
   Registry,
+  catalogDigest,
   validateCatalogSchema,
   validateCatalogSnapshot,
   validatePlanSchema,
@@ -131,7 +132,8 @@ test("unknown, expired and unapproved catalogs block a plan", () => {
 });
 
 test("catalog snapshots are closed records and unknown fields fail before planning", () => {
-  const catalog = { ...makeCatalogs()[0]!, entries: [{ id: "eu-west", availability: "available", approved: true }] };
+  const changed = { ...makeCatalogs()[0]!, entries: [{ id: "eu-west", availability: "available" as const, approved: true }] };
+  const catalog = { ...changed, digest: catalogDigest(changed) };
   validateCatalogSchema(catalog);
   validateCatalogSnapshot(catalog);
   const withUnknown = {
@@ -140,6 +142,34 @@ test("catalog snapshots are closed records and unknown fields fail before planni
   };
   expectCode("catalog_invalid", () => validateCatalogSnapshot(withUnknown));
   expectCode("schema_validation_failed", () => validateCatalogSchema(withUnknown));
+});
+
+test("catalog digest excludes only itself and covers scaled exact pricing", () => {
+  const changed = {
+    ...makeCatalogs().find((catalog) => catalog.catalog_kind === "pricing")!,
+    entries: [
+      {
+        id: "r2-storage-1000-gb-month",
+        availability: "available" as const,
+        approved: true,
+        provider: "cloudflare-r2",
+        currency: "USD",
+        minor_unit_price: 1500,
+        pricing_unit: "1000-gb-month",
+        tax_treatment: "excluded" as const,
+        effective_at: "2029-12-01T00:00:00.000Z",
+        source_reference: "https://developers.cloudflare.com/r2/pricing/",
+      },
+    ],
+  };
+  const catalog = { ...changed, digest: catalogDigest(changed) };
+  validateCatalogSchema(catalog);
+  validateCatalogSnapshot(catalog);
+
+  expectCode("catalog_invalid", () => validateCatalogSnapshot({
+    ...catalog,
+    entries: [{ ...catalog.entries[0]!, minor_unit_price: 1501 }],
+  }));
 });
 
 test("plan persistence rejects a stale expected registry version", () => {

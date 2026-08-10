@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { sha256Digest } from "../core/canonical.js";
+import { catalogDigest } from "../core/catalogs.js";
 import { DisposableOnboardingCore } from "../core/onboarding-core.js";
 import { DisposableOnboardingPlanner } from "../core/onboarding-planner.js";
 import {
@@ -53,10 +53,6 @@ const SMOKE_TESTS = [
   "runtime_project_ref",
 ] as const;
 
-function catalogDigest(kind: string, version: string): string {
-  return sha256Digest(`p4c:${kind}:${version}:${P4C_SOURCE_GIT_SHA}`);
-}
-
 function catalogs(): readonly CatalogSnapshot[] {
   const common = {
     source_revision: P4C_SOURCE_GIT_SHA,
@@ -64,12 +60,11 @@ function catalogs(): readonly CatalogSnapshot[] {
     valid_until: "2026-08-31T23:59:59.000Z",
     review_status: "approved" as const,
   };
-  return [
+  const snapshots = [
     {
       ...common,
       catalog_kind: "regions",
       catalog_version: "p4c-regions-2026-07-29",
-      digest: catalogDigest("regions", "p4c-regions-2026-07-29"),
       entries: [
         { id: "eu-eea-reviewed", availability: "available", approved: true },
         { id: "eu-west-1", availability: "available", approved: true },
@@ -79,7 +74,6 @@ function catalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "provider_tiers",
       catalog_version: "p4c-tiers-2026-07-29",
-      digest: catalogDigest("provider_tiers", "p4c-tiers-2026-07-29"),
       entries: [
         {
           id: "supabase-pro",
@@ -102,7 +96,6 @@ function catalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "pricing",
       catalog_version: "p4c-pricing-2026-07-29",
-      digest: catalogDigest("pricing", "p4c-pricing-2026-07-29"),
       entries: [
         { id: "supabase-pro-month", availability: "available", approved: true },
         { id: "vercel-existing-team", availability: "available", approved: true },
@@ -113,7 +106,6 @@ function catalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "backup_profiles",
       catalog_version: "p4c-backups-2026-07-29",
-      digest: catalogDigest("backup_profiles", "p4c-backups-2026-07-29"),
       entries: [
         {
           id: "supabase-pro-daily-7d",
@@ -131,10 +123,6 @@ function catalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "release_compatibility",
       catalog_version: "p4c-compatibility-2026-07-29",
-      digest: catalogDigest(
-        "release_compatibility",
-        "p4c-compatibility-2026-07-29",
-      ),
       entries: [
         { id: "p4c-release-v1", availability: "available", approved: true },
         { id: "p4c-agent-v1", availability: "available", approved: true },
@@ -147,7 +135,6 @@ function catalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "capabilities",
       catalog_version: "p4c-capabilities-2026-07-29",
-      digest: catalogDigest("capabilities", "p4c-capabilities-2026-07-29"),
       entries: CAPABILITIES.map((id) => ({
         id,
         availability: "available" as const,
@@ -158,7 +145,6 @@ function catalogs(): readonly CatalogSnapshot[] {
       ...common,
       catalog_kind: "subprocessors",
       catalog_version: "p4c-subprocessors-2026-07-29",
-      digest: catalogDigest("subprocessors", "p4c-subprocessors-2026-07-29"),
       entries: [
         {
           id: "p4c-reviewed-processors",
@@ -167,7 +153,11 @@ function catalogs(): readonly CatalogSnapshot[] {
         },
       ],
     },
-  ];
+  ] satisfies readonly Omit<CatalogSnapshot, "digest">[];
+  return snapshots.map((catalog) => ({
+    ...catalog,
+    digest: catalogDigest(catalog),
+  }));
 }
 
 export function p4cProfile(): DisposableOnboardingProfile {

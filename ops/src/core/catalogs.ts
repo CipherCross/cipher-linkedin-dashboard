@@ -1,4 +1,5 @@
 import { OpsError } from "./errors.js";
+import { canonicalJson, sha256Digest, type JsonValue } from "./canonical.js";
 import type {
   CatalogResolver,
   CatalogSnapshot,
@@ -96,6 +97,18 @@ function assertObject(value: unknown, message: string): asserts value is Record<
 }
 
 /**
+ * Catalog snapshot v1 integrity rule: hash the RFC 8785/JCS canonical payload
+ * after removing the top-level digest member. This avoids a self-referential
+ * digest while covering every other catalog field and entry.
+ */
+export function catalogDigest(
+  value: object,
+): string {
+  const { digest: _digest, ...payload } = value as Record<string, unknown>;
+  return sha256Digest(canonicalJson(payload as unknown as JsonValue));
+}
+
+/**
  * Catalogs are repository-pinned inputs, not provider response containers.
  * Rejecting unknown entry keys here keeps vendor response fragments out of
  * plan inputs even when a caller bypasses the JSON Schema layer.
@@ -160,6 +173,9 @@ export function validateCatalogSnapshot(value: unknown): asserts value is Catalo
       throw new OpsError("catalog_invalid", `Invalid or duplicate ${kind} catalog entry id`);
     }
     ids.add(entry.id);
+  }
+  if (String(value.digest) !== catalogDigest(value as unknown as CatalogSnapshot)) {
+    throw new OpsError("catalog_invalid", "Catalog digest does not match canonical content");
   }
 }
 

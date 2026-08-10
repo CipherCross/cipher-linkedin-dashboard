@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import * as z from "zod/v4";
 
+import { validateCatalogSnapshot } from "../core/catalogs.js";
 import { OpsError, assertOps } from "../core/errors.js";
 import { Redactor } from "../core/redaction.js";
 import { asJsonValue } from "../core/semantic-validation.js";
@@ -151,6 +152,14 @@ export function loadS26OwnerRuntimeConfig(path: string): S26OwnerRuntimeConfig {
     throw new OpsError("invalid_plan", "S26 runtime configuration is invalid", {
       issue_count: parsed.error.issues.length,
     });
+  }
+  const catalogKinds = new Set<string>();
+  for (const snapshot of parsed.data.profile.catalogs) {
+    validateCatalogSnapshot(snapshot);
+    if (catalogKinds.has(snapshot.catalog_kind)) {
+      throw new OpsError("catalog_invalid", `Duplicate S26 catalog kind ${snapshot.catalog_kind}`);
+    }
+    catalogKinds.add(snapshot.catalog_kind);
   }
   return parsed.data;
 }
