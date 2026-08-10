@@ -2,7 +2,9 @@ import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 
 import { anthropic } from '@ai-sdk/anthropic'
 import { SCHEMA_DOC, loadIcpRoster } from './_lib/core.js'
 import { buildTools } from './_lib/tools.js'
-import { guardMember } from './_lib/auth.js'
+import { authorizationResponse, guardMember } from './_lib/auth.js'
+import { deploymentAiPath } from './_lib/data/aiPath.js'
+import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 300
 
@@ -31,8 +33,26 @@ HOW TO WORK
 - Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
 export async function POST(req: Request) {
-  const auth = await guardMember(req)
-  if (auth.response) return auth.response
+  const neon = deploymentAiPath() === 'neon'
+  if (neon) {
+    try {
+      await neonWriter(req)
+    } catch (error) {
+      const denial = authorizationResponse(error)
+      if (denial) return denial
+      console.error(
+        'Chat authorization failed:',
+        error instanceof Error ? error.name : 'UnknownError',
+      )
+      return new Response(JSON.stringify({ error: 'Could not verify team access' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+  } else {
+    const auth = await guardMember(req)
+    if (auth.response) return auth.response
+  }
 
   const { messages }: { messages: UIMessage[] } = await req.json()
 
@@ -40,7 +60,10 @@ export async function POST(req: Request) {
   // doesn't need a tool call just to know what ICPs/hypotheses exist. Fetched per
   // request rather than baked into the module-level constant so a freshly-created
   // ICP shows up immediately, not just after the next cold start.
-  const roster = await loadIcpRoster()
+  // The roster preload is an optimization, not an authorization surface. The
+  // Neon tools remain available below; do not construct a Supabase service-role
+  // client merely to add this optional prompt context.
+  const roster = neon ? '' : await loadIcpRoster()
   const SYSTEM = roster
     ? `${SYSTEM_BASE}\n\n${roster}\n\nUse hypothesis_overview (or run_sql) for the funnel/keywords/personas behind any of these.`
     : SYSTEM_BASE

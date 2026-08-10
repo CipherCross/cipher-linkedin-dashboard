@@ -6,7 +6,9 @@
 //
 // Posting to Slack requires a verified application admin.
 import { postReviewDigestToSlack, type ReviewDigestRow } from './_lib/slack.js'
-import { guardAdmin } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
+import { deploymentApplicationAuthPath } from './_lib/identity/application.js'
+import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 10
 
@@ -29,8 +31,25 @@ const nonNegInt = (v: unknown): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= 0
 
 async function handle(req: Request): Promise<Response> {
-  const auth = await guardAdmin(req)
-  if (auth.response) return auth.response
+  if (deploymentApplicationAuthPath() === 'identity') {
+    try {
+      const writer = await neonWriter(req)
+      if (writer.actor.role !== 'admin') {
+        throw new AuthorizationError(403, 'Admin access required')
+      }
+    } catch (error) {
+      const denial = authorizationResponse(error)
+      if (denial) return denial
+      console.error(
+        'Review digest authorization failed:',
+        error instanceof Error ? error.name : 'UnknownError',
+      )
+      return json({ error: 'Could not verify team access' }, 500)
+    }
+  } else {
+    const auth = await guardAdmin(req)
+    if (auth.response) return auth.response
+  }
 
   const raw = await req.text()
   if (Buffer.byteLength(raw, 'utf8') > MAX_BODY_BYTES) {

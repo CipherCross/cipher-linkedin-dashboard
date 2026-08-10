@@ -81,13 +81,17 @@ provider state instead of manufacturing evidence. Timeouts, throttling, 5xx
 responses, and ambiguous database or R2 mutations return `outcome_unknown`
 with only an opaque request ID.
 
-The current application release still requires Supabase-shaped public/admin
-data API credentials. No reviewed official Neon capability can derive them.
-Consequently data inspection reports `authConfigurationSupported: false`, and
-the environment-binding route rejects those six canonical/legacy descriptors
-with `provider_readiness_blocked` before any provider request. The bridge does
-not accept tenant credentials as deployment secrets and does not fabricate
-replacement values.
+The current official Neon Data API and Neon-managed Better Auth documentation
+labels both products Beta. S26 therefore rejects them under its GA-only rule.
+The selected replacement is the repository's self-hosted Better Auth plus
+actor-scoped Vercel server APIs backed by least-privilege Postgres roles; its
+identity-only request boundary is implemented locally and documented in
+`s26-application-data-plane-compatibility.md`. The closed hosting profile and
+several roster-keyed mutations are not yet migrated, so data inspection remains
+`authConfigurationSupported: false`, and the environment-binding route keeps
+returning `provider_readiness_blocked` before any provider request. The bridge
+does not accept tenant credentials, fabricate replacement values, or proxy
+application data.
 
 Recovery artifacts remain metadata-only for hosting configuration: fixed
 resource identity, ownership digest, deployment/release identity, environment

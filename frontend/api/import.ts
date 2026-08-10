@@ -11,7 +11,7 @@
 import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
-import { guardAdmin } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
 import {
   AGENT_INGEST_OP,
   createAgentIngestHandler,
@@ -28,6 +28,8 @@ import {
 import { readDeploymentTenantId } from './_lib/agent/tenant.js'
 import { getMachineDataStore } from './_lib/data/machineStore.js'
 import { machineStoreConfigured } from './_lib/data/neonConfig.js'
+import { deploymentWritePath } from './_lib/data/writePath.js'
+import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 60
 
@@ -114,8 +116,25 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }
 
-  const auth = await guardAdmin(req)
-  if (auth.response) return auth.response
+  if (deploymentWritePath() === 'neon') {
+    try {
+      const writer = await neonWriter(req)
+      if (writer.actor.role !== 'admin') {
+        throw new AuthorizationError(403, 'Admin access required')
+      }
+    } catch (error) {
+      const denial = authorizationResponse(error)
+      if (denial) return denial
+      console.error(
+        'Import authorization failed:',
+        error instanceof Error ? error.name : 'UnknownError',
+      )
+      return json({ error: 'Could not verify team access' }, 500)
+    }
+  } else {
+    const auth = await guardAdmin(req)
+    if (auth.response) return auth.response
+  }
 
   const contentLength = Number(req.headers.get('content-length') ?? 0)
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {

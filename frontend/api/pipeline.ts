@@ -14,7 +14,7 @@
 // management require an admin. Audit identity comes from the verified JWT.
 import { db } from './_lib/core.js'
 import { PIPELINE_STAGE_IDS, stageAllowsSubstatus } from './_lib/pipeline.js'
-import { guardMember, type AppPrincipal } from './_lib/auth.js'
+import { authorizationResponse, guardMember } from './_lib/auth.js'
 import { deploymentWritePath } from './_lib/data/writePath.js'
 import {
   neonAddNote,
@@ -22,6 +22,7 @@ import {
   neonSetGender,
   neonSetInstanceConfig,
   neonSetStage,
+  neonWriter,
 } from './_lib/neonWrites.js'
 
 export const maxDuration = 10
@@ -875,9 +876,31 @@ async function followUp(
 }
 
 async function handle(req: Request): Promise<Response> {
-  const auth = await guardMember(req)
-  if (auth.response) return auth.response
-  const principal: AppPrincipal = auth.principal
+  const neon = deploymentWritePath() === 'neon'
+  let role: 'member' | 'admin'
+  let actorNameForLegacy = ''
+  if (neon) {
+    try {
+      const resolvedRole = (await neonWriter(req)).actor.role
+      if (resolvedRole !== 'member' && resolvedRole !== 'admin') {
+        return json({ error: 'Your account is not an active team member' }, 403)
+      }
+      role = resolvedRole
+    } catch (error) {
+      const denial = authorizationResponse(error)
+      if (denial) return denial
+      console.error(
+        'Pipeline authorization failed:',
+        error instanceof Error ? error.name : 'UnknownError',
+      )
+      return json({ error: 'Could not verify team access' }, 500)
+    }
+  } else {
+    const auth = await guardMember(req)
+    if (auth.response) return auth.response
+    role = auth.principal.member.role
+    actorNameForLegacy = auth.principal.member.name
+  }
 
   let payload: Record<string, unknown>
   try {
@@ -900,19 +923,40 @@ async function handle(req: Request): Promise<Response> {
   if (
     typeof payload.action === 'string' &&
     adminActions.has(payload.action) &&
-    principal.member.role !== 'admin'
+    role !== 'admin'
   ) {
     return json({ error: 'Admin access required' }, 403)
   }
 
-  const supa = db()
+  // These actions do not yet have a reviewed application-store operation.
+  // Refuse them before constructing a Supabase client: a Neon deployment must
+  // never reinterpret a Neon roster id in the legacy provider's id space.
+  if (
+    neon &&
+    typeof payload.action === 'string' &&
+    new Set([
+      'assign',
+      'add_member',
+      'set_member_active',
+      'invite_member',
+      'update_member',
+      ...Object.keys(FOLLOW_UP_ACTIONS),
+    ]).has(payload.action)
+  ) {
+    return json({ error: 'This action is not available on the Neon application path' }, 503)
+  }
+
+  // The five reviewed Neon branches below return before dereferencing this
+  // argument. Keeping the sentinel local avoids constructing a legacy client
+  // (and therefore avoids any Supabase-shaped deployment requirement).
+  const supa = neon ? (null as unknown as ReturnType<typeof db>) : db()
   switch (payload.action) {
     case 'set_stage':
-      return setStage(supa, payload, principal.member.name, req)
+      return setStage(supa, payload, actorNameForLegacy, req)
     case 'assign':
-      return assign(supa, payload, principal.member.name)
+      return assign(supa, payload, actorNameForLegacy)
     case 'add_note':
-      return addNote(supa, payload, principal.member.name, req)
+      return addNote(supa, payload, actorNameForLegacy, req)
     case 'delete_note':
       return deleteNote(supa, payload, req)
     case 'add_member':
@@ -926,7 +970,7 @@ async function handle(req: Request): Promise<Response> {
     case 'update_member':
       return updateMember(supa, payload)
     case 'set_gender':
-      return setGender(supa, payload, principal.member.name, req)
+      return setGender(supa, payload, actorNameForLegacy, req)
     case 'set_instance_config':
       return setInstanceConfig(supa, payload, req)
     case 'schedule_follow_up':
@@ -935,7 +979,7 @@ async function handle(req: Request): Promise<Response> {
     case 'complete_follow_up':
     case 'skip_follow_up':
     case 'cancel_follow_up':
-      return followUp(supa, payload, payload.action, principal.member.name)
+      return followUp(supa, payload, payload.action, actorNameForLegacy)
     default:
       return json({ error: 'unknown action' }, 400)
   }

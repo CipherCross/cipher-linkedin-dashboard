@@ -18,7 +18,7 @@
 //
 // Every path requires a verified application admin.
 import { db } from './_lib/core.js'
-import { guardAdmin } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
 import { validateSearch } from './_lib/savedSearch.js'
 import {
   validateCampaignIds,
@@ -37,6 +37,7 @@ import {
   neonSetHypothesisCampaigns,
   type LibraryEntity,
 } from './_lib/neonLibraryWrites.js'
+import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 10
 
@@ -401,8 +402,26 @@ async function saveCampaignContext(
 }
 
 async function handle(req: Request): Promise<Response> {
-  const auth = await guardAdmin(req)
-  if (auth.response) return auth.response
+  const neon = deploymentWritePath() === 'neon'
+  if (neon) {
+    try {
+      const writer = await neonWriter(req)
+      if (writer.actor.role !== 'admin') {
+        throw new AuthorizationError(403, 'Admin access required')
+      }
+    } catch (error) {
+      const denial = authorizationResponse(error)
+      if (denial) return denial
+      console.error(
+        'Playbook authorization failed:',
+        error instanceof Error ? error.name : 'UnknownError',
+      )
+      return json({ error: 'Could not verify team access' }, 500)
+    }
+  } else {
+    const auth = await guardAdmin(req)
+    if (auth.response) return auth.response
+  }
 
   let payload: Record<string, unknown>
   try {
@@ -411,7 +430,10 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: 'invalid JSON body' }, 400)
   }
 
-  const supa = db()
+  // Every Neon branch below authenticates and re-checks admin against the
+  // database it writes before it touches this argument. Do not construct the
+  // legacy service-role client on that path.
+  const supa = neon ? (null as unknown as ReturnType<typeof db>) : db()
 
   // Route on `action`. Absent action => the legacy playbook save (unchanged).
   const action = (payload as { action?: unknown } | null)?.action

@@ -700,8 +700,11 @@ async function coachOnNeon(
 }
 
 async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response> {
-  const auth = await guardMember(req)
-  if (auth.response) return auth.response
+  const neon = deploymentAiPath() === 'neon'
+  if (!neon) {
+    const auth = await guardMember(req)
+    if (auth.response) return auth.response
+  }
 
   let body: {
     instance_id?: unknown
@@ -724,7 +727,7 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
   // The provider decision, taken once per request. The AI path flag moves the
   // whole handler: every call here has a human actor, so none of it is blocked
   // on the system write path.
-  if (deploymentAiPath() === 'neon') {
+  if (neon) {
     return coachOnNeon(req, { ...body, instance_id }, deps)
   }
 

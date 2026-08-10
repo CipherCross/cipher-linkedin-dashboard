@@ -12,11 +12,11 @@
  *
  * ## Authorization: the database decides, and it decides differently from today
  *
- * `resolveRequestActor` with `acceptLegacyBearer: true` — the same call
- * `api/activity-daily.ts` makes, so this introduces no new authentication. The
- * browser sends the Supabase JWT it already sends; `identity_resolve_actor`
- * resolves that subject under `provider = 'supabase'` and answers with a
- * canonical actor id and a role.
+ * `resolveApplicationActor` selects exactly the authenticator the deployed SPA
+ * selected. Legacy deployments continue to send a Supabase bearer; identity
+ * deployments send the self-hosted Better Auth HttpOnly cookie and explicitly
+ * disable bearer fallback. Both subjects pass through `identity_resolve_actor`,
+ * which answers with the canonical actor id and role from this database.
  *
  * Two consequences worth being explicit about:
  *
@@ -74,7 +74,11 @@ import {
   type DataStoreTransaction,
   type Page,
 } from './data/contracts.js'
-import { resolveRequestActor } from './identity/session.js'
+import {
+  resolveApplicationActor,
+  type ApplicationAuthPath,
+} from './identity/application.js'
+import type { IdentityProvider } from './identity/provider.js'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -127,6 +131,10 @@ export interface NeonWriter {
  */
 export interface NeonWriteDeps {
   readonly store?: DataStore
+  /** Test seam for the deployment-selected application authenticator. */
+  readonly authPath?: ApplicationAuthPath
+  /** Identity provider used only when `authPath` is `identity`. */
+  readonly identity?: IdentityProvider
   /**
    * The provider name the transitional bearer resolves under. Defaults to
    * `session.ts`'s `LEGACY_PROVIDER_NAME`, which is what production uses; the
@@ -140,18 +148,20 @@ export interface NeonWriteDeps {
 /**
  * Resolve the actor once per request.
  *
- * No identity provider is passed, so this reads no session cookie and needs no
- * identity credential — the same decision `activity-daily.ts` records. S18
- * rewires the browser and this becomes a cookie.
+ * The application-auth selector lazily constructs the identity provider only
+ * for an identity deployment. The legacy path therefore retains its original
+ * deployment prerequisites, while the Neon/Better Auth path has no Supabase
+ * verifier dependency or fallback.
  */
 export async function neonWriter(
   request: Request,
   deps: NeonWriteDeps = {},
 ): Promise<NeonWriter> {
   const store = deps.store ?? getDataStore()
-  const resolved = await resolveRequestActor(request, {
+  const resolved = await resolveApplicationActor(request, {
     store,
-    acceptLegacyBearer: true,
+    authPath: deps.authPath,
+    identity: deps.identity,
     legacyProviderName: deps.legacyProviderName,
   })
   return { store, actor: resolved.actor }

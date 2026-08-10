@@ -67,12 +67,16 @@ schedule, ingest, and tool credentials, and binds the values directly to the
 Vercel production environment. Results expose only names, classes, source
 kinds, and a canonical digest.
 
-The Supabase-shaped public/admin data API values needed by the pinned
-application cannot currently be derived from an approved official Neon
-capability. Data preflight therefore remains false and apply fails with
-`provider_readiness_blocked` before an environment write. A blank or missing
-owner-approved full source Git SHA likewise blocks release readiness; a
-configured SHA must be confirmed by the fixed read-only repository route.
+The official Neon Data API and Neon-managed Better Auth surfaces remain Beta
+and are excluded by S26's GA-only rule. The local application now has the
+identity-only Better Auth boundary for its existing named Neon operations, but
+the fixed hosting profile, assignment/follow-up operations, and application R2
+credential posture are unresolved as recorded in
+`s26-application-data-plane-compatibility.md`. Data preflight therefore remains
+false and apply still fails with `provider_readiness_blocked` before an
+environment write. A blank or missing owner-approved full source Git SHA
+likewise blocks release readiness; a configured SHA must be confirmed by the
+fixed read-only repository route.
 
 ## Recovery behavior
 

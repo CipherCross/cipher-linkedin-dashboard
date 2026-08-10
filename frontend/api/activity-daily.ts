@@ -79,6 +79,11 @@ import {
 import { getDataStore } from './_lib/data/store.js'
 import { resolveRequestActor } from './_lib/identity/session.js'
 import {
+  resolveApplicationActor,
+  type ApplicationAuthPath,
+} from './_lib/identity/application.js'
+import type { IdentityProvider } from './_lib/identity/provider.js'
+import {
   objectStorageConfigured,
   readObjectStorageTenantId,
 } from './_lib/storage/config.js'
@@ -673,6 +678,8 @@ function readRequiredUuid(url: URL, name: string): string {
 }
 
 export interface ActivityDailyDeps {
+  readonly authPath?: ApplicationAuthPath
+  readonly identity?: IdentityProvider
   /**
    * Which `user_identities.provider` the transitional bearer resolves under.
    *
@@ -714,24 +721,21 @@ async function handle(
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }
 
-  // S17 replaced S12's actor bridge. The change here is small and the reason it
-  // is small is the point: the bridge's *shape* — verify a subject, then let the
-  // database decide who that is — was always right; only the environment-held
-  // map in the middle was temporary, and `identity_resolve_actor` removed it.
-  //
-  // No identity provider is passed, so this endpoint reads no session cookie and
-  // needs no identity credential: it authenticates the same signed-in browser it
-  // always did, through the transitional bearer, and resolves it through the real
-  // resolver instead of a redeploy-per-member map. S18 rewires the browser.
+  // The deployed SPA and this endpoint use the same explicit auth selector.
+  // Legacy mode verifies the transitional bearer. Identity mode reads the
+  // self-hosted Better Auth cookie and disables bearer fallback. In both cases
+  // the provider supplies only a subject; `identity_resolve_actor` in the tenant
+  // database decides active membership and role.
   //
   // **Resolved once per request** (G2's B5), then passed down. S12 measured this
   // at 196 ms of a 525 ms request, so a slice that resolved per read would pay it
   // once per relation.
   let actor
   try {
-    const resolved = await resolveRequestActor(req, {
+    const resolved = await resolveApplicationActor(req, {
       store: getDataStore(),
-      acceptLegacyBearer: true,
+      authPath: deps.authPath,
+      identity: deps.identity,
       legacyProviderName: deps.legacyProviderName,
     })
     actor = resolved.actor
