@@ -1,38 +1,44 @@
-# S26 catalog evidence and owner-decision package
+# S26 catalog evidence and disposable-policy decision
 
-Status: **draft evidence only — not an approved catalog snapshot**
-Retrieved: **2026-08-10** (public documentation opened on that date)
-Scope: the disposable S26 posture only; this is not a provider preflight, plan,
-apply/resume/verify, recovery capture, or runtime-configuration artifact.
+Status: **approved local catalog policy; configuration-valid and plan-blocked**
+Retrieved/reviewed: **2026-08-10**
+Scope: disposable, non-production, non-regulated data only. This is not a
+provider preflight, plan, apply/resume/verify, recovery capture, or live
+readiness result.
 
 ## Result
 
-This package covers all seven required catalog kinds, but deliberately creates
-**no catalog JSON**. It would be unsafe to present one as a usable draft:
+The owner approved the recommended bounded disposable policy. The repository
+now contains all seven reviewed snapshots in
+[`catalogs/s26-disposable-policy-v1.json`](catalogs/s26-disposable-policy-v1.json),
+and the permission-restricted owner-local configuration is materialized at
+`/Users/mykytashevchenko/.config/lh2-platform/s26-owner-runtime.json` with
+Keychain label references only.
 
-1. Every potential snapshot must remain `review_status: "draft"` until owner
-   approval. The semantic plan validator correctly rejects a non-approved
-   snapshot, so none of these entries could make a plan applicable.
-2. The contract says a catalog digest is SHA-256 of canonical JSON, but does
-   not define whether the `digest` member is excluded from that canonical input.
-   `ops/src/core/catalogs.ts` checks only a digest's format; it does not compute
-   or compare a catalog digest. A self-referential hash must not be invented.
-3. The S26 runtime loader presently requires `source_revision` to be a
-   40-character Git SHA, while the public pricing, capacity, and legal pages
-   below are mutable web pages with no publisher-supplied immutable revision.
-   A retrieval date and URL are evidence, not an immutable source revision.
-4. Cloudflare R2 Standard storage is currently USD 0.015/GB-month. The schema
-   permits only integer ISO-4217 minor-unit prices, so this rate cannot be
-   represented exactly in USD cents. Neon Launch CU-hour pricing is also
-   fractional cents. Rounding would violate the cost contract.
-5. Required owner facts remain unavailable from public documentation: selected
-   Neon/Cloudflare/Vercel entitlement and quota, Cloudflare R2 jurisdiction,
-   Vercel's commercial plan, domain control, a signed agent release, and the
-   machine-scoped ingest protocol selection.
+The catalog mechanics are closed without changing schema version:
 
-The correct outcome is a reviewable evidence package and a precise block on
-snapshot approval/configuration, rather than fixture-derived IDs, 2030 validity
-dates, synthetic digests, or fabricated provenance.
+1. `digest` is SHA-256 of RFC 8785/JCS canonical JSON after removing only the
+   top-level `digest` member, and both the core and S26 loader recompute it.
+2. Public mutable-source evidence is repository-pinned through source revision
+   `96f4e5228f9d058617151ac4246469b9fef44a26` and retains its official URL and
+   retrieval/effective time in the reviewed artifact.
+3. Fractional public prices use exact scaled units. For example, R2 storage is
+   1,500 USD minor units per 1,000 GB-months, and Neon Launch compute is 10,600
+   USD minor units per 1,000 CU-hours.
+4. `sync-agent-1.14.0`, `agent-ingest.v1`, the pinned 053→054 portable bundle,
+   the eight closed future smoke IDs, zero optional-capability budgets, 24-hour
+   RPO, 8-business-hour RTO, daily encrypted export, 30-day retention, and a
+   90-day drill cadence are reviewed selections. The agent release remains
+   unavailable until its signed manifest is verified.
+
+The policy is deliberately **not plan-eligible**. Vercel commercial entitlement,
+the approved source release's `fra1` pin, the control-plane R2 bucket's EU
+jurisdiction, and the selected agent's signed release manifest are not verified.
+Their tier/region/release/subprocessor entries are
+`availability: "unavailable"`, so catalog semantics must block planning. This
+is the final S26 blocker disposition, not a prompt for another repair loop.
+
+## Historical evidence used for the decision
 
 ## Evidence discipline and repository provenance
 
@@ -196,7 +202,7 @@ approved. The proposed data-flow inventory is intentionally narrow:
 | GitHub (and current published subprocessors) | Pinned source SHA and repository metadata only; no tenant data should be sent. | Source-inspection token must remain read-only and server-side. A future authorized inspection must prove the exact SHA is present. |
 | Anthropic, Slack, Airtable and other optional integrations | No S26 data flow under the disabled capability default. | Excluded from the proposed active profile. Enabling any requires its own pricing, DPA/subprocessor, regional, and budget evidence. |
 
-## Required owner decisions
+## Historical decision checklist resolved by the approved policy
 
 1. **Agent release:** select an actual signed `agent/current.json` manifest
    version plus its SHA-256, release time, Ed25519 verification evidence, and
@@ -232,23 +238,30 @@ approved. The proposed data-flow inventory is intentionally narrow:
    fractional-price representation. That is separate operations-contract work,
    not a reason to weaken S26 validation.
 
-## Explicit non-actions
+The approved local policy selects the repository-observed agent version and
+machine protocol, zero discretionary spend, zero optional-capability budgets,
+the stated recovery/smoke profile, and the narrow disposable-only processor
+acceptance. It does not override the four unavailable facts at the top of this
+document.
 
-- No owner-runtime configuration was created; specifically,
-  `/Users/mykytashevchenko/.config/lh2-platform/s26-owner-runtime.json` was not
-  created, read, or changed.
-- No preflight, plan, apply/resume/verify, tenant/branch/project/bucket/domain
-  action, provider API/dashboard call, deployment, restore, source inspection,
-  Keychain/secret access, email, S27/S28 work, or Git push occurred.
-- No snapshot is approved, no entry is approved for planning, and no test fixture,
-  synthetic future catalog, fake digest, or fake provenance is used.
+## Explicit actions and non-actions
+
+- Created the owner-local configuration at
+  `/Users/mykytashevchenko/.config/lh2-platform/s26-owner-runtime.json` with
+  mode `0600`. It contains only non-secret values and the four closed Keychain
+  labels; no Keychain value was resolved.
+- No owner-runtime/provider-backed preflight or plan, apply/resume/verify,
+  tenant/branch/project/bucket/domain action, provider control-plane/API/
+  dashboard call, deployment, restore, source inspection, Keychain/secret
+  access, email, S27/S28 work, or Git push occurred. Existing unit tests use
+  deterministic fakes only and create no reusable plan.
+- The seven snapshots are approved as reviewed policy inputs, but the unavailable
+  hosting/residency/subprocessor entries keep the policy non-plan-eligible.
 
 ## Verification record
 
-No draft catalog JSON exists, so schema and plan-semantic validation have no
-artifact to validate. This is intentional: a schema-valid but provenance- or
-digest-invalid JSON file would be misleading. The documentation-only change
-passed `cd ops && npm test` (**101 passed, 0 failed**),
-`node postgres/tests/portable_migration_ledger_static_assertions.mjs`
-(**188 passed, 0 failed**), and `git diff --check`; the complete diff was
-reviewed before the local commit.
+Focused tests validate every snapshot against the closed JSON Schema and the
+recomputed canonical digest, verify exact scaled prices, and assert the four
+unresolved conditions remain unavailable. The owner-local file was
+loaded successfully without constructing an adapter operation or resolving a
+credential. Full-suite results are recorded in the S26 handoff.

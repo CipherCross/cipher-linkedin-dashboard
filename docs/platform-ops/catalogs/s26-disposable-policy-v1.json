@@ -1,0 +1,462 @@
+{
+  "policy_id": "s26-disposable-policy-v1",
+  "workspace_class": "disposable",
+  "data_classification": "non-production-no-regulated-data",
+  "disposition": "configuration-valid-plan-blocked",
+  "blocking_conditions": [
+    "vercel-commercial-entitlement-not-provider-verified",
+    "vercel-fra1-not-pinned-in-approved-source-release",
+    "control-plane-r2-eu-jurisdiction-not-verified",
+    "signed-agent-release-manifest-not-verified"
+  ],
+  "catalogs": [
+    {
+      "catalog_kind": "regions",
+      "catalog_version": "s26-regions-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:676541308517cf22b49d70ebad3c499da1d5bd93d0f8abe09bcf7cc6b2be5cf8",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "eu-disposable-policy",
+          "availability": "available",
+          "approved": true,
+          "jurisdiction": "eu",
+          "residency_policy_ids": ["eu-disposable-policy"],
+          "allowed_workspace_classes": ["disposable"],
+          "legal_review_status": "approved"
+        },
+        {
+          "id": "aws-eu-central-1",
+          "availability": "available",
+          "approved": true,
+          "provider_region_code": "aws-eu-central-1",
+          "jurisdiction": "de-eu",
+          "residency_policy_ids": ["eu-disposable-policy"],
+          "allowed_workspace_classes": ["disposable"],
+          "legal_review_status": "approved"
+        },
+        {
+          "id": "cloudflare-r2-eu",
+          "availability": "unavailable",
+          "approved": true,
+          "provider_region_code": "eu",
+          "jurisdiction": "eu",
+          "residency_policy_ids": ["eu-disposable-policy"],
+          "allowed_workspace_classes": ["disposable"],
+          "legal_review_status": "approved"
+        },
+        {
+          "id": "vercel-fra1",
+          "availability": "unavailable",
+          "approved": true,
+          "provider_region_code": "fra1",
+          "jurisdiction": "de-eu",
+          "residency_policy_ids": ["eu-disposable-policy"],
+          "allowed_workspace_classes": ["disposable"],
+          "legal_review_status": "approved"
+        }
+      ]
+    },
+    {
+      "catalog_kind": "provider_tiers",
+      "catalog_version": "s26-provider-tiers-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:6781a49fda56ba6c9b28d9adb9e253ec0ad0b125f66a66015e912b4d17370317",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "neon-free",
+          "availability": "available",
+          "approved": true,
+          "provider": "neon",
+          "kind": "plan",
+          "capacity_limits": {
+            "cu_hours_month": 100,
+            "storage_gb": 0.5,
+            "soft_cu_hours": 80,
+            "soft_storage_gb": 0.4,
+            "automatic_paid_upgrade": false
+          },
+          "feature_limits": {
+            "restore_history_hours": 6,
+            "restore_history_change_gb": 1
+          },
+          "backup_capability_ids": ["neon-free-restore-6h"],
+          "billable": false
+        },
+        {
+          "id": "autoscale-0.25-2cu",
+          "availability": "available",
+          "approved": true,
+          "provider": "neon",
+          "kind": "compute",
+          "capacity_limits": {
+            "minimum_cu": 0.25,
+            "maximum_cu": 2,
+            "automatic_paid_upgrade": false
+          },
+          "billable": false
+        },
+        {
+          "id": "cloudflare-r2-standard-eu",
+          "availability": "unavailable",
+          "approved": true,
+          "provider": "cloudflare-r2",
+          "kind": "plan",
+          "capacity_limits": {
+            "included_storage_gb_month": 10,
+            "included_class_a_operations": 1000000,
+            "included_class_b_operations": 10000000,
+            "automatic_overage": false
+          },
+          "feature_limits": {
+            "required_jurisdiction": "eu",
+            "existing_bucket_jurisdiction_verified": false
+          },
+          "billable": true,
+          "pricing_sku_id": "r2-standard-storage-1000-gb-month"
+        },
+        {
+          "id": "vercel-commercial-fra1",
+          "availability": "unavailable",
+          "approved": true,
+          "provider": "vercel",
+          "kind": "plan",
+          "capacity_limits": {
+            "required_schedule_count": 4,
+            "automatic_overage": false
+          },
+          "feature_limits": {
+            "commercial_plan_required": true,
+            "commercial_entitlement_verified": false,
+            "required_function_region": "fra1",
+            "approved_source_pins_region": false
+          },
+          "billable": true,
+          "pricing_sku_id": "vercel-commercial-entitlement-pending"
+        }
+      ]
+    },
+    {
+      "catalog_kind": "pricing",
+      "catalog_version": "s26-pricing-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:221ed144d7c236332d288a5119d576dbf84b36af8e62713d02e8192729955077",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "neon-free-project-month",
+          "availability": "available",
+          "approved": true,
+          "provider": "neon",
+          "currency": "USD",
+          "minor_unit_price": 0,
+          "pricing_unit": "project-month",
+          "tax_treatment": "not_applicable",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://neon.com/pricing"
+        },
+        {
+          "id": "neon-launch-compute-1000-cu-hour",
+          "availability": "available",
+          "approved": true,
+          "provider": "neon",
+          "currency": "USD",
+          "minor_unit_price": 10600,
+          "pricing_unit": "1000-cu-hour",
+          "tax_treatment": "excluded",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://neon.com/pricing"
+        },
+        {
+          "id": "neon-launch-storage-gb-month",
+          "availability": "available",
+          "approved": true,
+          "provider": "neon",
+          "currency": "USD",
+          "minor_unit_price": 35,
+          "pricing_unit": "gb-month",
+          "tax_treatment": "excluded",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://neon.com/pricing"
+        },
+        {
+          "id": "r2-standard-storage-1000-gb-month",
+          "availability": "available",
+          "approved": true,
+          "provider": "cloudflare-r2",
+          "currency": "USD",
+          "minor_unit_price": 1500,
+          "pricing_unit": "1000-gb-month",
+          "tax_treatment": "excluded",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://developers.cloudflare.com/r2/pricing/"
+        },
+        {
+          "id": "r2-standard-class-a-million",
+          "availability": "available",
+          "approved": true,
+          "provider": "cloudflare-r2",
+          "currency": "USD",
+          "minor_unit_price": 450,
+          "pricing_unit": "million-class-a",
+          "tax_treatment": "excluded",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://developers.cloudflare.com/r2/pricing/"
+        },
+        {
+          "id": "r2-standard-class-b-million",
+          "availability": "available",
+          "approved": true,
+          "provider": "cloudflare-r2",
+          "currency": "USD",
+          "minor_unit_price": 36,
+          "pricing_unit": "million-class-b",
+          "tax_treatment": "excluded",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://developers.cloudflare.com/r2/pricing/"
+        },
+        {
+          "id": "vercel-commercial-entitlement-pending",
+          "availability": "unavailable",
+          "approved": true,
+          "provider": "vercel",
+          "currency": "USD",
+          "pricing_unit": "team-month",
+          "tax_treatment": "excluded",
+          "effective_at": "2026-08-10T00:00:00.000Z",
+          "source_reference": "https://vercel.com/docs/plans/pro-plan"
+        }
+      ]
+    },
+    {
+      "catalog_kind": "backup_profiles",
+      "catalog_version": "s26-backup-profiles-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:4ce646a2035b843af7d594f1d0ed13b47899c5e6b1aaec1d3f1c2d04daa2ab2c",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "s26-disposable-daily",
+          "availability": "available",
+          "approved": true,
+          "maximum_rpo_hours": 24,
+          "maximum_rto_business_hours": 8,
+          "provider_backup_interval_hours": 24,
+          "export_interval_hours": 24,
+          "drill_interval_days": 90,
+          "retention_choices": ["retention-30d"],
+          "required_coverage": [
+            "database_schema_data",
+            "auth_configuration_identities",
+            "storage_metadata",
+            "private_storage_objects_or_reconstruction",
+            "deployment_configuration_metadata"
+          ],
+          "compatible_tier_ids": ["neon-free"]
+        },
+        {
+          "id": "neon-free-restore-6h",
+          "availability": "available",
+          "approved": true,
+          "maximum_rpo_hours": 24,
+          "maximum_rto_business_hours": 8,
+          "provider_backup_interval_hours": 24,
+          "export_interval_hours": 24,
+          "drill_interval_days": 90,
+          "retention_choices": ["retention-30d"],
+          "required_coverage": ["database_schema_data"],
+          "compatible_tier_ids": ["neon-free"]
+        },
+        {
+          "id": "retention-30d",
+          "availability": "available",
+          "approved": true
+        }
+      ]
+    },
+    {
+      "catalog_kind": "release_compatibility",
+      "catalog_version": "s26-release-compatibility-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:e8f068a80556381f725fc11976416bed88a78707dec23b77774c2840046a1e27",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "s26-neon-hosting-v1",
+          "availability": "available",
+          "approved": true,
+          "baseline_version": 53,
+          "schema_min": 54,
+          "schema_max": 54,
+          "application_min": "s26-b2c287a",
+          "application_max": "s26-b2c287a",
+          "agent_min": "sync-agent-1.14.0",
+          "agent_max": "sync-agent-1.14.0",
+          "protocol_min": "agent-ingest.v1",
+          "protocol_max": "agent-ingest.v1",
+          "allowed_workspace_classes": ["disposable"],
+          "allowed_channels": ["canary"],
+          "approved_migration_digests": [
+            "sha256:4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415",
+            "sha256:18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80",
+            "sha256:a46a8e61f9b890e628b2d22d9fd2659f2ac39a7d01154f1b67a0c046d4448e92",
+            "sha256:2ec822cad4067273aac7ead38e1dfdb29dc8dbf3ce5e1ee1765ea0e24ecf7163",
+            "sha256:229442570c0440d5a6f0d1ae336e9e80924155d9437bab5347855eaed3ee27e8",
+            "sha256:87991430eca2ffc22a69a0570d6d4f45e9b852dc4274a4828f84306dfa37bf47",
+            "sha256:cf99c5a2c06b9b1c11305b9d1d6e23880e9d64efe3fddc6e7c299372a9d47e77",
+            "sha256:cf3db7c6713ed53489120cdafecaa36154bddf45104e3daa574c7b15988a0796",
+            "sha256:ae8e9fb9ad11aef10e58a773451bafb8aae5b35ec58d438a8047c6d888dd8267",
+            "sha256:b993324b7b741754284cdea213e5f7aa79a842706dfbf32e6a94df67e0f939c2"
+          ],
+          "verification_bundle_digests": [
+            "sha256:b57b998d3e460b529f4de3f7fe3f37c7184f4db7730d3873d1b88e23ca735c63",
+            "sha256:409d24fb619226cf46dd50949012705980ea046ffc556eb495fe76b425bdc22b",
+            "sha256:10caa332cc33cf90fc9c95c6a8a541bc84aae4d505b8cac78d5be7699b185744",
+            "sha256:8fece15b86539c9626b1b1efd19e706a08fec6ec04a0c8a69bd51f8f581a466f",
+            "sha256:dc088ba179c648c82ac9ee92c33f8e04c767b5b6918d061ad8f45104db805865",
+            "sha256:688baed28906755e59c836917b63626a44d00b2c544a7a82fe98b2cafe492ebc"
+          ]
+        },
+        {
+          "id": "sync-agent-1.14.0",
+          "availability": "unavailable",
+          "approved": true,
+          "allowed_workspace_classes": ["disposable"],
+          "allowed_channels": ["canary"]
+        },
+        {
+          "id": "agent-ingest.v1",
+          "availability": "available",
+          "approved": true,
+          "allowed_workspace_classes": ["disposable"],
+          "allowed_channels": ["canary"]
+        },
+        {
+          "id": "resend-eu-west-1",
+          "availability": "available",
+          "approved": true,
+          "allowed_workspace_classes": ["disposable"],
+          "allowed_channels": ["canary"]
+        },
+        {
+          "id": "s26-self-hosted-better-auth-v1",
+          "availability": "available",
+          "approved": true,
+          "allowed_workspace_classes": ["disposable"],
+          "allowed_channels": ["canary"]
+        }
+      ]
+    },
+    {
+      "catalog_kind": "capabilities",
+      "catalog_version": "s26-capabilities-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:48265df35feff7cce4b928599c7b998ce63f673bd60b023932ce985d259fa69d",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "ai.classification",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "requests",
+          "allowed_overage_actions": ["disable_and_alert"]
+        },
+        {
+          "id": "ai.coaching",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "requests",
+          "allowed_overage_actions": ["disable_and_alert"]
+        },
+        {
+          "id": "ai.briefing.daily",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "runs",
+          "allowed_overage_actions": ["disable_and_alert"]
+        },
+        {
+          "id": "ai.briefing.weekly",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "runs",
+          "allowed_overage_actions": ["disable_and_alert"]
+        },
+        {
+          "id": "slack.reply_alerts",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "messages",
+          "allowed_overage_actions": ["disable_and_alert"]
+        },
+        {
+          "id": "slack.briefings",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "messages",
+          "allowed_overage_actions": ["disable_and_alert"]
+        },
+        {
+          "id": "airtable.imports",
+          "availability": "available",
+          "approved": true,
+          "metering_unit": "imports",
+          "allowed_overage_actions": ["disable_and_alert"]
+        }
+      ]
+    },
+    {
+      "catalog_kind": "subprocessors",
+      "catalog_version": "s26-subprocessors-2026-08-10",
+      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "published_at": "2026-08-10T12:00:00.000Z",
+      "valid_until": "2026-09-09T23:59:59.000Z",
+      "digest": "sha256:0f245f66194403786be28f8a609fef14931fa7cdf7b983db6751c58e53f08753",
+      "review_status": "approved",
+      "entries": [
+        {
+          "id": "s26-disposable-processors",
+          "availability": "unavailable",
+          "approved": true,
+          "approved_processors": [
+            "neon",
+            "cloudflare-workers-r2",
+            "vercel",
+            "resend",
+            "github"
+          ],
+          "data_flows": [
+            "postgres-tenant-data",
+            "better-auth-identities",
+            "control-plane-recovery-artifacts",
+            "vercel-build-runtime-metadata",
+            "transactional-email",
+            "source-revision-metadata"
+          ],
+          "region_restrictions": [
+            "neon-frankfurt",
+            "r2-eu-required",
+            "vercel-fra1-required",
+            "disposable-non-regulated-only"
+          ],
+          "legal_review_status": "approved",
+          "effective_at": "2026-08-10T00:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}
