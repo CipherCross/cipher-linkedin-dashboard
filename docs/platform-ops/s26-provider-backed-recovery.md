@@ -51,6 +51,29 @@ the closed [`s26-control-plane.v1` bridge contract](./s26-control-plane-bridge.m
 The bridge is not deployed by this contract; an absent bridge blocks concrete
 preflight rather than falling back to a raw request or legacy provider path.
 
+## Configuration and tenant-value lifecycle
+
+The bridge deployment and read-only preflight require only five credentials:
+its bearer, Neon, Vercel, Resend, and read-only source-repository tokens.
+Provider/catalog/profile/release choices are closed non-secret configuration.
+Tenant-specific database and application credentials are neither deployment
+bindings nor preflight inputs.
+
+Only an exact approved apply may enter the fixed environment-binding route.
+That route verifies the already-created Neon project and Vercel target against
+their deterministic identities and ownership marker, derives the application
+database URI for the fixed least-privilege role, generates the Better Auth,
+schedule, ingest, and tool credentials, and binds the values directly to the
+Vercel production environment. Results expose only names, classes, source
+kinds, and a canonical digest.
+
+The Supabase-shaped public/admin data API values needed by the pinned
+application cannot currently be derived from an approved official Neon
+capability. Data preflight therefore remains false and apply fails with
+`provider_readiness_blocked` before an environment write. A blank or missing
+owner-approved full source Git SHA likewise blocks release readiness; a
+configured SHA must be confirmed by the fixed read-only repository route.
+
 ## Recovery behavior
 
 `TenantRecoveryService` captures opaque, secret-free provider artifacts and
@@ -60,6 +83,12 @@ and includes evidence of the existing encrypted local registry backup. Restore
 is target-specific and verifies every provider surface after restoration. It
 does not expose bytes, connection strings, identity credentials, environment
 values, SMTP values, or raw provider responses.
+
+Hosting recovery is deliberately metadata-only. It records owned resource and
+release identity, environment names/classes, counts, and canonical digests,
+but never captures or reconstructs a database URL or generated tenant secret.
+Restore must re-enter the same reviewed lifecycle and cannot turn recovery
+metadata into a secret-read or arbitrary environment-write path.
 
 The manifest schema is
 [`tenant-recovery.v1.schema.json`](./contracts/tenant-recovery.v1.schema.json).
@@ -73,5 +102,9 @@ The S26 tests use mocked named provider contracts to prove adapter composition,
 the full recovery coverage, manifest integrity, target-specific restore, and
 post-restore verification. They are not evidence of a live Neon project, Better
 Auth deployment, R2 bucket, Vercel target, email, domain, or source repository.
-The next session must generate a fresh read-only disposable plan and stop for
-an exact new G4 approval before any provider call or apply.
+The bridge is not deployed, the required non-secret selections are not all
+approved, the application data API capability is unresolved, and no approved
+source SHA is configured. A future separately authorized session must first
+resolve those readiness blockers and deploy the exact reviewed bridge. It may
+then run only a fresh read-only disposable preflight and plan and must stop for
+an exact new G4 approval before any apply.

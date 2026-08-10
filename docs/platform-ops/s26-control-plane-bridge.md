@@ -51,12 +51,25 @@ HTTP boundary accepts POST only, authenticates with the single
 `BRIDGE_BEARER_SECRET` binding using a timing-safe comparison, rejects bodies
 over 64 KiB, and never logs a body or authorization value.
 
-Provider credentials, approved catalog IDs, database connections, and generated
-tenant values are server-side Worker bindings. Their types are generated from
+Only five genuine deployment/preflight credentials are secret Worker bindings:
+`BRIDGE_BEARER_SECRET`, `NEON_API_TOKEN`, `VERCEL_API_TOKEN`,
+`RESEND_API_KEY`, and `SOURCE_REPOSITORY_TOKEN`. Provider scopes, approved
+catalog/profile IDs, release compatibility/version, schedule digest, source
+Git SHA, sender settings, and the fixed application database role are closed
+non-secret Worker variables. Their types are generated from
 `ops/wrangler.jsonc`; there is no hand-written Worker environment interface.
-The configuration pins the Neon organization, Vercel team, Resend profile,
-source repository, full application Git SHA, Worker name, R2 binding,
-compatibility date/flags, and production observability.
+Blank or unapproved selections fail closed and are never promoted to secret
+bindings merely to satisfy startup.
+
+Tenant values are not deployment prerequisites. During the exact approved
+`hosting.environment-bind` apply route, the Worker first verifies the
+registry-owned Neon project and Vercel ownership marker. It then obtains the
+least-privilege application connection URI from the fixed Neon
+`connection_uri` operation and generates the Better Auth, schedule, ingest,
+and tool credentials with Web Crypto. The values are written directly to the
+owned Vercel production environment. The caller supplies only fixed
+name/class/source descriptors and owned resource identities; neither request
+nor response contains a value.
 
 Portable PostgreSQL operations import only the repository's immutable ledger,
 migration, smoke, and recovery SQL. Every pinned digest is checked before a
@@ -68,6 +81,20 @@ provider state instead of manufacturing evidence. Timeouts, throttling, 5xx
 responses, and ambiguous database or R2 mutations return `outcome_unknown`
 with only an opaque request ID.
 
+The current application release still requires Supabase-shaped public/admin
+data API credentials. No reviewed official Neon capability can derive them.
+Consequently data inspection reports `authConfigurationSupported: false`, and
+the environment-binding route rejects those six canonical/legacy descriptors
+with `provider_readiness_blocked` before any provider request. The bridge does
+not accept tenant credentials as deployment secrets and does not fabricate
+replacement values.
+
+Recovery artifacts remain metadata-only for hosting configuration: fixed
+resource identity, ownership digest, deployment/release identity, environment
+names/classes, and counts. Database URLs, generated credentials, provider
+environment values, request bodies, logs, canonical results, and audit-shaped
+results never enter R2 recovery artifacts or bridge output.
+
 The Worker has been type-checked, tested in workerd, schema-validated, and
 bundled with a local Wrangler deployment dry run. None of those checks deploys
 or contacts a provider control plane.
@@ -78,9 +105,11 @@ The bridge must be deployed through a separately approved provider change
 before a live S26 preflight can use it. Before deployment, the owner must verify:
 
 1. the exact Worker source commit and generated bindings;
-2. every required secret and catalog binding listed in `ops/wrangler.jsonc`;
+2. the five required credential bindings and every approved closed non-secret
+   selection listed in `ops/wrangler.jsonc`;
 3. the fixed Neon, Vercel, Resend, R2, Better Auth, and source-repository scopes;
-4. that the pinned application release implements the approved Neon/Better Auth
+4. that an owner-approved full 40-character application Git SHA is configured,
+   exists in the fixed repository, and implements the approved Neon/Better Auth
    and fixed hosting-value profile; and
 5. that the resulting `workers.dev` base is installed under the closed
    owner-local `s26.bridge_base_url` configuration and its bearer value is

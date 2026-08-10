@@ -45,10 +45,37 @@ approval before any provider-changing operation.
 |---|---|
 | Provider integration | Map Neon, Cloudflare R2, and Vercel to their official HTTPS APIs through reviewed named adapters. Use a distinct S26 control-plane bridge only for Better Auth, SMTP, domain verification, and source-repository inspection. |
 | Owner runtime | Add an explicit `--s26` selector to the existing owner CLI and STDIO MCP. It is mutually exclusive with `--p4c`; the default remains provider-free and fail-closed. |
-| Generated disposable identity | Reserve logical defaults only: tenant slug `s26-disposable-lab`, hostname `s26-disposable-lab.app.ciphercross.dev`, source SHA `51f7eefaff62edb7e5c5c4bef5a2cab254a532a0`, baseline `053`, and ordered migrations beginning at `054`. The hostname is a proposed resource name, not authorization to bind it. |
+| Generated disposable identity | Reserve logical defaults only: tenant slug `s26-disposable-lab`, hostname `s26-disposable-lab.app.ciphercross.dev`, baseline `053`, and ordered migrations beginning at `054`. The hostname is a proposed resource name, not authorization to bind it. The application source has no repository default: an owner-approved full Git SHA must be supplied as closed non-secret release configuration and verified to exist remotely before it can pass preflight. |
 | Unknown provider identity | Neon organization ID, Vercel team ID, Cloudflare account ID, bridge base URL, bridge owner, SMTP sender profile, catalog entries, and provider scopes remain explicit fail-closed prerequisites. They must not be invented from the generated logical identity. |
 | Secrets | Extend the closed Keychain vocabulary with S26 capability-specific labels and use a resolver that obtains values only inside the client. Values are entered interactively after the labels and scopes are approved. |
 | S26 gate | Once configuration has reviewed values and catalog snapshots, run only concrete-client `preflight → fresh disposable plan`, then stop for new exact G4 approval. |
+
+### Worker configuration lifecycle clarification
+
+The deployed bridge has three distinct configuration classes:
+
+1. **Deployment and preflight credentials:** only
+   `BRIDGE_BEARER_SECRET`, `NEON_API_TOKEN`, `VERCEL_API_TOKEN`,
+   `RESEND_API_KEY`, and `SOURCE_REPOSITORY_TOKEN`. These are genuine
+   credentials and remain secret Worker bindings.
+2. **Closed non-secret selections:** provider scopes, catalog/profile IDs,
+   release compatibility and version, schedule digest, source Git SHA, sender
+   settings, and the fixed application database role. Blank or unapproved
+   selections make preflight report false readiness or block the relevant
+   operation; they are not disguised as secrets.
+3. **Tenant apply values:** the application database connection is derived
+   from the already-created, registry-owned Neon project; Better Auth,
+   schedule, ingest, and tool credentials are generated with Web Crypto only
+   inside the exact approved environment-binding apply route. They are bound
+   directly to the ownership-verified Vercel target and never cross the route
+   as input or output.
+
+The pinned application still requires Supabase-shaped public/admin data API
+credentials. Because no reviewed official Neon capability currently derives
+them, data preflight remains false and the environment-binding route returns
+the typed `provider_readiness_blocked` result before making a provider change.
+No placeholder, fabricated token, or manual tenant secret is an acceptable
+substitute.
 
 ## Approach
 
