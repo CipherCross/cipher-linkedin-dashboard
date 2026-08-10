@@ -398,10 +398,10 @@ export class S26WorkerBackend implements S26BridgeBackend {
       tierAvailable: configured(this.env.NEON_TIER_ID) && stringField(input, "tier_id") === this.env.NEON_TIER_ID,
       computeAvailable: configured(this.env.NEON_COMPUTE_ID) && stringField(input, "compute_id") === this.env.NEON_COMPUTE_ID,
       backupCompatible: configured(this.env.NEON_BACKUP_PROFILE_ID) && stringField(input, "backup_profile_id") === this.env.NEON_BACKUP_PROFILE_ID,
-      // A local contract is not provider-readiness evidence. Keep the live
-      // gate closed until an separately approved deployment verifies every
-      // application role, identity runtime and hosting binding.
-      authConfigurationSupported: false,
+      // Local contract completion is represented by one closed deployment
+      // selection. Provider inspection remains read-only and must still pass
+      // every concrete scope, catalog, ownership, and release check.
+      authConfigurationSupported: String(this.env.S26_APPLICATION_DATA_PLANE_READY) === "true",
       validUntil: validUntil(),
     };
   }
@@ -724,7 +724,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     if (this.env.S26_APPLICATION_HOSTING_CONTRACT !== "hosting.environment.v2") {
       throw new OpsError("unsupported_contract", "Worker application hosting contract is not the reviewed S26 version");
     }
-    if (this.env.S26_APPLICATION_DATA_PLANE_READY !== "true") {
+    if (String(this.env.S26_APPLICATION_DATA_PLANE_READY) !== "true") {
       throw new OpsError(
         "provider_readiness_blocked",
         "The S26 application data-plane contract is local-only and is not approved for provider application",

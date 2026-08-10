@@ -3,6 +3,7 @@ import { env, SELF } from "cloudflare:test";
 
 import { OpsError } from "../src/core/errors.js";
 import type { S26BridgeBackend } from "../src/bridge/s26-control-plane-service.js";
+import { CANONICAL_TENANT_ENVIRONMENT } from "../src/providers/hosting-tenant.js";
 import { S26WorkerBackend } from "../src/worker/backend.js";
 import { handleS26WorkerRequest, s26WorkerRequestLog } from "../src/worker/index.js";
 
@@ -29,6 +30,15 @@ const environmentContext = {
   ownership_marker_digest: OWNERSHIP,
   scope: "production",
 } as const;
+
+function closedEnvironmentBindings() {
+  return CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({
+    name: entry.name,
+    value_class: entry.valueClass,
+    source_kind: entry.source.kind,
+    source: entry.source,
+  }));
+}
 
 function request(
   path: string,
@@ -218,7 +228,7 @@ describe("S26 Worker lifecycle configuration", () => {
 
   it("blocks an absent owner-approved SHA and a missing remote SHA", async () => {
     const uncalledFetch = vi.fn<typeof fetch>();
-    const absent = await new S26WorkerBackend(env, { fetch: uncalledFetch }).invoke(
+    const absent = await new S26WorkerBackend(envWith({ APPROVED_SOURCE_GIT_SHA: "" }), { fetch: uncalledFetch }).invoke(
       { capability: "sourceRepository", operation: "inspect" },
       { source_git_sha: "c".repeat(40), compatibility_entry_id: "worker-test-only", application_version: "worker-test-only" },
     );
@@ -235,9 +245,10 @@ describe("S26 Worker lifecycle configuration", () => {
     expect(missingFetch).toHaveBeenCalledOnce();
   });
 
-  it("blocks unavailable official data API credentials without fabricating a value", async () => {
+  it("blocks application binding while the closed data-plane readiness selection is false", async () => {
+    const blockedEnv = envWith({ S26_APPLICATION_DATA_PLANE_READY: "false" });
     const inspectionFetch = vi.fn<typeof fetch>(async () => providerResponse(200, { projects: [] }));
-    const inspection = await new S26WorkerBackend(env, { fetch: inspectionFetch }).invoke(
+    const inspection = await new S26WorkerBackend(blockedEnv, { fetch: inspectionFetch }).invoke(
       { capability: "data", operation: "inspect" },
       {
         organization_id: env.NEON_ORGANIZATION_ID,
@@ -252,11 +263,11 @@ describe("S26 Worker lifecycle configuration", () => {
     expect(inspection).toMatchObject({ authConfigurationSupported: false });
 
     const fetcher = vi.fn<typeof fetch>();
-    const backend = new S26WorkerBackend(env, { fetch: fetcher });
+    const backend = new S26WorkerBackend(blockedEnv, { fetch: fetcher });
     const response = await handle(
       request("/s26/control-plane/v1/hosting/environment-bind", {
         ...environmentContext,
-        bindings: [{ name: "PUBLIC_DATA_API_KEY", value_class: "public_build", source_kind: "secret_label" }],
+        bindings: closedEnvironmentBindings(),
       }),
       backend,
     );
@@ -265,11 +276,37 @@ describe("S26 Worker lifecycle configuration", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("reports the reviewed application data plane only for the closed readiness selection", async () => {
+    const inspectionFetch = vi.fn<typeof fetch>(async () => providerResponse(200, { projects: [] }));
+    const inspection = await new S26WorkerBackend(
+      envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }),
+      { fetch: inspectionFetch },
+    ).invoke(
+      { capability: "data", operation: "inspect" },
+      {
+        organization_id: env.NEON_ORGANIZATION_ID,
+        deterministic_name: DATA_PROJECT_NAME,
+        region_id: "worker-test-only",
+        tier_id: "worker-test-only",
+        compute_id: "worker-test-only",
+        backup_profile_id: "worker-test-only",
+        ownership_marker_digest: OWNERSHIP,
+      },
+    );
+    expect(inspection).toMatchObject({ authConfigurationSupported: true });
+    expect(inspectionFetch).toHaveBeenCalledOnce();
+  });
+
   it("uses only the closed apply allowlist and rejects foreign ownership", async () => {
     const unknown = await handle(
       request("/s26/control-plane/v1/hosting/environment-bind", {
         ...environmentContext,
-        bindings: [{ name: "CALLER_CHOSEN_SECRET", value_class: "server_secret", source_kind: "generated_secret" }],
+        bindings: [{
+          name: "CALLER_CHOSEN_SECRET",
+          value_class: "server_secret",
+          source_kind: "generated_secret",
+          source: { kind: "generated_secret", generatorId: "caller.chosen" },
+        }],
       }),
       new S26WorkerBackend(env, { fetch: vi.fn<typeof fetch>() }),
     );
@@ -286,9 +323,9 @@ describe("S26 Worker lifecycle configuration", () => {
     const foreign = await handle(
       request("/s26/control-plane/v1/hosting/environment-bind", {
         ...environmentContext,
-        bindings: [{ name: "APP_BASE_URL", value_class: "server_public", source_kind: "derived_from_plan" }],
+        bindings: closedEnvironmentBindings(),
       }),
-      new S26WorkerBackend(env, { fetch: fetcher }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: fetcher }),
     );
     expect(foreign.status).toBe(409);
     await expect(foreign.json()).resolves.toEqual({ code: "provider_error" });
@@ -314,7 +351,7 @@ describe("S26 Worker lifecycle configuration", () => {
         return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
       }
       if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1/connection_uri")) {
-        expect(url.searchParams.get("role_name")).toBe("app_runtime");
+        expect(["app_runtime", "app_system", "app_machine", "identity_store"]).toContain(url.searchParams.get("role_name"));
         return providerResponse(200, { uri: databaseCanary });
       }
       if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
@@ -331,21 +368,11 @@ describe("S26 Worker lifecycle configuration", () => {
       }
       return providerResponse(500, {}, "unexpected-route");
     });
-    const backend = new S26WorkerBackend(env, {
+    const backend = new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
       fetch: fetcher,
       generateSecret: () => generatedCanaries[generatedIndex++]!,
     });
-    const bindings = [
-      { name: "DATABASE_URL", value_class: "server_secret", source_kind: "derived_from_owned_resource" },
-      { name: "AUTH_SESSION_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "SCHEDULE_INVOKE_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "CRON_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "INGEST_INVOKE_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "NOTIFY_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "TOOL_BRIDGE_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "MCP_SECRET", value_class: "server_secret", source_kind: "generated_secret" },
-      { name: "APP_BASE_URL", value_class: "server_public", source_kind: "derived_from_plan" },
-    ];
+    const bindings = closedEnvironmentBindings();
     const applyRequest = request("/s26/control-plane/v1/hosting/environment-bind", {
       ...environmentContext,
       bindings,
@@ -354,11 +381,11 @@ describe("S26 Worker lifecycle configuration", () => {
     expect(applied.status).toBe(200);
     const appliedText = await applied.text();
     expect(written).toHaveLength(bindings.length);
-    expect(written.find((entry) => entry.key === "DATABASE_URL")?.value).toBe(databaseCanary);
-    expect(written.find((entry) => entry.key === "AUTH_SESSION_SECRET")?.value).toBe(generatedCanaries[0]);
-    expect(written.find((entry) => entry.key === "SCHEDULE_INVOKE_SECRET")?.value).toBe(written.find((entry) => entry.key === "CRON_SECRET")?.value);
-    expect(written.find((entry) => entry.key === "INGEST_INVOKE_SECRET")?.value).toBe(written.find((entry) => entry.key === "NOTIFY_SECRET")?.value);
-    expect(written.find((entry) => entry.key === "TOOL_BRIDGE_SECRET")?.value).toBe(written.find((entry) => entry.key === "MCP_SECRET")?.value);
+    expect(written.find((entry) => entry.key === "NEON_DATABASE_URL")?.value).toBe(databaseCanary);
+    expect(written.find((entry) => entry.key === "IDENTITY_SESSION_SECRET")?.value).toBe(generatedCanaries[0]);
+    expect(written.find((entry) => entry.key === "CRON_SECRET")?.value).toBe(generatedCanaries[1]);
+    expect(written.find((entry) => entry.key === "NOTIFY_SECRET")?.value).toBe(generatedCanaries[2]);
+    expect(written.find((entry) => entry.key === "MCP_SECRET")?.value).toBe(generatedCanaries[3]);
 
     const logText = JSON.stringify(s26WorkerRequestLog(applyRequest, applied));
     const recovery = await backend.invoke(
@@ -397,9 +424,9 @@ describe("S26 Worker lifecycle configuration", () => {
     const failed = await handle(
       request("/s26/control-plane/v1/hosting/environment-bind", {
         ...environmentContext,
-        bindings: [{ name: "AUTH_SESSION_SECRET", value_class: "server_secret", source_kind: "generated_secret" }],
+        bindings: closedEnvironmentBindings(),
       }),
-      new S26WorkerBackend(env, { fetch: failedFetcher, generateSecret: () => generatedCanaries[0]! }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: failedFetcher, generateSecret: () => generatedCanaries[0]! }),
     );
     const failedText = await failed.text();
     expect(failed.status).toBe(502);
