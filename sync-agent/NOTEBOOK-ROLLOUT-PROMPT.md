@@ -1,4 +1,4 @@
-# Notebook rollout prompt — 1.12.2 → 1.15.0, Supabase → Neon gateway
+# Notebook rollout prompt — 1.12.2 → 1.15.1, Supabase → Neon gateway
 
 Paste everything between the two `═══` lines into the AI agent running on **one**
 notebook. It is identical for every notebook — **it contains no secrets and no
@@ -18,6 +18,15 @@ the agent check, but check yourself too:
 
 Do notebook 1 alone, all the way to `only`, and let one full cron cycle pass
 before you start notebook 2.
+
+**Decide `sync_photos` before step 7.** It is a remote-config key, so whatever
+the Health page holds for a notebook wins over its local file — a notebook with
+`sync_photos: true` remotely will mirror photos on a real sync no matter what
+the prompt or the local config says. From `shadow` onward the mirror also
+uploads each photo to the gateway, and a gateway upload failure withholds the
+Supabase `photo_synced_at` stamp, which stalls the existing Supabase backfill
+rather than failing on its own. Turning it off for the duration of the rehearsal
+keeps one unproven path in the run instead of two.
 
 ## Getting the `lha.` token — one per notebook
 
@@ -175,13 +184,21 @@ do not work around it. (The agent falls back to OpenSSL, but I want to know.)
 
 ## Step 4 — install the new agent
 
-I will give you the new `agent.py` (version 1.15.0). Put it in place of the
-current one, then verify **all three** of these before going further:
+I will give you the new `agent.py` (version 1.15.1), or you can fetch it
+yourself — the repository is public and this URL is pinned to one immutable
+commit:
 
-- `AGENT_VERSION` now reads exactly `1.15.0`
-- the file is exactly **133526** bytes
+```
+https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/4b040863d7dd39b6503d676eb8d959b5f9b31f45/sync-agent/agent.py
+```
+
+Put it in place of the current one, then verify **all three** of these before
+going further:
+
+- `AGENT_VERSION` now reads exactly `1.15.1`
+- the file is exactly **134074** bytes
 - its SHA-256 is exactly
-  `5e20056bbed623f1627950acecee601efa8f69eca3cd8a42f7197664b60aca90`
+  `b39fc97c3d2b8c3136d2dcf3e68b368274720da2b7ab6e47f6b891ebb6f01269`
   - macOS/Linux: `shasum -a 256 agent.py`
   - Windows: `certutil -hashfile agent.py SHA256`
 
@@ -297,10 +314,14 @@ This is the commitment: the gateway becomes the sole destination, no Supabase
 client is built at all, and a delivery failure now **fails the whole run**.
 
 Change `ingest_mode` to `"only"`, run one real sync, and show me the output.
-Expect two new things in it, both normal:
+Expect these, all normal:
 
-- a line saying photo sync was skipped — photos are not available on this path yet
-- no mention of Supabase at all
+- no mention of Supabase anywhere in the run
+- if `sync_photos` is still on for this notebook, one line saying the photo sync
+  was **skipped** — the mirror is a Supabase-path feature and this path builds no
+  Supabase client, so it refuses rather than half-running. If `sync_photos` is
+  off, there is no photo line at all. Either is correct; a photo mirror that
+  *ran* here would not be.
 
 If the run fails, put `ingest_mode` back to `"dual"`, tell me exactly what the
 failure said, and stop. Reverting the mode restores a working sync immediately.
