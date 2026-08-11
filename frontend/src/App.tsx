@@ -6,6 +6,7 @@ import { ToastProvider } from './lib/ToastContext'
 import { ThemeProvider } from './lib/ThemeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
+import { ResetPassword, resetTokenFromHash } from './pages/ResetPassword'
 
 // Pages are code-split so each route ships its own chunk — the initial bundle no
 // longer carries all nine. These modules use named exports, so map to default.
@@ -47,6 +48,20 @@ function AdminOnly({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  // Before the gate, deliberately. A recovery link is opened by somebody who
+  // cannot sign in — that is what the link is for — and every route below sits
+  // inside `AuthGate`, so a reset screen placed there could never be reached.
+  const resetToken = resetTokenFromHash(window.location.hash)
+  if (resetToken !== null) {
+    return (
+      <ErrorBoundary variant="screen">
+        <ThemeProvider>
+          <ResetPassword token={resetToken} />
+        </ThemeProvider>
+      </ErrorBoundary>
+    )
+  }
+
   return (
     <ErrorBoundary variant="screen">
       <ThemeProvider>

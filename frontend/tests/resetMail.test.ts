@@ -10,6 +10,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { IDENTITY_BASE_URL_ENV } from '../api/_lib/identity/config.js'
 import {
   RESET_MAIL_API_KEY_ENV,
   RESET_MAIL_FROM_ENV,
@@ -21,7 +22,10 @@ import {
 const LINK = {
   email: 'invited@example.test',
   token: 'single-use-token',
-  url: 'https://tenant.example.test/#/reset-password?token=single-use-token',
+  // What the candidate builds: its own server route. This deployment does not
+  // serve it — the dispatcher forwards `?op=` operations only — so a link to it
+  // lands on the SPA fallback, which is exactly what happened in production.
+  url: 'https://tenant.example.test/api/identity/reset-password/single-use-token?callbackURL=x',
 }
 
 describe('the sender a deployment carries', () => {
@@ -29,16 +33,29 @@ describe('the sender a deployment carries', () => {
     expect(readResetMailConfig({})).toBeNull()
     expect(readResetMailConfig({ [RESET_MAIL_API_KEY_ENV]: 'key' })).toBeNull()
     expect(readResetMailConfig({ [RESET_MAIL_FROM_ENV]: 'a@b.test' })).toBeNull()
+    // Without the origin there is no link to send, only a server route this
+    // deployment does not serve.
+    expect(
+      readResetMailConfig({ [RESET_MAIL_API_KEY_ENV]: 'key', [RESET_MAIL_FROM_ENV]: 'a@b.test' }),
+    ).toBeNull()
     // Blank is absent, not a sender that fails on the first delivery.
     expect(
-      readResetMailConfig({ [RESET_MAIL_API_KEY_ENV]: '  ', [RESET_MAIL_FROM_ENV]: 'a@b.test' }),
+      readResetMailConfig({
+        [RESET_MAIL_API_KEY_ENV]: '  ',
+        [RESET_MAIL_FROM_ENV]: 'a@b.test',
+        [IDENTITY_BASE_URL_ENV]: 'https://tenant.example.test',
+      }),
     ).toBeNull()
   })
 
   it('is read from the two bound values', () => {
     expect(
-      readResetMailConfig({ [RESET_MAIL_API_KEY_ENV]: ' key ', [RESET_MAIL_FROM_ENV]: ' a@b.test ' }),
-    ).toEqual({ apiKey: 'key', from: 'a@b.test' })
+      readResetMailConfig({
+        [RESET_MAIL_API_KEY_ENV]: ' key ',
+        [RESET_MAIL_FROM_ENV]: ' a@b.test ',
+        [IDENTITY_BASE_URL_ENV]: ' https://tenant.example.test ',
+      }),
+    ).toEqual({ apiKey: 'key', from: 'a@b.test', baseUrl: 'https://tenant.example.test' })
   })
 })
 
@@ -47,7 +64,11 @@ describe('delivering the link', () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', fetcher)
     try {
-      await createResetLinkSink({ apiKey: 'key', from: 'CipherCross <a@b.test>' })(LINK)
+      await createResetLinkSink({
+        apiKey: 'key',
+        from: 'CipherCross <a@b.test>',
+        baseUrl: 'https://tenant.example.test',
+      })(LINK)
     } finally {
       vi.unstubAllGlobals()
     }
@@ -57,15 +78,23 @@ describe('delivering the link', () => {
     const body = JSON.parse(String(init.body)) as { to: string[]; from: string; text: string }
     expect(body.to).toEqual([LINK.email])
     expect(body.from).toBe('CipherCross <a@b.test>')
-    // The link is passed through exactly as built; a rewritten one would point
-    // at a host the token was not issued for.
-    expect(body.text).toContain(LINK.url)
+    // The deployment's own reset screen, carrying the token in the hash — not
+    // the candidate's server route, which this deployment does not expose and
+    // which therefore landed on the SPA fallback with no form on it.
+    expect(body.text).toContain(
+      `https://tenant.example.test/#/reset-password?token=${LINK.token}`,
+    )
+    expect(body.text).not.toContain(LINK.url)
   })
 
   it('fails the request instead of reporting mail it never sent', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"message":"invited@example.test"}', { status: 422 })))
     try {
-      const sink = createResetLinkSink({ apiKey: 'key', from: 'a@b.test' })
+      const sink = createResetLinkSink({
+        apiKey: 'key',
+        from: 'a@b.test',
+        baseUrl: 'https://tenant.example.test',
+      })
       // The status travels so the refusal is attributable from outside the
       // deployment; the provider's body never does.
       await expect(sink(LINK)).rejects.toThrow(ResetMailDeliveryError)

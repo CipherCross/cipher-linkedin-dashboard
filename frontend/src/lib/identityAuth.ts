@@ -65,6 +65,7 @@ export const IDENTITY_OPS = {
   signIn: 'session.signIn',
   signOut: 'session.signOut',
   requestReset: 'password.requestReset',
+  completeReset: 'password.completeReset',
   roster: 'team.roster',
   invite: 'admin.invite',
   setActive: 'admin.setActive',
@@ -345,6 +346,29 @@ export async function signOut(fetchImpl: FetchLike = defaultFetch): Promise<void
  * `INVALID_REDIRECT_URL`, which F14 measured, so it is built from the caller's
  * own origin and never from anything a form supplied.
  */
+/**
+ * Set a new password from a recovery link.
+ *
+ * The token is the whole credential: it arrives in the link, is used once, and
+ * is never stored. Failures are returned rather than thrown so the screen can
+ * say whether the link expired or the password was refused.
+ */
+export async function completePasswordReset(
+  token: string,
+  newPassword: string,
+  fetchImpl: FetchLike = defaultFetch,
+): Promise<SignInOutcome> {
+  let response: Response
+  try {
+    response = await postOp(IDENTITY_OPS.completeReset, { token, newPassword }, fetchImpl)
+  } catch {
+    return { kind: 'refused', message: 'The service is unreachable. Try again in a moment.' }
+  }
+  if (response.ok) return { kind: 'ok' }
+  const body = await readBody(response)
+  return { kind: 'refused', message: errorMessage(body, response.status) }
+}
+
 export async function requestPasswordReset(
   email: string,
   origin: string,

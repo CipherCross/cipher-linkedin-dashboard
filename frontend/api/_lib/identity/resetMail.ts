@@ -14,6 +14,7 @@
  */
 
 import type { ResetLinkSink } from './betterAuthProvider.js'
+import { IDENTITY_BASE_URL_ENV } from './config.js'
 
 /**
  * A refusal from the mail provider, carrying its status and nothing else.
@@ -35,11 +36,30 @@ export class ResetMailDeliveryError extends Error {
 export const RESET_MAIL_API_KEY_ENV = 'RESEND_API_KEY'
 export const RESET_MAIL_FROM_ENV = 'RESEND_FROM_IDENTITY'
 
+/** The screen that accepts the token. A hash route, so the token never travels
+ *  to the server as part of a page request. */
+export const RESET_SCREEN_ROUTE = '/#/reset-password'
+
+/**
+ * Where the recipient is sent.
+ *
+ * Not the candidate's own `…/reset-password/<token>` URL. That is a server
+ * route this deployment does not expose — the dispatcher forwards `?op=`
+ * operations and nothing else — so the link landed on the SPA fallback and
+ * showed the ordinary app with no way to set a password. The link points at the
+ * screen that does the work, and the token rides in the hash.
+ */
+export function resetScreenLink(baseUrl: string, token: string): string {
+  return `${new URL(baseUrl).origin}${RESET_SCREEN_ROUTE}?token=${encodeURIComponent(token)}`
+}
+
 const ENDPOINT = 'https://api.resend.com/emails'
 
 export interface ResetMailConfig {
   readonly apiKey: string
   readonly from: string
+  /** This deployment's own origin: the link must point at its own reset screen. */
+  readonly baseUrl: string
 }
 
 /**
@@ -53,8 +73,9 @@ export function readResetMailConfig(
 ): ResetMailConfig | null {
   const apiKey = (env[RESET_MAIL_API_KEY_ENV] ?? '').trim()
   const from = (env[RESET_MAIL_FROM_ENV] ?? '').trim()
-  if (apiKey === '' || from === '') return null
-  return { apiKey, from }
+  const baseUrl = (env[IDENTITY_BASE_URL_ENV] ?? '').trim()
+  if (apiKey === '' || from === '' || baseUrl === '') return null
+  return { apiKey, from, baseUrl }
 }
 
 /**
@@ -66,7 +87,8 @@ export function readResetMailConfig(
  * a success for mail that was never sent.
  */
 export function createResetLinkSink(config: ResetMailConfig): ResetLinkSink {
-  return async ({ email, url }) => {
+  return async ({ email, token }) => {
+    const link = resetScreenLink(config.baseUrl, token)
     const response = await fetch(ENDPOINT, {
       method: 'POST',
       headers: {
@@ -78,7 +100,7 @@ export function createResetLinkSink(config: ResetMailConfig): ResetLinkSink {
         to: [email],
         subject: 'Reset your dashboard password',
         text:
-          `Open this link to choose a new password:\n\n${url}\n\n` +
+          `Open this link to choose a new password:\n\n${link}\n\n` +
           'It can be used once. If you did not ask for it, ignore this message.',
       }),
     })
