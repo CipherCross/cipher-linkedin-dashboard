@@ -369,7 +369,53 @@ else
   bad "the ledger's contents were readable without app_owner (status $leaked_status)"
 fi
 
-# --- 9. the live data smoke, on the state step 11 will actually meet ----------
+# --- 9. step 4's identity probe, which resolves a name in a locked schema -----
+# The Worker's identity.configure asks
+# `to_regclass('identity."user"') IS NOT NULL` over the OWNER connection, which
+# on a managed provider is the provider's own principal (neondb_owner), not
+# app_owner. Step 004 creates schema identity AUTHORIZATION identity_store,
+# revokes PUBLIC and grants USAGE to app_owner alone, so this is the same shape
+# as the step-3 ledger probe. Whether it needs SET ROLE is a fact about the live
+# role graph, so it is settled here instead of by reading.
+expect_provider_probe() {
+  local label="$1" sql="$2" expected="$3"
+  local observed
+  set +e
+  observed="$(printf '%s;\n' "$sql" \
+    | sql_as "$provider_role" "$provider_password" bootstrap_prepared 2>&1)"
+  local status=$?
+  set -e
+  if [ "$status" -ne 0 ]; then
+    bad "$label (the probe failed: $(printf '%s' "$observed" | head -1))"
+  elif [ "$observed" = "$expected" ]; then
+    ok "$label"
+  else
+    bad "$label (expected '$expected', got '$observed')"
+  fi
+}
+
+expect_provider_probe "step 4's identity-store probe answers over the provider principal" \
+  "$(node "$probe_sql_tool" IDENTITY_STORE_PRESENCE_SQL)" "t"
+expect_provider_probe "step 11's identity-surface probe answers over the provider principal" \
+  "$(node "$probe_sql_tool" IDENTITY_SURFACE_PRESENCE_SQL)" "t|t"
+
+# The retired forms, pinned so neither can come back. Both resolve a qualified
+# name in a schema the provider principal has no USAGE on.
+for retired in 'SELECT to_regclass('"'"'identity."user"'"'"') IS NOT NULL' \
+               'SELECT to_regprocedure('"'"'public.identity_admin_invite_member_atomic(text,text,text,text,text,text)'"'"') IS NOT NULL'; do
+  set +e
+  retired_output="$(printf '%s;\n' "$retired" \
+    | sql_as "$provider_role" "$provider_password" bootstrap_prepared 2>&1)"
+  retired_status=$?
+  set -e
+  if [ "$retired_status" -ne 0 ] && printf '%s' "$retired_output" | grep -q "permission denied for schema"; then
+    ok "the retired name-resolving form still fails: $(printf '%s' "$retired_output" | grep -o 'permission denied for schema [a-z_]*' | head -1)"
+  else
+    bad "a retired name-resolving probe no longer fails (status $retired_status); the regression's premise changed"
+  fi
+done
+
+# --- 10. the live data smoke, on the state step 11 will actually meet ---------
 # The four cleanroom catalog assertions cannot pass here: each asserts exact
 # counts for the state right after its own step. The live smoke asserts
 # invariants instead, so it has to hold on exactly this database.

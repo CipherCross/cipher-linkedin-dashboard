@@ -15,7 +15,13 @@ import {
 import { neonOwnershipRoleName } from "../providers/neon-ownership.js";
 import type { S26BridgeBackend } from "../bridge/s26-control-plane-service.js";
 import type { S26BridgeRoute } from "../providers/s26-bridge-contract.js";
-import { applyPinnedPortablePostgres, runPinnedPortableSmoke, runPinnedRestoreVerification } from "./pinned-postgres.js";
+import {
+  IDENTITY_STORE_PRESENCE_SQL,
+  IDENTITY_SURFACE_PRESENCE_SQL,
+  applyPinnedPortablePostgres,
+  runPinnedPortableSmoke,
+  runPinnedRestoreVerification,
+} from "./pinned-postgres.js";
 
 import supportMembershipSql from "../../../postgres/control-plane/s26/identity_support_membership.sql";
 import initialAdminSql from "../../../postgres/control-plane/s26/identity_initial_admin.sql";
@@ -579,7 +585,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const projectId = stringField(input, "project_id");
     const configured = await databaseQuery(
       await this.#ownerConnectionUri(projectId),
-      "SELECT to_regclass('identity.\"user\"') IS NOT NULL AS configured",
+      IDENTITY_STORE_PRESENCE_SQL,
     );
     if (configured.rows[0]?.configured !== true) {
       throw new OpsError("provider_error", "Better Auth identity store is not installed");
@@ -635,7 +641,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     }
     const result = await databaseQuery(
       await this.#ownerConnectionUri(stringField(input, "project_id")),
-      "SELECT to_regclass('identity.\"user\"') IS NOT NULL AS identity_store, to_regprocedure('public.identity_admin_invite_member_atomic(text,text,text,text,text,text)') IS NOT NULL AS invite_path",
+      IDENTITY_SURFACE_PRESENCE_SQL,
     );
     const rows = result.rows;
     if (rows[0]?.identity_store !== true || rows[0]?.invite_path !== true) {

@@ -400,6 +400,48 @@ export async function applyPinnedPortablePostgres(input: {
 }
 
 /**
+ * Whether step 004's identity store is installed, and whether step 005's atomic
+ * invite path is present with its exact six-text signature.
+ *
+ * Catalog reads, for the same reason as LEDGER_PRESENCE_SQL. These run over the
+ * OWNER connection, which on a managed provider is the provider's own principal
+ * (`neondb_owner`) and not app_owner. Step 004 creates
+ * `CREATE SCHEMA identity AUTHORIZATION identity_store`, revokes PUBLIC and
+ * grants USAGE to app_owner alone, and schema `public` is likewise owned by
+ * app_owner with USAGE for the contract roles only — so the provider principal
+ * holds USAGE on neither. The previous probes resolved
+ * `identity."user"` and `public.identity_admin_invite_member_atomic(...)` by
+ * name, which requires that USAGE, and both therefore raised
+ * `42501 permission denied for schema …` instead of answering. That was step 4's
+ * and step 11's copy of the defect that stopped step 3.
+ *
+ * `pg_class`, `pg_namespace` and `pg_proc` need no schema privilege.
+ *
+ * The signature check compares argument TYPES, the way the retired
+ * `to_regprocedure(...(text,text,...))` lookup did. Step 005 declares the
+ * function with named parameters (`p_email text, …`), so comparing
+ * `pg_get_function_identity_arguments` against a bare type list silently reports
+ * the invite path as absent.
+ */
+export const IDENTITY_STORE_PRESENCE_SQL = `SELECT EXISTS (
+  SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'identity' AND c.relname = 'user'
+) AS configured`;
+
+export const IDENTITY_SURFACE_PRESENCE_SQL = `SELECT EXISTS (
+  SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'identity' AND c.relname = 'user'
+) AS identity_store, EXISTS (
+  SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname = 'identity_admin_invite_member_atomic'
+     AND pg_catalog.oidvectortypes(p.proargtypes) = 'text, text, text, text, text, text'
+) AS invite_path`;
+
+/**
  * The two ledger reads the `schema_ledger` smoke makes, exported so the
  * live-shaped harness runs the same text. `role_bootstrap` is a single-row table
  * by constraint, so it needs no ordering.
