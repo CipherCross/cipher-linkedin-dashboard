@@ -1381,6 +1381,44 @@ export class S26WorkerBackend implements S26BridgeBackend {
     };
   }
 
+  /** Whether this project carries the hostname, via the proven single-domain probe. */
+  async #projectHostnameBound(target: string, hostname: string): Promise<boolean> {
+    try {
+      await this.#vercel(
+        `/v10/projects/${encodeURIComponent(target)}/domains/${encodeURIComponent(hostname)}`,
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof OpsError && error.code === "provider_error" && error.details.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Whether the hostname actually answers over HTTPS.
+   *
+   * Unauthenticated and read-only: it carries no credential and reads no body,
+   * only the status. It is the one check that speaks for the tenant's own users.
+   */
+  async #hostnameAnswers(hostname: string): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await this.#fetch(`https://${hostname}/`, {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+      });
+      return response.status < 500;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async #hostingVerify(input: JsonRecord): Promise<unknown> {
     const target = stringField(input, "target_handle");
     const expected = stringField(input, "expected_active_release_handle");
@@ -1405,10 +1443,19 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const activeRelease = this.#latestDeploymentId(project.value);
     const activeMatches = activeRelease === expected;
     const expectedHostname = stringField(input, "expected_hostname");
-    const aliases = Array.isArray(response.value.alias)
-      ? response.value.alias.filter((entry): entry is string => typeof entry === "string")
-      : [];
-    const domainMatches = aliases.includes(expectedHostname);
+    // The deployment object's `alias` array is a snapshot of what was assigned
+    // when it was created, so an alias attached later — which is exactly what
+    // step 10 does, because step 6 leaves automatic assignment off — never appears
+    // in it. Reading it reported all four domain checks false while
+    // https://<hostname>/ was in fact serving this release with HTTP 200.
+    //
+    // The binding is confirmed with the same single-domain probe used elsewhere,
+    // and whether the hostname actually answers is settled by asking it. Between
+    // them those two facts, plus the already-computed active-release check, say
+    // what the four fields below claim — none of it from a snapshot field.
+    const domainBound = await this.#projectHostnameBound(target, expectedHostname);
+    const domainServes = domainBound && await this.#hostnameAnswers(expectedHostname);
+    const domainMatches = domainBound;
     const environmentMetadata = this.#closedHostingEnvironmentMetadata(
       Array.isArray(environment.value.envs) ? environment.value.envs : [],
     );
@@ -1443,10 +1490,11 @@ export class S26WorkerBackend implements S26BridgeBackend {
       },
       domain: {
         hostname: expectedHostname,
-        assigned: domainMatches,
-        certificateReady: domainMatches && ready,
+        assigned: domainBound,
+        // Answering over HTTPS at all is the certificate working.
+        certificateReady: domainBound && domainServes,
         matchesExpected: domainMatches,
-        servesActiveRelease: domainMatches && activeMatches,
+        servesActiveRelease: domainBound && activeMatches && domainServes,
       },
       build: {
         releaseHandle: expected,
