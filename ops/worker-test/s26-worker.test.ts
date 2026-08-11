@@ -534,6 +534,81 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     expect(BOOTSTRAP_STATE_PROBE_SQL).not.toContain("app_ledger");
   });
 
+  it("records a staged build without requiring crons that only promotion can activate", async () => {
+    // The live step 9 blocked here. Vercel attaches cron jobs to the release that
+    // actually SERVES production, and step 9 stages its deployment on purpose —
+    // step 6 disables automatic domain assignment so nothing serves until step 10.
+    // So step 9 was waiting for an activation its own design defers, and the
+    // project's Cron Jobs page was empty the whole time. Step 9 keeps validating
+    // the schedule manifest DIGEST; #hostingVerify is the gate on the activated
+    // set and reports exactly which schedules are missing.
+    const approvedScheduleDigest = scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES);
+    const environmentBindingDigest = hostingEnvironmentBindingDigest(
+      CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({ name: entry.name, valueClass: entry.valueClass, source: entry.source })),
+    );
+    const buildIdentityDigest = sha256Digest(canonicalJson({
+      target_handle: "target-1",
+      revision_id: REVISION,
+      build_recipe_id: env.VERCEL_BUILD_RECIPE_ID,
+      environment_binding_digest: environmentBindingDigest,
+      schedule_manifest_digest: approvedScheduleDigest,
+    }));
+    const fetcher = vercelFetcher((url, method) => {
+      if (url.pathname === "/v7/deployments" && method === "GET") {
+        return providerResponse(200, { deployments: [] });
+      }
+      if (url.pathname === "/v13/deployments" && method === "POST") {
+        return providerResponse(200, { id: "staged-release" });
+      }
+      if (url.pathname === "/v13/deployments/staged-release" && method === "GET") {
+        return providerResponse(200, {
+          id: "staged-release",
+          readyState: "READY",
+          target: "production",
+          gitSource: { sha: REVISION },
+          meta: { lh2S26BuildDigest: buildIdentityDigest },
+        });
+      }
+      // The project carries NO cron record: nothing has been promoted yet, which
+      // is exactly the live state whose empty Cron Jobs page blocked step 9.
+      if (url.pathname === "/v9/projects/target-1" && method === "GET") {
+        return providerResponse(200, { id: "target-1", name: DATA_PROJECT_NAME });
+      }
+      return undefined;
+    });
+    const backend = new S26WorkerBackend(envWith({
+      APPROVED_SOURCE_GIT_SHA: REVISION,
+      APPROVED_SCHEDULE_MANIFEST_DIGEST: approvedScheduleDigest,
+    }), { fetch: fetcher });
+    const buildInput = {
+      target_handle: "target-1",
+      revision_id: REVISION,
+      build_recipe_id: env.VERCEL_BUILD_RECIPE_ID,
+      public_value_names: CANONICAL_TENANT_ENVIRONMENT
+        .filter((entry) => entry.valueClass === "public_build")
+        .map((entry) => entry.name)
+        .sort(),
+      environment_binding_digest: environmentBindingDigest,
+      schedule_manifest_digest: approvedScheduleDigest,
+    };
+    await expect(backend.invoke(
+      { capability: "hosting", operation: "build" },
+      buildInput,
+    )).resolves.toMatchObject({ releaseHandle: "staged-release", status: "verified" });
+
+    // registerSchedules runs in the same step and must not block either, while a
+    // cron record that DOES point at this release still has to match exactly.
+    await expect(backend.invoke(
+      { capability: "hosting", operation: "schedules" },
+      {
+        target_handle: "target-1",
+        release_handle: "staged-release",
+        schedules: CANONICAL_TENANT_SCHEDULES,
+        manifest_digest: approvedScheduleDigest,
+      },
+    )).resolves.toMatchObject({ releaseHandle: "staged-release" });
+  });
+
   it("owns a check for every canonical data smoke ID", () => {
     // The other half of the closed-vocabulary contract: the executor validates a
     // requested ID against CANONICAL_SMOKE_TEST_IDS.data, so an ID the plan may

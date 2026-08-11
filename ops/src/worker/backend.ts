@@ -1073,13 +1073,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       environment_binding_digest: environmentBindingDigest,
       schedule_manifest_digest: scheduleDigest,
     }));
-    const expectedCrons = canonicalCronSet();
-    const adopted = await this.#existingDeployment(
-      target,
-      revision,
-      buildIdentityDigest,
-      expectedCrons,
-    );
+    const adopted = await this.#existingDeployment(target, revision, buildIdentityDigest);
     const deployment = adopted ?? await (async () => {
       const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
       const projectName = stringField(project.value, "name");
@@ -1113,7 +1107,6 @@ export class S26WorkerBackend implements S26BridgeBackend {
       });
       const ready = await this.#waitForDeployment(stringField(response.value, "id"), response.id);
       this.#assertDeploymentIdentity(ready.value, revision, buildIdentityDigest);
-      await this.#waitForProjectCrons(target, stringField(ready.value, "id"), expectedCrons, ready.id);
       return ready;
     })();
     const release = stringField(deployment.value, "id");
@@ -1137,7 +1130,14 @@ export class S26WorkerBackend implements S26BridgeBackend {
     ) {
       throw new OpsError("provider_snapshot_drift", "Vercel schedule manifest digest is not the fixed approved set");
     }
-    if (projectCronDeploymentId(deployment.value) !== release || !cronsMatch(expected, observedCrons(deployment.value))) {
+    // Activation is deliberately NOT asserted here. This runs inside step 9,
+    // whose deployment is staged on purpose, and Vercel attaches crons to the
+    // release that actually serves production. The manifest digest above is the
+    // real gate at this point; #hostingRollout waits for activation once the
+    // release is promoted, and #hostingVerify compares the activated set against
+    // the expected one and fails closed.
+    if (projectCronDeploymentId(deployment.value) === release
+      && !cronsMatch(expected, observedCrons(deployment.value))) {
       throw new OpsError("provider_error", "Vercel deployment cron manifest does not match the fixed schedule set");
     }
     return { hostingRequestId: deployment.id, targetHandle: target, releaseHandle: release, registered: input.schedules, manifestDigest };
@@ -1153,7 +1153,6 @@ export class S26WorkerBackend implements S26BridgeBackend {
     target: string,
     revision: string,
     buildIdentityDigest: string,
-    expectedCrons: readonly { readonly path: string; readonly schedule: string }[],
   ): Promise<{ readonly id: string; readonly value: JsonRecord } | null> {
     const listed = await this.#vercel(
       `/v7/deployments?projectId=${encodeURIComponent(target)}&sha=${encodeURIComponent(revision)}&limit=20`,
@@ -1171,7 +1170,6 @@ export class S26WorkerBackend implements S26BridgeBackend {
         ? deployment
         : await this.#waitForDeployment(stringField(deployment.value, "id"), deployment.id);
       this.#assertDeploymentIdentity(ready.value, revision, buildIdentityDigest);
-      await this.#waitForProjectCrons(target, stringField(ready.value, "id"), expectedCrons, ready.id);
       return ready;
     }
     return null;
@@ -1191,28 +1189,6 @@ export class S26WorkerBackend implements S26BridgeBackend {
     ) {
       throw new OpsError("provider_snapshot_drift", "Vercel deployment does not match the marked S26 build inputs");
     }
-  }
-
-  async #waitForProjectCrons(
-    target: string,
-    release: string,
-    expectedCrons: readonly { readonly path: string; readonly schedule: string }[],
-    buildRequestId: string,
-  ): Promise<void> {
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
-      const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
-      if (
-        projectCronDeploymentId(project.value) === release
-        && cronsMatch(expectedCrons, observedCrons(project.value))
-      ) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    }
-    // Same reasoning as #waitForDeployment: the crons are declared in the built
-    // tree's own vercel.json, so they appear once Vercel finishes activating the
-    // release. Not yet activated is a known in-progress state, not an unknown one.
-    throw new OpsError("provider_readiness_blocked", "Vercel crons are not activated yet", {
-      provider_request_id: buildRequestId,
-    });
   }
 
   async #waitForDeployment(release: string, createRequestId: string): Promise<{ readonly id: string; readonly value: JsonRecord }> {
