@@ -175,6 +175,13 @@ export interface EnvironmentBindingRequest {
   readonly targetHandle: HostingTargetHandle;
   readonly scope: "production";
   readonly bindings: readonly HostingValueBinding[];
+  /**
+   * The tenant's own origin, from the plan's `auth_smtp.site_url`. It is what
+   * `IDENTITY_BASE_URL` is bound to, and that binding decides the identity
+   * service's own origin and the links it sends, so it is required rather than
+   * optional: a path that forgets it would bind another tenant's dashboard.
+   */
+  readonly siteUrl: string;
   /** S26 supplies the already-created, registry-owned data resource here. */
   readonly dataProjectHandle?: string;
   readonly dataProjectName?: string;

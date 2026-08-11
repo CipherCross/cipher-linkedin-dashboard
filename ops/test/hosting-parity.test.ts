@@ -97,6 +97,8 @@ const OPS_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const ROUTING_MANIFEST = join(REPOSITORY_ROOT, "frontend", "vercel.json");
 const REVISION_A = "1".repeat(40);
+/** The tenant's own origin, which IDENTITY_BASE_URL is bound to. */
+const SITE_URL = "https://tenant.example.test";
 const REVISION_B = "2".repeat(40);
 const HOSTNAME = "s10-lab.example-platform.test";
 const TARGET_NAME = "lh2-disposable-s10-lab";
@@ -357,6 +359,7 @@ async function driveCapabilities(
   const binding = await port.bindEnvironment({
     targetHandle: target.targetHandle,
     scope: "production",
+    siteUrl: SITE_URL,
     bindings: BINDINGS,
   });
   const release = await port.buildRelease({
@@ -964,6 +967,7 @@ test("the adapter refuses to register schedules the pinned release does not decl
   await adapter.bindEnvironment({
     targetHandle: target.targetHandle,
     scope: "production",
+    siteUrl: SITE_URL,
     bindings: BINDINGS,
   });
   const release = await adapter.buildRelease({
@@ -1017,6 +1021,7 @@ test("environment binding writes values but returns none, and no label either", 
   const binding = await adapter.bindEnvironment({
     targetHandle: target.targetHandle,
     scope: "production",
+    siteUrl: SITE_URL,
     bindings: BINDINGS,
   });
 
@@ -1098,6 +1103,7 @@ test("no canary reaches an adapter result, error or verification report", async 
     leaky.bindEnvironment({
       targetHandle: target.targetHandle,
       scope: "production",
+      siteUrl: SITE_URL,
       bindings: BINDINGS,
     }),
     (error: unknown) => {

@@ -11,7 +11,7 @@ import {
   hostingEnvironmentBindingDigest,
   scheduleManifestDigest,
 } from "../src/providers/hosting.js";
-import { S26WorkerBackend } from "../src/worker/backend.js";
+import { S26WorkerBackend, tenantOrigin } from "../src/worker/backend.js";
 import {
   BOOTSTRAP_STATE_PROBE_SQL,
   CONTROL_PLANE_ROLES,
@@ -47,8 +47,12 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/** The tenant's own origin, which IDENTITY_BASE_URL must be bound to. */
+const SITE_URL = `https://${HOSTNAME}`;
+
 const environmentContext = {
   target_handle: "target-1",
+  site_url: SITE_URL,
   data_project_id: "project-1",
   data_project_name: DATA_PROJECT_NAME,
   ownership_marker_digest: OWNERSHIP,
@@ -745,6 +749,74 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     );
   });
 
+  // The tenant's identity origin used to come from one control-plane-wide
+  // Worker variable, so every tenant but the first was bound to somebody else's
+  // dashboard — and nothing downstream compares environment *values*, so
+  // verification passed 13/13 over it in silence. It travels with the request.
+  it("binds the identity base URL to the tenant's own origin, not a shared one", async () => {
+    const written: { key: string; value: string }[] = [];
+    const fetcher = vercelFetcher((url, method, init) => {
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1")) {
+        return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
+      }
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/connection_uri")) {
+        return providerResponse(200, { uri: "postgresql://app_runtime:pw@ep.example.invalid/neondb" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
+        return providerResponse(200, { id: "target-1" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1/env")) {
+        if (method === "GET") {
+          return providerResponse(200, {
+            envs: [{ id: "ownership", key: "LH2_OWNERSHIP_MARKER_DIGEST", value: OWNERSHIP, type: "plain", target: ["production"] }],
+          });
+        }
+        written.push(JSON.parse(String(init?.body)) as { key: string; value: string });
+        return providerResponse(200, { id: `written-${written.length}` });
+      }
+      return undefined;
+    });
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        site_url: "https://uitop.ciphercross.dev",
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: fetcher }),
+    );
+    expect(response.status).toBe(200);
+    expect(written.find((entry) => entry.key === "IDENTITY_BASE_URL")?.value)
+      .toBe("https://uitop.ciphercross.dev");
+  });
+
+  it("refuses a site URL that is not an HTTPS origin", async () => {
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        site_url: "http://uitop.ciphercross.dev",
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: vi.fn<typeof fetch>() }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ code: "unsupported_contract" });
+  });
+
+  // The binding request is `strictObject`, so the origin cannot be omitted and
+  // cannot be smuggled in under another name either.
+  it("refuses a binding request that carries no site URL at all", async () => {
+    const { site_url: _omitted, ...withoutSiteUrl } = environmentContext;
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...withoutSiteUrl,
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: vi.fn<typeof fetch>() }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ code: "schema_validation_failed" });
+  });
+
   it("adopts a verified build of the approved revision instead of deploying again", async () => {
     const approvedScheduleDigest = scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES);
     const environmentBindingDigest = hostingEnvironmentBindingDigest(
@@ -1111,6 +1183,34 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
       provider_request_id: "ambiguous-email-request",
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("S26 identity invitations name the tenant's own dashboard", () => {
+  it("keeps only the origin of the site URL it was given", () => {
+    expect(tenantOrigin("https://uitop.ciphercross.dev")).toBe("https://uitop.ciphercross.dev");
+    // A path or query in the plan's site URL must not end up inside a base URL
+    // or a reset link, so only the origin survives.
+    expect(tenantOrigin("https://uitop.ciphercross.dev/dashboard?x=1")).toBe("https://uitop.ciphercross.dev");
+  });
+
+  it("refuses an origin that is not HTTPS or not a URL", () => {
+    expect(() => tenantOrigin("http://uitop.ciphercross.dev")).toThrow(OpsError);
+    expect(() => tenantOrigin("uitop.ciphercross.dev")).toThrow(OpsError);
+  });
+
+  // Step 12 sends a real invitation to a real person, and the link it carries
+  // is the dashboard they must open. The route cannot be reached without it.
+  it("refuses an invitation that does not say which dashboard to open", async () => {
+    const response = await handle(
+      request("/s26/control-plane/v1/identity/company-admin-invite", {
+        project_id: "project-1",
+        admin_email: "admin@example.test",
+      }),
+      new S26WorkerBackend(env, { fetch: vi.fn<typeof fetch>() }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ code: "schema_validation_failed" });
   });
 });
 

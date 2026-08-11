@@ -94,7 +94,7 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
 
   await neon.createOrAdoptProject({ organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab", regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership });
   await neon.applySchema({ projectId: "neon-project", baselineVersion: 53, migrationVersions: [54], targetSchemaVersion: 54 });
-  await betterAuth.createCompanyAdminAndInvite({ projectId: "tenant-auth", adminEmail: "admin@example.test" });
+  await betterAuth.createCompanyAdminAndInvite({ projectId: "tenant-auth", adminEmail: "admin@example.test", siteUrl: "https://tenant.example.test" });
   await r2.configurePrivateStorage({ projectId: "r2-bucket", bucketId: "lead-photos", visibility: "private" });
   await vercel.createDeploymentTarget({ deterministicName: "lh2-disposable-disposable-lab", workspaceClass: "disposable", runtimeProfileId: "runtime-v1", ownership, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false });
   await vercel.assignDomain({ targetHandle: "target", hostname: "disposable.example.test", ownership, certificateMode: "provider_managed" });
@@ -510,6 +510,7 @@ test("S26 environment binding forwards only the already-closed application descr
     dataProjectName: "lh2-disposable-disposable-lab",
     ownership,
     scope: "production",
+    siteUrl: "https://tenant.example.test",
     bindings: [{
       name: "VITE_AUTH_PATH",
       valueClass: "public_build",
@@ -523,6 +524,9 @@ test("S26 environment binding forwards only the already-closed application descr
     data_project_name: "lh2-disposable-disposable-lab",
     ownership_marker_digest: ownership.digest,
     scope: "production",
+    // The tenant's own origin travels with the binding: IDENTITY_BASE_URL is
+    // derived from it, so it may not be left to a control-plane-wide setting.
+    site_url: "https://tenant.example.test",
     bindings: [
       {
         name: "VITE_AUTH_PATH",

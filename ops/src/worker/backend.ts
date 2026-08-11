@@ -132,6 +132,27 @@ function validUntil(): string {
  * first label. A name with no zone left after that label is refused rather than
  * probed, so an apex or single-label hostname can never be read as a zone.
  */
+/**
+ * The tenant's own origin, as the identity service must state it.
+ *
+ * It arrives per request from the plan's `auth_smtp.site_url` rather than from
+ * a control-plane-wide setting, because one global value is right for at most
+ * one tenant and wrong for every other — and nothing downstream compares
+ * environment *values*, so a wrong one is never reported. Only the origin is
+ * kept, so a stray path or query cannot end up inside a base URL, and a
+ * non-HTTPS origin is refused rather than normalised.
+ */
+export function tenantOrigin(siteUrl: string): string {
+  let parsed: URL;
+  try { parsed = new URL(siteUrl); } catch {
+    throw new OpsError("unsupported_contract", "Tenant site URL is not a URL");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new OpsError("unsupported_contract", "Tenant site URL is not HTTPS");
+  }
+  return parsed.origin;
+}
+
 function parentZone(hostname: string): string {
   const separator = hostname.indexOf(".");
   const zone = separator === -1 ? "" : hostname.slice(separator + 1);
@@ -695,7 +716,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       marker,
       email,
       "Your CipherCross dashboard invitation",
-      `Open ${this.env.BETTER_AUTH_BASE_URL}/#/reset-password and request a password-reset link for this address.`,
+      `Open ${tenantOrigin(stringField(input, "site_url"))}/#/reset-password and request a password-reset link for this address.`,
     );
     return { providerRequestId };
   }
@@ -908,6 +929,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       );
     }
 
+    const identityBaseUrl = tenantOrigin(stringField(input, "site_url"));
     const dataProjectId = stringField(input, "data_project_id");
     await this.#assertOwnedDataProject(dataProjectId, stringField(input, "data_project_name"));
     const existingResponse = await this.#ownedHostingEnvironment(
@@ -977,7 +999,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       // adopted values are the right ones stays the verification step's job;
       // a sensitive Vercel value cannot be read back and compared here.
       if (!existingByName.has(name)) {
-        const approved = this.#hostingValue(name, applicationConnectionUris, generatedValue);
+        const approved = this.#hostingValue(name, applicationConnectionUris, generatedValue, identityBaseUrl);
         const response = await this.#vercel(`/v10/projects/${encodeURIComponent(target)}/env`, "POST", {
           key: name,
           value: approved.value,
@@ -1021,6 +1043,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     name: string,
     applicationConnectionUris: Readonly<Record<string, string>>,
     generatedValue: (id: string) => string,
+    identityBaseUrl: string,
   ): { readonly value: string; readonly valueClass: string; readonly sourceKind: string } {
     const selected = this.#hostingValueSpec(name);
     const generated: Readonly<Record<string, string>> = {
@@ -1030,7 +1053,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       MCP_SECRET: generatedValue("tenant.mcp_secret"),
     };
     const planned: Readonly<Record<string, string>> = {
-      IDENTITY_BASE_URL: requireConfigured(this.env.BETTER_AUTH_BASE_URL, "BETTER_AUTH_BASE_URL"),
+      IDENTITY_BASE_URL: identityBaseUrl,
       VITE_AUTH_PATH: "identity",
       NEON_READS_DEFAULT: "neon",
       NEON_WRITES_DEFAULT: "neon",

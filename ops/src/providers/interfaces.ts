@@ -73,6 +73,13 @@ export interface SmtpConfigurationRequest {
 export interface CompanyAdminRequest {
   readonly projectId: string;
   readonly adminEmail: string;
+  /**
+   * The tenant's own origin, from the plan's `auth_smtp.site_url`. The invite
+   * names the dashboard the recipient must open, so it cannot come from a
+   * control-plane-wide setting: one global value is right for at most one
+   * tenant, and wrong — undetectably — for every other.
+   */
+  readonly siteUrl: string;
 }
 
 export interface DataInspectionRequest {

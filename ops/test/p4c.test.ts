@@ -142,6 +142,7 @@ test("smoke ownership is complete and admin invite remains the following step", 
     override async createCompanyAdminAndInvite(request: {
       readonly projectId: string;
       readonly adminEmail: string;
+      readonly siteUrl: string;
     }) {
       events.push("admin-invite");
       return super.createCompanyAdminAndInvite(request);

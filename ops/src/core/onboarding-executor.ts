@@ -389,6 +389,10 @@ export class OnboardingExecutor {
             dataProjectHandle: dataProject.resourceId,
             dataProjectName: context.dataProjectName,
             ownership: context.ownership,
+            // IDENTITY_BASE_URL is `derived_from_plan`, so the plan's own
+            // origin travels with the request instead of being read from a
+            // control-plane setting that can only ever name one tenant.
+            siteUrl: context.siteUrl,
             bindings: buildTenantEnvironmentBindings({
               tenantSlug: context.tenantSlug,
             }),
@@ -563,6 +567,9 @@ export class OnboardingExecutor {
             this.#providers.identity.createCompanyAdminAndInvite({
               projectId: dataProject.resourceId,
               adminEmail: context.adminEmail,
+              // The invite names the dashboard this admin must open, which is
+              // this tenant's own origin and no other's.
+              siteUrl: context.siteUrl,
             }),
           )
         ).providerRequestId;

@@ -34,6 +34,8 @@ import { makeOnboardingPlan } from "./fixtures.js";
 
 const OPS_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const REVISION_A = "1".repeat(40);
+/** The tenant's own origin, which IDENTITY_BASE_URL is bound to. */
+const SITE_URL = "https://tenant.example.test";
 const REVISION_B = "2".repeat(40);
 
 /**
@@ -693,6 +695,7 @@ test("environment binding never returns a secret value on any code path", async 
   const binding = await provider.bindEnvironment({
     targetHandle,
     scope: "production",
+    siteUrl: SITE_URL,
     bindings: BINDINGS,
   });
   assertCanonical(binding, "environment binding result");
@@ -719,6 +722,7 @@ test("environment binding never returns a secret value on any code path", async 
     await provider.bindEnvironment({
       targetHandle,
       scope: "production",
+      siteUrl: SITE_URL,
       bindings: BINDINGS,
     }),
     release,
@@ -772,6 +776,7 @@ test("environment binding never returns a secret value on any code path", async 
     failing.bindEnvironment({
       targetHandle: failingTarget.targetHandle,
       scope: "production",
+      siteUrl: SITE_URL,
       bindings: BINDINGS,
     }),
     (error: unknown) => {
@@ -796,6 +801,7 @@ test("every canonical result has the provider-independent shape S10 must match",
   const binding = await provider.bindEnvironment({
     targetHandle,
     scope: "production",
+    siteUrl: SITE_URL,
     bindings: BINDINGS,
   });
   const schedules = await provider.registerSchedules({
@@ -1138,6 +1144,7 @@ async function provision(provider: FakeHostingProvider): Promise<{
   await provider.bindEnvironment({
     targetHandle: target.targetHandle,
     scope: "production",
+    siteUrl: SITE_URL,
     bindings: BINDINGS,
   });
   const release = await provider.buildRelease({

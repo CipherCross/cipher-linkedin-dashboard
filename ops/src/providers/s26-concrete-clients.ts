@@ -418,7 +418,7 @@ export class BetterAuthOperationsClient implements IdentityOperationsApi, Identi
   async inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> { return inspection(await this.http.invoke("POST", s26BridgePath("identity", "inspect"), { template_set_id: request.templateSetId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, release_compatibility_id: request.releaseCompatibilityId }), "Better Auth inspect"); }
   async configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "configure"), { project_id: request.projectId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, template_set_id: request.templateSetId }), "Better Auth configure"); }
   async createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "support-membership"), { project_id: projectId }), "Better Auth support membership"); }
-  async createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "company-admin-invite"), { project_id: request.projectId, admin_email: request.adminEmail }), "Better Auth company invite"); }
+  async createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "company-admin-invite"), { project_id: request.projectId, admin_email: request.adminEmail, site_url: request.siteUrl }), "Better Auth company invite"); }
   async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Better Auth smoke"); }
   async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-capture"), { source_resource_id: request.sourceResourceId, tenant_slug: request.tenantSlug, recovery_target_name: request.recoveryTargetName, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery capture"); }
   async restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "recovery-restore"), { target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId, artifact_manifest_digest: request.artifact.manifestDigest, ownership_marker_digest: request.ownership.digest }), "Better Auth recovery restore"); }
@@ -571,6 +571,7 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
       data_project_name: request.dataProjectName,
       ownership_marker_digest: request.ownership.digest,
       scope: request.scope,
+      site_url: request.siteUrl,
       bindings,
     }), "Vercel environment bridge");
   }

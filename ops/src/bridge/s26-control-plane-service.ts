@@ -53,7 +53,7 @@ const requestSchemas = {
   "identity.inspect": z.strictObject({ template_set_id: identifier, site_url: z.url(), redirect_urls: z.array(z.url()).min(1), release_compatibility_id: identifier }),
   "identity.configure": z.strictObject({ project_id: identifier, site_url: z.url(), redirect_urls: z.array(z.url()).min(1), template_set_id: identifier }),
   "identity.support-membership": z.strictObject({ project_id: identifier }),
-  "identity.company-admin-invite": z.strictObject({ project_id: identifier, admin_email: z.email() }),
+  "identity.company-admin-invite": z.strictObject({ project_id: identifier, admin_email: z.email(), site_url: z.url() }),
   "identity.smoke": z.strictObject({ project_id: identifier, smoke_test_ids: z.array(identifier).min(1) }),
   "smtp.inspect": z.strictObject({ smtp_profile_id: identifier, sender_domain: z.string().min(1).max(253), from_identity: z.email(), smtp_secret_labels: z.array(identifier).min(1) }),
   "smtp.configure": z.strictObject({ project_id: identifier, smtp_profile_id: identifier, sender_domain: z.string().min(1).max(253), from_identity: z.email(), smtp_secret_labels: z.array(identifier).min(1) }),
@@ -67,6 +67,9 @@ const requestSchemas = {
     data_project_name: z.string().min(1).max(200),
     ownership_marker_digest: digest,
     scope: z.literal("production"),
+    // Required, like `expected_hostname` on promote: the value bound to
+    // IDENTITY_BASE_URL is the tenant's own origin, and no path may forget it.
+    site_url: z.url(),
     bindings: z.array(z.strictObject({
       name: z.string().min(1).max(120),
       value_class: z.enum(["server_secret", "server_public", "public_build"]),
