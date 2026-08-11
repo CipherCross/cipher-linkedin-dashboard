@@ -87,8 +87,15 @@ presigned URL into a **private, versioned S3-compatible release bucket**
 itself out atomically and re-runs. To roll out a change to all notebooks:
 
 ```bash
-sync-agent/deploy.sh    # signs + publishes a release; notebooks update within 30 min
+set -a; . ~/.config/agent-release.env; set +a   # operator credentials, never committed
+sync-agent/deploy.sh                            # signs + publishes; notebooks update within 30 min
 ```
+
+The channel is live (bucket `lh2-agent-releases`, first release 1.15.1).
+**`docs/platform-ops/agent-release-channel.md`** is the runbook: how to cut and
+verify a release, and the four things that bite — you roll back by rolling
+*forward*, publishing the version the fleet already runs proves nothing, the
+signing key is the fleet, and `deploy.sh` runs under bash 3.2.
 
 `deploy.sh` needs the operator-side release variables — `AGENT_RELEASE_ENDPOINT`,
 `AGENT_RELEASE_BUCKET`, the **write**-scoped `AGENT_RELEASE_WRITE_ACCESS_KEY_ID`
