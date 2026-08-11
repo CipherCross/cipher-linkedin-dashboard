@@ -412,6 +412,130 @@ It was not flipped here, for two reasons and both matter:
 holds `EXECUTE` on `public.pipeline_auto_advance()`, then either flip the
 capability or state explicitly that the scheduled triage is being retired.
 
+## Step 4 — flip the defaults — DESIGNED, STARTED, STOPPED
+
+Stopped mid-step at the owner's request, to hand over to a different agent. The
+partial implementation is on branch **`s27-step4-wip`** (one commit, `npm test`
+red 1/902 on it). **`main` is clean and green at `c12263a`** — steps 1–3 only.
+Nothing about step 4 is on `main` except this section.
+
+Read this before touching the branch. The code there is half of an idea, and the
+idea matters more than the code.
+
+### The trap the plan's own wording walks into
+
+The plan says: *"Make `neon` the default and `supabase` the opt-in, with the
+owner's deployment explicitly opted in."* Taken literally that is a live outage.
+
+The owner's deployment sets **none** of the four flags and holds **no** Neon
+connection string. Invert the default and the next deploy resolves
+`deploymentReadPath()`/`deploymentWritePath()` to `neon`, `getDataStore()` calls
+`readNeonConnectionString()`, that throws `NEON_CONFIGURATION_MISSING`, and every
+read 500s. The dashboard goes down *on merge*, and the "explicitly opted in" half
+of the sentence is a **Vercel environment change nobody can make from inside this
+repository** — so the repo and the environment would have to be changed in the
+right order, by hand, with the live dashboard as the failure mode if they are
+not.
+
+### The fix: derive the default, do not hardcode it
+
+`neon` is the default **wherever the deployment holds the credential that path
+needs**, and `supabase` where it does not. `supabase` stays available as an
+explicit opt-out.
+
+| Deployment | `NEON_*_URL` | Flag | Resolves to |
+| --- | --- | --- | --- |
+| uitop and every tenant | bound by the contract | `neon` (explicit) | `neon` — unchanged |
+| the owner's, today | absent | unset | `supabase` — unchanged, no env edit needed |
+| the owner's, after step 5 | present | unset | `neon` — flips itself, at exactly the right moment |
+| anyone, deliberately held back | present | `supabase` | `supabase` |
+
+Three properties this buys, each of which was a real risk:
+
+1. **The merge is safe on its own.** No coordinated env change, no ordering
+   hazard, nothing to forget.
+2. **An explicit `neon` with no credential still fails loudly**, exactly as
+   today. The presence check decides only the *unset* case; it must never turn a
+   stated choice into a silent `supabase`, because a deployment reading the wrong
+   database while reporting success is the worst outcome this migration has.
+3. **It is per path, not global.** The AI layer has its own credential
+   (`NEON_AI_DATABASE_URL`, the `app_system` principal) and holding one and not
+   the other is a real state.
+
+### An unrecognised value is refused, not interpreted
+
+The old rule — anything that is not exactly `neon` means `supabase` — was a safe
+guess in the old direction and is not one in this direction: a mistyped opt-out
+(`supabse`) on a deployment holding both credentials would move it onto the
+provider its live data is not in. `ProviderPathError` refuses instead.
+
+Safe to be strict about *because of the table above*: the tenant contract binds
+the exact string, and the owner's deployment binds nothing. Nothing sets these
+to a third value today. Verify that is still true before merging.
+
+### What is on the branch
+
+Finished: `data/providerPath.ts` (the resolver and `ProviderPathError`),
+`neonConfig.ts` (`dataStoreConfigured` / `aiStoreConfigured`, in the shape
+`machineStoreConfigured` already had), and `writePath.ts` / `aiPath.ts` rewritten
+over the resolver.
+
+**Not done, and the branch is inconsistent until it is:**
+
+1. The module docblocks of `writePath.ts` and `aiPath.ts` still describe the old
+   fail-closed direction and now **contradict the code beneath them**. In this
+   codebase a stale docblock that asserts the opposite is worse than none.
+2. `deploymentReadPath` and `deploymentPhotoPath` (`api/activity-daily.ts:212`,
+   `:253`) are untouched, so the read path and the write path currently disagree
+   about the default. `deploymentPhotoPath` has three values and does not fit the
+   shared resolver directly — keep `disabled` explicit, keep the two correctness
+   conditions (read path is `neon`, object storage configured), derive only the
+   unset case.
+3. `tests/aiSlice.test.ts:49` asserts the old semantics and **fails**. It is a
+   correct test of a rule that no longer holds; rewrite it, do not delete it.
+4. No test covers `resolveProviderPath` at all. It needs one per row of the table
+   above, plus the refusal, plus the "explicit `neon` without a credential still
+   resolves `neon`" case — that last one is the property whose loss would be
+   silent.
+5. `tests/leadPhotoApi.test.ts:286` asserts `deploymentPhotoPath({})` is
+   `supabase`; under the new rule an empty env holds no credential, so it still
+   is — check rather than assume.
+
+### The browser's fallback, which is part of this step
+
+`dashboardReads.ts:188,204` resolve **every** failure of the `config.readPath`
+lookup to `supabase`, and `resolveDeploymentPaths` (`:253`) memoises that answer
+for the page's whole lifetime. On a tenant `supabase` is a `null` client, so one
+transient blip turns into *"Supabase is not configured — set VITE_SUPABASE_URL…"*
+until the tab is reloaded.
+
+The intended fix, not started: **fall back to `neon`, and do not memoise a
+failure** — so the next call (the Retry button, the five-minute refresh, the next
+component) asks again and the session self-heals. Flapping, which is what the
+memoisation exists to prevent, needs two *successful* answers that differ, and a
+deployment's answer is constant.
+
+Note what makes this low-stakes: a failed lookup means the same-origin API is
+unreachable, in which case every read is about to fail anyway. The choice of
+fallback barely affects correctness; what matters is that the failure is visible
+and retryable instead of memoised into a sentence about a provider that may not
+exist. The banner now says something honest and has a working Retry.
+
+### `VITE_AUTH_PATH` is deliberately excluded from step 4
+
+The browser cannot observe the server's identity credential, so its auth path
+cannot derive from one — and defaulting it to `identity` would break sign-in on
+the owner's deployment, which has no identity store. The honest options are a
+server-answered lookup (like `config.readPath`, but `AuthContext` gates startup,
+so it is a real change) or leaving it explicit until step 5 gives the owner's
+deployment an identity store. **Left explicit.** `N-S18` left it unset
+deliberately; that reason still holds.
+
+Consequence to be aware of, not a defect: a deployment with Neon credentials and
+no `VITE_AUTH_PATH` reads Neon while presenting a Supabase bearer. That is the
+documented transitional combination — `resolveApplicationActor` with
+`acceptLegacyBearer: true` — and tenants set the flag explicitly.
+
 ## Suggested sequencing
 
 Each step ends in a state the owner can stop at.
