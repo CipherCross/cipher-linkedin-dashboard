@@ -307,30 +307,89 @@ session is about. Do it in the same session that first publishes a release.
 
 ## The provisioning checklist — owner actions
 
-Nothing below was attempted. Items 1–2 are platform-wide. Item 3 is uitop-only
-and is **out of band** (finding I: there is no sanctioned repair path for an
-active tenant).
+Items 1–2 are platform-wide. Item 3 is uitop-only and is **out of band**
+(finding I: there is no sanctioned repair path for an active tenant). Item 1 is
+partly done — see its table.
+
+### 0. The order, for the owner's own four notebooks
+
+The owner chose this fleet first, 2026-08-11. Its order is **not** the order of
+this checklist, because S28's cutover sits inside it.
+
+**The trap, stated once.** Do not switch a notebook to the gateway before S28
+gate 6. Production still resolves `readPath: neon` against the *fixture*
+database while the owner's real 27,338 rows sit in `autumn-snow-04881924` at
+47/47 parity with nothing pointing at them. A notebook switched first would
+write correctly into a database the dashboard is not reading — the S27 step-4
+incident again, one layer down. Neon first, agents second.
+
+**The second thing to know before starting: every notebook needs one hand
+visit, and no amount of provisioning removes it.** `ingest_token` and
+`release_public_key` are in `LOCAL_ONLY_CONFIG_KEYS` by design, and the live
+fleet runs **1.12.2**, whose `self_update` reads the Supabase bucket that no
+longer receives releases. So the 1.12.2 → 1.15.0 hop is a file copy, per
+notebook, once. Every release after that one is automatic.
+
+| Phase | Step | Who |
+| --- | --- | --- |
+| **1. Release channel** | mint the two bucket-scoped R2 pairs (item 1b) | owner, dashboard |
+| | `git push` — `a768854` is committed but unpushed, and Vercel deploys from git | owner |
+| | set the four read-scoped `AGENT_RELEASE_*` on the owner's Vercel project | owner |
+| | deploy the frontend — **carries fix A**; without it `agent.release` is 405 and nothing can ever self-update | owner |
+| | `sync-agent/deploy.sh` with the write pair + `AGENT_RELEASE_SIGNING_KEY_FILE` | either |
+| **2. Neon cutover** | S28 gate 5 — 671 photo objects → R2, verify by SHA-256, report the 36 known dangling paths | either |
+| | S28 gate 6 — repoint `NEON_DATABASE_URL`, `NEON_AI_DATABASE_URL`, `IDENTITY_STORE_DATABASE_URL`; **closes the incident** | owner |
+| | S28 gate 7 — delta reconcile from watermark `2026-08-11T20:59:00.223Z`, re-run parity | either |
+| **3. Notebooks** | confirm the deployment has a tenant — `OBJECT_STORAGE_TENANT_ID=ciphercross` may already satisfy it (see below) | either |
+| | bind `NEON_MACHINE_DATABASE_URL` (already in `~/.config/neon-s28-production.env`) | owner |
+| | mint one machine credential per notebook — **after gate 6**, or the rows land in the wrong database | owner, admin session |
+| | one notebook: copy 1.15.0, add the three local keys, `sync --dry-run`, compare to LH2, then `dual`, then `only` | either |
+| | the other three, once the first is proven | either |
+
+**On the tenant binding for the owner's own deployment:** `readDeploymentTenantId`
+accepts `APP_TENANT_ID` *or* `OBJECT_STORAGE_TENANT_ID` and requires them equal
+when both are set. The owner's storage tenant is already `ciphercross`, so if
+that variable is bound on Vercel the machine path already has a tenant and
+`APP_TENANT_ID` is optional — but if you add it, it must be `ciphercross`
+exactly. Check before setting; a disagreement is the one configuration the code
+refuses outright.
+
+**Why `dual` before `only`:** with both credentials present, `dual` keeps
+Supabase authoritative while the gateway receives the same extraction and a
+delivery failure marks the run `partial`. That is the cutover rehearsal, and it
+is the cheapest place to find a projection defect. `only` is the commitment.
+
+The credentials each phase needs are already on this machine:
+`~/.config/neon-s28-production.env` (all six for the new project),
+`~/.config/neon-s20-object-storage.env` (R2 for gate 5),
+`~/.config/neon-b2-supabase.env` (the source for gates 5 and 7).
 
 ### 1. The R2 release bucket and its two credential pairs
 
-The bucket does not exist. `releaseArtifacts.ts:181-190` refuses a bucket equal
-to `OBJECT_STORAGE_BUCKET`, so this is a **second** bucket with its own
-credentials — not the `lead-photos` one.
+`releaseArtifacts.ts:181-190` refuses a bucket equal to `OBJECT_STORAGE_BUCKET`,
+so this is a **second** bucket with its own credentials — not the one holding
+lead photos.
 
-```
-a. Create a private R2 bucket, e.g. `lh2-agent-releases`. Not public, no
-   custom domain: every read is a 120s presigned URL (RELEASE_DOWNLOAD_TTL_SECONDS).
-b. Create TWO R2 API tokens, both scoped to that bucket only:
-     - a READ-ONLY pair  -> the dashboard
-     - a WRITE pair      -> the operator's shell, never the dashboard
-c. Generate the Ed25519 release signing keypair:
-     openssl genpkey -algorithm ed25519 -out agent-release-signing.pem
-     chmod 600 agent-release-signing.pem
-     # the public half, in the unpadded base64url form the agent expects:
-     openssl pkey -in agent-release-signing.pem -pubout -outform DER \
-       | tail -c 32 | base64 | tr '+/' '-_' | tr -d '='
-   Keep the private key OFF the dashboard and off every notebook.
-```
+**(a) and (c) are DONE, 2026-08-11.** (b) is not, and cannot be: `wrangler r2`
+exposes only `object`, `bucket` and `sql`, so minting an S3 API token pair is a
+Cloudflare **dashboard** action.
+
+| | State |
+| --- | --- |
+| a. private bucket | ✅ **`lh2-agent-releases`**, created 2026-08-11 in account `eb89cc458183927bebefdebe1f751880`. `r2.dev` public access confirmed **disabled** — every read is a 120s presigned URL (`RELEASE_DOWNLOAD_TTL_SECONDS`). |
+| b. two bucket-scoped token pairs | ❌ **owner, in the dashboard.** One READ-ONLY pair for the dashboard, one WRITE pair for the operator shell. Scope both to `lh2-agent-releases` **only** — the existing `OBJECT_STORAGE_*` pair is scoped to `linkedin-campaign-dashboard` and cannot write here. |
+| c. Ed25519 signing keypair | ✅ **`~/.config/agent-release-signing.pem`**, mode 0600. Public half, in the unpadded base64url form the agent expects: **`v-Zb6qV8GZhMjatTKgNo4BUaTIjfHh1MWEq8jQ4A6Is`** |
+| d. an S3 client for `deploy.sh` | ✅ `awscli` **2.36.20** installed. `publish_release.py:88` shells out to `aws s3 cp`, and it was absent — `deploy.sh` would have failed at the first upload, *after* passing its own tests. |
+
+The keypair is not merely generated, it is **proved against the consumer**: a
+manifest signed the way `publish_release.py` signs one verifies through the
+agent's own `verify_release_signature`, the agent rebuilds the identical
+canonical message, and both negative controls fail (a tampered `sha256`, and a
+different public key). The private half is on this machine only — never on the
+dashboard, never on a notebook.
+
+`AGENT_RELEASE_ENDPOINT` for this account is
+`https://eb89cc458183927bebefdebe1f751880.r2.cloudflarestorage.com`.
 
 Where each value goes:
 
