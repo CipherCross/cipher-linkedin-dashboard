@@ -73,7 +73,7 @@ test("S26 provider, catalog, profile, and release selections are non-secret clos
   }
   assert.equal(
     vars.APPROVED_SOURCE_GIT_SHA,
-    "c4c1957452bd647ce6377211a61558704c7d0ce8",
+    "fc4729e0968f79ca13cb7b751abdbf14db612658",
     "the closed source selection must match the owner-approved published release",
   );
   assert.equal(/^[0-9a-f]{40}$/.test(vars.APPROVED_SOURCE_GIT_SHA), true);
@@ -97,7 +97,7 @@ test("S26 provider, catalog, profile, and release selections are non-secret clos
       backup: "neon-free-restore-6h",
       template: "s26-self-hosted-better-auth-v1",
       compatibility: "s26-neon-hosting-v1",
-      application: "s26-c4c1957",
+      application: "s26-fc4729e",
       schedule: "sha256:688baed28906755e59c836917b63626a44d00b2c544a7a82fe98b2cafe492ebc",
     },
   );

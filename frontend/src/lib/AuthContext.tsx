@@ -777,12 +777,6 @@ function AuthScreen() {
                 required
               />
             </label>
-            {auth.authPath === 'identity' && (
-              <p className="muted small">
-                This deployment has no email delivery configured yet, so no
-                message will arrive. Ask an admin to set your password directly.
-              </p>
-            )}
             {message && <div className="auth-success">{message}</div>}
             {localError && <div className="auth-error" role="alert">{localError}</div>}
             <button className="btn accent" disabled={busy} type="submit">

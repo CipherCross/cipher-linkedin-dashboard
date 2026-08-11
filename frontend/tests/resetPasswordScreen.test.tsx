@@ -60,8 +60,31 @@ describe('setting the password', () => {
     fill('a-long-enough-password', 'something-else')
     expect(screen.getByRole('alert').textContent).toContain('do not match')
     fill('short')
-    expect(screen.getByRole('alert').textContent).toContain('at least 8')
+    expect(screen.getByRole('alert').textContent).toContain('at least 12')
     expect(complete).not.toHaveBeenCalled()
+  })
+
+  // The link opens this screen ahead of the router, so a plain anchor to `#/`
+  // changes the hash and re-renders nothing — which is exactly how it shipped,
+  // and the button did nothing at all.
+  it('leaves for sign-in by reloading, not by changing the hash alone', async () => {
+    vi.spyOn(identityAuth, 'completePasswordReset').mockResolvedValue({ kind: 'ok' })
+    const reload = vi.fn()
+    const original = window.location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...original, hash: '#/reset-password', reload },
+    })
+    try {
+      render(<ResetPassword token="link-token" />)
+      fill('a-long-enough-password')
+      const leave = await screen.findByRole('button', { name: 'Go to sign in' })
+      fireEvent.click(leave)
+      expect(window.location.hash).toBe('#/')
+      expect(reload).toHaveBeenCalledTimes(1)
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original })
+    }
   })
 
   it('shows the refusal instead of claiming the password was set', async () => {

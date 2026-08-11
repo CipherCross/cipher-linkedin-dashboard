@@ -336,11 +336,9 @@ export async function signOut(fetchImpl: FetchLike = defaultFetch): Promise<void
 /**
  * Ask for a recovery link.
  *
- * **This deployment has no email delivery** — SMTP is the external gate the
- * spec names for S18 — so the request is accepted and no message is sent. The
- * call is wired anyway rather than disabled, because the endpoint is the
- * finished half and hiding it would make the gap invisible; the caller's copy
- * is what stays honest about it.
+ * Delivery depends on the deployment: one bound with a sender mails the link,
+ * one without still answers 200 and sends nothing, because whether an address
+ * exists is not something an unauthenticated caller may learn from the status.
  *
  * `redirectTo` is same-origin. An off-origin one is refused 403
  * `INVALID_REDIRECT_URL`, which F14 measured, so it is built from the caller's

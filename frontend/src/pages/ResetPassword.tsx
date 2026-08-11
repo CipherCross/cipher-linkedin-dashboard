@@ -22,8 +22,21 @@ export function resetTokenFromHash(hash: string): string | null {
   return token === null || token.trim() === '' ? null : token
 }
 
-/** The candidate's own floor. Stated here so the refusal is immediate. */
-const MINIMUM_LENGTH = 8
+/** The product's own floor, matching the invitation screen in `AuthContext`. */
+const MINIMUM_LENGTH = 12
+
+/**
+ * Leaves the reset screen for the sign-in one.
+ *
+ * A plain `href="#/"` does nothing here, and the reason is structural: this
+ * screen is chosen in `App` from the hash at first render, deliberately ahead of
+ * the auth gate, so changing the hash alone re-renders nothing. The document is
+ * reloaded so that decision is taken again.
+ */
+function goToSignIn() {
+  window.location.hash = '#/'
+  window.location.reload()
+}
 
 /**
  * The screen a recovery link opens.
@@ -64,54 +77,68 @@ export function ResetPassword({ token }: { token: string }) {
   }
 
   return (
-    <div className="auth-screen">
-      <div className="card auth-card">
-        <Logo />
+    <main className="auth-shell">
+      <section className="auth-card" aria-live="polite">
+        <div className="auth-brand">
+          <Logo size={34} className="brand-mark" />
+          <div>
+            <div className="auth-product">Outreach Deck</div>
+            <div className="auth-kicker">Team dashboard</div>
+          </div>
+        </div>
+
         {done ? (
-          <>
+          <div className="auth-state">
             <h1>Password set</h1>
-            <p className="muted">You can sign in with it now.</p>
-            <a className="button" href="#/">
+            <p>You can sign in with it now.</p>
+            <button className="btn accent" type="button" onClick={goToSignIn}>
               Go to sign in
-            </a>
-          </>
+            </button>
+          </div>
         ) : (
-          <form onSubmit={submit}>
-            <h1>Choose a password</h1>
-            <p className="muted">
-              This link works once. Set a password and use it to sign in.
-            </p>
-            <label htmlFor="reset-password">New password</label>
-            <input
-              id="reset-password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={busy}
-              required
-            />
-            <label htmlFor="reset-password-confirm">Repeat it</label>
-            <input
-              id="reset-password-confirm"
-              type="password"
-              autoComplete="new-password"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              disabled={busy}
-              required
-            />
-            {error === null ? null : (
-              <p className="auth-error" role="alert">
-                {error}
+          <form className="auth-form" onSubmit={submit}>
+            <div>
+              <h1>Choose a password</h1>
+              <p>
+                This link works once. Use at least {MINIMUM_LENGTH} characters,
+                then sign in with your new password.
               </p>
+            </div>
+            <label>
+              New password
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={MINIMUM_LENGTH}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={busy}
+                required
+              />
+            </label>
+            <label>
+              Repeat it
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={MINIMUM_LENGTH}
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                disabled={busy}
+                required
+              />
+            </label>
+            {error && (
+              <div className="auth-error" role="alert">
+                {error}
+              </div>
             )}
-            <button type="submit" disabled={busy}>
+            <button className="btn accent" disabled={busy} type="submit">
               {busy ? 'Setting…' : 'Set password'}
             </button>
           </form>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }
