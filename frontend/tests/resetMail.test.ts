@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   RESET_MAIL_API_KEY_ENV,
   RESET_MAIL_FROM_ENV,
+  ResetMailDeliveryError,
   createResetLinkSink,
   readResetMailConfig,
 } from '../api/_lib/identity/resetMail.js'
@@ -65,7 +66,10 @@ describe('delivering the link', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"message":"invited@example.test"}', { status: 422 })))
     try {
       const sink = createResetLinkSink({ apiKey: 'key', from: 'a@b.test' })
-      await expect(sink(LINK)).rejects.toThrow(/422/)
+      // The status travels so the refusal is attributable from outside the
+      // deployment; the provider's body never does.
+      await expect(sink(LINK)).rejects.toThrow(ResetMailDeliveryError)
+      await expect(sink(LINK)).rejects.toMatchObject({ status: 422 })
       // The provider's body can quote the recipient back, so only the status
       // travels.
       await expect(sink(LINK)).rejects.not.toThrow(/example\.test/)

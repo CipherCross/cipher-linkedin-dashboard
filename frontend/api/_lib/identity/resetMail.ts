@@ -15,6 +15,23 @@
 
 import type { ResetLinkSink } from './betterAuthProvider.js'
 
+/**
+ * A refusal from the mail provider, carrying its status and nothing else.
+ *
+ * The status travels because a delivery that fails with no attribution is
+ * exactly the failure this project keeps paying for: the bridge learned the
+ * same lesson and forwards the upstream status for the same reason — a status
+ * is a number, and carries no address, credential, URL or payload. The
+ * provider's body is never kept: it quotes the recipient back.
+ */
+export class ResetMailDeliveryError extends Error {
+  readonly name = 'ResetMailDeliveryError'
+
+  constructor(readonly status: number) {
+    super(`reset link delivery refused with status ${status}`)
+  }
+}
+
 export const RESET_MAIL_API_KEY_ENV = 'RESEND_API_KEY'
 export const RESET_MAIL_FROM_ENV = 'RESEND_FROM_IDENTITY'
 
@@ -65,10 +82,6 @@ export function createResetLinkSink(config: ResetMailConfig): ResetLinkSink {
           'It can be used once. If you did not ask for it, ignore this message.',
       }),
     })
-    if (!response.ok) {
-      // The status only. The body can quote the recipient back, and this error
-      // reaches a log.
-      throw new Error(`reset link delivery failed with ${response.status}`)
-    }
+    if (!response.ok) throw new ResetMailDeliveryError(response.status)
   }
 }

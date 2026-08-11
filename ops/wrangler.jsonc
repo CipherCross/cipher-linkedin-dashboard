@@ -40,12 +40,12 @@
     "RESEND_SMOKE_RECIPIENT": "accounts@ciphercross.com",
     "BETTER_AUTH_TEMPLATE_SET_ID": "s26-self-hosted-better-auth-v1",
     "RELEASE_COMPATIBILITY_ID": "s26-neon-hosting-v1",
-    "APPROVED_APPLICATION_VERSION": "s26-2d3fe98",
+    "APPROVED_APPLICATION_VERSION": "s26-be02fd7",
     "APPROVED_SCHEDULE_MANIFEST_DIGEST": "sha256:688baed28906755e59c836917b63626a44d00b2c544a7a82fe98b2cafe492ebc",
     "SOURCE_REPOSITORY_API_BASE_URL": "https://api.github.com",
     "SOURCE_REPOSITORY_OWNER": "CipherCross",
     "SOURCE_REPOSITORY_NAME": "cipher-linkedin-dashboard",
-    "APPROVED_SOURCE_GIT_SHA": "2d3fe9899956d2d7cc0f3ef11bf1f7ea9df3806c",
+    "APPROVED_SOURCE_GIT_SHA": "be02fd7e6d24cfea4910778de486cdad0ecfe0df",
     "RECOVERY_OBJECT_PREFIX": "s26-control-plane/recovery/v1"
   },
   "secrets": {

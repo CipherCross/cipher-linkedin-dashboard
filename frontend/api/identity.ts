@@ -72,6 +72,7 @@ import {
   readIdentityConfig,
 } from './_lib/identity/config.js'
 import { checkRequestOrigin, originRefusal } from './_lib/identity/origin.js'
+import { ResetMailDeliveryError } from './_lib/identity/resetMail.js'
 import {
   IdentityProviderError,
   type IdentityProvider,
@@ -159,6 +160,10 @@ function safeErrorLabel(error: unknown): string {
   // Without it every one of those failures logs the same word, which is what
   // made the first production 500 undiagnosable from the outside.
   if (error instanceof IdentityProviderError) return `${error.name}/${error.code}`
+  // Same rule, one subsystem further out: the mail provider's status names which
+  // refusal happened, and a bare "Error" here is what made a dead reset flow
+  // undiagnosable from outside the deployment.
+  if (error instanceof ResetMailDeliveryError) return `${error.name}/${error.status}`
   // Deliberately still name-only. A pg connection failure is a plain Error whose
   // message embeds the database hostname (`getaddrinfo ENOTFOUND <host>`), so
   // this branch must never widen to include it.
@@ -319,7 +324,18 @@ async function forwardToCandidate(
     return response
   } catch (error) {
     console.error('identity: candidate route failed:', safeErrorLabel(error))
-    return json({ error: 'Authentication is unavailable' }, 503)
+    // The subsystem, never the reason in words. "Authentication is unavailable"
+    // is true of a dead database and of a refused email alike, and telling those
+    // apart from outside took a deployment cycle it should not have.
+    return json(
+      {
+        error: 'Authentication is unavailable',
+        ...(error instanceof ResetMailDeliveryError
+          ? { subsystem: 'reset_delivery', providerStatus: error.status }
+          : {}),
+      },
+      503,
+    )
   }
 }
 
