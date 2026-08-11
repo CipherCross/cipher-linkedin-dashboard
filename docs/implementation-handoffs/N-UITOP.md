@@ -1,5 +1,95 @@
 # uitop — first real tenant onboarding — handoff
 
+## uitop is live at 13/13, and two defects were only visible after it was — 2026-08-11
+
+Operation `op_df52aade0edabc19d09cf8251733c27906727190` — **succeeded**, all
+**13/13** steps, plan `pln_98cf19580aa4f944f066d2e8`, digest
+`sha256:f9f0a64b…`, expected registry version 399, idempotency key
+`uitop-20260811-02`. Registry **439**, audit chain **verified**. Tenant `uitop`
+is `active`/`active` on `https://uitop.ciphercross.dev` (HTTP 200), Neon project
+`dry-mode-26725161`, Vercel project `prj_gMKtZ4wfKgUFMDLwHCpdyd7fmSFT`.
+Step 12 sent the real invitation to `ivan@uitop.design`.
+
+Two code fixes made it possible, both of the S26 family — a guard or a value
+keyed on something the real provider cannot produce:
+
+- **`d9bb5ce` — the zone and the hostname are different questions.**
+  `#domainInspect` derived all three domain facts from
+  `GET /v6/domains/{host}/config`, which answers none of them: `configuredBy` is
+  a DNS-configuration enum (`A`/`CNAME`/`dns-01`/`http`), so
+  `existingBindingOwned: configuredBy === VERCEL_TEAM_ID` could never once be
+  true, and `misconfigured` reports whether DNS already resolves to Vercel —
+  which a not-yet-created subdomain never does. Ownership now asks the zone
+  (`GET /v5/domains/{zone}`, **status only**: 200 owned, 404 not in the account,
+  anything else throws), and availability keeps answering about the exact host
+  through the single-domain project probe. The two branches are now one.
+- **`af28aaf` — the tenant's origin travels with the request.**
+  `IDENTITY_BASE_URL` and the invite link both came from one Worker variable
+  pinned to the drill tenant's hostname, so uitop's step 7 bound *another
+  tenant's dashboard* into uitop's production environment. `site_url` is now
+  required on `hosting.environment-bind` and `identity.company-admin-invite`,
+  like `expected_hostname` on promote. `BETTER_AUTH_BASE_URL` is deleted.
+
+Deployed Worker: **`09db7e8e-8464-4ccf-a511-5897f4a69001`**. Verification before
+the commits: `npm test` 127/127, `worker:test` 42/42, `worker:types:check` and
+`worker:typecheck` clean, ledger static assertions 193/193, `git diff --check`
+clean.
+
+### The tenant was inert behind its own front page
+
+13/13 passed while the dashboard could not open its database at all:
+`GET /api/identity?op=session.current` answered **500** (`resolveRequestActor`
+failed), and so did `team.roster`.
+
+**Every app-facing Neon role has no password, and never had one.** The bootstrap
+creates them with `CREATE ROLE … LOGIN` and no `PASSWORD`
+(`000_control_plane_role_bootstrap.sql:50,59-60`), so Neon holds no credential
+for them; `#connectionUri` (`backend.ts:939-956`) hands back whatever Neon has,
+which for `app_runtime`, `app_ai_runner` and `identity_store` is a URI with an
+empty password. Probed on both tenants — only `neondb_owner` comes back with
+one. So `NEON_DATABASE_URL`, `NEON_AI_DATABASE_URL` and
+`IDENTITY_STORE_DATABASE_URL` were unusable in **every** tenant ever onboarded,
+`s26-disposable-lab` included; nobody noticed because nobody ever signed in, and
+step 11 compares environment names, types and scopes, never values, and never
+connects the way the application does.
+
+**Not fixed in the control plane.** uitop was repaired out of band: `ALTER ROLE`
+gave the three roles generated passwords, the three production bindings were
+rewritten with composed URIs, a fresh release was built and promoted (the
+bridge's build route would have adopted the stale deployment, so only the build
+was direct; promotion went through the reviewed route). `session.current` then
+answered **401** instead of 500 and a real sign-in returned **200**. The proper
+fix belongs in the Worker: generate the password, `ALTER ROLE` it, and compose
+the URI — the same shape the other `generated_secret` values already use.
+
+### The invite flow cannot complete as shipped
+
+`admin.invite` and step 12 both create an account with a random passphrase that
+is never returned, and tell the recipient to use the reset flow — but this
+deployment builds `BetterAuthIdentityProvider` with no `sendResetLink`, so
+`dropResetLink` discards the link (`betterAuthProvider.ts:81`, which records it
+as a known limit). `password.change` exists precisely for an out-of-band
+passphrase. **ivan therefore cannot sign in yet**: his credential row exists and
+its password is unknown to everyone.
+
+### Recorded divergences — the registry does not know about these
+
+1. The three production database bindings were rewritten outside any operation,
+   and the serving release is `dpl_2aC9vR8YDMSrmw3mQPBStnMxPxDF`, built out of
+   band. The registry still names the step-9 build.
+2. `IDENTITY_BASE_URL` was corrected by the owner in the Vercel console; step 7
+   adopts a binding by name and had kept the drill tenant's origin.
+3. A second active admin (`mykyta.shevchenko@ciphercross.com`, member 3) was
+   added through `identity_admin_invite_member_atomic` with the existing admin
+   as the authorizing actor, with a known initial passphrase.
+
+**There is no sanctioned repair path for an active tenant**, which is why all
+three are out of band: step 1 moves the tenant to `provisioning`, and
+`state-machines.ts:23` only allows `active → suspended | offboarding_planned`.
+A second onboarding operation is refused. That capability is the obvious next
+session, and it is what these divergences are waiting for.
+
+
 Onboarding the first tenant that is not the S26 drill. Read
 `docs/implementation-handoffs/N-S26.md` first: it holds the 13-step procedure,
 the one-call-per-step discipline, and the nine defects that made the machinery
