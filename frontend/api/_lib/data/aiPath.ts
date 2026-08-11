@@ -1,3 +1,6 @@
+import { aiStoreConfigured } from './neonConfig.js'
+import { resolveProviderPath, type ProviderPath } from './providerPath.js'
+
 /**
  * Which provider the AI layer runs against.
  *
@@ -18,24 +21,35 @@
  * system write path) is applied. The split is per invocation, taken once, and
  * the browser never sees it.
  *
- * The shape copies `deploymentWritePath` exactly: only the string `neon`
- * enables the new path, so unset, empty, `true`, `1` and every typo resolve to
- * `supabase`. `NEON_AI_DATABASE_URL` is set in no Vercel environment, so a
- * deployment that flips the flag without the credential fails loudly on the
- * first AI read rather than answering from the wrong database.
+ * The shape copies `deploymentWritePath` exactly, through the resolver both call:
+ * unset means `neon` wherever this path's own credential is present, `supabase`
+ * is the explicit opt-out, and an unrecognised value is refused rather than
+ * interpreted. A deployment that states `neon` without `NEON_AI_DATABASE_URL`
+ * still fails loudly on the first AI read rather than answering from the wrong
+ * database — the presence check decides the unset case only, and never turns a
+ * stated choice into a silent `supabase`.
  */
 
-export type AiPath = 'supabase' | 'neon'
+export type AiPath = ProviderPath
 
 export const NEON_AI_PATH_ENV = 'NEON_AI_PATH_DEFAULT'
 
 /**
- * The deployment's AI path. Off unless a deployment says exactly `neon`.
+ * The deployment's AI path.
+ *
+ * **S27 inverted the default**, and this path derives it from its own
+ * credential — `NEON_AI_DATABASE_URL`, never `NEON_DATABASE_URL`. That
+ * separation is the same one the rest of this file argues for: the AI layer is a
+ * third path with its own principal, and a deployment holding the runtime
+ * credential but not the system one is a real state that must not be read as
+ * consent to run the AI layer against Neon.
  *
  * Read per call rather than cached at module scope, for the same reason as
  * `deploymentWritePath`: a cached value would make the flag untestable without
  * reloading the module.
  */
 export function deploymentAiPath(env = process.env): AiPath {
-  return (env[NEON_AI_PATH_ENV] ?? '').trim() === 'neon' ? 'neon' : 'supabase'
+  return resolveProviderPath(NEON_AI_PATH_ENV, env[NEON_AI_PATH_ENV], () =>
+    aiStoreConfigured(env),
+  )
 }

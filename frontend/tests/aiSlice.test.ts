@@ -9,6 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { deploymentAiPath, NEON_AI_PATH_ENV } from '../api/_lib/data/aiPath.js'
 import {
+  NEON_AI_DATABASE_URL_ENV,
+  NEON_DATABASE_URL_ENV,
+} from '../api/_lib/data/neonConfig.js'
+import { ProviderPathError } from '../api/_lib/data/providerPath.js'
+import {
   AI_LOCAL_ROLE,
   buildAiStoreConfig,
   SYSTEM_ACTOR,
@@ -46,14 +51,49 @@ import { GET as briefingCron } from '../api/briefing.js'
 import { POST as notifyReplies } from '../api/notify-replies.js'
 
 describe('deploymentAiPath', () => {
-  it('enables the Neon path only for exactly "neon"', () => {
-    for (const value of ['', '  ', 'true', '1', 'yes', 'supabase', 'Neon', 'NEON', ' neon2']) {
-      expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: value })).toBe('supabase')
-    }
-    expect(deploymentAiPath({})).toBe('supabase')
+  const CREDENTIAL = { [NEON_AI_DATABASE_URL_ENV]: 'postgres://ai@example/db' }
+
+  it('takes an explicit value on either side', () => {
     expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: 'neon' })).toBe('neon')
+    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: 'supabase' })).toBe('supabase')
     // Whitespace is trimmed, matching deploymentWritePath's shape exactly.
     expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: ' neon ' })).toBe('neon')
+    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: ' supabase ' })).toBe('supabase')
+  })
+
+  it('derives the unset case from this path\'s own credential', () => {
+    // **S27 inverted the default.** Unset used to mean `supabase` unconditionally;
+    // it now means "whatever this deployment is equipped for", which is what lets
+    // the flip land without a coordinated environment change.
+    expect(deploymentAiPath({})).toBe('supabase')
+    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: '  ' })).toBe('supabase')
+    expect(deploymentAiPath(CREDENTIAL)).toBe('neon')
+    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: '', ...CREDENTIAL })).toBe('neon')
+  })
+
+  it('reads its own credential and not the runtime one', () => {
+    // The AI layer runs as `app_system` and the runtime store as `app_runtime`.
+    // A deployment holding one and not the other is a real state, and treating
+    // the runtime credential as consent would run the AI layer with the wrong
+    // principal's surface.
+    expect(
+      deploymentAiPath({ [NEON_DATABASE_URL_ENV]: 'postgres://runtime@example/db' }),
+    ).toBe('supabase')
+  })
+
+  it('keeps an explicit `neon` without a credential, so it fails loudly', () => {
+    // The presence check decides the *unset* case only. Turning a stated choice
+    // into a silent `supabase` is this migration's worst outcome: a deployment
+    // reading the wrong database while reporting success.
+    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: 'neon' })).toBe('neon')
+  })
+
+  it('refuses a value nobody recognises rather than guessing', () => {
+    for (const value of ['true', '1', 'yes', 'Neon', 'NEON', ' neon2', 'supabse']) {
+      expect(() => deploymentAiPath({ [NEON_AI_PATH_ENV]: value, ...CREDENTIAL })).toThrow(
+        ProviderPathError,
+      )
+    }
   })
 })
 

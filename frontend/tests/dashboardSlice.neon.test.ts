@@ -283,7 +283,7 @@ describe('S13 part 1 — the five small reads, live', () => {
     expect(legacy.activity).toEqual(legacy.items)
   })
 
-  it('serves config.readPath with no token at all, defaulting to supabase', async () => {
+  it('serves config.readPath with no token at all, deriving the default', async () => {
     // The one unauthenticated operation. It must answer without a bearer, without
     // a store and without reaching Neon — a dashboard on the Supabase path must
     // never need Neon to be told to stay where it is.
@@ -292,11 +292,16 @@ describe('S13 part 1 — the five small reads, live', () => {
     )
     expect(response.status).toBe(200)
     // S20 added `photoPath` to the same lookup, and the equality is kept strict
-    // rather than relaxed to `toMatchObject`: what this pins is that a deployment
-    // which has set nothing reports **both** paths off, and a third flag appearing
-    // here unannounced should fail a test.
+    // rather than relaxed to `toMatchObject`: a third flag appearing here
+    // unannounced should fail a test.
+    //
+    // **S27 changed what "set nothing" reports.** This process holds
+    // `NEON_DATABASE_URL` and no flags, which is the state every tenant is in, so
+    // the read path derives `neon`. Photos stay `supabase`: object storage is not
+    // configured here, and that condition is unchanged — a deployment that cannot
+    // sign an object must not be told to ask this endpoint for one.
     expect(await response.json()).toEqual({
-      readPath: 'supabase',
+      readPath: 'neon',
       photoPath: 'supabase',
     })
   })

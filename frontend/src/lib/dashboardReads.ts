@@ -166,54 +166,138 @@ export const MAX_PAGES = 1000
 
 let pathsPromise: Promise<DeploymentPaths> | null = null
 
+/** What `fallbackPaths` reads. Narrower than `ImportMetaEnv`, exactly as
+ *  `authPath.ts` does it, so a test can pass a plain object. */
+export type BrowserEnv = Readonly<Record<string, unknown>>
+
+/**
+ * Whether this build holds a legacy Supabase client at all.
+ *
+ * `src/lib/supabase.ts` constructs one only when both variables are present and
+ * exports `null` otherwise, so this is the same condition read without importing
+ * the client — the browser's equivalent of the server's `dataStoreConfigured`.
+ */
+function legacyClientConfigured(env: BrowserEnv): boolean {
+  const url = env.VITE_SUPABASE_URL
+  const key = env.VITE_SUPABASE_ANON_KEY
+  return typeof url === 'string' && url !== '' && typeof key === 'string' && key !== ''
+}
+
+/**
+ * What the browser assumes when the lookup gives it no usable answer.
+ *
+ * **Derived from the credential this build holds**, which is the same rule the
+ * server's flags follow (`api/_lib/data/providerPath.ts`) and, for the same
+ * reason, not a hardcoded side:
+ *
+ *   * **A build with no Supabase client falls back to `neon`.** The old fallback
+ *     was `supabase` unconditionally, and on a tenant that is a `null` client —
+ *     so one transient blip turned into *"Supabase is not configured — set
+ *     VITE_SUPABASE_URL…"* until the tab was reloaded, a sentence about a
+ *     provider the deployment does not have.
+ *   * **A build that does hold one falls back to `supabase`.** Falling back to
+ *     `neon` there would be a *new* way to break a working dashboard: those reads
+ *     go straight to PostgREST and do not depend on this same-origin lookup at
+ *     all, so a blip in the lookup would move a page that was about to work onto
+ *     a path the deployment may have no credential for.
+ *   * **The photo half follows the read half**, because it must: the two
+ *     providers' lead ids name different rows. `disabled` is the honest answer to
+ *     "we do not know yet" — `neon` would fire one 503 per avatar at a deployment
+ *     that may not serve them.
+ *
+ * A fallback, not a guess we live with: a failed lookup is never memoised, so the
+ * next caller asks again — see `resolveDeploymentPaths`.
+ */
+function fallbackPaths(
+  env: BrowserEnv = import.meta.env as unknown as BrowserEnv,
+): DeploymentPaths {
+  return legacyClientConfigured(env)
+    ? { readPath: 'supabase', photoPath: 'supabase' }
+    : { readPath: 'neon', photoPath: 'disabled' }
+}
+
+/** A lookup's answer, and whether it *is* one. */
+interface PathsLookup {
+  readonly paths: DeploymentPaths
+  /** `true` when `paths` came from `fallbackPaths` because the lookup failed. */
+  readonly failed: boolean
+}
+
 /**
  * Ask the deployment which paths it serves — reads and photos, in one request.
  *
- * **Every lookup failure resolves to `supabase` for both**, for the reason
- * `fetchReadPath` below states. An explicit `disabled` answer is preserved: it
- * means initials-only and must never fall through to a storage call. The `neon`
- * photo path carries one extra rule the server also applies: it can only be
- * `neon` when the read path is. The browser asks for photos by `lead.id`, and the
+ * **Every lookup failure takes `fallbackPaths`**, which since S27 derives its
+ * side from the credential this build holds rather than always answering
+ * `supabase`. A malformed answer counts as a failure: the two exact strings are
+ * the only readable answers, and a body carrying neither tells us nothing about
+ * the deployment.
+ *
+ * A *readable* answer is believed in full, including two rules that survive
+ * unchanged. An explicit `disabled` photo posture means initials-only and must
+ * never fall through to a storage call. And the `neon` photo path can only be
+ * `neon` when the read path is — the browser asks for photos by `lead.id`, and the
  * two providers' lead ids name different rows, so a dashboard reading Supabase
  * leads while asking Neon for their photos would render one person's face against
  * another's name.
+ *
+ * A readable read path with an unreadable *photo* field is still an answer, not a
+ * failure: it is what a server built before S20 sends, and `supabase` photos were
+ * right for it.
  */
-export async function fetchDeploymentPaths(
+async function lookupDeploymentPaths(
   fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
-): Promise<DeploymentPaths> {
+  env?: BrowserEnv,
+): Promise<PathsLookup> {
+  const failure = (): PathsLookup => ({ paths: fallbackPaths(env), failed: true })
   try {
     const res = await fetchImpl(
       `${READ_ENDPOINT}?op=${encodeURIComponent(READ_PATH_OPERATION)}`,
     )
-    if (!res.ok) return { readPath: 'supabase', photoPath: 'supabase' }
+    if (!res.ok) return failure()
     const body = (await res.json()) as {
       readPath?: unknown
       photoPath?: unknown
     } | null
-    const readPath: ReadPath = body?.readPath === 'neon' ? 'neon' : 'supabase'
+    if (body?.readPath !== 'neon' && body?.readPath !== 'supabase') {
+      return failure()
+    }
+    const readPath: ReadPath = body.readPath
     return {
-      readPath,
-      photoPath:
-        body?.photoPath === 'disabled'
-          ? 'disabled'
-          : readPath === 'neon' && body?.photoPath === 'neon'
-            ? 'neon'
-            : 'supabase',
+      failed: false,
+      paths: {
+        readPath,
+        photoPath:
+          body.photoPath === 'disabled'
+            ? 'disabled'
+            : readPath === 'neon' && body.photoPath === 'neon'
+              ? 'neon'
+              : 'supabase',
+      },
     }
   } catch {
-    return { readPath: 'supabase', photoPath: 'supabase' }
+    return failure()
   }
+}
+
+/** The lookup's answer alone. The memoizing callers need to know whether it
+ *  failed; everything else — and every test of the parsing rules — does not. */
+export async function fetchDeploymentPaths(
+  fetchImpl?: ApiFetch,
+  env?: BrowserEnv,
+): Promise<DeploymentPaths> {
+  return (await lookupDeploymentPaths(fetchImpl, env)).paths
 }
 
 /**
  * Ask the deployment which read path it serves.
  *
- * **Every failure resolves to `supabase`**, and that direction is the whole
- * point: the flag lookup must not be able to break a dashboard that works. A
- * network failure, a 500, a body that is not the expected enum, an endpoint that
- * does not exist yet — all mean "keep reading Supabase". Only the exact string
- * `neon` moves the browser, mirroring `deploymentReadPath()` on the server and
- * `deploymentAuthPath()` in the browser.
+ * **S27 stopped hardcoding the failure direction.** A network failure, a 500, a
+ * body that is not the expected enum, an endpoint that does not exist yet — all
+ * used to mean "keep reading Supabase", which was right while every build had a
+ * Supabase client and wrong for a tenant, where there is no Supabase to keep
+ * reading. They now take `fallbackPaths`, which asks what this build actually
+ * holds, and none of them is remembered — so a failure costs one retry rather
+ * than the session.
  *
  * Plain `fetch`, not `authFetch`: this operation is unauthenticated by design
  * (see `readPathResponse` in `api/activity-daily.ts`), and routing it through
@@ -222,22 +306,31 @@ export async function fetchDeploymentPaths(
  */
 export async function fetchReadPath(
   fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
+  env?: BrowserEnv,
 ): Promise<ReadPath> {
-  return (await fetchDeploymentPaths(fetchImpl)).readPath
+  return (await fetchDeploymentPaths(fetchImpl, env)).readPath
 }
 
 /**
  * The flag, resolved once per page load and shared by `DataContext` and the
  * three components that read on demand.
  *
- * Memoized rather than re-asked, and the resolved value is cached even when it
- * came from a failure. Re-asking would let one session flap between providers
- * mid-flight — a five-minute refresh answering from Neon while an open drawer
- * still reads Supabase — which is strictly worse than being consistently on the
- * path that works.
+ * An **answer** is memoized: re-asking would let one session flap between
+ * providers mid-flight — a five-minute refresh answering from Neon while an open
+ * drawer still reads Supabase — and a deployment's answer does not change under a
+ * running tab anyway.
+ *
+ * A **failure is not**, which is S27's correction. Caching one pinned the whole
+ * page to a fallback until it was reloaded; dropping it means the Retry button,
+ * the five-minute refresh and the next component each ask again, and the session
+ * heals itself. This does not reopen the flapping the memo exists to prevent:
+ * that needs two *successful* answers that disagree.
  */
-export function resolveReadPath(fetchImpl?: ApiFetch): Promise<ReadPath> {
-  return resolveDeploymentPaths(fetchImpl).then((paths) => paths.readPath)
+export function resolveReadPath(
+  fetchImpl?: ApiFetch,
+  env?: BrowserEnv,
+): Promise<ReadPath> {
+  return resolveDeploymentPaths(fetchImpl, env).then((paths) => paths.readPath)
 }
 
 /**
@@ -248,12 +341,23 @@ export function resolveReadPath(fetchImpl?: ApiFetch): Promise<ReadPath> {
  * disagree, which they could if each were fetched separately and a deployment
  * changed between the two.
  */
-export function resolvePhotoPath(fetchImpl?: ApiFetch): Promise<PhotoPath> {
-  return resolveDeploymentPaths(fetchImpl).then((paths) => paths.photoPath)
+export function resolvePhotoPath(
+  fetchImpl?: ApiFetch,
+  env?: BrowserEnv,
+): Promise<PhotoPath> {
+  return resolveDeploymentPaths(fetchImpl, env).then((paths) => paths.photoPath)
 }
 
-function resolveDeploymentPaths(fetchImpl?: ApiFetch): Promise<DeploymentPaths> {
-  pathsPromise ??= fetchDeploymentPaths(fetchImpl)
+function resolveDeploymentPaths(
+  fetchImpl?: ApiFetch,
+  env?: BrowserEnv,
+): Promise<DeploymentPaths> {
+  pathsPromise ??= lookupDeploymentPaths(fetchImpl, env).then((lookup) => {
+    // Concurrent callers still share this one in-flight request; what is dropped
+    // is the *settled* fallback, so only the next caller pays for the retry.
+    if (lookup.failed) pathsPromise = null
+    return lookup.paths
+  })
   return pathsPromise
 }
 

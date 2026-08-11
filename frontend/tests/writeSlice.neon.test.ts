@@ -76,6 +76,8 @@ const { resetDataStore } = await import('../api/_lib/data/store.js')
 const { deploymentWritePath, NEON_WRITES_ENV } = await import(
   '../api/_lib/data/writePath.js'
 )
+const { NEON_DATABASE_URL_ENV } = await import('../api/_lib/data/neonConfig.js')
+const { ProviderPathError } = await import('../api/_lib/data/providerPath.js')
 
 const fixtures = new NeonFixtureClient(connection.direct)
 
@@ -191,14 +193,26 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('the write-path flag', () => {
-  it('is off unless a deployment says exactly "neon"', () => {
+  it('takes an explicit value, and derives the unset one from the credential', () => {
+    // **S27 inverted the default.** `providerPath.test.ts` covers the resolver
+    // row by row; what this asserts is that the write flag is wired to it and to
+    // the runtime credential — the one this suite is actually running against.
+    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'neon' })).toBe('neon')
+    expect(deploymentWritePath({ [NEON_WRITES_ENV]: ' neon ' })).toBe('neon')
+    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'supabase' })).toBe('supabase')
     expect(deploymentWritePath({})).toBe('supabase')
     expect(deploymentWritePath({ [NEON_WRITES_ENV]: '' })).toBe('supabase')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'true' })).toBe('supabase')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: '1' })).toBe('supabase')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'NEON' })).toBe('supabase')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: ' neon ' })).toBe('neon')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'neon' })).toBe('neon')
+    expect(
+      deploymentWritePath({ [NEON_DATABASE_URL_ENV]: 'postgres://runtime@example/db' }),
+    ).toBe('neon')
+    // This process holds the real credential, so the deployment default here is
+    // `neon` with nothing set at all — the state every tenant is in.
+    expect(deploymentWritePath()).toBe('neon')
+    for (const value of ['true', '1', 'NEON', 'supabse']) {
+      expect(() => deploymentWritePath({ [NEON_WRITES_ENV]: value })).toThrow(
+        ProviderPathError,
+      )
+    }
   })
 })
 

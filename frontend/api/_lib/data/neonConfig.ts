@@ -109,6 +109,29 @@ export function machineStoreConfigured(env: EnvSource = process.env): boolean {
   return typeof value === 'string' && value.trim() !== ''
 }
 
+/**
+ * True when the runtime / AI connection string is configured, without reading it.
+ *
+ * Same shape as `machineStoreConfigured`, and they exist for the same reason: a
+ * *presence* question must not throw, because the caller is deciding what this
+ * deployment is equipped for rather than trying to connect. `readRequired`
+ * refuses loudly and is the right function once the decision is made.
+ *
+ * These two are what make the provider default derivable — see
+ * `providerPath.ts`. Deliberately no `VITE_` guard here: `readRequired` refuses a
+ * browser-exposed name, and a presence check that threw on one would turn a
+ * question into an outage.
+ */
+export function dataStoreConfigured(env: EnvSource = process.env): boolean {
+  const value = env[NEON_DATABASE_URL_ENV]
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+export function aiStoreConfigured(env: EnvSource = process.env): boolean {
+  const value = env[NEON_AI_DATABASE_URL_ENV]
+  return typeof value === 'string' && value.trim() !== ''
+}
+
 export function readNeonDirectConnectionString(
   env: EnvSource = process.env,
 ): string {

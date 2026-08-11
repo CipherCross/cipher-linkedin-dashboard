@@ -408,19 +408,33 @@ It was not flipped here, for two reasons and both matter:
    live data.** That is the mutation to be most careful with in this whole plan,
    and it is not one to make on the strength of a file existing in the repo.
 
-**What step 4 must do first**: confirm on each target database that `app_system`
-holds `EXECUTE` on `public.pipeline_auto_advance()`, then either flip the
-capability or state explicitly that the scheduled triage is being retired.
+**What step 5 must do first** — this was written as step 4's prerequisite and is
+not one, because the derived default leaves the owner's AI path on Supabase until
+that deployment holds an AI credential: confirm on each target database that
+`app_system` holds `EXECUTE` on `public.pipeline_auto_advance()`, then either flip
+the capability or state explicitly that the scheduled triage is being retired.
 
-## Step 4 — flip the defaults — DESIGNED, STARTED, STOPPED
+## Step 4 — flip the defaults — DONE in code, NOT DEPLOYED
 
-Stopped mid-step at the owner's request, to hand over to a different agent. The
-partial implementation is on branch **`s27-step4-wip`** (one commit, `npm test`
-red 1/902 on it). **`main` is clean and green at `c12263a`** — steps 1–3 only.
-Nothing about step 4 is on `main` except this section.
+Designed and stopped in one session, finished in the next. The code is complete
+and green — `npm test` 928/928 (up from 902: 26 new tests, all of them about this
+step), `npm run build`, `npm run typecheck:api`, and the live `npm run test:neon`
+run at **226 passed / 0 failed / 23 skipped**. Nothing is deployed and no
+environment variable changed anywhere; **the merge is deliberately safe on its
+own**, which is the whole design below.
 
-Read this before touching the branch. The code there is half of an idea, and the
-idea matters more than the code.
+Two live-suite assertions had to move with the flip and are worth knowing about
+before the next session reads a red run as a regression: that process holds
+`NEON_DATABASE_URL` and no flags — the state every tenant is in — so
+`config.readPath` now answers `neon` there rather than `supabase`
+(`dashboardSlice.neon.test.ts`, `dashboardReadsRest.neon.test.ts`). Two files in
+that suite still fail *at import* for credentials this machine does not hold, as
+they did before this step: `identityStore.neon.test.ts`
+(`IDENTITY_STORE_DATABASE_URL`) and `aiSystemWrites.neon.test.ts`
+(`NEON_AI_DATABASE_URL`).
+
+Read the next two sections before changing any of it. The reasoning is the part
+that matters — the code is small and the wrong version of it is a live outage.
 
 ### The trap the plan's own wording walks into
 
@@ -470,56 +484,92 @@ guess in the old direction and is not one in this direction: a mistyped opt-out
 provider its live data is not in. `ProviderPathError` refuses instead.
 
 Safe to be strict about *because of the table above*: the tenant contract binds
-the exact string, and the owner's deployment binds nothing. Nothing sets these
-to a third value today. Verify that is still true before merging.
+the exact string (`s26.application-hosting.v1` binds `NEON_READS_DEFAULT`,
+`NEON_WRITES_DEFAULT` and `NEON_AI_PATH_DEFAULT` to `neon` and
+`NEON_PHOTOS_DEFAULT` to `disabled`), and the owner's deployment binds nothing.
+Verified at implementation time that nothing sets these to a fourth value;
+re-verify if a new contract version appears.
 
-### What is on the branch
+The refusal also covers a *present value of the wrong type* — a caller handing
+the resolver a parsed config rather than an environment. Only `undefined` and
+`null` mean unset, because reading `7` as unset would hide the misconfiguration
+that a typo is now caught for.
 
-Finished: `data/providerPath.ts` (the resolver and `ProviderPathError`),
-`neonConfig.ts` (`dataStoreConfigured` / `aiStoreConfigured`, in the shape
-`machineStoreConfigured` already had), and `writePath.ts` / `aiPath.ts` rewritten
-over the resolver.
+### What landed, file by file
 
-**Not done, and the branch is inconsistent until it is:**
+| File | Change |
+| --- | --- |
+| `api/_lib/data/providerPath.ts` | **New.** `resolveProviderPath` + `ProviderPathError`, and the whole argument in its docblock. |
+| `api/_lib/data/neonConfig.ts` | `dataStoreConfigured` / `aiStoreConfigured` — presence checks in the shape `machineStoreConfigured` already had, so a *question* about equipment never throws. |
+| `api/_lib/data/writePath.ts`, `aiPath.ts` | Rewritten over the resolver, docblocks rewritten with them. Each reads **its own** credential; the AI path never derives consent from `NEON_DATABASE_URL`. |
+| `api/activity-daily.ts` | `deploymentReadPath` over the same resolver. `deploymentPhotoPath` keeps `disabled` and its two correctness conditions and derives only the unset case, so the opt-in is no longer a third condition. A refused flag is answered as a **500 naming the variable** — on `config.readPath` and on `leads.photoUrls` — rather than escaping as a body-less platform error. |
+| `src/lib/dashboardReads.ts` | The browser fallback, below: derived from whether the build holds a Supabase client, and no longer memoised when it is a fallback. |
+| `src/lib/authPath.ts` | Docblock only: it claimed to copy `deploymentAiPath`'s shape, which is no longer true, and its reason for existing referred to a `DataContext` that S13 has since rewired. |
 
-1. The module docblocks of `writePath.ts` and `aiPath.ts` still describe the old
-   fail-closed direction and now **contradict the code beneath them**. In this
-   codebase a stale docblock that asserts the opposite is worse than none.
-2. `deploymentReadPath` and `deploymentPhotoPath` (`api/activity-daily.ts:212`,
-   `:253`) are untouched, so the read path and the write path currently disagree
-   about the default. `deploymentPhotoPath` has three values and does not fit the
-   shared resolver directly — keep `disabled` explicit, keep the two correctness
-   conditions (read path is `neon`, object storage configured), derive only the
-   unset case.
-3. `tests/aiSlice.test.ts:49` asserts the old semantics and **fails**. It is a
-   correct test of a rule that no longer holds; rewrite it, do not delete it.
-4. No test covers `resolveProviderPath` at all. It needs one per row of the table
-   above, plus the refusal, plus the "explicit `neon` without a credential still
-   resolves `neon`" case — that last one is the property whose loss would be
-   silent.
-5. `tests/leadPhotoApi.test.ts:286` asserts `deploymentPhotoPath({})` is
-   `supabase`; under the new rule an empty env holds no credential, so it still
-   is — check rather than assume.
+The photo flag is the one deliberate asymmetry: an explicit `neon` there is still
+held to both conditions, where an explicit `neon` on the other flags is honoured
+and fails loudly if the credential is missing. Photos are cosmetic — degrading to
+initials is honest, and refusing the *flag lookup* over them would take down a
+dashboard whose data is fine.
 
-### The browser's fallback, which is part of this step
+### The browser's fallback, which was part of this step
 
-`dashboardReads.ts:188,204` resolve **every** failure of the `config.readPath`
-lookup to `supabase`, and `resolveDeploymentPaths` (`:253`) memoises that answer
-for the page's whole lifetime. On a tenant `supabase` is a `null` client, so one
-transient blip turns into *"Supabase is not configured — set VITE_SUPABASE_URL…"*
-until the tab is reloaded.
+`fetchDeploymentPaths` used to resolve **every** failure of the `config.readPath`
+lookup to `supabase`, and `resolveDeploymentPaths` memoised that answer for the
+page's whole lifetime. On a tenant `supabase` is a `null` client, so one transient
+blip turned into *"Supabase is not configured — set VITE_SUPABASE_URL…"* until the
+tab was reloaded.
 
-The intended fix, not started: **fall back to `neon`, and do not memoise a
-failure** — so the next call (the Retry button, the five-minute refresh, the next
-component) asks again and the session self-heals. Flapping, which is what the
-memoisation exists to prevent, needs two *successful* answers that differ, and a
-deployment's answer is constant.
+Now: **a failure is never memoised**, so the Retry button, the five-minute refresh
+and the next component each ask again and the session heals itself — and the
+fallback itself is **derived, exactly as the server's default is**.
 
-Note what makes this low-stakes: a failed lookup means the same-origin API is
-unreachable, in which case every read is about to fail anyway. The choice of
-fallback barely affects correctness; what matters is that the failure is visible
-and retryable instead of memoised into a sentence about a provider that may not
-exist. The banner now says something honest and has a working Retry.
+That derivation is a correction to the design this section originally stated.
+"Fall back to `neon`" is right for a tenant and *wrong for the owner's
+deployment*, and the earlier reasoning ("a failed lookup means the API is
+unreachable, so every read is about to fail anyway") is what hid it: on the
+Supabase path the reads do not go through this API at all, they go straight to
+PostgREST. Falling back to `neon` there would take a page that was about to work
+and move it onto a path the deployment has no credential for — a *new* outage
+mode, invented by a fix for a cosmetic one. So `fallbackPaths()` asks what the
+build holds:
+
+| Build | `VITE_SUPABASE_URL` + anon key | Fallback |
+| --- | --- | --- |
+| a tenant | absent | `neon` reads, `disabled` photos |
+| the owner's, today | present | `supabase` reads, `supabase` photos — unchanged |
+
+Three details worth keeping:
+
+- **`disabled`, not a provider, for the tenant photo half.** `supabase` would ask
+  a client that does not exist for objects named by the other provider's rows;
+  `neon` would fire one 503 per avatar at a deployment that may not serve them.
+- **A malformed answer counts as a failure**, but only in its *read* half. An
+  unreadable `photoPath` beside a readable `readPath` is what a server built
+  before S20 sends, and `supabase` photos were right for it.
+- **Concurrent callers still share one in-flight request.** Only the settled
+  fallback is dropped, so a startup with three readers does not triple the
+  lookup. Flapping — what the memo exists to prevent — needs two *successful*
+  answers that differ, and a deployment's answer is constant.
+
+The env is an argument on all five entry points rather than read from
+`import.meta.env` inside them, because a developer's own `.env` holds Supabase
+variables: an ambient default would make these tests pass or fail depending on
+whose machine ran them.
+
+### The auto-advance prerequisite moved to step 5
+
+The earlier draft of this section required confirming `app_system`'s `EXECUTE` on
+`public.pipeline_auto_advance()` **before** flipping the defaults, because the
+flip would have retired a live capability on the owner's deployment. Deriving the
+default from the credential removes that ordering: the owner's deployment holds no
+`NEON_AI_DATABASE_URL`, so its AI path stays `supabase` and its scheduled
+classifier keeps running auto-advance exactly as today. Tenants are already on the
+Neon AI path and already blocked, so nothing changes for them either.
+
+The prerequisite is unchanged in substance and still open — it is simply step 5's,
+where the owner's deployment first gets an AI credential. Nothing about it needs to
+happen before this code merges.
 
 ### `VITE_AUTH_PATH` is deliberately excluded from step 4
 
@@ -548,9 +598,11 @@ Each step ends in a state the owner can stop at.
    part the owner currently feels.
 3. **Close the Supabase-only holes** found in step 1, so every surface has a
    Neon branch. Until this is done, deleting anything is premature.
-4. **Flip the defaults.** Make `neon` the default and `supabase` the opt-in,
-   with the owner's deployment explicitly opted in. This is the reversible
-   midpoint and the right place for a gate.
+4. **Flip the defaults.** ✅ done in code. *Not* "with the owner's deployment
+   explicitly opted in" — that wording is the trap the step's own section opens
+   with. The default is **derived from the credential each path needs**, so no
+   environment change is required anywhere and the merge cannot take the live
+   dashboard down. This is the reversible midpoint and the right place for a gate.
 5. **Migrate the owner's data**, if in scope: schema, rows, storage objects,
    then agents (`ingest_mode` → a Supabase-off mode), then cron.
 6. **Delete.** Client, branches, flags, env, `supabase/migrations`, the

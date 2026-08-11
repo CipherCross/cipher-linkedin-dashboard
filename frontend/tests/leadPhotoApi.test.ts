@@ -16,6 +16,7 @@ import {
   deploymentPhotoPath,
   deploymentReadPath,
 } from '../api/activity-daily.js'
+import { ProviderPathError } from '../api/_lib/data/providerPath.js'
 import {
   objectStorageConfigured,
   ObjectStorageConfigurationError,
@@ -282,17 +283,13 @@ describe('the photo-path flag', () => {
     ).toBe('disabled')
   })
 
-  it('is supabase unless every condition holds', () => {
+  it('is supabase unless both correctness conditions hold', () => {
     expect(deploymentPhotoPath({})).toBe('supabase')
-    // Opt-in alone is not enough.
+    // Storage alone is not enough: the read path decides whose lead ids these are.
     expect(
       deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'neon', ...CONFIGURED }),
     ).toBe('supabase')
-    // Nor is the read path alone.
-    expect(
-      deploymentPhotoPath({ NEON_READS_DEFAULT: 'neon', ...CONFIGURED }),
-    ).toBe('supabase')
-    // Nor are both, without storage configured.
+    // Nor is the read path alone, without storage configured.
     expect(
       deploymentPhotoPath({
         NEON_PHOTOS_DEFAULT: 'neon',
@@ -301,7 +298,17 @@ describe('the photo-path flag', () => {
     ).toBe('supabase')
   })
 
-  it('is neon when the opt-in, the read path and the storage config all hold', () => {
+  it('holds an explicit `neon` to the same two conditions', () => {
+    // **A deliberate difference from the other flags**, where a stated `neon`
+    // without its credential fails loudly. Photos are cosmetic: degrading to
+    // Supabase or to initials is honest, whereas refusing the flag lookup over
+    // them would take down a dashboard whose data is fine.
+    expect(
+      deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'neon', NEON_READS_DEFAULT: 'supabase', ...CONFIGURED }),
+    ).toBe('supabase')
+  })
+
+  it('is neon when the read path and the storage config both hold', () => {
     expect(
       deploymentPhotoPath({
         NEON_PHOTOS_DEFAULT: 'neon',
@@ -311,22 +318,83 @@ describe('the photo-path flag', () => {
     ).toBe('neon')
   })
 
-  it.each([['true'], ['1'], ['NEON'], [' neon-ish'], ['']])(
-    'treats %j as off',
+  it('derives the unset case rather than requiring the opt-in', () => {
+    // **S27 retired the opt-in as a third condition.** A deployment equipped for
+    // Neon photos — reads on Neon, storage resolving — serves them without being
+    // told twice; what it must not do is serve them when either condition fails.
+    expect(
+      deploymentPhotoPath({ NEON_READS_DEFAULT: 'neon', ...CONFIGURED }),
+    ).toBe('neon')
+    expect(deploymentPhotoPath({ NEON_READS_DEFAULT: 'neon' })).toBe('supabase')
+    expect(deploymentPhotoPath({ ...CONFIGURED })).toBe('supabase')
+    // Whitespace is the unset case too, not a value.
+    expect(
+      deploymentPhotoPath({
+        NEON_PHOTOS_DEFAULT: '  ',
+        NEON_READS_DEFAULT: 'neon',
+        ...CONFIGURED,
+      }),
+    ).toBe('neon')
+  })
+
+  it('takes an explicit `supabase` without consulting either condition', () => {
+    expect(
+      deploymentPhotoPath({
+        NEON_PHOTOS_DEFAULT: 'supabase',
+        NEON_READS_DEFAULT: 'neon',
+        ...CONFIGURED,
+      }),
+    ).toBe('supabase')
+  })
+
+  it.each([['true'], ['1'], ['NEON'], [' neon-ish'], ['disable'], ['supabse']])(
+    'refuses %j rather than reading it as off',
     (value) => {
-      expect(
+      // The old rule read every unknown value as `supabase`, which was safe while
+      // that was the working path. It is not now: a deployment whose reads are on
+      // Neon would be told to fetch photos from a provider its rows do not name.
+      expect(() =>
         deploymentPhotoPath({
           NEON_PHOTOS_DEFAULT: value,
           NEON_READS_DEFAULT: 'neon',
           ...CONFIGURED,
         }),
-      ).toBe('supabase')
+      ).toThrow(ProviderPathError)
     },
   )
 
   it('leaves the read-path flag alone', () => {
     expect(deploymentReadPath({ NEON_PHOTOS_DEFAULT: 'neon' })).toBe('supabase')
     expect(deploymentReadPath({ NEON_READS_DEFAULT: 'neon' })).toBe('neon')
+  })
+
+  it('answers the flag lookup with the refusal instead of crashing', async () => {
+    // An unrecognised value must reach the browser as a diagnosable 500 naming
+    // the variable, not as a body-less platform error readable only in the log.
+    const handler = createActivityDailyHandler({
+      env: { NEON_PHOTOS_DEFAULT: 'disabld' },
+    })
+    const response = await handler(
+      new Request('https://dashboard.test/api/activity-daily?op=config.readPath'),
+    )
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining('NEON_PHOTOS_DEFAULT'),
+      variable: 'NEON_PHOTOS_DEFAULT',
+    })
+  })
+
+  it('refuses a photo request on a malformed flag before authentication', async () => {
+    const handler = createActivityDailyHandler({
+      env: { NEON_PHOTOS_DEFAULT: 'disabld' },
+    })
+    const response = await handler(
+      new Request(
+        `https://dashboard.test/api/activity-daily?op=leads.photoUrls&lead_ids=${ID_A}`,
+      ),
+    )
+    expect(response.status).toBe(500)
+    expect((await response.json()).variable).toBe('NEON_PHOTOS_DEFAULT')
   })
 
   it('fails closed before authentication or storage when the S26 initials-only posture disables photos', async () => {

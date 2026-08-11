@@ -7,18 +7,24 @@
  * specific rather than symmetrical: **the Supabase session is what authorizes
  * the dashboard's data reads.**
  *
- * `DataContext.tsx` fetches all twenty datasets straight from PostgREST with the
- * signed-in Supabase client, and `N-S13-consolidation.md` records that it was
- * never rewired to the Neon read path. So cutting `AuthContext` over to the
- * identity cookie unconditionally would sign a person in and then show them an
- * empty dashboard: the browser would hold no Supabase JWT and every read would
- * be refused. The two authenticators therefore have to coexist until the read
- * cutover, and which one runs is a deployment decision, not a code one.
+ * `DataContext.tsx` now reads through the application API when the deployment's
+ * read path is `neon`, but it still falls back to PostgREST with the signed-in
+ * Supabase client otherwise. So cutting `AuthContext` over to the identity cookie
+ * unconditionally would sign a person in against a store that deployment may not
+ * have, or hold no Supabase JWT for the reads it still makes — either way an empty
+ * dashboard behind a successful sign-in. The two authenticators therefore coexist
+ * until a deployment has both an identity store and the Neon read path, and which
+ * one runs is a deployment decision, not a code one.
  *
- * The shape copies `deploymentAiPath` exactly: only the string `identity`
- * enables the new path, so unset, empty, `true`, `1`, `neon` and every typo
- * resolve to `supabase`. That direction matters — a build that fumbles the flag
- * keeps the authenticator that works rather than losing sign-in altogether.
+ * **This flag no longer copies the server ones, and S27 is where they parted.**
+ * The three server flags now default to `neon` wherever the deployment holds the
+ * credential that path needs; this one still requires the exact string
+ * `identity`, so unset, empty, `true`, `1`, `neon` and every typo keep the
+ * Supabase authenticator. The difference is not caution, it is what the browser
+ * can observe: it cannot see whether an identity store is configured, so there is
+ * no credential here to derive a default from — and defaulting to `identity`
+ * without one would not degrade a dashboard, it would end sign-in. A build that
+ * fumbles the flag keeps the authenticator that works.
  *
  * It is a `VITE_`-prefixed variable because it is read in the browser, and it is
  * safe to expose: it names which sign-in surface the SPA calls and carries no

@@ -77,6 +77,11 @@ import {
   MESSAGES_OPERATIONS,
   PIPELINE_OPERATIONS,
 } from './_lib/data/operations/index.js'
+import { dataStoreConfigured } from './_lib/data/neonConfig.js'
+import {
+  ProviderPathError,
+  resolveProviderPath,
+} from './_lib/data/providerPath.js'
 import { getDataStore } from './_lib/data/store.js'
 import { resolveRequestActor } from './_lib/identity/session.js'
 import {
@@ -201,16 +206,29 @@ export type ReadPath = 'supabase' | 'neon'
  */
 export const CONFIG_READ_PATH_OPERATION = 'config.readPath'
 
+export const NEON_READS_ENV = 'NEON_READS_DEFAULT'
+
 /**
  * The deployment's default read path, for a browser that has not overridden it.
  *
- * **Off unless a deployment says otherwise.** Only the exact string `neon`
- * enables it; anything else — unset, empty, `true`, `1`, a typo — resolves to
- * `supabase`, so no accident switches the running dashboard onto a path it was
- * not deployed to use. Flipping it is an owner decision and S13 does not take it.
+ * **S27 inverted the default.** It used to be off unless a deployment said
+ * exactly `neon` — right while Neon was the thing being proved, wrong now that
+ * Supabase is the thing being removed. It is now `neon` wherever the deployment
+ * holds `NEON_DATABASE_URL`, `supabase` where it does not, and `supabase` where a
+ * deployment says so explicitly. `_lib/data/providerPath.ts` carries the whole
+ * argument, including why the default is *derived from the credential* rather
+ * than simply flipped: a plain inversion would have taken a deployment with no
+ * Neon credential down on the next deploy, since every read would have resolved
+ * a store that cannot exist.
+ *
+ * It shares that resolver with the write and AI flags rather than restating the
+ * rule, because the three drifting apart is exactly how a deployment ends up
+ * reading one provider and writing another.
  */
 export function deploymentReadPath(env = process.env): ReadPath {
-  return (env.NEON_READS_DEFAULT ?? '').trim() === 'neon' ? 'neon' : 'supabase'
+  return resolveProviderPath(NEON_READS_ENV, env[NEON_READS_ENV], () =>
+    dataStoreConfigured(env),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -225,34 +243,51 @@ export function deploymentReadPath(env = process.env): ReadPath {
  */
 export type PhotoPath = 'disabled' | 'supabase' | 'neon'
 
+export const NEON_PHOTOS_ENV = 'NEON_PHOTOS_DEFAULT'
+
+/** The three values the photo flag accepts, for its refusal message. */
+const PHOTO_PATH_VALUES = ['neon', 'supabase', 'disabled'] as const
+
 /**
  * Which lead-photo path this deployment serves. Reported beside `readPath` by the
  * same unauthenticated lookup.
  *
- * **Three conditions, all required, each for a different reason.** This is more
- * than the other flags ask for, and the extra conditions are not belt-and-braces:
+ * **Why this one does not simply call the shared resolver.** It has a third legal
+ * value and two conditions the other flags have no equivalent of, so it borrows
+ * the resolver's *rules* — derive the unset case, refuse an unrecognised value —
+ * and keeps its own conditions on top:
  *
- * 1. **`NEON_PHOTOS_DEFAULT=neon`** — the explicit opt-in, in the shape every
- *    other seam uses. Only the exact string counts; a typo keeps the path that
- *    works.
- * 2. **The read path is already `neon`.** Not a policy, a *correctness*
+ * 1. **`disabled` is answered first and unconditionally.** It is a deployment
+ *    posture, not a provider: initials only, no storage call and no application
+ *    photo request. Every tenant the control plane onboards binds exactly this
+ *    (`s26.application-hosting.v1`), so it must never be reached through a
+ *    condition that could downgrade it to a provider.
+ * 2. **The read path must already be `neon`.** Not a policy, a *correctness*
  *    requirement, and the subtlest thing in this file. The browser asks for photos
  *    by `lead.id`, and a lead id means different rows in the two providers —
  *    `N-B2.md` records that the id spaces name different people. A dashboard
  *    reading Supabase leads while asking Neon for their photos would therefore
  *    render other people's faces against the wrong names. It would look like a
  *    caching bug and it would be a privacy incident.
- * 3. **Object storage resolves.** Checked rather than assumed, because the flag's
- *    whole job is to keep a working dashboard working: a deployment that sets the
- *    opt-in before the bucket exists reports `supabase` and renders initials from
- *    Supabase, instead of asking an endpoint that can only 503.
+ * 3. **Object storage must resolve.** Checked rather than assumed, because the
+ *    flag's whole job is to keep a working dashboard working: a deployment that
+ *    opts in before the bucket exists reports `supabase` and renders initials,
+ *    instead of asking an endpoint that can only 503.
  *
- * The flag is *not* `neon` merely because storage is configured, and not merely
- * because reads are — an owner enables it deliberately, once both hold.
+ * Conditions 2 and 3 hold an **explicit** `neon` to the same bar as a derived
+ * one, and that is a deliberate difference from the other flags, where a stated
+ * `neon` without a credential fails loudly. Photos are cosmetic: degrading to
+ * initials is the honest outcome, whereas failing the flag lookup over them would
+ * take down a dashboard whose data is fine. What is *not* tolerated is a value
+ * nobody recognises — see the resolver on why a typo must not choose a provider.
  */
 export function deploymentPhotoPath(env = process.env): PhotoPath {
-  if ((env.NEON_PHOTOS_DEFAULT ?? '').trim() === 'disabled') return 'disabled'
-  if ((env.NEON_PHOTOS_DEFAULT ?? '').trim() !== 'neon') return 'supabase'
+  const value = (env[NEON_PHOTOS_ENV] ?? '').trim()
+  if (value === 'disabled') return 'disabled'
+  if (value !== '' && value !== 'neon' && value !== 'supabase') {
+    throw new ProviderPathError(NEON_PHOTOS_ENV, PHOTO_PATH_VALUES)
+  }
+  if (value === 'supabase') return 'supabase'
   if (deploymentReadPath(env) !== 'neon') return 'supabase'
   return objectStorageConfigured(env) ? 'neon' : 'supabase'
 }
@@ -272,16 +307,40 @@ export function deploymentPhotoPath(env = process.env): PhotoPath {
  * secret, it is not a capability, and it is inferable from timing anyway.
  */
 function readPathResponse(env = process.env): Response {
-  // `photoPath` rides along on the same lookup rather than taking an operation of
-  // its own. The browser needs both before it renders anything, they are decided
-  // by the same deployment, and a second unauthenticated round trip at startup
-  // would buy nothing — the field is additive, so a browser built before S20
-  // ignores it and keeps the Supabase photo path.
-  return json({
-    readPath: deploymentReadPath(env),
-    photoPath: deploymentPhotoPath(env),
-  })
+  try {
+    // `photoPath` rides along on the same lookup rather than taking an operation
+    // of its own. The browser needs both before it renders anything, they are
+    // decided by the same deployment, and a second unauthenticated round trip at
+    // startup would buy nothing — the field is additive, so a browser built
+    // before S20 ignores it and keeps the Supabase photo path.
+    return json({
+      readPath: deploymentReadPath(env),
+      photoPath: deploymentPhotoPath(env),
+    })
+  } catch (error) {
+    const refusal = providerPathRefusal(error)
+    if (refusal) return refusal
+    throw error
+  }
 }
+
+/**
+ * A refused path flag, answered instead of thrown.
+ *
+ * Since S27 an unrecognised flag value is a refusal rather than a guess, and this
+ * endpoint is where a browser meets it first. Letting it escape would surface as
+ * a body-less platform 500, so the misconfiguration would be diagnosable only
+ * from the function log — the exact failure mode step 2 of this migration was
+ * spent removing. The message names the variable and the legal values and
+ * discloses nothing else; which provider a deployment serves is already this
+ * operation's answer.
+ */
+function providerPathRefusal(error: unknown): Response | null {
+  if (!(error instanceof ProviderPathError)) return null
+  console.error('Provider path flag refused:', error.variable)
+  return json({ error: error.message, variable: error.variable }, 500)
+}
+
 
 /**
  * `leads.photoUrls` — the one operation on this endpoint that is not a plain
@@ -741,11 +800,18 @@ async function handle(
   // actor resolution, database reads, or object-storage construction so no
   // request can accidentally exercise a preserved photo path. Existing photo
   // rows and objects are intentionally not read, changed, or deleted.
-  if (
-    op === LEAD_PHOTO_URLS_OPERATION &&
-    deploymentPhotoPath(deps.env) !== 'neon'
-  ) {
-    return json({ error: 'Lead photo operations are disabled for this deployment' }, 503)
+  if (op === LEAD_PHOTO_URLS_OPERATION) {
+    let photoPath: PhotoPath
+    try {
+      photoPath = deploymentPhotoPath(deps.env)
+    } catch (error) {
+      const refusal = providerPathRefusal(error)
+      if (refusal) return refusal
+      throw error
+    }
+    if (photoPath !== 'neon') {
+      return json({ error: 'Lead photo operations are disabled for this deployment' }, 503)
+    }
   }
 
   // The deployed SPA and this endpoint use the same explicit auth selector.

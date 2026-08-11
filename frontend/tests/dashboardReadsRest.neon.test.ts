@@ -171,7 +171,12 @@ describe('the flag lookup, through the real endpoint', () => {
   it('answers without a credential and reports the deployment default', async () => {
     // Unauthenticated by design: a dashboard on the Supabase path must not have
     // to reach Neon successfully just to be told to keep using Supabase.
-    expect(await fetchReadPath(anonymousFetch)).toBe('supabase')
+    //
+    // **`neon`, with no flag set anywhere.** This process holds
+    // `NEON_DATABASE_URL` and nothing else, which after S27 is exactly the state
+    // a tenant is in — so this is the derived default observed end to end,
+    // through the real handler rather than through the resolver's unit test.
+    expect(await fetchReadPath(anonymousFetch)).toBe('neon')
   })
 })
 
