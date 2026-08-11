@@ -18,10 +18,7 @@ import step007 from "../../../postgres/tenant-baseline/v1/007_ai_system_write_pa
 import step008 from "../../../postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql";
 import step009 from "../../../postgres/tenant-baseline/v1/009_machine_ingest_path.sql";
 import step010 from "../../../postgres/tenant-baseline/v1/010_machine_schema_usage.sql";
-import businessCatalogSmoke from "../../../postgres/tests/portable_business_catalog_assertions.sql";
-import identityCatalogSmoke from "../../../postgres/tests/portable_identity_roles_rls_catalog_assertions.sql";
-import identityWritePathSmoke from "../../../postgres/tests/portable_identity_write_path_catalog_assertions.sql";
-import functionsCatalogSmoke from "../../../postgres/tests/portable_functions_triggers_ai_guard_catalog_assertions.sql";
+import liveRlsRoleBoundaries from "../../../postgres/tests/portable_live_rls_role_boundaries.sql";
 import restoreVerification from "../../../postgres/tests/portable_restore_reconciliation.sql";
 
 interface ManifestStep {
@@ -59,13 +56,42 @@ const textByArtifact: Readonly<Record<string, string>> = {
   "010_machine_schema_usage.sql": step010,
 };
 
-const smokeArtifacts = [
-  { text: businessCatalogSmoke, sha256: "b57b998d3e460b529f4de3f7fe3f37c7184f4db7730d3873d1b88e23ca735c63" },
-  { text: identityCatalogSmoke, sha256: "409d24fb619226cf46dd50949012705980ea046ffc556eb495fe76b425bdc22b" },
-  { text: identityWritePathSmoke, sha256: "10caa332cc33cf90fc9c95c6a8a541bc84aae4d505b8cac78d5be7699b185744" },
-  { text: functionsCatalogSmoke, sha256: "8fece15b86539c9626b1b1efd19e706a08fec6ec04a0c8a69bd51f8f581a466f" },
-] as const;
+/**
+ * The pinned SQL the live data smoke runs, by canonical smoke test ID.
+ *
+ * This deliberately does NOT include the four portable_*_catalog_assertions.sql
+ * artifacts the live smoke used to run. Each of those belongs to the cleanroom
+ * harness that applies its own step and asserts exact counts for the state right
+ * after it — portable_business_catalog_assertions.sql requires `tables = 25` and
+ * `rls_tables = 0`, which is the state after step 001 alone. Against a tenant at
+ * baseline 053 plus migration 054 all four fail by construction, and all four
+ * also require `provider_roles = 0` and `provider_schemas = 0`, which a managed
+ * provider's own principals break independently. Running them here would have
+ * failed step 11 deterministically, in the same way the wrong-stage
+ * ledger-presence probe failed step 3.
+ *
+ * They are not edited or moved: their cleanroom harnesses still own them, and
+ * they remain digest-pinned for those harnesses by the static assertions.
+ */
+const smokeArtifacts = {
+  rls_role_boundaries: {
+    text: liveRlsRoleBoundaries,
+    sha256: "500915da8f117ff2e631abcde4d1da552d66bddf63c1784ee31de10ecd632a4f",
+  },
+} as const;
 const restoreVerificationSha256 = "dc088ba179c648c82ac9ee92c33f8e04c767b5b6918d061ad8f45104db805865";
+
+/**
+ * Every data smoke ID this module can actually run.
+ *
+ * The executor validates a requested ID against the closed suite vocabulary, and
+ * this is the other half of that contract: an ID the plan is entitled to ask for
+ * and that nothing here owns must be a visible gap, not a silent skip.
+ */
+export const DATA_SMOKE_CHECK_IDS: readonly string[] = [
+  "schema_ledger",
+  ...Object.keys(smokeArtifacts),
+];
 
 function postgresSql(text: string): string {
   return text
@@ -97,7 +123,7 @@ async function assertPinnedArtifacts(): Promise<void> {
       });
     }
   }
-  for (const artifact of smokeArtifacts) {
+  for (const artifact of Object.values(smokeArtifacts)) {
     if (await sha256Hex(artifact.text) !== artifact.sha256) {
       throw new OpsError("provider_snapshot_drift", "Pinned portable smoke artifact digest mismatch");
     }
@@ -373,10 +399,73 @@ export async function applyPinnedPortablePostgres(input: {
   }
 }
 
-export async function runPinnedPortableSmoke(ownerConnectionUri: string): Promise<void> {
+/**
+ * The two ledger reads the `schema_ledger` smoke makes, exported so the
+ * live-shaped harness runs the same text. `role_bootstrap` is a single-row table
+ * by constraint, so it needs no ordering.
+ */
+export const LEDGER_APPLIED_STEPS_SQL =
+  "SELECT step, artifact, sha256 FROM app_ledger.applied_migration ORDER BY step";
+export const LEDGER_ROLE_BOOTSTRAP_SQL =
+  "SELECT artifact, sha256 FROM app_ledger.role_bootstrap";
+
+/**
+ * The `schema_ledger` data smoke: the tenant really is at the release the plan
+ * approved, checked against the pinned manifest rather than against a count.
+ *
+ * The ledger's contents are control-plane state that only app_owner may read, so
+ * this enters that role the same way every other ledger read does.
+ */
+async function verifySchemaLedger(client: PoolClient): Promise<void> {
+  await client.query("SET ROLE app_owner");
+  const applied = await client.query(LEDGER_APPLIED_STEPS_SQL);
+  const bootstrap = await client.query(LEDGER_ROLE_BOOTSTRAP_SQL);
+  await client.query("RESET ROLE");
+
+  if (applied.rows.length !== manifest.steps.length) {
+    throw new OpsError("provider_error", "Tenant ledger step count does not match the pinned release", {
+      applied_steps: applied.rows.length,
+      expected_steps: manifest.steps.length,
+    });
+  }
+  for (const [index, step] of manifest.steps.entries()) {
+    const row = applied.rows[index];
+    if (Number(row?.step) !== step.step || row?.artifact !== step.artifact || row?.sha256 !== step.sha256) {
+      throw new OpsError("provider_snapshot_drift", "Tenant ledger does not match the pinned release", {
+        step: step.step,
+        artifact: step.artifact,
+      });
+    }
+  }
+  if (!bootstrap.rows.some((row) => row.artifact === manifest.role_bootstrap.artifact
+    && row.sha256 === manifest.role_bootstrap.sha256)) {
+    throw new OpsError("provider_snapshot_drift", "Tenant ledger records no matching role bootstrap");
+  }
+}
+
+/**
+ * Runs the data smoke checks the plan asked for, one per canonical ID.
+ *
+ * The IDs were previously validated and then ignored, with every artifact run
+ * regardless. Routing each ID to the single check that owns it is what the
+ * closed suite vocabulary is for, and it is what lets a check be written for the
+ * state the tenant is actually in.
+ */
+export async function runPinnedPortableSmoke(
+  ownerConnectionUri: string,
+  smokeTestIds: readonly string[],
+): Promise<void> {
   await assertPinnedArtifacts();
   await withConnection(ownerConnectionUri, async (sql) => {
-    for (const artifact of smokeArtifacts) {
+    for (const id of smokeTestIds) {
+      if (id === "schema_ledger") {
+        await verifySchemaLedger(sql);
+        continue;
+      }
+      const artifact = smokeArtifacts[id as keyof typeof smokeArtifacts];
+      if (artifact === undefined) {
+        throw new OpsError("unsupported_contract", "Data smoke test ID has no pinned check");
+      }
       await sql.query(postgresSql(artifact.text));
     }
   });

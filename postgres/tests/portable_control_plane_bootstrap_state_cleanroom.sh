@@ -323,6 +323,101 @@ else
   bad "re-verifying the fully migrated database reported drift ($(tail -3 "$work_dir/verify.log" | tr '\n' ' '))"
 fi
 
+# --- 8. the schema_ledger smoke's own two reads -------------------------------
+# These run as app_owner, entered from the provider principal, and read the
+# ledger's contents. Their column names are a schema contract with
+# 000_migration_ledger.sql, and a wrong one would fail step 11 the same way a
+# wrong probe failed step 3 — so the shipped text is executed here too.
+applied_steps_sql="$(node "$probe_sql_tool" LEDGER_APPLIED_STEPS_SQL)"
+role_bootstrap_sql="$(node "$probe_sql_tool" LEDGER_ROLE_BOOTSTRAP_SQL)"
+
+ledger_read() {
+  printf 'SET ROLE app_owner;\n%s;\nRESET ROLE;\n' "$1" \
+    | sql_as "$provider_role" "$provider_password" bootstrap_prepared
+}
+
+set +e
+applied_rows="$(ledger_read "$applied_steps_sql" 2>&1)"
+applied_status=$?
+set -e
+if [ "$applied_status" -eq 0 ] && [ "$(printf '%s\n' "$applied_rows" | grep -c '^[0-9]')" -eq 10 ]; then
+  ok "the schema_ledger smoke reads all ten applied steps as app_owner"
+else
+  bad "the schema_ledger applied-steps read failed (status $applied_status: $(printf '%s' "$applied_rows" | head -1))"
+fi
+
+set +e
+bootstrap_row="$(ledger_read "$role_bootstrap_sql" 2>&1)"
+bootstrap_status=$?
+set -e
+if [ "$bootstrap_status" -eq 0 ] && printf '%s' "$bootstrap_row" | grep -q "$role_artifact"; then
+  ok "the schema_ledger smoke reads the recorded role bootstrap as app_owner"
+else
+  bad "the schema_ledger role-bootstrap read failed (status $bootstrap_status: $(printf '%s' "$bootstrap_row" | head -1))"
+fi
+
+# The same reads must be refused without app_owner: the ledger is control-plane
+# state and the application must never reach it.
+set +e
+leaked="$(printf '%s;\n' "$applied_steps_sql" \
+  | sql_as app_migration "$migration_password" bootstrap_prepared 2>&1)"
+leaked_status=$?
+set -e
+if [ "$leaked_status" -ne 0 ] && printf '%s' "$leaked" | grep -q "permission denied for schema app_ledger"; then
+  ok "the ledger's contents stay unreadable without SET ROLE app_owner"
+else
+  bad "the ledger's contents were readable without app_owner (status $leaked_status)"
+fi
+
+# --- 9. the live data smoke, on the state step 11 will actually meet ----------
+# The four cleanroom catalog assertions cannot pass here: each asserts exact
+# counts for the state right after its own step. The live smoke asserts
+# invariants instead, so it has to hold on exactly this database.
+live_smoke="$repo_dir/postgres/tests/portable_live_rls_role_boundaries.sql"
+
+run_live_smoke() {
+  sql_as "$provider_role" "$provider_password" bootstrap_prepared < "$live_smoke"
+}
+
+set +e
+smoke_output="$(run_live_smoke 2>&1)"
+smoke_status=$?
+set -e
+if [ "$smoke_status" -eq 0 ]; then
+  ok "the live rls_role_boundaries smoke passes on a fully migrated tenant"
+else
+  bad "the live rls_role_boundaries smoke failed ($(printf '%s' "$smoke_output" | grep -i 'error\|EXCEPTION' | head -1))"
+fi
+
+# A managed provider brings its own roles and schemas. The cleanroom assertions
+# require none to exist; the live smoke must be indifferent to them.
+printf 'CREATE ROLE neon_superuser SUPERUSER;\nCREATE SCHEMA provider_owned;\n' \
+  | sql_super bootstrap_prepared >/dev/null
+set +e
+smoke_output="$(run_live_smoke 2>&1)"
+smoke_status=$?
+set -e
+if [ "$smoke_status" -eq 0 ]; then
+  ok "the live smoke tolerates provider-owned roles and schemas"
+else
+  bad "the live smoke rejected a provider-owned role or schema ($(printf '%s' "$smoke_output" | grep -i 'error\|EXCEPTION' | head -1))"
+fi
+
+# And it must still bite. Turning RLS off on one table has to fail it.
+printf 'ALTER TABLE public.leads DISABLE ROW LEVEL SECURITY;\n' \
+  | sql_as "$provider_role" "$provider_password" bootstrap_prepared >/dev/null 2>&1 \
+  || printf 'SET ROLE app_owner; ALTER TABLE public.leads DISABLE ROW LEVEL SECURITY;\n' \
+       | sql_as app_migration "$migration_password" bootstrap_prepared >/dev/null
+set +e
+smoke_output="$(run_live_smoke 2>&1)"
+smoke_status=$?
+set -e
+if [ "$smoke_status" -ne 0 ] && printf '%s' "$smoke_output" | grep -q "RLS is off on leads"; then
+  ok "the live smoke fails closed when RLS is dropped on one table"
+else
+  bad "the live smoke did not notice RLS being disabled (status $smoke_status: $(printf '%s' "$smoke_output" | head -1))"
+fi
+
 echo
 echo "Control-plane bootstrap-state tests: $pass_count passed, $fail_count failed"
 [ "$fail_count" -eq 0 ]

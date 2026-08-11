@@ -20,7 +20,12 @@ import { fileURLToPath } from 'node:url';
 const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SOURCE_PATH = join(REPO_DIR, 'ops', 'src', 'worker', 'pinned-postgres.ts');
 
-const ALLOWED = new Set(['BOOTSTRAP_STATE_PROBE_SQL', 'LEDGER_PRESENCE_SQL']);
+const ALLOWED = new Set([
+  'BOOTSTRAP_STATE_PROBE_SQL',
+  'LEDGER_PRESENCE_SQL',
+  'LEDGER_APPLIED_STEPS_SQL',
+  'LEDGER_ROLE_BOOTSTRAP_SQL',
+]);
 
 const name = process.argv[2];
 if (!ALLOWED.has(name)) {
@@ -29,26 +34,30 @@ if (!ALLOWED.has(name)) {
 }
 
 const source = readFileSync(SOURCE_PATH, 'utf8');
-// The constants are plain backtick literals with no interpolation, so the first
-// unescaped backtick after the assignment closes them.
-const opening = `export const ${name} = \``;
-const start = source.indexOf(opening);
-if (start === -1) {
+// The constants are plain single string literals with no interpolation and no
+// escapes, written either as a backtick block or as one double-quoted line, so
+// the first matching quote after the assignment closes them. Anything else is
+// treated as "the harness can no longer read the shipped SQL" rather than
+// guessed at.
+const assignment = new RegExp(`export const ${name} =\\s*([\`"])`);
+const match = assignment.exec(source);
+if (match === null) {
   process.stderr.write(
-    `${name} is no longer an exported template literal in ops/src/worker/pinned-postgres.ts; `
+    `${name} is no longer an exported string literal in ops/src/worker/pinned-postgres.ts; `
     + 'the live-shaped harness would silently stop testing the shipped SQL\n',
   );
   process.exit(2);
 }
-const bodyStart = start + opening.length;
-const end = source.indexOf('`', bodyStart);
+const quote = match[1];
+const bodyStart = match.index + match[0].length;
+const end = source.indexOf(quote, bodyStart);
 if (end === -1) {
-  process.stderr.write(`${name} has no closing backtick\n`);
+  process.stderr.write(`${name} has no closing ${quote}\n`);
   process.exit(2);
 }
 const sql = source.slice(bodyStart, end);
-if (sql.includes('${')) {
-  process.stderr.write(`${name} interpolates a value; the harness cannot run it verbatim\n`);
+if (sql.includes('${') || sql.includes('\\')) {
+  process.stderr.write(`${name} interpolates or escapes a value; the harness cannot run it verbatim\n`);
   process.exit(2);
 }
 if (!/\bSELECT\b/i.test(sql)) {

@@ -463,6 +463,38 @@ for (const relative of S08_ARTIFACTS) {
     resourceHits.length === 0, resourceHits.join(', '));
 }
 
+// --- the live smoke must not borrow a cleanroom's stage-scoped assertions ----
+//
+// Each portable_*_catalog_assertions.sql belongs to the cleanroom harness that
+// applies its own step and asserts EXACT counts for the state right after it:
+// the business one requires tables=25 and rls_tables=0, true only after step 001.
+// The control plane's live smoke runs against a tenant at baseline 053 plus
+// migration 054, where all of them fail by construction, and they additionally
+// require provider_roles=0 and provider_schemas=0, which a managed provider's own
+// principals break. Importing one into the Worker is therefore a step-11 failure
+// waiting to happen, in the same family as the wrong-stage step-3 probe.
+process.stdout.write('\nLive smoke staging\n');
+{
+  const relative = 'ops/src/worker/pinned-postgres.ts';
+  const source = readFileSync(join(REPO_DIR, relative), 'utf8');
+  // Only the import statements count. The module explains in prose why it no
+  // longer uses these artifacts, and naming them there must stay allowed.
+  const imported = source
+    .split('\n')
+    .filter((line) => /^\s*import\s/.test(line))
+    .join('\n');
+  const stageScoped = [
+    'portable_business_catalog_assertions.sql',
+    'portable_identity_roles_rls_catalog_assertions.sql',
+    'portable_identity_write_path_catalog_assertions.sql',
+    'portable_functions_triggers_ai_guard_catalog_assertions.sql',
+  ].filter((artifact) => imported.includes(artifact));
+  check(`${relative} imports no stage-scoped cleanroom assertion`,
+    stageScoped.length === 0, stageScoped.join(', '));
+  check(`${relative} runs the live tenant boundary smoke`,
+    imported.includes('portable_live_rls_role_boundaries.sql'));
+}
+
 process.stdout.write('\nHarness hygiene\n');
 for (const relative of EXECUTABLE_SCRIPTS) {
   const path = join(REPO_DIR, relative);

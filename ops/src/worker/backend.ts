@@ -501,10 +501,20 @@ export class S26WorkerBackend implements S26BridgeBackend {
     // The closed suite's own vocabulary, shared with the executor that routes
     // it. An abbreviated private spelling here rejected every real request.
     const allowed = new Set<string>(CANONICAL_SMOKE_TEST_IDS.data);
-    if (stringArray(input, "smoke_test_ids").some((id) => !allowed.has(id))) {
+    const requested = stringArray(input, "smoke_test_ids");
+    if (requested.some((id) => !allowed.has(id))) {
       throw new OpsError("unsupported_contract", "Unknown smoke test ID");
     }
-    await runPinnedPortableSmoke(await this.#ownerConnectionUri(stringField(input, "project_id")));
+    try {
+      await runPinnedPortableSmoke(
+        await this.#ownerConnectionUri(stringField(input, "project_id")),
+        requested,
+      );
+    } catch (error) {
+      // A failed assertion is a Postgres exception, so without this it would
+      // arrive as an unclassified error rather than a deterministic refusal.
+      throw databaseFailure(error);
+    }
     return { providerRequestId: crypto.randomUUID() };
   }
 

@@ -15,7 +15,10 @@ import { S26WorkerBackend } from "../src/worker/backend.js";
 import {
   BOOTSTRAP_STATE_PROBE_SQL,
   CONTROL_PLANE_ROLES,
+  DATA_SMOKE_CHECK_IDS,
+  LEDGER_APPLIED_STEPS_SQL,
   LEDGER_PRESENCE_SQL,
+  LEDGER_ROLE_BOOTSTRAP_SQL,
   bootstrapArtifactsToApply,
   readBootstrapState,
 } from "../src/worker/pinned-postgres.js";
@@ -529,6 +532,25 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     expect(BOOTSTRAP_STATE_PROBE_SQL).toContain("machine_ingest");
     // A probe that had to read a protected schema would carry the same defect.
     expect(BOOTSTRAP_STATE_PROBE_SQL).not.toContain("app_ledger");
+  });
+
+  it("owns a check for every canonical data smoke ID", () => {
+    // The other half of the closed-vocabulary contract: the executor validates a
+    // requested ID against CANONICAL_SMOKE_TEST_IDS.data, so an ID the plan may
+    // ask for and nothing here runs has to be a visible gap. The live smoke no
+    // longer runs the four stage-scoped cleanroom catalog assertions — the
+    // business one requires tables=25 and rls_tables=0, the state after step 001
+    // alone, so against baseline 053 plus migration 054 they could only fail.
+    expect([...DATA_SMOKE_CHECK_IDS].sort()).toEqual([...CANONICAL_SMOKE_TEST_IDS.data].sort());
+  });
+
+  it("reads the ledger's contents from within app_ledger, which needs app_owner", () => {
+    // app_ledger grants USAGE to nobody but app_owner, so these two reads are
+    // exactly the shape that broke step 3 when it ran without SET ROLE. That they
+    // are actually issued as app_owner is proven live in
+    // portable_control_plane_bootstrap_state_cleanroom.sh.
+    expect(LEDGER_APPLIED_STEPS_SQL).toContain("app_ledger.applied_migration");
+    expect(LEDGER_ROLE_BOOTSTRAP_SQL).toContain("app_ledger.role_bootstrap");
   });
 
   it("runs only bootstrap artifacts whose postcondition is missing", () => {
