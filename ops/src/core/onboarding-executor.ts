@@ -69,6 +69,24 @@ export interface ExecuteNextResult {
   readonly operationState: string;
 }
 
+/**
+ * The dotted names of every boolean check a verification report reports false.
+ *
+ * Generic on purpose: it walks the report rather than naming its fields, so a
+ * check added later cannot silently stop being attributable. Only the names
+ * travel, never the report's handles or digests.
+ */
+function failedVerificationChecks(report: unknown, path = ""): readonly string[] {
+  if (typeof report !== "object" || report === null || Array.isArray(report)) return [];
+  const failed: string[] = [];
+  for (const [key, value] of Object.entries(report as Record<string, unknown>)) {
+    const name = path === "" ? key : `${path}.${key}`;
+    if (value === false) failed.push(name);
+    else if (typeof value === "object" && value !== null) failed.push(...failedVerificationChecks(value, name));
+  }
+  return failed;
+}
+
 export class OnboardingExecutor {
   readonly #registry: Registry;
   readonly #providers: OnboardingProviders;
@@ -529,6 +547,11 @@ export class OnboardingExecutor {
           verification.status === "passed",
           "provider_error",
           "Hosting deployment verification did not pass",
+          // The report says WHICH of its six checks failed, and discarding that
+          // left step 11 as an unattributable "did not pass". The report is
+          // already redaction-safe — it holds booleans, handles and digests, not
+          // values — and only the names of the false checks are kept.
+          { failed_checks: failedVerificationChecks(verification) },
         );
         return verification.hostingRequestId;
       }
