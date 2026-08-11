@@ -2,9 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { env, SELF } from "cloudflare:test";
 
 import { OpsError } from "../src/core/errors.js";
+import { canonicalJson, sha256Digest } from "../src/core/canonical.js";
 import type { S26BridgeBackend } from "../src/bridge/s26-control-plane-service.js";
+import { CANONICAL_SMOKE_TEST_IDS } from "../src/core/smoke-tests.js";
 import { CANONICAL_TENANT_ENVIRONMENT } from "../src/providers/hosting-tenant.js";
+import {
+  CANONICAL_TENANT_SCHEDULES,
+  hostingEnvironmentBindingDigest,
+  scheduleManifestDigest,
+} from "../src/providers/hosting.js";
 import { S26WorkerBackend } from "../src/worker/backend.js";
+import {
+  CONTROL_PLANE_ROLES,
+  bootstrapArtifactsToApply,
+  readBootstrapState,
+} from "../src/worker/pinned-postgres.js";
 import { handleS26WorkerRequest, s26WorkerRequestLog } from "../src/worker/index.js";
 
 const BRIDGE_SECRET = "worker-test-bridge-secret";
@@ -21,6 +33,11 @@ function envWith(values: Readonly<Record<string, string>>): Env {
 
 function providerResponse(status: number, body: unknown, requestId = "worker-provider-request"): Response {
   return Response.json(body, { status, headers: { "x-request-id": requestId } });
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 const environmentContext = {
@@ -433,5 +450,501 @@ describe("S26 Worker lifecycle configuration", () => {
     expect(JSON.parse(failedText)).toEqual({ code: "outcome_unknown", provider_request_id: "opaque-vercel-request" });
     expect(failedText).not.toContain(generatedCanaries[0]!);
     expect(failedText).not.toContain(databaseCanary);
+  });
+});
+
+describe("S26 apply steps are re-runnable against their own effect", () => {
+  const REVISION = "b".repeat(40);
+
+  function vercelFetcher(
+    routes: (url: URL, method: string, init: RequestInit | undefined) => Response | undefined,
+  ) {
+    return vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.url);
+      const method = init?.method ?? "GET";
+      return routes(url, method, init as RequestInit | undefined)
+        ?? providerResponse(500, {}, "unexpected-route");
+    });
+  }
+
+  it("skips a role bootstrap whose own effect is already present", async () => {
+    const asked: unknown[][] = [];
+    const client = {
+      query: async (_text: string, values?: readonly unknown[]) => {
+        asked.push([...(values ?? [])]);
+        return {
+          rows: [{
+            control_plane: true,
+            identity_store: true,
+            ai_execution: false,
+            machine_ingest: false,
+          }],
+        };
+      },
+    };
+    await expect(readBootstrapState(client)).resolves.toEqual({
+      controlPlane: true,
+      identityStore: true,
+      aiExecution: false,
+      machineIngest: false,
+    });
+    // The probe asks about the exact seven-role contract, so a cluster missing
+    // one of them is never mistaken for a prepared one.
+    expect(asked[0]?.[0]).toEqual([...CONTROL_PLANE_ROLES]);
+    expect(asked[0]?.[1]).toBe(7);
+  });
+
+  it("reads a fresh database as no bootstrap applied", async () => {
+    const client = { query: async () => ({ rows: [] as Record<string, unknown>[] }) };
+    await expect(readBootstrapState(client)).resolves.toEqual({
+      controlPlane: false,
+      identityStore: false,
+      aiExecution: false,
+      machineIngest: false,
+    });
+  });
+
+  it("runs only bootstrap artifacts whose postcondition is missing", () => {
+    expect(bootstrapArtifactsToApply({
+      controlPlane: true,
+      identityStore: true,
+      aiExecution: false,
+      machineIngest: true,
+    })).toEqual(["aiExecution"]);
+    expect(bootstrapArtifactsToApply({
+      controlPlane: true,
+      identityStore: true,
+      aiExecution: true,
+      machineIngest: true,
+    })).toEqual([]);
+  });
+
+  it("adopts production values the target already carries instead of rotating them", async () => {
+    const environmentEntries = [
+      { id: "ownership", key: "LH2_OWNERSHIP_MARKER_DIGEST", value: OWNERSHIP, type: "plain", target: ["production"] },
+      ...CANONICAL_TENANT_ENVIRONMENT.map((entry, index) => ({
+        id: `env-${index}`,
+        key: entry.name,
+        type: entry.valueClass === "server_secret" ? "sensitive" : "encrypted",
+        target: ["production"],
+      })),
+    ];
+    const writes: string[] = [];
+    const fetcher = vercelFetcher((url, method) => {
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1")) {
+        return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
+      }
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/connection_uri")) {
+        return providerResponse(200, { uri: "postgresql://app_runtime:pw@ep.example.invalid/neondb" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
+        return providerResponse(200, { id: "target-1" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1/env")) {
+        if (method === "GET") return providerResponse(200, { envs: environmentEntries });
+        writes.push(`${method} ${url.pathname}`);
+        return providerResponse(200, { id: "unexpected" });
+      }
+      return undefined;
+    });
+    const rotated: string[] = [];
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
+        fetch: fetcher,
+        generateSecret: () => { rotated.push("generated"); return "rotated-canary"; },
+      }),
+    );
+    expect(response.status).toBe(200);
+    // Nothing was written, and above all no generated secret was minted: a
+    // retry that rotated them would break the release already promoted with
+    // the previous ones.
+    expect(writes).toEqual([]);
+    expect(rotated).toEqual([]);
+    const body = await response.json() as { bindings: readonly { name: string }[] };
+    expect(body.bindings.map((binding) => binding.name).sort())
+      .toEqual(CANONICAL_TENANT_ENVIRONMENT.map((entry) => entry.name).sort());
+  });
+
+  it("writes only the production values a partially bound target is missing", async () => {
+    const bound = CANONICAL_TENANT_ENVIRONMENT.slice(0, 3);
+    const written: string[] = [];
+    const fetcher = vercelFetcher((url, method, init) => {
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1")) {
+        return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
+      }
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/connection_uri")) {
+        return providerResponse(200, { uri: "postgresql://app_runtime:pw@ep.example.invalid/neondb" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
+        return providerResponse(200, { id: "target-1" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1/env")) {
+        if (method === "GET") {
+          return providerResponse(200, {
+            envs: [
+              { id: "ownership", key: "LH2_OWNERSHIP_MARKER_DIGEST", value: OWNERSHIP, type: "plain", target: ["production"] },
+              // A preview-scoped value of the same name is a different binding
+              // and must not be mistaken for the production one.
+              { id: "preview", key: CANONICAL_TENANT_ENVIRONMENT[3]!.name, type: "encrypted", target: ["preview"] },
+              ...bound.map((entry, index) => ({
+                id: `env-${index}`,
+                key: entry.name,
+                type: entry.valueClass === "server_secret" ? "sensitive" : "encrypted",
+                target: ["production"],
+              })),
+            ],
+          });
+        }
+        written.push(String((JSON.parse(String(init?.body)) as { key: string }).key));
+        return providerResponse(200, { id: `written-${written.length}` });
+      }
+      return undefined;
+    });
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: fetcher }),
+    );
+    expect(response.status).toBe(200);
+    expect(written.sort()).toEqual(
+      CANONICAL_TENANT_ENVIRONMENT.map((entry) => entry.name)
+        .filter((name) => !bound.some((entry) => entry.name === name))
+        .sort(),
+    );
+  });
+
+  it("adopts a verified build of the approved revision instead of deploying again", async () => {
+    const approvedScheduleDigest = scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES);
+    const environmentBindingDigest = hostingEnvironmentBindingDigest(
+      CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({ name: entry.name, valueClass: entry.valueClass, source: entry.source })),
+    );
+    const buildIdentityDigest = sha256Digest(canonicalJson({
+      target_handle: "target-1",
+      revision_id: REVISION,
+      build_recipe_id: env.VERCEL_BUILD_RECIPE_ID,
+      environment_binding_digest: environmentBindingDigest,
+      schedule_manifest_digest: approvedScheduleDigest,
+    }));
+    const crons = CANONICAL_TENANT_SCHEDULES.map((entry) => ({
+      path: Object.keys(entry.queryParameters).length === 0
+        ? entry.routePath
+        : `${entry.routePath}?${new URLSearchParams(Object.entries(entry.queryParameters)).toString()}`,
+      schedule: entry.expression,
+    }));
+    const created: string[] = [];
+    const fetcher = vercelFetcher((url, method) => {
+      if (url.pathname === "/v7/deployments" && method === "GET") {
+        return providerResponse(200, {
+          deployments: [
+            { uid: "older", meta: { lh2S26BuildDigest: `sha256:${"c".repeat(64)}` } },
+            { uid: "already-built", meta: { lh2S26BuildDigest: buildIdentityDigest } },
+          ],
+        });
+      }
+      if (url.pathname === "/v13/deployments" && method === "POST") {
+        created.push("deployment");
+        return providerResponse(200, { id: "fresh" });
+      }
+      if (url.pathname === "/v13/deployments/already-built" && method === "GET") {
+        return providerResponse(200, {
+          id: "already-built",
+          readyState: "READY",
+          target: "production",
+          gitSource: { sha: REVISION },
+          meta: { lh2S26BuildDigest: buildIdentityDigest },
+          crons,
+        });
+      }
+      if (url.pathname === "/v9/projects/target-1" && method === "GET") {
+        return providerResponse(200, {
+          id: "target-1",
+          crons: { deploymentId: "already-built", definitions: crons },
+        });
+      }
+      return undefined;
+    });
+    const buildInput = {
+        target_handle: "target-1",
+        revision_id: REVISION,
+        build_recipe_id: env.VERCEL_BUILD_RECIPE_ID,
+        public_value_names: CANONICAL_TENANT_ENVIRONMENT
+          .filter((entry) => entry.valueClass === "public_build")
+          .map((entry) => entry.name)
+          .sort(),
+        environment_binding_digest: environmentBindingDigest,
+        schedule_manifest_digest: approvedScheduleDigest,
+    };
+    const backend = new S26WorkerBackend(envWith({
+      APPROVED_SOURCE_GIT_SHA: REVISION,
+      APPROVED_SCHEDULE_MANIFEST_DIGEST: approvedScheduleDigest,
+    }), { fetch: fetcher });
+    await expect(backend.invoke(
+      { capability: "hosting", operation: "build" },
+      buildInput,
+    )).resolves.toMatchObject({ releaseHandle: "already-built", status: "verified" });
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/build", buildInput),
+      backend,
+    );
+    expect(response.status, `${await response.clone().text()} created=${JSON.stringify(created)}`).toBe(200);
+    expect(created).toEqual([]);
+    await expect(response.json()).resolves.toMatchObject({ releaseHandle: "already-built", status: "verified" });
+  });
+
+  it("marks a fresh preview build with its complete retry identity", async () => {
+    const approvedScheduleDigest = scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES);
+    const environmentBindingDigest = hostingEnvironmentBindingDigest(
+      CANONICAL_TENANT_ENVIRONMENT.map((entry) => ({ name: entry.name, valueClass: entry.valueClass, source: entry.source })),
+    );
+    const buildIdentityDigest = sha256Digest(canonicalJson({
+      target_handle: "target-1",
+      revision_id: REVISION,
+      build_recipe_id: env.VERCEL_BUILD_RECIPE_ID,
+      environment_binding_digest: environmentBindingDigest,
+      schedule_manifest_digest: approvedScheduleDigest,
+    }));
+    const crons = CANONICAL_TENANT_SCHEDULES.map((entry) => ({
+      path: Object.keys(entry.queryParameters).length === 0
+        ? entry.routePath
+        : `${entry.routePath}?${new URLSearchParams(Object.entries(entry.queryParameters)).toString()}`,
+      schedule: entry.expression,
+    }));
+    let createBody: Record<string, unknown> | undefined;
+    const fetcher = vercelFetcher((url, method, init) => {
+      if (url.pathname === "/v7/deployments" && method === "GET") {
+        return providerResponse(200, { deployments: [] });
+      }
+      if (url.pathname === "/v9/projects/target-1" && method === "GET") {
+        return providerResponse(200, {
+          id: "target-1",
+          name: "lh2-disposable-disposable-lab",
+          ...(createBody === undefined
+            ? {}
+            : { crons: { deploymentId: "fresh-release", definitions: crons } }),
+        });
+      }
+      if (url.pathname === "/v13/deployments" && method === "POST") {
+        createBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return providerResponse(200, { id: "fresh-release" }, "create-request");
+      }
+      if (url.pathname === "/v13/deployments/fresh-release" && method === "GET") {
+        return providerResponse(200, {
+          id: "fresh-release",
+          readyState: "READY",
+          target: "production",
+          gitSource: { sha: REVISION },
+          meta: { lh2S26BuildDigest: buildIdentityDigest },
+          crons,
+        });
+      }
+      return undefined;
+    });
+    const backend = new S26WorkerBackend(envWith({
+      APPROVED_SOURCE_GIT_SHA: REVISION,
+      APPROVED_SCHEDULE_MANIFEST_DIGEST: approvedScheduleDigest,
+    }), { fetch: fetcher });
+    await expect(backend.invoke(
+      { capability: "hosting", operation: "build" },
+      {
+        target_handle: "target-1",
+        revision_id: REVISION,
+        build_recipe_id: env.VERCEL_BUILD_RECIPE_ID,
+        public_value_names: CANONICAL_TENANT_ENVIRONMENT
+          .filter((entry) => entry.valueClass === "public_build")
+          .map((entry) => entry.name)
+          .sort(),
+        environment_binding_digest: environmentBindingDigest,
+        schedule_manifest_digest: approvedScheduleDigest,
+      },
+    )).resolves.toMatchObject({ releaseHandle: "fresh-release", status: "verified" });
+    expect(createBody).toEqual({
+      name: "lh2-disposable-disposable-lab",
+      project: "target-1",
+      target: "production",
+      gitSource: {
+        type: "github",
+        org: env.SOURCE_REPOSITORY_OWNER,
+        repo: env.SOURCE_REPOSITORY_NAME,
+        ref: REVISION,
+        sha: REVISION,
+      },
+      meta: { lh2S26BuildDigest: buildIdentityDigest },
+    });
+  });
+
+  it("does not promote a release the target already serves", async () => {
+    const promotions: string[] = [];
+    let current = "release-1";
+    const fetcher = vercelFetcher((url, method) => {
+      if (url.pathname === "/v9/projects/target-1" && method === "GET") {
+        return providerResponse(200, {
+          id: "target-1",
+          targets: { production: { id: current, readySubstate: "PROMOTED" } },
+        });
+      }
+      if (url.pathname.includes("/promote/") && method === "POST") {
+        promotions.push(url.pathname);
+        current = url.pathname.split("/").at(-1)!;
+        return providerResponse(200, {});
+      }
+      return undefined;
+    });
+    const backend = new S26WorkerBackend(env, { fetch: fetcher });
+    const adopted = await handle(
+      request("/s26/control-plane/v1/hosting/promote", { target_handle: "target-1", release_handle: "release-1" }),
+      backend,
+    );
+    expect(adopted.status).toBe(200);
+    expect(promotions).toEqual([]);
+    await expect(adopted.json()).resolves.toMatchObject({ activeReleaseHandle: "release-1", rolloutKind: "promote" });
+
+    const promoted = await handle(
+      request("/s26/control-plane/v1/hosting/promote", { target_handle: "target-1", release_handle: "release-2" }),
+      backend,
+    );
+    expect(promoted.status).toBe(200);
+    expect(promotions).toEqual(["/v10/projects/target-1/promote/release-2"]);
+  });
+
+  it("does not mistake an unaliased staged production build for current traffic", async () => {
+    let promoted = false;
+    const promotions: string[] = [];
+    const fetcher = vercelFetcher((url, method) => {
+      if (url.pathname === "/v9/projects/target-1" && method === "GET") {
+        return providerResponse(200, {
+          id: "target-1",
+          targets: {
+            production: {
+              id: "release-staged",
+              readySubstate: promoted ? "PROMOTED" : "STAGED",
+            },
+          },
+        });
+      }
+      if (url.pathname === "/v10/projects/target-1/promote/release-staged" && method === "POST") {
+        promotions.push(url.pathname);
+        promoted = true;
+        return providerResponse(200, {});
+      }
+      return undefined;
+    });
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/promote", {
+        target_handle: "target-1",
+        release_handle: "release-staged",
+      }),
+      new S26WorkerBackend(env, { fetch: fetcher }),
+    );
+    expect(response.status).toBe(200);
+    expect(promotions).toEqual(["/v10/projects/target-1/promote/release-staged"]);
+  });
+
+  it("accepts the closed smoke vocabulary the executor actually sends", async () => {
+    const fetcher = vercelFetcher((url) => {
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/connection_uri")) {
+        return providerResponse(503, {}, "opaque-neon-request");
+      }
+      return undefined;
+    });
+    const backend = new S26WorkerBackend(env, { fetch: fetcher });
+    const unknown = await handle(
+      request("/s26/control-plane/v1/data/smoke", { project_id: "project-1", smoke_test_ids: ["preview-isolation"] }),
+      backend,
+    );
+    expect(unknown.status).toBe(400);
+    await expect(unknown.json()).resolves.toEqual({ code: "unsupported_contract" });
+
+    // The contract's own IDs pass the allowlist and reach the provider, which
+    // is the only difference the boundary can show without a live database.
+    const accepted = await handle(
+      request("/s26/control-plane/v1/data/smoke", {
+        project_id: "project-1",
+        smoke_test_ids: [...CANONICAL_SMOKE_TEST_IDS.data],
+      }),
+      backend,
+    );
+    expect(accepted.status).toBe(502);
+    await expect(accepted.json()).resolves.toEqual({ code: "outcome_unknown", provider_request_id: "opaque-neon-request" });
+  });
+
+  it("reuses and removes the same R2 canary on a smoke retry", async () => {
+    const projectId = "project-r2-smoke-retry";
+    const backend = new S26WorkerBackend(env, { fetch: vi.fn<typeof fetch>() });
+    const body = {
+      project_id: projectId,
+      smoke_test_ids: [...CANONICAL_SMOKE_TEST_IDS.objectStorage],
+      require_private_access_checks: true,
+    };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await handle(
+        request("/s26/control-plane/v1/object-storage/smoke", body),
+        backend,
+      );
+      expect(response.status).toBe(200);
+    }
+    const remaining = await env.TENANT_LEAD_PHOTOS.list({
+      prefix: `${env.RECOVERY_OBJECT_PREFIX}/smoke/${projectId}/`,
+    });
+    expect(remaining.objects).toEqual([]);
+  });
+
+  it("adopts a delivered SMTP smoke marker instead of sending twice", async () => {
+    const projectId = "project-smtp-smoke-retry";
+    const idempotencyKeys: string[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.url);
+      expect(url.hostname).toBe("api.resend.com");
+      expect(url.pathname).toBe("/emails");
+      idempotencyKeys.push(new Headers(init?.headers).get("idempotency-key") ?? "");
+      return providerResponse(200, { id: "email-provider-id" }, "resend-request-1");
+    });
+    const backend = new S26WorkerBackend(env, { fetch: fetcher });
+    const body = {
+      project_id: projectId,
+      smoke_test_ids: [...CANONICAL_SMOKE_TEST_IDS.email],
+    };
+    const first = await handle(request("/s26/control-plane/v1/smtp/smoke", body), backend);
+    const repeated = await handle(request("/s26/control-plane/v1/smtp/smoke", body), backend);
+    expect(first.status).toBe(200);
+    expect(repeated.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(idempotencyKeys).toHaveLength(1);
+    expect(idempotencyKeys[0]).toMatch(/^s26\/[0-9a-f]{64}$/);
+    await expect(first.json()).resolves.toEqual({ providerRequestId: "resend-request-1" });
+    await expect(repeated.json()).resolves.toEqual({ providerRequestId: "resend-request-1" });
+  });
+
+  it("quarantines an email still ambiguous beyond the provider idempotency window", async () => {
+    const projectId = "project-smtp-stale-pending";
+    const recipient = env.RESEND_SMOKE_RECIPIENT;
+    const markerDigest = await sha256Hex(`${recipient}\n${CANONICAL_SMOKE_TEST_IDS.email.join("\n")}`);
+    const markerKey = `${env.RECOVERY_OBJECT_PREFIX}/smtp-smoke/${projectId}/${markerDigest}.json`;
+    await env.CONTROL_PLANE_OBJECTS.put(markerKey, JSON.stringify({
+      version: "s26-email-delivery.v1",
+      state: "pending",
+      idempotencyKey: `s26/${await sha256Hex(markerKey)}`,
+      correlationId: "ambiguous-email-request",
+      createdAt: "2000-01-01T00:00:00.000Z",
+    }));
+    const fetcher = vi.fn<typeof fetch>();
+    const response = await handle(
+      request("/s26/control-plane/v1/smtp/smoke", {
+        project_id: projectId,
+        smoke_test_ids: [...CANONICAL_SMOKE_TEST_IDS.email],
+      }),
+      new S26WorkerBackend(env, { fetch: fetcher }),
+    );
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      code: "outcome_unknown",
+      provider_request_id: "ambiguous-email-request",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

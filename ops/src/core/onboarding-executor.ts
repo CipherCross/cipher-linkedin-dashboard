@@ -1,5 +1,6 @@
 import { OpsError, assertOps } from "./errors.js";
 import { Redactor } from "./redaction.js";
+import { CANONICAL_SMOKE_TEST_IDS } from "./smoke-tests.js";
 import type { StepState } from "./types.js";
 import {
   CANONICAL_TENANT_SCHEDULES,
@@ -57,12 +58,7 @@ export interface OnboardingExecutionContext {
  * The runtime checks the hosting control plane owns inside the smoke suite. The
  * other smoke IDs belong to the data, auth and SMTP ports and are unchanged.
  */
-const HOSTING_RUNTIME_CHECK_IDS: readonly string[] = [
-  "api_health",
-  "cron_configuration",
-  "preview_isolation",
-  "runtime_project_ref",
-];
+const HOSTING_RUNTIME_CHECK_IDS: readonly string[] = CANONICAL_SMOKE_TEST_IDS.hosting;
 
 /** Every public build value in the closed S26 profile. */
 const PUBLIC_VALUE_NAMES: readonly string[] = [...CANONICAL_PUBLIC_BUILD_VALUE_NAMES].sort();
@@ -134,6 +130,22 @@ export class OnboardingExecutor {
 
     try {
       const providerRequestId = await this.#execute(context, next.ordinal);
+      if (next.ordinal === 13) {
+        // Finalization is one registry effect. Marking the step, tenant and
+        // operation in separate transactions leaves an unrecoverable split if
+        // the process stops between them.
+        this.#registry.completeOnboarding(
+          context.tenantId,
+          context.operationId,
+          context.fencingToken,
+          this.#clock(),
+        );
+        return {
+          ordinal: next.ordinal,
+          state: "succeeded",
+          operationState: "succeeded",
+        };
+      }
       if (next.ordinal === 1) {
         this.#registry.transitionTenant(
           context.tenantId,
@@ -163,21 +175,6 @@ export class OnboardingExecutor {
           now: this.#clock(),
         },
       );
-      if (next.ordinal === 13) {
-        this.#registry.transitionTenant(
-          context.tenantId,
-          "active",
-          context.operationId,
-          context.fencingToken,
-          this.#clock(),
-        );
-        this.#registry.transitionOperation(
-          context.operationId,
-          "succeeded",
-          context.fencingToken,
-          { now: this.#clock() },
-        );
-      }
       return {
         ordinal: next.ordinal,
         state: "succeeded",
@@ -242,7 +239,6 @@ export class OnboardingExecutor {
     );
     switch (ordinal) {
       case 1:
-      case 13:
         return undefined;
       case 2: {
         const resource = await this.#providerCall("data.createOrAdoptProject", () => this.#providers.data.createOrAdoptProject({
@@ -488,11 +484,7 @@ export class OnboardingExecutor {
           this.#providers.data.runSmokeTests(
             dataProject.resourceId,
             context.smokeTestIds.filter((id) =>
-              [
-                "schema_ledger",
-                "rls_role_boundaries",
-                "private_storage_delivery",
-              ].includes(id),
+              (CANONICAL_SMOKE_TEST_IDS.data as readonly string[]).includes(id),
             ),
           ),
         );
@@ -500,18 +492,24 @@ export class OnboardingExecutor {
           this.#providers.identity.runSmokeTests(
             dataProject.resourceId,
             context.smokeTestIds.filter((id) =>
-              [
-                "auth_anonymous_denied",
-                "auth_inactive_denied",
-                "auth_member_allowed",
-              ].includes(id),
+              (CANONICAL_SMOKE_TEST_IDS.identity as readonly string[]).includes(id),
+            ),
+          ),
+        );
+        await this.#providerCall("objectStorage.runSmokeTests", () =>
+          this.#providers.objectStorage.runSmokeTests(
+            dataProject.resourceId,
+            context.smokeTestIds.filter((id) =>
+              (CANONICAL_SMOKE_TEST_IDS.objectStorage as readonly string[]).includes(id),
             ),
           ),
         );
         await this.#providerCall("email.runSmokeTests", () =>
           this.#providers.email.runSmokeTests(
             dataProject.resourceId,
-            context.smokeTestIds.filter((id) => id === "smtp_delivery"),
+            context.smokeTestIds.filter((id) =>
+              (CANONICAL_SMOKE_TEST_IDS.email as readonly string[]).includes(id),
+            ),
           ),
         );
         const verification = await this.#providerCall(
@@ -544,6 +542,8 @@ export class OnboardingExecutor {
             }),
           )
         ).providerRequestId;
+      case 13:
+        return undefined;
       default:
         throw new OpsError("invalid_plan", `Unknown onboarding ordinal ${ordinal}`);
     }

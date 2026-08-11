@@ -286,13 +286,19 @@ export async function runCli(
         case "tenant:verify": {
           assertOnly(parsed, [...runtimeOptions(), "operation-id"]);
           const operationId = requiredOption(parsed, "operation-id");
+          const tenantSlug = businessInputs(parsed).tenant_slug;
+          assertOps(
+            typeof tenantSlug === "string" && tenantSlug.length > 0,
+            "invalid_plan",
+            "The selected runtime must provide a tenant slug",
+          );
           const operations = await ownerOperations(parsed, registry, redactor, makeSecretStore(redactor));
           emit(stdout, redactor, {
             operation: await operations.call("operation_get", {
               operation_id: operationId,
             }),
             tenant: await operations.call("tenant_get", {
-              tenant_slug: "p4c-lab",
+              tenant_slug: tenantSlug,
             }),
           });
           return 0;

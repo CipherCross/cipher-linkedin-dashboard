@@ -114,6 +114,11 @@ test("S26 deterministic fake plan completes the disposable onboarding fixture", 
       1,
     );
     assert.equal(bundle.registry.countResourceReferences(bundle.tenantId), 4);
+    const repeated = await bundle.core.applyOrResume(
+      fixtureRequest(bundle.registry.registryVersion),
+    );
+    assert.equal(repeated.executedOrdinal, null);
+    assert.equal(repeated.state, "succeeded");
     const spec = bundle.plan.spec as Record<string, unknown>;
     assert.deepEqual(
       (spec.recovery as { coverage: readonly string[] }).coverage,
@@ -130,6 +135,41 @@ test("S26 deterministic fake plan completes the disposable onboarding fixture", 
         (smoke) => smoke.id === "rls_role_boundaries",
       ),
     );
+    bundle.registry.verifyAuditChain();
+  } finally {
+    bundle.registry.close();
+  }
+});
+
+test("S26 finalization cannot commit a split step, tenant, and operation state", async () => {
+  const bundle = await fixtureCore();
+  try {
+    let request = fixtureRequest();
+    let operationId = "";
+    for (let ordinal = 1; ordinal <= 12; ordinal += 1) {
+      const result = await bundle.core.applyOrResume(request);
+      assert.equal(result.executedOrdinal, ordinal);
+      operationId = result.operationId;
+      request = {
+        ...request,
+        expected_registry_version: bundle.registry.registryVersion,
+      };
+    }
+    bundle.registry.unsafeDatabaseForTests().exec(`
+      CREATE TEMP TRIGGER reject_operation_completion
+      BEFORE UPDATE OF state ON operations
+      WHEN NEW.state = 'succeeded'
+      BEGIN
+        SELECT RAISE(ABORT, 'injected-finalization-failure');
+      END;
+    `);
+
+    await assert.rejects(bundle.core.applyOrResume(request));
+    const finalStep = bundle.registry.listSteps(operationId)[12]!;
+    assert.equal(finalStep.state, "failed");
+    assert.equal(bundle.registry.getTenantLifecycle(bundle.tenantId), "quarantined");
+    assert.equal(bundle.registry.getOperation(operationId)?.state, "failed");
+    assert.notEqual(finalStep.state, "succeeded");
     bundle.registry.verifyAuditChain();
   } finally {
     bundle.registry.close();

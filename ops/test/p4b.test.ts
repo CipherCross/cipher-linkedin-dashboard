@@ -255,6 +255,7 @@ const injectedEffects = [
   ["hosting", "promoteRelease"],
   ["data", "runSmokeTests"],
   ["identity", "runSmokeTests"],
+  ["objectStorage", "runSmokeTests"],
   ["email", "runSmokeTests"],
   ["hosting", "verifyDeployment"],
   ["identity", "createCompanyAdminAndInvite"],
@@ -268,6 +269,10 @@ test("failure after every provider effect quarantines and resumes without duplic
         [providerName]: [
           { method, call: 1, timing: "after_effect" },
         ] satisfies readonly FailureRule[],
+        // FakeObjectStorage historically inherits data failures for the old
+        // combined Supabase port. Smoke now has a distinct R2 owner, so a data
+        // failure must not be injected a second time into that separate call.
+        ...(providerName === "data" ? { objectStorage: [] } : {}),
       };
       const providerPorts = new FakeOnboardingProviderBundle(rules);
       const { core } = runtime(registry, strictProviders(providerPorts));

@@ -147,6 +147,12 @@ test("smoke ownership is complete and admin invite remains the following step", 
       return super.createCompanyAdminAndInvite(request);
     }
   }
+  class RecordingStorage extends FakeSupabaseProvider {
+    override async runSmokeTests(projectId: string, ids: readonly string[]) {
+      events.push(`storage:${ids.join(",")}`);
+      return super.runSmokeTests(projectId, ids);
+    }
+  }
   class RecordingSmtp extends FakeSmtpProvider {
     override async runSmokeTests(projectId: string, ids: readonly string[]) {
       events.push(`smtp:${ids.join(",")}`);
@@ -165,7 +171,7 @@ test("smoke ownership is complete and admin invite remains the following step", 
     const providers: OnboardingProviders = {
       data: new RecordingSupabase(),
       identity: new RecordingAuth(),
-      objectStorage: new RecordingSupabase(),
+      objectStorage: new RecordingStorage(),
       hosting: new RecordingHosting(),
       email: new RecordingSmtp(),
       domain: new FakeDomainProvider(),
@@ -210,8 +216,9 @@ test("smoke ownership is complete and admin invite remains the following step", 
     }
     assert.equal(events.includes("admin-invite"), false);
     assert.deepEqual(events, [
-      "supabase:schema_ledger,rls_role_boundaries,private_storage_delivery",
+      "supabase:schema_ledger,rls_role_boundaries",
       "auth:auth_anonymous_denied,auth_inactive_denied,auth_member_allowed",
+      "storage:private_storage_delivery",
       "smtp:smtp_delivery",
       "hosting:api_health,cron_configuration,preview_isolation,runtime_project_ref",
     ]);

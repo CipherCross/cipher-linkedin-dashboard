@@ -3,10 +3,15 @@ import { Pool, type PoolClient, type QueryResult } from "@neondatabase/serverles
 
 import { OpsError } from "../core/errors.js";
 import { canonicalJson, sha256Digest, type JsonValue } from "../core/canonical.js";
+import { CANONICAL_SMOKE_TEST_IDS } from "../core/smoke-tests.js";
 import {
   CANONICAL_TENANT_ENVIRONMENT,
 } from "../providers/hosting-tenant.js";
-import { hostingEnvironmentBindingDigest } from "../providers/hosting.js";
+import {
+  CANONICAL_TENANT_SCHEDULES,
+  hostingEnvironmentBindingDigest,
+  scheduleManifestDigest,
+} from "../providers/hosting.js";
 import { neonOwnershipRoleName } from "../providers/neon-ownership.js";
 import type { S26BridgeBackend } from "../bridge/s26-control-plane-service.js";
 import type { S26BridgeRoute } from "../providers/s26-bridge-contract.js";
@@ -25,6 +30,15 @@ interface StoredRecoveryArtifact {
   readonly ownershipMarkerDigest: string;
   readonly capturedAt: string;
   readonly payload: JsonRecord;
+}
+
+interface EmailDeliveryMarker {
+  readonly version: "s26-email-delivery.v1";
+  readonly state: "pending" | "delivered";
+  readonly idempotencyKey: string;
+  readonly correlationId: string;
+  readonly createdAt: string;
+  readonly providerRequestId?: string;
 }
 
 function isRecoveryCapability(value: string): value is StoredRecoveryArtifact["capability"] {
@@ -115,12 +129,36 @@ function schedulePath(schedule: JsonRecord): string {
   return `${route}?${new URLSearchParams(pairs).toString()}`;
 }
 
+function canonicalCronSet(): readonly { readonly path: string; readonly schedule: string }[] {
+  return CANONICAL_TENANT_SCHEDULES.map((entry) => {
+    const pairs = Object.entries(entry.queryParameters)
+      .map(([name, value]) => [name, value] as [string, string])
+      .sort(([left], [right]) => left.localeCompare(right));
+    const path = pairs.length === 0
+      ? entry.routePath
+      : `${entry.routePath}?${new URLSearchParams(pairs).toString()}`;
+    return { path, schedule: entry.expression };
+  });
+}
+
 function observedCrons(value: JsonRecord): readonly { readonly path: string; readonly schedule: string }[] {
-  if (!Array.isArray(value.crons)) return [];
-  return value.crons.map((entry) => {
+  const cronValue = value.crons;
+  const entries = Array.isArray(cronValue)
+    ? cronValue
+    : typeof cronValue === "object" && cronValue !== null && !Array.isArray(cronValue)
+      && Array.isArray((cronValue as Record<string, unknown>).definitions)
+      ? (cronValue as Record<string, unknown>).definitions as readonly unknown[]
+      : [];
+  return entries.map((entry) => {
     const cron = record(entry, "Vercel cron");
     return { path: stringField(cron, "path"), schedule: stringField(cron, "schedule") };
   });
+}
+
+function projectCronDeploymentId(value: JsonRecord): string | null {
+  if (typeof value.crons !== "object" || value.crons === null || Array.isArray(value.crons)) return null;
+  const deploymentId = (value.crons as Record<string, unknown>).deploymentId;
+  return typeof deploymentId === "string" ? deploymentId : null;
 }
 
 function expectedCrons(value: JsonRecord): readonly { readonly id: string; readonly path: string; readonly schedule: string; readonly source: JsonRecord }[] {
@@ -201,6 +239,7 @@ async function providerJson(input: {
   readonly method?: "GET" | "POST" | "PATCH";
   readonly body?: JsonRecord;
   readonly fetcher?: typeof fetch;
+  readonly idempotencyKey?: string;
 }): Promise<{ readonly id: string; readonly value: JsonRecord; readonly status: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -213,6 +252,8 @@ async function providerJson(input: {
         accept: "application/json",
         ...(input.body === undefined ? {} : { "content-type": "application/json" }),
         ...(input.provider === "source-repository" ? { "user-agent": "lh2-s26-control-plane" } : {}),
+        ...(input.provider === "resend" ? { "user-agent": "lh2-s26-control-plane" } : {}),
+        ...(input.idempotencyKey === undefined ? {} : { "idempotency-key": input.idempotencyKey }),
       },
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
       signal: controller.signal,
@@ -292,6 +333,11 @@ async function bindingMutation<T>(provider: string, operation: () => Promise<T>)
       provider_request_id: crypto.randomUUID(),
     });
   }
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function sqlText(text: string): string {
@@ -452,7 +498,9 @@ export class S26WorkerBackend implements S26BridgeBackend {
   }
 
   async #dataSmoke(input: JsonRecord): Promise<unknown> {
-    const allowed = new Set(["schema", "auth", "rls", "storage", "api", "cron", "preview-isolation", "smtp"]);
+    // The closed suite's own vocabulary, shared with the executor that routes
+    // it. An abbreviated private spelling here rejected every real request.
+    const allowed = new Set<string>(CANONICAL_SMOKE_TEST_IDS.data);
     if (stringArray(input, "smoke_test_ids").some((id) => !allowed.has(id))) {
       throw new OpsError("unsupported_contract", "Unknown smoke test ID");
     }
@@ -553,21 +601,28 @@ export class S26WorkerBackend implements S26BridgeBackend {
       .replaceAll("__ADMIN_EMAIL__", sqlLiteral(email))
       .replaceAll("__ADMIN_SUBJECT__", sqlLiteral(subject))
       .replaceAll("__ADMIN_PASSWORD_HASH__", sqlLiteral(passwordHash));
-    await databaseMutation(
-      await this.#ownerConnectionUri(stringField(input, "project_id")),
-      statement,
-    );
+    const projectId = stringField(input, "project_id");
+    await databaseMutation(await this.#ownerConnectionUri(projectId), statement);
+    // The admin row is idempotent in SQL. Email is reconciled separately with a
+    // durable pending/delivered marker and the provider's idempotency key.
+    const marker = `${this.env.RECOVERY_OBJECT_PREFIX}/identity-invite/${projectId}/${await sha256Hex(email)}.json`;
     // The generated bootstrap password is deliberately discarded. The approved
     // application-hosted Better Auth reset flow is the only way to set one.
-    await this.#sendResend(
+    const providerRequestId = await this.#sendResendOnce(
+      marker,
       email,
       "Your CipherCross dashboard invitation",
       `Open ${this.env.BETTER_AUTH_BASE_URL}/#/reset-password and request a password-reset link for this address.`,
     );
-    return { providerRequestId: crypto.randomUUID() };
+    return { providerRequestId };
   }
 
   async #identitySmoke(input: JsonRecord): Promise<unknown> {
+    if (stringArray(input, "smoke_test_ids").some(
+      (id) => !(CANONICAL_SMOKE_TEST_IDS.identity as readonly string[]).includes(id),
+    )) {
+      throw new OpsError("unsupported_contract", "Unknown identity smoke test ID");
+    }
     const result = await databaseQuery(
       await this.#ownerConnectionUri(stringField(input, "project_id")),
       "SELECT to_regclass('identity.\"user\"') IS NOT NULL AS identity_store, to_regprocedure('public.identity_admin_invite_member_atomic(text,text,text,text,text,text)') IS NOT NULL AS invite_path",
@@ -581,17 +636,26 @@ export class S26WorkerBackend implements S26BridgeBackend {
 
   async #objectSmoke(input: JsonRecord): Promise<unknown> {
     if (input.require_private_access_checks !== true) throw new OpsError("unsupported_contract", "Private object checks are required");
-    const key = `${this.env.RECOVERY_OBJECT_PREFIX}/smoke/${stringField(input, "project_id")}/${crypto.randomUUID()}`;
-    await bindingMutation("R2", () => this.env.CONTROL_PLANE_OBJECTS.put(key, new Uint8Array([0x53, 0x32, 0x36])));
-    const observed = await this.env.CONTROL_PLANE_OBJECTS.get(key);
-    await bindingMutation("R2", () => this.env.CONTROL_PLANE_OBJECTS.delete(key));
+    const smokeTestIds = stringArray(input, "smoke_test_ids");
+    if (smokeTestIds.some(
+      (id) => !(CANONICAL_SMOKE_TEST_IDS.objectStorage as readonly string[]).includes(id),
+    )) {
+      throw new OpsError("unsupported_contract", "Unknown object-storage smoke test ID");
+    }
+    // The same key is deliberately reused. If a prior put/delete response was
+    // lost, the retry reconciles that exact canary instead of leaking one more
+    // object on every attempt.
+    const key = `${this.env.RECOVERY_OBJECT_PREFIX}/smoke/${stringField(input, "project_id")}/${await sha256Hex([...smokeTestIds].sort().join("\n"))}`;
+    await bindingMutation("R2", () => this.env.TENANT_LEAD_PHOTOS.put(key, new Uint8Array([0x53, 0x32, 0x36])));
+    const observed = await this.env.TENANT_LEAD_PHOTOS.get(key);
+    await bindingMutation("R2", () => this.env.TENANT_LEAD_PHOTOS.delete(key));
     if (observed === null) throw new OpsError("provider_error", "R2 binding smoke check failed");
     return { providerRequestId: crypto.randomUUID() };
   }
 
   async #objectRecoveryCapture(input: JsonRecord): Promise<unknown> {
     const source = stringField(input, "source_resource_id");
-    const listed = await this.env.CONTROL_PLANE_OBJECTS.list({ prefix: `tenant/${source}/`, limit: 1000 });
+    const listed = await this.env.TENANT_LEAD_PHOTOS.list({ prefix: `tenant/${source}/`, limit: 1000 });
     if (listed.truncated) throw new OpsError("provider_error", "R2 recovery inventory exceeded the fixed object limit");
     const totalBytes = listed.objects.reduce((sum, object) => sum + object.size, 0);
     if (totalBytes > 100 * 1024 * 1024) {
@@ -600,7 +664,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const artifactId = crypto.randomUUID();
     const objects: Array<Record<string, unknown>> = [];
     for (const [index, listedObject] of listed.objects.entries()) {
-      const sourceObject = await this.env.CONTROL_PLANE_OBJECTS.get(listedObject.key);
+      const sourceObject = await this.env.TENANT_LEAD_PHOTOS.get(listedObject.key);
       if (sourceObject === null || sourceObject.etag !== listedObject.etag) {
         throw new OpsError("recovery_conflict", "R2 source changed during recovery capture");
       }
@@ -641,7 +705,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       const options: R2PutOptions = {};
       if (source.httpMetadata !== undefined) options.httpMetadata = source.httpMetadata;
       if (source.customMetadata !== undefined) options.customMetadata = source.customMetadata;
-      await bindingMutation("R2", () => this.env.CONTROL_PLANE_OBJECTS.put(`tenant/${target}/${suffix}`, source.body, options));
+      await bindingMutation("R2", () => this.env.TENANT_LEAD_PHOTOS.put(`tenant/${target}/${suffix}`, source.body, options));
     }
     return { providerRequestId: crypto.randomUUID() };
   }
@@ -659,13 +723,13 @@ export class S26WorkerBackend implements S26BridgeBackend {
         passed = false;
         break;
       }
-      const restored = await this.env.CONTROL_PLANE_OBJECTS.head(`tenant/${target}/${sourceKey.slice(sourcePrefix.length)}`);
+      const restored = await this.env.TENANT_LEAD_PHOTOS.head(`tenant/${target}/${sourceKey.slice(sourcePrefix.length)}`);
       if (restored === null || restored.size !== numberField(object, "size")) {
         passed = false;
         break;
       }
     }
-    const listed = await this.env.CONTROL_PLANE_OBJECTS.list({ prefix: `tenant/${target}/`, limit: 1000 });
+    const listed = await this.env.TENANT_LEAD_PHOTOS.list({ prefix: `tenant/${target}/`, limit: 1000 });
     passed = passed && !listed.truncated && listed.objects.length === objects.length;
     return { providerRequestId: crypto.randomUUID(), coverage: ["storage_metadata", "private_storage_objects_or_reconstruction"], passed, checkedAt: new Date().toISOString() };
   }
@@ -795,30 +859,50 @@ export class S26WorkerBackend implements S26BridgeBackend {
     };
 
     const existingValues = Array.isArray(existingResponse.value.envs) ? existingResponse.value.envs : [];
-    const existingByName = new Map(
-      existingValues.map((entry) => {
-        const current = record(entry, "Vercel environment entry");
-        return [stringField(current, "key"), current] as const;
-      }),
-    );
+    // Only a production entry counts as this binding being already present; a
+    // preview-scoped value of the same name is a different binding.
+    const existingByName = new Map<string, JsonRecord>();
+    for (const rawEntry of existingValues) {
+      const entry = record(rawEntry, "Vercel environment entry");
+      const targets = Array.isArray(entry.target)
+        ? entry.target.filter((target): target is string => typeof target === "string")
+        : [];
+      if (!targets.includes("production")) continue;
+      const name = stringField(entry, "key");
+      if (name === "LH2_OWNERSHIP_MARKER_DIGEST") continue;
+      if (existingByName.has(name)) {
+        throw new OpsError("provider_error", `Vercel production binding ${name} is duplicated`);
+      }
+      const expected = this.#hostingValueSpec(name);
+      const expectedType = expected.valueClass === "server_secret" ? "sensitive" : "encrypted";
+      if (entry.type !== expectedType || JSON.stringify([...targets].sort()) !== JSON.stringify(["production"])) {
+        throw new OpsError("provider_error", `Vercel production binding ${name} has the wrong scope or type`);
+      }
+      existingByName.set(name, entry);
+    }
     let lastRequestId = existingResponse.id;
     const resultBindings: Array<{ name: string; valueClass: string; sourceKind: string }> = [];
     for (const descriptor of descriptors) {
       const name = stringField(descriptor, "name");
       const valueClass = stringField(descriptor, "value_class");
       const sourceKind = stringField(descriptor, "source_kind");
-      const approved = this.#hostingValue(name, applicationConnectionUris, generatedValue);
-      const current = existingByName.get(name);
-      const body = {
-        key: name,
-        value: approved.value,
-        type: valueClass === "server_secret" ? "sensitive" : "encrypted",
-        target: ["production"],
-      };
-      const response = current === undefined
-        ? await this.#vercel(`/v10/projects/${encodeURIComponent(target)}/env`, "POST", body)
-        : await this.#vercel(`/v9/projects/${encodeURIComponent(target)}/env/${encodeURIComponent(stringField(current, "id"))}`, "PATCH", body);
-      lastRequestId = response.id;
+      // A binding this target already carries is the retried case: the step's
+      // outcome — the closed profile is bound to production — is already true
+      // for that name. Re-writing it would mint a fresh generated secret on
+      // every retry and silently rotate the tenant's credentials underneath a
+      // release that was already promoted with the previous ones. Whether the
+      // adopted values are the right ones stays the verification step's job;
+      // a sensitive Vercel value cannot be read back and compared here.
+      if (!existingByName.has(name)) {
+        const approved = this.#hostingValue(name, applicationConnectionUris, generatedValue);
+        const response = await this.#vercel(`/v10/projects/${encodeURIComponent(target)}/env`, "POST", {
+          key: name,
+          value: approved.value,
+          type: valueClass === "server_secret" ? "sensitive" : "encrypted",
+          target: ["production"],
+        });
+        lastRequestId = response.id;
+      }
       resultBindings.push({ name, valueClass, sourceKind });
     }
     return {
@@ -904,16 +988,57 @@ export class S26WorkerBackend implements S26BridgeBackend {
       throw new OpsError("provider_snapshot_drift", "Vercel environment binding digest is not the closed S26 profile");
     }
     const scheduleDigest = stringField(input, "schedule_manifest_digest");
-    if (scheduleDigest !== requireConfigured(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")) {
+    if (
+      scheduleDigest !== requireConfigured(this.env.APPROVED_SCHEDULE_MANIFEST_DIGEST, "APPROVED_SCHEDULE_MANIFEST_DIGEST")
+      || scheduleDigest !== scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES)
+    ) {
       throw new OpsError("provider_snapshot_drift", "Vercel schedule manifest digest is not approved");
     }
-    const response = await this.#vercel("/v13/deployments", "POST", {
-      name: stringField(input, "target_handle"),
-      project: stringField(input, "target_handle"),
-      gitSource: { type: "github", repo: `${this.env.SOURCE_REPOSITORY_OWNER}/${this.env.SOURCE_REPOSITORY_NAME}`, ref: revision },
-    });
-    const release = stringField(response.value, "id");
-    const deployment = await this.#waitForDeployment(release, response.id);
+    // A build this target already holds for the approved revision is the
+    // retried case: the step's outcome — a verified release of that exact SHA
+    // exists — is already true. Creating another one would leave a second
+    // deployment behind and move the registry's build reference off the
+    // release that step 10 may already have promoted.
+    const target = stringField(input, "target_handle");
+    const buildIdentityDigest = sha256Digest(canonicalJson({
+      target_handle: target,
+      revision_id: revision,
+      build_recipe_id: buildRecipe,
+      environment_binding_digest: environmentBindingDigest,
+      schedule_manifest_digest: scheduleDigest,
+    }));
+    const expectedCrons = canonicalCronSet();
+    const adopted = await this.#existingDeployment(
+      target,
+      revision,
+      buildIdentityDigest,
+      expectedCrons,
+    );
+    const deployment = adopted ?? await (async () => {
+      const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
+      const projectName = stringField(project.value, "name");
+      const response = await this.#vercel("/v13/deployments", "POST", {
+        name: projectName,
+        project: target,
+        // The project has automatic domain assignment disabled in step 6, so
+        // this is a staged production build: it receives the production-only
+        // bindings from step 7 without serving traffic before step 10.
+        target: "production",
+        gitSource: {
+          type: "github",
+          org: this.env.SOURCE_REPOSITORY_OWNER,
+          repo: this.env.SOURCE_REPOSITORY_NAME,
+          ref: revision,
+          sha: revision,
+        },
+        meta: { lh2S26BuildDigest: buildIdentityDigest },
+      });
+      const ready = await this.#waitForDeployment(stringField(response.value, "id"), response.id);
+      this.#assertDeploymentIdentity(ready.value, revision, buildIdentityDigest);
+      await this.#waitForProjectCrons(target, stringField(ready.value, "id"), expectedCrons, ready.id);
+      return ready;
+    })();
+    const release = stringField(deployment.value, "id");
     const gitSource = record(deployment.value.gitSource, "Vercel deployment git source");
     const observedRevision = gitSource.sha ?? gitSource.ref;
     if (observedRevision !== revision) {
@@ -924,7 +1049,8 @@ export class S26WorkerBackend implements S26BridgeBackend {
 
   async #hostingSchedules(input: JsonRecord): Promise<unknown> {
     const release = stringField(input, "release_handle");
-    const deployment = await this.#vercel(`/v13/deployments/${encodeURIComponent(release)}`);
+    const target = stringField(input, "target_handle");
+    const deployment = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
     const expected = expectedCrons(input);
     const manifestDigest = stringField(input, "manifest_digest");
     if (
@@ -933,15 +1059,84 @@ export class S26WorkerBackend implements S26BridgeBackend {
     ) {
       throw new OpsError("provider_snapshot_drift", "Vercel schedule manifest digest is not the fixed approved set");
     }
-    if (!cronsMatch(expected, observedCrons(deployment.value))) {
+    if (projectCronDeploymentId(deployment.value) !== release || !cronsMatch(expected, observedCrons(deployment.value))) {
       throw new OpsError("provider_error", "Vercel deployment cron manifest does not match the fixed schedule set");
     }
-    return { hostingRequestId: deployment.id, targetHandle: stringField(input, "target_handle"), releaseHandle: release, registered: input.schedules, manifestDigest };
+    return { hostingRequestId: deployment.id, targetHandle: target, releaseHandle: release, registered: input.schedules, manifestDigest };
+  }
+
+  /**
+   * The newest READY deployment of this target that already carries the
+   * approved revision, if one exists. The list endpoint's commit metadata only
+   * selects candidates; the revision is confirmed on the same deployment
+   * record, and by the same comparison, that a fresh build is confirmed with.
+   */
+  async #existingDeployment(
+    target: string,
+    revision: string,
+    buildIdentityDigest: string,
+    expectedCrons: readonly { readonly path: string; readonly schedule: string }[],
+  ): Promise<{ readonly id: string; readonly value: JsonRecord } | null> {
+    const listed = await this.#vercel(
+      `/v7/deployments?projectId=${encodeURIComponent(target)}&sha=${encodeURIComponent(revision)}&limit=20`,
+    );
+    const deployments = Array.isArray(listed.value.deployments) ? listed.value.deployments : [];
+    for (const entry of deployments) {
+      const candidate = record(entry, "Vercel deployment");
+      const meta = typeof candidate.meta === "object" && candidate.meta !== null
+        ? record(candidate.meta, "Vercel deployment metadata")
+        : {};
+      if (meta.lh2S26BuildDigest !== buildIdentityDigest) continue;
+      const deployment = await this.#vercel(`/v13/deployments/${encodeURIComponent(stringField(candidate, "uid"))}?withGitRepoInfo=true`);
+      if (["ERROR", "CANCELED", "BLOCKED"].includes(String(deployment.value.readyState))) continue;
+      const ready = deployment.value.readyState === "READY"
+        ? deployment
+        : await this.#waitForDeployment(stringField(deployment.value, "id"), deployment.id);
+      this.#assertDeploymentIdentity(ready.value, revision, buildIdentityDigest);
+      await this.#waitForProjectCrons(target, stringField(ready.value, "id"), expectedCrons, ready.id);
+      return ready;
+    }
+    return null;
+  }
+
+  #assertDeploymentIdentity(
+    deployment: JsonRecord,
+    revision: string,
+    buildIdentityDigest: string,
+  ): void {
+    const meta = record(deployment.meta, "Vercel deployment metadata");
+    const gitSource = record(deployment.gitSource, "Vercel deployment git source");
+    if (
+      meta.lh2S26BuildDigest !== buildIdentityDigest
+      || (gitSource.sha ?? gitSource.ref) !== revision
+      || deployment.target !== "production"
+    ) {
+      throw new OpsError("provider_snapshot_drift", "Vercel deployment does not match the marked S26 build inputs");
+    }
+  }
+
+  async #waitForProjectCrons(
+    target: string,
+    release: string,
+    expectedCrons: readonly { readonly path: string; readonly schedule: string }[],
+    buildRequestId: string,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
+      if (
+        projectCronDeploymentId(project.value) === release
+        && cronsMatch(expectedCrons, observedCrons(project.value))
+      ) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+    }
+    throw new OpsError("outcome_unknown", "Vercel cron activation outcome is unknown", {
+      provider_request_id: buildRequestId,
+    });
   }
 
   async #waitForDeployment(release: string, createRequestId: string): Promise<{ readonly id: string; readonly value: JsonRecord }> {
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const deployment = await this.#vercel(`/v13/deployments/${encodeURIComponent(release)}`);
+      const deployment = await this.#vercel(`/v13/deployments/${encodeURIComponent(release)}?withGitRepoInfo=true`);
       if (deployment.value.readyState === "READY") return deployment;
       if (deployment.value.readyState === "ERROR" || deployment.value.readyState === "CANCELED") {
         throw new OpsError("provider_error", "Vercel deployment did not reach READY", {
@@ -959,18 +1154,57 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const target = stringField(input, "target_handle");
     const active = stringField(input, "release_handle");
     const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
-    const previous = kind === "promote"
-      ? this.#latestDeploymentId(project.value)
-      : stringField(input, "superseded_release_handle");
-    const response = await this.#vercel(`/v13/deployments/${encodeURIComponent(active)}/promote`, "POST", { projectId: target });
+    const current = this.#latestDeploymentId(project.value);
+    const previous = kind === "promote" ? current : stringField(input, "superseded_release_handle");
+    // A release this target already serves is the retried case: the step's
+    // outcome — production points at this release — is already true, so the
+    // promotion is adopted rather than issued a second time. A rollback stays
+    // explicit; it names the release it supersedes and is never inferred.
+    const response = kind === "promote" && current === active
+      ? project
+      : await this.#vercel(
+        `/v10/projects/${encodeURIComponent(target)}/promote/${encodeURIComponent(active)}`,
+        "POST",
+      );
+    if (current !== active) await this.#waitForActiveRelease(target, active, response.id);
     return { hostingRequestId: response.id, targetHandle: target, rolloutHandle: response.id, rolloutKind: kind, activeReleaseHandle: active, previousReleaseHandle: previous, rolloutSequence: Date.now(), reasonCode: kind === "rollback" ? stringField(input, "reason_code") : null };
   }
 
   #latestDeploymentId(project: JsonRecord): string | null {
+    if (typeof project.targets === "object" && project.targets !== null && !Array.isArray(project.targets)) {
+      const production = (project.targets as Record<string, unknown>).production;
+      if (typeof production === "object" && production !== null && !Array.isArray(production)) {
+        const target = production as Record<string, unknown>;
+        const id = target.id;
+        const promoted = target.readySubstate === "PROMOTED"
+          || target.aliasAssigned === true
+          || (typeof target.aliasAssigned === "number" && Number.isFinite(target.aliasAssigned));
+        // `targets.production` may point at the newest staged production
+        // build before it serves traffic. Only its promoted/aliased state is
+        // the step-10 postcondition.
+        if (typeof id === "string" && promoted) return id;
+      }
+      return null;
+    }
     if (typeof project.latestDeploymentId === "string") return project.latestDeploymentId;
     if (!Array.isArray(project.latestDeployments) || project.latestDeployments.length === 0) return null;
     const latest = record(project.latestDeployments[0], "Vercel latest deployment");
     return typeof latest.id === "string" ? latest.id : null;
+  }
+
+  async #waitForActiveRelease(
+    target: string,
+    release: string,
+    promoteRequestId: string,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
+      if (this.#latestDeploymentId(project.value) === release) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+    }
+    throw new OpsError("outcome_unknown", "Vercel promotion outcome is unknown", {
+      provider_request_id: promoteRequestId,
+    });
   }
 
   /**
@@ -1032,13 +1266,14 @@ export class S26WorkerBackend implements S26BridgeBackend {
   async #hostingVerify(input: JsonRecord): Promise<unknown> {
     const target = stringField(input, "target_handle");
     const expected = stringField(input, "expected_active_release_handle");
-    const response = await this.#vercel(`/v13/deployments/${encodeURIComponent(expected)}`);
+    const response = await this.#vercel(`/v13/deployments/${encodeURIComponent(expected)}?withGitRepoInfo=true`);
     const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
     const environment = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}/env`);
     const ready = response.value.readyState === "READY";
     const expectedScheduleSet = expectedCrons(input);
-    const providerCrons = observedCrons(response.value);
-    const schedulesMatch = cronsMatch(expectedScheduleSet, providerCrons);
+    const providerCrons = observedCrons(project.value);
+    const schedulesMatch = projectCronDeploymentId(project.value) === expected
+      && cronsMatch(expectedScheduleSet, providerCrons);
     const missingScheduleIds = expectedScheduleSet
       .filter((candidate) => !providerCrons.some((observed) => observed.path === candidate.path && observed.schedule === candidate.schedule))
       .map((candidate) => candidate.id);
@@ -1158,8 +1393,21 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return { providerRequestId: response.id, coverage: ["deployment_configuration_metadata"], passed: target === artifact.sourceResourceId && this.#latestDeploymentId(response.value) === artifact.payload.latest_deployment_id && metadataMatches && expectedDigest === observedEnvironment.bindingDigest, checkedAt: new Date().toISOString() };
   }
 
-  async #resend(path: string, method: "GET" | "POST" = "GET", body?: JsonRecord) {
-    return providerJson({ provider: "resend", url: `${this.env.RESEND_API_BASE_URL}${path}`, token: requireBinding(this.env.RESEND_API_KEY, "RESEND_API_KEY"), method, fetcher: this.#fetch, ...(body === undefined ? {} : { body }) });
+  async #resend(
+    path: string,
+    method: "GET" | "POST" = "GET",
+    body?: JsonRecord,
+    idempotencyKey?: string,
+  ) {
+    return providerJson({
+      provider: "resend",
+      url: `${this.env.RESEND_API_BASE_URL}${path}`,
+      token: requireBinding(this.env.RESEND_API_KEY, "RESEND_API_KEY"),
+      method,
+      fetcher: this.#fetch,
+      ...(body === undefined ? {} : { body }),
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+    });
   }
 
   async #smtpInspect(input: JsonRecord): Promise<unknown> {
@@ -1188,13 +1436,110 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return { providerRequestId: crypto.randomUUID() };
   }
 
-  async #sendResend(to: string, subject: string, text: string): Promise<string> {
-    const response = await this.#resend("/emails", "POST", { from: this.env.RESEND_FROM_IDENTITY, to: [to], subject, text });
+  async #sendResend(to: string, subject: string, text: string, idempotencyKey: string): Promise<string> {
+    const response = await this.#resend(
+      "/emails",
+      "POST",
+      { from: this.env.RESEND_FROM_IDENTITY, to: [to], subject, text },
+      idempotencyKey,
+    );
     return response.id;
   }
 
+  async #sendResendOnce(
+    markerKey: string,
+    to: string,
+    subject: string,
+    text: string,
+  ): Promise<string> {
+    const object = await bindingMutation("R2", () => this.env.CONTROL_PLANE_OBJECTS.get(markerKey));
+    let marker: EmailDeliveryMarker;
+    if (object === null) {
+      marker = {
+        version: "s26-email-delivery.v1",
+        state: "pending",
+        idempotencyKey: `s26/${await sha256Hex(markerKey)}`,
+        correlationId: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
+      await bindingMutation("R2", () => this.env.CONTROL_PLANE_OBJECTS.put(
+        markerKey,
+        JSON.stringify(marker),
+        { httpMetadata: { contentType: "application/json" } },
+      ));
+    } else {
+      const raw = record(await object.json(), "R2 email-delivery marker");
+      if (
+        raw.version !== "s26-email-delivery.v1"
+        || (raw.state !== "pending" && raw.state !== "delivered")
+        || typeof raw.idempotencyKey !== "string"
+        || typeof raw.correlationId !== "string"
+        || typeof raw.createdAt !== "string"
+        || !Number.isFinite(Date.parse(raw.createdAt))
+      ) {
+        throw new OpsError("provider_error", "R2 email-delivery marker is invalid");
+      }
+      marker = {
+        version: raw.version,
+        state: raw.state,
+        idempotencyKey: raw.idempotencyKey,
+        correlationId: raw.correlationId,
+        createdAt: raw.createdAt,
+        ...(typeof raw.providerRequestId === "string"
+          ? { providerRequestId: raw.providerRequestId }
+          : {}),
+      };
+    }
+
+    if (marker.state === "delivered") {
+      if (marker.providerRequestId === undefined) {
+        throw new OpsError("provider_error", "Delivered email marker has no provider request ID");
+      }
+      return marker.providerRequestId;
+    }
+    // Resend retains idempotency keys for 24 hours. Stop an old ambiguous
+    // delivery before that window can expire; reviewed recovery must decide it.
+    if (Date.now() - Date.parse(marker.createdAt) >= 23 * 60 * 60_000) {
+      throw new OpsError("outcome_unknown", "Email delivery remains ambiguous beyond the provider idempotency window", {
+        provider_request_id: marker.correlationId,
+      });
+    }
+
+    const providerRequestId = await this.#sendResend(
+      to,
+      subject,
+      text,
+      marker.idempotencyKey,
+    );
+    const delivered: EmailDeliveryMarker = {
+      ...marker,
+      state: "delivered",
+      providerRequestId,
+    };
+    await bindingMutation("R2", () => this.env.CONTROL_PLANE_OBJECTS.put(
+      markerKey,
+      JSON.stringify(delivered),
+      { httpMetadata: { contentType: "application/json" } },
+    ));
+    return providerRequestId;
+  }
+
   async #smtpSmoke(input: JsonRecord): Promise<unknown> {
-    const id = await this.#sendResend(requireBinding(this.env.RESEND_SMOKE_RECIPIENT, "RESEND_SMOKE_RECIPIENT"), "S26 SMTP smoke", `S26 fixed smoke checks: ${stringArray(input, "smoke_test_ids").join(", ")}`);
+    const smokeTestIds = stringArray(input, "smoke_test_ids");
+    if (smokeTestIds.some(
+      (id) => !(CANONICAL_SMOKE_TEST_IDS.email as readonly string[]).includes(id),
+    )) {
+      throw new OpsError("unsupported_contract", "Unknown SMTP smoke test ID");
+    }
+    const recipient = requireBinding(this.env.RESEND_SMOKE_RECIPIENT, "RESEND_SMOKE_RECIPIENT");
+    const projectId = stringField(input, "project_id");
+    const marker = `${this.env.RECOVERY_OBJECT_PREFIX}/smtp-smoke/${projectId}/${await sha256Hex(`${recipient}\n${[...smokeTestIds].sort().join("\n")}`)}.json`;
+    const id = await this.#sendResendOnce(
+      marker,
+      recipient,
+      "S26 SMTP smoke",
+      `S26 fixed smoke checks: ${smokeTestIds.join(", ")}`,
+    );
     return { providerRequestId: id };
   }
 

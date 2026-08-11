@@ -662,6 +662,113 @@ export class Registry {
     });
   }
 
+  /**
+   * Commit the registry-only thirteenth onboarding effect atomically.
+   *
+   * A successful finalization has three postconditions: step 13 succeeded, the
+   * tenant is active, and the operation succeeded. None is valid on its own, so
+   * they share one SQLite transaction and one fence check.
+   */
+  completeOnboarding(
+    tenantId: string,
+    operationId: string,
+    fencingToken: number,
+    now = new Date(),
+  ): void {
+    this.#mutate(() => {
+      const operation = this.#requireOperationRow(operationId);
+      this.#assertFence(
+        this.#lockNameForScope(String(operation.scope)),
+        operationId,
+        fencingToken,
+        now,
+      );
+      const operationState = String(operation.state) as OperationState;
+      assertOps(operation.kind === "tenant_onboarding", "invalid_plan", "Operation is not onboarding");
+      assertOperationTransition(operationState, "succeeded", "tenant_onboarding");
+
+      const steps = this.#database
+        .prepare("SELECT * FROM operation_steps WHERE operation_id = ? ORDER BY ordinal")
+        .all(operationId) as Row[];
+      const finalStep = steps.find((step) => Number(step.ordinal) === 13);
+      assertOps(finalStep, "invalid_plan", "Final onboarding step is missing");
+      const finalStepState = String(finalStep.state) as StepState;
+      assertStepTransition(finalStepState, "succeeded");
+      for (const prior of steps.filter((step) => Number(step.ordinal) < 13)) {
+        assertOps(
+          prior.state === "succeeded" || prior.state === "not_applicable",
+          "invalid_state_transition",
+          `Finalization cannot run before step ${String(prior.ordinal)}`,
+        );
+      }
+
+      const tenant = this.#selectOne("SELECT * FROM tenants WHERE tenant_id = ?", tenantId);
+      assertOps(tenant, "invalid_plan", `Unknown tenant ${tenantId}`);
+      const tenantState = String(tenant.observed_lifecycle) as TenantLifecycle;
+      assertTenantTransition(tenantState, "active");
+      if (tenant.workspace_class === "external") {
+        const collision = this.#selectOne(
+          `SELECT tenant_id FROM tenants
+           WHERE tenant_id <> ? AND workspace_class = 'external'
+             AND observed_lifecycle = 'active' AND cron_slot = ?`,
+          tenantId,
+          Number(tenant.cron_slot),
+        );
+        assertOps(
+          collision === undefined,
+          "catalog_invalid",
+          `Cron slot ${String(tenant.cron_slot)} is already used by an active external tenant`,
+        );
+      }
+
+      const timestamp = now.toISOString();
+      this.#database
+        .prepare(
+          `UPDATE operation_steps
+             SET state = 'succeeded', updated_at = ?, completed_at = ?, redacted_error = NULL
+           WHERE operation_id = ? AND ordinal = 13`,
+        )
+        .run(timestamp, timestamp, operationId);
+      this.#database
+        .prepare(
+          `UPDATE tenants
+             SET desired_lifecycle = 'active', observed_lifecycle = 'active', updated_at = ?
+           WHERE tenant_id = ?`,
+        )
+        .run(timestamp, tenantId);
+      this.#database
+        .prepare(
+          `UPDATE operations
+             SET state = 'succeeded', error_code = NULL, redacted_error_summary = NULL,
+                 updated_at = ?, completed_at = ?
+           WHERE operation_id = ?`,
+        )
+        .run(timestamp, timestamp, operationId);
+
+      this.#appendAudit({
+        actor: "operations-core",
+        eventKind: "step_state_changed",
+        operationId,
+        stateTransition: `${finalStepState}->succeeded`,
+        detail: { ordinal: 13, kind: String(finalStep.kind), attempt: Number(finalStep.attempt) },
+      });
+      this.#appendAudit({
+        actor: "operations-core",
+        eventKind: "tenant_state_changed",
+        operationId,
+        stateTransition: `${tenantState}->active`,
+        detail: { tenant_id: tenantId },
+      });
+      this.#appendAudit({
+        actor: "operations-core",
+        eventKind: "operation_state_changed",
+        operationId,
+        stateTransition: `${operationState}->succeeded`,
+        detail: {},
+      });
+    });
+  }
+
   saveResourceReference(
     reference: ResourceReference,
     operationId: string,

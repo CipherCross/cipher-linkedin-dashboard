@@ -86,7 +86,7 @@ class PrivateProviderHttp {
     this.#redactor = redactor;
   }
 
-  async invoke(method: "GET" | "POST", path: string, payload?: unknown): Promise<unknown> {
+  async invoke(method: "GET" | "POST" | "PATCH", path: string, payload?: unknown): Promise<unknown> {
     const credential = await this.#credential.resolve();
     this.#redactor.registerSecret(credential);
     // Resolve relative to the base's own path. An absolute `/v2/projects`
@@ -101,7 +101,7 @@ class PrivateProviderHttp {
       });
       const requestId = response.headers.get("x-request-id") ?? "provider-request-unknown";
       if (!response.ok) {
-        const code = response.status === 408 || response.status === 429 || response.status >= 500
+        const code = response.status === 408 || response.status === 409 || response.status === 423 || response.status === 429 || response.status >= 500
           ? "outcome_unknown" : "provider_error";
         // The host and path say which named operation failed. Without them a
         // provider status is unattributable, which is how a bridge route sent
@@ -111,6 +111,10 @@ class PrivateProviderHttp {
         throw new OpsError(code, `Provider request failed with status ${response.status}`, {
           provider_request_id: requestId,
           provider_endpoint: `${method} ${new URL(url).origin}${new URL(url).pathname}`,
+          // Adoption has to tell "this resource does not exist yet" apart from
+          // "the provider refused". Only the status can say that, and it is a
+          // number, so it carries no scope, credential or payload with it.
+          provider_status: response.status,
         });
       }
       const body = await response.json();
@@ -126,6 +130,13 @@ class PrivateProviderHttp {
 }
 
 function id(value: string): string { return encodeURIComponent(value); }
+/** True when the provider answered "no such resource" rather than refusing. */
+function isAbsent(error: unknown): boolean {
+  return error instanceof OpsError && error.code === "provider_error" && error.details.provider_status === 404;
+}
+async function absentOr<T>(read: () => Promise<T>): Promise<T | undefined> {
+  try { return await read(); } catch (error) { if (isAbsent(error)) return undefined; throw error; }
+}
 function result<T>(value: unknown, label: string): T {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new OpsError("provider_error", `${label} returned an invalid response`);
@@ -311,7 +322,72 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
   constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Vercel team scope is required"); this.#teamId = configuration.scopeId; }
   #projectPath(version: string, handle?: string, suffix = ""): string { return `/v${version}/projects${handle ? `/${id(handle)}` : ""}${suffix}?teamId=${id(this.#teamId)}`; }
   async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return inspection(await this.bridge.invoke("POST", s26BridgePath("hosting", "inspect"), { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspection bridge"); }
-  async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> { const value = result<{ readonly providerRequestId: string; readonly id?: string; readonly name?: string }>(await this.#direct.invoke("POST", this.#projectPath("11"), { name: request.deterministicName, environmentVariables: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: request.ownership.digest, type: "plain", target: ["production", "preview"] }] }), "Vercel project"); if (!value.id || value.name !== request.deterministicName) throw new OpsError("provider_error", "Vercel project response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: value.id, deterministicName: request.deterministicName, workspaceClass: request.workspaceClass, runtimeProfileId: request.runtimeProfileId, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false }; }
+  async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> {
+    // Vercel rejects a duplicate project name outright, so without adoption a
+    // resumed or re-planned operation can never get past this step again.
+    const common = {
+      deterministicName: request.deterministicName, workspaceClass: request.workspaceClass,
+      runtimeProfileId: request.runtimeProfileId, ownershipMarkerDigest: request.ownership.digest,
+      lifecycle: "provisioning" as const, automaticPromotionEnabled: false as const, isolatedPreviewsEnabled: false as const,
+    };
+    const adopted = await this.#findOwnedTarget(request.deterministicName, request.ownership.digest);
+    if (adopted !== undefined) {
+      return { hostingRequestId: adopted.providerRequestId, targetHandle: adopted.targetHandle, adopted: true, ...common };
+    }
+    const value = result<{ readonly providerRequestId: string; readonly id?: string; readonly name?: string }>(await this.#direct.invoke("POST", this.#projectPath("11"), { name: request.deterministicName, previewDeploymentsDisabled: true, environmentVariables: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: request.ownership.digest, type: "plain", target: ["production", "preview"] }] }), "Vercel project");
+    if (!value.id || value.name !== request.deterministicName) throw new OpsError("provider_error", "Vercel project response is incomplete");
+    const configured = await this.#ensureStagedProduction(value.id);
+    return { hostingRequestId: configured, targetHandle: value.id, adopted: false, ...common };
+  }
+  /**
+   * A target is ours only if it carries our ownership marker, which is written
+   * as a plain environment value when the project is created. A name match
+   * alone is a foreign project and is deliberately not adopted.
+   */
+  async #findOwnedTarget(
+    deterministicName: string,
+    ownershipMarkerDigest: string,
+  ): Promise<{ readonly targetHandle: string; readonly providerRequestId: string } | undefined> {
+    const existing = await absentOr(() => this.#direct.invoke("GET", this.#projectPath("9", deterministicName)));
+    if (existing === undefined) return undefined;
+    const project = result<{
+      readonly providerRequestId: string;
+      readonly id?: string;
+      readonly autoAssignCustomDomains?: boolean;
+    }>(existing, "Vercel project");
+    if (!project.id) throw new OpsError("provider_error", "Vercel project response is incomplete");
+    const environment = result<{
+      readonly envs?: readonly { readonly key?: string; readonly value?: string }[];
+    }>(await this.#direct.invoke("GET", this.#projectPath("9", project.id, "/env")), "Vercel project environment");
+    const owned = (environment.envs ?? []).some(
+      (entry) => entry.key === "LH2_OWNERSHIP_MARKER_DIGEST" && entry.value === ownershipMarkerDigest,
+    );
+    if (!owned) throw new OpsError("provider_error", "Vercel deterministic name is held by a foreign project");
+    return {
+      targetHandle: project.id,
+      providerRequestId: project.autoAssignCustomDomains === false
+        ? project.providerRequestId
+        : await this.#ensureStagedProduction(project.id),
+    };
+  }
+  async #ensureStagedProduction(targetHandle: string): Promise<string> {
+    // Step 9 creates a production-environment build so it receives the
+    // production-only bindings from step 7. Domain auto-assignment must stay
+    // off until step 10 explicitly promotes that verified deployment, and the
+    // contract does not permit separate preview deployments.
+    const configured = result<{
+      readonly providerRequestId: string;
+      readonly autoAssignCustomDomains?: boolean;
+    }>(await this.#direct.invoke(
+      "PATCH",
+      this.#projectPath("9", targetHandle),
+      { autoAssignCustomDomains: false, previewDeploymentsDisabled: true },
+    ), "Vercel project configuration");
+    if (configured.autoAssignCustomDomains !== false) {
+      throw new OpsError("provider_error", "Vercel staged-production configuration was not applied");
+    }
+    return configured.providerRequestId;
+  }
   async bindEnvironment(request: EnvironmentBindingRequest): Promise<EnvironmentBindingResult> {
     if (!request.dataProjectHandle || !request.dataProjectName || !request.ownership) {
       throw new OpsError("invalid_plan", "S26 environment binding requires the owned data project context");
@@ -337,7 +413,21 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
     }), "Vercel environment bridge");
   }
   async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, environment_binding_digest: request.environmentBindingDigest, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
-  async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> { const value = result<{ readonly providerRequestId: string; readonly name?: string; readonly verified?: boolean }>(await this.#direct.invoke("POST", this.#projectPath("10", request.targetHandle, "/domains"), { name: request.hostname }), "Vercel domain"); if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest }; }
+  async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> {
+    // A hostname already bound to this same target is the retried case, not a
+    // conflict: Vercel answers a second POST with "domain already in use",
+    // which would otherwise fail the step for a binding it already has.
+    const existing = await absentOr(() => this.#direct.invoke(
+      "GET",
+      this.#projectPath("10", request.targetHandle, `/domains/${id(request.hostname)}`),
+    ));
+    const value = result<{ readonly providerRequestId: string; readonly name?: string; readonly verified?: boolean }>(
+      existing ?? await this.#direct.invoke("POST", this.#projectPath("10", request.targetHandle, "/domains"), { name: request.hostname }),
+      "Vercel domain",
+    );
+    if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete");
+    return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest };
+  }
   async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
   async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "promote"), { target_handle: request.targetHandle, release_handle: request.releaseHandle }), "Vercel promotion bridge"); }
   async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "rollback"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback bridge"); }

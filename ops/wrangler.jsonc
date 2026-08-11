@@ -62,6 +62,10 @@
     {
       "binding": "CONTROL_PLANE_OBJECTS",
       "bucket_name": "linkedin-campaign-dashboard"
+    },
+    {
+      "binding": "TENANT_LEAD_PHOTOS",
+      "bucket_name": "lead-photos"
     }
   ],
   "observability": {

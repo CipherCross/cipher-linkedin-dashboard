@@ -32,6 +32,12 @@ function recordingFetch(calls: Call[], body: unknown = { providerRequestId: "req
   return async (url, init) => {
     calls.push({ url, method: init.method, body: init.body });
     const pathname = new URL(url).pathname;
+    // The adoption reads find nothing, so creation proceeds. A provider says
+    // "no such project/domain" with 404, which is the only answer that lets an
+    // adopting client tell an absent resource from a refused request.
+    if (init.method === "GET" && /^\/v(9|10)\/projects\//.test(pathname)) {
+      return { ok: false, status: 404, headers: { get: () => "req_s26" }, json: async () => ({}) };
+    }
     // Matched by suffix so a base URL that carries its own path prefix still
     // resolves to the same named operation.
     const mapped = pathname.endsWith("/v2/projects") && init.method === "GET"
@@ -44,6 +50,8 @@ function recordingFetch(calls: Call[], body: unknown = { providerRequestId: "req
       }
       : pathname.endsWith("/v11/projects")
         ? { id: "target", name: "lh2-disposable-disposable-lab" }
+        : pathname.endsWith("/v9/projects/target") && init.method === "PATCH"
+          ? { id: "target", autoAssignCustomDomains: false, previewDeploymentsDisabled: true }
         : pathname.endsWith("/domains")
           ? { name: "disposable.example.test", verified: true }
           : body;
@@ -102,7 +110,10 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
     "POST https://bridge.example.test/s26/control-plane/v1/data/portable-schema-apply",
     "POST https://bridge.example.test/s26/control-plane/v1/identity/company-admin-invite",
     "POST https://provider.example.test/client/v4/accounts/provider-scope/r2/buckets",
+    "GET https://provider.example.test/v9/projects/lh2-disposable-disposable-lab",
     "POST https://provider.example.test/v11/projects",
+    "PATCH https://provider.example.test/v9/projects/target",
+    "GET https://provider.example.test/v10/projects/target/domains/disposable.example.test",
     "POST https://provider.example.test/v10/projects/target/domains",
     "POST https://bridge.example.test/s26/control-plane/v1/hosting/promote",
     "POST https://bridge.example.test/s26/control-plane/v1/smtp/configure",
@@ -118,14 +129,19 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   assert.equal(calls.find((call) => new URL(call.url).pathname === "/v10/projects/target/domains")?.url.includes("teamId=provider-scope"), true);
   assert.deepEqual(JSON.parse(calls[1]!.body!), { org_id: "provider-scope", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
   assert.deepEqual(JSON.parse(calls[5]!.body!), { name: "lead-photos" });
-  assert.deepEqual(JSON.parse(calls[6]!.body!), {
+  assert.deepEqual(JSON.parse(calls[7]!.body!), {
     name: "lh2-disposable-disposable-lab",
+    previewDeploymentsDisabled: true,
     environmentVariables: [{
       key: "LH2_OWNERSHIP_MARKER_DIGEST",
       value: ownership.digest,
       type: "plain",
       target: ["production", "preview"],
     }],
+  });
+  assert.deepEqual(JSON.parse(calls[8]!.body!), {
+    autoAssignCustomDomains: false,
+    previewDeploymentsDisabled: true,
   });
 });
 
@@ -293,4 +309,120 @@ test("direct mappings return only canonical ownership evidence", async () => {
   const resource = await data.createOrAdoptProject({ organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab", regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership });
   assert.equal(resource.ownershipMarkerDigest, ownership.digest);
   assert.equal(JSON.stringify(resource).includes("local-test-credential"), false);
+});
+
+test("an owned Vercel project is adopted without a second create", async () => {
+  const calls: Call[] = [];
+  const direct = configuration(calls);
+  direct.fetch = async (url, init) => {
+    calls.push({ url, method: init.method, body: init.body });
+    const pathname = new URL(url).pathname;
+    const value = pathname.endsWith("/v9/projects/lh2-disposable-disposable-lab")
+      ? {
+        id: "existing-target",
+        name: "lh2-disposable-disposable-lab",
+        autoAssignCustomDomains: false,
+        previewDeploymentsDisabled: true,
+      }
+      : pathname.endsWith("/v9/projects/existing-target/env")
+        ? { envs: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: ownership.digest }] }
+        : {};
+    return { ok: true, status: 200, headers: { get: () => "req_adopt" }, json: async () => value };
+  };
+  const result = await new VercelOperationsClient(direct, bridgeConfiguration([]))
+    .createDeploymentTarget({
+      deterministicName: "lh2-disposable-disposable-lab",
+      workspaceClass: "disposable",
+      runtimeProfileId: "runtime-v1",
+      ownership,
+      automaticPromotionEnabled: false,
+      isolatedPreviewsEnabled: false,
+    });
+  assert.equal(result.adopted, true);
+  assert.equal(result.targetHandle, "existing-target");
+  assert.deepEqual(calls.map((call) => call.method), ["GET", "GET"]);
+});
+
+test("a foreign Vercel project with the deterministic name is never adopted", async () => {
+  const calls: Call[] = [];
+  const direct = configuration(calls);
+  direct.fetch = async (url, init) => {
+    calls.push({ url, method: init.method, body: init.body });
+    const pathname = new URL(url).pathname;
+    const value = pathname.endsWith("/env")
+      ? { envs: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: `sha256:${"f".repeat(64)}` }] }
+      : { id: "foreign-target", name: "lh2-disposable-disposable-lab" };
+    return { ok: true, status: 200, headers: { get: () => "req_foreign" }, json: async () => value };
+  };
+  const client = new VercelOperationsClient(direct, bridgeConfiguration([]));
+  await assert.rejects(
+    client.createDeploymentTarget({
+      deterministicName: "lh2-disposable-disposable-lab",
+      workspaceClass: "disposable",
+      runtimeProfileId: "runtime-v1",
+      ownership,
+      automaticPromotionEnabled: false,
+      isolatedPreviewsEnabled: false,
+    }),
+    (error: unknown) => error instanceof OpsError && error.code === "provider_error",
+  );
+  assert.deepEqual(calls.map((call) => call.method), ["GET", "GET"]);
+});
+
+test("an owned Vercel project is normalized to staged production before adoption", async () => {
+  const calls: Call[] = [];
+  const direct = configuration(calls);
+  direct.fetch = async (url, init) => {
+    calls.push({ url, method: init.method, body: init.body });
+    const pathname = new URL(url).pathname;
+    const value = pathname.endsWith("/env")
+      ? { envs: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: ownership.digest }] }
+      : init.method === "PATCH"
+        ? { id: "existing-target", autoAssignCustomDomains: false, previewDeploymentsDisabled: true }
+        : {
+          id: "existing-target",
+          name: "lh2-disposable-disposable-lab",
+          autoAssignCustomDomains: true,
+          previewDeploymentsDisabled: false,
+        };
+    return { ok: true, status: 200, headers: { get: () => "req_normalize" }, json: async () => value };
+  };
+  const result = await new VercelOperationsClient(direct, bridgeConfiguration([]))
+    .createDeploymentTarget({
+      deterministicName: "lh2-disposable-disposable-lab",
+      workspaceClass: "disposable",
+      runtimeProfileId: "runtime-v1",
+      ownership,
+      automaticPromotionEnabled: false,
+      isolatedPreviewsEnabled: false,
+    });
+  assert.equal(result.adopted, true);
+  assert.deepEqual(calls.map((call) => call.method), ["GET", "GET", "PATCH"]);
+  assert.deepEqual(JSON.parse(calls[2]!.body!), {
+    autoAssignCustomDomains: false,
+    previewDeploymentsDisabled: true,
+  });
+});
+
+test("an existing domain binding on the same Vercel target is adopted", async () => {
+  const calls: Call[] = [];
+  const direct = configuration(calls);
+  direct.fetch = async (url, init) => {
+    calls.push({ url, method: init.method, body: init.body });
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => "req_domain_adopt" },
+      json: async () => ({ name: "disposable.example.test", verified: true }),
+    };
+  };
+  const result = await new VercelOperationsClient(direct, bridgeConfiguration([])).assignDomain({
+    targetHandle: "existing-target",
+    hostname: "disposable.example.test",
+    ownership,
+    certificateMode: "provider_managed",
+  });
+  assert.equal(result.assigned, true);
+  assert.equal(result.certificateReady, true);
+  assert.deepEqual(calls.map((call) => call.method), ["GET"]);
 });

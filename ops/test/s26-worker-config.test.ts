@@ -6,6 +6,7 @@ import test from "node:test";
 interface WorkerConfiguration {
   readonly vars: Readonly<Record<string, string>>;
   readonly secrets: { readonly required: readonly string[] };
+  readonly r2_buckets: readonly { readonly binding: string; readonly bucket_name: string }[];
 }
 
 function workerConfiguration(): WorkerConfiguration {
@@ -21,6 +22,10 @@ test("S26 Worker deployment requires only genuine deployment and preflight crede
     "VERCEL_API_TOKEN",
     "RESEND_API_KEY",
     "SOURCE_REPOSITORY_TOKEN",
+  ]);
+  assert.deepEqual(configuration.r2_buckets, [
+    { binding: "CONTROL_PLANE_OBJECTS", bucket_name: "linkedin-campaign-dashboard" },
+    { binding: "TENANT_LEAD_PHOTOS", bucket_name: "lead-photos" },
   ]);
   for (const forbidden of [
     "TENANT_DATABASE_URL",

@@ -126,6 +126,98 @@ async function withConnection<T>(
   }
 }
 
+/**
+ * Whether each pinned bootstrap artifact has already produced its own effect.
+ *
+ * Every artifact is sent as one multi-statement simple query, which PostgreSQL
+ * runs inside a single implicit transaction, so each of these postconditions is
+ * exact: it is true only if that whole artifact committed.
+ *
+ * This matters because the artifacts are not all re-runnable against the state
+ * they leave behind. The seven-role bootstrap ends with
+ * `ALTER SCHEMA public OWNER TO app_owner`, and once that has run the executing
+ * principal is only a NON-INHERITING member of the new owner, so PostgreSQL's
+ * ownership check fails on the second attempt. That surfaces as a plain SQLSTATE
+ * and becomes a `provider_error`, which is the 409 a resumed step 3 used to hit.
+ * The artifacts themselves are digest-pinned and must not be edited, so the
+ * decision to run them is made here instead — the same shape as the ledger
+ * bootstrap's own `to_regclass` guard below.
+ */
+export interface BootstrapState {
+  readonly controlPlane: boolean;
+  readonly identityStore: boolean;
+  readonly aiExecution: boolean;
+  readonly machineIngest: boolean;
+}
+
+/** The minimum of a Postgres client this probe needs, so it can be exercised. */
+export interface BootstrapProbeClient {
+  query(text: string, values?: readonly unknown[]): Promise<{ readonly rows: readonly Record<string, unknown>[] }>;
+}
+
+export const CONTROL_PLANE_ROLES = [
+  "app_owner", "app_migration", "app_runtime", "app_readonly",
+  "app_machine", "app_system", "app_ai_runner",
+] as const;
+
+export type BootstrapArtifact = "controlPlane" | "identityStore" | "aiExecution" | "machineIngest";
+
+export function bootstrapArtifactsToApply(state: BootstrapState): readonly BootstrapArtifact[] {
+  return (["controlPlane", "identityStore", "aiExecution", "machineIngest"] as const)
+    .filter((artifact) => !state[artifact]);
+}
+
+export async function readBootstrapState(owner: BootstrapProbeClient): Promise<BootstrapState> {
+  const observed = await owner.query(
+    `SELECT
+       coalesce(
+         (SELECT count(*) FROM pg_roles WHERE rolname = ANY($1::text[])) = $2
+         AND (SELECT bool_and(rolcanlogin) FROM pg_roles
+               WHERE rolname IN ('app_migration', 'app_runtime'))
+         AND (SELECT nspowner FROM pg_namespace WHERE nspname = 'public')
+             = (SELECT oid FROM pg_roles WHERE rolname = 'app_owner'),
+         false)
+         AND EXISTS (
+           SELECT 1 FROM pg_auth_members m
+             JOIN pg_roles granted ON granted.oid = m.roleid
+             JOIN pg_roles member ON member.oid = m.member
+            WHERE granted.rolname = 'app_owner'
+              AND member.rolname = 'app_migration' AND m.set_option)
+         AND EXISTS (
+           SELECT 1 FROM pg_auth_members m
+             JOIN pg_roles granted ON granted.oid = m.roleid
+             JOIN pg_roles member ON member.oid = m.member
+            WHERE granted.rolname = 'app_ai_runner'
+              AND member.rolname = 'app_owner' AND m.set_option)
+         AND coalesce(
+           (SELECT has_database_privilege(oid, current_database(), 'CREATE')
+              FROM pg_roles WHERE rolname = 'app_owner'),
+           false)
+         AS control_plane,
+       coalesce(
+         (SELECT rolcanlogin FROM pg_roles WHERE rolname = 'identity_store')
+         AND EXISTS (
+           SELECT 1 FROM pg_auth_members m
+             JOIN pg_roles granted ON granted.oid = m.roleid
+             JOIN pg_roles member ON member.oid = m.member
+            WHERE granted.rolname = 'identity_store'
+              AND member.rolname = 'app_owner' AND m.set_option),
+         false) AS identity_store,
+       coalesce((SELECT rolcanlogin FROM pg_roles WHERE rolname = 'app_system'), false)
+         AS ai_execution,
+       coalesce((SELECT rolcanlogin FROM pg_roles WHERE rolname = 'app_machine'), false)
+         AS machine_ingest`,
+    [[...CONTROL_PLANE_ROLES], CONTROL_PLANE_ROLES.length],
+  );
+  const row = observed.rows[0] ?? {};
+  return {
+    controlPlane: row.control_plane === true,
+    identityStore: row.identity_store === true,
+    aiExecution: row.ai_execution === true,
+    machineIngest: row.machine_ingest === true,
+  };
+}
+
 function assertApprovedReleaseTuple(
   baselineVersion: number,
   migrationVersions: readonly number[],
@@ -160,10 +252,19 @@ export async function applyPinnedPortablePostgres(input: {
 
   try {
     await withConnection(input.ownerConnectionUri, async (owner) => {
-      await owner.query(postgresSql(roleBootstrap));
-      await owner.query(postgresSql(identityRoleBootstrap));
-      await owner.query(postgresSql(aiRoleBootstrap));
-      await owner.query(postgresSql(machineRoleBootstrap));
+      // Already-prepared artifacts are adopted rather than replayed; see
+      // readBootstrapState. Only the temporary migration credential is always
+      // reassigned, because it is deliberately dropped again in the finally.
+      const prepared = await readBootstrapState(owner);
+      const bootstrapSql: Readonly<Record<BootstrapArtifact, string>> = {
+        controlPlane: roleBootstrap,
+        identityStore: identityRoleBootstrap,
+        aiExecution: aiRoleBootstrap,
+        machineIngest: machineRoleBootstrap,
+      };
+      for (const artifact of bootstrapArtifactsToApply(prepared)) {
+        await owner.query(postgresSql(bootstrapSql[artifact]));
+      }
       await owner.query(`ALTER ROLE app_migration PASSWORD '${quotedPassword}'`);
     });
 
