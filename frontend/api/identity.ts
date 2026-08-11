@@ -20,7 +20,7 @@
  * |---|---|---|---|
  * | `session.signIn` | POST | anyone | candidate's `/sign-in/email` |
  * | `session.signOut` | POST | anyone | candidate's `/sign-out` |
- * | `password.requestReset` | POST | anyone | candidate's `/forget-password` |
+ * | `password.requestReset` | POST | anyone | candidate's `/request-password-reset` |
  * | `password.completeReset` | POST | anyone | candidate's `/reset-password` |
  * | `password.change` | POST | signed in, knows current password | candidate's `/change-password` |
  * | `session.current` | GET | any signed-in caller | the resolver, then nothing |
@@ -92,10 +92,17 @@ export const maxDuration = 10
  * under the base path would expose every route the candidate and its plugins
  * happen to register, including ones added by a future dependency upgrade.
  */
-const CANDIDATE_ROUTES: Readonly<Record<string, string>> = {
+export const CANDIDATE_ROUTES: Readonly<Record<string, string>> = {
   'session.signIn': '/sign-in/email',
   'session.signOut': '/sign-out',
-  'password.requestReset': '/forget-password',
+  /**
+   * `/request-password-reset`, not `/forget-password`: the candidate renamed it,
+   * and this mapping kept the old name, so the operation answered 404 for its
+   * whole life. It was invisible because delivery was discarded anyway — the
+   * two halves of the only route into an account were both broken, and each one
+   * hid the other.
+   */
+  'password.requestReset': '/request-password-reset',
   'password.completeReset': '/reset-password',
   /**
    * Change your own password while signed in.

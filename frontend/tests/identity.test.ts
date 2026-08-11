@@ -20,7 +20,7 @@
 
 import { describe, expect, it, beforeEach } from 'vitest'
 
-import { createIdentityHandler } from '../api/identity.js'
+import { CANDIDATE_ROUTES, createIdentityHandler } from '../api/identity.js'
 import { FakeDataStore } from '../api/_lib/data/fake.js'
 import {
   APPLICATION_ACTORLESS_OPERATIONS,
@@ -39,7 +39,7 @@ import {
   pruneSessionsIfDue,
   resetPruneClock,
 } from '../api/_lib/identity/runtime.js'
-import { SESSION_EXPIRES_IN_SECONDS } from '../api/_lib/identity/config.js'
+import { IDENTITY_BASE_PATH, SESSION_EXPIRES_IN_SECONDS } from '../api/_lib/identity/config.js'
 import { buildCandidateOptions } from '../api/_lib/identity/betterAuthProvider.js'
 
 const ORIGIN = 'https://dashboard.test'
@@ -937,6 +937,54 @@ describe('resolveActor contract (fake side)', () => {
       ['better-auth', 'subject-'],
     ]) {
       await expect(store.resolveActor({ provider, subject })).resolves.toBeNull()
+    }
+  })
+})
+
+describe('the routes forwarded to the candidate exist in the candidate', () => {
+  /**
+   * Every mapped route, checked against the candidate's own endpoint table.
+   *
+   * `password.requestReset` pointed at `/forget-password` — a name this version
+   * does not serve — so the operation answered 404 from the day it shipped. It
+   * survived because the other half of the flow was broken too: the reset link
+   * was discarded before delivery, so nobody ever got far enough to see the 404.
+   * A mapping to a name the dependency does not have is exactly what an upgrade
+   * breaks silently, which is why this asserts against the table and not a list.
+   */
+  it('maps every operation to a path the installed candidate serves', async () => {
+    const { betterAuth } = await import('better-auth')
+    const options = buildCandidateOptions(
+      {
+        config: {
+          connectionString: 'postgres://user@host/db',
+          sessionSecret: 'x'.repeat(32),
+          baseUrl: 'https://tenant.example.test',
+          basePath: IDENTITY_BASE_PATH,
+          useSecureCookies: true,
+        },
+      },
+      // A pool shape that answers, so the candidate's adapter initialises and
+      // registers its routes instead of rejecting in the background. Nothing
+      // here executes a query: only the route table is read.
+      {
+        query: async () => ({ rows: [], rowCount: 0 }),
+        connect: async () => ({ query: async () => ({ rows: [], rowCount: 0 }), release: () => {} }),
+        on: () => {},
+        end: async () => {},
+      } as never,
+    )
+    const candidate = betterAuth(options as never) as unknown as {
+      api: Record<string, { path?: string }>
+    }
+    const served = new Set(
+      Object.values(candidate.api)
+        .map((endpoint) => endpoint?.path)
+        .filter((path): path is string => typeof path === 'string'),
+    )
+    expect(served.size).toBeGreaterThan(0)
+    for (const [operation, route] of Object.entries(CANDIDATE_ROUTES)) {
+      expect(served.has(route), `${operation} -> ${route}`).toBe(true)
     }
   })
 })

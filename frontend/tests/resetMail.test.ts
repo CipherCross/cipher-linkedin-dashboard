@@ -51,7 +51,7 @@ describe('delivering the link', () => {
       vi.unstubAllGlobals()
     }
     expect(fetcher).toHaveBeenCalledTimes(1)
-    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit]
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://api.resend.com/emails')
     const body = JSON.parse(String(init.body)) as { to: string[]; from: string; text: string }
     expect(body.to).toEqual([LINK.email])
