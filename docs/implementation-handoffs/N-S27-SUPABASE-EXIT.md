@@ -332,6 +332,86 @@ approved-SHA bump. It does not — the working tree was clean at `de70f79`. The 
 is at `d7d585e`, one commit behind, and `de70f79` is docs-only, so nothing was
 lost; the bump is still owed for anything this session ships.
 
+## Step 3 — close the Supabase-only holes (done)
+
+Step 1 found exactly one Supabase-only surface in the API, and it is closed.
+Nothing in `frontend/api` reaches Supabase now except through a branch a flag
+selects — which is the precondition step 4 needed.
+
+### `loadIcpRoster`
+
+The copilot's always-on ICP/hypothesis awareness was the last read with no Neon
+counterpart, and `chat.ts` had closed the gap the wrong way:
+`const roster = neon ? '' : await loadIcpRoster()`. On a Neon deployment the
+system prompt simply had no ICP layer in it — no error, no log, no failing
+request. **That is the failure shape this whole session keeps meeting**: 22/22
+green reads and a live 200 could never have shown it.
+
+Both queries now live in the AI adapter's vocabulary (`operations/ai.ts`) beside
+`hypothesis_overview`, which already reads `icps` and `hypotheses` through the
+same `ai_execute_sql` guard on **both** providers — so the grant was already
+proven and there is one definition of each statement rather than two that can
+drift. `loadIcpRoster` reads through `executeNamedSql`, and `db()` leaves it.
+
+Three details that are decisions, not accidents:
+
+- **Two queries, not one join.** The loader resolves each hypothesis's ICP name
+  against the ICP rows it actually received, so a hypothesis pointing at an
+  *archived* ICP reads as unassigned. That is what the PostgREST pair did; a
+  `LEFT JOIN` would have silently changed it.
+- **It never throws.** The old pair swallowed failures by construction — it
+  destructured `data` and ignored `error`. `executeNamedSql` throws, so the
+  swallow is now explicit: optional prompt context must degrade the prompt, not
+  take the copilot down.
+- **Truncation is announced.** `capRows` trims at 200 rows, below PostgREST's
+  1000, so a large roster now says it is partial instead of reading as the
+  complete list of what the team has.
+
+`chat.ts` also stopped telling the model it was querying *"the team's Supabase
+Postgres database"* — a sentence that was wrong on every tenant and is now wrong
+everywhere.
+
+Tests: `icpRoster.test.ts` (8) covers the loader on both providers, and
+`chatRosterPrompt.test.ts` (3) covers the call site, because a loader test alone
+would have stayed green through the exact defect being fixed. Both were
+mutation-checked: restoring the bypass reddens 4 and 1 respectively; restoring
+the Supabase wording reddens 1.
+
+### The two holes step 3 deliberately did not close
+
+- **The sync agent has no Supabase-off mode.** The plan puts agents in step 5
+  and that is right — the Neon branch already exists (`ingest_mode`), what is
+  missing is the *cutover*, which is a decision about live notebooks rather than
+  a missing surface.
+- **`supabase/migrations/` vs `postgres/tenant-baseline/v1`.** Which artefact
+  survives is step 6's question and the owner's.
+
+### The parity gap that now blocks step 4, not step 3
+
+**The scheduled classifier advances the pipeline on Supabase and refuses to on
+Neon.** `classify.ts` hardcodes `AUTO_ADVANCE_BLOCKED` for the cron, so on the
+Neon path it labels replies and reports `auto_advance_blocked`; the Supabase
+cron calls `autoAdvancePipeline(sb)` and moves rows. Flipping the default
+therefore *removes a capability the owner's deployment has today* — quietly,
+because the field is only present in a response body nobody reads.
+
+It was not flipped here, for two reasons and both matter:
+
+1. **The constant's stated reason is that ledger step 008 "is written and not
+   applied".** Step 008 exists in the baseline and grants `app_system` exactly
+   that `EXECUTE`, and `N-S21` records the ledger at 10/10 on tenants — but
+   confirming it against a *live* database needs the psql wrapper recipe, which
+   is the raw-SQL route this session is not taking. The reason string is
+   therefore of unknown accuracy and was left alone rather than replaced with a
+   different unverified claim.
+2. **Flipping it makes the next cron run a real `pipeline_auto_advance()` on
+   live data.** That is the mutation to be most careful with in this whole plan,
+   and it is not one to make on the strength of a file existing in the repo.
+
+**What step 4 must do first**: confirm on each target database that `app_system`
+holds `EXECUTE` on `public.pipeline_auto_advance()`, then either flip the
+capability or state explicitly that the scheduled triage is being retired.
+
 ## Suggested sequencing
 
 Each step ends in a state the owner can stop at.

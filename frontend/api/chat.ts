@@ -10,7 +10,7 @@ import { neonWriter } from './_lib/neonWrites.js'
 export const maxDuration = 300
 
 const SYSTEM_BASE = `You are the analytics copilot for a LinkedIn outreach dashboard. You have
-read-only SQL access to the team's Supabase Postgres database through tools.
+read-only SQL access to the team's Postgres database through tools.
 
 ${SCHEMA_DOC}
 
@@ -65,10 +65,14 @@ export async function POST(req: Request) {
   // doesn't need a tool call just to know what ICPs/hypotheses exist. Fetched per
   // request rather than baked into the module-level constant so a freshly-created
   // ICP shows up immediately, not just after the next cold start.
-  // The roster preload is an optimization, not an authorization surface. The
-  // Neon tools remain available below; do not construct a Supabase service-role
-  // client merely to add this optional prompt context.
-  const roster = neon ? '' : await loadIcpRoster()
+  //
+  // It used to read `neon ? '' : await loadIcpRoster()`, because the loader was
+  // Supabase-only and building a service-role client for optional prompt context
+  // would have been worse. The loader now reads through the AI adapter's own
+  // vocabulary on whichever provider this deployment serves, and swallows its own
+  // failures, so the preload is no longer something a provider can silently take
+  // away.
+  const roster = await loadIcpRoster()
   const SYSTEM = roster
     ? `${SYSTEM_BASE}\n\n${roster}\n\nUse hypothesis_overview (or run_sql) for the funnel/keywords/personas behind any of these.`
     : SYSTEM_BASE

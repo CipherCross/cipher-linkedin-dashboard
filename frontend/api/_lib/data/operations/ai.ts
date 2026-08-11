@@ -71,6 +71,8 @@ export const AI_OPERATIONS = {
   weeklyFunnelByAccount: 'ai.weeklyFunnelByAccount',
   dailyTrend: 'ai.dailyTrend',
   instancesList: 'ai.instancesList',
+  icpRoster: 'ai.icpRoster',
+  hypothesisRoster: 'ai.hypothesisRoster',
 } as const
 
 /** The fixed queries, named exactly as their operation names. */
@@ -283,6 +285,31 @@ from instances
 order by id
 `.trim()
 
+// The copilot's always-on ICP/hypothesis awareness: names and one-liners only,
+// so it knows what exists without spending a tool call to find out. Depth —
+// personas, keyword lists, per-hypothesis funnel — stays with
+// `hypothesis_overview` and `run_sql`.
+//
+// Two queries rather than one join, deliberately. `loadIcpRoster` resolves each
+// hypothesis's ICP name against the ICP rows it actually received, so a
+// hypothesis pointing at an *archived* ICP reads as unassigned — which is the
+// behaviour the PostgREST pair had, and a `LEFT JOIN` here would silently
+// change it. Two round trips also give each list its own row cap instead of
+// making one crowd the other out.
+export const ICP_ROSTER_SQL = `
+select id, name, main_product, core_sphere
+from icps
+where archived = false
+order by name
+`.trim()
+
+export const HYPOTHESIS_ROSTER_SQL = `
+select name, icp_id, description
+from hypotheses
+where archived = false
+order by name
+`.trim()
+
 /** Every fixed query and the SQL it runs under, for the Supabase branch. */
 export const AI_NAMED_SQL: Record<AiNamedQuery, string> = {
   weeklyFunnel: WEEKLY_FUNNEL_SQL,
@@ -294,6 +321,8 @@ export const AI_NAMED_SQL: Record<AiNamedQuery, string> = {
   weeklyFunnelByAccount: WEEKLY_FUNNEL_BY_ACCOUNT_SQL,
   dailyTrend: DAILY_TREND_SQL,
   instancesList: INSTANCES_LIST_SQL,
+  icpRoster: ICP_ROSTER_SQL,
+  hypothesisRoster: HYPOTHESIS_ROSTER_SQL,
 }
 
 export interface AiExecuteSqlParams extends DataStoreParams {

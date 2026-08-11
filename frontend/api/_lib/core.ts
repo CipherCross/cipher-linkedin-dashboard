@@ -107,22 +107,45 @@ export async function executeNamedSql(name: AiNamedQuery): Promise<SqlResult> {
  *  hypothesis_overview on demand. Flat selects joined in JS (matches the rest of this
  *  codebase's style — no PostgREST relationship embedding). Empty string when neither
  *  table has any live (non-archived) rows yet, so a blank ICP layer adds nothing to
- *  the prompt. */
+ *  the prompt.
+ *
+ *  ## Why this reads through `executeNamedSql` rather than `db()`
+ *
+ *  It was the last Supabase-only surface in the API, and `chat.ts` closed the
+ *  hole the wrong way: `neon ? '' : await loadIcpRoster()` meant the copilot on
+ *  the Neon path lost its ICP awareness **silently**, with no error and no log —
+ *  the one failure shape that survives every green test run. Both fixed queries
+ *  now live in the AI adapter's vocabulary beside `hypothesis_overview`, which
+ *  already reads both relations through the same guard on both providers, so
+ *  there is one definition and neither provider can drift from it.
+ *
+ *  ## It never throws
+ *
+ *  The roster is prompt context, not an authorization surface. The PostgREST
+ *  pair swallowed failures by construction — it destructured `data` and ignored
+ *  `error` — so a failed read produced an empty roster and a working chat.
+ *  `executeNamedSql` throws, so the swallow is now explicit and deliberate:
+ *  degrading the prompt is right, taking the copilot down for optional context
+ *  is not. */
 export async function loadIcpRoster(): Promise<string> {
-  const [{ data: icps }, { data: hyps }] = await Promise.all([
-    db()
-      .from('icps')
-      .select('id,name,main_product,core_sphere')
-      .eq('archived', false)
-      .order('name'),
-    db()
-      .from('hypotheses')
-      .select('name,icp_id,description')
-      .eq('archived', false)
-      .order('name'),
-  ])
-  const icpRows = (icps ?? []) as { id: number; name: string; main_product: string | null; core_sphere: string | null }[]
-  const hypRows = (hyps ?? []) as { name: string; icp_id: number | null; description: string | null }[]
+  let icps: SqlResult
+  let hyps: SqlResult
+  try {
+    ;[icps, hyps] = await Promise.all([
+      executeNamedSql('icpRoster'),
+      executeNamedSql('hypothesisRoster'),
+    ])
+  } catch (error) {
+    // By class only: the driver composes a connection failure with the database
+    // hostname in it, and this text would reach a log.
+    console.warn(
+      'ICP roster preload failed; continuing without it:',
+      error instanceof Error ? error.name : 'UnknownError',
+    )
+    return ''
+  }
+  const icpRows = icps.rows as { id: number; name: string; main_product: string | null; core_sphere: string | null }[]
+  const hypRows = hyps.rows as { name: string; icp_id: number | null; description: string | null }[]
   if (icpRows.length === 0 && hypRows.length === 0) return ''
 
   const icpNameById = new Map(icpRows.map((i) => [i.id, i.name]))
@@ -136,12 +159,24 @@ export async function loadIcpRoster(): Promise<string> {
     return `- "${h.name}"${scope}${h.description ? `: ${h.description}` : ''}`
   })
 
-  return [
-    icpLines.length ? `ICPs (Ideal Customer Profiles):\n${icpLines.join('\n')}` : '',
-    hypLines.length ? `Hypotheses:\n${hypLines.join('\n')}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n')
+  // `capRows` trims a long roster to keep one list out of the context budget.
+  // Saying so is the difference between a partial list and a list the model
+  // will reason about as complete — the same rule `readAll` follows in the
+  // browser, where exceeding the page ceiling throws rather than answering
+  // short.
+  const partial =
+    icps.truncated || hyps.truncated
+      ? '\n\n(This roster is truncated — query icps / hypotheses directly for the full list.)'
+      : ''
+
+  return (
+    [
+      icpLines.length ? `ICPs (Ideal Customer Profiles):\n${icpLines.join('\n')}` : '',
+      hypLines.length ? `Hypotheses:\n${hypLines.join('\n')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n') + partial
+  )
 }
 
 export const SCHEMA_DOC = `
