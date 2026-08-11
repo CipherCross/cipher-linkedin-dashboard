@@ -1225,6 +1225,38 @@ class MachineOnlyWiringTest(unittest.TestCase):
         self.assertTrue(any("photo sync: skipped" in line for line in lines),
                         lines)
 
+    def test_photo_sync_is_refused_even_when_supabase_keys_linger(self):
+        """The step-9 state of a cutover, and the one the credential guard let
+        through: `only` mode on a notebook that still HAS its Supabase keys.
+
+        `sync_machine_only` builds no Supabase client and passes None, so the
+        mirror would read candidates and upload bytes over plain `requests`,
+        then reach `sb.update` and raise AttributeError into an `except` that
+        counts it `retryable`. Nothing converges, and the same capped window is
+        re-downloaded and re-uploaded on every scheduled run, forever."""
+        cfg = dict(machine_cfg(), sync_photos=True, ingest_mode="only",
+                   **SUPABASE_CFG)
+        self.assertTrue(agent.supabase_configured(cfg))
+        cs, ls, ms, ss, demo = extraction(leads=3)
+        lines = []
+        with mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update", return_value=False), \
+                mock.patch.object(agent, "extract_local",
+                                  return_value=(cs, ls, ms, ss, {}, demo)), \
+                mock.patch.object(agent, "notify_new_replies"), \
+                mock.patch.object(agent.requests, "get") as got, \
+                mock.patch.object(agent.requests, "post",
+                                  side_effect=lambda *a, **k: Answer()), \
+                mock.patch("builtins.print",
+                           side_effect=lambda *a, **k: lines.append(
+                               " ".join(str(part) for part in a))):
+            agent.cmd_sync(mock.Mock(dry_run=False))
+        self.assertTrue(any("photo sync: skipped" in line for line in lines), lines)
+        # The candidate list is a GET against Supabase. Not reaching it is what
+        # proves the refusal happened before any work, not after.
+        got.assert_not_called()
+
     def test_a_dry_run_on_this_path_sends_nothing(self):
         cfg = machine_cfg()
         cs, ls, ms, ss, demo = extraction(leads=3)

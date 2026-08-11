@@ -51,7 +51,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.15.0"
+AGENT_VERSION = "1.15.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -1289,10 +1289,17 @@ def sync_photos(cfg, sb, avatar_map, machine_mode="off"):
     landed. Refusing loudly is the difference between a known gap and a
     `sync_photos: true` that quietly mirrors nothing.
     """
-    if not supabase_configured(cfg):
-        print("photo sync: skipped — the photo mirror still writes to Supabase "
-              "Storage and reads its candidate list from Supabase, and this "
-              "notebook holds no Supabase credential")
+    # `sb is None` FIRST, and it is the predicate that matters. The credential
+    # answers "could this notebook reach Supabase", which is not the question:
+    # `sync_machine_only` passes None deliberately, and a notebook mid-cutover
+    # still holds the keys it has stopped using. Testing only the credential let
+    # that combination through to `sb.update`, where the AttributeError was
+    # swallowed as `retryable` — so every run re-downloaded and re-uploaded the
+    # same capped window of photos and nothing ever converged.
+    if sb is None or not supabase_configured(cfg):
+        print("photo sync: skipped — the mirror writes to Supabase Storage and "
+              "reads its candidate list from Supabase, and this run has no "
+              "Supabase client to do either with")
         return
     try:
         instance_id = cfg["instance_id"]
