@@ -916,13 +916,31 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
 
   it("does not promote a release the target already serves", async () => {
     const promotions: string[] = [];
+    const aliased: { release: string; alias: string }[] = [];
     let current = "release-1";
-    const fetcher = vercelFetcher((url, method) => {
+    const fetcher = vercelFetcher((url, method, init) => {
       if (url.pathname === "/v9/projects/target-1" && method === "GET") {
         return providerResponse(200, {
           id: "target-1",
           targets: { production: { id: current, readySubstate: "PROMOTED" } },
         });
+      }
+      if (url.pathname === "/v10/projects/target-1/domains" && method === "GET") {
+        return providerResponse(200, {
+          domains: [
+            { name: "s26-disposable-lab.vercel.app" },
+            // A redirect-only entry forwards elsewhere; this release must not
+            // start answering for it.
+            { name: "old.example.test", redirect: "s26-disposable-lab.vercel.app" },
+          ],
+        });
+      }
+      if (/^\/v2\/deployments\/[^/]+\/aliases$/.test(url.pathname) && method === "POST") {
+        aliased.push({
+          release: url.pathname.split("/")[3]!,
+          alias: (JSON.parse(String(init?.body)) as { alias: string }).alias,
+        });
+        return providerResponse(200, {});
       }
       if (url.pathname.includes("/promote/") && method === "POST") {
         promotions.push(url.pathname);
@@ -946,6 +964,15 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     );
     expect(promoted.status).toBe(200);
     expect(promotions).toEqual(["/v10/projects/target-1/promote/release-2"]);
+    // Step 6 leaves automatic domain assignment off so step 9 stays staged, so
+    // making the promoted release serve the project's hostname is step 10's own
+    // effect. It was missing entirely, which is what failed step 11's four
+    // domain.* checks. It also runs on the adopted path, because a release that
+    // is already promoted can still not be aliased.
+    expect(aliased).toEqual([
+      { release: "release-1", alias: "s26-disposable-lab.vercel.app" },
+      { release: "release-2", alias: "s26-disposable-lab.vercel.app" },
+    ]);
   });
 
   it("does not mistake an unaliased staged production build for current traffic", async () => {
@@ -967,6 +994,9 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
         promotions.push(url.pathname);
         promoted = true;
         return providerResponse(200, {});
+      }
+      if (url.pathname === "/v10/projects/target-1/domains" && method === "GET") {
+        return providerResponse(200, { domains: [] });
       }
       return undefined;
     });

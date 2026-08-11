@@ -1214,6 +1214,31 @@ export class S26WorkerBackend implements S26BridgeBackend {
     });
   }
 
+  /**
+   * Points every hostname the project owns at this release.
+   *
+   * Vercel's own generated `*.vercel.app` aliases follow a promoted deployment by
+   * themselves; a hostname added to the project explicitly does not, while
+   * automatic assignment is off. Re-aliasing an alias that already resolves here
+   * is accepted, so this is safe to repeat — which matters because step 10 adopts
+   * an already-promoted release rather than promoting twice.
+   */
+  async #serveProjectDomains(target: string, release: string): Promise<void> {
+    const listed = await this.#vercel(`/v10/projects/${encodeURIComponent(target)}/domains`);
+    const domains = Array.isArray(listed.value.domains) ? listed.value.domains : [];
+    for (const entry of domains) {
+      const domain = record(entry, "Vercel project domain");
+      // A redirect-only entry names another host as the target it forwards to; it
+      // is not a hostname this release should answer for.
+      if (typeof domain.redirect === "string" && domain.redirect.length > 0) continue;
+      await this.#vercel(
+        `/v2/deployments/${encodeURIComponent(release)}/aliases`,
+        "POST",
+        { alias: stringField(domain, "name") },
+      );
+    }
+  }
+
   async #hostingRollout(input: JsonRecord, kind: "promote" | "rollback"): Promise<unknown> {
     const target = stringField(input, "target_handle");
     const active = stringField(input, "release_handle");
@@ -1231,6 +1256,20 @@ export class S26WorkerBackend implements S26BridgeBackend {
         "POST",
       );
     if (current !== active) await this.#waitForActiveRelease(target, active, response.id);
+    // Making the release SERVE the target's own hostnames is step 10's effect,
+    // and it was missing entirely. Step 6 sets autoAssignCustomDomains: false —
+    // deliberately, and it asserts the flag took hold — so that step 9's build
+    // stays staged "until step 10". Nothing then re-enabled it or aliased the
+    // promoted release, so a custom hostname could never come to serve it. That
+    // is what step 11 reported as domain.assigned / matchesExpected /
+    // servesActiveRelease all false.
+    //
+    // The domains are read from the project rather than taken from the request:
+    // step 8 already bound the hostname there, so the project is the authority on
+    // what this release must answer for, and the promote contract stays unchanged.
+    // Aliasing is explicit, so the project-level auto-assign flag stays off and
+    // future builds keep staging as designed.
+    if (kind === "promote") await this.#serveProjectDomains(target, active);
     return { hostingRequestId: response.id, targetHandle: target, rolloutHandle: response.id, rolloutKind: kind, activeReleaseHandle: active, previousReleaseHandle: previous, rolloutSequence: Date.now(), reasonCode: kind === "rollback" ? stringField(input, "reason_code") : null };
   }
 
