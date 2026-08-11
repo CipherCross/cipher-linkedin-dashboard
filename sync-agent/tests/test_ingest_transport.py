@@ -180,6 +180,32 @@ class CompileTest(unittest.TestCase):
         py_compile.compile(os.path.join(AGENT_DIR, "agent.py"), doraise=True)
 
 
+class ReleaseScriptTest(unittest.TestCase):
+    def test_the_release_script_parses_under_the_system_shell(self):
+        """`deploy.sh` is the last gate before the whole fleet self-updates, and
+        nothing checked that it PARSES.
+
+        It shipped with an apostrophe inside a `${VAR:?message}` expansion, which
+        bash 3.2 — the bash macOS ships, and the one `/usr/bin/env bash` finds
+        here — reads as an opening quote. `bash -n` rejected the entire file. The
+        script had never been run, so the defect was invisible until the first
+        real release attempt, which ran the tests, passed them, and then died
+        before publishing anything.
+
+        Checked with `-n` rather than by running it: this must prove the file
+        parses without executing a publish."""
+        import shutil
+        import subprocess
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash on this machine")
+        script = os.path.join(AGENT_DIR, "deploy.sh")
+        result = subprocess.run([bash, "-n", script],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0,
+                         f"deploy.sh does not parse:\n{result.stderr}")
+
+
 class ContractPinTest(unittest.TestCase):
     """The agent's constants against the endpoint's own, read from source."""
 

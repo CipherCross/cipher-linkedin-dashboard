@@ -23,7 +23,7 @@ else
   echo "WARNING: sync-agent/.venv is missing — transport tests NOT run" >&2
 fi
 
-: "${AGENT_RELEASE_ENDPOINT:?Set the release bucket's S3-compatible endpoint}"
+: "${AGENT_RELEASE_ENDPOINT:?Set the S3-compatible endpoint of the release bucket}"
 : "${AGENT_RELEASE_BUCKET:?Set the separate agent release bucket name}"
 : "${AGENT_RELEASE_WRITE_ACCESS_KEY_ID:?Set the write-scoped release access key}"
 : "${AGENT_RELEASE_WRITE_SECRET_ACCESS_KEY:?Set the write-scoped release secret}"
