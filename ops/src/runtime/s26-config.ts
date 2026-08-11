@@ -293,7 +293,10 @@ export function createConfiguredS26Runtime(
   store: SecretStore = new MacOsKeychainSecretStore(redactor),
 ): S26Runtime {
   const config = loadS26OwnerRuntimeConfig(configPath);
-  const bridge = providerHttp(config.providers.bridge, store, redactor);
+  // The only transport that reaches our own reviewed bridge. Marking it here —
+  // and nowhere else — is what lets a deterministic bridge failure keep its code
+  // while a third-party provider's ambiguous status still reads as ambiguous.
+  const bridge = { ...providerHttp(config.providers.bridge, store, redactor), controlPlaneBridge: true };
   const apis = createS26ConcreteApiBundle({
     neon: providerHttp(config.providers.neon, store, redactor),
     r2: providerHttp(config.providers.r2, store, redactor),

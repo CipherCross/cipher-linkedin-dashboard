@@ -165,6 +165,110 @@ test("S26 concrete transport quarantines unknown outcomes and redacts credential
   );
 });
 
+// The bridge derives its HTTP status FROM a deterministic OpsError code, so on
+// that transport the status alone is lossy: provider_error and
+// provider_readiness_blocked both leave as 409. Reading only the status recorded
+// the live step-3 schema-apply refusal as `outcome_unknown`, which quarantined
+// the operation behind ambiguity that no evidence could resolve — while the
+// database had in fact rejected one statement deterministically.
+function bridgeFailure(status: number, body: unknown, requestId = "opaque-request") {
+  return {
+    baseUrl: "https://bridge.example.test",
+    scopeId: "provider-scope",
+    controlPlaneBridge: true,
+    credential: { resolve: async () => "local-bridge-credential" },
+    fetch: async () => ({
+      ok: false,
+      status,
+      headers: { get: () => requestId },
+      json: async () => {
+        if (body === undefined) throw new Error("response body is not JSON");
+        return body;
+      },
+    }),
+  };
+}
+
+async function schemaApplyFailure(bridge: ReturnType<typeof bridgeFailure>): Promise<OpsError> {
+  const client = new NeonPostgresOperationsClient(
+    { baseUrl: "https://provider.example.test", scopeId: "provider-scope", credential: { resolve: async () => "unused" } },
+    bridge,
+    new Redactor(),
+  );
+  try {
+    await client.applySchema({ projectId: "neon-project", baselineVersion: 53, migrationVersions: [54], targetSchemaVersion: 54 });
+  } catch (error) {
+    assert.ok(error instanceof OpsError);
+    return error;
+  }
+  throw new Error("the bridge failure did not reject");
+}
+
+test("a deterministic control-plane bridge failure keeps its own code instead of becoming ambiguous", async () => {
+  const decided = await schemaApplyFailure(
+    bridgeFailure(409, { code: "provider_error", provider_request_id: "bridge-request-7" }),
+  );
+  assert.equal(decided.code, "provider_error");
+  // The bridge's own request id is better evidence than the missing header that
+  // left the live registry holding "provider-request-unknown".
+  assert.equal(decided.details.provider_request_id, "bridge-request-7");
+
+  const blocked = await schemaApplyFailure(bridgeFailure(409, { code: "provider_readiness_blocked" }));
+  assert.equal(blocked.code, "provider_readiness_blocked");
+
+  const secrets = await schemaApplyFailure(bridgeFailure(503, { code: "secret_store_error" }));
+  assert.equal(secrets.code, "secret_store_error");
+});
+
+test("a genuinely ambiguous outcome is never downgraded by the bridge body", async () => {
+  // The bridge reports a real unknown outcome with 502 and says so in the body.
+  const reported = await schemaApplyFailure(bridgeFailure(502, { code: "outcome_unknown" }));
+  assert.equal(reported.code, "outcome_unknown");
+
+  // A body that is not ours at all — an edge or proxy failure — must fall back to
+  // the conservative status mapping rather than being trusted.
+  const unparseable = await schemaApplyFailure(bridgeFailure(409, undefined));
+  assert.equal(unparseable.code, "outcome_unknown");
+
+  // A code outside the closed deterministic set is not honoured either, so the
+  // set cannot be widened by whatever a response happens to claim.
+  const unknownCode = await schemaApplyFailure(bridgeFailure(409, { code: "lock_conflict" }));
+  assert.equal(unknownCode.code, "outcome_unknown");
+
+  // The bridge's own non-OpsError bodies are outside the set too, so they take
+  // the status mapping: 401 is decided, and an unrecognised body on an ambiguous
+  // status stays ambiguous.
+  const rejected = await schemaApplyFailure(bridgeFailure(401, { code: "unauthorized" }));
+  assert.equal(rejected.code, "provider_error");
+  const ambiguous = await schemaApplyFailure(bridgeFailure(409, { code: "unauthorized" }));
+  assert.equal(ambiguous.code, "outcome_unknown");
+});
+
+test("the deterministic body rule does not apply to a third-party provider endpoint", async () => {
+  // Same body, same status, but an arbitrary provider host: a 409 mid-mutation
+  // there really is ambiguous, and no provider owes us this vocabulary.
+  const client = new NeonPostgresOperationsClient(
+    {
+      baseUrl: "https://provider.example.test",
+      scopeId: "provider-scope",
+      credential: { resolve: async () => "unused" },
+      fetch: async () => ({
+        ok: false,
+        status: 409,
+        headers: { get: () => "opaque-request" },
+        json: async () => ({ code: "provider_error" }),
+      }),
+    },
+    bridgeConfiguration([]),
+    new Redactor(),
+  );
+  await assert.rejects(client.waitUntilReady("project"), (error: unknown) => {
+    assert.ok(error instanceof OpsError);
+    assert.equal(error.code, "outcome_unknown");
+    return true;
+  });
+});
+
 test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   assert.throws(
     () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", scopeId: "provider-scope", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),

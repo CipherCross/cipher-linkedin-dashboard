@@ -7,7 +7,7 @@
  * constructor reads process environment variables and no method accepts a URL,
  * header map, SQL string, shell command or arbitrary payload.
  */
-import { OpsError } from "../core/errors.js";
+import { OpsError, type OpsErrorCode } from "../core/errors.js";
 import { Redactor } from "../core/redaction.js";
 import { neonOwnershipRoleName } from "./neon-ownership.js";
 import { s26BridgePath } from "./s26-bridge-contract.js";
@@ -55,13 +55,43 @@ export interface ProviderHttpConfiguration {
   readonly scopeId?: string;
   /** Test-only replacement for the platform fetch implementation. */
   readonly fetch?: ProviderFetch;
+  /**
+   * Set ONLY for our own reviewed control-plane bridge.
+   *
+   * The bridge derives its HTTP status from a deterministic OpsError code, so on
+   * that transport alone the body's `code` is better evidence than the status.
+   * A third-party provider endpoint must never carry this: there, an ambiguous
+   * status is the only honest reading of a possibly-applied mutation.
+   */
+  readonly controlPlaneBridge?: boolean;
 }
+
+/**
+ * Bridge body codes that name a decision made *before* any provider mutation
+ * was attempted, so repeating the request is no less safe than the first call.
+ *
+ * `outcome_unknown` is deliberately absent: the bridge reports it with 502 and
+ * it must never be downgraded to a deterministic failure. Any code outside this
+ * closed set — including the bridge's non-OpsError `unauthorized` and
+ * `unsupported_route` bodies — falls back to the status mapping.
+ */
+const DETERMINISTIC_BRIDGE_ERROR_CODES: ReadonlySet<string> = new Set<OpsErrorCode>([
+  "provider_error",
+  "provider_readiness_blocked",
+  "provider_snapshot_drift",
+  "schema_validation_failed",
+  "secret_input_required",
+  "secret_invalid",
+  "secret_store_error",
+  "unsupported_contract",
+]);
 
 class PrivateProviderHttp {
   readonly #baseUrl: URL;
   readonly #credential: ProviderCredentialResolver;
   readonly #fetch: ProviderFetch;
   readonly #redactor: Redactor;
+  readonly #controlPlaneBridge: boolean;
 
   constructor(configuration: ProviderHttpConfiguration, redactor: Redactor) {
     try {
@@ -84,6 +114,35 @@ class PrivateProviderHttp {
       return response;
     });
     this.#redactor = redactor;
+    this.#controlPlaneBridge = configuration.controlPlaneBridge === true;
+  }
+
+  /**
+   * The deterministic code our own bridge put in the body, when it left one.
+   *
+   * Returns undefined — keeping the conservative status mapping — for any
+   * non-bridge transport, an unreadable or non-JSON body, or a code outside the
+   * closed deterministic set. An edge or proxy failure never reaches this shape.
+   */
+  async #deterministicBridgeFailure(
+    response: ProviderFetchResponse,
+  ): Promise<{ readonly code: OpsErrorCode; readonly providerRequestId?: string } | undefined> {
+    if (!this.#controlPlaneBridge) return undefined;
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return undefined;
+    }
+    if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined;
+    const record = body as Record<string, unknown>;
+    const code = record.code;
+    if (typeof code !== "string" || !DETERMINISTIC_BRIDGE_ERROR_CODES.has(code)) return undefined;
+    const providerRequestId = record.provider_request_id;
+    return {
+      code: code as OpsErrorCode,
+      ...(typeof providerRequestId === "string" ? { providerRequestId } : {}),
+    };
   }
 
   async invoke(method: "GET" | "POST" | "PATCH", path: string, payload?: unknown): Promise<unknown> {
@@ -99,10 +158,19 @@ class PrivateProviderHttp {
         headers: { authorization: `Bearer ${credential}`, accept: "application/json", ...(payload === undefined ? {} : { "content-type": "application/json" }) },
         ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       });
-      const requestId = response.headers.get("x-request-id") ?? "provider-request-unknown";
+      let requestId = response.headers.get("x-request-id") ?? "provider-request-unknown";
       if (!response.ok) {
-        const code = response.status === 408 || response.status === 409 || response.status === 423 || response.status === 429 || response.status >= 500
-          ? "outcome_unknown" : "provider_error";
+        // Our own bridge answers a deterministic OpsError with a status chosen
+        // FROM that code — provider_error and provider_readiness_blocked both
+        // become 409. Reading only the status therefore threw the safe code away
+        // and recorded a decided failure as an ambiguous one, which is what
+        // quarantined S26 step 3 behind an `outcome_unknown` that no evidence
+        // could ever resolve. The body is authoritative on that transport only.
+        const bridgeFailure = await this.#deterministicBridgeFailure(response);
+        if (bridgeFailure?.providerRequestId !== undefined) requestId = bridgeFailure.providerRequestId;
+        const code = bridgeFailure?.code
+          ?? (response.status === 408 || response.status === 409 || response.status === 423 || response.status === 429 || response.status >= 500
+            ? "outcome_unknown" : "provider_error");
         // The host and path say which named operation failed. Without them a
         // provider status is unattributable, which is how a bridge route sent
         // to a provider's own API stayed hidden behind an opaque 401.
