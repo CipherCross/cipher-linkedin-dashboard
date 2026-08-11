@@ -269,6 +269,87 @@ test("the deterministic body rule does not apply to a third-party provider endpo
   });
 });
 
+// Step 4 stopped live on `outcome_unknown: Provider request failed with status
+// 409` against a bucket it had itself created. Cloudflare answers an existing
+// bucket with 409, the direct transport reads any 409 as ambiguous — correctly,
+// for an arbitrary provider — and the adopt branch required `provider_error`, so
+// the one status that means "already there" could never reach it.
+function r2WithExistingBucket(statusForCreate: number, buckets: readonly string[], listOk = true) {
+  const calls: string[] = [];
+  const transport = {
+    baseUrl: "https://r2.example.test",
+    scopeId: "account-scope",
+    credential: { resolve: async () => "local-r2-credential" },
+    fetch: async (url: string, init: { method: string }) => {
+      calls.push(`${init.method} ${new URL(url).pathname}`);
+      if (init.method === "POST") {
+        return { ok: false, status: statusForCreate, headers: { get: () => null }, json: async () => ({}) };
+      }
+      if (!listOk) {
+        return { ok: false, status: 401, headers: { get: () => null }, json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "r2-list-request" },
+        json: async () => ({ result: { buckets: buckets.map((name) => ({ name })) } }),
+      };
+    },
+  };
+  return { client: new CloudflareR2OperationsClient(transport as never, bridgeConfiguration([]), new Redactor()), calls };
+}
+
+test("an R2 bucket the account already holds is adopted whatever status the create returned", async () => {
+  // 409 is the live case. 400 is the same conflict under Cloudflare's other
+  // spelling of error 10004, so neither may depend on the create's classification.
+  for (const status of [409, 400, 500]) {
+    const { client, calls } = r2WithExistingBucket(status, ["lead-photos"]);
+    const adopted = await client.configurePrivateStorage({
+      projectId: "neon-project", bucketId: "lead-photos", visibility: "private",
+    });
+    assert.equal(adopted.providerRequestId, "r2-list-request");
+    assert.deepEqual(calls, [
+      "POST /client/v4/accounts/account-scope/r2/buckets",
+      "GET /client/v4/accounts/account-scope/r2/buckets",
+    ]);
+  }
+});
+
+test("a failed R2 create that did not leave the bucket keeps its original error", async () => {
+  // The confirming read is what resolves the ambiguity, so when it finds nothing
+  // the create's own code must survive untouched — an unknown stays unknown
+  // rather than being reported as a decided failure.
+  const { client } = r2WithExistingBucket(409, ["some-other-bucket"]);
+  await assert.rejects(
+    client.configurePrivateStorage({ projectId: "neon-project", bucketId: "lead-photos", visibility: "private" }),
+    (error: unknown) => {
+      assert.ok(error instanceof OpsError);
+      assert.equal(error.code, "outcome_unknown");
+      return true;
+    },
+  );
+
+  const refused = r2WithExistingBucket(403, ["some-other-bucket"]);
+  await assert.rejects(
+    refused.client.configurePrivateStorage({ projectId: "neon-project", bucketId: "lead-photos", visibility: "private" }),
+    (error: unknown) => error instanceof OpsError && error.code === "provider_error",
+  );
+
+  // When the confirming read fails too it proves nothing, so the create's error
+  // stands rather than the read's — otherwise a bad credential would be reported
+  // as whatever the second call happened to return.
+  const unreadable = r2WithExistingBucket(409, ["lead-photos"], false);
+  await assert.rejects(
+    unreadable.client.configurePrivateStorage({ projectId: "neon-project", bucketId: "lead-photos", visibility: "private" }),
+    (error: unknown) => {
+      assert.ok(error instanceof OpsError);
+      assert.equal(error.code, "outcome_unknown");
+      assert.equal(error.details.provider_status, 409);
+      return true;
+    },
+  );
+});
+
 test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   assert.throws(
     () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", scopeId: "provider-scope", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),

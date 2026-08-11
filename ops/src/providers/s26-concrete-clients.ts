@@ -366,13 +366,36 @@ export class CloudflareR2OperationsClient extends BridgeRecoveryClient implement
       const value = result<{ readonly providerRequestId: string }>(await this.#direct.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket");
       return { providerRequestId: value.providerRequestId };
     } catch (error) {
-      // A bucket this account already holds is the retried case, not a
-      // failure: the step's outcome — the bucket exists — is already true.
-      if (!(error instanceof OpsError) || error.code !== "provider_error") throw error;
-      const existing = result<{ readonly providerRequestId: string; readonly result?: { readonly buckets?: readonly { readonly name?: string }[] } }>(
-        await this.#direct.invoke("GET", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`),
-        "R2 buckets",
-      );
+      // A bucket this account already holds is the retried case, not a failure:
+      // the step's outcome — the bucket exists — is already true. Bucket
+      // existence IS the whole postcondition here, because R2 buckets are
+      // private unless a public binding is added.
+      //
+      // This deliberately does not decide from the create's classification.
+      // Cloudflare answers an existing bucket with 409, which the transport reads
+      // as `outcome_unknown` — correctly, since a bare status cannot say whether
+      // an arbitrary provider applied a mutation. Requiring `provider_error` here
+      // therefore made the adopt branch unreachable for the one status that
+      // actually means "already there", and step 4 failed on a bucket it had
+      // itself created. Keying on the status instead would be almost as brittle:
+      // Cloudflare has used both 400 and 409 for error 10004.
+      //
+      // Instead the authoritative list decides. Re-reading is read-only and safe
+      // to repeat after an ambiguous create, and it is what resolves the
+      // ambiguity: present means the postcondition holds, absent means the
+      // original error stands, unchanged, so a genuine unknown stays unknown.
+      if (!(error instanceof OpsError)) throw error;
+      let existing;
+      try {
+        existing = result<{ readonly providerRequestId: string; readonly result?: { readonly buckets?: readonly { readonly name?: string }[] } }>(
+          await this.#direct.invoke("GET", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`),
+          "R2 buckets",
+        );
+      } catch {
+        // The confirming read failed too, so it proves nothing. The create's own
+        // error is the honest result.
+        throw error;
+      }
       const found = (existing.result?.buckets ?? []).some((bucket) => bucket.name === request.bucketId);
       if (!found) throw error;
       return { providerRequestId: existing.providerRequestId };
