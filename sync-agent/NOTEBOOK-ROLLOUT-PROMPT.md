@@ -184,29 +184,55 @@ do not work around it. (The agent falls back to OpenSSL, but I want to know.)
 
 ## Step 4 — install the new agent
 
-I will give you the new `agent.py` (version 1.15.1), or you can fetch it
-yourself — the repository is public and this URL is pinned to one immutable
-commit:
+Download version **1.15.1** yourself. The repository is public, so this needs no
+credential, and the URL is pinned to one immutable commit — not to a branch — so
+it cannot hand you a different file tomorrow than it handed the last notebook
+today.
 
+**Verify before installing, not after.** Download to a temporary name, check it,
+and only then move it into place. A corrupt or truncated download must never
+spend a moment as `agent.py`.
+
+macOS / Linux:
+
+```bash
+curl -fsSL -o agent.py.new \
+  https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/4b040863d7dd39b6503d676eb8d959b5f9b31f45/sync-agent/agent.py
+
+shasum -a 256 agent.py.new              # expect b39fc97c3d2b8c3136d2dcf3e68b368274720da2b7ab6e47f6b891ebb6f01269
+wc -c < agent.py.new                    # expect 134074
+grep -m1 '^AGENT_VERSION' agent.py.new  # expect AGENT_VERSION = "1.15.1"
+
+# Only if all three matched:
+mv agent.py.new agent.py
 ```
-https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/4b040863d7dd39b6503d676eb8d959b5f9b31f45/sync-agent/agent.py
+
+Windows (PowerShell):
+
+```powershell
+curl.exe -fsSL -o agent.py.new `
+  https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/4b040863d7dd39b6503d676eb8d959b5f9b31f45/sync-agent/agent.py
+
+certutil -hashfile agent.py.new SHA256   # expect b39fc97c3d2b8c3136d2dcf3e68b368274720da2b7ab6e47f6b891ebb6f01269
+(Get-Item agent.py.new).Length           # expect 134074
+Select-String -Path agent.py.new -Pattern '^AGENT_VERSION' | Select-Object -First 1
+
+# Only if all three matched:
+Move-Item -Force agent.py.new agent.py
 ```
 
-Put it in place of the current one, then verify **all three** of these before
-going further:
+Report all three values to me. If any of them disagrees, **delete `agent.py.new`,
+leave the current `agent.py` untouched, and stop** — the running agent is still
+fine, and a mismatch means either a broken download or a URL that is not the one
+I intended.
 
-- `AGENT_VERSION` now reads exactly `1.15.1`
-- the file is exactly **134074** bytes
-- its SHA-256 is exactly
-  `b39fc97c3d2b8c3136d2dcf3e68b368274720da2b7ab6e47f6b891ebb6f01269`
-  - macOS/Linux: `shasum -a 256 agent.py`
-  - Windows: `certutil -hashfile agent.py SHA256`
+If this machine cannot reach `raw.githubusercontent.com` at all, say so and I
+will hand you the file directly instead.
 
-If the size or hash does not match, the copy is corrupt: restore
-`agent.py.1.12.2.bak`, tell me, and stop.
+Then check it parses, and that the file in place is the one you verified:
 
-Then check it parses:
-`.venv/bin/python -m py_compile agent.py` (Windows: `.venv\Scripts\python.exe -m py_compile agent.py`).
+- macOS/Linux: `.venv/bin/python -m py_compile agent.py && shasum -a 256 agent.py`
+- Windows: `.venv\Scripts\python.exe -m py_compile agent.py` then `certutil -hashfile agent.py SHA256`
 
 ## Step 5 — add the three new settings to config.yaml
 
