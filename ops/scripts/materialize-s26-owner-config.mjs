@@ -24,14 +24,29 @@ if (
   throw new Error("S26 disposable policy artifact is not the reviewed plan-eligible configuration");
 }
 
-const capabilityIds = [
-  "ai.classification",
-  "ai.coaching",
-  "ai.briefing.daily",
-  "ai.briefing.weekly",
-  "slack.reply_alerts",
-  "slack.briefings",
-  "airtable.imports",
+// Each budget's unit must equal that capability's metering unit, so it is read
+// off the approved capabilities catalog rather than restated here.
+const capabilityCatalog = policy.catalogs.find(
+  (catalog) => catalog.catalog_kind === "capabilities",
+);
+const capabilities = capabilityCatalog.entries.map((entry) => ({
+  id: entry.id,
+  meteringUnit: entry.metering_unit,
+}));
+
+// The onboarding contract fixes this suite exactly; it is not a free selection.
+const smokeTestIds = [
+  "schema_ledger",
+  "auth_anonymous_denied",
+  "auth_inactive_denied",
+  "auth_member_allowed",
+  "rls_role_boundaries",
+  "private_storage_delivery",
+  "api_health",
+  "cron_configuration",
+  "preview_isolation",
+  "smtp_delivery",
+  "runtime_project_ref",
 ];
 
 const config = {
@@ -91,8 +106,9 @@ const config = {
     agent_release_id: "sync-agent-1.14.0",
     ingest_protocol_id: "agent-ingest.v1",
     template_set_id: "s26-self-hosted-better-auth-v1",
-    sender_domain: "ciphercross.dev",
-    from_identity: "noreply@ciphercross.dev",
+    // The verified Resend domain is the mail subdomain, not the apex.
+    sender_domain: "mail.ciphercross.dev",
+    from_identity: "noreply@mail.ciphercross.dev",
     baseline_version: 53,
     migration_versions: [54],
     target_schema_version: 54,
@@ -105,15 +121,25 @@ const config = {
       recurring_high_minor: 0,
       usage_ceiling_minor: 0,
       one_time_minor: 0,
-      // The drill selects only free-tier, non-billable entitlements, so it
-      // buys no priced component and carries no cost SKU.
-      components: [],
+      // The contract requires at least one component. The drill buys nothing,
+      // so it declares the free Neon project at zero cost.
+      components: [
+        {
+          provider: "data",
+          sku_id: "neon-free-project-month",
+          quantity: 1,
+          unit: "tenant_month",
+          low_minor: 0,
+          high_minor: 0,
+          assumption: "Neon Free project for a disposable, non-production drill; no paid entitlement is selected",
+        },
+      ],
       pricing_catalog_version: "s26-pricing-2026-08-10",
     },
-    capability_budgets: capabilityIds.map((capability) => ({
-      capability,
+    capability_budgets: capabilities.map(({ id, meteringUnit }) => ({
+      capability: id,
       enabled: false,
-      unit: "events",
+      unit: meteringUnit,
       period: "calendar_month",
       soft_limit: 0,
       hard_limit: 0,
@@ -136,16 +162,7 @@ const config = {
       ],
       retention_policy_id: "retention-30d",
     },
-    smoke_test_ids: [
-      "schema",
-      "auth",
-      "rls",
-      "storage",
-      "api",
-      "cron",
-      "preview-isolation",
-      "smtp",
-    ],
+    smoke_test_ids: smokeTestIds,
   },
 };
 
