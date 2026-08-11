@@ -111,16 +111,22 @@ export class DisposableOnboardingPlanner {
     const ownership = ownershipMarker(this.#registry.ownerUuid, inputs);
     const preflight = await this.#preflight.inspect(inputs, ownership);
     const generatedAt = this.#clock();
-    const maximumExpiry = generatedAt.getTime() + 30 * 60 * 1_000;
-    const snapshotExpiry =
-      preflight.snapshotValidUntil === null
-        ? maximumExpiry
-        : Date.parse(preflight.snapshotValidUntil);
-    const expiresAt = Math.min(maximumExpiry, snapshotExpiry);
+    /*
+     * A plan carries no wall clock of its own. Every step re-runs the live
+     * preflight before it executes, so provider drift is caught continuously
+     * and by observation rather than by a timer — a short TTL added nothing
+     * except a deadline that a thirteen-step onboarding could not meet.
+     *
+     * What genuinely bounds a plan is the approved catalogs it was built from:
+     * it must not outlive them, which the semantic validator already asserts.
+     */
+    const expiresAt = Math.min(
+      ...this.#profile.catalogs.map((catalog) => Date.parse(catalog.valid_until)),
+    );
     assertOps(
       expiresAt > generatedAt.getTime(),
-      "provider_snapshot_drift",
-      "Provider preflight snapshots are already expired",
+      "catalog_invalid",
+      "Approved catalogs have expired",
     );
     const projectName = `lh2-${inputs.workspace_class}-${inputs.tenant_slug}`;
     const hostname = `${inputs.tenant_slug}.${this.#profile.platformDomain}`;

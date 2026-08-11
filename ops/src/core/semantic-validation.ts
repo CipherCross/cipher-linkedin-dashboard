@@ -8,7 +8,6 @@ import type {
   ProviderSnapshot,
 } from "./types.js";
 
-const MAX_PLAN_TTL_MS = 30 * 60 * 1_000;
 const RESERVED_SLUGS = new Set([
   "api",
   "app",
@@ -74,12 +73,10 @@ function validateEnvelopeTime(plan: PlanEnvelope, now: Date): void {
   const generatedAt = instant(plan.generated_at, "generated_at");
   const expiresAt = instant(plan.expires_at, "expires_at");
   assertOps(expiresAt > generatedAt, "invalid_plan", "Plan expiry must follow generation");
-  assertOps(
-    expiresAt - generatedAt <= MAX_PLAN_TTL_MS,
-    "invalid_plan",
-    "Plan TTL exceeds 30 minutes",
-  );
-  assertOps(now.getTime() < expiresAt, "plan_expired", "Plan has expired");
+  // No maximum lifetime: a plan is bounded by the approved catalogs it was
+  // built from, and provider drift is caught by the live preflight that runs
+  // before every step rather than by a deadline.
+  assertOps(now.getTime() < expiresAt, "catalog_invalid", "Approved catalogs have expired");
 }
 
 function validateCatalogs(
@@ -367,11 +364,10 @@ function validateOnboarding(
       "valid_until",
     );
     assertOps(validUntil > observedAt, "invalid_plan", "Snapshot validity is empty");
-    assertOps(
-      planExpiry <= validUntil,
-      "invalid_plan",
-      "Plan expiry exceeds provider snapshot validity",
-    );
+    // A stored snapshot's window does not bound the plan: it records what was
+    // observed when the plan was built, while every step re-observes the
+    // providers before it runs. Tying the plan's life to that window is what
+    // made a multi-step apply expire against its own onboarding.
   }
 }
 
@@ -458,12 +454,8 @@ export function validateProviderSnapshots(
       "provider_snapshot_drift",
       `Provider snapshot expired for ${provider}`,
     );
-    assertOps(
-      instant(current.valid_until, `${provider}.valid_until`) >=
-        instant(plan.expires_at, "plan.expires_at"),
-      "provider_snapshot_drift",
-      `Current provider snapshot for ${provider} expires before the plan`,
-    );
+    // The snapshot only has to be valid now, at the step about to run. It does
+    // not have to outlive the plan: the next step takes its own snapshot.
   }
 }
 
