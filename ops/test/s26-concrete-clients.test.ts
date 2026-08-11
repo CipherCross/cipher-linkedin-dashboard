@@ -5,6 +5,7 @@ import {
   BetterAuthOperationsClient,
   CloudflareR2OperationsClient,
   DomainOperationsClient,
+  neonOwnershipRoleName,
   NeonPostgresOperationsClient,
   OpsError,
   Redactor,
@@ -33,8 +34,14 @@ function recordingFetch(calls: Call[], body: unknown = { providerRequestId: "req
     const pathname = new URL(url).pathname;
     // Matched by suffix so a base URL that carries its own path prefix still
     // resolves to the same named operation.
-    const mapped = pathname.endsWith("/v2/projects")
-      ? { project: { id: "neon-project", name: "lh2-disposable-disposable-lab" } }
+    const mapped = pathname.endsWith("/v2/projects") && init.method === "GET"
+      // The adoption search finds nothing, so creation proceeds.
+      ? { projects: [] }
+      : pathname.endsWith("/v2/projects")
+      ? {
+        project: { id: "neon-project", name: "lh2-disposable-disposable-lab" },
+        branch: { id: "br-main" },
+      }
       : pathname.endsWith("/v11/projects")
         ? { id: "target", name: "lh2-disposable-disposable-lab" }
         : pathname.endsWith("/domains")
@@ -89,7 +96,9 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   await source.inspect({ sourceGitSha: "a".repeat(40), compatibilityEntryId: "release-v1", applicationVersion: "1" });
 
   assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).origin}${new URL(call.url).pathname}`), [
+    "GET https://provider.example.test/v2/projects",
     "POST https://provider.example.test/v2/projects",
+    "POST https://provider.example.test/v2/projects/neon-project/branches/br-main/roles",
     "POST https://bridge.example.test/s26/control-plane/v1/data/portable-schema-apply",
     "POST https://bridge.example.test/s26/control-plane/v1/identity/company-admin-invite",
     "POST https://provider.example.test/client/v4/accounts/provider-scope/r2/buckets",
@@ -102,13 +111,14 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   ]);
   for (const call of calls) {
     assert.equal(call.url.includes("credential"), false);
-    assert.equal(call.body?.includes("authorization"), false);
+    // A GET carries no body; the assertion must not pass vacuously either way.
+    assert.notEqual(call.body?.includes("authorization"), true);
   }
   assert.equal(calls.find((call) => new URL(call.url).pathname === "/v11/projects")?.url.includes("teamId=provider-scope"), true);
   assert.equal(calls.find((call) => new URL(call.url).pathname === "/v10/projects/target/domains")?.url.includes("teamId=provider-scope"), true);
-  assert.deepEqual(JSON.parse(calls[0]!.body!), { org_id: "neon-owner", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
-  assert.deepEqual(JSON.parse(calls[3]!.body!), { name: "lead-photos" });
-  assert.deepEqual(JSON.parse(calls[4]!.body!), {
+  assert.deepEqual(JSON.parse(calls[1]!.body!), { org_id: "neon-owner", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
+  assert.deepEqual(JSON.parse(calls[5]!.body!), { name: "lead-photos" });
+  assert.deepEqual(JSON.parse(calls[6]!.body!), {
     name: "lh2-disposable-disposable-lab",
     environmentVariables: [{
       key: "LH2_OWNERSHIP_MARKER_DIGEST",
@@ -201,6 +211,30 @@ test("Better Auth recovery uses the fixed S26 bridge paths", async () => {
   ]);
 });
 
+test("creating a Neon project writes the ownership marker onto it", async () => {
+  const calls: Call[] = [];
+  const neon = new NeonPostgresOperationsClient(configuration(calls), bridgeConfiguration(calls));
+  await neon.createOrAdoptProject({
+    organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab",
+    regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership,
+  });
+
+  // Without this role the project reads back as foreign on the next
+  // inspection, which blocks every step after its own creation.
+  const marker = calls.find((call) => call.url.endsWith("/roles"));
+  assert.ok(marker, "project creation must write an ownership marker");
+  assert.deepEqual(JSON.parse(marker.body!), {
+    role: { name: `lh2_owner_${"a".repeat(32)}` },
+  });
+});
+
+test("a malformed ownership digest cannot produce a marker name", () => {
+  assert.throws(
+    () => neonOwnershipRoleName("not-a-digest"),
+    (error: unknown) => error instanceof OpsError && error.code === "provider_error",
+  );
+});
+
 test("a base URL path prefix is extended, not replaced", async () => {
   const calls: Call[] = [];
   // Neon's control plane lives under /api; an absolute path would address
@@ -213,7 +247,7 @@ test("a base URL path prefix is extended, not replaced", async () => {
     organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab",
     regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership,
   });
-  assert.equal(calls[0]!.url, "https://provider.example.test/api/v2/projects");
+  assert.equal(calls[1]!.url, "https://provider.example.test/api/v2/projects");
 });
 
 test("preflight inspections travel on the bridge, never on a provider API host", async () => {

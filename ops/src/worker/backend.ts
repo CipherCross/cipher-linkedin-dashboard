@@ -7,6 +7,7 @@ import {
   CANONICAL_TENANT_ENVIRONMENT,
 } from "../providers/hosting-tenant.js";
 import { hostingEnvironmentBindingDigest } from "../providers/hosting.js";
+import { neonOwnershipRoleName } from "../providers/neon-ownership.js";
 import type { S26BridgeBackend } from "../bridge/s26-control-plane-service.js";
 import type { S26BridgeRoute } from "../providers/s26-bridge-contract.js";
 import { applyPinnedPortablePostgres, runPinnedPortableSmoke, runPinnedRestoreVerification } from "./pinned-postgres.js";
@@ -93,8 +94,14 @@ function generateHighEntropySecret(): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Snapshot validity caps the plan's own expiry, and apply executes one step per
+ * call with a fresh preflight each time. A window shorter than the contract's
+ * 30-minute maximum cannot fit a thirteen-step onboarding, so it matches that
+ * maximum rather than undercutting it.
+ */
 function validUntil(): string {
-  return new Date(Date.now() + 5 * 60_000).toISOString();
+  return new Date(Date.now() + 30 * 60_000).toISOString();
 }
 
 function schedulePath(schedule: JsonRecord): string {
@@ -377,6 +384,22 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return this.#connectionUri(projectId, this.env.NEON_OWNER_ROLE_NAME, branchId);
   }
 
+  async #neonOwnershipMarkerPresent(projectId: string, ownershipMarkerDigest: string): Promise<boolean> {
+    const expected = neonOwnershipRoleName(ownershipMarkerDigest);
+    const branches = await this.#neon(`/projects/${encodeURIComponent(projectId)}/branches`);
+    const list = Array.isArray(branches.value.branches) ? branches.value.branches : [];
+    for (const entry of list) {
+      const branchId = stringField(record(entry, "Neon branch"), "id");
+      const roles = await this.#neon(
+        `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/roles`,
+      );
+      const names = (Array.isArray(roles.value.roles) ? roles.value.roles : [])
+        .map((role) => record(role, "Neon role").name);
+      if (names.includes(expected)) return true;
+    }
+    return false;
+  }
+
   async #dataInspect(input: JsonRecord): Promise<unknown> {
     if (stringField(input, "organization_id") !== this.env.NEON_ORGANIZATION_ID) {
       throw new OpsError("provider_error", "Neon organization scope mismatch");
@@ -386,10 +409,17 @@ export class S26WorkerBackend implements S26BridgeBackend {
     const response = await this.#neon(`/projects?${query.toString()}`);
     const projects = Array.isArray(response.value.projects) ? response.value.projects : [];
     const existing = projects.map((entry) => record(entry, "Neon project")).find((project) => project.name === name);
-    // Neon projects have no reviewed immutable ownership-marker field in this
-    // contract. A name collision therefore stays foreign/ambiguous instead of
-    // being adopted from organization membership alone.
-    const owned = existing === undefined;
+    // Neon has no metadata field on a project, so ownership is carried by a
+    // role written onto the project at creation. Organization membership and a
+    // matching name are not evidence on their own: without the marker the
+    // project stays foreign, and with it our own resource is adoptable instead
+    // of blocking every step that follows its creation.
+    const owned = existing === undefined
+      ? false
+      : await this.#neonOwnershipMarkerPresent(
+        stringField(existing, "id"),
+        stringField(input, "ownership_marker_digest"),
+      );
     return {
       organizationAccessible: true,
       deterministicNameAvailable: existing === undefined,

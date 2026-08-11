@@ -9,6 +9,7 @@
  */
 import { OpsError } from "../core/errors.js";
 import { Redactor } from "../core/redaction.js";
+import { neonOwnershipRoleName } from "./neon-ownership.js";
 import { s26BridgePath } from "./s26-bridge-contract.js";
 import type {
   AuthConfigurationRequest, CompanyAdminRequest, DataInspection, DataInspectionRequest,
@@ -176,9 +177,64 @@ export class NeonPostgresOperationsClient extends BridgeRecoveryClient implement
   constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); }
   async inspect(request: DataInspectionRequest): Promise<DataInspection> { return inspection(await this.bridge.invoke("POST", s26BridgePath("data", "inspect"), { organization_id: request.organizationId, deterministic_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, backup_profile_id: request.backupProfileId, ownership_marker_digest: request.ownership.digest }), "Neon inspection bridge"); }
   async createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
-    const value = result<{ readonly providerRequestId: string; readonly project?: { readonly id?: string; readonly name?: string } }>(await this.#direct.invoke("POST", this.prefix, { org_id: request.organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
+    // Adoption is what makes this step safe to retry. Without it a resumed or
+    // re-planned operation creates a second project every time, because Neon
+    // does not require project names to be unique.
+    const adopted = await this.#findOwnedProject(request.organizationId, request.deterministicName, request.ownership.digest);
+    if (adopted !== undefined) {
+      return { providerRequestId: adopted.providerRequestId, providerOwnerId: request.organizationId, resourceId: adopted.resourceId, deterministicName: request.deterministicName, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: true };
+    }
+    const value = result<{
+      readonly providerRequestId: string;
+      readonly project?: { readonly id?: string; readonly name?: string };
+      readonly branch?: { readonly id?: string };
+    }>(await this.#direct.invoke("POST", this.prefix, { org_id: request.organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
     if (!value.project?.id || value.project.name !== request.deterministicName) throw new OpsError("provider_error", "Neon project response is incomplete");
+    if (!value.branch?.id) throw new OpsError("provider_error", "Neon project response has no default branch");
+    // The marker must exist before anything inspects this project, otherwise
+    // our own resource reads back as foreign and blocks every later step.
+    await this.#markOwnership(value.project.id, value.branch.id, request.ownership.digest);
     return { providerRequestId: value.providerRequestId, providerOwnerId: request.organizationId, resourceId: value.project.id, deterministicName: request.deterministicName, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false };
+  }
+  /**
+   * A project is ours only if it carries our ownership marker. A name match
+   * alone is a foreign resource, so it is deliberately not adopted.
+   */
+  async #findOwnedProject(
+    organizationId: string,
+    deterministicName: string,
+    ownershipMarkerDigest: string,
+  ): Promise<{ readonly resourceId: string; readonly providerRequestId: string } | undefined> {
+    const query = new URLSearchParams({ org_id: organizationId, search: deterministicName, limit: "100" });
+    const listed = result<{
+      readonly providerRequestId: string;
+      readonly projects?: readonly { readonly id?: string; readonly name?: string }[];
+    }>(await this.#direct.invoke("GET", `${this.prefix}?${query.toString()}`), "Neon project search");
+    const match = (listed.projects ?? []).find((project) => project.name === deterministicName);
+    if (!match?.id) return undefined;
+    const expected = neonOwnershipRoleName(ownershipMarkerDigest);
+    const branches = result<{ readonly branches?: readonly { readonly id?: string }[] }>(
+      await this.#direct.invoke("GET", `${this.prefix}/${id(match.id)}/branches`),
+      "Neon branches",
+    );
+    for (const branch of branches.branches ?? []) {
+      if (!branch.id) continue;
+      const roles = result<{ readonly roles?: readonly { readonly name?: string }[] }>(
+        await this.#direct.invoke("GET", `${this.prefix}/${id(match.id)}/branches/${id(branch.id)}/roles`),
+        "Neon roles",
+      );
+      if ((roles.roles ?? []).some((role) => role.name === expected)) {
+        return { resourceId: match.id, providerRequestId: listed.providerRequestId };
+      }
+    }
+    return undefined;
+  }
+  async #markOwnership(projectId: string, branchId: string, ownershipMarkerDigest: string): Promise<void> {
+    await this.#direct.invoke(
+      "POST",
+      `${this.prefix}/${id(projectId)}/branches/${id(branchId)}/roles`,
+      { role: { name: neonOwnershipRoleName(ownershipMarkerDigest) } },
+    );
   }
   async waitUntilReady(projectId: string): Promise<ProviderActionResult> { return result(await this.#direct.invoke("GET", `${this.prefix}/${id(projectId)}`), "Neon project readiness"); }
   async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("data", "portable-schema-apply"), { project_id: request.projectId, baseline_version: request.baselineVersion, migration_versions: request.migrationVersions, target_schema_version: request.targetSchemaVersion }), "Postgres migration bridge"); }

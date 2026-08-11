@@ -628,6 +628,10 @@ export class Registry {
       const tenant = this.#selectOne("SELECT * FROM tenants WHERE tenant_id = ?", tenantId);
       assertOps(tenant, "invalid_plan", `Unknown tenant ${tenantId}`);
       const from = String(tenant.observed_lifecycle) as TenantLifecycle;
+      // Re-running a step that already moved the tenant into this state is the
+      // idempotent case, not a forbidden transition: a reviewed retry after a
+      // superseded plan must not be rejected for arriving where it already is.
+      if (from === to) return;
       assertTenantTransition(from, to);
       if (to === "active" && tenant.workspace_class === "external") {
         const collision = this.#selectOne(
@@ -1061,6 +1065,18 @@ export class Registry {
     const spec = plan.spec as Record<string, unknown>;
     const inputs = spec.inputs as Record<string, unknown>;
     const resources = spec.resources as Record<string, unknown>;
+    // The tenant id is derived from the owner and slug, so re-reserving after a
+    // superseded plan is this registry re-stating its own reservation, not a
+    // collision. A slug held under a different id is still foreign and fails.
+    const holder = this.#selectOne(
+      "SELECT tenant_id FROM tenants WHERE slug = ?",
+      String(inputs.tenant_slug),
+    );
+    assertOps(
+      holder === undefined || String(holder.tenant_id) === String(resources.tenant_id),
+      "provider_error",
+      "Tenant slug is reserved by a different tenant",
+    );
     this.#database
       .prepare(
         `INSERT INTO tenants (
@@ -1068,7 +1084,8 @@ export class Registry {
           observed_lifecycle, release_channel, region_id, data_tier_id,
           data_compute_id, hosting_tier_id, backup_profile_id, catalog_refs_json,
           cron_slot, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'planned', 'planned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, 'planned', 'planned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id) DO NOTHING`,
       )
       .run(
         String(resources.tenant_id),
@@ -1095,7 +1112,8 @@ export class Registry {
           `INSERT INTO capability_budgets (
             tenant_id, capability_catalog_id, enabled, unit, soft_limit,
             hard_limit, period, overage_action
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(tenant_id, capability_catalog_id) DO NOTHING`,
         )
         .run(
           String(resources.tenant_id),
@@ -1116,7 +1134,8 @@ export class Registry {
           rto_business_hours, business_timezone, business_calendar, coverage_json,
           provider_backup_interval_hours, encrypted_export_interval_hours,
           restore_drill_interval_days
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id) DO NOTHING`,
       )
       .run(
         String(resources.tenant_id),

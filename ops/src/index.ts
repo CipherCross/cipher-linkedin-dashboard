@@ -15,6 +15,7 @@ export * from "./providers/fake-bundle.js";
 export * from "./providers/adapters.js";
 export * from "./providers/apis.js";
 export * from "./providers/s26-provider-backed.js";
+export * from "./providers/neon-ownership.js";
 export * from "./providers/s26-concrete-clients.js";
 export * from "./providers/s26-bridge-contract.js";
 export * from "./bridge/s26-control-plane-service.js";
