@@ -1198,11 +1198,49 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return { providerRequestId: id };
   }
 
+  /** True when some project in the approved team already holds this hostname. */
+  async #vercelHostnameBoundInTeam(hostname: string): Promise<boolean> {
+    const projects = await this.#vercel("/v9/projects?limit=100");
+    const list = Array.isArray(projects.value.projects) ? projects.value.projects : [];
+    for (const entry of list) {
+      const name = stringField(record(entry, "Vercel project"), "name");
+      try {
+        await this.#vercel(
+          `/v10/projects/${encodeURIComponent(name)}/domains/${encodeURIComponent(hostname)}`,
+        );
+        return true;
+      } catch (error) {
+        if (!(error instanceof OpsError) || error.code !== "provider_error" || error.details.status !== 404) throw error;
+      }
+    }
+    return false;
+  }
+
   async #domainInspect(input: JsonRecord): Promise<unknown> {
     const hostname = stringField(input, "hostname");
     const senderDomain = stringField(input, "sender_domain");
     if (senderDomain !== this.env.RESEND_SENDER_DOMAIN) {
       throw new OpsError("unsupported_contract", "Domain inspection sender is outside the fixed Resend profile");
+    }
+    // Vercel operates the *.vercel.app zone itself, so its domain config
+    // describes that shared zone rather than an owner: `configuredBy` is set
+    // for every name in it, claimed or not, and cannot answer availability.
+    // Within our own team the binding is what decides it.
+    if (hostname.endsWith(".vercel.app")) {
+      const owned = await this.#vercelHostnameBoundInTeam(hostname);
+      const resend = await this.#resend("/domains");
+      const senderDomains = Array.isArray(resend.value.data) ? resend.value.data : [];
+      const verified = senderDomains
+        .map((entry) => record(entry, "Resend domain"))
+        .find((entry) => entry.name === senderDomain);
+      return {
+        zoneOwned: true,
+        hostnameAvailable: !owned,
+        existingBindingOwned: owned,
+        senderDomainVerified: verified?.status === "verified",
+        legalReviewApproved: input.workspace_class === "disposable",
+        validUntil: validUntil(),
+      };
     }
     // A hostname that no project has claimed yet has no domain config at all,
     // and Vercel answers 404. That is the expected pre-provisioning state for a

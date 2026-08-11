@@ -283,8 +283,21 @@ export class CloudflareR2OperationsClient extends BridgeRecoveryClient implement
   readonly #accountId: string;
   constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Cloudflare account scope is required"); this.#accountId = configuration.scopeId; }
   async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> {
-    const value = result<{ readonly providerRequestId: string }>(await this.#direct.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket");
-    return { providerRequestId: value.providerRequestId };
+    try {
+      const value = result<{ readonly providerRequestId: string }>(await this.#direct.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket");
+      return { providerRequestId: value.providerRequestId };
+    } catch (error) {
+      // A bucket this account already holds is the retried case, not a
+      // failure: the step's outcome — the bucket exists — is already true.
+      if (!(error instanceof OpsError) || error.code !== "provider_error") throw error;
+      const existing = result<{ readonly providerRequestId: string; readonly result?: { readonly buckets?: readonly { readonly name?: string }[] } }>(
+        await this.#direct.invoke("GET", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`),
+        "R2 buckets",
+      );
+      const found = (existing.result?.buckets ?? []).some((bucket) => bucket.name === request.bucketId);
+      if (!found) throw error;
+      return { providerRequestId: existing.providerRequestId };
+    }
   }
   async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("objectStorage", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds, require_private_access_checks: true }), "R2 smoke bridge"); }
 }
