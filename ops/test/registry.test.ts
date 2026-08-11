@@ -48,6 +48,51 @@ test("closed state machines allow contract transitions and reject forbidden ones
   );
 });
 
+test("a healthy running operation may resume after its lock lease lapses", () => {
+  const registry = new Registry(":memory:", OWNER_UUID);
+  try {
+    const plan = makeOnboardingPlan();
+    registry.savePlan(plan, { catalogs: catalogResolver(), now: TEST_NOW });
+    const request = makeApplyRequest(plan);
+    const started = registry.startOrResumeOperation(request, "owner", observedSnapshots(), TEST_NOW);
+    assert.equal(started.state, "running");
+
+    // Within the lease, a retry stays read-only and keeps the same token.
+    const soon = new Date(TEST_NOW.getTime() + 30_000);
+    const held = registry.startOrResumeOperation(request, "owner", observedSnapshots(), soon);
+    assert.deepEqual(held, { ...started, resumed: true });
+    const versionAfterHeldRetry = registry.registryVersion;
+
+    // Past the lease, the operation is still ours and still running, so it must
+    // be able to carry on. This used to hand back the stale token, which
+    // #assertFence then rejected because the lock had expired — so every later
+    // resume of a HEALTHY operation failed lock_fence_lost for good. Only an
+    // operation whose steps kept failing escaped, because the failed branch
+    // re-acquires the lease.
+    const lapsed = new Date(TEST_NOW.getTime() + 6 * 60 * 1_000);
+    const renewed = registry.startOrResumeOperation(request, "owner", observedSnapshots(), lapsed);
+    assert.equal(renewed.operationId, started.operationId);
+    assert.equal(renewed.state, "running");
+    assert.ok(
+      renewed.fencingToken > started.fencingToken,
+      "a renewed lease must bump the fencing token so a stale writer is fenced out",
+    );
+    assert.ok(registry.registryVersion > versionAfterHeldRetry, "renewal is a write");
+
+    // The renewed token really is usable, which is the whole point.
+    assert.doesNotThrow(() => registry.transitionStep(
+      renewed.operationId,
+      1,
+      "running",
+      renewed.fencingToken,
+      { now: lapsed },
+    ));
+    registry.verifyAuditChain();
+  } finally {
+    registry.close();
+  }
+});
+
 test("apply is atomic and idempotent; consumed plans cannot be reused", () => {
   const registry = new Registry(":memory:", OWNER_UUID);
   try {

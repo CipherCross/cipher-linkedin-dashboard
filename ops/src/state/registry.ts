@@ -1135,12 +1135,48 @@ export class Registry {
     const lockName = this.#lockNameForScope(String(row.scope));
     const lock = this.#selectOne("SELECT * FROM locks WHERE lock_name = ?", lockName);
     if (state !== "failed" && state !== "quarantined") {
-      return {
-        operationId,
-        state,
-        fencingToken: Number(lock?.fencing_token ?? 0),
-        resumed: true,
-      };
+      // A running operation whose lease is still valid is handed the stored token
+      // and nothing is written, which is what keeps an ordinary retry read-only.
+      const leaseHeld = lock !== undefined
+        && String(lock.owner_operation_id) === operationId
+        && Date.parse(String(lock.expires_at)) > now.getTime();
+      if (leaseHeld) {
+        return {
+          operationId,
+          state,
+          fencingToken: Number(lock.fencing_token ?? 0),
+          resumed: true,
+        };
+      }
+      // A LAPSED lease is renewed instead of handed back. #assertFence also
+      // requires the lock to be unexpired, so once DEFAULT_LOCK_TTL_MS passed,
+      // every further resume of a healthy operation failed `lock_fence_lost`
+      // for good, because nothing ever renewed it.
+      //
+      // The bug hid for the worst possible reason: a step that FAILS leaves the
+      // operation `failed`, which takes the branch below and re-acquires a fresh
+      // lease. So an operation whose steps kept failing kept working, while one
+      // whose steps all succeeded locked itself out after five minutes. S26's
+      // first run only ever progressed because it kept failing.
+      //
+      // Re-acquiring is the right renewal rather than heartbeatLock, which
+      // asserts the fence first and so cannot rescue an already-lapsed lease.
+      // #acquireLockInTransaction still refuses a lock held by a DIFFERENT live
+      // operation, and bumping the token is what the failed branch already does:
+      // it invalidates any stale in-flight writer, which is the point of fencing.
+      let renewedToken = 0;
+      this.#mutate(() => {
+        renewedToken = this.#acquireLockInTransaction(lockName, operationId, now);
+        this.#appendAudit({
+          actor,
+          eventKind: "lock_heartbeat",
+          planId: request.plan_id,
+          operationId,
+          idempotencyKey: request.idempotency_key,
+          detail: { lock_name: lockName, fencing_token: renewedToken, renewed_lapsed_lease: true },
+        });
+      });
+      return { operationId, state, fencingToken: renewedToken, resumed: true };
     }
     assertOps(
       request.expected_registry_version === this.registryVersion,
