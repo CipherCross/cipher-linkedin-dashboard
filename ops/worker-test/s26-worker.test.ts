@@ -11,7 +11,7 @@ import {
   hostingEnvironmentBindingDigest,
   scheduleManifestDigest,
 } from "../src/providers/hosting.js";
-import { S26WorkerBackend, tenantOrigin } from "../src/worker/backend.js";
+import { S26WorkerBackend, tenantIdentifier, tenantOrigin } from "../src/worker/backend.js";
 import {
   BOOTSTRAP_STATE_PROBE_SQL,
   CONTROL_PLANE_ROLES,
@@ -50,9 +50,13 @@ async function sha256Hex(value: string): Promise<string> {
 /** The tenant's own origin, which IDENTITY_BASE_URL must be bound to. */
 const SITE_URL = `https://${HOSTNAME}`;
 
+/** The tenant the deployment serves, which APP_TENANT_ID must be bound to. */
+const TENANT_SLUG = "s26-disposable-lab";
+
 const environmentContext = {
   target_handle: "target-1",
   site_url: SITE_URL,
+  tenant_slug: TENANT_SLUG,
   data_project_id: "project-1",
   data_project_name: DATA_PROJECT_NAME,
   ownership_marker_digest: OWNERSHIP,
@@ -361,11 +365,20 @@ describe("S26 Worker lifecycle configuration", () => {
 
   it("keeps generated and derived values out of output, errors, logs, recovery, and audit-shaped results", async () => {
     const databaseCanary = "postgresql://app_runtime:db-canary@ep.example.invalid/neondb";
+    // In mint order. A role password is minted while resolving each database
+    // URL, and the four tenant secrets are all minted while resolving the first
+    // binding of any kind, because #hostingValue builds that record eagerly and
+    // memoises it. Role passwords are as secret as the rest: they end up inside
+    // a connection URI, so the leak sweep below covers them too.
     const generatedCanaries = [
+      "generated-runtime-password-canary",
       "generated-auth-canary",
       "generated-schedule-canary",
       "generated-ingest-canary",
       "generated-tool-canary",
+      "generated-system-password-canary",
+      "generated-machine-password-canary",
+      "generated-identity-password-canary",
     ];
     let generatedIndex = 0;
     const written: Array<Record<string, unknown>> = [];
@@ -379,7 +392,8 @@ describe("S26 Worker lifecycle configuration", () => {
         return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
       }
       if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1/connection_uri")) {
-        expect(["app_runtime", "app_system", "app_machine", "identity_store"]).toContain(url.searchParams.get("role_name"));
+        expect([env.NEON_OWNER_ROLE_NAME, "app_runtime", "app_system", "app_machine", "identity_store"])
+          .toContain(url.searchParams.get("role_name"));
         return providerResponse(200, { uri: databaseCanary });
       }
       if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
@@ -399,6 +413,10 @@ describe("S26 Worker lifecycle configuration", () => {
     const backend = new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
       fetch: fetcher,
       generateSecret: () => generatedCanaries[generatedIndex++]!,
+      // Binding a database URL now sets the role's password first, so the write
+      // branch runs SQL. The statement carries a canary too, and must not
+      // surface anywhere the canary loop below looks.
+      databaseMutation: async () => undefined,
     });
     const bindings = closedEnvironmentBindings();
     const applyRequest = request("/s26/control-plane/v1/hosting/environment-bind", {
@@ -409,11 +427,14 @@ describe("S26 Worker lifecycle configuration", () => {
     expect(applied.status).toBe(200);
     const appliedText = await applied.text();
     expect(written).toHaveLength(bindings.length);
-    expect(written.find((entry) => entry.key === "NEON_DATABASE_URL")?.value).toBe(databaseCanary);
-    expect(written.find((entry) => entry.key === "IDENTITY_SESSION_SECRET")?.value).toBe(generatedCanaries[0]);
-    expect(written.find((entry) => entry.key === "CRON_SECRET")?.value).toBe(generatedCanaries[1]);
-    expect(written.find((entry) => entry.key === "NOTIFY_SECRET")?.value).toBe(generatedCanaries[2]);
-    expect(written.find((entry) => entry.key === "MCP_SECRET")?.value).toBe(generatedCanaries[3]);
+    // Not the URI Neon reported — that one's password is empty. The bound value
+    // is the same endpoint with the role and the password this step just set.
+    expect(written.find((entry) => entry.key === "NEON_DATABASE_URL")?.value)
+      .toBe("postgresql://app_runtime:generated-runtime-password-canary@ep.example.invalid/neondb");
+    expect(written.find((entry) => entry.key === "IDENTITY_SESSION_SECRET")?.value).toBe(generatedCanaries[1]);
+    expect(written.find((entry) => entry.key === "CRON_SECRET")?.value).toBe(generatedCanaries[2]);
+    expect(written.find((entry) => entry.key === "NOTIFY_SECRET")?.value).toBe(generatedCanaries[3]);
+    expect(written.find((entry) => entry.key === "MCP_SECRET")?.value).toBe(generatedCanaries[4]);
 
     const logText = JSON.stringify(s26WorkerRequestLog(applyRequest, applied));
     const recovery = await backend.invoke(
@@ -454,7 +475,11 @@ describe("S26 Worker lifecycle configuration", () => {
         ...environmentContext,
         bindings: closedEnvironmentBindings(),
       }),
-      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: failedFetcher, generateSecret: () => generatedCanaries[0]! }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
+        fetch: failedFetcher,
+        generateSecret: () => generatedCanaries[0]!,
+        databaseMutation: async () => undefined,
+      }),
     );
     const failedText = await failed.text();
     expect(failed.status).toBe(502);
@@ -739,7 +764,12 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
         ...environmentContext,
         bindings: closedEnvironmentBindings(),
       }),
-      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: fetcher }),
+      // Writing a database binding sets the role password first, so the
+      // write branch runs SQL that no fixture here is asserting over.
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
+        fetch: fetcher,
+        databaseMutation: async () => undefined,
+      }),
     );
     expect(response.status).toBe(200);
     expect(written.sort()).toEqual(
@@ -782,11 +812,256 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
         site_url: "https://uitop.ciphercross.dev",
         bindings: closedEnvironmentBindings(),
       }),
-      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: fetcher }),
+      // Writing a database binding sets the role password first, so the
+      // write branch runs SQL that no fixture here is asserting over.
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
+        fetch: fetcher,
+        databaseMutation: async () => undefined,
+      }),
     );
     expect(response.status).toBe(200);
     expect(written.find((entry) => entry.key === "IDENTITY_BASE_URL")?.value)
       .toBe("https://uitop.ciphercross.dev");
+  });
+
+  /**
+   * A binding target whose production environment carries exactly `bound`, and
+   * which records every value written and every statement run against Postgres.
+   *
+   * The Neon connection URI it answers with has an **empty password**, which is
+   * what the real API returns for a role created `LOGIN` with no `PASSWORD` —
+   * the whole of defect G. A fixture that handed back a populated password
+   * would pass whether or not the Worker ever set one.
+   */
+  function credentialFixture(bound: readonly string[] = []) {
+    const written: { key: string; value: string }[] = [];
+    const altered: { statement: string; connectedAs: string }[] = [];
+    let minted = 0;
+    const fetcher = vercelFetcher((url, method, init) => {
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1")) {
+        return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
+      }
+      if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/connection_uri")) {
+        const role = url.searchParams.get("role_name");
+        return providerResponse(200, { uri: `postgresql://${role}:@ep.example.invalid/neondb?sslmode=require` });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
+        return providerResponse(200, { id: "target-1" });
+      }
+      if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1/env")) {
+        if (method === "GET") {
+          return providerResponse(200, {
+            envs: [
+              { id: "ownership", key: "LH2_OWNERSHIP_MARKER_DIGEST", value: OWNERSHIP, type: "plain", target: ["production"] },
+              ...CANONICAL_TENANT_ENVIRONMENT
+                .filter((entry) => bound.includes(entry.name))
+                .map((entry, index) => ({
+                  id: `env-${index}`,
+                  key: entry.name,
+                  type: entry.valueClass === "server_secret" ? "sensitive" : "encrypted",
+                  target: ["production"],
+                })),
+            ],
+          });
+        }
+        written.push(JSON.parse(String(init?.body)) as { key: string; value: string });
+        return providerResponse(200, { id: `written-${written.length}` });
+      }
+      return undefined;
+    });
+    const backend = new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), {
+      fetch: fetcher,
+      generateSecret: () => `minted-${++minted}`,
+      databaseMutation: async (connectionString, text) => {
+        altered.push({ statement: text, connectedAs: new URL(connectionString).username });
+        return undefined;
+      },
+    });
+    return { backend, written, altered, valueOf: (key: string) => written.find((entry) => entry.key === key)?.value };
+  }
+
+  // Every app-facing role is created LOGIN with no PASSWORD, so Neon holds no
+  // credential for them and its connection URI comes back with an empty one.
+  // Four tenants were onboarded with database URLs nothing could connect with,
+  // and 13/13 passed over it, because no step ever opens the database the way
+  // the application does.
+  it("gives each application role a password and binds the URI that carries it", async () => {
+    const fixture = credentialFixture();
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        bindings: closedEnvironmentBindings(),
+      }),
+      fixture.backend,
+    );
+    expect(response.status).toBe(200);
+
+    const expectedRoles = {
+      NEON_DATABASE_URL: "app_runtime",
+      NEON_AI_DATABASE_URL: "app_system",
+      NEON_MACHINE_DATABASE_URL: "app_machine",
+      IDENTITY_STORE_DATABASE_URL: "identity_store",
+    } as const;
+    for (const [name, role] of Object.entries(expectedRoles)) {
+      const bound = new URL(fixture.valueOf(name)!);
+      expect(bound.username).toBe(role);
+      // The bound password is the one the database was actually given, not one
+      // Neon reported: the API cannot see a password set in SQL.
+      expect(bound.password).not.toBe("");
+      expect(fixture.altered).toContainEqual({
+        statement: `ALTER ROLE ${role} PASSWORD '${bound.password}'`,
+        connectedAs: env.NEON_OWNER_ROLE_NAME,
+      });
+    }
+    // Exactly those four, and no other role. `app_ai_runner` in particular is
+    // deliberately NOLOGIN, and `neondb_owner`/`app_migration` are not the
+    // application's to rotate.
+    expect(fixture.altered).toHaveLength(4);
+    expect(fixture.altered.map((entry) => entry.statement.split(" ")[2]).sort())
+      .toEqual(["app_machine", "app_runtime", "app_system", "identity_store"]);
+  });
+
+  // ALTER ROLE takes an identifier and no placeholder can carry one, so the
+  // configured role name is concatenated into SQL. It is non-secret Worker
+  // configuration rather than caller input, which is a reason to check it here
+  // rather than a reason not to: nothing else between the var and the database
+  // looks at it.
+  it("refuses a configured role name that is not a plain SQL identifier", async () => {
+    const altered: string[] = [];
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(
+        envWith({
+          S26_APPLICATION_DATA_PLANE_READY: "true",
+          NEON_APPLICATION_ROLE_NAME: "app_runtime'; DROP OWNED BY app_runtime; --",
+        }),
+        {
+          fetch: vercelFetcher((url, method) => {
+            if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/projects/project-1")) {
+              return providerResponse(200, { project: { id: "project-1", name: DATA_PROJECT_NAME, org_id: env.NEON_ORGANIZATION_ID } });
+            }
+            if (url.hostname === "console.neon.tech" && url.pathname.endsWith("/connection_uri")) {
+              return providerResponse(200, { uri: "postgresql://neondb_owner:@ep.example.invalid/neondb" });
+            }
+            if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1") && method === "GET") {
+              return providerResponse(200, { id: "target-1" });
+            }
+            if (url.hostname === "api.vercel.com" && url.pathname.endsWith("/projects/target-1/env") && method === "GET") {
+              return providerResponse(200, {
+                envs: [{ id: "ownership", key: "LH2_OWNERSHIP_MARKER_DIGEST", value: OWNERSHIP, type: "plain", target: ["production"] }],
+              });
+            }
+            return undefined;
+          }),
+          databaseMutation: async (_connectionString, text) => { altered.push(text); return undefined; },
+        },
+      ),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ code: "unsupported_contract" });
+    expect(altered).toEqual([]);
+  });
+
+  // The regression this fix could most easily introduce. Resolving a database
+  // value now *rotates* a password, so doing it eagerly — as the four awaits
+  // this replaced did — would, on a retry against a tenant whose bindings
+  // already exist, change all four passwords in Postgres while Vercel kept the
+  // old ones. That takes a promoted, serving tenant down.
+  it("issues no ALTER ROLE on a retry whose bindings are all already bound", async () => {
+    const fixture = credentialFixture(CANONICAL_TENANT_ENVIRONMENT.map((entry) => entry.name));
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        bindings: closedEnvironmentBindings(),
+      }),
+      fixture.backend,
+    );
+    expect(response.status).toBe(200);
+    expect(fixture.written).toEqual([]);
+    expect(fixture.altered).toEqual([]);
+  });
+
+  // The partially bound case is the same rule at finer grain: only the role
+  // whose binding is missing may be rotated.
+  it("rotates only the roles whose bindings are still absent", async () => {
+    const fixture = credentialFixture(
+      CANONICAL_TENANT_ENVIRONMENT
+        .map((entry) => entry.name)
+        .filter((name) => name !== "NEON_MACHINE_DATABASE_URL"),
+    );
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        bindings: closedEnvironmentBindings(),
+      }),
+      fixture.backend,
+    );
+    expect(response.status).toBe(200);
+    expect(fixture.written.map((entry) => entry.key)).toEqual(["NEON_MACHINE_DATABASE_URL"]);
+    expect(fixture.altered.map((entry) => entry.statement.split(" ")[2])).toEqual(["app_machine"]);
+  });
+
+  // Without APP_TENANT_ID `readDeploymentTenantId` returns null and the whole
+  // machine-ingest path answers 503, so step 7 could not produce a deployment
+  // any notebook could sync into. Like the origin, it travels with the request.
+  it("binds the tenant the deployment serves, from the request's own slug", async () => {
+    const fixture = credentialFixture();
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        tenant_slug: "uitop",
+        bindings: closedEnvironmentBindings(),
+      }),
+      fixture.backend,
+    );
+    expect(response.status).toBe(200);
+    expect(fixture.valueOf("APP_TENANT_ID")).toBe("uitop");
+    // The redundant second name is deliberately not bound: the application
+    // accepts either and requires them to be equal, so a second copy could only
+    // ever disagree with this one.
+    expect(fixture.written.some((entry) => entry.key === "OBJECT_STORAGE_TENANT_ID")).toBe(false);
+  });
+
+  it("refuses a tenant slug the application itself would reject", async () => {
+    // The bridge schema already refuses this shape, so the Worker's own check
+    // is only reachable through a direct invocation — which is exactly the
+    // caller a defence-in-depth check exists for.
+    await expect(
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: vi.fn<typeof fetch>() })
+        .invoke({ capability: "hosting", operation: "environment-bind" }, {
+          ...environmentContext,
+          tenant_slug: "-Not A Slug",
+          bindings: closedEnvironmentBindings(),
+        }),
+    ).rejects.toThrow(OpsError);
+
+    const overHttp = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...environmentContext,
+        tenant_slug: "-Not A Slug",
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: vi.fn<typeof fetch>() }),
+    );
+    expect(overHttp.status).toBe(400);
+    await expect(overHttp.json()).resolves.toEqual({ code: "schema_validation_failed" });
+  });
+
+  // The request is `strictObject`, so the slug cannot be omitted either.
+  it("refuses a binding request that names no tenant at all", async () => {
+    const { tenant_slug: _omitted, ...withoutTenant } = environmentContext;
+    const response = await handle(
+      request("/s26/control-plane/v1/hosting/environment-bind", {
+        ...withoutTenant,
+        bindings: closedEnvironmentBindings(),
+      }),
+      new S26WorkerBackend(envWith({ S26_APPLICATION_DATA_PLANE_READY: "true" }), { fetch: vi.fn<typeof fetch>() }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ code: "schema_validation_failed" });
   });
 
   it("refuses a site URL that is not an HTTPS origin", async () => {
@@ -1197,6 +1472,17 @@ describe("S26 identity invitations name the tenant's own dashboard", () => {
   it("refuses an origin that is not HTTPS or not a URL", () => {
     expect(() => tenantOrigin("http://uitop.ciphercross.dev")).toThrow(OpsError);
     expect(() => tenantOrigin("uitop.ciphercross.dev")).toThrow(OpsError);
+  });
+
+  // The same shape `readDeploymentTenantId` enforces. A value the application
+  // would throw on is a deployment whose ingest path fails on every request,
+  // and the bind step is the last place that can see it.
+  it("keeps the tenant identifier to the shape the application accepts", () => {
+    expect(tenantIdentifier("uitop")).toBe("uitop");
+    expect(tenantIdentifier("s26-disposable-lab")).toBe("s26-disposable-lab");
+    for (const rejected of ["Uitop", "-uitop", "ui top", "ui_top", "", "a".repeat(64)]) {
+      expect(() => tenantIdentifier(rejected)).toThrow(OpsError);
+    }
   });
 
   // Step 12 sends a real invitation to a real person, and the link it carries

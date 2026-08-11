@@ -1,10 +1,23 @@
 # Copy to config.yaml on each notebook and edit. config.yaml is gitignored —
-# it contains the service-role key, never commit it.
+# it holds credentials, never commit it.
 #
-# ONLINE CONFIG: the three legacy bootstrap keys below plus the machine token
-# and release public key must be set locally. The token is the one credential
-# used for ingest, config, photo upload, notify and release authorization;
-# EVERYTHING else in this file
+# WHICH KEYS ARE REQUIRED depends on which destination this notebook has, and
+# the agent derives that from the credentials it finds rather than from a flag:
+#
+#   * a notebook on the ORIGINAL deployment sets supabase_url +
+#     supabase_service_key (below), and optionally the gateway keys further down
+#     to mirror or to cut over;
+#   * a notebook on a TENANT deployment sets ingest_url + ingest_token and NO
+#     Supabase keys at all — a tenant has no Supabase project to have a key for.
+#     Such a notebook runs `ingest_mode: only` whatever the flag says.
+#
+# `instance_id` is always required. A config with neither destination is
+# refused at startup rather than syncing into nothing.
+#
+# ONLINE CONFIG: the bootstrap keys (supabase_url, supabase_service_key,
+# instance_id) plus the machine token and release public key must be set
+# locally. The token is the one credential used for ingest, config, photo
+# upload, notify and release authorization; EVERYTHING else in this file
 # (instance_label, account_*, the sync_* toggles, lh2_db_path, even the mapping)
 # can be overridden from the dashboard's Health page; the agent merges those
 # online values over this file on every sync and REMOTE WINS. So you rarely need
@@ -12,6 +25,7 @@
 # to pin a notebook to this file only (escape hatch if a bad online value breaks
 # its sync).
 
+# Omit BOTH of these on a tenant notebook.
 supabase_url: "https://YOUR-PROJECT.supabase.co"
 supabase_service_key: "YOUR-SERVICE-ROLE-KEY"   # Settings -> API -> service_role
 
@@ -59,21 +73,31 @@ sync_photos: false
 # notify_url: "https://<your-app>.vercel.app/api/notify-replies"
 
 # ---------------------------------------------------------------------------
-# Second transport: the machine ingest gateway. OFF by default.
+# The machine ingest gateway.
 #
-# The agent can deliver the same extraction it just pushed to Supabase to the
-# dashboard's ingest endpoint as well, authenticating with a credential issued
-# for THIS notebook rather than the shared service key. The Supabase push is
-# unchanged, runs first, and stays authoritative; nothing in this transport can
-# make a sync fail.
+# The agent delivers its extraction to the dashboard's ingest endpoint,
+# authenticating with a credential issued for THIS notebook rather than a shared
+# service key. On a tenant deployment this is the only transport there is.
 #
-#   ingest_mode: off     nothing is built and nothing is sent (default)
-#                shadow  delivered; every failure is noise and is not reported
-#                dual    delivered; a failure marks the run 'partial' so it shows
-#                        on the Health page
+#   ingest_mode: off     nothing is built and nothing is sent. The default for a
+#                        notebook that holds a Supabase credential.
+#                shadow  delivered alongside Supabase; every failure is noise
+#                        and is not reported
+#                dual    delivered alongside Supabase; a failure marks the run
+#                        'partial' so it shows on the Health page
+#                only    the gateway is the SOLE destination. No Supabase client
+#                        is built and a delivery failure FAILS the run, because
+#                        nothing was written anywhere. Automatic — and the only
+#                        possibility — when no Supabase credential is set.
 #
 # Roll out one notebook at a time: set ingest_mode to 'shadow' remotely from the
-# Health page, read the run's log, then move it to 'dual'.
+# Health page, read the run's log, then move it to 'dual', then to 'only'.
+#
+# Two commands behave differently on a Supabase-free notebook. `ingest-csv`
+# works — it delivers through the same gateway, with the same idempotency key
+# and parity check as `sync`. `annotate` refuses: the ingest contract carries no
+# annotations and app_machine holds no grant on that table. `sync_photos` is
+# skipped for the same kind of reason, and says so on every run.
 #
 # ingest_url and ingest_mode are remote-config keys. `ingest_url` must also be
 # bootstrapped locally when the authenticated config API is first enabled; after

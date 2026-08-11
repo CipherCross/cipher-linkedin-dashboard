@@ -153,6 +153,37 @@ export function tenantOrigin(siteUrl: string): string {
   return parsed.origin;
 }
 
+/**
+ * The tenant this deployment serves, as `APP_TENANT_ID`.
+ *
+ * Checked here against the shape the application itself enforces
+ * (`readDeploymentTenantId`): a value the application would reject is a
+ * deployment whose machine-ingest path throws on every request, and the bind
+ * step is the last place that can refuse it — verification compares names,
+ * types and scopes, never values.
+ */
+export function tenantIdentifier(tenantSlug: string): string {
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(tenantSlug)) {
+    throw new OpsError("unsupported_contract", "Tenant slug is not a deployment tenant identifier");
+  }
+  return tenantSlug;
+}
+
+/**
+ * A Postgres role name safe to interpolate into `ALTER ROLE`.
+ *
+ * The four names are non-secret Worker configuration rather than caller input,
+ * but `ALTER ROLE` takes an identifier and no placeholder can carry one, so the
+ * value is proved to be an identifier before it is concatenated rather than
+ * trusted because of where it came from.
+ */
+function roleIdentifier(roleName: string): string {
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(roleName)) {
+    throw new OpsError("unsupported_contract", "Configured Neon role name is not a plain SQL identifier");
+  }
+  return roleName;
+}
+
 function parentZone(hostname: string): string {
   const separator = hostname.indexOf(".");
   const zone = separator === -1 ? "" : hostname.slice(separator + 1);
@@ -445,16 +476,25 @@ function sqlLiteral(value: string): string {
 export class S26WorkerBackend implements S26BridgeBackend {
   readonly #fetch: typeof fetch;
   readonly #generateSecret: () => string;
+  readonly #databaseMutation: (connectionString: string, text: string) => Promise<unknown>;
 
   constructor(
     private readonly env: Env,
     options: {
       readonly fetch?: typeof fetch;
       readonly generateSecret?: () => string;
+      /**
+       * The one write path that is neither HTTP nor a binding. It is injectable
+       * for the same reason `fetch` is: a test can otherwise only observe what
+       * the Worker sends over the wire, and the statements it sends to Postgres
+       * are exactly what the credential fixes turn on.
+       */
+      readonly databaseMutation?: (connectionString: string, text: string) => Promise<unknown>;
     } = {},
   ) {
     this.#fetch = options.fetch ?? fetch;
     this.#generateSecret = options.generateSecret ?? generateHighEntropySecret;
+    this.#databaseMutation = options.databaseMutation ?? databaseMutation;
   }
 
   async invoke(route: S26BridgeRoute, request: unknown): Promise<unknown> {
@@ -687,7 +727,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
   }
 
   async #identitySupport(input: JsonRecord): Promise<unknown> {
-    await databaseMutation(
+    await this.#databaseMutation(
       await this.#ownerConnectionUri(stringField(input, "project_id")),
       sqlText(supportMembershipSql),
     );
@@ -706,7 +746,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       .replaceAll("__ADMIN_SUBJECT__", sqlLiteral(subject))
       .replaceAll("__ADMIN_PASSWORD_HASH__", sqlLiteral(passwordHash));
     const projectId = stringField(input, "project_id");
-    await databaseMutation(await this.#ownerConnectionUri(projectId), statement);
+    await this.#databaseMutation(await this.#ownerConnectionUri(projectId), statement);
     // The admin row is idempotent in SQL. Email is reconciled separately with a
     // durable pending/delivered marker and the provider's idempotency key.
     const marker = `${this.env.RECOVERY_OBJECT_PREFIX}/identity-invite/${projectId}/${await sha256Hex(email)}.json`;
@@ -919,7 +959,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
         "Vercel binding descriptors must be the complete closed S26 application profile",
       );
     }
-    if (this.env.S26_APPLICATION_HOSTING_CONTRACT !== "hosting.environment.v3") {
+    if (this.env.S26_APPLICATION_HOSTING_CONTRACT !== "hosting.environment.v4") {
       throw new OpsError("unsupported_contract", "Worker application hosting contract is not the reviewed S26 version");
     }
     if (String(this.env.S26_APPLICATION_DATA_PLANE_READY) !== "true") {
@@ -930,29 +970,31 @@ export class S26WorkerBackend implements S26BridgeBackend {
     }
 
     const identityBaseUrl = tenantOrigin(stringField(input, "site_url"));
+    const tenantId = tenantIdentifier(stringField(input, "tenant_slug"));
     const dataProjectId = stringField(input, "data_project_id");
     await this.#assertOwnedDataProject(dataProjectId, stringField(input, "data_project_name"));
     const existingResponse = await this.#ownedHostingEnvironment(
       target,
       stringField(input, "ownership_marker_digest"),
     );
-    const applicationConnectionUris: Readonly<Record<string, string>> = {
-      NEON_DATABASE_URL: await this.#connectionUri(
-        dataProjectId,
-        requireConfigured(this.env.NEON_APPLICATION_ROLE_NAME, "NEON_APPLICATION_ROLE_NAME"),
-      ),
-      NEON_AI_DATABASE_URL: await this.#connectionUri(
-        dataProjectId,
-        requireConfigured(this.env.NEON_AI_ROLE_NAME, "NEON_AI_ROLE_NAME"),
-      ),
-      NEON_MACHINE_DATABASE_URL: await this.#connectionUri(
-        dataProjectId,
-        requireConfigured(this.env.NEON_MACHINE_ROLE_NAME, "NEON_MACHINE_ROLE_NAME"),
-      ),
-      IDENTITY_STORE_DATABASE_URL: await this.#connectionUri(
-        dataProjectId,
-        requireConfigured(this.env.NEON_IDENTITY_STORE_ROLE_NAME, "NEON_IDENTITY_STORE_ROLE_NAME"),
-      ),
+    // The four application roles are created LOGIN with no PASSWORD, so Neon
+    // holds no credential for them and hands back a URI with an empty password.
+    // Each one therefore has to be given a password here — see
+    // #applicationConnectionUri. That makes resolving these values a *mutation*
+    // of the database, which is why the map below is a resolver invoked from
+    // the write branch and not, as it was, four eager awaits: a retry against a
+    // tenant whose bindings already exist must issue no ALTER ROLE at all.
+    // Rotating the four passwords while Vercel still carries the old ones is
+    // precisely how a live tenant loses its database.
+    const databaseRoleNames: Readonly<Record<string, () => string>> = {
+      NEON_DATABASE_URL: () => requireConfigured(this.env.NEON_APPLICATION_ROLE_NAME, "NEON_APPLICATION_ROLE_NAME"),
+      NEON_AI_DATABASE_URL: () => requireConfigured(this.env.NEON_AI_ROLE_NAME, "NEON_AI_ROLE_NAME"),
+      NEON_MACHINE_DATABASE_URL: () => requireConfigured(this.env.NEON_MACHINE_ROLE_NAME, "NEON_MACHINE_ROLE_NAME"),
+      IDENTITY_STORE_DATABASE_URL: () => requireConfigured(this.env.NEON_IDENTITY_STORE_ROLE_NAME, "NEON_IDENTITY_STORE_ROLE_NAME"),
+    };
+    const connectionUriFor = async (name: string): Promise<string | undefined> => {
+      const roleName = databaseRoleNames[name];
+      return roleName === undefined ? undefined : this.#applicationConnectionUri(dataProjectId, roleName());
     };
     const generated = new Map<string, string>();
     const generatedValue = (id: string): string => {
@@ -999,7 +1041,18 @@ export class S26WorkerBackend implements S26BridgeBackend {
       // adopted values are the right ones stays the verification step's job;
       // a sensitive Vercel value cannot be read back and compared here.
       if (!existingByName.has(name)) {
-        const approved = this.#hostingValue(name, applicationConnectionUris, generatedValue, identityBaseUrl);
+        // Resolving a database value mints its password, so it happens inside
+        // this branch and nowhere else. If the Vercel POST below then fails,
+        // the role holds a password nobody has — which is self-healing rather
+        // than lost: the binding is still absent, so the retry mints another
+        // one and binds it. The unrecoverable order is the opposite one.
+        const approved = this.#hostingValue(
+          name,
+          await connectionUriFor(name),
+          generatedValue,
+          identityBaseUrl,
+          tenantId,
+        );
         const response = await this.#vercel(`/v10/projects/${encodeURIComponent(target)}/env`, "POST", {
           key: name,
           value: approved.value,
@@ -1039,11 +1092,40 @@ export class S26WorkerBackend implements S26BridgeBackend {
     };
   }
 
+  /**
+   * A least-privilege application role URI the application can actually open.
+   *
+   * The pinned bootstrap creates these roles `LOGIN` with no `PASSWORD`, so
+   * Neon holds no credential for them and its `connection_uri` comes back with
+   * an empty password — every tenant onboarded before this shipped a database
+   * URL nothing could connect with, and no step noticed because none of them
+   * connects the way the application does. So the password is set here and the
+   * URI's password component is rewritten with it: Neon's API cannot report a
+   * password that was set in SQL. This is the same shape `app_migration`
+   * already uses in pinned-postgres.ts.
+   *
+   * Calling this rotates the role's password, which is why it is reached only
+   * from the branch that is about to write the binding that carries it.
+   */
+  async #applicationConnectionUri(projectId: string, roleName: string): Promise<string> {
+    const role = roleIdentifier(roleName);
+    const password = this.#generateSecret();
+    await this.#databaseMutation(
+      await this.#ownerConnectionUri(projectId),
+      `ALTER ROLE ${role} PASSWORD ${sqlLiteral(password)}`,
+    );
+    const uri = new URL(await this.#connectionUri(projectId, role));
+    uri.username = role;
+    uri.password = password;
+    return uri.toString();
+  }
+
   #hostingValue(
     name: string,
-    applicationConnectionUris: Readonly<Record<string, string>>,
+    applicationConnectionUri: string | undefined,
     generatedValue: (id: string) => string,
     identityBaseUrl: string,
+    tenantId: string,
   ): { readonly value: string; readonly valueClass: string; readonly sourceKind: string } {
     const selected = this.#hostingValueSpec(name);
     const generated: Readonly<Record<string, string>> = {
@@ -1062,13 +1144,14 @@ export class S26WorkerBackend implements S26BridgeBackend {
     };
     const planned: Readonly<Record<string, string>> = {
       IDENTITY_BASE_URL: identityBaseUrl,
+      APP_TENANT_ID: tenantId,
       VITE_AUTH_PATH: "identity",
       NEON_READS_DEFAULT: "neon",
       NEON_WRITES_DEFAULT: "neon",
       NEON_AI_PATH_DEFAULT: "neon",
       NEON_PHOTOS_DEFAULT: "disabled",
     };
-    const value = applicationConnectionUris[name] ?? generated[name] ?? sender[name] ?? planned[name];
+    const value = applicationConnectionUri ?? generated[name] ?? sender[name] ?? planned[name];
     if (value === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
     return { value, ...selected };
   }

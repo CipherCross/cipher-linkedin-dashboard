@@ -22,9 +22,9 @@ import {
 
 const OWNER_UUID = "11111111-1111-4111-8111-111111111111";
 const FIXTURE_NOW = new Date("2026-08-07T14:46:13.317Z");
-const FIXTURE_PLAN_ID = "pln_5fa149c9e209cd9aa2c9f7e8";
+const FIXTURE_PLAN_ID = "pln_cd07f1f49ad293eed73a40da";
 const FIXTURE_PLAN_DIGEST =
-  "sha256:5c3df59773c1e302ab3e2cf983dc4a6afe5d99321198f3d6660b7911b78bbc18";
+  "sha256:57bf1a0711bbeadc95a1e7c2f48b2a9c2ddd1d6c4d97fbad94f4f28a597f5ecf";
 const FIXTURE_IDEMPOTENCY_KEY = "s26-disposable-lab-20260807-01";
 
 async function fixtureCore(

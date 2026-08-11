@@ -182,6 +182,14 @@ export interface EnvironmentBindingRequest {
    * optional: a path that forgets it would bind another tenant's dashboard.
    */
   readonly siteUrl: string;
+  /**
+   * The tenant this deployment serves, from the plan's `inputs.tenant_slug`.
+   * It is what `APP_TENANT_ID` is bound to, and the machine-ingest path refuses
+   * to serve at all without it, so — like `siteUrl` — it travels with the
+   * request rather than being read from a control-plane-wide setting that could
+   * only ever name one tenant.
+   */
+  readonly tenantSlug: string;
   /** S26 supplies the already-created, registry-owned data resource here. */
   readonly dataProjectHandle?: string;
   readonly dataProjectName?: string;

@@ -23,7 +23,7 @@
     "NEON_AI_ROLE_NAME": "app_system",
     "NEON_MACHINE_ROLE_NAME": "app_machine",
     "NEON_IDENTITY_STORE_ROLE_NAME": "identity_store",
-    "S26_APPLICATION_HOSTING_CONTRACT": "hosting.environment.v3",
+    "S26_APPLICATION_HOSTING_CONTRACT": "hosting.environment.v4",
     "S26_APPLICATION_DATA_PLANE_READY": "true",
     "NEON_REGION_ID": "aws-eu-central-1",
     "NEON_TIER_ID": "neon-free",

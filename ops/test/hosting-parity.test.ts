@@ -360,6 +360,7 @@ async function driveCapabilities(
     targetHandle: target.targetHandle,
     scope: "production",
     siteUrl: SITE_URL,
+    tenantSlug: "s10-lab",
     bindings: BINDINGS,
   });
   const release = await port.buildRelease({
@@ -968,6 +969,7 @@ test("the adapter refuses to register schedules the pinned release does not decl
     targetHandle: target.targetHandle,
     scope: "production",
     siteUrl: SITE_URL,
+    tenantSlug: "s10-lab",
     bindings: BINDINGS,
   });
   const release = await adapter.buildRelease({
@@ -1022,6 +1024,7 @@ test("environment binding writes values but returns none, and no label either", 
     targetHandle: target.targetHandle,
     scope: "production",
     siteUrl: SITE_URL,
+    tenantSlug: "s10-lab",
     bindings: BINDINGS,
   });
 
@@ -1104,6 +1107,7 @@ test("no canary reaches an adapter result, error or verification report", async 
       targetHandle: target.targetHandle,
       scope: "production",
       siteUrl: SITE_URL,
+      tenantSlug: "s10-lab",
       bindings: BINDINGS,
     }),
     (error: unknown) => {

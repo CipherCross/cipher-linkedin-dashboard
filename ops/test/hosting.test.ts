@@ -696,6 +696,7 @@ test("environment binding never returns a secret value on any code path", async 
     targetHandle,
     scope: "production",
     siteUrl: SITE_URL,
+    tenantSlug: "s09-lab",
     bindings: BINDINGS,
   });
   assertCanonical(binding, "environment binding result");
@@ -723,6 +724,7 @@ test("environment binding never returns a secret value on any code path", async 
       targetHandle,
       scope: "production",
       siteUrl: SITE_URL,
+      tenantSlug: "s09-lab",
       bindings: BINDINGS,
     }),
     release,
@@ -777,6 +779,7 @@ test("environment binding never returns a secret value on any code path", async 
       targetHandle: failingTarget.targetHandle,
       scope: "production",
       siteUrl: SITE_URL,
+      tenantSlug: "s09-lab",
       bindings: BINDINGS,
     }),
     (error: unknown) => {
@@ -802,6 +805,7 @@ test("every canonical result has the provider-independent shape S10 must match",
     targetHandle,
     scope: "production",
     siteUrl: SITE_URL,
+    tenantSlug: "s09-lab",
     bindings: BINDINGS,
   });
   const schedules = await provider.registerSchedules({
@@ -1047,7 +1051,7 @@ test("canonical digests are stable and no existing schema version moved", () => 
   assert.equal(plan.contract_version, "p2.v1");
   assert.equal(plan.plan_schema_version, 1);
   assert.equal(plan.plan_digest, planDigest(asJsonValue(plan.spec)));
-  assert.equal(plan.plan_digest, "sha256:005656f5ad6b629d334e623dccffccf853da0c58b6fb8261dfd20c6aab6e25f3");
+  assert.equal(plan.plan_digest, "sha256:ef38eb9981da3b33803f0fe08170d03b580ec1a2a86e9ed5a9c3b5b7f8bf3211");
 });
 
 /* ------------------------------------------------------------------ *
@@ -1145,6 +1149,7 @@ async function provision(provider: FakeHostingProvider): Promise<{
     targetHandle: target.targetHandle,
     scope: "production",
     siteUrl: SITE_URL,
+    tenantSlug: "s09-lab",
     bindings: BINDINGS,
   });
   const release = await provider.buildRelease({

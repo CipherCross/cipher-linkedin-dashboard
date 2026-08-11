@@ -77,19 +77,32 @@ On Windows notebooks use Task Scheduler with the same command.
 
 #### Deploying agent updates (no manual copying)
 
-The agent **self-updates**: at the start of every scheduled `sync` it
-downloads `agent.py` from the private `agent` storage bucket, swaps itself
-out if the hash differs, and re-runs. To roll out a change to all notebooks:
+The agent **self-updates** through a signed release channel. At the start of
+every scheduled `sync` it asks the dashboard's authenticated machine API
+(`GET /api/import?op=agent.release`, with its own `ingest_token`) for the
+current release; the API answers with a signed manifest and a short-lived
+presigned URL into a **private, versioned S3-compatible release bucket**
+(Cloudflare R2). The agent verifies the Ed25519 signature against the
+`release_public_key` in its config, checks the size and SHA-256, then swaps
+itself out atomically and re-runs. To roll out a change to all notebooks:
 
 ```bash
-sync-agent/deploy.sh    # uploads agent.py; notebooks update within 30 min
+sync-agent/deploy.sh    # signs + publishes a release; notebooks update within 30 min
 ```
 
+`deploy.sh` needs the operator-side release variables — `AGENT_RELEASE_ENDPOINT`,
+`AGENT_RELEASE_BUCKET`, the **write**-scoped `AGENT_RELEASE_WRITE_ACCESS_KEY_ID`
+/ `AGENT_RELEASE_WRITE_SECRET_ACCESS_KEY` pair, and `AGENT_RELEASE_SIGNING_KEY_FILE`.
+The dashboard holds only a separate **read**-scoped pair
+(`AGENT_RELEASE_ACCESS_KEY_ID` / `AGENT_RELEASE_SECRET_ACCESS_KEY`) and can
+never publish. The release bucket must not be the lead-photos bucket; the code
+refuses that configuration.
+
 Watch the rollout on the dashboard's **Health** page (each instance reports
-its `agent_version`). Failures are safe: if the bucket is unreachable or the
-download looks wrong, the agent keeps running its current version. Pin a
-notebook with `auto_update: false` in its config.yaml. Only the
-service-role key can read the bucket — the anon key gets a 4xx.
+its `agent_version`). Failures are safe: if the release path is unconfigured,
+the signature does not verify or the download looks wrong, the agent keeps
+running its current version and the scheduled sync proceeds. Pin a notebook
+with `auto_update: false` in its config.yaml.
 
 #### Configuring notebooks online (no SSH)
 

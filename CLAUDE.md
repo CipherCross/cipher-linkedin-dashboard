@@ -97,11 +97,18 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
   inbound replies to Slack. Current agents authenticate with their local-only `ingest_token`;
   the old `notify_secret` is compatibility-only. All failures are swallowed and never break a sync.
-- **Dual transport (`ingest_mode`)**: the same extraction can also go to
-  `POST /api/import?op=agent.ingest` with a per-notebook machine credential. Additive —
-  the Supabase push runs first and stays authoritative; `off` (default) / `shadow` (deliver,
-  failures are noise) / `dual` (deliver, a failure marks the run `partial`). There is no
-  Supabase-off mode; that is a whole-cutover decision, not a per-notebook flag. The
+- **Transport (`ingest_mode`)**: the same extraction can also go to
+  `POST /api/import?op=agent.ingest` with a per-notebook machine credential.
+  `off` (default) / `shadow` (deliver alongside Supabase, failures are noise) / `dual`
+  (deliver alongside Supabase, a failure marks the run `partial`) / `only` (the gateway
+  is the sole destination — no Supabase client is built and a delivery failure FAILS the
+  run). **The mode is derived from the credentials `config.yaml` holds, not defaulted
+  from the flag**: `load_config` requires `instance_id` plus *either* the Supabase pair
+  *or* `ingest_url` + a well-formed `ingest_token`, and a notebook with no Supabase
+  credential resolves to `only` whatever the flag says. `annotate` refuses on that path
+  (`app_machine` has no grant on `annotations`); `ingest-csv` is ported to the gateway;
+  `sync_photos` refuses loudly (no machine-path candidate query, and tenants bind no
+  `OBJECT_STORAGE_*` at all). The
   idempotency key is `sync.<UTC date>.<digest of the batch's own content>`, so a retry
   repeats a key and a changed extraction does not. `ingest_url`/`ingest_mode` are
   remote-config keys; **`ingest_token` and `release_public_key` are local-only** —

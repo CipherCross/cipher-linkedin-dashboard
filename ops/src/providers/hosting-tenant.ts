@@ -15,7 +15,7 @@ import {
 } from "./hosting.js";
 
 /** Versioned closed contract for the S26 application's hosting values. */
-export const HOSTING_ENVIRONMENT_CONTRACT = "hosting.environment.v3" as const;
+export const HOSTING_ENVIRONMENT_CONTRACT = "hosting.environment.v4" as const;
 export const S26_APPLICATION_HOSTING_PROFILE = "s26.application-hosting.v1" as const;
 
 export const CANONICAL_RUNTIME_PROFILE_ID = "web-node22-1x" as const;
@@ -41,6 +41,7 @@ export const HOSTING_PLAN_FIELD_REFS = {
   neonWritesDefault: "application.neon_writes_default",
   neonAiPathDefault: "application.neon_ai_path_default",
   neonPhotosDefault: "application.neon_photos_default",
+  tenantSlug: "tenant.slug",
 } as const;
 
 /** Registry-owned logical resources, not provider IDs or connection strings. */
@@ -147,6 +148,18 @@ export const CANONICAL_TENANT_ENVIRONMENT: readonly HostingEnvironmentValueContr
     name: "RESEND_FROM_IDENTITY",
     valueClass: "server_public",
     source: { kind: "derived_from_owned_resource", resourceRef: S26_SENDER_RESOURCE_REFS.fromIdentity },
+  },
+  {
+    // v4. One database per tenant already answers "which tenant is this?", so
+    // this value exists to be *disagreed with*: `agent_credential_resolve`
+    // refuses a machine credential minted for another tenant, or a dump
+    // restored into the wrong deployment, instead of accepting a row because it
+    // happened to be present. Absent, `readDeploymentTenantId` returns null and
+    // the whole machine-ingest path answers 503 — so v3 could not produce a
+    // deployment any notebook could sync into, and nothing said so.
+    name: "APP_TENANT_ID",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.tenantSlug },
   },
   {
     name: "VITE_AUTH_PATH",

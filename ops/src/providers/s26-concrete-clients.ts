@@ -572,6 +572,7 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
       ownership_marker_digest: request.ownership.digest,
       scope: request.scope,
       site_url: request.siteUrl,
+      tenant_slug: request.tenantSlug,
       bindings,
     }), "Vercel environment bridge");
   }

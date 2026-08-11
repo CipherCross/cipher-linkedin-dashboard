@@ -511,6 +511,7 @@ test("S26 environment binding forwards only the already-closed application descr
     ownership,
     scope: "production",
     siteUrl: "https://tenant.example.test",
+    tenantSlug: "disposable-lab",
     bindings: [{
       name: "VITE_AUTH_PATH",
       valueClass: "public_build",
@@ -527,6 +528,9 @@ test("S26 environment binding forwards only the already-closed application descr
     // The tenant's own origin travels with the binding: IDENTITY_BASE_URL is
     // derived from it, so it may not be left to a control-plane-wide setting.
     site_url: "https://tenant.example.test",
+    // As does the tenant the deployment serves: APP_TENANT_ID is derived from
+    // it, and without it the machine-ingest path answers 503 for every notebook.
+    tenant_slug: "disposable-lab",
     bindings: [
       {
         name: "VITE_AUTH_PATH",

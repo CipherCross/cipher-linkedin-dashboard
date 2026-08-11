@@ -79,6 +79,22 @@ def a_token():
     return f"lha.3f1a6c52-9b0e-4d7a-8c31-2e5f7a9d0b64.{secret}"
 
 
+class OrderedKeys(frozenset):
+    """`REMOTE_CONFIG_KEYS` with its iteration order pinned.
+
+    `apply_remote_config` iterates `REMOTE_CONFIG_KEYS - LOCAL_ONLY_CONFIG_KEYS`,
+    and a frozenset of strings orders itself by hashes that are randomized per
+    process. A test about order-dependence therefore cannot use the real one."""
+
+    def __new__(cls, order):
+        self = super().__new__(cls, order)
+        self._order = list(order)
+        return self
+
+    def __sub__(self, other):
+        return [key for key in self._order if key not in other]
+
+
 def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello"):
     """A synthetic extraction in the exact row shapes `extract_local` returns."""
     now = "2026-08-07T00:00:00+00:00"
@@ -293,6 +309,83 @@ class RemoteConfigTest(unittest.TestCase):
         self.assertIn("ingest_token", denied)
         self.assertNotIn("release_public_key", denied)
 
+    def test_remote_config_cannot_switch_a_notebook_to_a_destination_it_lacks(self):
+        """`only` from the Health page against a notebook with no machine
+        credential would stop a working sync from a web form. A LOCAL `only` in
+        that state still fails loudly — that is a stated choice, this is not."""
+        local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off"}
+        with mock.patch.object(agent, "fetch_remote_config",
+                               return_value={"ingest_mode": "only"}), \
+                mock.patch("builtins.print"):
+            merged = agent.apply_remote_config(dict(local))
+        self.assertEqual(merged["ingest_mode"], "off")
+
+    def test_remote_only_is_honoured_once_the_notebook_can_deliver(self):
+        local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "dual",
+                 "ingest_url": "https://dash.example/x", "ingest_token": a_token()}
+        with mock.patch.object(agent, "fetch_remote_config",
+                               return_value={"ingest_mode": "only"}), \
+                mock.patch("builtins.print"):
+            merged = agent.apply_remote_config(dict(local))
+        self.assertEqual(merged["ingest_mode"], "only")
+
+    def test_remote_only_survives_the_url_arriving_in_the_same_blob(self):
+        """The refusal must ask about the config the merge PRODUCES.
+
+        `ingest_url` is itself a remote key, so a Health-page edit that turns a
+        notebook on will usually carry the URL and the mode together. Asking
+        the half-merged config made the answer depend on the iteration order of
+        a set — honoured or ignored for the same input, decided by string
+        hashing. Both orders are pinned here because the real frozenset's order
+        is randomized per process and neither run would catch it reliably."""
+        remote = {"ingest_mode": "only",
+                  "ingest_url": "https://dash.example/api/import?op=agent.ingest"}
+        for order in (["ingest_mode", "ingest_url"], ["ingest_url", "ingest_mode"]):
+            local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off",
+                     "ingest_token": a_token()}
+            with mock.patch.object(agent, "REMOTE_CONFIG_KEYS", OrderedKeys(order)), \
+                    mock.patch.object(agent, "fetch_remote_config",
+                                      return_value=dict(remote)), \
+                    mock.patch("builtins.print"):
+                merged = agent.apply_remote_config(local)
+            self.assertEqual(merged["ingest_mode"], "only", order)
+            self.assertEqual(merged["ingest_url"], remote["ingest_url"], order)
+
+    def test_a_remote_url_alone_still_cannot_switch_a_notebook_to_only(self):
+        """The other half of the same question. A remote blob may supply the
+        URL, but never the token — so a notebook without a local one still
+        cannot be told it is the gateway's, in either order."""
+        remote = {"ingest_mode": "only",
+                  "ingest_url": "https://dash.example/api/import?op=agent.ingest"}
+        for order in (["ingest_mode", "ingest_url"], ["ingest_url", "ingest_mode"]):
+            local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off"}
+            with mock.patch.object(agent, "REMOTE_CONFIG_KEYS", OrderedKeys(order)), \
+                    mock.patch.object(agent, "fetch_remote_config",
+                                      return_value=dict(remote)), \
+                    mock.patch("builtins.print"):
+                merged = agent.apply_remote_config(local)
+            self.assertEqual(merged["ingest_mode"], "off", order)
+
+    def test_a_malformed_remote_url_fails_the_refusal_closed(self):
+        """A URL that is not a string is not a URL. The predicate must answer
+        no rather than raise: `apply_remote_config` is called unguarded at the
+        top of `cmd_sync`, so an exception here would break a working sync."""
+        local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off",
+                 "ingest_token": a_token()}
+        with mock.patch.object(agent, "fetch_remote_config",
+                               return_value={"ingest_mode": "only",
+                                             "ingest_url": {"not": "a url"}}), \
+                mock.patch("builtins.print"):
+            merged = agent.apply_remote_config(local)
+        self.assertEqual(merged["ingest_mode"], "off")
+
+    def test_the_legacy_fetch_is_unreachable_without_a_supabase_credential(self):
+        """It subscripted `cfg['supabase_url']` directly. A notebook that has no
+        such key must get `{}`, not a KeyError out of a non-fatal fetch."""
+        with mock.patch.object(agent.requests, "get") as got:
+            self.assertEqual(agent.fetch_remote_config({"instance_id": "nb"}), {})
+        got.assert_not_called()
+
     def test_the_allowlist_subtraction_is_what_refuses_it(self):
         """Not the spelling of the allowlist: even if a later session adds the
         token to REMOTE_CONFIG_KEYS, the subtraction still drops it."""
@@ -326,18 +419,54 @@ class S23MachineApiTest(unittest.TestCase):
             agent.notify_new_replies(cfg)
 
 
+SUPABASE_CFG = {"supabase_url": "https://sb.example",
+                "supabase_service_key": "service-key"}
+
+
+def machine_cfg(**extra):
+    """A notebook with a machine credential and NO Supabase credential."""
+    return dict({"instance_id": "nb",
+                 "ingest_url": "https://dash.example/api/import?op=agent.ingest",
+                 "ingest_token": a_token()}, **extra)
+
+
 class ModeTest(unittest.TestCase):
     def test_known_modes(self):
         for mode in agent.INGEST_MODES:
-            self.assertEqual(agent.resolve_ingest_mode({"ingest_mode": mode}), mode)
-        self.assertEqual(agent.resolve_ingest_mode({"ingest_mode": " DUAL "}), "dual")
+            self.assertEqual(
+                agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode=mode)),
+                mode)
+        self.assertEqual(
+            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode=" DUAL ")),
+            "dual")
 
     def test_unset_and_unknown_are_off(self):
         """Fail closed: `ingest_mode` is remote-overridable, so a typo on the
         Health page must leave the notebook exactly as it was."""
-        self.assertEqual(agent.resolve_ingest_mode({}), "off")
-        self.assertEqual(agent.resolve_ingest_mode({"ingest_mode": "on"}), "off")
-        self.assertEqual(agent.resolve_ingest_mode({"ingest_mode": None}), "off")
+        self.assertEqual(agent.resolve_ingest_mode(dict(SUPABASE_CFG)), "off")
+        self.assertEqual(
+            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode="on")), "off")
+        self.assertEqual(
+            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode=None)), "off")
+
+    def test_only_is_a_mode(self):
+        """The refusal that used to be here was the whole blocker: without a
+        Supabase-off member there was no way to describe a tenant's notebook."""
+        self.assertIn("only", agent.INGEST_MODES)
+        self.assertEqual(
+            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode="only")),
+            "only")
+
+    def test_no_supabase_credential_resolves_to_only_whatever_the_flag_says(self):
+        """The mode is derived from the credential, not defaulted from a flag.
+
+        Every one of these would otherwise resolve to 'off' and the notebook
+        would extract its whole LH2 database and deliver it nowhere, reporting
+        success. That is the failure this derivation exists to make impossible."""
+        for flag in (None, "", "off", "shadow", "dual", "typo"):
+            cfg = machine_cfg() if flag is None else machine_cfg(ingest_mode=flag)
+            with mock.patch("builtins.print"):
+                self.assertEqual(agent.resolve_ingest_mode(cfg), "only", repr(flag))
 
 
 class IdempotencyKeyTest(unittest.TestCase):
@@ -956,6 +1085,250 @@ class SupabasePathTest(unittest.TestCase):
         payload = agent.build_ingest_payload({"instance_id": "nb"}, cs, ls, sent,
                                              [], ss, demo, "ok", "")
         self.assertEqual(len(payload["messages"]), len(sent))
+
+
+class LoadConfigTest(unittest.TestCase):
+    """`load_config` is the first statement of every command, so what it demands
+    decides which notebooks can run at all. It used to demand a Supabase
+    credential unconditionally, which is why a tenant's notebook exited before
+    reaching the transport that would have worked for it."""
+
+    def load(self, cfg):
+        with mock.patch.object(agent.os.path, "exists", return_value=True), \
+                mock.patch("builtins.open", mock.mock_open(read_data="{}")), \
+                mock.patch.object(agent.yaml, "safe_load", return_value=cfg):
+            return agent.load_config()
+
+    def test_a_supabase_notebook_still_loads(self):
+        cfg = {"instance_id": "nb", **SUPABASE_CFG}
+        self.assertEqual(self.load(cfg)["instance_id"], "nb")
+
+    def test_a_machine_only_notebook_loads(self):
+        self.assertEqual(self.load(machine_cfg())["instance_id"], "nb")
+
+    def test_a_notebook_with_neither_credential_is_refused(self):
+        with self.assertRaises(SystemExit) as raised:
+            self.load({"instance_id": "nb"})
+        self.assertIn("no destination credential", str(raised.exception))
+
+    def test_instance_id_is_still_required_of_everyone(self):
+        for cfg in (dict(SUPABASE_CFG), machine_cfg()):
+            cfg.pop("instance_id", None)
+            with self.assertRaises(SystemExit) as raised:
+                self.load(cfg)
+            self.assertIn("instance_id", str(raised.exception))
+
+    def test_a_placeholder_token_is_not_a_credential(self):
+        """The shape is part of the question. `ingest_token: "paste-it-here"`
+        with no Supabase key is a notebook that can reach nothing, and accepting
+        it would move the failure from a legible exit to a silent no-op."""
+        with self.assertRaises(SystemExit):
+            self.load({"instance_id": "nb", "ingest_url": "https://dash/x",
+                       "ingest_token": "paste-it-here"})
+
+
+class MachineOnlyWiringTest(unittest.TestCase):
+    """`sync` with the gateway as the ONLY destination.
+
+    Asserted on what was observed — whether a Supabase client was constructed,
+    whether a request went out, what the process exit was — because the claim is
+    about behaviour a tenant's notebook depends on, not about a return value."""
+
+    def run_sync(self, post=None, extract=None, **extra):
+        cfg = machine_cfg(instance_label="Notebook", **extra)
+        cs, ls, ms, ss, demo = extraction(leads=5, messages=4)
+        owner = {"account_name": "Ivan", "account_avatar": "https://cdn/a.jpg"}
+        lines = []
+        with mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update", return_value=False), \
+                mock.patch.object(
+                    agent, "extract_local",
+                    side_effect=extract,
+                    **({} if extract else
+                       {"return_value": (cs, ls, ms, ss, owner, demo)})), \
+                mock.patch.object(agent, "Supabase") as supabase, \
+                mock.patch.object(agent, "notify_new_replies") as notified, \
+                mock.patch.object(agent.time, "sleep"), \
+                mock.patch("builtins.print",
+                           side_effect=lambda *a, **k: lines.append(" ".join(
+                               str(part) for part in a))), \
+                mock.patch.object(
+                    agent.requests, "post",
+                    side_effect=post or (lambda *a, **k: Answer())) as posted:
+            try:
+                agent.cmd_sync(mock.Mock(dry_run=False))
+                exit_code = None
+            except SystemExit as raised:
+                exit_code = str(raised.code)
+        return supabase, posted, notified, exit_code, lines
+
+    def test_it_delivers_and_never_constructs_a_supabase_client(self):
+        supabase, posted, notified, exit_code, lines = self.run_sync()
+        supabase.assert_not_called()
+        self.assertEqual(posted.call_count, 1)
+        self.assertIsNone(exit_code)
+        self.assertTrue(notified.called)
+        self.assertTrue(any("sync ok" in line for line in lines), lines)
+
+    def test_the_batch_carries_the_heartbeat_and_the_extracted_owner(self):
+        """There is no `instances` PATCH on this path, so the instance row's
+        label, avatar and last_sync_at have to travel inside the payload — the
+        gateway's upsert stamps `last_sync_at = now()` and COALESCEs the rest."""
+        sent = []
+        self.run_sync(post=lambda *a, **k: sent.append(k["data"]) or Answer())
+        payload = json.loads(sent[0])
+        self.assertEqual(payload["instance_id"], "nb")
+        self.assertEqual(payload["instance"]["label"], "Notebook")
+        self.assertEqual(payload["instance"]["account_name"], "Ivan")
+        self.assertEqual(payload["instance"]["account_avatar"],
+                         "https://cdn/a.jpg")
+        self.assertEqual(payload["sync_run"]["status"], "ok")
+        self.assertEqual(payload["agent_version"], agent.AGENT_VERSION)
+
+    def test_a_delivery_failure_fails_the_run(self):
+        """The inversion that matters. Alongside Supabase a failed delivery is a
+        warning; as the sole destination nothing was written anywhere, so cron
+        must not be told the notebook synced."""
+        _, posted, notified, exit_code, _ = self.run_sync(
+            post=lambda *a, **k: Answer(401, {"error": "revoked"}))
+        self.assertTrue(posted.called)
+        self.assertIsNotNone(exit_code)
+        self.assertIn("sync failed", exit_code)
+        notified.assert_not_called()
+
+    def test_a_gateway_that_raises_also_fails_the_run(self):
+        def explode(*a, **k):
+            raise RuntimeError("gateway is on fire")
+
+        _, _, _, exit_code, _ = self.run_sync(post=explode)
+        self.assertIn("sync failed", exit_code or "")
+
+    def test_a_parity_problem_refuses_to_deliver_and_fails_the_run(self):
+        with mock.patch.object(agent, "verify_ingest_parity",
+                               return_value=["leads: a row went missing"]):
+            _, posted, _, exit_code, _ = self.run_sync()
+        posted.assert_not_called()
+        self.assertIn("parity", exit_code or "")
+
+    def test_an_extraction_failure_fails_the_run_without_sending(self):
+        def boom(*a, **k):
+            raise sqlite_error()
+
+        _, posted, _, exit_code, _ = self.run_sync(extract=boom)
+        posted.assert_not_called()
+        self.assertIn("extraction", exit_code or "")
+
+    def test_photo_sync_is_refused_rather_than_silently_mirroring_nothing(self):
+        _, _, _, exit_code, lines = self.run_sync(sync_photos=True)
+        self.assertIsNone(exit_code)
+        self.assertTrue(any("photo sync: skipped" in line for line in lines),
+                        lines)
+
+    def test_a_dry_run_on_this_path_sends_nothing(self):
+        cfg = machine_cfg()
+        cs, ls, ms, ss, demo = extraction(leads=3)
+        with mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update") as updated, \
+                mock.patch.object(agent, "extract_local",
+                                  return_value=(cs, ls, ms, ss, {}, demo)), \
+                mock.patch.object(agent, "Supabase") as supabase, \
+                mock.patch.object(agent.requests, "post") as posted, \
+                mock.patch("builtins.print"):
+            agent.cmd_sync(mock.Mock(dry_run=True))
+        supabase.assert_not_called()
+        posted.assert_not_called()
+        updated.assert_not_called()
+
+
+def sqlite_error():
+    import sqlite3
+    return sqlite3.DatabaseError("lh.db is locked")
+
+
+class SupabaseFreeCommandTest(unittest.TestCase):
+    """The two commands that were Supabase-only besides `sync`. One is ported
+    and one is refused, and the difference is whether the contract can carry
+    it — never whether it was convenient."""
+
+    def test_ingest_csv_delivers_through_the_gateway(self):
+        import tempfile
+        csv_text = ("Profile Url,Full Name,Company,Invited\n"
+                    "https://www.linkedin.com/in/a,Ann,Acme,2026-07-01\n"
+                    "https://www.linkedin.com/in/b,Bob,Beta,2026-07-02\n")
+        sent = []
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(csv_text)
+            path = f.name
+        try:
+            args = mock.Mock(file=path, campaign="SaaS Founders", kind="queue")
+            with mock.patch.object(agent, "load_config",
+                                   return_value=machine_cfg()), \
+                    mock.patch.object(agent, "Supabase") as supabase, \
+                    mock.patch.object(
+                        agent.requests, "post",
+                        side_effect=lambda *a, **k: sent.append(k["data"])
+                        or Answer()), \
+                    mock.patch("builtins.print"):
+                agent.cmd_ingest_csv(args)
+        finally:
+            os.unlink(path)
+        supabase.assert_not_called()
+        payload = json.loads(sent[0])
+        self.assertEqual(len(payload["leads"]), 2)
+        self.assertEqual(len(payload["campaigns"]), 1)
+        self.assertEqual(payload["campaigns"][0]["name"], "SaaS Founders")
+        # The events derived from the CSV milestones travel with it, and the
+        # collections a CSV cannot carry are empty rather than absent.
+        self.assertTrue(payload["events"])
+        self.assertEqual(payload["messages"], [])
+        self.assertEqual(payload["campaign_steps"], [])
+        # Same key rule as `sync`, so re-importing the same file is a replay.
+        self.assertTrue(payload["idempotency_key"].startswith("sync."))
+
+    def test_ingest_csv_that_cannot_be_delivered_exits_non_zero(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False,
+                                         encoding="utf-8") as f:
+            f.write("Profile Url\nhttps://www.linkedin.com/in/a\n")
+            path = f.name
+        try:
+            args = mock.Mock(file=path, campaign="X", kind="queue")
+            with mock.patch.object(agent, "load_config",
+                                   return_value=machine_cfg()), \
+                    mock.patch.object(agent.time, "sleep"), \
+                    mock.patch.object(agent.requests, "post",
+                                      side_effect=lambda *a, **k: Answer(401)), \
+                    mock.patch("builtins.print"), \
+                    self.assertRaises(SystemExit) as raised:
+                agent.cmd_ingest_csv(args)
+        finally:
+            os.unlink(path)
+        self.assertIn("ingest-csv failed", str(raised.exception))
+
+    def test_annotate_refuses_instead_of_writing_nowhere(self):
+        """`app_machine` holds no grant on public.annotations and the ingest
+        contract has no annotations collection, so there is nothing to port to."""
+        args = mock.Mock(note="Template B", date=None, campaign=None,
+                         instance=False)
+        with mock.patch.object(agent, "load_config", return_value=machine_cfg()), \
+                mock.patch.object(agent, "Supabase") as supabase, \
+                self.assertRaises(SystemExit) as raised:
+            agent.cmd_annotate(args)
+        supabase.assert_not_called()
+        self.assertIn("annotations", str(raised.exception))
+
+    def test_annotate_still_works_on_a_supabase_notebook(self):
+        args = mock.Mock(note="Template B", date="2026-08-11", campaign=None,
+                         instance=False)
+        with mock.patch.object(agent, "load_config",
+                               return_value={"instance_id": "nb", **SUPABASE_CFG}), \
+                mock.patch.object(agent, "Supabase") as supabase, \
+                mock.patch("builtins.print"):
+            agent.cmd_annotate(args)
+        supabase.return_value.upsert.assert_called_once()
 
 
 if __name__ == "__main__":

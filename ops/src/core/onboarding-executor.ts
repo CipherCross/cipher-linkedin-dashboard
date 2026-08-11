@@ -393,6 +393,10 @@ export class OnboardingExecutor {
             // origin travels with the request instead of being read from a
             // control-plane setting that can only ever name one tenant.
             siteUrl: context.siteUrl,
+            // `APP_TENANT_ID` is `derived_from_plan` too: the tenant the
+            // deployment serves is the plan's own slug, and without it the
+            // machine-ingest path refuses every notebook that syncs into it.
+            tenantSlug: context.tenantSlug,
             bindings: buildTenantEnvironmentBindings({
               tenantSlug: context.tenantSlug,
             }),

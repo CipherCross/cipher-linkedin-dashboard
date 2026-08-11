@@ -8,7 +8,7 @@
 # token and signing key below; the dashboard only holds a separate read-scoped
 # token and can never publish a release.
 set -euo pipefail
-cd "$(dirname "$0")/.."   # repo root — supabase CLI needs the linked project
+cd "$(dirname "$0")/.."   # repo root — the paths below are repo-relative
 
 python3 -m py_compile sync-agent/agent.py   # never ship a build that can't parse
 

@@ -70,6 +70,10 @@ const requestSchemas = {
     // Required, like `expected_hostname` on promote: the value bound to
     // IDENTITY_BASE_URL is the tenant's own origin, and no path may forget it.
     site_url: z.url(),
+    // Required for the same reason: `APP_TENANT_ID` decides which tenant the
+    // deployment believes it serves, and the machine-ingest path answers 503
+    // while it is absent, so no path may forget it either.
+    tenant_slug: z.string().regex(/^[a-z][a-z0-9-]{1,30}[a-z0-9]$/),
     bindings: z.array(z.strictObject({
       name: z.string().min(1).max(120),
       value_class: z.enum(["server_secret", "server_public", "public_build"]),

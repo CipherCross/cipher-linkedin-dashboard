@@ -26,8 +26,8 @@ function descriptorDigest(
   return hostingEnvironmentBindingDigest(descriptors);
 }
 
-test("S26 v3 contract binds the four least-privilege Neon URLs, Better Auth, a sender, and exact feature flags", () => {
-  assert.equal(HOSTING_ENVIRONMENT_CONTRACT, "hosting.environment.v3");
+test("S26 v4 contract binds the four least-privilege Neon URLs, Better Auth, a sender, the tenant, and exact feature flags", () => {
+  assert.equal(HOSTING_ENVIRONMENT_CONTRACT, "hosting.environment.v4");
   assert.equal(S26_APPLICATION_HOSTING_PROFILE, "s26.application-hosting.v1");
   assert.deepEqual(
     CANONICAL_TENANT_ENVIRONMENT.map((entry) => [entry.name, entry.valueClass, entry.source.kind]),
@@ -49,6 +49,10 @@ test("S26 v3 contract binds the four least-privilege Neon URLs, Better Auth, a s
       // reset link is the only route into an invited account.
       ["RESEND_API_KEY", "server_secret", "derived_from_owned_resource"],
       ["RESEND_FROM_IDENTITY", "server_public", "derived_from_owned_resource"],
+      // v4. The machine-ingest path answers 503 for every notebook while this
+      // is absent, so v3 could not produce a deployment that could be synced
+      // into at all.
+      ["APP_TENANT_ID", "server_public", "derived_from_plan"],
       ["VITE_AUTH_PATH", "public_build", "derived_from_plan"],
     ],
   );
@@ -73,7 +77,14 @@ test("names, classifications, and exact source references are immutable through 
   assert.equal(digest, tenantEnvironmentContractDigest({ tenantSlug: TENANT_SLUG }));
   for (const mutate of [
     (entries: typeof descriptors) => [{ ...entries[0]!, name: "NEON_RUNTIME_URL" }, ...entries.slice(1)],
-    (entries: typeof descriptors) => [{ ...entries[0]!, valueClass: "server_public" }, ...entries.slice(1)],
+    // Flipped relative to whatever the first descriptor actually is: pinning a
+    // literal class here silently became a no-op the moment a `server_public`
+    // entry sorted to the front, and a mutation that mutates nothing proves
+    // nothing about the digest.
+    (entries: typeof descriptors) => [{
+      ...entries[0]!,
+      valueClass: entries[0]!.valueClass === "server_secret" ? "server_public" : "server_secret",
+    }, ...entries.slice(1)],
     (entries: typeof descriptors) => [{
       ...entries[0]!,
       source: { kind: "derived_from_owned_resource" as const, resourceRef: "data.roles.changed" },
@@ -102,6 +113,43 @@ test("names, classifications, and exact source references are immutable through 
   assert.equal(release.environment_binding_digest, digest);
   assert.deepEqual(environment.bindings, expectBindingsForPlan());
   assert.match(hostingPlanDigest(plan), /^sha256:[a-f0-9]{64}$/);
+});
+
+// A deployment with no APP_TENANT_ID has no tenant: `readDeploymentTenantId`
+// returns null and every machine-ingest request answers 503, so a notebook can
+// never sync into a tenant onboarded without this binding — and step 11 would
+// still report 13/13, because it compares names, types and scopes and never
+// asks the deployment a question only a configured one can answer.
+test("the deployment is told which tenant it serves, from the plan's own slug", () => {
+  const tenant = CANONICAL_TENANT_ENVIRONMENT.find((entry) => entry.name === "APP_TENANT_ID");
+  assert.deepEqual(tenant, {
+    name: "APP_TENANT_ID",
+    valueClass: "server_public",
+    source: { kind: "derived_from_plan", planFieldRef: "tenant.slug" },
+  });
+  // Not a secret and not a build-time value: the serverless handlers read it at
+  // request time, and a public build value would bake one tenant into the
+  // bundle.
+  assert.equal(CANONICAL_PUBLIC_BUILD_VALUE_NAMES.includes("APP_TENANT_ID"), false);
+  // `OBJECT_STORAGE_TENANT_ID` is deliberately absent. The application accepts
+  // either name and requires them to be equal when both are set, so a second
+  // binding of the same value could only ever disagree with this one.
+  assert.equal(
+    CANONICAL_TENANT_ENVIRONMENT.some((entry) => entry.name === "OBJECT_STORAGE_TENANT_ID"),
+    false,
+  );
+  // The binding is inside the digest the plan, the build and recovery all carry,
+  // so a tenant cannot be onboarded against a profile that has dropped it.
+  assert.notEqual(
+    hostingEnvironmentBindingDigest(
+      BINDINGS.filter((binding) => binding.name !== "APP_TENANT_ID").map((binding) => ({
+        name: binding.name,
+        valueClass: binding.valueClass,
+        source: binding.source,
+      })),
+    ),
+    tenantEnvironmentContractDigest({ tenantSlug: TENANT_SLUG }),
+  );
 });
 
 test("the initials-only photo posture is explicit and recovery-safe", () => {

@@ -117,6 +117,19 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }
 
+  // Everything below is the human import surface, and it is POST-only. This
+  // route exports GET as well now, because two of the four machine operations
+  // above are GETs and a route that exports only POST never runs for them —
+  // the platform answers 405 before `handle` is entered, which is why
+  // `agent.config` and `agent.release` were unreachable in every deployment
+  // while their handlers looked correct in isolation. Refusing here keeps that
+  // widening confined to the four ops: a GET that falls through must not enter
+  // a flow that reads a body, or an authenticated GET would be answered
+  // `invalid JSON body` by an action that was never meant to see it.
+  if (req.method.toUpperCase() !== 'POST') {
+    return json({ error: `${req.method} is not allowed` }, 405)
+  }
+
   if (deploymentWritePath() === 'neon') {
     try {
       const writer = await neonWriter(req)
@@ -173,4 +186,12 @@ async function handle(req: Request): Promise<Response> {
   return json({ error: 'unknown import action' }, 400)
 }
 
+// Both verbs, one dispatcher. `agent.config` and `agent.release` are GETs (the
+// agent calls them with `requests.get`), and a route that exports only POST is
+// answered 405 by the platform before `handle` runs — so the two operations
+// were unreachable in every deployment while their handlers were correct in
+// isolation. `notify-replies.ts` and `identity.ts` already export both for the
+// same reason. `tests/importRoute.test.ts` exercises these symbols, rather than
+// the handler factories, because the defect was in the export list.
+export const GET = (req: Request) => handle(req)
 export const POST = (req: Request) => handle(req)
