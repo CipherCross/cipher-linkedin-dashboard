@@ -499,13 +499,13 @@
         "public_build_value_names"
       ],
       "properties": {
-        "hosting_value_contract": { "const": "hosting.environment.v2" },
+        "hosting_value_contract": { "const": "hosting.environment.v3" },
         "hosting_profile": { "const": "s26.application-hosting.v1" },
         "environment_binding_digest": { "$ref": "#/$defs/digest" },
         "value_descriptors": {
           "type": "array",
-          "minItems": 14,
-          "maxItems": 14,
+          "minItems": 16,
+          "maxItems": 16,
           "uniqueItems": true,
           "items": {
             "type": "object",

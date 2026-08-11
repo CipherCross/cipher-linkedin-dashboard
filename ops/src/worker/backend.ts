@@ -919,7 +919,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
         "Vercel binding descriptors must be the complete closed S26 application profile",
       );
     }
-    if (this.env.S26_APPLICATION_HOSTING_CONTRACT !== "hosting.environment.v2") {
+    if (this.env.S26_APPLICATION_HOSTING_CONTRACT !== "hosting.environment.v3") {
       throw new OpsError("unsupported_contract", "Worker application hosting contract is not the reviewed S26 version");
     }
     if (String(this.env.S26_APPLICATION_DATA_PLANE_READY) !== "true") {
@@ -1052,6 +1052,14 @@ export class S26WorkerBackend implements S26BridgeBackend {
       NOTIFY_SECRET: generatedValue("tenant.notify_secret"),
       MCP_SECRET: generatedValue("tenant.mcp_secret"),
     };
+    // The platform's own sending identity, shared by every tenant because the
+    // verified domain is one resource. Unlike IDENTITY_BASE_URL, which names a
+    // single tenant and therefore must travel with the request, these two are
+    // the same value for all of them.
+    const sender: Readonly<Record<string, string>> = {
+      RESEND_API_KEY: requireBinding(this.env.RESEND_API_KEY, "RESEND_API_KEY"),
+      RESEND_FROM_IDENTITY: requireConfigured(this.env.RESEND_FROM_IDENTITY, "RESEND_FROM_IDENTITY"),
+    };
     const planned: Readonly<Record<string, string>> = {
       IDENTITY_BASE_URL: identityBaseUrl,
       VITE_AUTH_PATH: "identity",
@@ -1060,7 +1068,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
       NEON_AI_PATH_DEFAULT: "neon",
       NEON_PHOTOS_DEFAULT: "disabled",
     };
-    const value = applicationConnectionUris[name] ?? generated[name] ?? planned[name];
+    const value = applicationConnectionUris[name] ?? generated[name] ?? sender[name] ?? planned[name];
     if (value === undefined) throw new OpsError("unsupported_contract", `Vercel binding ${name} is not in the fixed profile`);
     return { value, ...selected };
   }

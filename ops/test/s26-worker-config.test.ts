@@ -77,7 +77,7 @@ test("S26 provider, catalog, profile, and release selections are non-secret clos
     "the closed source selection must match the owner-approved published release",
   );
   assert.equal(/^[0-9a-f]{40}$/.test(vars.APPROVED_SOURCE_GIT_SHA), true);
-  assert.equal(vars.S26_APPLICATION_HOSTING_CONTRACT, "hosting.environment.v2");
+  assert.equal(vars.S26_APPLICATION_HOSTING_CONTRACT, "hosting.environment.v3");
   assert.equal(vars.S26_APPLICATION_DATA_PLANE_READY, "true");
   assert.deepEqual(
     {

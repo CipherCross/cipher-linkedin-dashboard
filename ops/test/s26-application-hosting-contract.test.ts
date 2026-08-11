@@ -26,8 +26,8 @@ function descriptorDigest(
   return hostingEnvironmentBindingDigest(descriptors);
 }
 
-test("S26 v2 contract binds the four least-privilege Neon URLs, Better Auth, and exact feature flags", () => {
-  assert.equal(HOSTING_ENVIRONMENT_CONTRACT, "hosting.environment.v2");
+test("S26 v3 contract binds the four least-privilege Neon URLs, Better Auth, a sender, and exact feature flags", () => {
+  assert.equal(HOSTING_ENVIRONMENT_CONTRACT, "hosting.environment.v3");
   assert.equal(S26_APPLICATION_HOSTING_PROFILE, "s26.application-hosting.v1");
   assert.deepEqual(
     CANONICAL_TENANT_ENVIRONMENT.map((entry) => [entry.name, entry.valueClass, entry.source.kind]),
@@ -45,6 +45,10 @@ test("S26 v2 contract binds the four least-privilege Neon URLs, Better Auth, and
       ["NEON_WRITES_DEFAULT", "server_public", "derived_from_plan"],
       ["NEON_AI_PATH_DEFAULT", "server_public", "derived_from_plan"],
       ["NEON_PHOTOS_DEFAULT", "server_public", "derived_from_plan"],
+      // v3. Without a sender the application cannot mail a reset link, and the
+      // reset link is the only route into an invited account.
+      ["RESEND_API_KEY", "server_secret", "derived_from_owned_resource"],
+      ["RESEND_FROM_IDENTITY", "server_public", "derived_from_owned_resource"],
       ["VITE_AUTH_PATH", "public_build", "derived_from_plan"],
     ],
   );

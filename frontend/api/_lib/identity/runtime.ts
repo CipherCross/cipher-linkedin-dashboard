@@ -12,12 +12,20 @@
 import { readIdentityConfig, SESSION_PRUNE_INTERVAL_MS } from './config.js'
 import { BetterAuthIdentityProvider } from './betterAuthProvider.js'
 import type { IdentityProvider } from './provider.js'
+import { createResetLinkSink, readResetMailConfig } from './resetMail.js'
 
 let provider: IdentityProvider | null = null
 
 export function getIdentityProvider(): IdentityProvider {
   if (!provider) {
-    provider = new BetterAuthIdentityProvider({ config: readIdentityConfig() })
+    // A deployment with a sender delivers reset links; one without keeps the
+    // provider's dropping sink, which is what every deployment did before the
+    // environment contract bound a sender at all.
+    const mail = readResetMailConfig()
+    provider = new BetterAuthIdentityProvider({
+      config: readIdentityConfig(),
+      ...(mail === null ? {} : { sendResetLink: createResetLinkSink(mail) }),
+    })
   }
   return provider
 }

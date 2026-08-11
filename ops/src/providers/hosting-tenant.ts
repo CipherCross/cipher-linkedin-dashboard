@@ -15,7 +15,7 @@ import {
 } from "./hosting.js";
 
 /** Versioned closed contract for the S26 application's hosting values. */
-export const HOSTING_ENVIRONMENT_CONTRACT = "hosting.environment.v2" as const;
+export const HOSTING_ENVIRONMENT_CONTRACT = "hosting.environment.v3" as const;
 export const S26_APPLICATION_HOSTING_PROFILE = "s26.application-hosting.v1" as const;
 
 export const CANONICAL_RUNTIME_PROFILE_ID = "web-node22-1x" as const;
@@ -44,6 +44,16 @@ export const HOSTING_PLAN_FIELD_REFS = {
 } as const;
 
 /** Registry-owned logical resources, not provider IDs or connection strings. */
+/**
+ * The platform's own verified sending identity. It is one resource shared by
+ * every tenant — a single verified domain — which is why the tenant's copy is
+ * derived from it rather than planned per tenant.
+ */
+export const S26_SENDER_RESOURCE_REFS = {
+  apiCredential: "email.sender.api_credential",
+  fromIdentity: "email.sender.from_identity",
+} as const;
+
 export const S26_ROLE_RESOURCE_REFS = {
   appRuntime: "data.roles.app_runtime",
   appSystem: "data.roles.app_system",
@@ -122,6 +132,21 @@ export const CANONICAL_TENANT_ENVIRONMENT: readonly HostingEnvironmentValueContr
     name: "NEON_PHOTOS_DEFAULT",
     valueClass: "server_public",
     source: { kind: "derived_from_plan", planFieldRef: HOSTING_PLAN_FIELD_REFS.neonPhotosDefault },
+  },
+  {
+    // Without these two the application can send no mail at all, and the one
+    // flow that needs it is the only way anybody reaches an account: an invite
+    // creates a credential nobody knows and points at the reset link. v2 bound
+    // no sender, so `dropResetLink` discarded every link and no invited person
+    // could sign in.
+    name: "RESEND_API_KEY",
+    valueClass: "server_secret",
+    source: { kind: "derived_from_owned_resource", resourceRef: S26_SENDER_RESOURCE_REFS.apiCredential },
+  },
+  {
+    name: "RESEND_FROM_IDENTITY",
+    valueClass: "server_public",
+    source: { kind: "derived_from_owned_resource", resourceRef: S26_SENDER_RESOURCE_REFS.fromIdentity },
   },
   {
     name: "VITE_AUTH_PATH",
