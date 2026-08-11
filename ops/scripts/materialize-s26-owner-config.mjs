@@ -16,11 +16,12 @@ const policy = JSON.parse(readFileSync(policyPath, "utf8"));
 
 if (
   policy.policy_id !== "s26-disposable-policy-v1"
-  || policy.disposition !== "configuration-valid-plan-blocked"
+  || policy.disposition !== "configuration-valid-plan-eligible"
   || !Array.isArray(policy.catalogs)
   || policy.catalogs.length !== 7
+  || policy.blocking_conditions.length !== 0
 ) {
-  throw new Error("S26 disposable policy artifact is not the reviewed blocked configuration");
+  throw new Error("S26 disposable policy artifact is not the reviewed plan-eligible configuration");
 }
 
 const capabilityIds = [
@@ -57,7 +58,31 @@ const config = {
   },
   profile: {
     allowed_tenant_slug: "s26-disposable-lab",
-    platform_domain: "app.ciphercross.dev",
+    selections: {
+      company_name: "S26 Disposable Lab",
+      admin_email: "accounts@ciphercross.com",
+      expected_instances: 1,
+      release_channel: "canary",
+      residency_policy_id: "eu-disposable-policy",
+      region_id: "aws-eu-central-1",
+      data_tier_id: "neon-free",
+      data_compute_id: "autoscale-0.25-2cu",
+      hosting_tier_id: "vercel-hobby",
+      // Neon Free's actual restore window is the provider-level profile;
+      // s26-disposable-daily remains the platform recovery profile below.
+      backup_profile_id: "neon-free-restore-6h",
+      retention_policy_id: "retention-30d",
+      subprocessor_profile_id: "s26-disposable-processors",
+      smtp_profile_id: "resend-eu-west-1",
+      smtp_secret_labels: [
+        "lh2-platform/platform/smtp.username",
+        "lh2-platform/platform/smtp.password",
+      ],
+      support_access_maximum_duration_hours: 24,
+    },
+    // The disposable drill binds no owned zone; it uses the hostname
+    // Vercel serves itself.
+    platform_domain: "vercel.app",
     data_owner_scope_id: "org-damp-hill-86577285",
     hosting_owner_scope_id: "team_AB0nAOId1mR7gHxPldsG9f2u",
     source_git_sha: "b2c287af68b5afe46deee27aa3eb829ed0297c60",
@@ -80,17 +105,9 @@ const config = {
       recurring_high_minor: 0,
       usage_ceiling_minor: 0,
       one_time_minor: 0,
-      components: [
-        {
-          provider: "hosting",
-          sku_id: "vercel-commercial-entitlement-pending",
-          quantity: 1,
-          unit: "team_month",
-          low_minor: 0,
-          high_minor: 0,
-          assumption: "Unavailable until a commercial Vercel entitlement and exact incremental price are provider-verified",
-        },
-      ],
+      // The drill selects only free-tier, non-billable entitlements, so it
+      // buys no priced component and carries no cost SKU.
+      components: [],
       pricing_catalog_version: "s26-pricing-2026-08-10",
     },
     capability_budgets: capabilityIds.map((capability) => ({

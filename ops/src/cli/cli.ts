@@ -18,7 +18,11 @@ import {
   createP4COwnerOperations,
   p4cBusinessInputs,
 } from "../runtime/p4c-runtime.js";
-import { createConfiguredS26Runtime } from "../runtime/s26-config.js";
+import {
+  createConfiguredS26Runtime,
+  loadS26OwnerRuntimeConfig,
+  s26BusinessInputs,
+} from "../runtime/s26-config.js";
 import { MacOsKeychainSecretStore } from "../secrets/keychain.js";
 import { readSecretNoEcho } from "../secrets/no-echo.js";
 import { SecretBootstrapService } from "../secrets/service.js";
@@ -228,7 +232,7 @@ export async function runCli(
           emit(
             stdout,
             redactor,
-            await operations.call(toolName, p4cBusinessInputs()),
+            await operations.call(toolName, businessInputs(parsed)),
           );
           return 0;
         }
@@ -366,6 +370,20 @@ function requiredOption(parsed: ParsedArgs, name: string): string {
 
 function runtimeOptions(): readonly string[] {
   return ["registry", "owner-id", "p4c", "s26", "s26-config"];
+}
+
+/**
+ * Each runtime plans with its own selections. Feeding one runtime's inputs to
+ * the other silently targets the wrong tenant and catalog entries, so the
+ * S26 path reads them from its own reviewed configuration.
+ */
+function businessInputs(parsed: ParsedArgs): Record<string, unknown> {
+  if (!parsed.options.has("s26")) {
+    return p4cBusinessInputs();
+  }
+  return s26BusinessInputs(
+    loadS26OwnerRuntimeConfig(requiredOption(parsed, "s26-config")),
+  );
 }
 
 async function ownerOperations(

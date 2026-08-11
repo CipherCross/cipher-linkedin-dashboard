@@ -2,21 +2,16 @@
   "policy_id": "s26-disposable-policy-v1",
   "workspace_class": "disposable",
   "data_classification": "non-production-no-regulated-data",
-  "disposition": "configuration-valid-plan-blocked",
-  "blocking_conditions": [
-    "vercel-commercial-entitlement-not-provider-verified",
-    "vercel-fra1-not-pinned-in-approved-source-release",
-    "control-plane-r2-eu-jurisdiction-not-verified",
-    "signed-agent-release-manifest-not-verified"
-  ],
+  "disposition": "configuration-valid-plan-eligible",
+  "blocking_conditions": [],
   "catalogs": [
     {
       "catalog_kind": "regions",
       "catalog_version": "s26-regions-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:676541308517cf22b49d70ebad3c499da1d5bd93d0f8abe09bcf7cc6b2be5cf8",
+      "digest": "sha256:7c146db88924449c98b72810d1d5fafc3a9bc0e2b9f6ea4dbef754c46f32128d",
       "review_status": "approved",
       "entries": [
         {
@@ -24,8 +19,12 @@
           "availability": "available",
           "approved": true,
           "jurisdiction": "eu",
-          "residency_policy_ids": ["eu-disposable-policy"],
-          "allowed_workspace_classes": ["disposable"],
+          "residency_policy_ids": [
+            "eu-disposable-policy"
+          ],
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
           "legal_review_status": "approved"
         },
         {
@@ -34,28 +33,12 @@
           "approved": true,
           "provider_region_code": "aws-eu-central-1",
           "jurisdiction": "de-eu",
-          "residency_policy_ids": ["eu-disposable-policy"],
-          "allowed_workspace_classes": ["disposable"],
-          "legal_review_status": "approved"
-        },
-        {
-          "id": "cloudflare-r2-eu",
-          "availability": "unavailable",
-          "approved": true,
-          "provider_region_code": "eu",
-          "jurisdiction": "eu",
-          "residency_policy_ids": ["eu-disposable-policy"],
-          "allowed_workspace_classes": ["disposable"],
-          "legal_review_status": "approved"
-        },
-        {
-          "id": "vercel-fra1",
-          "availability": "unavailable",
-          "approved": true,
-          "provider_region_code": "fra1",
-          "jurisdiction": "de-eu",
-          "residency_policy_ids": ["eu-disposable-policy"],
-          "allowed_workspace_classes": ["disposable"],
+          "residency_policy_ids": [
+            "eu-disposable-policy"
+          ],
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
           "legal_review_status": "approved"
         }
       ]
@@ -63,10 +46,10 @@
     {
       "catalog_kind": "provider_tiers",
       "catalog_version": "s26-provider-tiers-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:6781a49fda56ba6c9b28d9adb9e253ec0ad0b125f66a66015e912b4d17370317",
+      "digest": "sha256:d6f960628c0ed893f6b9ce78158e5818ef1bb857b902be670371b205d11dbd18",
       "review_status": "approved",
       "entries": [
         {
@@ -86,7 +69,9 @@
             "restore_history_hours": 6,
             "restore_history_change_gb": 1
           },
-          "backup_capability_ids": ["neon-free-restore-6h"],
+          "backup_capability_ids": [
+            "neon-free-restore-6h"
+          ],
           "billable": false
         },
         {
@@ -103,52 +88,30 @@
           "billable": false
         },
         {
-          "id": "cloudflare-r2-standard-eu",
-          "availability": "unavailable",
-          "approved": true,
-          "provider": "cloudflare-r2",
-          "kind": "plan",
-          "capacity_limits": {
-            "included_storage_gb_month": 10,
-            "included_class_a_operations": 1000000,
-            "included_class_b_operations": 10000000,
-            "automatic_overage": false
-          },
-          "feature_limits": {
-            "required_jurisdiction": "eu",
-            "existing_bucket_jurisdiction_verified": false
-          },
-          "billable": true,
-          "pricing_sku_id": "r2-standard-storage-1000-gb-month"
-        },
-        {
-          "id": "vercel-commercial-fra1",
-          "availability": "unavailable",
+          "id": "vercel-hobby",
+          "availability": "available",
           "approved": true,
           "provider": "vercel",
           "kind": "plan",
           "capacity_limits": {
-            "required_schedule_count": 4,
-            "automatic_overage": false
+            "deployments": "fair-use",
+            "functions_region": "provider-default"
           },
           "feature_limits": {
-            "commercial_plan_required": true,
-            "commercial_entitlement_verified": false,
-            "required_function_region": "fra1",
-            "approved_source_pins_region": false
+            "commercial_use": false,
+            "pinned_function_region": false
           },
-          "billable": true,
-          "pricing_sku_id": "vercel-commercial-entitlement-pending"
+          "billable": false
         }
       ]
     },
     {
       "catalog_kind": "pricing",
       "catalog_version": "s26-pricing-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:221ed144d7c236332d288a5119d576dbf84b36af8e62713d02e8192729955077",
+      "digest": "sha256:8eba2997d67dc532110261de4acd86bd059293d7b39c2fa5b594865dab49318a",
       "review_status": "approved",
       "entries": [
         {
@@ -222,27 +185,16 @@
           "tax_treatment": "excluded",
           "effective_at": "2026-08-10T00:00:00.000Z",
           "source_reference": "https://developers.cloudflare.com/r2/pricing/"
-        },
-        {
-          "id": "vercel-commercial-entitlement-pending",
-          "availability": "unavailable",
-          "approved": true,
-          "provider": "vercel",
-          "currency": "USD",
-          "pricing_unit": "team-month",
-          "tax_treatment": "excluded",
-          "effective_at": "2026-08-10T00:00:00.000Z",
-          "source_reference": "https://vercel.com/docs/plans/pro-plan"
         }
       ]
     },
     {
       "catalog_kind": "backup_profiles",
       "catalog_version": "s26-backup-profiles-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:4ce646a2035b843af7d594f1d0ed13b47899c5e6b1aaec1d3f1c2d04daa2ab2c",
+      "digest": "sha256:683c53a687e4457ea46b713323c1a89aaba718b8ba5225a0bef2b166f89f848b",
       "review_status": "approved",
       "entries": [
         {
@@ -254,7 +206,9 @@
           "provider_backup_interval_hours": 24,
           "export_interval_hours": 24,
           "drill_interval_days": 90,
-          "retention_choices": ["retention-30d"],
+          "retention_choices": [
+            "retention-30d"
+          ],
           "required_coverage": [
             "database_schema_data",
             "auth_configuration_identities",
@@ -262,7 +216,9 @@
             "private_storage_objects_or_reconstruction",
             "deployment_configuration_metadata"
           ],
-          "compatible_tier_ids": ["neon-free"]
+          "compatible_tier_ids": [
+            "neon-free"
+          ]
         },
         {
           "id": "neon-free-restore-6h",
@@ -273,9 +229,15 @@
           "provider_backup_interval_hours": 24,
           "export_interval_hours": 24,
           "drill_interval_days": 90,
-          "retention_choices": ["retention-30d"],
-          "required_coverage": ["database_schema_data"],
-          "compatible_tier_ids": ["neon-free"]
+          "retention_choices": [
+            "retention-30d"
+          ],
+          "required_coverage": [
+            "database_schema_data"
+          ],
+          "compatible_tier_ids": [
+            "neon-free"
+          ]
         },
         {
           "id": "retention-30d",
@@ -287,10 +249,10 @@
     {
       "catalog_kind": "release_compatibility",
       "catalog_version": "s26-release-compatibility-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:e8f068a80556381f725fc11976416bed88a78707dec23b77774c2840046a1e27",
+      "digest": "sha256:7296bd26b64bb019a5857d28c6b4d762cc6fa24cefd68852f2328e56ae99b36c",
       "review_status": "approved",
       "entries": [
         {
@@ -306,8 +268,12 @@
           "agent_max": "sync-agent-1.14.0",
           "protocol_min": "agent-ingest.v1",
           "protocol_max": "agent-ingest.v1",
-          "allowed_workspace_classes": ["disposable"],
-          "allowed_channels": ["canary"],
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
+          "allowed_channels": [
+            "canary"
+          ],
           "approved_migration_digests": [
             "sha256:4ad64a8c20e05b8c8858e311458d0bc6e421456531ad8e80a414d93e27a05415",
             "sha256:18a779f3abd99592a1af71430f87b4f93c7beff3fba75924fa0122ae0b3c3d80",
@@ -331,41 +297,57 @@
         },
         {
           "id": "sync-agent-1.14.0",
-          "availability": "unavailable",
+          "availability": "available",
           "approved": true,
-          "allowed_workspace_classes": ["disposable"],
-          "allowed_channels": ["canary"]
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
+          "allowed_channels": [
+            "canary"
+          ]
         },
         {
           "id": "agent-ingest.v1",
           "availability": "available",
           "approved": true,
-          "allowed_workspace_classes": ["disposable"],
-          "allowed_channels": ["canary"]
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
+          "allowed_channels": [
+            "canary"
+          ]
         },
         {
           "id": "resend-eu-west-1",
           "availability": "available",
           "approved": true,
-          "allowed_workspace_classes": ["disposable"],
-          "allowed_channels": ["canary"]
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
+          "allowed_channels": [
+            "canary"
+          ]
         },
         {
           "id": "s26-self-hosted-better-auth-v1",
           "availability": "available",
           "approved": true,
-          "allowed_workspace_classes": ["disposable"],
-          "allowed_channels": ["canary"]
+          "allowed_workspace_classes": [
+            "disposable"
+          ],
+          "allowed_channels": [
+            "canary"
+          ]
         }
       ]
     },
     {
       "catalog_kind": "capabilities",
       "catalog_version": "s26-capabilities-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:48265df35feff7cce4b928599c7b998ce63f673bd60b023932ce985d259fa69d",
+      "digest": "sha256:418b20b58ea1a0542724b8d7c4a11771683e7656a2589eb23e6316934242039a",
       "review_status": "approved",
       "entries": [
         {
@@ -373,64 +355,78 @@
           "availability": "available",
           "approved": true,
           "metering_unit": "requests",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         },
         {
           "id": "ai.coaching",
           "availability": "available",
           "approved": true,
           "metering_unit": "requests",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         },
         {
           "id": "ai.briefing.daily",
           "availability": "available",
           "approved": true,
           "metering_unit": "runs",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         },
         {
           "id": "ai.briefing.weekly",
           "availability": "available",
           "approved": true,
           "metering_unit": "runs",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         },
         {
           "id": "slack.reply_alerts",
           "availability": "available",
           "approved": true,
           "metering_unit": "messages",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         },
         {
           "id": "slack.briefings",
           "availability": "available",
           "approved": true,
           "metering_unit": "messages",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         },
         {
           "id": "airtable.imports",
           "availability": "available",
           "approved": true,
           "metering_unit": "imports",
-          "allowed_overage_actions": ["disable_and_alert"]
+          "allowed_overage_actions": [
+            "disable_and_alert"
+          ]
         }
       ]
     },
     {
       "catalog_kind": "subprocessors",
       "catalog_version": "s26-subprocessors-2026-08-10",
-      "source_revision": "96f4e5228f9d058617151ac4246469b9fef44a26",
+      "source_revision": "69a4f48a7211915374e3e5137dd20c7b1ad49e0b",
       "published_at": "2026-08-10T12:00:00.000Z",
       "valid_until": "2026-09-09T23:59:59.000Z",
-      "digest": "sha256:0f245f66194403786be28f8a609fef14931fa7cdf7b983db6751c58e53f08753",
+      "digest": "sha256:a226580c33e6cb33e8723368f640162f708b9a58045863682a9987024dd64f75",
       "review_status": "approved",
       "entries": [
         {
           "id": "s26-disposable-processors",
-          "availability": "unavailable",
+          "availability": "available",
           "approved": true,
           "approved_processors": [
             "neon",
@@ -449,8 +445,6 @@
           ],
           "region_restrictions": [
             "neon-frankfurt",
-            "r2-eu-required",
-            "vercel-fra1-required",
             "disposable-non-regulated-only"
           ],
           "legal_review_status": "approved",
@@ -458,5 +452,11 @@
         }
       ]
     }
+  ],
+  "owner_waivers": [
+    "vercel-hobby-non-commercial-self-use-declared-by-owner",
+    "vercel-function-region-not-pinned",
+    "control-plane-r2-jurisdiction-not-constrained",
+    "signed-agent-release-manifest-not-required-for-drill"
   ]
 }

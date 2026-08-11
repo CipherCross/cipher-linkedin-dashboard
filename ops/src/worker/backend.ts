@@ -1174,13 +1174,20 @@ export class S26WorkerBackend implements S26BridgeBackend {
     if (senderDomain !== this.env.RESEND_SENDER_DOMAIN) {
       throw new OpsError("unsupported_contract", "Domain inspection sender is outside the fixed Resend profile");
     }
-    const response = await this.#vercel(`/v6/domains/${encodeURIComponent(hostname)}/config`);
+    // A hostname that no project has claimed yet has no domain config at all,
+    // and Vercel answers 404. That is the expected pre-provisioning state for a
+    // new tenant, not a provider failure: the name is simply still available.
+    let config: JsonRecord | null = null;
+    try { config = (await this.#vercel(`/v6/domains/${encodeURIComponent(hostname)}/config`)).value; } catch (error) {
+      if (!(error instanceof OpsError) || error.code !== "provider_error" || error.details.status !== 404) throw error;
+    }
+    const response = { value: config ?? { misconfigured: false, configuredBy: null } };
     const resend = await this.#resend("/domains");
     const domains = Array.isArray(resend.value.data) ? resend.value.data : [];
     const sender = domains
       .map((entry) => record(entry, "Resend domain"))
       .find((entry) => entry.name === senderDomain);
-    return { zoneOwned: response.value.misconfigured !== true, hostnameAvailable: response.value.configuredBy === null || response.value.configuredBy === undefined, existingBindingOwned: response.value.configuredBy === this.env.VERCEL_TEAM_ID, senderDomainVerified: sender?.status === "verified", legalReviewApproved: input.workspace_class === "disposable", validUntil: validUntil() };
+    return { zoneOwned: response.value.misconfigured !== true, hostnameAvailable: response.value.configuredBy === null || response.value.configuredBy === undefined, existingBindingOwned: config !== null && response.value.configuredBy === this.env.VERCEL_TEAM_ID, senderDomainVerified: sender?.status === "verified", legalReviewApproved: input.workspace_class === "disposable", validUntil: validUntil() };
   }
 
   async #sourceInspect(input: JsonRecord): Promise<unknown> {

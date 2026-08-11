@@ -115,24 +115,41 @@ function result<T>(value: unknown, label: string): T {
   return value as T;
 }
 
+/**
+ * Read-only inspections carry no provider request id in their canonical shape:
+ * that id exists to make an ambiguous *mutation* resumable. The transport adds
+ * one to every response, so it is dropped here rather than reaching the
+ * canonical adapter's strict schema as an unrecognized key.
+ */
+function inspection<T>(value: unknown, label: string): T {
+  const { providerRequestId: _providerRequestId, ...rest } = result<Record<string, unknown>>(value, label);
+  return rest as T;
+}
+
 abstract class BridgeRecoveryClient {
-  protected abstract readonly http: PrivateProviderHttp;
+  /**
+   * Recovery is a bridge vocabulary, so it must travel over the bridge
+   * transport. Sending a bridge path to a provider's own API host presents the
+   * provider credential to a route that provider does not serve, which it
+   * rejects as unauthorized.
+   */
+  protected abstract readonly bridge: PrivateProviderHttp;
 
   async captureRecovery(request: RecoveryCaptureRequest): Promise<RecoveryArtifact> {
-    return result(await this.http.invoke("POST", s26BridgePath(this.capability, "recovery-capture"), {
+    return result(await this.bridge.invoke("POST", s26BridgePath(this.capability, "recovery-capture"), {
       source_resource_id: request.sourceResourceId, tenant_slug: request.tenantSlug,
       recovery_target_name: request.recoveryTargetName, ownership_marker_digest: request.ownership.digest,
     }), "recovery capture");
   }
   async restoreRecovery(request: RecoveryRestoreRequest): Promise<ProviderActionResult> {
-    return result(await this.http.invoke("POST", s26BridgePath(this.capability, "recovery-restore"), {
+    return result(await this.bridge.invoke("POST", s26BridgePath(this.capability, "recovery-restore"), {
       target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId,
       artifact_manifest_digest: request.artifact.manifestDigest,
       ownership_marker_digest: request.ownership.digest,
     }), "recovery restore");
   }
   async verifyRecovery(request: RecoveryRestoreRequest): Promise<RecoveryVerification> {
-    return result(await this.http.invoke("POST", s26BridgePath(this.capability, "recovery-verify"), {
+    return result(await this.bridge.invoke("POST", s26BridgePath(this.capability, "recovery-verify"), {
       target_resource_id: request.targetResourceId, tenant_slug: request.tenantSlug, artifact_id: request.artifact.artifactId,
       ownership_marker_digest: request.ownership.digest,
     }), "recovery verification");
@@ -143,26 +160,27 @@ abstract class BridgeRecoveryClient {
 
 /** Direct Neon project control-plane mapping; portable Postgres work is bridged. */
 export class NeonPostgresOperationsClient extends BridgeRecoveryClient implements NeonOperationsApi, DataRecoveryPort {
-  protected readonly http: PrivateProviderHttp;
+  protected readonly bridge: PrivateProviderHttp;
+  readonly #direct: PrivateProviderHttp;
   protected readonly capability = "data" as const;
   protected readonly prefix = "/v2/projects";
-  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: DataInspectionRequest): Promise<DataInspection> { return result(await this.http.invoke("POST", s26BridgePath("data", "inspect"), { organization_id: request.organizationId, deterministic_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, backup_profile_id: request.backupProfileId, ownership_marker_digest: request.ownership.digest }), "Neon inspection bridge"); }
+  constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); }
+  async inspect(request: DataInspectionRequest): Promise<DataInspection> { return inspection(await this.bridge.invoke("POST", s26BridgePath("data", "inspect"), { organization_id: request.organizationId, deterministic_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, backup_profile_id: request.backupProfileId, ownership_marker_digest: request.ownership.digest }), "Neon inspection bridge"); }
   async createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
-    const value = result<{ readonly providerRequestId: string; readonly project?: { readonly id?: string; readonly name?: string } }>(await this.http.invoke("POST", this.prefix, { org_id: request.organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
+    const value = result<{ readonly providerRequestId: string; readonly project?: { readonly id?: string; readonly name?: string } }>(await this.#direct.invoke("POST", this.prefix, { org_id: request.organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
     if (!value.project?.id || value.project.name !== request.deterministicName) throw new OpsError("provider_error", "Neon project response is incomplete");
     return { providerRequestId: value.providerRequestId, providerOwnerId: request.organizationId, resourceId: value.project.id, deterministicName: request.deterministicName, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false };
   }
-  async waitUntilReady(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("GET", `${this.prefix}/${id(projectId)}`), "Neon project readiness"); }
-  async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("data", "portable-schema-apply"), { project_id: request.projectId, baseline_version: request.baselineVersion, migration_versions: request.migrationVersions, target_schema_version: request.targetSchemaVersion }), "Postgres migration bridge"); }
-  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("data", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Postgres smoke bridge"); }
+  async waitUntilReady(projectId: string): Promise<ProviderActionResult> { return result(await this.#direct.invoke("GET", `${this.prefix}/${id(projectId)}`), "Neon project readiness"); }
+  async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("data", "portable-schema-apply"), { project_id: request.projectId, baseline_version: request.baselineVersion, migration_versions: request.migrationVersions, target_schema_version: request.targetSchemaVersion }), "Postgres migration bridge"); }
+  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("data", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Postgres smoke bridge"); }
 }
 
 /** Better Auth is application-hosted; its reviewed admin bridge has named operations only. */
 export class BetterAuthOperationsClient implements IdentityOperationsApi, IdentityRecoveryPort {
   protected readonly http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> { return result(await this.http.invoke("POST", s26BridgePath("identity", "inspect"), { template_set_id: request.templateSetId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, release_compatibility_id: request.releaseCompatibilityId }), "Better Auth inspect"); }
+  async inspect(request: IdentityInspectionRequest): Promise<IdentityInspection> { return inspection(await this.http.invoke("POST", s26BridgePath("identity", "inspect"), { template_set_id: request.templateSetId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, release_compatibility_id: request.releaseCompatibilityId }), "Better Auth inspect"); }
   async configure(request: AuthConfigurationRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "configure"), { project_id: request.projectId, site_url: request.siteUrl, redirect_urls: request.redirectUrls, template_set_id: request.templateSetId }), "Better Auth configure"); }
   async createDisabledSupportMembership(projectId: string): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "support-membership"), { project_id: projectId }), "Better Auth support membership"); }
   async createCompanyAdminAndInvite(request: CompanyAdminRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("identity", "company-admin-invite"), { project_id: request.projectId, admin_email: request.adminEmail }), "Better Auth company invite"); }
@@ -174,23 +192,25 @@ export class BetterAuthOperationsClient implements IdentityOperationsApi, Identi
 
 /** Cloudflare R2 private-bucket and object-recovery client. */
 export class CloudflareR2OperationsClient extends BridgeRecoveryClient implements ObjectStorageOperationsApi, ObjectStorageRecoveryPort {
-  protected readonly http: PrivateProviderHttp;
+  protected readonly bridge: PrivateProviderHttp;
+  readonly #direct: PrivateProviderHttp;
   protected readonly capability = "objectStorage" as const;
   readonly #accountId: string;
-  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Cloudflare account scope is required"); this.#accountId = configuration.scopeId; }
-  async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket"); }
-  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.http.invoke("POST", s26BridgePath("objectStorage", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds, require_private_access_checks: true }), "R2 smoke bridge"); }
+  constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Cloudflare account scope is required"); this.#accountId = configuration.scopeId; }
+  async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> { return result(await this.#direct.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket"); }
+  async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("objectStorage", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds, require_private_access_checks: true }), "R2 smoke bridge"); }
 }
 
 /** Vercel deployment/configuration client. Every operation maps to one fixed route. */
 export class VercelOperationsClient extends BridgeRecoveryClient implements HostingOperationsApi, HostingRecoveryPort {
-  protected readonly http: PrivateProviderHttp;
+  protected readonly bridge: PrivateProviderHttp;
+  readonly #direct: PrivateProviderHttp;
   protected readonly capability = "hosting" as const;
   readonly #teamId: string;
-  constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.http = new PrivateProviderHttp(configuration, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Vercel team scope is required"); this.#teamId = configuration.scopeId; }
+  constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Vercel team scope is required"); this.#teamId = configuration.scopeId; }
   #projectPath(version: string, handle?: string, suffix = ""): string { return `/v${version}/projects${handle ? `/${id(handle)}` : ""}${suffix}?teamId=${id(this.#teamId)}`; }
-  async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "inspect"), { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspection bridge"); }
-  async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> { const value = result<{ readonly providerRequestId: string; readonly id?: string; readonly name?: string }>(await this.http.invoke("POST", this.#projectPath("11"), { name: request.deterministicName, environmentVariables: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: request.ownership.digest, type: "plain", target: ["production", "preview"] }] }), "Vercel project"); if (!value.id || value.name !== request.deterministicName) throw new OpsError("provider_error", "Vercel project response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: value.id, deterministicName: request.deterministicName, workspaceClass: request.workspaceClass, runtimeProfileId: request.runtimeProfileId, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false }; }
+  async inspect(request: HostingCapabilityInspectionRequest): Promise<HostingCapabilityInspection> { return inspection(await this.bridge.invoke("POST", s26BridgePath("hosting", "inspect"), { deterministic_name: request.deterministicName, workspace_class: request.workspaceClass, runtime_profile_id: request.runtimeProfileId, required_schedule_count: request.requiredScheduleCount, required_server_value_count: request.requiredServerValueCount, required_public_value_count: request.requiredPublicValueCount, ownership_marker_digest: request.ownership.digest }), "Vercel inspection bridge"); }
+  async createDeploymentTarget(request: DeploymentTargetRequest): Promise<DeploymentTargetResult> { const value = result<{ readonly providerRequestId: string; readonly id?: string; readonly name?: string }>(await this.#direct.invoke("POST", this.#projectPath("11"), { name: request.deterministicName, environmentVariables: [{ key: "LH2_OWNERSHIP_MARKER_DIGEST", value: request.ownership.digest, type: "plain", target: ["production", "preview"] }] }), "Vercel project"); if (!value.id || value.name !== request.deterministicName) throw new OpsError("provider_error", "Vercel project response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: value.id, deterministicName: request.deterministicName, workspaceClass: request.workspaceClass, runtimeProfileId: request.runtimeProfileId, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: false, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false }; }
   async bindEnvironment(request: EnvironmentBindingRequest): Promise<EnvironmentBindingResult> {
     if (!request.dataProjectHandle || !request.dataProjectName || !request.ownership) {
       throw new OpsError("invalid_plan", "S26 environment binding requires the owned data project context");
@@ -206,7 +226,7 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
       source_kind: binding.source.kind,
       source: binding.source,
     }));
-    return result(await this.http.invoke("POST", s26BridgePath("hosting", "environment-bind"), {
+    return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "environment-bind"), {
       target_handle: request.targetHandle,
       data_project_id: request.dataProjectHandle,
       data_project_name: request.dataProjectName,
@@ -215,18 +235,18 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
       bindings,
     }), "Vercel environment bridge");
   }
-  async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, environment_binding_digest: request.environmentBindingDigest, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
-  async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> { const value = result<{ readonly providerRequestId: string; readonly name?: string; readonly verified?: boolean }>(await this.http.invoke("POST", this.#projectPath("10", request.targetHandle, "/domains"), { name: request.hostname }), "Vercel domain"); if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest }; }
-  async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
-  async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "promote"), { target_handle: request.targetHandle, release_handle: request.releaseHandle }), "Vercel promotion bridge"); }
-  async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "rollback"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback bridge"); }
-  async verifyDeployment(request: DeploymentVerificationRequest): Promise<HostingVerificationReport> { return result(await this.http.invoke("POST", s26BridgePath("hosting", "verify"), { target_handle: request.targetHandle, expected_active_release_handle: request.expectedActiveReleaseHandle, expected_revision_id: request.expectedRevisionId, expected_hostname: request.expectedHostname, expected_schedules: request.expectedSchedules, runtime_check_ids: request.runtimeCheckIds }), "Vercel verification bridge"); }
+  async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, environment_binding_digest: request.environmentBindingDigest, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
+  async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> { const value = result<{ readonly providerRequestId: string; readonly name?: string; readonly verified?: boolean }>(await this.#direct.invoke("POST", this.#projectPath("10", request.targetHandle, "/domains"), { name: request.hostname }), "Vercel domain"); if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete"); return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest }; }
+  async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
+  async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "promote"), { target_handle: request.targetHandle, release_handle: request.releaseHandle }), "Vercel promotion bridge"); }
+  async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "rollback"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback bridge"); }
+  async verifyDeployment(request: DeploymentVerificationRequest): Promise<HostingVerificationReport> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "verify"), { target_handle: request.targetHandle, expected_active_release_handle: request.expectedActiveReleaseHandle, expected_revision_id: request.expectedRevisionId, expected_hostname: request.expectedHostname, expected_schedules: request.expectedSchedules, runtime_check_ids: request.runtimeCheckIds }), "Vercel verification bridge"); }
 }
 
 export class SmtpEmailOperationsClient implements EmailOperationsApi {
   readonly #http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.#http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: SmtpInspectionRequest): Promise<SmtpInspection> { return result(await this.#http.invoke("POST", s26BridgePath("smtp", "inspect"), { smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP inspect"); }
+  async inspect(request: SmtpInspectionRequest): Promise<SmtpInspection> { return inspection(await this.#http.invoke("POST", s26BridgePath("smtp", "inspect"), { smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP inspect"); }
   async configure(request: SmtpConfigurationRequest): Promise<ProviderActionResult> { return result(await this.#http.invoke("POST", s26BridgePath("smtp", "configure"), { project_id: request.projectId, smtp_profile_id: request.smtpProfileId, sender_domain: request.senderDomain, from_identity: request.fromIdentity, smtp_secret_labels: request.smtpSecretLabels }), "SMTP configure"); }
   async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.#http.invoke("POST", s26BridgePath("smtp", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "SMTP smoke"); }
 }
@@ -234,14 +254,14 @@ export class SmtpEmailOperationsClient implements EmailOperationsApi {
 export class DomainOperationsClient implements DomainOperationsApi {
   readonly #http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.#http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: DomainInspectionRequest): Promise<DomainInspection> { return result(await this.#http.invoke("POST", s26BridgePath("domain", "inspect"), { hostname: request.hostname, sender_domain: request.senderDomain, workspace_class: request.workspaceClass }), "Domain inspect"); }
+  async inspect(request: DomainInspectionRequest): Promise<DomainInspection> { return inspection(await this.#http.invoke("POST", s26BridgePath("domain", "inspect"), { hostname: request.hostname, sender_domain: request.senderDomain, workspace_class: request.workspaceClass }), "Domain inspect"); }
 }
 
 /** Read-only source release inspection; no Git mutation or remote request is exposed. */
 export class SourceRepositoryOperationsClient implements SourceRepositoryOperationsApi {
   readonly #http: PrivateProviderHttp;
   constructor(configuration: ProviderHttpConfiguration, redactor = new Redactor()) { this.#http = new PrivateProviderHttp(configuration, redactor); }
-  async inspect(request: SourceRepositoryInspectionRequest): Promise<SourceRepositoryInspection> { return result(await this.#http.invoke("POST", s26BridgePath("sourceRepository", "inspect"), { source_git_sha: request.sourceGitSha, compatibility_entry_id: request.compatibilityEntryId, application_version: request.applicationVersion }), "Source repository inspect"); }
+  async inspect(request: SourceRepositoryInspectionRequest): Promise<SourceRepositoryInspection> { return inspection(await this.#http.invoke("POST", s26BridgePath("sourceRepository", "inspect"), { source_git_sha: request.sourceGitSha, compatibility_entry_id: request.compatibilityEntryId, application_version: request.applicationVersion }), "Source repository inspect"); }
 }
 
 export interface S26ConcreteClientConfiguration {
@@ -252,6 +272,12 @@ export interface S26ConcreteClientConfiguration {
   readonly smtp: ProviderHttpConfiguration;
   readonly domain: ProviderHttpConfiguration;
   readonly sourceRepository: ProviderHttpConfiguration;
+  /**
+   * The control-plane bridge transport. Neon, R2 and Vercel each expose a
+   * mixture of direct provider routes and bridge routes, so those three clients
+   * need both transports rather than one.
+   */
+  readonly bridge: ProviderHttpConfiguration;
 }
 
 /** Builds the only reviewed concrete S26 bundle; it never imports p4c-sdk.ts. */
@@ -260,10 +286,10 @@ export function createS26ConcreteApiBundle(
   redactor = new Redactor(),
 ): S26OperationsApiBundle {
   return {
-    data: new NeonPostgresOperationsClient(configuration.neon, redactor),
+    data: new NeonPostgresOperationsClient(configuration.neon, configuration.bridge, redactor),
     identity: new BetterAuthOperationsClient(configuration.betterAuth, redactor),
-    objectStorage: new CloudflareR2OperationsClient(configuration.r2, redactor),
-    hosting: new VercelOperationsClient(configuration.vercel, redactor),
+    objectStorage: new CloudflareR2OperationsClient(configuration.r2, configuration.bridge, redactor),
+    hosting: new VercelOperationsClient(configuration.vercel, configuration.bridge, redactor),
     email: new SmtpEmailOperationsClient(configuration.smtp, redactor),
     domain: new DomainOperationsClient(configuration.domain, redactor),
     sourceRepository: new SourceRepositoryOperationsClient(configuration.sourceRepository, redactor),

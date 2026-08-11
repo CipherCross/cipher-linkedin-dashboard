@@ -11,12 +11,19 @@ import {
   OpsError,
   Registry,
   runCli,
+  s26BusinessInputs,
   type SecretStore,
 } from "../src/index.js";
-import { disposableProfile, makeCatalogs, OWNER_UUID } from "./fixtures.js";
+import {
+  disposableBusinessInputs,
+  disposableProfile,
+  makeCatalogs,
+  OWNER_UUID,
+} from "./fixtures.js";
 
 function configValue() {
   const profile = disposableProfile();
+  const inputs = disposableBusinessInputs(profile.allowedTenantSlug);
   return {
     config_version: "s26-owner-runtime.v1",
     providers: {
@@ -27,6 +34,24 @@ function configValue() {
     },
     profile: {
       allowed_tenant_slug: profile.allowedTenantSlug,
+      selections: {
+        company_name: inputs.company_name,
+        admin_email: inputs.admin_email,
+        expected_instances: inputs.expected_instances,
+        release_channel: inputs.release_channel,
+        residency_policy_id: inputs.residency_policy_id,
+        region_id: inputs.region_id,
+        data_tier_id: inputs.data_tier_id,
+        data_compute_id: inputs.data_compute_id,
+        hosting_tier_id: inputs.hosting_tier_id,
+        backup_profile_id: inputs.backup_profile_id,
+        retention_policy_id: inputs.retention_policy_id,
+        subprocessor_profile_id: inputs.subprocessor_profile_id,
+        smtp_profile_id: inputs.smtp_profile_id,
+        smtp_secret_labels: inputs.smtp_secret_labels,
+        support_access_maximum_duration_hours:
+          inputs.support_access_policy.maximum_duration_hours,
+      },
       platform_domain: profile.platformDomain,
       data_owner_scope_id: profile.dataOwnerScopeId,
       hosting_owner_scope_id: profile.hostingOwnerScopeId,
@@ -149,6 +174,35 @@ test("S26 runtime construction does not resolve Keychain values or instantiate P
     } finally {
       registry.close();
     }
+  });
+});
+
+test("S26 plans on its own selections, never another runtime's", async () => {
+  await inTemporaryDirectory((directory) => {
+    const path = join(directory, "s26.json");
+    writeFileSync(path, JSON.stringify(configValue()), "utf8");
+    const config = loadS26OwnerRuntimeConfig(path);
+    const inputs = s26BusinessInputs(config);
+
+    // The tenant slug the plan targets must be the one the profile allows;
+    // a foreign slug would inspect and later create the wrong tenant.
+    assert.equal(inputs.tenant_slug, config.profile.allowed_tenant_slug);
+    assert.equal(inputs.workspace_class, "disposable");
+
+    // The validator compares this pair for equality, so it is read off the
+    // pinned pricing snapshot rather than restated by hand.
+    const pricing = config.profile.catalogs.find(
+      (catalog) => catalog.catalog_kind === "pricing",
+    );
+    assert.equal(inputs.pricing_catalog_id, pricing?.catalog_version);
+
+    // Every catalog id comes from the reviewed selections block.
+    const chosen = config.profile.selections;
+    assert.equal(inputs.region_id, chosen.region_id);
+    assert.equal(inputs.data_tier_id, chosen.data_tier_id);
+    assert.equal(inputs.hosting_tier_id, chosen.hosting_tier_id);
+    assert.equal(inputs.subprocessor_profile_id, chosen.subprocessor_profile_id);
+    assert.deepEqual(inputs.integration_secret_labels, []);
   });
 });
 

@@ -104,8 +104,33 @@ const catalog = z.strictObject({
   entries: z.array(catalogEntry).min(1),
 });
 
+/**
+ * The catalog entries and business facts this drill selects. They are closed
+ * non-secret configuration rather than code constants so an S26 run can never
+ * inherit another runtime's selections: every id is resolved against the
+ * pinned catalogs, and an unknown or unavailable one fails the plan.
+ */
+const selections = z.strictObject({
+  company_name: z.string().trim().min(1).max(160),
+  admin_email: z.email().max(320),
+  expected_instances: z.number().int().min(1).max(100),
+  release_channel: z.enum(["internal", "canary", "stable"]),
+  residency_policy_id: identifier,
+  region_id: identifier,
+  data_tier_id: identifier,
+  data_compute_id: identifier,
+  hosting_tier_id: identifier,
+  backup_profile_id: identifier,
+  retention_policy_id: identifier,
+  subprocessor_profile_id: identifier,
+  smtp_profile_id: identifier,
+  smtp_secret_labels: z.array(z.string().min(1).max(200)).max(8),
+  support_access_maximum_duration_hours: z.number().int().min(1).max(168),
+});
+
 const profile = z.strictObject({
   allowed_tenant_slug: z.string().regex(/^[a-z][a-z0-9-]{1,30}[a-z0-9]$/),
+  selections,
   platform_domain: z.string().min(1).max(253),
   data_owner_scope_id: identifier,
   hosting_owner_scope_id: identifier,
@@ -162,6 +187,44 @@ export function loadS26OwnerRuntimeConfig(path: string): S26OwnerRuntimeConfig {
     catalogKinds.add(snapshot.catalog_kind);
   }
   return parsed.data;
+}
+
+/**
+ * The onboarding business inputs for the S26 disposable drill.
+ *
+ * These are derived from the loaded configuration, never from another
+ * runtime's constants: the tenant slug is the one the profile allows, and the
+ * pricing catalog id is read off the pinned pricing snapshot, so the pair the
+ * semantic validator compares cannot drift apart.
+ */
+export function s26BusinessInputs(config: S26OwnerRuntimeConfig): Record<string, unknown> {
+  const { selections: chosen, catalogs } = config.profile;
+  const pricing = catalogs.find((catalog) => catalog.catalog_kind === "pricing");
+  assertOps(pricing, "catalog_invalid", "S26 configuration has no pricing catalog");
+  return {
+    company_name: chosen.company_name,
+    tenant_slug: config.profile.allowed_tenant_slug,
+    workspace_class: "disposable",
+    admin_email: chosen.admin_email,
+    expected_instances: chosen.expected_instances,
+    release_channel: chosen.release_channel,
+    residency_policy_id: chosen.residency_policy_id,
+    region_id: chosen.region_id,
+    data_tier_id: chosen.data_tier_id,
+    data_compute_id: chosen.data_compute_id,
+    hosting_tier_id: chosen.hosting_tier_id,
+    backup_profile_id: chosen.backup_profile_id,
+    pricing_catalog_id: pricing.catalog_version,
+    retention_policy_id: chosen.retention_policy_id,
+    subprocessor_profile_id: chosen.subprocessor_profile_id,
+    smtp_profile_id: chosen.smtp_profile_id,
+    smtp_secret_labels: chosen.smtp_secret_labels,
+    integration_secret_labels: [],
+    support_access_policy: {
+      initial_state: "disabled",
+      maximum_duration_hours: chosen.support_access_maximum_duration_hours,
+    },
+  };
 }
 
 function resolver(
@@ -239,6 +302,7 @@ export function createConfiguredS26Runtime(
     smtp: bridge,
     domain: bridge,
     sourceRepository: bridge,
+    bridge,
   }, redactor);
   return createS26Runtime(registry, onboardingProfile(config), apis, redactor);
 }

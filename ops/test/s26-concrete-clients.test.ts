@@ -51,15 +51,29 @@ function configuration(calls: Call[], body?: unknown) {
   };
 }
 
+/**
+ * The bridge deliberately has a different host and credential from any direct
+ * provider API. Asserting origins, not just paths, is what proves a bridge
+ * route never travels on a provider's own transport.
+ */
+function bridgeConfiguration(calls: Call[], body?: unknown) {
+  return {
+    baseUrl: "https://bridge.example.test",
+    scopeId: "provider-scope",
+    credential: { resolve: async () => "local-bridge-credential" },
+    fetch: recordingFetch(calls, body),
+  };
+}
+
 test("S26 concrete clients translate only fixed named provider operations", async () => {
   const calls: Call[] = [];
-  const neon = new NeonPostgresOperationsClient(configuration(calls));
-  const betterAuth = new BetterAuthOperationsClient(configuration(calls));
-  const r2 = new CloudflareR2OperationsClient(configuration(calls));
-  const vercel = new VercelOperationsClient(configuration(calls));
-  const smtp = new SmtpEmailOperationsClient(configuration(calls));
-  const domain = new DomainOperationsClient(configuration(calls));
-  const source = new SourceRepositoryOperationsClient(configuration(calls));
+  const neon = new NeonPostgresOperationsClient(configuration(calls), bridgeConfiguration(calls));
+  const betterAuth = new BetterAuthOperationsClient(bridgeConfiguration(calls));
+  const r2 = new CloudflareR2OperationsClient(configuration(calls), bridgeConfiguration(calls));
+  const vercel = new VercelOperationsClient(configuration(calls), bridgeConfiguration(calls));
+  const smtp = new SmtpEmailOperationsClient(bridgeConfiguration(calls));
+  const domain = new DomainOperationsClient(bridgeConfiguration(calls));
+  const source = new SourceRepositoryOperationsClient(bridgeConfiguration(calls));
 
   await neon.createOrAdoptProject({ organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab", regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership });
   await neon.applySchema({ projectId: "neon-project", baselineVersion: 53, migrationVersions: [54], targetSchemaVersion: 54 });
@@ -72,17 +86,17 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   await domain.inspect({ hostname: "disposable.example.test", senderDomain: "example.test", workspaceClass: "disposable" });
   await source.inspect({ sourceGitSha: "a".repeat(40), compatibilityEntryId: "release-v1", applicationVersion: "1" });
 
-  assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
-    "POST /v2/projects",
-    "POST /s26/control-plane/v1/data/portable-schema-apply",
-    "POST /s26/control-plane/v1/identity/company-admin-invite",
-    "POST /client/v4/accounts/provider-scope/r2/buckets",
-    "POST /v11/projects",
-    "POST /v10/projects/target/domains",
-    "POST /s26/control-plane/v1/hosting/promote",
-    "POST /s26/control-plane/v1/smtp/configure",
-    "POST /s26/control-plane/v1/domain/inspect",
-    "POST /s26/control-plane/v1/source-repository/inspect",
+  assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).origin}${new URL(call.url).pathname}`), [
+    "POST https://provider.example.test/v2/projects",
+    "POST https://bridge.example.test/s26/control-plane/v1/data/portable-schema-apply",
+    "POST https://bridge.example.test/s26/control-plane/v1/identity/company-admin-invite",
+    "POST https://provider.example.test/client/v4/accounts/provider-scope/r2/buckets",
+    "POST https://provider.example.test/v11/projects",
+    "POST https://provider.example.test/v10/projects/target/domains",
+    "POST https://bridge.example.test/s26/control-plane/v1/hosting/promote",
+    "POST https://bridge.example.test/s26/control-plane/v1/smtp/configure",
+    "POST https://bridge.example.test/s26/control-plane/v1/domain/inspect",
+    "POST https://bridge.example.test/s26/control-plane/v1/source-repository/inspect",
   ]);
   for (const call of calls) {
     assert.equal(call.url.includes("credential"), false);
@@ -109,7 +123,7 @@ test("S26 concrete transport quarantines unknown outcomes and redacts credential
     baseUrl: "https://provider.example.test",
     credential: { resolve: async () => secret },
     fetch: async () => ({ ok: false, status: 503, headers: { get: () => "opaque-request" }, json: async () => ({ token: secret }) }),
-  }, new Redactor());
+  }, bridgeConfiguration([]), new Redactor());
   await assert.rejects(
     client.waitUntilReady("project"),
     (error: unknown) => {
@@ -124,14 +138,14 @@ test("S26 concrete transport quarantines unknown outcomes and redacts credential
 
 test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   assert.throws(
-    () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", credential: { resolve: async () => "unused" } }),
+    () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),
     (error: unknown) => error instanceof OpsError && error.code === "provider_error",
   );
 });
 
 test("S26 environment binding forwards only the already-closed application descriptors", async () => {
   const calls: Call[] = [];
-  const hosting = new VercelOperationsClient(configuration(calls));
+  const hosting = new VercelOperationsClient(configuration(calls), bridgeConfiguration(calls));
   await hosting.bindEnvironment({
     targetHandle: "target",
     dataProjectHandle: "neon-project",
@@ -164,7 +178,7 @@ test("S26 environment binding forwards only the already-closed application descr
 
 test("Better Auth recovery uses the fixed S26 bridge paths", async () => {
   const calls: Call[] = [];
-  const identity = new BetterAuthOperationsClient(configuration(calls, {
+  const identity = new BetterAuthOperationsClient(bridgeConfiguration(calls, {
     providerRequestId: "req_recovery",
     artifactId: "artifact",
     manifestDigest: DIGEST,
@@ -180,14 +194,50 @@ test("Better Auth recovery uses the fixed S26 bridge paths", async () => {
     recoveryTargetName: "identity-recovery",
     ownership,
   });
-  assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`), [
-    "POST /s26/control-plane/v1/identity/recovery-capture",
+  assert.deepEqual(calls.map((call) => `${call.method} ${new URL(call.url).origin}${new URL(call.url).pathname}`), [
+    "POST https://bridge.example.test/s26/control-plane/v1/identity/recovery-capture",
+  ]);
+});
+
+test("preflight inspections travel on the bridge, never on a provider API host", async () => {
+  const calls: Call[] = [];
+  const inspection = {
+    organizationAccessible: true, deterministicNameAvailable: true, existingResourceOwned: false,
+    regionAvailable: true, tierAvailable: true, computeAvailable: true, backupCompatible: true,
+    authConfigurationSupported: true, validUntil: "2030-01-01T00:00:00.000Z",
+  };
+  const neon = new NeonPostgresOperationsClient(
+    configuration(calls, inspection),
+    bridgeConfiguration(calls, inspection),
+  );
+  const vercel = new VercelOperationsClient(
+    configuration(calls, inspection),
+    bridgeConfiguration(calls, inspection),
+  );
+
+  await neon.inspect({
+    organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab",
+    regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared",
+    backupProfileId: "daily", ownership,
+  });
+  await vercel.inspect({
+    deterministicName: "lh2-disposable-disposable-lab", workspaceClass: "disposable",
+    runtimeProfileId: "runtime-v1", requiredScheduleCount: 4,
+    requiredServerValueCount: 10, requiredPublicValueCount: 1, ownership,
+  });
+
+  // Both are bridge vocabulary. Sending either to console.neon.tech or
+  // api.vercel.com presents the provider token to a route it does not serve,
+  // which is how S26 preflight failed with an opaque 401.
+  assert.deepEqual(calls.map((call) => new URL(call.url).origin), [
+    "https://bridge.example.test",
+    "https://bridge.example.test",
   ]);
 });
 
 test("direct mappings return only canonical ownership evidence", async () => {
   const calls: Call[] = [];
-  const data = new NeonPostgresOperationsClient(configuration(calls));
+  const data = new NeonPostgresOperationsClient(configuration(calls), bridgeConfiguration(calls));
   const resource = await data.createOrAdoptProject({ organizationId: "neon-owner", deterministicName: "lh2-disposable-disposable-lab", regionId: "aws-eu-central-1", tierId: "neon-free", computeId: "shared", ownership });
   assert.equal(resource.ownershipMarkerDigest, ownership.digest);
   assert.equal(JSON.stringify(resource).includes("local-test-credential"), false);

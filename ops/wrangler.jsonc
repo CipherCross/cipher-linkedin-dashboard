@@ -38,7 +38,7 @@
     "RESEND_FROM_EMAIL": "noreply@ciphercross.dev",
     "RESEND_FROM_IDENTITY": "CipherCross <noreply@ciphercross.dev>",
     "RESEND_SMOKE_RECIPIENT": "accounts@ciphercross.com",
-    "BETTER_AUTH_BASE_URL": "https://s26-disposable-lab.app.ciphercross.dev",
+    "BETTER_AUTH_BASE_URL": "https://s26-disposable-lab.vercel.app",
     "BETTER_AUTH_TEMPLATE_SET_ID": "s26-self-hosted-better-auth-v1",
     "RELEASE_COMPATIBILITY_ID": "s26-neon-hosting-v1",
     "APPROVED_APPLICATION_VERSION": "s26-b2c287a",
