@@ -13,7 +13,9 @@ import {
 } from "../src/providers/hosting.js";
 import { S26WorkerBackend } from "../src/worker/backend.js";
 import {
+  BOOTSTRAP_STATE_PROBE_SQL,
   CONTROL_PLANE_ROLES,
+  LEDGER_PRESENCE_SQL,
   bootstrapArtifactsToApply,
   readBootstrapState,
 } from "../src/worker/pinned-postgres.js";
@@ -502,6 +504,31 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
       aiExecution: false,
       machineIngest: false,
     });
+  });
+
+  // These two only pin the shape. What the probes actually DO against a real
+  // PostgreSQL 17 role graph — including the privileges they need, which is
+  // where the live step-3 defect lived — is covered by
+  // postgres/tests/portable_control_plane_bootstrap_state_cleanroom.sh.
+  it("asks whether the ledger exists without needing USAGE on its schema", () => {
+    // The ledger bootstrap leaves app_ledger owned by app_owner with no USAGE
+    // for anyone else, and app_migration is NOINHERIT. Resolving a qualified
+    // name needs that USAGE, so a to_regclass probe answered NULL on the first
+    // apply and then raised 42501 forever after — the step-3 409 no retry could
+    // pass. Reading the catalog needs no schema privilege at all.
+    expect(LEDGER_PRESENCE_SQL).not.toContain("to_regclass");
+    expect(LEDGER_PRESENCE_SQL).toContain("pg_class");
+    expect(LEDGER_PRESENCE_SQL).toContain("pg_namespace");
+    expect(LEDGER_PRESENCE_SQL).toContain("AS present");
+  });
+
+  it("probes bootstrap postconditions through the catalog, not through owned objects", () => {
+    expect(BOOTSTRAP_STATE_PROBE_SQL).toContain("control_plane");
+    expect(BOOTSTRAP_STATE_PROBE_SQL).toContain("identity_store");
+    expect(BOOTSTRAP_STATE_PROBE_SQL).toContain("ai_execution");
+    expect(BOOTSTRAP_STATE_PROBE_SQL).toContain("machine_ingest");
+    // A probe that had to read a protected schema would carry the same defect.
+    expect(BOOTSTRAP_STATE_PROBE_SQL).not.toContain("app_ledger");
   });
 
   it("runs only bootstrap artifacts whose postcondition is missing", () => {

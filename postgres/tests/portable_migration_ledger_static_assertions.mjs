@@ -127,6 +127,12 @@ const EXECUTABLE_SCRIPTS = [
   'postgres/tests/portable_dump_restore_cleanroom.sh',
   'postgres/tests/portable_identity_write_path_cleanroom.sh',
   'postgres/tests/portable_identity_atomic_invite_cleanroom.sh',
+  // The only harness here whose privileged principal is a NON-SUPERUSER, which
+  // is the shape a managed provider actually hands over. It exists because the
+  // control plane's bootstrap-state and ledger-presence probes were covered only
+  // by mocked rows, and the privileges they really need are what broke S26's
+  // step-3 retry.
+  'postgres/tests/portable_control_plane_bootstrap_state_cleanroom.sh',
 ];
 
 // Paths no session may touch, on any branch, for the life of the migration.

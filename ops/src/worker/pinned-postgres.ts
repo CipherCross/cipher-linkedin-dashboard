@@ -133,15 +133,19 @@ async function withConnection<T>(
  * runs inside a single implicit transaction, so each of these postconditions is
  * exact: it is true only if that whole artifact committed.
  *
- * This matters because the artifacts are not all re-runnable against the state
- * they leave behind. The seven-role bootstrap ends with
- * `ALTER SCHEMA public OWNER TO app_owner`, and once that has run the executing
- * principal is only a NON-INHERITING member of the new owner, so PostgreSQL's
- * ownership check fails on the second attempt. That surfaces as a plain SQLSTATE
- * and becomes a `provider_error`, which is the 409 a resumed step 3 used to hit.
- * The artifacts themselves are digest-pinned and must not be edited, so the
- * decision to run them is made here instead — the same shape as the ledger
- * bootstrap's own `to_regclass` guard below.
+ * This exists so a retry does not reissue privileged role and ownership
+ * statements it does not need, and so a partial bootstrap is completed rather
+ * than guessed at. It is NOT what unblocks a resumed step 3.
+ *
+ * An earlier reading of the live step-3 409 blamed a replayed bootstrap, on the
+ * theory that `ALTER SCHEMA public OWNER TO app_owner` must fail the second time
+ * because the executing principal is only a NON-INHERITING member of the new
+ * owner. That is wrong, and
+ * `postgres/tests/portable_control_plane_bootstrap_state_cleanroom.sh` now pins
+ * the correction: the artifact deliberately grants a non-superuser principal
+ * `app_owner WITH SET TRUE` for precisely that statement, and all four artifacts
+ * replay cleanly against the state they leave behind. The real cause was the
+ * ledger-presence probe — see LEDGER_PRESENCE_SQL.
  */
 export interface BootstrapState {
   readonly controlPlane: boolean;
@@ -167,9 +171,39 @@ export function bootstrapArtifactsToApply(state: BootstrapState): readonly Boots
     .filter((artifact) => !state[artifact]);
 }
 
-export async function readBootstrapState(owner: BootstrapProbeClient): Promise<BootstrapState> {
-  const observed = await owner.query(
-    `SELECT
+/**
+ * Whether the ledger's own tables are already present.
+ *
+ * This deliberately reads the catalog instead of resolving
+ * `app_ledger.applied_migration` with `to_regclass`. The ledger bootstrap ends
+ * by revoking everything on its schema from PUBLIC, leaving
+ * `app_ledger` owned by app_owner with no USAGE for anyone else, and
+ * app_migration is NOINHERIT. Resolving a schema-qualified name requires USAGE
+ * on the schema, so `to_regclass` succeeded on the first apply — when the schema
+ * did not exist yet and the name resolved to NULL — and then raised
+ * `42501 permission denied for schema app_ledger` on every apply afterwards.
+ * That is a deterministic Postgres error, so it became `provider_error`, which
+ * the bridge answers with 409: the step-3 409 that a retry could never get past,
+ * created by the very act of having succeeded once.
+ *
+ * `pg_class`/`pg_namespace` are world-readable and need no schema USAGE, so this
+ * probe reports the same answer before and after the bootstrap and cannot be
+ * defeated by the ACL the bootstrap installs. The reads of the ledger's
+ * *contents* below still enter app_owner with SET ROLE, which is what they need.
+ */
+export const LEDGER_PRESENCE_SQL = `SELECT EXISTS (
+  SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'app_ledger' AND c.relname = 'applied_migration'
+) AS present`;
+
+/**
+ * The bootstrap postcondition probe, exported so a live-shaped harness can run
+ * the very same text against a real PostgreSQL 17 role graph. A mocked row of
+ * booleans cannot show that this SQL is valid, readable by the principal that
+ * issues it, or true of an already-prepared cluster.
+ */
+export const BOOTSTRAP_STATE_PROBE_SQL = `SELECT
        coalesce(
          (SELECT count(*) FROM pg_roles WHERE rolname = ANY($1::text[])) = $2
          AND (SELECT bool_and(rolcanlogin) FROM pg_roles
@@ -206,7 +240,11 @@ export async function readBootstrapState(owner: BootstrapProbeClient): Promise<B
        coalesce((SELECT rolcanlogin FROM pg_roles WHERE rolname = 'app_system'), false)
          AS ai_execution,
        coalesce((SELECT rolcanlogin FROM pg_roles WHERE rolname = 'app_machine'), false)
-         AS machine_ingest`,
+         AS machine_ingest`;
+
+export async function readBootstrapState(owner: BootstrapProbeClient): Promise<BootstrapState> {
+  const observed = await owner.query(
+    BOOTSTRAP_STATE_PROBE_SQL,
     [[...CONTROL_PLANE_ROLES], CONTROL_PLANE_ROLES.length],
   );
   const row = observed.rows[0] ?? {};
@@ -269,9 +307,7 @@ export async function applyPinnedPortablePostgres(input: {
     });
 
     await withConnection(migrationUri.toString(), async (runner) => {
-      const ledgerExists = await runner.query(
-        "SELECT to_regclass('app_ledger.applied_migration') IS NOT NULL AS present",
-      );
+      const ledgerExists = await runner.query(LEDGER_PRESENCE_SQL);
       if (ledgerExists.rows[0]?.present !== true) {
         await runner.query(postgresSql(ledgerBootstrap));
         const requiredRoles = [
