@@ -409,6 +409,91 @@ test("hosting results drop the request id the transport adds, so strict schemas 
   assert.equal((scheduled as { hostingRequestId: string }).hostingRequestId, "bridge-hosting-request");
 });
 
+// Neon answers 423 Locked on a branch operation issued right after
+// POST /projects, because the project is still initialising. Onboarding `uitop`
+// lost the ownership marker to exactly that, and the loss is unrecoverable: an
+// unmarked project reads back as foreign, so its name is taken and it can never
+// be adopted.
+test("the Neon ownership marker survives a project that is still locked", async () => {
+  const posts: string[] = [];
+  let markerAttempts = 0;
+  const transport = {
+    baseUrl: "https://neon.example.test",
+    scopeId: "org-scope",
+    credential: { resolve: async () => "local-neon-credential" },
+    fetch: async (url: string, init: { method: string }) => {
+      const pathname = new URL(url).pathname;
+      if (init.method === "GET") {
+        return { ok: true, status: 200, headers: { get: () => "req" }, json: async () => ({ projects: [] }) };
+      }
+      posts.push(pathname);
+      if (pathname.endsWith("/roles")) {
+        markerAttempts += 1;
+        // Locked twice, then the project finishes initialising.
+        if (markerAttempts < 3) {
+          return { ok: false, status: 423, headers: { get: () => "req" }, json: async () => ({}) };
+        }
+        return { ok: true, status: 200, headers: { get: () => "req" }, json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "req" },
+        json: async () => ({ project: { id: "neon-uitop", name: "lh2-disposable-uitop" }, branch: { id: "br-main" } }),
+      };
+    },
+  };
+  const client = new NeonPostgresOperationsClient(transport as never, bridgeConfiguration([]), new Redactor());
+  const created = await client.createOrAdoptProject({
+    organizationId: "org-scope",
+    deterministicName: "lh2-disposable-uitop",
+    regionId: "aws-eu-central-1",
+    tierId: "neon-free",
+    computeId: "shared",
+    ownership,
+  });
+  assert.equal(created.resourceId, "neon-uitop");
+  assert.equal(created.adopted, false);
+  assert.equal(markerAttempts, 3, "the marker write must be retried while the project is locked");
+  // Exactly one project was created; only the marker was repeated.
+  assert.equal(posts.filter((path) => path.endsWith("/v2/projects")).length, 1);
+});
+
+test("a deterministic refusal of the ownership marker is not retried", async () => {
+  let markerAttempts = 0;
+  const transport = {
+    baseUrl: "https://neon.example.test",
+    scopeId: "org-scope",
+    credential: { resolve: async () => "local-neon-credential" },
+    fetch: async (url: string, init: { method: string }) => {
+      const pathname = new URL(url).pathname;
+      if (init.method === "GET") {
+        return { ok: true, status: 200, headers: { get: () => "req" }, json: async () => ({ projects: [] }) };
+      }
+      if (pathname.endsWith("/roles")) {
+        markerAttempts += 1;
+        return { ok: false, status: 400, headers: { get: () => "req" }, json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "req" },
+        json: async () => ({ project: { id: "neon-uitop", name: "lh2-disposable-uitop" }, branch: { id: "br-main" } }),
+      };
+    },
+  };
+  const client = new NeonPostgresOperationsClient(transport as never, bridgeConfiguration([]), new Redactor());
+  await assert.rejects(client.createOrAdoptProject({
+    organizationId: "org-scope",
+    deterministicName: "lh2-disposable-uitop",
+    regionId: "aws-eu-central-1",
+    tierId: "neon-free",
+    computeId: "shared",
+    ownership,
+  }));
+  assert.equal(markerAttempts, 1, "a 400 is decided, so repeating it would only waste time");
+});
+
 test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   assert.throws(
     () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", scopeId: "provider-scope", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),

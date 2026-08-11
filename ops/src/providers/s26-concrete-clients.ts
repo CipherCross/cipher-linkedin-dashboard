@@ -217,6 +217,14 @@ class PrivateProviderHttp {
 }
 
 function id(value: string): string { return encodeURIComponent(value); }
+
+/**
+ * How long to keep re-writing the Neon ownership marker while the freshly
+ * created project is still locked. Bounded, because a marker that never lands
+ * must surface as a failure rather than hang the step.
+ */
+const NEON_MARKER_ATTEMPTS = 10;
+const NEON_MARKER_RETRY_MS = 2_000;
 /** True when the provider answered "no such resource" rather than refusing. */
 function isAbsent(error: unknown): boolean {
   return error instanceof OpsError && error.code === "provider_error" && error.details.provider_status === 404;
@@ -362,12 +370,35 @@ export class NeonPostgresOperationsClient extends BridgeRecoveryClient implement
     }
     return undefined;
   }
+  /**
+   * Writes the ownership marker, retrying while the project is still locked.
+   *
+   * Neon answers `423 Locked` on a branch operation issued immediately after
+   * `POST /projects`, because the project is still initialising. That single
+   * status is what makes this write racy, and losing it is unrecoverable: the
+   * comment on the call site is exact — an unmarked project reads back as
+   * foreign, so the name is taken and the project can never be adopted. Onboarding
+   * `uitop` produced precisely that orphan on its first attempt.
+   *
+   * Creating the marker role is the only mutation here and it is name-addressed,
+   * so repeating it is safe. The retry covers the transient statuses only; a
+   * deterministic refusal still fails on the first attempt.
+   */
   async #markOwnership(projectId: string, branchId: string, ownershipMarkerDigest: string): Promise<void> {
-    await this.#direct.invoke(
-      "POST",
-      `${this.prefix}/${id(projectId)}/branches/${id(branchId)}/roles`,
-      { role: { name: neonOwnershipRoleName(ownershipMarkerDigest) } },
-    );
+    const path = `${this.prefix}/${id(projectId)}/branches/${id(branchId)}/roles`;
+    const payload = { role: { name: neonOwnershipRoleName(ownershipMarkerDigest) } };
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await this.#direct.invoke("POST", path, payload);
+        return;
+      } catch (error) {
+        const status = error instanceof OpsError ? error.details.provider_status : undefined;
+        const transient = status === 423 || status === 429 || status === 408
+          || (typeof status === "number" && status >= 500);
+        if (!transient || attempt >= NEON_MARKER_ATTEMPTS) throw error;
+        await new Promise<void>((resolve) => setTimeout(resolve, NEON_MARKER_RETRY_MS));
+      }
+    }
   }
   async waitUntilReady(projectId: string): Promise<ProviderActionResult> {
     // Only the request id crosses the boundary. Returning the provider's own
