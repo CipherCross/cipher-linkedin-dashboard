@@ -56,6 +56,7 @@ import {
   type IssueCredentialInput,
 } from './_lib/agent/credentials.js'
 import { authorizationResponse, requireMachineSecret } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import {
   DataStoreContractError,
   type DataStore,
@@ -258,6 +259,10 @@ export function createIdentityHandler(
     } catch (error) {
       const denial = authorizationResponse(error)
       if (denial) return denial
+      // The database was not reached, so no membership decision was taken and
+      // the answer below would be a claim about one. Named cause, honest status.
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       console.error('identity: actor resolution failed:', safeErrorLabel(error))
       return json({ error: 'Could not verify team access' }, 500)
     }

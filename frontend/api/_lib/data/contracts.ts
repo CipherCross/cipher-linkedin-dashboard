@@ -73,6 +73,56 @@ export class DataStoreTransactionError extends DataStoreContractError {
 }
 
 /**
+ * The database could not be reached, or an established connection died.
+ *
+ * **The third widening of the S03 contract, and it exists because a failure
+ * nobody can name is a failure nobody can fix.** S27 opened on an intermittent
+ * 500 that a live session could not reproduce, and the reason it could not be
+ * diagnosed is that every candidate cause arrived at the log as the same label:
+ * a pool that timed out waiting for a slot, a credential the database rejected,
+ * and a backend that went away mid-statement all became
+ * `DataStoreTransactionError/TRANSACTION_INVALID`. The two hypotheses actually
+ * on the table — connection pressure, and warm instances outliving a credential
+ * repair — are *distinguishable at the driver* and were indistinguishable
+ * everywhere after it.
+ *
+ * The `code` is therefore the diagnosis, and there are exactly three:
+ *
+ * - `DATASTORE_CONNECT_FAILED` — no connection could be obtained. A pool that
+ *   exhausted its ceiling and timed out waiting, a refused socket, DNS. This is
+ *   what connection pressure looks like.
+ * - `DATASTORE_CREDENTIAL_REJECTED` — a connection reached the database and the
+ *   database refused the login (SQLSTATE class 28). This is what a stale or
+ *   absent password looks like, and it is the one cause that no amount of
+ *   retrying will clear.
+ * - `DATASTORE_CONNECTION_LOST` — the connection was established and then
+ *   failed under an in-flight statement (SQLSTATE class 08, or an
+ *   administrator/crash shutdown). This is what a serverless instance that was
+ *   frozen long enough for its pooled socket to be closed looks like.
+ *
+ * **It carries no driver text**, for the reason stated above `DataStoreSchemaError`:
+ * a connection-level message embeds the database hostname. The code is the whole
+ * of what a log or a response may learn.
+ *
+ * Callers should treat all three as *availability*, not authorization. An
+ * endpoint that answers `Could not verify team access` to one of these is
+ * reporting a membership decision that was never taken.
+ */
+export type DataStoreUnavailableCode =
+  | 'DATASTORE_CONNECT_FAILED'
+  | 'DATASTORE_CREDENTIAL_REJECTED'
+  | 'DATASTORE_CONNECTION_LOST'
+
+export class DataStoreUnavailableError extends DataStoreContractError {
+  declare readonly code: DataStoreUnavailableCode
+
+  constructor(code: DataStoreUnavailableCode, message: string) {
+    super(code, message)
+    this.name = 'DataStoreUnavailableError'
+  }
+}
+
+/**
  * An operation named a relation the database does not have.
  *
  * **This is the first widening of the S03 contract, and it exists for exactly

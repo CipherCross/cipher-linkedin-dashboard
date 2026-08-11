@@ -50,6 +50,7 @@ import {
 } from './_lib/briefing.js'
 import type { BriefingKind, BriefingPeriod, StructuredBriefing } from './_lib/briefing.js'
 import { guardAdmin, guardMachine, authorizationResponse, AuthorizationError } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
@@ -1452,6 +1453,10 @@ async function briefingOnNeon(
   } catch (error) {
     const denial = authorizationResponse(error)
     if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
     console.error(`${kind} briefing failed (verify team access):`, safeErrorLabel(error))
     return json({ error: 'Could not verify team access' }, 500)
   }

@@ -15,6 +15,7 @@
 import { db } from './_lib/core.js'
 import { PIPELINE_STAGE_IDS, stageAllowsSubstatus } from './_lib/pipeline.js'
 import { authorizationResponse, guardMember } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import { deploymentWritePath } from './_lib/data/writePath.js'
 import {
   neonAddNote,
@@ -909,6 +910,10 @@ async function handle(req: Request): Promise<Response> {
     } catch (error) {
       const denial = authorizationResponse(error)
       if (denial) return denial
+      // The database was not reached, so no membership decision was taken and
+      // the answer below would be a claim about one. Named cause, honest status.
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       console.error(
         'Pipeline authorization failed:',
         error instanceof Error ? error.name : 'UnknownError',

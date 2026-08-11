@@ -12,6 +12,7 @@ import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
 import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import {
   AGENT_INGEST_OP,
   createAgentIngestHandler,
@@ -125,6 +126,10 @@ async function handle(req: Request): Promise<Response> {
     } catch (error) {
       const denial = authorizationResponse(error)
       if (denial) return denial
+      // The database was not reached, so no membership decision was taken and
+      // the answer below would be a claim about one. Named cause, honest status.
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       console.error(
         'Import authorization failed:',
         error instanceof Error ? error.name : 'UnknownError',

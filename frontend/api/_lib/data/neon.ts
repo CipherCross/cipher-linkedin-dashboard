@@ -37,6 +37,8 @@ import {
   DataStoreContractError,
   DataStoreSchemaError,
   DataStoreTransactionError,
+  DataStoreUnavailableError,
+  type DataStoreUnavailableCode,
   normalizePageRequest,
   normalizeUtcRange,
   PaginationError,
@@ -90,6 +92,44 @@ const SQLSTATE_UNDEFINED_TABLE = '42P01'
  */
 const SQLSTATE_UNIQUE_VIOLATION = '23505'
 const SQLSTATE_FOREIGN_KEY_VIOLATION = '23503'
+
+/**
+ * The SQLSTATE classes that mean "this is about reaching the database", not
+ * about the statement. Matched by **class** (the first two characters) rather
+ * than by individual code, because the members of each class differ only in
+ * which layer noticed and a caller's decision is identical for all of them:
+ *
+ * - `08` — `connection_exception`. The connection failed under an in-flight
+ *   statement, which is what a pooled socket closed while a serverless instance
+ *   was frozen looks like on the next invocation.
+ * - `28` — `invalid_authorization_specification`, including `28P01`
+ *   `invalid_password`. The database was reached and refused the login. This is
+ *   the only one of the three that retrying cannot clear, and it is exactly the
+ *   shape of `N-UITOP.md`'s roles-with-no-password defect.
+ */
+const SQLSTATE_CLASS_CONNECTION_EXCEPTION = '08'
+const SQLSTATE_CLASS_INVALID_AUTHORIZATION = '28'
+/** `too_many_connections` — the database's own ceiling, refused at connect. */
+const SQLSTATE_TOO_MANY_CONNECTIONS = '53300'
+/** `admin_shutdown` / `crash_shutdown` / `cannot_connect_now`. */
+const SQLSTATE_ADMIN_SHUTDOWN = '57P01'
+const SQLSTATE_CRASH_SHUTDOWN = '57P02'
+const SQLSTATE_CANNOT_CONNECT_NOW = '57P03'
+
+/**
+ * Socket-level failures, which carry a libuv code and no SQLSTATE at all — the
+ * database was never reached, or the peer vanished before it could answer.
+ */
+const SOCKET_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+])
 
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 10_000
 
@@ -571,8 +611,95 @@ function withCause<TError extends Error>(error: TError, cause: unknown): TError 
  * raised by the caller or by the adapter itself pass through untouched so
  * callers can keep discriminating on them.
  */
+/** The SQLSTATE class of a driver error, or `null` when it carries none. */
+function sqlstateClass(error: unknown): string | null {
+  if (!isPgError(error)) return null
+  const code = error.code
+  return typeof code === 'string' && /^[0-9A-Za-z]{5}$/.test(code)
+    ? code.slice(0, 2)
+    : null
+}
+
+/**
+ * Whether a failure is the driver reporting that an *established* connection
+ * died, rather than that a statement was refused.
+ *
+ * `pg` reports this one case with no SQLSTATE and no libuv code — the pool
+ * composes it itself when a backend disappears with a query outstanding — so the
+ * literal is matched here. It is a stable string in `pg`'s client, and the
+ * alternative is losing the single most likely explanation of an intermittent
+ * failure on a platform that freezes idle instances. Nothing derived from the
+ * message is ever emitted; it decides a code and is then discarded.
+ */
+const PG_CONNECTION_TERMINATED = 'Connection terminated unexpectedly'
+
+/**
+ * Classify a failure as unavailability, or decline to.
+ *
+ * **Exported for one reason: so the classification is testable without a
+ * database.** Two of the three codes cannot be produced offline — a rejected
+ * credential and a backend that dies mid-statement both need a real server —
+ * and a diagnosis that is only exercised by the failure it diagnoses is a
+ * diagnosis nobody has ever seen work.
+ *
+ * `phase` is what the caller was doing, and it is the whole reason the same
+ * SQLSTATE can mean two different codes: a class-08 failure while acquiring a
+ * connection never had one, while a class-08 failure mid-statement lost one that
+ * worked. Returns `null` when the failure is about the statement — those keep
+ * the classifications below unchanged.
+ */
+export function unavailableCodeFor(
+  error: unknown,
+  phase: 'connect' | 'statement',
+): DataStoreUnavailableCode | null {
+  const cls = sqlstateClass(error)
+  if (cls === SQLSTATE_CLASS_INVALID_AUTHORIZATION) {
+    return 'DATASTORE_CREDENTIAL_REJECTED'
+  }
+  const code = isPgError(error) ? error.code : undefined
+  const lostConnection =
+    cls === SQLSTATE_CLASS_CONNECTION_EXCEPTION ||
+    code === SQLSTATE_ADMIN_SHUTDOWN ||
+    code === SQLSTATE_CRASH_SHUTDOWN ||
+    code === SQLSTATE_CANNOT_CONNECT_NOW ||
+    (typeof code === 'string' && SOCKET_ERROR_CODES.has(code)) ||
+    (isPgError(error) && error.message === PG_CONNECTION_TERMINATED)
+  if (lostConnection) {
+    return phase === 'connect'
+      ? 'DATASTORE_CONNECT_FAILED'
+      : 'DATASTORE_CONNECTION_LOST'
+  }
+  if (code === SQLSTATE_TOO_MANY_CONNECTIONS) return 'DATASTORE_CONNECT_FAILED'
+  // Every remaining failure of `pool.connect()` is still an acquisition
+  // failure by construction — a ceiling reached and waited out is a plain
+  // `Error` with no code at all, and that is precisely the connection-pressure
+  // hypothesis this code exists to name.
+  return phase === 'connect' ? 'DATASTORE_CONNECT_FAILED' : null
+}
+
+/**
+ * The failure of `pool.connect()`, named.
+ *
+ * Every call site that acquires a connection routes through this instead of
+ * `toContractError`, so an acquisition failure can never arrive at a log as the
+ * same label as a failed statement.
+ */
+function toConnectionError(error: unknown, what: string): Error {
+  if (error instanceof DataStoreContractError) return error
+  const code = unavailableCodeFor(error, 'connect') ?? 'DATASTORE_CONNECT_FAILED'
+  return withCause(new DataStoreUnavailableError(code, what), error)
+}
+
 function toContractError(error: unknown, what: string): Error {
   if (error instanceof DataStoreContractError) return error
+
+  const unavailable = unavailableCodeFor(error, 'statement')
+  if (unavailable) {
+    // Before every SQLSTATE below: a connection that died mid-statement is not
+    // a statement that failed, and collapsing the two is what made the S27
+    // alert undiagnosable.
+    return withCause(new DataStoreUnavailableError(unavailable, what), error)
+  }
 
   if (isPgError(error)) {
     if (error.code === SQLSTATE_QUERY_CANCELED) {
@@ -882,7 +1009,7 @@ export class NeonDataStore implements DataStore {
     try {
       client = await this.pool.connect()
     } catch (error) {
-      throw toContractError(error, 'Acquiring a database connection')
+      throw toConnectionError(error, 'Acquiring a database connection')
     }
 
     let opened = false
@@ -950,7 +1077,7 @@ export class NeonDataStore implements DataStore {
     try {
       client = await this.pool.connect()
     } catch (error) {
-      throw toContractError(error, 'Acquiring a database connection')
+      throw toConnectionError(error, 'Acquiring a database connection')
     }
 
     const transaction = new NeonTransaction(this, actor, client)
@@ -1050,7 +1177,7 @@ export class NeonDataStore implements DataStore {
       try {
         client = await this.pool.connect()
       } catch (error) {
-        throw toContractError(error, 'Acquiring a database connection')
+        throw toConnectionError(error, 'Acquiring a database connection')
       }
       try {
         const result = await client.query<{

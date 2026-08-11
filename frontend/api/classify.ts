@@ -35,6 +35,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { db } from './_lib/core.js'
 import { guardAdmin, guardMachine, authorizationResponse } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
@@ -887,6 +888,10 @@ async function classifyOnNeon(
   } catch (error) {
     const denial = authorizationResponse(error)
     if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
     console.error('Neon classify failed (verify team access):', safeErrorLabel(error))
     return json({ error: 'Could not verify team access' }, 500)
   }
@@ -1151,6 +1156,10 @@ async function reclassifyOnNeon(req: Request, deps: NeonWriteDeps = {}): Promise
   } catch (error) {
     const denial = authorizationResponse(error)
     if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
     console.error('Neon reclassify failed (verify team access):', safeErrorLabel(error))
     return json({ error: 'Could not verify team access' }, 500)
   }

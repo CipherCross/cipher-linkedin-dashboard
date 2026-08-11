@@ -7,6 +7,7 @@
 // Posting to Slack requires a verified application admin.
 import { postReviewDigestToSlack, type ReviewDigestRow } from './_lib/slack.js'
 import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import { deploymentApplicationAuthPath } from './_lib/identity/application.js'
 import { neonWriter } from './_lib/neonWrites.js'
 
@@ -40,6 +41,10 @@ async function handle(req: Request): Promise<Response> {
     } catch (error) {
       const denial = authorizationResponse(error)
       if (denial) return denial
+      // The database was not reached, so no membership decision was taken and
+      // the answer below would be a claim about one. Named cause, honest status.
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       console.error(
         'Review digest authorization failed:',
         error instanceof Error ? error.name : 'UnknownError',

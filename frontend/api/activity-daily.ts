@@ -56,6 +56,7 @@
  */
 
 import { authorizationResponse } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import {
   DataStoreContractError,
   DataStoreSchemaError,
@@ -339,6 +340,8 @@ async function leadPhotoUrlsResponse(
   } catch (error) {
     if (error instanceof DataStoreContractError) {
       console.error('Lead photo read failed:', safeErrorLabel(error))
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       return json({ error: 'Could not load lead photos' }, 500)
     }
     throw error
@@ -766,6 +769,10 @@ async function handle(
   } catch (error) {
     const denial = authorizationResponse(error)
     if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
     console.error('Neon actor resolution failed:', safeErrorLabel(error))
     return json({ error: 'Could not verify team access' }, 500)
   }
@@ -861,6 +868,11 @@ async function handle(
       // The operation name is adapter-owned constant text, so it is loggable —
       // unlike the error's message, which embeds the database hostname.
       console.error(`Read ${spec.operation} failed:`, safeErrorLabel(error))
+      // A read that could not reach the database is a different answer from one
+      // the database refused, and `readAll` prefixes whichever it gets with the
+      // operation name — so this is the sentence that lands in the banner.
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       return json({ error: 'Could not load dashboard data' }, 500)
     }
     throw error

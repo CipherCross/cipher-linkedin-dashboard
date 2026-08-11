@@ -3,6 +3,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { SCHEMA_DOC, loadIcpRoster } from './_lib/core.js'
 import { buildTools } from './_lib/tools.js'
 import { authorizationResponse, guardMember } from './_lib/auth.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { neonWriter } from './_lib/neonWrites.js'
 
@@ -40,6 +41,10 @@ export async function POST(req: Request) {
     } catch (error) {
       const denial = authorizationResponse(error)
       if (denial) return denial
+      // The database was not reached, so no membership decision was taken and
+      // the answer below would be a claim about one. Named cause, honest status.
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       console.error(
         'Chat authorization failed:',
         error instanceof Error ? error.name : 'UnknownError',

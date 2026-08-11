@@ -550,7 +550,18 @@ function Sidebar({
   )
 }
 
-function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+/**
+ * The dashboard's one failure surface.
+ *
+ * **It names no provider, and that is the point.** It used to read
+ * `Supabase error: {message}`, on every deployment and for every failure
+ * whatever produced it — so a tenant that has never had Supabase reported a
+ * Neon read failure under a Supabase headline, and no alert this dashboard
+ * raised could be trusted about its own cause. The message already carries the
+ * operation that failed and the reason the server gave; the banner's job is to
+ * say that the load failed and offer the retry, not to guess at a database.
+ */
+export function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   const [busy, setBusy] = useState(false)
   const retry = async () => {
     if (busy) return
@@ -564,7 +575,7 @@ function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => voi
   }
   return (
     <div className="banner" role="alert">
-      <span>Supabase error: {message}</span>
+      <span>Couldn’t load the dashboard: {message}</span>
       <button className="btn sm" onClick={retry} disabled={busy}>
         <RotateCw size={13} />
         {busy ? 'Retrying…' : 'Retry'}
