@@ -416,7 +416,7 @@ test("rollback is expressible and distinguishable from promote", async () => {
     scheduleManifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
 
-  const promoteFirst = await provider.promoteRelease({
+  const promoteFirst = await provider.promoteRelease({ hostname: "tenant.example.test",
     targetHandle,
     releaseHandle: first.releaseHandle,
   });
@@ -425,7 +425,7 @@ test("rollback is expressible and distinguishable from promote", async () => {
   assert.equal(promoteFirst.reasonCode, null);
   assert.equal(promoteFirst.rolloutSequence, 1);
 
-  const promoteSecond = await provider.promoteRelease({
+  const promoteSecond = await provider.promoteRelease({ hostname: "tenant.example.test",
     targetHandle,
     releaseHandle: second.releaseHandle,
   });
@@ -478,12 +478,12 @@ test("rollback is expressible and distinguishable from promote", async () => {
   // The reverse direction is closed too: a rollback cannot be smuggled in as a
   // promote, so the two operations stay genuinely distinct.
   await assert.rejects(
-    provider.promoteRelease({ targetHandle, releaseHandle: second.releaseHandle }),
+    provider.promoteRelease({ hostname: "tenant.example.test", targetHandle, releaseHandle: second.releaseHandle }),
     (error: unknown) => error instanceof OpsError && error.code === "provider_error",
   );
   assert.equal(provider.activeReleaseHandle(targetHandle), first.releaseHandle);
   // Re-issuing the promotion that is already active still resumes cleanly.
-  const resumed = await provider.promoteRelease({
+  const resumed = await provider.promoteRelease({ hostname: "tenant.example.test",
     targetHandle,
     releaseHandle: first.releaseHandle,
   });
@@ -559,7 +559,7 @@ test("the fake satisfies the whole contract with no provider and no credentials"
       schedules: CANONICAL_TENANT_SCHEDULES,
       manifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
     });
-    await provider.promoteRelease({
+    await provider.promoteRelease({ hostname: "tenant.example.test",
       targetHandle,
       releaseHandle: release.releaseHandle,
     });
@@ -661,7 +661,7 @@ test("hosting fake injects failures before, after and with unknown outcome", asy
     ]);
     const { targetHandle, release } = await provision(provider);
     await assert.rejects(
-      provider.promoteRelease({ targetHandle, releaseHandle: release.releaseHandle }),
+      provider.promoteRelease({ hostname: "tenant.example.test", targetHandle, releaseHandle: release.releaseHandle }),
       (error: unknown) =>
         error instanceof OpsError &&
         error.code === (timing === "outcome_unknown" ? "outcome_unknown" : "provider_error"),
@@ -671,7 +671,7 @@ test("hosting fake injects failures before, after and with unknown outcome", asy
       timing === "before_effect" ? null : release.releaseHandle,
       `${timing} must be visible in the resulting state`,
     );
-    const retried = await provider.promoteRelease({
+    const retried = await provider.promoteRelease({ hostname: "tenant.example.test",
       targetHandle,
       releaseHandle: release.releaseHandle,
     });
@@ -734,7 +734,7 @@ test("environment binding never returns a secret value on any code path", async 
       schedules: CANONICAL_TENANT_SCHEDULES,
       manifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
     }),
-    await provider.promoteRelease({
+    await provider.promoteRelease({ hostname: "tenant.example.test",
       targetHandle,
       releaseHandle: release.releaseHandle,
     }),
@@ -804,7 +804,7 @@ test("every canonical result has the provider-independent shape S10 must match",
     schedules: CANONICAL_TENANT_SCHEDULES,
     manifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
-  const promote = await provider.promoteRelease({
+  const promote = await provider.promoteRelease({ hostname: "tenant.example.test",
     targetHandle,
     releaseHandle: release.releaseHandle,
   });
@@ -816,7 +816,7 @@ test("every canonical result has the provider-independent shape S10 must match",
     environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
-  await provider.promoteRelease({
+  await provider.promoteRelease({ hostname: "tenant.example.test",
     targetHandle,
     releaseHandle: second.releaseHandle,
   });
@@ -902,7 +902,7 @@ test("verification reports runtime, schedules, domain and build metadata", async
     schedules: CANONICAL_TENANT_SCHEDULES,
     manifestDigest: scheduleManifestDigest(CANONICAL_TENANT_SCHEDULES),
   });
-  await provider.promoteRelease({
+  await provider.promoteRelease({ hostname: "tenant.example.test",
     targetHandle,
     releaseHandle: release.releaseHandle,
   });
@@ -973,6 +973,7 @@ test("verification reports runtime, schedules, domain and build metadata", async
   await green.promoteRelease({
     targetHandle: ready.targetHandle,
     releaseHandle: ready.release.releaseHandle,
+    hostname: "s09-lab.example-platform.test",
   });
   const passed = await green.verifyDeployment({
     targetHandle: ready.targetHandle,
@@ -997,6 +998,7 @@ test("verification reports runtime, schedules, domain and build metadata", async
   await green.promoteRelease({
     targetHandle: ready.targetHandle,
     releaseHandle: drifted.releaseHandle,
+    hostname: "s09-lab.example-platform.test",
   });
   const afterRollbackDrift = await green.verifyDeployment({
     targetHandle: ready.targetHandle,

@@ -385,6 +385,15 @@ export type HostingRolloutKind = "promote" | "rollback";
 export interface PromotionRequest {
   readonly targetHandle: HostingTargetHandle;
   readonly releaseHandle: HostingReleaseHandle;
+  /**
+   * The hostname the promoted release must answer for.
+   *
+   * Promotion is the step that makes a release serve traffic, and step 6 leaves
+   * automatic domain assignment off so the build stays staged until here. The
+   * hostname therefore has to travel with the promotion rather than be guessed
+   * from the project.
+   */
+  readonly hostname: string;
 }
 
 export interface RollbackRequest {

@@ -379,7 +379,7 @@ async function driveCapabilities(
     schedules: CANONICAL_TENANT_SCHEDULES,
     manifestDigest: MANIFEST_DIGEST,
   });
-  const promote = await port.promoteRelease({
+  const promote = await port.promoteRelease({ hostname: "tenant.example.test",
     targetHandle: target.targetHandle,
     releaseHandle: release.releaseHandle,
   });
@@ -399,7 +399,7 @@ async function driveCapabilities(
     environmentBindingDigest: ENVIRONMENT_BINDING_DIGEST,
     scheduleManifestDigest: MANIFEST_DIGEST,
   });
-  const secondPromote = await port.promoteRelease({
+  const secondPromote = await port.promoteRelease({ hostname: "tenant.example.test",
     targetHandle: target.targetHandle,
     releaseHandle: secondRelease.releaseHandle,
   });
@@ -754,7 +754,7 @@ test("promote and rollback stay distinguishable and equally constrained", async 
     );
     // Returning to an already-superseded release through promote is refused.
     await assert.rejects(
-      port.promoteRelease({
+      port.promoteRelease({ hostname: "tenant.example.test",
         targetHandle: results.target.targetHandle,
         releaseHandle: results.secondRelease.releaseHandle,
       }),

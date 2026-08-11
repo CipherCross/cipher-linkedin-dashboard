@@ -76,7 +76,7 @@ const requestSchemas = {
   }),
   "hosting.build": z.strictObject({ target_handle: identifier, revision_id: z.string().regex(/^[0-9a-f]{40}$/), build_recipe_id: identifier, public_value_names: z.array(identifier), environment_binding_digest: digest, schedule_manifest_digest: digest }),
   "hosting.schedules": z.strictObject({ target_handle: identifier, release_handle: identifier, schedules: z.array(schedule), manifest_digest: digest }),
-  "hosting.promote": z.strictObject({ target_handle: identifier, release_handle: identifier }),
+  "hosting.promote": z.strictObject({ target_handle: identifier, release_handle: identifier, expected_hostname: z.string().min(1).max(253) }),
   "hosting.rollback": z.strictObject({ target_handle: identifier, release_handle: identifier, superseded_release_handle: identifier, reason_code: identifier }),
   "hosting.verify": z.strictObject({ target_handle: identifier, expected_active_release_handle: identifier, expected_revision_id: z.string().regex(/^[0-9a-f]{40}$/), expected_hostname: z.string().min(1).max(253), expected_schedules: z.array(schedule), runtime_check_ids: z.array(identifier).min(1) }),
 } as const;

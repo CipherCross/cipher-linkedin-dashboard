@@ -1215,28 +1215,40 @@ export class S26WorkerBackend implements S26BridgeBackend {
   }
 
   /**
-   * Points every hostname the project owns at this release.
+   * Points the tenant's hostname at this release.
    *
    * Vercel's own generated `*.vercel.app` aliases follow a promoted deployment by
    * themselves; a hostname added to the project explicitly does not, while
-   * automatic assignment is off. Re-aliasing an alias that already resolves here
-   * is accepted, so this is safe to repeat — which matters because step 10 adopts
-   * an already-promoted release rather than promoting twice.
+   * automatic assignment is off — and step 6 turns it off deliberately so the
+   * step-9 build stays staged until here.
+   *
+   * The hostname is supplied by the caller and its binding is confirmed with the
+   * same single-domain probe #vercelHostnameBoundInTeam uses. A first attempt
+   * listed the project's domains instead and guessed the response key, so when
+   * nothing matched it aliased nothing and step 10 still reported success — the
+   * silent no-op left step 11 failing on the same four domain checks with no new
+   * information. An absent binding is now a named failure instead.
+   *
+   * Re-aliasing a hostname that already resolves here is accepted, so this is
+   * safe to repeat, which matters because step 10 adopts an already-promoted
+   * release rather than promoting twice.
    */
-  async #serveProjectDomains(target: string, release: string): Promise<void> {
-    const listed = await this.#vercel(`/v10/projects/${encodeURIComponent(target)}/domains`);
-    const domains = Array.isArray(listed.value.domains) ? listed.value.domains : [];
-    for (const entry of domains) {
-      const domain = record(entry, "Vercel project domain");
-      // A redirect-only entry names another host as the target it forwards to; it
-      // is not a hostname this release should answer for.
-      if (typeof domain.redirect === "string" && domain.redirect.length > 0) continue;
+  async #serveHostname(target: string, release: string, hostname: string): Promise<void> {
+    try {
       await this.#vercel(
-        `/v2/deployments/${encodeURIComponent(release)}/aliases`,
-        "POST",
-        { alias: stringField(domain, "name") },
+        `/v10/projects/${encodeURIComponent(target)}/domains/${encodeURIComponent(hostname)}`,
       );
+    } catch (error) {
+      if (error instanceof OpsError && error.code === "provider_error" && error.details.status === 404) {
+        throw new OpsError("provider_error", "Vercel project does not carry the tenant hostname");
+      }
+      throw error;
     }
+    await this.#vercel(
+      `/v2/deployments/${encodeURIComponent(release)}/aliases`,
+      "POST",
+      { alias: hostname },
+    );
   }
 
   async #hostingRollout(input: JsonRecord, kind: "promote" | "rollback"): Promise<unknown> {
@@ -1269,7 +1281,7 @@ export class S26WorkerBackend implements S26BridgeBackend {
     // what this release must answer for, and the promote contract stays unchanged.
     // Aliasing is explicit, so the project-level auto-assign flag stays off and
     // future builds keep staging as designed.
-    if (kind === "promote") await this.#serveProjectDomains(target, active);
+    if (kind === "promote") await this.#serveHostname(target, active, stringField(input, "expected_hostname"));
     return { hostingRequestId: response.id, targetHandle: target, rolloutHandle: response.id, rolloutKind: kind, activeReleaseHandle: active, previousReleaseHandle: previous, rolloutSequence: Date.now(), reasonCode: kind === "rollback" ? stringField(input, "reason_code") : null };
   }
 

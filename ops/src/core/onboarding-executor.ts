@@ -469,6 +469,7 @@ export class OnboardingExecutor {
           this.#providers.hosting.promoteRelease({
             targetHandle: hostingTarget.resourceId,
             releaseHandle: release.resourceId,
+            hostname: context.productionHostname,
           }),
         );
         this.#registry.saveResourceReference(

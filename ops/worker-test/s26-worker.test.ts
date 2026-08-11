@@ -27,6 +27,8 @@ import { handleS26WorkerRequest, s26WorkerRequestLog } from "../src/worker/index
 const BRIDGE_SECRET = "worker-test-bridge-secret";
 const OWNERSHIP = `sha256:${"a".repeat(64)}`;
 const DATA_PROJECT_NAME = "lh2-disposable-disposable-lab";
+/** The tenant hostname promotion must make the release answer for. */
+const HOSTNAME = "s26-disposable-lab.vercel.app";
 
 function envWith(values: Readonly<Record<string, string>>): Env {
   const derived: Env = Object.create(env);
@@ -925,15 +927,8 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
           targets: { production: { id: current, readySubstate: "PROMOTED" } },
         });
       }
-      if (url.pathname === "/v10/projects/target-1/domains" && method === "GET") {
-        return providerResponse(200, {
-          domains: [
-            { name: "s26-disposable-lab.vercel.app" },
-            // A redirect-only entry forwards elsewhere; this release must not
-            // start answering for it.
-            { name: "old.example.test", redirect: "s26-disposable-lab.vercel.app" },
-          ],
-        });
+      if (url.pathname === `/v10/projects/target-1/domains/${HOSTNAME}` && method === "GET") {
+        return providerResponse(200, { name: HOSTNAME, verified: true });
       }
       if (/^\/v2\/deployments\/[^/]+\/aliases$/.test(url.pathname) && method === "POST") {
         aliased.push({
@@ -951,7 +946,7 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     });
     const backend = new S26WorkerBackend(env, { fetch: fetcher });
     const adopted = await handle(
-      request("/s26/control-plane/v1/hosting/promote", { target_handle: "target-1", release_handle: "release-1" }),
+      request("/s26/control-plane/v1/hosting/promote", { target_handle: "target-1", release_handle: "release-1", expected_hostname: HOSTNAME }),
       backend,
     );
     expect(adopted.status).toBe(200);
@@ -959,7 +954,7 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     await expect(adopted.json()).resolves.toMatchObject({ activeReleaseHandle: "release-1", rolloutKind: "promote" });
 
     const promoted = await handle(
-      request("/s26/control-plane/v1/hosting/promote", { target_handle: "target-1", release_handle: "release-2" }),
+      request("/s26/control-plane/v1/hosting/promote", { target_handle: "target-1", release_handle: "release-2", expected_hostname: HOSTNAME }),
       backend,
     );
     expect(promoted.status).toBe(200);
@@ -970,8 +965,8 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     // domain.* checks. It also runs on the adopted path, because a release that
     // is already promoted can still not be aliased.
     expect(aliased).toEqual([
-      { release: "release-1", alias: "s26-disposable-lab.vercel.app" },
-      { release: "release-2", alias: "s26-disposable-lab.vercel.app" },
+      { release: "release-1", alias: HOSTNAME },
+      { release: "release-2", alias: HOSTNAME },
     ]);
   });
 
@@ -995,8 +990,11 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
         promoted = true;
         return providerResponse(200, {});
       }
-      if (url.pathname === "/v10/projects/target-1/domains" && method === "GET") {
-        return providerResponse(200, { domains: [] });
+      if (url.pathname === `/v10/projects/target-1/domains/${HOSTNAME}` && method === "GET") {
+        return providerResponse(200, { name: HOSTNAME, verified: true });
+      }
+      if (/^\/v2\/deployments\/[^/]+\/aliases$/.test(url.pathname) && method === "POST") {
+        return providerResponse(200, {});
       }
       return undefined;
     });
@@ -1004,6 +1002,7 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
       request("/s26/control-plane/v1/hosting/promote", {
         target_handle: "target-1",
         release_handle: "release-staged",
+        expected_hostname: HOSTNAME,
       }),
       new S26WorkerBackend(env, { fetch: fetcher }),
     );

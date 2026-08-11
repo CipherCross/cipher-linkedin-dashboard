@@ -98,7 +98,7 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   await r2.configurePrivateStorage({ projectId: "r2-bucket", bucketId: "lead-photos", visibility: "private" });
   await vercel.createDeploymentTarget({ deterministicName: "lh2-disposable-disposable-lab", workspaceClass: "disposable", runtimeProfileId: "runtime-v1", ownership, automaticPromotionEnabled: false, isolatedPreviewsEnabled: false });
   await vercel.assignDomain({ targetHandle: "target", hostname: "disposable.example.test", ownership, certificateMode: "provider_managed" });
-  await vercel.promoteRelease({ targetHandle: "target", releaseHandle: "release" });
+  await vercel.promoteRelease({ targetHandle: "target", releaseHandle: "release", hostname: "tenant.example.test" });
   await smtp.configure({ projectId: "tenant-auth", smtpProfileId: "smtp-v1", senderDomain: "example.test", fromIdentity: "ops@example.test", smtpSecretLabels: ["label-a"] });
   await domain.inspect({ hostname: "disposable.example.test", senderDomain: "example.test", workspaceClass: "disposable" });
   await source.inspect({ sourceGitSha: "a".repeat(40), compatibilityEntryId: "release-v1", applicationVersion: "1" });
@@ -396,7 +396,7 @@ test("hosting results drop the request id the transport adds, so strict schemas 
 
   const promoted = await client(hostingBody({
     targetHandle: "target", releaseHandle: "release", active: true,
-  })).promoteRelease({ targetHandle: "target", releaseHandle: "release" });
+  })).promoteRelease({ targetHandle: "target", releaseHandle: "release", hostname: "tenant.example.test" });
   assert.equal(Object.hasOwn(promoted as object, "providerRequestId"), false);
 
   const scheduled = await client(hostingBody({
