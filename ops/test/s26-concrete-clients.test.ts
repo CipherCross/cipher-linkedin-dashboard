@@ -350,6 +350,65 @@ test("a failed R2 create that did not leave the bucket keeps its original error"
   );
 });
 
+// Step 7 failed live with `Unrecognized key: "providerRequestId"`. Hosting
+// results name their request id `hostingRequestId`, set by the bridge, and the
+// canonical schemas are strict — so the key the transport adds to every response
+// is rejected. createDeploymentTarget and assignDomain build their result by hand
+// and map the id across, which is why steps 6 and 8 passed while every hosting
+// call that returns the bridge body as-is failed.
+test("hosting results drop the request id the transport adds, so strict schemas accept them", async () => {
+  const hostingBody = (extra: Record<string, unknown>) => ({
+    hostingRequestId: "bridge-hosting-request",
+    ...extra,
+  });
+  const bridge = (body: Record<string, unknown>) => ({
+    baseUrl: "https://bridge.example.test",
+    scopeId: "provider-scope",
+    controlPlaneBridge: true,
+    credential: { resolve: async () => "local-bridge-credential" },
+    // Mirrors PrivateProviderHttp: the transport appends providerRequestId.
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "transport-request-id" },
+      json: async () => body,
+    }),
+  });
+
+  const client = (body: Record<string, unknown>) => new VercelOperationsClient(
+    { baseUrl: "https://vercel.example.test", scopeId: "team-scope", credential: { resolve: async () => "unused" } },
+    bridge(body) as never,
+    new Redactor(),
+  );
+
+  const bound = await client(hostingBody({
+    targetHandle: "target", scope: "production", bindings: [],
+  })).bindEnvironment({
+    targetHandle: "target",
+    dataProjectHandle: "neon-project",
+    dataProjectName: "lh2-disposable-disposable-lab",
+    ownership,
+    scope: "production",
+    bindings: [{ name: "DATABASE_URL", valueClass: "server_secret", source: { kind: "secret_label", secretLabel: "db" } }],
+  } as never);
+  assert.equal(Object.hasOwn(bound as object, "providerRequestId"), false);
+  assert.equal((bound as { hostingRequestId: string }).hostingRequestId, "bridge-hosting-request");
+
+  const promoted = await client(hostingBody({
+    targetHandle: "target", releaseHandle: "release", active: true,
+  })).promoteRelease({ targetHandle: "target", releaseHandle: "release" });
+  assert.equal(Object.hasOwn(promoted as object, "providerRequestId"), false);
+
+  const scheduled = await client(hostingBody({
+    targetHandle: "target", releaseHandle: "release", schedules: [], manifestDigest: DIGEST,
+  })).registerSchedules({ targetHandle: "target", releaseHandle: "release", schedules: [], manifestDigest: DIGEST });
+  assert.equal(Object.hasOwn(scheduled as object, "providerRequestId"), false);
+
+  // The bridge's own id must survive: dropping it would lose the only handle on
+  // the hosting request.
+  assert.equal((scheduled as { hostingRequestId: string }).hostingRequestId, "bridge-hosting-request");
+});
+
 test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   assert.throws(
     () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", scopeId: "provider-scope", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),

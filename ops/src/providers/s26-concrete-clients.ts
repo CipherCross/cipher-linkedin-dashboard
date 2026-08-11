@@ -212,6 +212,12 @@ function result<T>(value: unknown, label: string): T {
   return value as T;
 }
 
+/** Drops the key the transport adds, for shapes whose canonical form lacks it. */
+function withoutProviderRequestId<T>(value: unknown, label: string): T {
+  const { providerRequestId: _providerRequestId, ...rest } = result<Record<string, unknown>>(value, label);
+  return rest as T;
+}
+
 /**
  * Read-only inspections carry no provider request id in their canonical shape:
  * that id exists to make an ambiguous *mutation* resumable. The transport adds
@@ -219,8 +225,23 @@ function result<T>(value: unknown, label: string): T {
  * canonical adapter's strict schema as an unrecognized key.
  */
 function inspection<T>(value: unknown, label: string): T {
-  const { providerRequestId: _providerRequestId, ...rest } = result<Record<string, unknown>>(value, label);
-  return rest as T;
+  return withoutProviderRequestId<T>(value, label);
+}
+
+/**
+ * Hosting results name their request id `hostingRequestId`, which the bridge
+ * sets, so the transport's added `providerRequestId` is a second, redundant copy
+ * — and the canonical hosting schemas are strict, so it is rejected as an
+ * unrecognized key.
+ *
+ * This is the mutation half of the defect that was fixed for the six inspections.
+ * It went unnoticed because the two hosting operations that build their result
+ * explicitly — createDeploymentTarget and assignDomain — map providerRequestId to
+ * hostingRequestId by hand, so steps 6 and 8 passed while every hosting call that
+ * returns the bridge body as-is (steps 7, 9, 10 and the final verify) failed.
+ */
+function hostingResult<T>(value: unknown, label: string): T {
+  return withoutProviderRequestId<T>(value, label);
 }
 
 abstract class BridgeRecoveryClient {
@@ -494,7 +515,7 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
       source_kind: binding.source.kind,
       source: binding.source,
     }));
-    return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "environment-bind"), {
+    return hostingResult(await this.bridge.invoke("POST", s26BridgePath("hosting", "environment-bind"), {
       target_handle: request.targetHandle,
       data_project_id: request.dataProjectHandle,
       data_project_name: request.dataProjectName,
@@ -503,7 +524,7 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
       bindings,
     }), "Vercel environment bridge");
   }
-  async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, environment_binding_digest: request.environmentBindingDigest, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
+  async buildRelease(request: ReleaseBuildRequest): Promise<ReleaseBuildResult> { return hostingResult(await this.bridge.invoke("POST", s26BridgePath("hosting", "build"), { target_handle: request.targetHandle, revision_id: request.revisionId, build_recipe_id: request.buildRecipeId, public_value_names: request.publicValueNames, environment_binding_digest: request.environmentBindingDigest, schedule_manifest_digest: request.scheduleManifestDigest }), "Vercel build bridge"); }
   async assignDomain(request: DomainAssignmentRequest): Promise<DomainAssignmentResult> {
     // A hostname already bound to this same target is the retried case, not a
     // conflict: Vercel answers a second POST with "domain already in use",
@@ -519,10 +540,10 @@ export class VercelOperationsClient extends BridgeRecoveryClient implements Host
     if (value.name !== request.hostname) throw new OpsError("provider_error", "Vercel domain response is incomplete");
     return { hostingRequestId: value.providerRequestId, targetHandle: request.targetHandle, hostname: request.hostname, assigned: true, certificateReady: value.verified === true, certificateMode: "provider_managed", ownershipMarkerDigest: request.ownership.digest };
   }
-  async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
-  async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "promote"), { target_handle: request.targetHandle, release_handle: request.releaseHandle }), "Vercel promotion bridge"); }
-  async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "rollback"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback bridge"); }
-  async verifyDeployment(request: DeploymentVerificationRequest): Promise<HostingVerificationReport> { return result(await this.bridge.invoke("POST", s26BridgePath("hosting", "verify"), { target_handle: request.targetHandle, expected_active_release_handle: request.expectedActiveReleaseHandle, expected_revision_id: request.expectedRevisionId, expected_hostname: request.expectedHostname, expected_schedules: request.expectedSchedules, runtime_check_ids: request.runtimeCheckIds }), "Vercel verification bridge"); }
+  async registerSchedules(request: ScheduleRegistrationRequest): Promise<ScheduleRegistrationResult> { return hostingResult(await this.bridge.invoke("POST", s26BridgePath("hosting", "schedules"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, schedules: request.schedules, manifest_digest: request.manifestDigest }), "Vercel schedules bridge"); }
+  async promoteRelease(request: PromotionRequest): Promise<RolloutResult> { return hostingResult(await this.bridge.invoke("POST", s26BridgePath("hosting", "promote"), { target_handle: request.targetHandle, release_handle: request.releaseHandle }), "Vercel promotion bridge"); }
+  async rollbackRelease(request: RollbackRequest): Promise<RolloutResult> { return hostingResult(await this.bridge.invoke("POST", s26BridgePath("hosting", "rollback"), { target_handle: request.targetHandle, release_handle: request.releaseHandle, superseded_release_handle: request.supersededReleaseHandle, reason_code: request.reasonCode }), "Vercel rollback bridge"); }
+  async verifyDeployment(request: DeploymentVerificationRequest): Promise<HostingVerificationReport> { return hostingResult(await this.bridge.invoke("POST", s26BridgePath("hosting", "verify"), { target_handle: request.targetHandle, expected_active_release_handle: request.expectedActiveReleaseHandle, expected_revision_id: request.expectedRevisionId, expected_hostname: request.expectedHostname, expected_schedules: request.expectedSchedules, runtime_check_ids: request.runtimeCheckIds }), "Vercel verification bridge"); }
 }
 
 export class SmtpEmailOperationsClient implements EmailOperationsApi {
