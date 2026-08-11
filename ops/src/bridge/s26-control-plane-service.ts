@@ -183,6 +183,10 @@ export class S26ControlPlaneBridgeService {
           code: safe.code,
           provider_request_id: typeof safe.details.provider_request_id === "string" ? safe.details.provider_request_id : undefined,
           ...(typeof safe.details.status === "number" ? { provider_status: safe.details.status } : {}),
+          ...(typeof safe.details.provider_error_code === "string"
+            && /^[A-Za-z0-9_.:-]{1,64}$/.test(safe.details.provider_error_code)
+            ? { provider_error_code: safe.details.provider_error_code }
+            : {}),
         },
       };
     }

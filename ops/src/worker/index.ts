@@ -133,10 +133,10 @@ export async function handleS26WorkerRequest(
 }
 
 /** The sanitized code/status a failed bridge response already carries. */
-export function s26BridgeFailureFields(body: unknown): Readonly<{ code?: unknown; provider_status?: unknown }> {
+export function s26BridgeFailureFields(body: unknown): Readonly<{ code?: unknown; provider_status?: unknown; provider_error_code?: unknown }> {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return {};
   const record = body as Record<string, unknown>;
-  return { code: record.code, provider_status: record.provider_status };
+  return { code: record.code, provider_status: record.provider_status, provider_error_code: record.provider_error_code };
 }
 
 function requiredSecret(value: string | undefined): string {
@@ -146,7 +146,7 @@ function requiredSecret(value: string | undefined): string {
 export function s26WorkerRequestLog(
   request: Request,
   response: Response,
-  failure?: Readonly<{ code?: unknown; provider_status?: unknown }>,
+  failure?: Readonly<{ code?: unknown; provider_status?: unknown; provider_error_code?: unknown }>,
 ): Readonly<Record<string, unknown>> {
   return {
     event: "s26_bridge_request",
@@ -160,6 +160,7 @@ export function s26WorkerRequestLog(
     // credential, scope or payload.
     ...(typeof failure?.code === "string" ? { code: failure.code } : {}),
     ...(typeof failure?.provider_status === "number" ? { provider_status: failure.provider_status } : {}),
+    ...(typeof failure?.provider_error_code === "string" ? { provider_error_code: failure.provider_error_code } : {}),
   };
 }
 
@@ -177,7 +178,7 @@ export default {
     });
     // The body is read back from a clone so logging cannot consume the stream
     // the caller still needs.
-    let failure: Readonly<{ code?: unknown; provider_status?: unknown }> = {};
+    let failure: Readonly<{ code?: unknown; provider_status?: unknown; provider_error_code?: unknown }> = {};
     if (!response.ok) {
       try { failure = s26BridgeFailureFields(await response.clone().json()); } catch { failure = {}; }
     }

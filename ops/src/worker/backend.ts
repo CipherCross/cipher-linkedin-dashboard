@@ -238,6 +238,38 @@ async function readBoundedProviderJson(response: Response): Promise<unknown> {
   }
 }
 
+/**
+ * The build settings that ARE the `spa-plus-http-handlers-v1` recipe.
+ *
+ * Kept beside the recipe rather than inside the request so the two cannot drift,
+ * and matching the settings the P4-C path already used for the same application —
+ * except for rootDirectory, which must name the subdirectory holding the app and
+ * its `vercel.json`.
+ */
+const BUILD_RECIPE_PROJECT_SETTINGS = {
+  framework: "vite",
+  rootDirectory: "frontend",
+  buildCommand: "npm run build",
+  outputDirectory: "dist",
+} as const;
+
+/**
+ * The provider's own machine-readable error token, when it left a bounded one.
+ *
+ * Deliberately excludes the human message: a provider often echoes parts of the
+ * request back in it, and this value travels to the operator. A token matching
+ * this shape carries no URL, credential, payload or free text.
+ */
+function providerErrorCode(value: JsonRecord): Readonly<Record<string, string>> {
+  const nested = typeof value.error === "object" && value.error !== null
+    ? (value.error as Record<string, unknown>).code
+    : undefined;
+  const candidate = typeof nested === "string" ? nested : value.code;
+  return typeof candidate === "string" && /^[A-Za-z0-9_.:-]{1,64}$/.test(candidate)
+    ? { provider_error_code: candidate }
+    : {};
+}
+
 async function providerJson(input: {
   readonly provider: string;
   readonly url: string;
@@ -282,6 +314,12 @@ async function providerJson(input: {
     throw new OpsError("provider_error", `${input.provider} rejected the fixed operation`, {
       provider_request_id: id,
       status: response.status,
+      // The provider's own short error token — Vercel puts it in error.code,
+      // others at the top level. The body was already read and then thrown away,
+      // so a deterministic refusal arrived with no reason attached at all: a
+      // Vercel 400 said only "400". Only a bounded token is kept, never the
+      // free-text message, which can quote request content back.
+      ...providerErrorCode(value),
     });
   }
   return { id, value, status: response.status };
@@ -1048,6 +1086,18 @@ export class S26WorkerBackend implements S26BridgeBackend {
           sha: revision,
         },
         meta: { lh2S26BuildDigest: buildIdentityDigest },
+        // Step 6 creates the project through the API, which leaves it with no
+        // build settings, and Vercel then refuses a deployment with
+        // `400 missing_project_settings`. The settings must therefore travel with
+        // the deployment. They are the approved build recipe's own definition —
+        // the recipe id was already checked against VERCEL_BUILD_RECIPE_ID above,
+        // so a different recipe cannot reach this.
+        //
+        // rootDirectory is `frontend` because that is where the app and, more
+        // importantly, `frontend/vercel.json` live. That file declares the four
+        // crons this step then waits for in #waitForProjectCrons, so a root of
+        // null would build the wrong tree and never register a schedule.
+        projectSettings: BUILD_RECIPE_PROJECT_SETTINGS,
       });
       const ready = await this.#waitForDeployment(stringField(response.value, "id"), response.id);
       this.#assertDeploymentIdentity(ready.value, revision, buildIdentityDigest);

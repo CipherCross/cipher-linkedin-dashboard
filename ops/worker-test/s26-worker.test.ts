@@ -824,6 +824,18 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
         sha: REVISION,
       },
       meta: { lh2S26BuildDigest: buildIdentityDigest },
+      // Step 6 creates the project through the API, so it carries no build
+      // settings and Vercel refuses the deployment with
+      // `400 missing_project_settings` — the live step-9 failure. rootDirectory
+      // must stay `frontend`: that is where `frontend/vercel.json` declares the
+      // four crons this step then waits for, so a null root would build the wrong
+      // tree and never register a schedule.
+      projectSettings: {
+        framework: "vite",
+        rootDirectory: "frontend",
+        buildCommand: "npm run build",
+        outputDirectory: "dist",
+      },
     });
   });
 
