@@ -71,6 +71,12 @@ class PrivateProviderHttp {
     if (this.#baseUrl.protocol !== "https:") {
       throw new OpsError("provider_error", "Provider base URL must use HTTPS");
     }
+    // A base may carry a path prefix of its own — Neon's API lives under
+    // `/api`. Resolution below is relative, so the base must end in a slash or
+    // its last segment would be replaced instead of extended.
+    if (!this.#baseUrl.pathname.endsWith("/")) {
+      this.#baseUrl.pathname = `${this.#baseUrl.pathname}/`;
+    }
     this.#credential = configuration.credential;
     this.#fetch = configuration.fetch ?? (async (url, init) => {
       const response = await fetch(url, init);
@@ -82,7 +88,10 @@ class PrivateProviderHttp {
   async invoke(method: "GET" | "POST", path: string, payload?: unknown): Promise<unknown> {
     const credential = await this.#credential.resolve();
     this.#redactor.registerSecret(credential);
-    const url = new URL(path, this.#baseUrl).toString();
+    // Resolve relative to the base's own path. An absolute `/v2/projects`
+    // would discard the base prefix and address `console.neon.tech/v2/...`,
+    // which answers 404.
+    const url = new URL(path.replace(/^\/+/, ""), this.#baseUrl).toString();
     try {
       const response = await this.#fetch(url, {
         method,

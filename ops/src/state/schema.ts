@@ -1,4 +1,4 @@
-export const REGISTRY_SCHEMA_VERSION = 2;
+export const REGISTRY_SCHEMA_VERSION = 3;
 
 /**
  * v1 used provider names as registry vocabulary. v2 keeps provider IDs opaque
@@ -69,12 +69,81 @@ export const REGISTRY_MIGRATIONS = Object.freeze([
       CREATE INDEX IF NOT EXISTS refs_tenant_idx ON resource_refs(tenant_id);
     `,
   },
+  {
+    from: 2,
+    to: 3,
+    /**
+     * v2 renamed the effect vocabulary to provider-neutral names everywhere
+     * except `operation_steps`, whose kind CHECK still enumerated the Supabase
+     * ones. `CREATE TABLE IF NOT EXISTS` cannot repair an existing table, so a
+     * registry created before the rename rejected every apply with a CHECK
+     * constraint failure on the first step it tried to persist.
+     */
+    sql: `
+      ALTER TABLE operation_steps RENAME TO operation_steps_v2;
+      CREATE TABLE operation_steps (
+        operation_id TEXT NOT NULL REFERENCES operations(operation_id),
+        ordinal INTEGER NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN (
+          'reserve_tenant','data_project','tenant_schema','object_storage_identity_email',
+          'platform_support','hosting_project','production_env','domain_binding',
+          'tenant_build','production_deployment','smoke_suite','company_admin',
+          'finalize_tenant'
+        )),
+        state TEXT NOT NULL CHECK (state IN (
+          'pending','running','waiting_provider','failed','outcome_unknown',
+          'succeeded','not_applicable'
+        )),
+        attempt INTEGER NOT NULL DEFAULT 0 CHECK (attempt >= 0),
+        provider_request_id TEXT,
+        started_at TEXT,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        redacted_error TEXT,
+        PRIMARY KEY(operation_id, ordinal)
+      );
+      INSERT INTO operation_steps (
+        operation_id, ordinal, kind, state, attempt, provider_request_id,
+        started_at, updated_at, completed_at, redacted_error
+      )
+      SELECT operation_id, ordinal,
+        CASE kind
+          WHEN 'supabase_project' THEN 'data_project'
+          WHEN 'storage_auth_smtp' THEN 'object_storage_identity_email'
+          WHEN 'vercel_project' THEN 'hosting_project'
+          ELSE kind
+        END,
+        state, attempt, provider_request_id, started_at, updated_at,
+        completed_at, redacted_error
+      FROM operation_steps_v2;
+      DROP TABLE operation_steps_v2;
+
+      ALTER TABLE registry_meta RENAME TO registry_meta_v2;
+      CREATE TABLE registry_meta (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        schema_version INTEGER NOT NULL CHECK (schema_version = 3),
+        registry_version INTEGER NOT NULL CHECK (registry_version >= 0),
+        owner_uuid TEXT NOT NULL UNIQUE,
+        last_backup_digest TEXT,
+        last_backup_at TEXT,
+        CHECK (last_backup_digest IS NULL OR last_backup_digest GLOB 'sha256:[0-9a-f]*')
+      );
+      INSERT INTO registry_meta (
+        singleton_id, schema_version, registry_version, owner_uuid,
+        last_backup_digest, last_backup_at
+      )
+      SELECT singleton_id, 3, registry_version, owner_uuid,
+        last_backup_digest, last_backup_at
+      FROM registry_meta_v2;
+      DROP TABLE registry_meta_v2;
+    `,
+  },
 ] as const);
 
 export const REGISTRY_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS registry_meta (
   singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-  schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+  schema_version INTEGER NOT NULL CHECK (schema_version = 3),
   registry_version INTEGER NOT NULL CHECK (registry_version >= 0),
   owner_uuid TEXT NOT NULL UNIQUE,
   last_backup_digest TEXT,
