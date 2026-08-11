@@ -19,6 +19,77 @@ the agent check, but check yourself too:
 Do notebook 1 alone, all the way to `only`, and let one full cron cycle pass
 before you start notebook 2.
 
+## Getting the `lha.` token — one per notebook
+
+There is no UI and no CLI. The SPA has no screen for it, nothing in `ops/src` or
+`postgres/` issues one, and the ops MCP tool `machine_enrollment_create` throws
+`unsupported_contract`. The only path is a single authenticated POST to
+`admin.agentCredentialIssue`, and the plaintext token is in that one response and
+**nowhere else** — not logged, not stored, not recoverable. A lost token is not
+looked up, it is replaced: issue a new one and revoke the old.
+
+**Do this from the dashboard's own browser console.** Not curl — the endpoint
+requires an `Origin` header matching `IDENTITY_BASE_URL`, and a browser sets that
+for you while curl does not.
+
+1. Sign in to `https://ciphercross.dev` as a user whose `team_members.role` is
+   `admin`.
+2. Open DevTools → Console and run this, editing the two values on the last line:
+
+```js
+// The dashboard still signs in through Supabase Auth, and the identity endpoint
+// still accepts that bearer (acceptLegacyBearer). Pull it out of the session.
+const k = Object.keys(localStorage).find(x => x.startsWith('sb-') && x.includes('auth-token'));
+let raw = localStorage.getItem(k);
+if (raw?.startsWith('base64-')) raw = atob(raw.slice(7));
+const jwt = JSON.parse(raw).access_token;
+
+const r = await fetch('/api/identity?op=admin.agentCredentialIssue', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${jwt}` },
+  // tenant_id MUST be the deployment's own tenant. instance_id MUST equal the
+  // instance_id already in that notebook's config.yaml.
+  body: JSON.stringify({ tenant_id: 'ciphercross', instance_id: 'notebook-1', label: 'Notebook 1' }),
+});
+console.log(await r.json());
+```
+
+3. Copy the `token` field — `lha.<uuid>.<secret>` — straight into the notebook's
+   agent when it asks in step 5. Do not put it anywhere else.
+4. Repeat for each notebook, changing `instance_id` and `label` only.
+
+### The four ways this goes wrong
+
+| What you see | What it means |
+| --- | --- |
+| `403 {"error":"Admin access required"}` or `Forbidden` | the signed-in user's `team_members.role` is not `admin` |
+| `403` naming `MISSING_ORIGIN` or `INVALID_ORIGIN` | the request carried no `Origin`, or one that is not `IDENTITY_BASE_URL`. This is what happens if you reach for curl. |
+| `401 Authentication required` | the bearer was missing or expired — reload the dashboard and re-run |
+| **It mints cleanly, and then every sync 401s** | `tenant_id` did not match the deployment's own tenant. It is stored exactly as given and only compared at ingest time, so a wrong value is silent until a notebook tries to use it. For this deployment it is `ciphercross` — the same value as `OBJECT_STORAGE_TENANT_ID`. |
+
+And the fifth, which produces no error at all: **minting before S28 gate 6** writes
+the credentials into whichever database the deployment currently points at. Right
+now that is the fixture database. Mint after the repoint, not before.
+
+### Listing and revoking
+
+```js
+// List (no plaintext, ever — ids, labels, instance, status):
+await (await fetch('/api/identity?op=admin.agentCredentials',
+  { headers: { authorization: `Bearer ${jwt}` } })).json();
+
+// Revoke, if a token leaks or goes to the wrong notebook:
+await (await fetch('/api/identity?op=admin.agentCredentialRevoke', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${jwt}` },
+  body: JSON.stringify({ credentialId: '<uuid>', reason: 'pasted into the wrong notebook' }),
+})).json();
+```
+
+The `credentialId` is the UUID in the middle of the token, and it is the half
+that is safe to write down — it identifies which notebook a batch came from
+without authenticating anything.
+
 ═══════════════════════════════════════════════════════════════════════════════
 
 You are helping me upgrade the Linked Helper sync agent on this notebook and move
