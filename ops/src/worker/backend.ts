@@ -124,6 +124,23 @@ function validUntil(): string {
   return new Date(Date.now() + 30 * 60_000).toISOString();
 }
 
+/**
+ * The zone a tenant hostname belongs to.
+ *
+ * The planner derives the hostname as `<tenant_slug>.<platform_domain>`
+ * (`onboarding-planner.ts`), so the zone is exactly the hostname without its
+ * first label. A name with no zone left after that label is refused rather than
+ * probed, so an apex or single-label hostname can never be read as a zone.
+ */
+function parentZone(hostname: string): string {
+  const separator = hostname.indexOf(".");
+  const zone = separator === -1 ? "" : hostname.slice(separator + 1);
+  if (!zone.includes(".")) {
+    throw new OpsError("unsupported_contract", "Tenant hostname has no parent zone");
+  }
+  return zone;
+}
+
 function schedulePath(schedule: JsonRecord): string {
   const route = stringField(schedule, "routePath");
   const query = record(schedule.queryParameters, "schedule query parameters");
@@ -1727,46 +1744,59 @@ export class S26WorkerBackend implements S26BridgeBackend {
     return false;
   }
 
+  /**
+   * True when the hostname's own zone is a domain of the approved team.
+   *
+   * Ownership is decided by presence, and presence is read from the status
+   * alone: 200 is the domain, 404 is "not in this account". Nothing is read out
+   * of the body, so no response key is guessed, and any other refusal (401/403)
+   * still throws attributably instead of passing as "not owned".
+   */
+  async #vercelZoneInAccount(zone: string): Promise<boolean> {
+    try {
+      await this.#vercel(`/v5/domains/${encodeURIComponent(zone)}`);
+      return true;
+    } catch (error) {
+      if (!(error instanceof OpsError) || error.code !== "provider_error" || error.details.status !== 404) throw error;
+      return false;
+    }
+  }
+
   async #domainInspect(input: JsonRecord): Promise<unknown> {
     const hostname = stringField(input, "hostname");
     const senderDomain = stringField(input, "sender_domain");
     if (senderDomain !== this.env.RESEND_SENDER_DOMAIN) {
       throw new OpsError("unsupported_contract", "Domain inspection sender is outside the fixed Resend profile");
     }
-    // Vercel operates the *.vercel.app zone itself, so its domain config
-    // describes that shared zone rather than an owner: `configuredBy` is set
-    // for every name in it, claimed or not, and cannot answer availability.
-    // Within our own team the binding is what decides it.
-    if (hostname.endsWith(".vercel.app")) {
-      const owned = await this.#vercelHostnameBoundInTeam(hostname);
-      const resend = await this.#resend("/domains");
-      const senderDomains = Array.isArray(resend.value.data) ? resend.value.data : [];
-      const verified = senderDomains
-        .map((entry) => record(entry, "Resend domain"))
-        .find((entry) => entry.name === senderDomain);
-      return {
-        zoneOwned: true,
-        hostnameAvailable: !owned,
-        existingBindingOwned: owned,
-        senderDomainVerified: verified?.status === "verified",
-        legalReviewApproved: input.workspace_class === "disposable",
-        validUntil: validUntil(),
-      };
-    }
-    // A hostname that no project has claimed yet has no domain config at all,
-    // and Vercel answers 404. That is the expected pre-provisioning state for a
-    // new tenant, not a provider failure: the name is simply still available.
-    let config: JsonRecord | null = null;
-    try { config = (await this.#vercel(`/v6/domains/${encodeURIComponent(hostname)}/config`)).value; } catch (error) {
-      if (!(error instanceof OpsError) || error.code !== "provider_error" || error.details.status !== 404) throw error;
-    }
-    const response = { value: config ?? { misconfigured: false, configuredBy: null } };
+    // Availability is a question about this exact hostname, and only the
+    // binding answers it. `GET /v6/domains/{host}/config` cannot: its
+    // `configuredBy` is a DNS-configuration enum (`A`/`CNAME`/`dns-01`/`http`),
+    // never an owner, so comparing it to a team ID could not once be true, and
+    // its `misconfigured` reports whether DNS already resolves to Vercel — which
+    // a subdomain that does not exist yet never does. The single-domain project
+    // probe is the proven shape, and it is what decides both fields.
+    const owned = await this.#vercelHostnameBoundInTeam(hostname);
+    // The zone is a separate question from the hostname. Vercel operates the
+    // *.vercel.app zone itself, so no account owns it and every name in it is
+    // reachable; for a custom hostname the zone must be a domain of this
+    // account, and Vercel then manages its DNS, so binding the subdomain creates
+    // the record. The zone is the hostname's parent because the planner derives
+    // the hostname as one slug label in front of the platform domain.
+    const zoneOwned = hostname.endsWith(".vercel.app")
+      || await this.#vercelZoneInAccount(parentZone(hostname));
     const resend = await this.#resend("/domains");
     const domains = Array.isArray(resend.value.data) ? resend.value.data : [];
     const sender = domains
       .map((entry) => record(entry, "Resend domain"))
       .find((entry) => entry.name === senderDomain);
-    return { zoneOwned: response.value.misconfigured !== true, hostnameAvailable: response.value.configuredBy === null || response.value.configuredBy === undefined, existingBindingOwned: config !== null && response.value.configuredBy === this.env.VERCEL_TEAM_ID, senderDomainVerified: sender?.status === "verified", legalReviewApproved: input.workspace_class === "disposable", validUntil: validUntil() };
+    return {
+      zoneOwned,
+      hostnameAvailable: !owned,
+      existingBindingOwned: owned,
+      senderDomainVerified: sender?.status === "verified",
+      legalReviewApproved: input.workspace_class === "disposable",
+      validUntil: validUntil(),
+    };
   }
 
   async #sourceInspect(input: JsonRecord): Promise<unknown> {

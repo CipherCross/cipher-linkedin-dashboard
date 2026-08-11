@@ -1113,3 +1113,131 @@ describe("S26 apply steps are re-runnable against their own effect", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+describe("S26 domain inspection separates the zone from the hostname", () => {
+  const TENANT_HOST = "uitop.ciphercross.dev";
+  const ZONE = "ciphercross.dev";
+
+  function domainFetcher(
+    routes: (url: URL, method: string) => Response | undefined,
+    seen: string[] = [],
+  ) {
+    return vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.url);
+      const method = init?.method ?? "GET";
+      seen.push(`${method} ${url.origin}${url.pathname}`);
+      if (url.origin === env.RESEND_API_BASE_URL && url.pathname === "/domains") {
+        return providerResponse(200, { data: [{ name: env.RESEND_SENDER_DOMAIN, status: "verified" }] });
+      }
+      if (url.pathname === "/v9/projects") {
+        return providerResponse(200, { projects: [{ name: "existing-project" }] });
+      }
+      return routes(url, method) ?? providerResponse(500, {}, "unexpected-route");
+    });
+  }
+
+  function inspect(hostname: string, fetcher: typeof fetch) {
+    return handle(
+      request("/s26/control-plane/v1/domain/inspect", {
+        hostname,
+        sender_domain: env.RESEND_SENDER_DOMAIN,
+        workspace_class: "disposable",
+      }),
+      new S26WorkerBackend(env, { fetch: fetcher }),
+    );
+  }
+
+  // The uitop blocker: `zoneOwned` was read from the *subdomain's* DNS config,
+  // and a tenant hostname that does not exist yet is by definition not resolving
+  // to Vercel, so a zone the owner really holds reported `preflight.domain`
+  // blocked. Ownership is a question about the zone.
+  it("owns a zone whose tenant subdomain has no DNS record yet", async () => {
+    const seen: string[] = [];
+    const response = await inspect(TENANT_HOST, domainFetcher((url, method) => {
+      if (url.pathname === `/v5/domains/${ZONE}` && method === "GET") {
+        return providerResponse(200, { domain: { name: ZONE } });
+      }
+      if (url.pathname === `/v10/projects/existing-project/domains/${TENANT_HOST}`) {
+        return providerResponse(404, { error: { code: "not_found" } });
+      }
+      return undefined;
+    }, seen));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      zoneOwned: true,
+      hostnameAvailable: true,
+      existingBindingOwned: false,
+      senderDomainVerified: true,
+    });
+    // Nothing asks the subdomain about its own configuration any more, so an
+    // absent DNS record cannot decide ownership again.
+    expect(seen.some((call) => call.includes("/v6/domains/"))).toBe(false);
+    expect(seen).toContain(`GET ${env.VERCEL_API_BASE_URL}/v5/domains/${ZONE}`);
+  });
+
+  it("refuses a zone that is not a domain of the approved team", async () => {
+    const response = await inspect("uitop.not-ours.example", domainFetcher((url) => {
+      if (url.pathname === "/v5/domains/not-ours.example") {
+        return providerResponse(404, { error: { code: "not_found" } });
+      }
+      if (url.pathname === "/v10/projects/existing-project/domains/uitop.not-ours.example") {
+        return providerResponse(404, { error: { code: "not_found" } });
+      }
+      return undefined;
+    }));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ zoneOwned: false, hostnameAvailable: true });
+  });
+
+  it("reports the exact hostname as ours once a project in the team holds it", async () => {
+    const response = await inspect(TENANT_HOST, domainFetcher((url) => {
+      if (url.pathname === `/v5/domains/${ZONE}`) return providerResponse(200, { domain: { name: ZONE } });
+      if (url.pathname === `/v10/projects/existing-project/domains/${TENANT_HOST}`) {
+        return providerResponse(200, { name: TENANT_HOST });
+      }
+      return undefined;
+    }));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      zoneOwned: true,
+      hostnameAvailable: false,
+      existingBindingOwned: true,
+    });
+  });
+
+  // Only 404 means "not in this account". Any other refusal is a failure to
+  // answer, and passing it off as `zoneOwned: false` would report an
+  // authorization problem as an owner decision.
+  it("does not read an authorization refusal on the zone as a missing zone", async () => {
+    const response = await inspect(TENANT_HOST, domainFetcher((url) => {
+      if (url.pathname === `/v5/domains/${ZONE}`) {
+        return providerResponse(403, { error: { code: "forbidden" } });
+      }
+      if (url.pathname === `/v10/projects/existing-project/domains/${TENANT_HOST}`) {
+        return providerResponse(404, { error: { code: "not_found" } });
+      }
+      return undefined;
+    }));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "provider_error",
+      provider_status: 403,
+      provider_error_code: "forbidden",
+    });
+  });
+
+  // Vercel operates *.vercel.app itself, so no account holds that zone and
+  // there is nothing to probe; the binding still decides the hostname.
+  it("keeps the shared vercel.app zone owned without probing it as a domain", async () => {
+    const seen: string[] = [];
+    const response = await inspect("s26-disposable-lab.vercel.app", domainFetcher((url) => {
+      if (url.pathname === "/v10/projects/existing-project/domains/s26-disposable-lab.vercel.app") {
+        return providerResponse(404, { error: { code: "not_found" } });
+      }
+      return undefined;
+    }, seen));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ zoneOwned: true, hostnameAvailable: true });
+    expect(seen.some((call) => call.includes("/v5/domains/"))).toBe(false);
+  });
+});
