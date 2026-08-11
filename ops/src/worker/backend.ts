@@ -246,6 +246,18 @@ async function readBoundedProviderJson(response: Response): Promise<unknown> {
  * except for rootDirectory, which must name the subdirectory holding the app and
  * its `vercel.json`.
  */
+/**
+ * Readiness polling budget for one bridge call.
+ *
+ * A Workers request cannot be held open for the minutes a real build takes, so
+ * the budget stays bounded and the non-terminal state is reported as
+ * `provider_readiness_blocked` for the operator to retry. Convergence comes from
+ * the adopt path, not from waiting longer. The previous budget was 20 attempts at
+ * one second — twenty seconds against a build that takes minutes.
+ */
+const POLL_ATTEMPTS = 25;
+const POLL_INTERVAL_MS = 2_000;
+
 const BUILD_RECIPE_PROJECT_SETTINGS = {
   framework: "vite",
   rootDirectory: "frontend",
@@ -1187,21 +1199,24 @@ export class S26WorkerBackend implements S26BridgeBackend {
     expectedCrons: readonly { readonly path: string; readonly schedule: string }[],
     buildRequestId: string,
   ): Promise<void> {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
       const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
       if (
         projectCronDeploymentId(project.value) === release
         && cronsMatch(expectedCrons, observedCrons(project.value))
       ) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
-    throw new OpsError("outcome_unknown", "Vercel cron activation outcome is unknown", {
+    // Same reasoning as #waitForDeployment: the crons are declared in the built
+    // tree's own vercel.json, so they appear once Vercel finishes activating the
+    // release. Not yet activated is a known in-progress state, not an unknown one.
+    throw new OpsError("provider_readiness_blocked", "Vercel crons are not activated yet", {
       provider_request_id: buildRequestId,
     });
   }
 
   async #waitForDeployment(release: string, createRequestId: string): Promise<{ readonly id: string; readonly value: JsonRecord }> {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
       const deployment = await this.#vercel(`/v13/deployments/${encodeURIComponent(release)}?withGitRepoInfo=true`);
       if (deployment.value.readyState === "READY") return deployment;
       if (deployment.value.readyState === "ERROR" || deployment.value.readyState === "CANCELED") {
@@ -1209,9 +1224,16 @@ export class S26WorkerBackend implements S26BridgeBackend {
           provider_request_id: deployment.id,
         });
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
-    throw new OpsError("outcome_unknown", "Vercel deployment readiness outcome is unknown", {
+    // Running out of polling budget while the build is still progressing is NOT
+    // an unknown outcome. The deployment exists, its id is known, and it carries
+    // the build identity digest, so the next attempt adopts it through
+    // #existingDeployment once it is READY with its crons registered. Reporting
+    // `outcome_unknown` quarantined the operation for a build that was merely
+    // still running — and a real Vite build takes minutes, so with the previous
+    // 20-second budget a fresh build could essentially never be recorded.
+    throw new OpsError("provider_readiness_blocked", "Vercel deployment is still building", {
       provider_request_id: createRequestId,
     });
   }
@@ -1263,12 +1285,15 @@ export class S26WorkerBackend implements S26BridgeBackend {
     release: string,
     promoteRequestId: string,
   ): Promise<void> {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
       const project = await this.#vercel(`/v9/projects/${encodeURIComponent(target)}`);
       if (this.#latestDeploymentId(project.value) === release) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
-    throw new OpsError("outcome_unknown", "Vercel promotion outcome is unknown", {
+    // Step 10's own copy of the same problem. The requested release handle is
+    // known and #hostingRollout adopts a target that already serves it, so a
+    // promotion still propagating is in progress, not ambiguous.
+    throw new OpsError("provider_readiness_blocked", "Vercel promotion is not active yet", {
       provider_request_id: promoteRequestId,
     });
   }
