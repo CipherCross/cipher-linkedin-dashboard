@@ -116,7 +116,7 @@ test("S26 concrete clients translate only fixed named provider operations", asyn
   }
   assert.equal(calls.find((call) => new URL(call.url).pathname === "/v11/projects")?.url.includes("teamId=provider-scope"), true);
   assert.equal(calls.find((call) => new URL(call.url).pathname === "/v10/projects/target/domains")?.url.includes("teamId=provider-scope"), true);
-  assert.deepEqual(JSON.parse(calls[1]!.body!), { org_id: "neon-owner", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
+  assert.deepEqual(JSON.parse(calls[1]!.body!), { org_id: "provider-scope", project: { name: "lh2-disposable-disposable-lab", region_id: "aws-eu-central-1" } });
   assert.deepEqual(JSON.parse(calls[5]!.body!), { name: "lead-photos" });
   assert.deepEqual(JSON.parse(calls[6]!.body!), {
     name: "lh2-disposable-disposable-lab",
@@ -133,6 +133,7 @@ test("S26 concrete transport quarantines unknown outcomes and redacts credential
   const secret = "local-test-credential";
   const client = new NeonPostgresOperationsClient({
     baseUrl: "https://provider.example.test",
+    scopeId: "provider-scope",
     credential: { resolve: async () => secret },
     fetch: async () => ({ ok: false, status: 503, headers: { get: () => "opaque-request" }, json: async () => ({ token: secret }) }),
   }, bridgeConfiguration([]), new Redactor());
@@ -150,7 +151,7 @@ test("S26 concrete transport quarantines unknown outcomes and redacts credential
 
 test("S26 concrete clients reject non-HTTPS transport configuration", () => {
   assert.throws(
-    () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),
+    () => new NeonPostgresOperationsClient({ baseUrl: "http://provider.example.test", scopeId: "provider-scope", credential: { resolve: async () => "unused" } }, bridgeConfiguration([])),
     (error: unknown) => error instanceof OpsError && error.code === "provider_error",
   );
 });

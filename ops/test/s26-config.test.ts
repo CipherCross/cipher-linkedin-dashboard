@@ -27,7 +27,7 @@ function configValue() {
   return {
     config_version: "s26-owner-runtime.v1",
     providers: {
-      neon: { base_url: "https://console.neon.tech/api/", credential_name: "neon.operations_token" },
+      neon: { base_url: "https://console.neon.tech/api/", credential_name: "neon.operations_token", scope_id: "neon-org" },
       r2: { base_url: "https://api.cloudflare.com/", credential_name: "r2.operations_token", scope_id: "cloudflare-account" },
       vercel: { base_url: "https://api.vercel.com/", credential_name: "vercel.operations_token", scope_id: "vercel-team" },
       bridge: { base_url: "https://s26-control.example.test/", credential_name: "s26.bridge_token" },

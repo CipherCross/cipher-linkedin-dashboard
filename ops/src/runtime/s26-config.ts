@@ -155,7 +155,7 @@ const profile = z.strictObject({
 const s26ConfigSchema = z.strictObject({
   config_version: z.literal("s26-owner-runtime.v1"),
   providers: z.strictObject({
-    neon: providerConfig.extend({ credential_name: z.literal("neon.operations_token") }),
+    neon: providerConfig.extend({ credential_name: z.literal("neon.operations_token"), scope_id: identifier }),
     r2: providerConfig.extend({ credential_name: z.literal("r2.operations_token"), scope_id: identifier }),
     vercel: providerConfig.extend({ credential_name: z.literal("vercel.operations_token"), scope_id: identifier }),
     bridge: providerConfig.extend({ credential_name: z.literal("s26.bridge_token") }),

@@ -55,6 +55,7 @@ const config = {
     neon: {
       base_url: "https://console.neon.tech/api/",
       credential_name: "neon.operations_token",
+      scope_id: "org-damp-hill-86577285",
     },
     r2: {
       base_url: "https://api.cloudflare.com/",

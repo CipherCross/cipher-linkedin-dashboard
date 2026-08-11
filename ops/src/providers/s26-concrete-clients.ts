@@ -103,7 +103,15 @@ class PrivateProviderHttp {
       if (!response.ok) {
         const code = response.status === 408 || response.status === 429 || response.status >= 500
           ? "outcome_unknown" : "provider_error";
-        throw new OpsError(code, `Provider request failed with status ${response.status}`, { provider_request_id: requestId });
+        // The host and path say which named operation failed. Without them a
+        // provider status is unattributable, which is how a bridge route sent
+        // to a provider's own API stayed hidden behind an opaque 401.
+        // Credentials live in the header, never here, and the query string is
+        // dropped so no scope value rides along.
+        throw new OpsError(code, `Provider request failed with status ${response.status}`, {
+          provider_request_id: requestId,
+          provider_endpoint: `${method} ${new URL(url).origin}${new URL(url).pathname}`,
+        });
       }
       const body = await response.json();
       this.#redactor.assertSecretFree(body, "provider response");
@@ -174,13 +182,20 @@ export class NeonPostgresOperationsClient extends BridgeRecoveryClient implement
   readonly #direct: PrivateProviderHttp;
   protected readonly capability = "data" as const;
   protected readonly prefix = "/v2/projects";
-  constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); }
+  /**
+   * The real Neon organization, like the R2 account and Vercel team, is
+   * adapter-private configuration. The core deliberately passes an opaque
+   * capability label as the owner scope, so a caller-supplied value must never
+   * reach the provider as an organization id.
+   */
+  readonly #organizationId: string;
+  constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Neon organization scope is required"); this.#organizationId = configuration.scopeId; }
   async inspect(request: DataInspectionRequest): Promise<DataInspection> { return inspection(await this.bridge.invoke("POST", s26BridgePath("data", "inspect"), { organization_id: request.organizationId, deterministic_name: request.deterministicName, region_id: request.regionId, tier_id: request.tierId, compute_id: request.computeId, backup_profile_id: request.backupProfileId, ownership_marker_digest: request.ownership.digest }), "Neon inspection bridge"); }
   async createOrAdoptProject(request: DataProjectRequest): Promise<ProviderResource> {
     // Adoption is what makes this step safe to retry. Without it a resumed or
     // re-planned operation creates a second project every time, because Neon
     // does not require project names to be unique.
-    const adopted = await this.#findOwnedProject(request.organizationId, request.deterministicName, request.ownership.digest);
+    const adopted = await this.#findOwnedProject(request.deterministicName, request.ownership.digest);
     if (adopted !== undefined) {
       return { providerRequestId: adopted.providerRequestId, providerOwnerId: request.organizationId, resourceId: adopted.resourceId, deterministicName: request.deterministicName, ownershipMarkerDigest: request.ownership.digest, lifecycle: "provisioning", adopted: true };
     }
@@ -188,7 +203,7 @@ export class NeonPostgresOperationsClient extends BridgeRecoveryClient implement
       readonly providerRequestId: string;
       readonly project?: { readonly id?: string; readonly name?: string };
       readonly branch?: { readonly id?: string };
-    }>(await this.#direct.invoke("POST", this.prefix, { org_id: request.organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
+    }>(await this.#direct.invoke("POST", this.prefix, { org_id: this.#organizationId, project: { name: request.deterministicName, region_id: request.regionId } }), "Neon project");
     if (!value.project?.id || value.project.name !== request.deterministicName) throw new OpsError("provider_error", "Neon project response is incomplete");
     if (!value.branch?.id) throw new OpsError("provider_error", "Neon project response has no default branch");
     // The marker must exist before anything inspects this project, otherwise
@@ -201,11 +216,10 @@ export class NeonPostgresOperationsClient extends BridgeRecoveryClient implement
    * alone is a foreign resource, so it is deliberately not adopted.
    */
   async #findOwnedProject(
-    organizationId: string,
     deterministicName: string,
     ownershipMarkerDigest: string,
   ): Promise<{ readonly resourceId: string; readonly providerRequestId: string } | undefined> {
-    const query = new URLSearchParams({ org_id: organizationId, search: deterministicName, limit: "100" });
+    const query = new URLSearchParams({ org_id: this.#organizationId, search: deterministicName, limit: "100" });
     const listed = result<{
       readonly providerRequestId: string;
       readonly projects?: readonly { readonly id?: string; readonly name?: string }[];
@@ -236,7 +250,13 @@ export class NeonPostgresOperationsClient extends BridgeRecoveryClient implement
       { role: { name: neonOwnershipRoleName(ownershipMarkerDigest) } },
     );
   }
-  async waitUntilReady(projectId: string): Promise<ProviderActionResult> { return result(await this.#direct.invoke("GET", `${this.prefix}/${id(projectId)}`), "Neon project readiness"); }
+  async waitUntilReady(projectId: string): Promise<ProviderActionResult> {
+    // Only the request id crosses the boundary. Returning the provider's own
+    // project payload would both leak vendor shape into the core and fail the
+    // canonical adapter's strict action schema.
+    const value = result<{ readonly providerRequestId: string }>(await this.#direct.invoke("GET", `${this.prefix}/${id(projectId)}`), "Neon project readiness");
+    return { providerRequestId: value.providerRequestId };
+  }
   async applySchema(request: TenantSchemaRequest): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("data", "portable-schema-apply"), { project_id: request.projectId, baseline_version: request.baselineVersion, migration_versions: request.migrationVersions, target_schema_version: request.targetSchemaVersion }), "Postgres migration bridge"); }
   async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("data", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds }), "Postgres smoke bridge"); }
 }
@@ -262,7 +282,10 @@ export class CloudflareR2OperationsClient extends BridgeRecoveryClient implement
   protected readonly capability = "objectStorage" as const;
   readonly #accountId: string;
   constructor(configuration: ProviderHttpConfiguration, bridge: ProviderHttpConfiguration, redactor = new Redactor()) { super(); this.#direct = new PrivateProviderHttp(configuration, redactor); this.bridge = new PrivateProviderHttp(bridge, redactor); if (!configuration.scopeId) throw new OpsError("provider_error", "Cloudflare account scope is required"); this.#accountId = configuration.scopeId; }
-  async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> { return result(await this.#direct.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket"); }
+  async configurePrivateStorage(request: PrivateStorageRequest): Promise<ProviderActionResult> {
+    const value = result<{ readonly providerRequestId: string }>(await this.#direct.invoke("POST", `/client/v4/accounts/${id(this.#accountId)}/r2/buckets`, { name: request.bucketId }), "R2 bucket");
+    return { providerRequestId: value.providerRequestId };
+  }
   async runSmokeTests(projectId: string, smokeTestIds: readonly string[]): Promise<ProviderActionResult> { return result(await this.bridge.invoke("POST", s26BridgePath("objectStorage", "smoke"), { project_id: projectId, smoke_test_ids: smokeTestIds, require_private_access_checks: true }), "R2 smoke bridge"); }
 }
 
