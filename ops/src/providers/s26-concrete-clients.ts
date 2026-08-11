@@ -126,7 +126,11 @@ class PrivateProviderHttp {
    */
   async #deterministicBridgeFailure(
     response: ProviderFetchResponse,
-  ): Promise<{ readonly code: OpsErrorCode; readonly providerRequestId?: string } | undefined> {
+  ): Promise<{
+    readonly code: OpsErrorCode;
+    readonly providerRequestId?: string;
+    readonly upstreamStatus?: number;
+  } | undefined> {
     if (!this.#controlPlaneBridge) return undefined;
     let body: unknown;
     try {
@@ -139,9 +143,11 @@ class PrivateProviderHttp {
     const code = record.code;
     if (typeof code !== "string" || !DETERMINISTIC_BRIDGE_ERROR_CODES.has(code)) return undefined;
     const providerRequestId = record.provider_request_id;
+    const upstreamStatus = record.provider_status;
     return {
       code: code as OpsErrorCode,
       ...(typeof providerRequestId === "string" ? { providerRequestId } : {}),
+      ...(typeof upstreamStatus === "number" ? { upstreamStatus } : {}),
     };
   }
 
@@ -176,7 +182,12 @@ class PrivateProviderHttp {
         // to a provider's own API stayed hidden behind an opaque 401.
         // Credentials live in the header, never here, and the query string is
         // dropped so no scope value rides along.
-        throw new OpsError(code, `Provider request failed with status ${response.status}`, {
+        // Naming the upstream status in the message is what makes a bridge
+        // failure attributable at all: "status 409" alone only ever said "our own
+        // bridge refused", never which provider refused it or why.
+        const upstream = bridgeFailure?.upstreamStatus;
+        throw new OpsError(code, `Provider request failed with status ${response.status}${upstream === undefined ? "" : ` (upstream ${upstream})`}`, {
+          ...(upstream === undefined ? {} : { upstream_provider_status: upstream }),
           provider_request_id: requestId,
           provider_endpoint: `${method} ${new URL(url).origin}${new URL(url).pathname}`,
           // Adoption has to tell "this resource does not exist yet" apart from

@@ -171,7 +171,20 @@ export class S26ControlPlaneBridgeService {
           : safe.code === "provider_error" || safe.code === "provider_readiness_blocked"
             ? 409
             : 400;
-      return { status, body: { code: safe.code, provider_request_id: typeof safe.details.provider_request_id === "string" ? safe.details.provider_request_id : undefined } };
+      // The upstream provider's numeric status travels with the code. Three
+      // separate S26 failures cost a session each because a deterministic
+      // refusal reached the operator as a bare bridge status with no way to tell
+      // which provider had said what. A status is a number: it carries no scope,
+      // credential, URL or payload, which is the same reasoning the client-side
+      // transport already uses for its own `provider_status`.
+      return {
+        status,
+        body: {
+          code: safe.code,
+          provider_request_id: typeof safe.details.provider_request_id === "string" ? safe.details.provider_request_id : undefined,
+          ...(typeof safe.details.status === "number" ? { provider_status: safe.details.status } : {}),
+        },
+      };
     }
   }
 

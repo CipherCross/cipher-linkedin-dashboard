@@ -132,16 +132,34 @@ export async function handleS26WorkerRequest(
   return jsonResponse(result.status, result.body);
 }
 
+/** The sanitized code/status a failed bridge response already carries. */
+export function s26BridgeFailureFields(body: unknown): Readonly<{ code?: unknown; provider_status?: unknown }> {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return {};
+  const record = body as Record<string, unknown>;
+  return { code: record.code, provider_status: record.provider_status };
+}
+
 function requiredSecret(value: string | undefined): string {
   return typeof value === "string" ? value : "";
 }
 
-export function s26WorkerRequestLog(request: Request, response: Response): Readonly<Record<string, unknown>> {
+export function s26WorkerRequestLog(
+  request: Request,
+  response: Response,
+  failure?: Readonly<{ code?: unknown; provider_status?: unknown }>,
+): Readonly<Record<string, unknown>> {
   return {
     event: "s26_bridge_request",
     method: request.method,
     path: new URL(request.url).pathname,
     status: response.status,
+    // The already-sanitized code and the upstream provider's numeric status.
+    // Without these the server-side log said only "some route returned 409",
+    // which is how three separate deterministic refusals each cost a session to
+    // attribute. Both values have already passed redaction; neither is a URL,
+    // credential, scope or payload.
+    ...(typeof failure?.code === "string" ? { code: failure.code } : {}),
+    ...(typeof failure?.provider_status === "number" ? { provider_status: failure.provider_status } : {}),
   };
 }
 
@@ -157,7 +175,13 @@ export default {
         requiredSecret(env.SOURCE_REPOSITORY_TOKEN),
       ],
     });
-    console.log(JSON.stringify(s26WorkerRequestLog(request, response)));
+    // The body is read back from a clone so logging cannot consume the stream
+    // the caller still needs.
+    let failure: Readonly<{ code?: unknown; provider_status?: unknown }> = {};
+    if (!response.ok) {
+      try { failure = s26BridgeFailureFields(await response.clone().json()); } catch { failure = {}; }
+    }
+    console.log(JSON.stringify(s26WorkerRequestLog(request, response, failure)));
     return response;
   },
 } satisfies ExportedHandler<Env>;
