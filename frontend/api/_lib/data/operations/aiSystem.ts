@@ -191,8 +191,10 @@ export const SYSTEM_GUARD_OPERATIONS = [
  * are direct statements and none is a guard call.
  *
  * `classify.autoAdvance` is deliberately absent and must stay absent: it calls
- * `public.pipeline_auto_advance()`, on which `app_system` holds no `EXECUTE`.
- * Ledger step 008 is written and unapplied, and until it is applied the cron
+ * `public.pipeline_auto_advance()`, and scheduled auto-advance is retired by
+ * decision (2026-08-12). The omission — not a missing grant — is what enforces
+ * that: on the owner's database ledger step 008 IS applied and `app_system` DOES
+ * hold the `EXECUTE`, so nothing below the registry would stop the call. The cron
  * reports the gap rather than routing around it.
  */
 export const SYSTEM_CRON_QUERY_OPERATIONS = [
@@ -486,10 +488,12 @@ export { insertSavedSearchOperation, updateSavedSearchOperation }
 // they are NOT is a shared registry: `buildApplicationRegistry` still holds its
 // own entries, and revoking one here revokes it for the machine path alone.
 //
-// Registering `classify.autoAdvance` here would compile and would then be
-// refused at run time by the grant graph — `app_system` holds no EXECUTE on
-// `public.pipeline_auto_advance()`. It is left out rather than left to fail, so
-// the omission is legible at review time instead of at 06:00 UTC.
+// Registering `classify.autoAdvance` here would compile, and on a database where
+// ledger step 008 is applied it would then SUCCEED — running a real mutation on
+// live data at 06:00 UTC. That is the case on the owner's database today, so this
+// omission is now the only thing standing between the cron and the pipeline, not
+// a belt beside the grant graph's braces. It is left out rather than left to
+// fail, so the decision is legible at review time.
 // ---------------------------------------------------------------------------
 
 /**

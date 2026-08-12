@@ -23,13 +23,25 @@
 // them is the principal and nothing else — same batch sizes, same prompts, same
 // ref-validation, same response shape.
 //
-// ONE exception, and it is a real one: pipeline auto-advance. `app_system` holds
-// no EXECUTE on `public.pipeline_auto_advance()`; ledger step 008 grants it and
-// is written but NOT applied. The guard is not a way around that — it is
-// SELECT-only and `app_ai_runner` holds no EXECUTE either — so the cron reports
-// `auto_advance_blocked` in its response instead of quietly answering as though
-// it had done the work. A cron run that labelled replies but could not advance
-// the pipeline is a PARTIAL run and says so.
+// ONE exception, and it is a real one: pipeline auto-advance. The cron does not
+// run `public.pipeline_auto_advance()` and reports `auto_advance_blocked`
+// instead of quietly answering as though it had done the work. A cron run that
+// labelled replies but could not advance the pipeline is a PARTIAL run and says
+// so.
+//
+// WHY it does not run has changed, and the distinction matters. It began as a
+// missing grant: ledger step 008 grants `app_system` the EXECUTE and was, at the
+// time, written and unapplied. **On the owner's database step 008 is applied and
+// that grant now exists** (measured 2026-08-12:
+// `has_function_privilege('app_system', 'public.pipeline_auto_advance()',
+// 'EXECUTE')` is true). What keeps the cron out today is a decision, taken
+// 2026-08-12, that scheduled auto-advance stays retired — so the block is
+// enforced structurally instead, by leaving `classify.autoAdvance` out of the
+// system registry entirely (see `aiSystem.ts`). Do not read this as a capability
+// gap that applying a migration would close; it would not.
+//
+// The guard was never a way around either version of this — it is SELECT-only
+// and `app_ai_runner` holds no EXECUTE.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
@@ -688,25 +700,41 @@ async function autoAdvanceNeon(
  *
  * A capability rather than a boolean because a blocked run must be able to SAY
  * why. `app_runtime` (the admin POST) holds the EXECUTE and advances the
- * pipeline as it always has; `app_system` (the cron) does not, and the reason
- * is a ledger step that exists and has not been applied. Reporting that in the
- * response body is the difference between a partial run and a run that looks
+ * pipeline as it always has; the cron does not run it at all. Reporting that in
+ * the response body is the difference between a partial run and a run that looks
  * complete — nothing else in this file distinguishes the two, because
  * `auto_advanced` is simply omitted when the RPC is unavailable.
  *
  * The blocked branch does NOT reach for the guard. The guard is SELECT-only,
  * `app_ai_runner` holds no EXECUTE on the function either, and giving
- * `ai_execute_sql` a write path to work around a missing grant would trade the
- * one property that makes arbitrary SQL safe for a pipeline column.
+ * `ai_execute_sql` a write path to work around this would trade the one property
+ * that makes arbitrary SQL safe for a pipeline column.
  */
 type AutoAdvanceCapability =
   | { readonly kind: 'available' }
   | { readonly kind: 'blocked'; readonly reason: string }
 
+/**
+ * The reason deliberately no longer names ledger step 008.
+ *
+ * It used to read "app_system holds no EXECUTE on pipeline_auto_advance();
+ * ledger step 008 is written and not applied". That was true when written and is
+ * **false on the owner's database**, where step 008 is applied and the grant does
+ * exist — so the string was telling an operator to go apply a migration that is
+ * already applied, in a response body they actually read.
+ *
+ * It is also the wrong shape for a string baked into the build: whether the grant
+ * exists is a property of one deployment, and this constant is shared by all of
+ * them. What IS true everywhere is the decision — the cron does not auto-advance,
+ * and `classify.autoAdvance` is left out of the system registry to enforce it —
+ * so that is what this says. Enabling scheduled auto-advance is therefore not a
+ * one-line change here: it needs the registry entry, this constant, and the tests
+ * in `aiSlice.test.ts` that assert the omission, together.
+ */
 const AUTO_ADVANCE_BLOCKED: AutoAdvanceCapability = {
   kind: 'blocked',
   reason:
-    'app_system holds no EXECUTE on pipeline_auto_advance(); ledger step 008 is written and not applied',
+    'scheduled auto-advance is retired by decision (2026-08-12); the admin classify path still advances the pipeline',
 }
 
 /**

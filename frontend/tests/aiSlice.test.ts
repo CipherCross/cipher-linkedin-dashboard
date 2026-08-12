@@ -346,10 +346,11 @@ describe('the system operation allowlist', () => {
   })
 
   it('calls pipeline_auto_advance from nowhere in the AI store', () => {
-    // Ledger step 008 (the EXECUTE grant) is written and NOT applied, and even
-    // once it is, the call belongs on a direct connection: it has side effects
-    // and the guard is SELECT-only. Neither the fixed guard queries nor the
-    // system statements may name it.
+    // The call belongs on a direct connection whatever the grant graph says: it
+    // has side effects and the guard is SELECT-only. (Ledger step 008, the
+    // EXECUTE grant, is applied on the owner's database — so "it would be refused
+    // anyway" is no longer a reason, and this assertion carries its own weight.)
+    // Neither the fixed guard queries nor the system statements may name it.
     const everySql = [
       ...Object.values(AI_NAMED_SQL),
       ...Object.values(SYSTEM_GUARD_SQL),
@@ -439,10 +440,13 @@ describe('the cron half of classify and briefing', () => {
   })
 
   it('does NOT admit classify.autoAdvance, by either kind', () => {
-    // The whole reason ledger step 008 exists as an unapplied artifact. If this
-    // ever passes, the cron will call `pipeline_auto_advance()` as `app_system`
-    // and either be refused at run time or — worse — succeed because someone
-    // widened the grant without widening the review.
+    // This assertion is now the ONLY thing keeping the cron off the pipeline.
+    // It began as a backstop behind an unapplied ledger step 008; that step is
+    // applied on the owner's database and `app_system` holds the EXECUTE, so if
+    // this ever passes the cron will call `pipeline_auto_advance()` and SUCCEED —
+    // a real mutation on live data at 06:00 UTC. Scheduled auto-advance is
+    // retired by decision (2026-08-12); reversing that means changing this test
+    // deliberately, which is exactly the review this is here to force.
     expect(() =>
       registry.lookupCommand(AI_WRITE_OPERATIONS.classifyAutoAdvance),
     ).toThrow(DataStoreAuthorizationError)
