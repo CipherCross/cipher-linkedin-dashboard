@@ -564,6 +564,7 @@ describe('the server-side Overview summary', () => {
     const sql = sqlOf(inspectable(overviewSummaryOperation)).toLowerCase()
     expect(sql).toContain('lead_rows as materialized')
     expect(sql).toContain('intent_milestones as materialized')
+    expect(sql).toContain('from campaign_stats c')
     expect(sql).not.toContain('conversation_reply_intent')
   })
 })
