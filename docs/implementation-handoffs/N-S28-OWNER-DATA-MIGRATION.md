@@ -19,8 +19,12 @@ cannot reopen, and Slack reply alerts work again. Scheduled auto-advance is
 **retired by decision**, and the code now says so where it used to blame an
 unapplied ledger step that is in fact applied here.
 
-**What remains is N-S27 step 6, Delete — and auth is what blocks it.**
-`VITE_AUTH_PATH` is unset, so Supabase is still the identity provider.
+**What remains is N-S27 step 6, Delete — and auth blocks it harder than it
+looks.** `VITE_AUTH_PATH` is unset, so Supabase is still the identity provider,
+and flipping it today would lock all five teammates out: their Better Auth
+credentials are gate 2's placeholders, no session has ever been created, and the
+one way back — `password.requestReset` — silently drops the mail because
+`RESEND_API_KEY` is unbound on Production. Bind mail and prove one reset first.
 
 ## CUTOVER DONE — session 3, 2026-08-12 ~00:0x UTC
 
@@ -1115,18 +1119,34 @@ hygiene item and the wider N-S27 step 6.
   `VITE_AUTH_PATH` is unset, so all five teammates still sign in through Supabase
   and present a legacy bearer; `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`
   and `VITE_SUPABASE_ANON_KEY` are all still bound on Production. Supabase cannot
-  be deleted while it is the identity provider. Note one constraint has **lapsed**:
-  the standing reason for leaving the flag unset was "until `DataContext` moves",
-  and `DataContext` moved in S13. So this is now a decision to take, not a
-  dependency to wait for.
-- **Preview lost two variables** in session 3. `NEON_DATABASE_URL` and
-  `IDENTITY_STORE_DATABASE_URL` were `Preview, Production` and are now Production
-  only, so preview deployments resolve to `supabase` and the preview identity
-  smoke will not run. Harmless to production. The fix is to rebind both on Preview
-  **to the fixture project** (`proud-voice-47907246`, credentials in
-  `~/.config/neon-s11-datastore.env` and `~/.config/neon-s17-identity-store.env`)
-  — never to `autumn-snow-04881924`, or a preview deployment gets write access to
-  the owner's live data.
+  be deleted while it is the identity provider. One constraint has **lapsed** — the
+  standing reason for leaving the flag unset was "until `DataContext` moves", and
+  `DataContext` moved in S13 — but a **new and harder** one is measured below: the
+  flip would lock all five out today.
+- ~~**Preview lost two variables** in session 3.~~ **Fixed 2026-08-12.**
+  `NEON_DATABASE_URL` and `IDENTITY_STORE_DATABASE_URL` are rebound on Preview,
+  both pointing at the **fixture** project (`ep-bold-art-a2iy6z2e`), asserted by a
+  guard in the rebinding command — binding these to `autumn-snow-04881924` would
+  hand every preview deployment write access to the owner's live data. Production
+  was not touched.
+- **N-S27 step 6 cannot start: flipping `VITE_AUTH_PATH` today would lock all
+  five teammates out with no recovery.** Measured 2026-08-12; a hard stop, not a
+  preference:
+  - All five `identity."account"` rows still carry gate 2's **placeholder**
+    scrypt-shaped hashes (161 chars, random). Nobody knows a matching password —
+    that was the design, and the intended way in is `password.requestReset`.
+  - `identity.session` has **0 rows**. Nobody has ever signed in through Better
+    Auth on this database, so no live session would survive the flip.
+  - **`RESEND_API_KEY` and `RESEND_FROM_IDENTITY` are not bound on Production**,
+    so `resetMail.ts` keeps its dropping sink and the reset link is silently
+    discarded. That is exactly the failure its own docstring records: *"The first
+    real tenant reached 13/13 with two accounts nobody could open."*
+
+  The order is: bind the mail credentials -> prove one real reset end to end ->
+  flip `VITE_AUTH_PATH` -> step 6. Reversing any two of those takes a production
+  dashboard away from five people. The reset-mail path is under active development
+  in a parallel session, so this prerequisite is moving.
+
 - **`sync_photos` refuses on the machine path**, so a lead that gains a photo
   after the cutover will have no object behind it. Photo state is clean *today* —
   708 non-null / 672 distinct `photo_path` on both sides, all 672 copied at gate 5
