@@ -32,7 +32,13 @@ $ErrorActionPreference = 'Stop'
 function Assert-InstallRoot {
     param([string]$Root)
 
-    if (-not [System.IO.Path]::IsPathFullyQualified($Root)) {
+    # IsPathFullyQualified was added after the .NET Framework shipped with
+    # Windows PowerShell 5.1. Accept only drive-absolute or complete UNC paths
+    # without calling that newer API, so scheduled activation also works on
+    # older Windows notebooks.
+    $isDriveAbsolute = $Root -match '^[A-Za-z]:[\\/]'
+    $isUncAbsolute = $Root -match '^[\\/]{2}[^\\/]+[\\/]+[^\\/]+'
+    if (-not ($isDriveAbsolute -or $isUncAbsolute)) {
         throw 'InstallRoot must be an absolute path.'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $Root 'agent.py') -PathType Leaf)) {

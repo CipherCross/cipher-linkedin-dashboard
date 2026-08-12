@@ -282,6 +282,9 @@ class SchedulerContractTest(unittest.TestCase):
             "AddMinutes(30 + $StartOffsetMinutes)",
         ):
             self.assertIn(fragment, source)
+        self.assertNotIn("[System.IO.Path]::IsPathFullyQualified", source)
+        self.assertIn("$isDriveAbsolute", source)
+        self.assertIn("$isUncAbsolute", source)
         self.assertNotIn("ingest_token", source)
         self.assertNotIn("lha.", source)
 
