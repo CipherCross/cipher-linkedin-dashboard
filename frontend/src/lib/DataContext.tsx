@@ -268,10 +268,10 @@ function mergeById<T extends { id: string | number }>(existing: T[], updates: T[
 // landed mid-fetch; overlapping rows just re-merge idempotently (never missed).
 const REFRESH_OVERLAP_MS = 2 * 60_000
 
-function isOverviewLocation(): boolean {
+function isProgressiveLocation(): boolean {
   if (typeof window === 'undefined') return false
   const route = window.location.hash.replace(/^#/, '').split('?')[0] || '/'
-  return route === '/'
+  return route === '/' || route === '/leads'
 }
 
 // The always-full-refetched small tables get a fresh array every cycle even when
@@ -543,6 +543,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [phase, setPhase] = useState<'empty' | 'bootstrap' | 'full'>('empty')
   const bootstrapReady = useRef(false)
+  const fullSnapshotReady = useRef(false)
   // Only the most recent load() wins, so a manual refetch can't be clobbered by
   // an in-flight interval load (or vice versa).
   const reqId = useRef(0)
@@ -818,11 +819,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (typeof performance !== 'undefined') {
             performance.mark('dashboard_bootstrap_ready')
           }
-          // On the default route, let `overview.summary` use the connection pool
-          // before any tenant-wide walks begin. Overview emits
-          // `dashboard:overview-ready` after its compact result paints; deep links
-          // continue straight into the full route dataset below.
-          if (isOverviewLocation()) return
+          // Overview and Leads both have compact route-owned reads, so neither
+          // starts the historical tenant-wide snapshot on its critical path.
+          // Other deep links still continue into the full route dataset below.
+          if (isProgressiveLocation()) return
         }
         const since = new Date(startedAt - 90 * 86_400_000)
           .toISOString()
@@ -919,6 +919,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // Advance the cursor for the next delta (start-time minus overlap).
           cursorRef.current = new Date(startedAt - REFRESH_OVERLAP_MS).toISOString()
           setPhase('full')
+          fullSnapshotReady.current = true
           if (typeof performance !== 'undefined') {
             performance.mark('dashboard_full_ready')
           }
@@ -953,7 +954,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void load('full')
     const ensureFull = () => {
-      if (!isOverviewLocation()) void load('full')
+      if (!isProgressiveLocation()) void load('full')
     }
     const afterOverview = () => {
       // Yield one task so React can paint the useful metrics before background
@@ -962,7 +963,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener('hashchange', ensureFull)
     window.addEventListener('dashboard:overview-ready', afterOverview)
-    const timer = setInterval(() => void load('delta'), 5 * 60_000)
+    const timer = setInterval(() => {
+      if (fullSnapshotReady.current || !isProgressiveLocation()) void load('delta')
+    }, 5 * 60_000)
     return () => {
       clearInterval(timer)
       window.removeEventListener('hashchange', ensureFull)

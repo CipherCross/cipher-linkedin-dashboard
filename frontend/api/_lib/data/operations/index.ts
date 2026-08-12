@@ -76,6 +76,7 @@ import {
   leadNotesOperation,
   leadPhotoObjectsOperation,
   leadsDirectoryOperation,
+  leadsSearchPageOperation,
 } from './leads.js'
 import {
   LIBRARY_OPERATIONS,
@@ -204,6 +205,8 @@ export {
   type LeadNotesParams,
   type LeadRow,
   type LeadsDirectoryParams,
+  type LeadsSearchPageParams,
+  type LeadsSearchPageRow,
 } from './leads.js'
 export {
   MESSAGES_OPERATIONS,
@@ -394,8 +397,9 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     annotationsTimelineOperation,
   )
 
-  // S13's second slice — the two keyset-paginated base-table reads.
+  // The full-snapshot base-table walks plus the route-owned Leads page.
   registry.registerQuery(LEADS_OPERATIONS.directory, leadsDirectoryOperation)
+  registry.registerQuery(LEADS_OPERATIONS.searchPage, leadsSearchPageOperation)
   registry.registerQuery(
     MESSAGES_OPERATIONS.inboundHistory,
     inboundHistoryOperation,
@@ -768,12 +772,15 @@ export const APPLICATION_QUERY_OPERATIONS = [
   AGENT_ADMIN_OPERATIONS.credentialDirectory,
   IDENTITY_OPERATIONS.teamRoster,
   ACTIVITY_OPERATIONS.dailySeries,
+  DASHBOARD_OPERATIONS.bootstrap,
+  DASHBOARD_OPERATIONS.overviewSummary,
   DASHBOARD_OPERATIONS.instancesOverview,
   DASHBOARD_OPERATIONS.campaignsPerformance,
   DASHBOARD_OPERATIONS.campaignsSequenceSteps,
   DASHBOARD_OPERATIONS.syncRecentRuns,
   DASHBOARD_OPERATIONS.annotationsTimeline,
   LEADS_OPERATIONS.directory,
+  LEADS_OPERATIONS.searchPage,
   MESSAGES_OPERATIONS.inboundHistory,
   MESSAGES_OPERATIONS.outboundRecent,
   PIPELINE_OPERATIONS.eventLog,

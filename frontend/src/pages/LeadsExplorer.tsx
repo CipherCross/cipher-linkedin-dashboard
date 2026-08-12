@@ -4,7 +4,10 @@ import {
   ChevronDown, ChevronRight, Download, GraduationCap, Loader2, SearchX, Sparkles, X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { fetchNeonCoachingDigests, resolveReadPath } from '../lib/dashboardReads'
+import {
+  fetchNeonCoachingDigests, fetchNeonLeadsSearchPage, resolveReadPath,
+} from '../lib/dashboardReads'
+import type { LeadsSearchQuery } from '../lib/dashboardReads'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
 import { useToast } from '../lib/ToastContext'
@@ -14,7 +17,9 @@ import { useAuth } from '../lib/AuthContext'
 import { EmptyState } from '../components/EmptyState'
 import { LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
-import type { CoachingDigest, Gender, Lead, ReplyIntent, Sentiment } from '../lib/types'
+import type {
+  CoachingDigest, Gender, Lead, LeadsSearchItem, LeadsSearchPage, ReplyIntent, Sentiment,
+} from '../lib/types'
 import {
   AGE_BUCKETS, GENDER_SHORT, INTENT_META, INTENT_ORDER, RISK_LABEL, SENTIMENT_META,
   SENTIMENT_ORDER, STAGES, ageBucketOf, ageRange, downloadCsv, highestIntentByLead,
@@ -25,6 +30,7 @@ import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
 import { num, shortDate } from '../lib/format'
 import {
   activeFollowUp,
+  businessDateKey,
   followUpBucket,
   followUpDueLabel,
   followUpKey,
@@ -121,6 +127,13 @@ export function LeadsExplorer() {
   const page = Math.max(0, (Number(params.get('page')) || 1) - 1)
   const showAdded = params.get('added') === '1'
 
+  const [serverMode, setServerMode] = useState(false)
+  const [serverPage, setServerPage] = useState<LeadsSearchPage | null>(null)
+  const [serverLoading, setServerLoading] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverRefresh, setServerRefresh] = useState(0)
+  const [exporting, setExporting] = useState(false)
+
   // Search is debounced: it types into local state and only commits to the URL
   // param (which re-filters every lead) ~200ms after the last keystroke.
   const [qInput, setQInput] = useState(q)
@@ -154,6 +167,67 @@ export function LeadsExplorer() {
   const effCamp =
     camp !== 'all' && inst !== 'all' && campInstance && campInstance !== inst ? 'all' : camp
 
+  const repliedSince = useMemo(
+    () => repliedDays > 0
+      ? new Date(Date.now() - repliedDays * 86_400_000).toISOString()
+      : null,
+    [repliedDays],
+  )
+  const serverQuery = useMemo<LeadsSearchQuery>(() => ({
+    inst,
+    camp: effCamp,
+    stage,
+    risk,
+    pipe,
+    who,
+    gender: genderF,
+    agebucket: ageF,
+    follow: followF,
+    repliedSince,
+    sentiment: sent,
+    intent,
+    q: q.trim(),
+    sort: sortKey,
+    dir: sortAsc ? 'asc' : 'desc',
+    today: businessDateKey(),
+    page,
+    pageSize: PAGE_SIZE,
+  }), [
+    inst, effCamp, stage, risk, pipe, who, genderF, ageF, followF, repliedSince,
+    sent, intent, q, sortKey, sortAsc, page,
+  ])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const path = await resolveReadPath()
+      if (cancelled) return
+      if (path !== 'neon') {
+        setServerMode(false)
+        setServerPage(null)
+        return
+      }
+      setServerMode(true)
+      setServerLoading(true)
+      setServerError(null)
+      setServerPage(null)
+      try {
+        const next = await fetchNeonLeadsSearchPage(serverQuery)
+        if (cancelled) return
+        setServerPage(next)
+        performance.mark('dashboard_leads_page_ready')
+      } catch (error) {
+        if (cancelled) return
+        setServerError(error instanceof Error ? error.message : String(error))
+      } finally {
+        if (!cancelled) setServerLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [serverQuery, serverRefresh])
+
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params)
     if (value === 'all' || value === '') next.delete(key)
@@ -177,12 +251,31 @@ export function LeadsExplorer() {
 
   // Latest inbound reply (body + classification) per lead — powers the sentiment
   // buckets/counts and the per-row snippet shown in reply mode.
-  const snippets = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data])
-  const conversationIntents = useMemo(() => highestIntentByLead(data?.messages ?? []), [data])
-  const followUps = useMemo(
-    () => followUpStateMap(data?.followUpStates ?? []),
-    [data?.followUpStates],
-  )
+  const snippets = useMemo(() => {
+    if (!serverMode) return latestRepliesByLead(data?.messages ?? [])
+    return new Map(
+      (serverPage?.items ?? [])
+        .filter((item) => item.reply !== null)
+        .map((item) => [leadKey(item.lead.instance_id, item.lead.profile_url), item.reply!]),
+    )
+  }, [data?.messages, serverMode, serverPage])
+  const conversationIntents = useMemo(() => {
+    if (!serverMode) return highestIntentByLead(data?.messages ?? [])
+    return new Map(
+      (serverPage?.items ?? [])
+        .filter((item) => item.highestIntent !== null)
+        .map((item) => [
+          leadKey(item.lead.instance_id, item.lead.profile_url),
+          { highest: item.highestIntent!, first_at: item.reply?.sent_at ?? '' },
+        ]),
+    )
+  }, [data?.messages, serverMode, serverPage])
+  const followUps = useMemo(() => {
+    if (!serverMode) return followUpStateMap(data?.followUpStates ?? [])
+    return followUpStateMap(
+      (serverPage?.items ?? []).flatMap((item) => item.followUp ? [item.followUp] : []),
+    )
+  }, [data?.followUpStates, serverMode, serverPage])
 
   // «Classify replies» — moved here from the Replies page; same endpoint and
   // refetch behaviour so freshly-labelled replies flow into the buckets.
@@ -209,7 +302,8 @@ export function LeadsExplorer() {
         (j.remaining ? `, ${j.remaining} still queued` : ' — all caught up')
       const demographics = demographicsSummary(j.demographics)
       toast.success(demographics ? `${replies} · ${demographics}` : replies)
-      refetch()
+      if (serverMode) setServerRefresh((value) => value + 1)
+      else refetch()
     } catch (e) {
       toast.error(`Couldn't classify: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -224,7 +318,8 @@ export function LeadsExplorer() {
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
       toast.success(demographicsSummary(j.demographics) || 'Demographics are up to date')
-      refetch()
+      if (serverMode) setServerRefresh((value) => value + 1)
+      else refetch()
     } catch (e) {
       toast.error(`Couldn't update demographics: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -348,7 +443,7 @@ export function LeadsExplorer() {
   // Sentiment bucket counts over the base set, restricted to replied leads inside
   // the reply-date window but NOT by the sentiment filter itself (so the numbers
   // don't collapse to the selected bucket) — matches the old Replies page.
-  const replyCounts = useMemo(() => {
+  const legacyReplyCounts = useMemo(() => {
     const c: Record<string, number> = {}
     let total = 0
     const since = repliedDays > 0 ? Date.now() - repliedDays * 86_400_000 : 0
@@ -361,6 +456,10 @@ export function LeadsExplorer() {
     return { c, total }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseFiltered, repliedDays, snippets])
+
+  const replyCounts = serverMode
+    ? serverPage?.replyCounts ?? { total: 0, c: {} }
+    : legacyReplyCounts
 
   const filtered = useMemo(() => {
     const since = repliedDays > 0 ? Date.now() - repliedDays * 86_400_000 : 0
@@ -404,8 +503,12 @@ export function LeadsExplorer() {
   const campaignOptions = data.campaigns.filter(
     (c) => inst === 'all' || c.instance_id === inst,
   )
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const resultCount = serverMode ? serverPage?.total ?? 0 : filtered.length
+  const allLeadCount = serverMode ? serverPage?.allTotal ?? 0 : data.leads.length
+  const pages = Math.max(1, Math.ceil(resultCount / PAGE_SIZE))
+  const pageRows = serverMode
+    ? (serverPage?.items ?? []).map((item) => item.lead)
+    : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   const dateColumns = DATE_COLUMNS.filter((c) => !c.optional || showAdded)
   // Lead, Headline, Campaign, Stage, Pipeline, Age, Gender + the date columns.
@@ -502,11 +605,35 @@ export function LeadsExplorer() {
     <span className="sort-ind">{key === sortKey ? (sortAsc ? '↑' : '↓') : ''}</span>
   )
 
-  const exportCsv = () =>
-    downloadCsv(
-      `leads-${new Date().toISOString().slice(0, 10)}.csv`,
-      toCsv(
-        filtered.map((l) => ({
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      let items: LeadsSearchItem[]
+      if (serverMode) {
+        items = []
+        const exportPageSize = 1_000
+        const pageCount = Math.ceil(resultCount / exportPageSize)
+        for (let exportPage = 0; exportPage < pageCount; exportPage++) {
+          const result = await fetchNeonLeadsSearchPage({
+            ...serverQuery,
+            page: exportPage,
+            pageSize: exportPageSize,
+          })
+          items.push(...result.items)
+        }
+      } else {
+        items = filtered.map((lead) => ({
+          lead,
+          reply: snippets.get(leadKey(lead.instance_id, lead.profile_url)) ?? null,
+          highestIntent:
+            conversationIntents.get(leadKey(lead.instance_id, lead.profile_url))?.highest ?? null,
+          followUp: followUps.get(followUpKey(lead.instance_id, lead.profile_url)) ?? null,
+        }))
+      }
+
+      downloadCsv(
+        `leads-${new Date().toISOString().slice(0, 10)}.csv`,
+        toCsv(items.map(({ lead: l, highestIntent, followUp }) => ({
           name: l.full_name,
           profile_url: l.profile_url,
           headline: l.headline,
@@ -530,13 +657,16 @@ export function LeadsExplorer() {
           connected_at: l.connected_at,
           replied_at: l.replied_at,
           last_action_at: l.last_action_at,
-          next_follow_up_date:
-            followUps.get(followUpKey(l.instance_id, l.profile_url))?.next_follow_up_date ?? null,
-          reply_intent:
-            conversationIntents.get(leadKey(l.instance_id, l.profile_url))?.highest ?? null,
-        })),
-      ),
-    )
+          next_follow_up_date: followUp?.next_follow_up_date ?? null,
+          reply_intent: highestIntent,
+        }))),
+      )
+    } catch (error) {
+      toast.error(`Couldn't export leads: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <>
@@ -782,10 +912,18 @@ export function LeadsExplorer() {
         ) : null}
       </div>
 
+      {serverError && (
+        <div className="card error-state">
+          <strong>Leads could not load.</strong>
+          <div className="muted small">{serverError}</div>
+        </div>
+      )}
+
       <div className="card">
         <div className="table-toolbar">
           <span className="muted small">
-            {num(filtered.length)} of {num(data.leads.length)} leads
+            {serverLoading && <Loader2 size={13} className="spin" />}
+            {num(resultCount)} of {num(allLeadCount)} leads
           </span>
           <div className="table-toolbar-actions">
             <label className="col-toggle">
@@ -815,8 +953,13 @@ export function LeadsExplorer() {
                 </button>
               </>
             )}
-            <button className="btn sm" onClick={exportCsv} disabled={filtered.length === 0}>
-              <Download size={14} /> Export CSV
+            <button
+              className="btn sm"
+              onClick={() => void exportCsv()}
+              disabled={resultCount === 0 || exporting}
+            >
+              {exporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+              {exporting ? 'Exporting…' : 'Export CSV'}
             </button>
           </div>
         </div>
@@ -909,7 +1052,9 @@ export function LeadsExplorer() {
                     onChange={(e) => {
                       const v = e.target.value
                       if (v === 'lost') setPendingLost(l)
-                      else void setStage(l, v || null)
+                      else void setStage(l, v || null).then(() => {
+                        if (serverMode) setServerRefresh((value) => value + 1)
+                      })
                     }}
                   >
                     <option value="">—</option>
@@ -983,7 +1128,9 @@ export function LeadsExplorer() {
           onConfirm={(reason) => {
             const lead = pendingLost
             setPendingLost(null)
-            void setStage(lead, 'lost', { lostReason: reason })
+            void setStage(lead, 'lost', { lostReason: reason }).then(() => {
+              if (serverMode) setServerRefresh((value) => value + 1)
+            })
           }}
         />
       )}

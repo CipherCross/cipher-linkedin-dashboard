@@ -60,6 +60,8 @@ import type {
 export const LEADS_OPERATIONS = {
   /** Every lead, with milestones, pipeline overlay and demographics. */
   directory: 'leads.directory',
+  /** Filtered/sorted Leads Explorer page with reply and follow-up projections. */
+  searchPage: 'leads.searchPage',
   /** The free-text notes an operator pinned to one lead, newest first. */
   notes: 'leads.notes',
   /**
@@ -255,6 +257,297 @@ export const leadsDirectoryOperation: NeonQueryOperation<
     photo_path: nullableText(row.photo_path),
     photo_synced_at: nullableText(row.photo_synced_at),
   }),
+}
+
+// ---------------------------------------------------------------------------
+// leads.searchPage — server-side Leads/Replies explorer
+// ---------------------------------------------------------------------------
+
+export interface LeadsSearchPageParams {
+  readonly instanceId: string | null
+  readonly campaignId: string | null
+  readonly stage: string | null
+  readonly risk: string | null
+  readonly pipeline: string | null
+  readonly owner: string | null
+  readonly gender: string | null
+  readonly ageBucket: string | null
+  readonly followUp: string | null
+  readonly repliedSince: string | null
+  readonly sentiment: string | null
+  readonly intent: string | null
+  readonly query: string | null
+  readonly sort: string
+  readonly direction: string
+  readonly today: string
+  readonly pageSize: string
+  readonly page: string
+  readonly [key: string]: string | null
+}
+
+export interface LeadsSearchPageRow {
+  readonly items: readonly unknown[]
+  readonly total: number
+  readonly allTotal: number
+  readonly replyCounts: {
+    readonly total: number
+    readonly c: Readonly<Record<string, number>>
+  }
+}
+
+/**
+ * The explorer used to download every lead, every inbound message, the intent
+ * view and follow-up state before filtering 50 rows in the browser. This query
+ * keeps the exact filter vocabulary but returns one JSON payload for one page.
+ *
+ * Offset is intentional here. Unlike `leads.directory`, users can sort on seven
+ * nullable columns and jump to a shared page number; a keyset cursor would make
+ * page 12 depend on ten prior requests and would no longer be shareable. The
+ * filtered set must already be scanned for exact sentiment facets and total
+ * count, so offset does not introduce the old full-tenant network/JSON cost.
+ */
+const LEADS_SEARCH_PAGE_SQL = `WITH latest_inbound AS (
+  SELECT DISTINCT ON (m.instance_id, m.profile_url)
+         m.instance_id,
+         m.profile_url,
+         m.id,
+         m.campaign_id,
+         m.body,
+         m.sent_at,
+         m.sentiment,
+         m.reason,
+         m.intent_level,
+         m.intent_reason
+    FROM public.messages m
+   WHERE m.direction = 'in'
+     AND m.body IS NOT NULL
+     AND btrim(m.body) <> ''
+   ORDER BY m.instance_id, m.profile_url, m.sent_at DESC, m.id DESC
+), intent_by_conversation AS (
+  SELECT m.instance_id,
+         m.profile_url,
+         CASE max(CASE m.intent_level WHEN 'p3' THEN 3 WHEN 'p2' THEN 2 WHEN 'p1' THEN 1 END)
+           WHEN 3 THEN 'p3'
+           WHEN 2 THEN 'p2'
+           WHEN 1 THEN 'p1'
+           ELSE NULL
+         END AS highest_intent
+    FROM public.messages m
+   WHERE m.direction = 'in' AND m.intent_level IS NOT NULL
+   GROUP BY m.instance_id, m.profile_url
+), joined AS (
+  SELECT l.*,
+         li.id AS latest_reply_id,
+         li.campaign_id AS latest_reply_campaign_id,
+         li.body AS latest_reply_body,
+         li.sent_at AS latest_reply_sent_at,
+         li.sentiment AS latest_reply_sentiment,
+         li.reason AS latest_reply_reason,
+         li.intent_level AS latest_reply_intent,
+         li.intent_reason AS latest_reply_intent_reason,
+         ri.highest_intent,
+         s.next_follow_up_date,
+         s.owner_id AS follow_up_owner_id,
+         s.revision AS follow_up_revision,
+         s.last_event_id AS follow_up_last_event_id,
+         s.last_mutation_id AS follow_up_last_mutation_id,
+         s.created_at AS follow_up_created_at,
+         s.updated_at AS follow_up_updated_at,
+         s.updated_by AS follow_up_updated_by,
+         s.archived_at AS follow_up_archived_at,
+         CASE
+           WHEN l.replied_at IS NOT NULL THEN 'replied'
+           WHEN l.connected_at IS NOT NULL THEN 'accepted'
+           WHEN l.invited_at IS NOT NULL THEN 'invited'
+           ELSE 'queued'
+         END AS derived_stage,
+         CASE
+           WHEN l.birth_year_min IS NULL OR l.birth_year_max IS NULL THEN NULL
+           ELSE floor(
+             extract(year FROM now() AT TIME ZONE 'UTC')
+             - (l.birth_year_min + l.birth_year_max) / 2.0
+           )::int
+         END AS derived_age
+    FROM public.leads l
+    LEFT JOIN latest_inbound li
+      ON li.instance_id = l.instance_id AND li.profile_url = l.profile_url
+    LEFT JOIN intent_by_conversation ri
+      ON ri.instance_id = l.instance_id AND ri.profile_url = l.profile_url
+    LEFT JOIN public.conversation_follow_up_state s
+      ON s.instance_id = l.instance_id AND s.profile_url = l.profile_url
+), base AS (
+  SELECT j.*
+    FROM joined j
+   WHERE ($1::text IS NULL OR j.instance_id = $1::text)
+     AND ($2::text IS NULL OR j.campaign_id = $2::text)
+     AND ($3::text IS NULL OR j.derived_stage = $3::text)
+     AND (
+       $4::text IS NULL
+       OR ($4::text = 'pending_2w' AND j.invited_at < now() - interval '14 days' AND j.connected_at IS NULL)
+       OR ($4::text = 'no_reply_2w' AND j.connected_at < now() - interval '14 days' AND j.replied_at IS NULL)
+     )
+     AND (
+       $5::text IS NULL
+       OR ($5::text = 'untriaged' AND j.replied_at IS NOT NULL AND j.pipeline_stage IS NULL)
+       OR ($5::text <> 'untriaged' AND j.pipeline_stage = $5::text)
+     )
+     AND (
+       $6::text IS NULL
+       OR ($6::text = 'unassigned' AND j.assigned_to IS NULL)
+       OR ($6::text <> 'unassigned' AND j.assigned_to::text = $6::text)
+     )
+     AND (
+       $7::text IS NULL
+       OR ($7::text = 'pending' AND j.gender IS NULL)
+       OR ($7::text <> 'pending' AND j.gender = $7::text)
+     )
+     AND (
+       $8::text IS NULL
+       OR ($8::text = 'under_25' AND j.derived_age < 25)
+       OR ($8::text = '25_34' AND j.derived_age BETWEEN 25 AND 34)
+       OR ($8::text = '35_44' AND j.derived_age BETWEEN 35 AND 44)
+       OR ($8::text = '45_54' AND j.derived_age BETWEEN 45 AND 54)
+       OR ($8::text = '55_plus' AND j.derived_age >= 55)
+     )
+     AND (
+       $9::text IS NULL
+       OR ($9::text = 'unscheduled' AND (j.next_follow_up_date IS NULL OR j.follow_up_archived_at IS NOT NULL))
+       OR ($9::text = 'overdue' AND j.next_follow_up_date < $16::date AND j.follow_up_archived_at IS NULL)
+       OR ($9::text = 'today' AND j.next_follow_up_date = $16::date AND j.follow_up_archived_at IS NULL)
+       OR ($9::text = 'upcoming' AND j.next_follow_up_date > $16::date AND j.follow_up_archived_at IS NULL)
+     )
+     AND (
+       $13::text IS NULL
+       OR lower(concat_ws(' ', j.full_name, j.headline, j.company)) LIKE '%' || lower($13::text) || '%'
+     )
+), reply_base AS (
+  SELECT b.*
+    FROM base b
+   WHERE b.replied_at IS NOT NULL
+     AND ($10::timestamptz IS NULL OR b.replied_at >= $10::timestamptz)
+), filtered AS (
+  SELECT b.*
+    FROM base b
+   WHERE ($10::timestamptz IS NULL OR b.replied_at >= $10::timestamptz)
+     AND (
+       $11::text IS NULL
+       OR ($11::text = 'any' AND b.replied_at IS NOT NULL)
+       OR ($11::text = 'unclassified' AND b.replied_at IS NOT NULL AND b.latest_reply_sentiment IS NULL)
+       OR ($11::text NOT IN ('any', 'unclassified') AND b.latest_reply_sentiment = $11::text)
+     )
+     AND (
+       $12::text IS NULL
+       OR ($12::text = 'none' AND b.highest_intent IS NULL)
+       OR ($12::text <> 'none' AND b.highest_intent = $12::text)
+     )
+), ordered AS (
+  SELECT f.*,
+         row_number() OVER (ORDER BY
+           CASE WHEN $14::text = 'full_name' AND $15::text = 'asc' THEN lower(f.full_name) END ASC NULLS LAST,
+           CASE WHEN $14::text = 'full_name' AND $15::text = 'desc' THEN lower(f.full_name) END DESC NULLS LAST,
+           CASE WHEN $14::text = 'added_at' AND $15::text = 'asc' THEN f.added_at END ASC NULLS LAST,
+           CASE WHEN $14::text = 'added_at' AND $15::text = 'desc' THEN f.added_at END DESC NULLS LAST,
+           CASE WHEN $14::text = 'invited_at' AND $15::text = 'asc' THEN f.invited_at END ASC NULLS LAST,
+           CASE WHEN $14::text = 'invited_at' AND $15::text = 'desc' THEN f.invited_at END DESC NULLS LAST,
+           CASE WHEN $14::text = 'connected_at' AND $15::text = 'asc' THEN f.connected_at END ASC NULLS LAST,
+           CASE WHEN $14::text = 'connected_at' AND $15::text = 'desc' THEN f.connected_at END DESC NULLS LAST,
+           CASE WHEN $14::text = 'replied_at' AND $15::text = 'asc' THEN f.replied_at END ASC NULLS LAST,
+           CASE WHEN $14::text = 'replied_at' AND $15::text = 'desc' THEN f.replied_at END DESC NULLS LAST,
+           CASE WHEN $14::text = 'last_action_at' AND $15::text = 'asc' THEN f.last_action_at END ASC NULLS LAST,
+           CASE WHEN $14::text = 'last_action_at' AND $15::text = 'desc' THEN f.last_action_at END DESC NULLS LAST,
+           CASE WHEN $14::text = 'next_follow_up_date' AND $15::text = 'asc' THEN f.next_follow_up_date END ASC NULLS LAST,
+           CASE WHEN $14::text = 'next_follow_up_date' AND $15::text = 'desc' THEN f.next_follow_up_date END DESC NULLS LAST,
+           f.id ASC
+         ) AS page_order
+    FROM filtered f
+), paged AS (
+  SELECT *
+    FROM ordered
+   WHERE page_order > ($18::int * $17::int)
+     AND page_order <= (($18::int + 1) * $17::int)
+   ORDER BY page_order
+), reply_counts AS (
+  SELECT coalesce(latest_reply_sentiment, 'unclassified') AS bucket, count(*)::int AS cnt
+    FROM reply_base
+   GROUP BY coalesce(latest_reply_sentiment, 'unclassified')
+)
+SELECT jsonb_build_object(
+  'items', coalesce((
+    SELECT jsonb_agg(jsonb_build_object(
+      'lead', to_jsonb(p) - ARRAY[
+        'updated_at', 'derived_stage', 'derived_age', 'latest_reply_id',
+        'latest_reply_campaign_id', 'latest_reply_body', 'latest_reply_sent_at',
+        'latest_reply_sentiment', 'latest_reply_reason', 'latest_reply_intent',
+        'latest_reply_intent_reason', 'highest_intent', 'next_follow_up_date',
+        'follow_up_owner_id', 'follow_up_revision', 'follow_up_last_event_id',
+        'follow_up_last_mutation_id', 'follow_up_created_at', 'follow_up_updated_at',
+        'follow_up_updated_by', 'follow_up_archived_at', 'page_order'
+      ]::text[],
+      'reply', CASE WHEN p.latest_reply_id IS NULL THEN NULL ELSE jsonb_build_object(
+        'body', p.latest_reply_body,
+        'sentiment', p.latest_reply_sentiment,
+        'reason', p.latest_reply_reason,
+        'intent_level', p.latest_reply_intent,
+        'intent_reason', p.latest_reply_intent_reason,
+        'highest_intent', p.highest_intent,
+        'sent_at', p.latest_reply_sent_at
+      ) END,
+      'highestIntent', p.highest_intent,
+      'followUp', CASE WHEN p.follow_up_updated_at IS NULL THEN NULL ELSE jsonb_build_object(
+        'instance_id', p.instance_id,
+        'profile_url', p.profile_url,
+        'next_follow_up_date', to_char(p.next_follow_up_date, 'YYYY-MM-DD'),
+        'owner_id', p.follow_up_owner_id,
+        'revision', p.follow_up_revision,
+        'last_event_id', p.follow_up_last_event_id,
+        'last_mutation_id', p.follow_up_last_mutation_id,
+        'created_at', p.follow_up_created_at,
+        'updated_at', p.follow_up_updated_at,
+        'updated_by', p.follow_up_updated_by,
+        'archived_at', p.follow_up_archived_at
+      ) END
+    ) ORDER BY p.page_order)
+      FROM paged p
+  ), '[]'::jsonb),
+  'total', (SELECT count(*)::int FROM filtered),
+  'allTotal', (SELECT count(*)::int FROM joined),
+  'replyCounts', jsonb_build_object(
+    'total', (SELECT count(*)::int FROM reply_base),
+    'c', coalesce((SELECT jsonb_object_agg(bucket, cnt) FROM reply_counts), '{}'::jsonb)
+  )
+) AS payload`
+
+export const leadsSearchPageOperation: NeonQueryOperation<
+  LeadsSearchPageRow,
+  LeadsSearchPageParams
+> = {
+  build: ({ params }) => ({
+    text: LEADS_SEARCH_PAGE_SQL,
+    values: [
+      params?.instanceId ?? null,
+      params?.campaignId ?? null,
+      params?.stage ?? null,
+      params?.risk ?? null,
+      params?.pipeline ?? null,
+      params?.owner ?? null,
+      params?.gender ?? null,
+      params?.ageBucket ?? null,
+      params?.followUp ?? null,
+      params?.repliedSince ?? null,
+      params?.sentiment ?? null,
+      params?.intent ?? null,
+      params?.query ?? null,
+      params?.sort ?? 'last_action_at',
+      params?.direction ?? 'desc',
+      params?.today ?? null,
+      params?.pageSize ?? '50',
+      params?.page ?? '0',
+    ],
+  }),
+  mapRow: (row: NeonRow): LeadsSearchPageRow => {
+    const payload = row.payload as LeadsSearchPageRow | undefined
+    return payload ?? { items: [], total: 0, allTotal: 0, replyCounts: { total: 0, c: {} } }
+  },
 }
 
 // ---------------------------------------------------------------------------

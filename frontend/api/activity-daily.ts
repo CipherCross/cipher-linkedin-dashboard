@@ -519,6 +519,10 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     // takes it as an explicit parameter. See `LeadsDirectoryParams`.
     params: (url) => ({ updatedSince: readOptionalInstant(url) }),
   },
+  [LEADS_OPERATIONS.searchPage]: {
+    operation: LEADS_OPERATIONS.searchPage,
+    params: readLeadsSearch,
+  },
   [MESSAGES_OPERATIONS.inboundHistory]: {
     operation: MESSAGES_OPERATIONS.inboundHistory,
     // Deliberately not `ranged`, and this one is an invariant rather than a
@@ -751,6 +755,86 @@ function readRequiredUuid(url: URL, name: string): string {
     throw new BadRequest(`${name} must be a UUID`)
   }
   return raw
+}
+
+function readOptionalEnum(
+  url: URL,
+  name: string,
+  allowed: readonly string[],
+): string | null {
+  const value = (url.searchParams.get(name) ?? '').trim()
+  if (value === '' || value === 'all') return null
+  if (!allowed.includes(value)) {
+    throw new BadRequest(`${name} is not an allowed value`)
+  }
+  return value
+}
+
+function readOptionalSearch(url: URL): string | null {
+  const value = (url.searchParams.get('q') ?? '').trim()
+  if (value === '') return null
+  if (value.length > 200) throw new BadRequest('q must be at most 200 characters')
+  return value
+}
+
+function readOptionalBoundedText(url: URL, name: string): string | null {
+  const value = (url.searchParams.get(name) ?? '').trim()
+  if (value === '' || value === 'all') return null
+  if (value.length > MAX_KEY_LENGTH) {
+    throw new BadRequest(`${name} must be at most ${MAX_KEY_LENGTH} characters`)
+  }
+  return value
+}
+
+function readPageInteger(url: URL, name: string, fallback: number, max: number): string {
+  const raw = (url.searchParams.get(name) ?? '').trim()
+  const value = raw === '' ? fallback : Number(raw)
+  if (!Number.isSafeInteger(value) || value < 0 || value > max) {
+    throw new BadRequest(`${name} must be an integer between 0 and ${max}`)
+  }
+  return String(value)
+}
+
+function readLeadsSearch(url: URL): DataStoreParams {
+  const today = readDay(url.searchParams.get('today'), 'today')
+  if (today === null) throw new BadRequest('today is required')
+  const ownerRaw = (url.searchParams.get('who') ?? '').trim()
+  const owner = ownerRaw === '' || ownerRaw === 'all' ? null : ownerRaw
+  if (owner !== null && owner !== 'unassigned' && !/^\d+$/.test(owner)) {
+    throw new BadRequest('who must be unassigned or a member id')
+  }
+  return {
+    instanceId: readOptionalInstance(url),
+    campaignId: readOptionalBoundedText(url, 'camp'),
+    stage: readOptionalEnum(url, 'stage', ['queued', 'invited', 'accepted', 'replied']),
+    risk: readOptionalEnum(url, 'risk', ['pending_2w', 'no_reply_2w']),
+    pipeline: readOptionalEnum(url, 'pipe', [
+      'untriaged', 'first_contact', 'interested', 'neutral', 'negative',
+      'following_up', 'negotiations_call', 'call_booked', 'call_done',
+      'proposal_in_progress', 'proposal_presented', 'client', 'lost',
+    ]),
+    owner,
+    gender: readOptionalEnum(url, 'gender', ['male', 'female', 'unknown', 'pending']),
+    ageBucket: readOptionalEnum(url, 'agebucket', [
+      'under_25', '25_34', '35_44', '45_54', '55_plus',
+    ]),
+    followUp: readOptionalEnum(url, 'follow', ['overdue', 'today', 'upcoming', 'unscheduled']),
+    repliedSince: readOptionalInstant(url, 'replied_since'),
+    sentiment: readOptionalEnum(url, 'sentiment', [
+      'any', 'unclassified', 'positive', 'neutral', 'negative', 'objection',
+      'referral', 'auto',
+    ]),
+    intent: readOptionalEnum(url, 'intent', ['p1', 'p2', 'p3', 'none']),
+    query: readOptionalSearch(url),
+    sort: readOptionalEnum(url, 'sort', [
+      'full_name', 'added_at', 'invited_at', 'connected_at', 'replied_at',
+      'last_action_at', 'next_follow_up_date',
+    ]) ?? 'last_action_at',
+    direction: readOptionalEnum(url, 'dir', ['asc', 'desc']) ?? 'desc',
+    today,
+    pageSize: readPageInteger(url, 'page_size', 50, 1_000),
+    page: readPageInteger(url, 'page', 0, 100_000),
+  }
 }
 
 export interface ActivityDailyDeps {

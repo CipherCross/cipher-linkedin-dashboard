@@ -91,6 +91,7 @@ import {
 import {
   leadNotesOperation,
   leadsDirectoryOperation,
+  leadsSearchPageOperation,
 } from '../api/_lib/data/operations/leads.js'
 import {
   inboundHistoryOperation,
@@ -161,6 +162,7 @@ const READ_SLICE = [
   [DASHBOARD_OPERATIONS.syncRecentRuns, syncRecentRunsOperation],
   [DASHBOARD_OPERATIONS.annotationsTimeline, annotationsTimelineOperation],
   [LEADS_OPERATIONS.directory, leadsDirectoryOperation],
+  [LEADS_OPERATIONS.searchPage, leadsSearchPageOperation],
   [MESSAGES_OPERATIONS.inboundHistory, inboundHistoryOperation],
   [MESSAGES_OPERATIONS.outboundRecent, outboundRecentOperation],
   [PIPELINE_OPERATIONS.eventLog, pipelineEventLogOperation],
@@ -188,6 +190,7 @@ const READ_SLICE = [
  */
 const MEMBER_ID_BEARING = [
   LEADS_OPERATIONS.directory,
+  LEADS_OPERATIONS.searchPage,
   CONVERSATION_OPERATIONS.followUpState,
   CONVERSATION_OPERATIONS.followUpHistory,
 ] as readonly string[]
@@ -208,7 +211,7 @@ const ROSTER_READING = [
 ] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists twenty-seven reads and no more', () => {
+  it('allowlists twenty-eight reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -240,6 +243,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'instances.overview',
       'leads.directory',
       'leads.notes',
+      'leads.searchPage',
       'messages.inboundHistory',
       'messages.outboundRecent',
       'messages.thread',
@@ -539,6 +543,19 @@ describe('every read is a paged, ordered, read-only projection', () => {
       expect(sql).toContain('instance_id = $1')
       expect(sql).toContain('profile_url = $2')
     }
+  })
+})
+
+describe('the server-side Leads explorer', () => {
+  it('returns one JSON page and computes filters before pagination', () => {
+    const sql = sqlOf(inspectable(leadsSearchPageOperation)).toLowerCase()
+    expect(sql).toContain('latest_inbound as')
+    expect(sql).toContain('intent_by_conversation as')
+    expect(sql).toContain('reply_counts as')
+    expect(sql).toContain("'replycounts'")
+    expect(sql).toContain('row_number() over')
+    expect(sql).toContain('page_order > ($18::int * $17::int)')
+    expect(sql).not.toContain('conversation_reply_intent')
   })
 })
 

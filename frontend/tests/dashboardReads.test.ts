@@ -36,6 +36,7 @@ import {
   SYNC_RUN_LIMIT,
   fetchNeonBootstrap,
   fetchNeonDashboard,
+  fetchNeonLeadsSearchPage,
   fetchNeonOverviewSummary,
   fetchNeonFollowUpHistory,
   fetchNeonCoachingDigests,
@@ -120,9 +121,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names twenty-seven reads including shell and Overview route contracts', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(27)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(27)
+  it('names twenty-eight reads including route-owned performance contracts', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(28)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(28)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -504,6 +505,7 @@ describe('the dashboard load', () => {
     const pageLocalReads = [
       READ_OPS.bootstrap,
       READ_OPS.overviewSummary,
+      READ_OPS.leadsSearchPage,
       READ_OPS.thread,
       READ_OPS.leadNotes,
       READ_OPS.followUpHistory,
@@ -553,6 +555,25 @@ describe('the dashboard load', () => {
     expect(query.get('to')).toBe('2026-05-31')
     expect(query.get('limit')).toBe('1')
     expect(result.totals.leads).toBe(10)
+  })
+
+  it('requests one server-filtered Leads page instead of walking the directory', async () => {
+    const payload = { items: [], total: 42, allTotal: 10_250, replyCounts: { total: 5, c: {} } }
+    const rec = recorder(() => jsonResponse(emptyPage([payload])))
+    const result = await fetchNeonLeadsSearchPage({
+      inst: 'uitop', camp: 'all', stage: 'replied', risk: 'all', pipe: 'all',
+      who: 'all', gender: 'all', agebucket: 'all', follow: 'all',
+      repliedSince: '2026-08-01T00:00:00.000Z', sentiment: 'positive', intent: 'p3',
+      q: 'founder', sort: 'replied_at', dir: 'desc', today: '2026-08-12',
+      page: 2, pageSize: 50,
+    }, rec.fetchImpl)
+    const query = onlyQuery(rec, READ_OPS.leadsSearchPage)
+    expect(query.get('instance_id')).toBe('uitop')
+    expect(query.get('page')).toBe('2')
+    expect(query.get('page_size')).toBe('50')
+    expect(query.get('sentiment')).toBe('positive')
+    expect(query.get('limit')).toBe('1')
+    expect(result.allTotal).toBe(10_250)
   })
 
   it('preserves the inbound/outbound fetch asymmetry', async () => {

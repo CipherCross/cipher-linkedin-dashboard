@@ -62,6 +62,7 @@ import type {
   FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
+  LeadsSearchPage,
 } from './types'
 
 /**
@@ -91,6 +92,7 @@ export const READ_OPS = {
   syncRuns: 'sync.recentRuns',
   annotations: 'annotations.timeline',
   leads: 'leads.directory',
+  leadsSearchPage: 'leads.searchPage',
   inboundMessages: 'messages.inboundHistory',
   outboundMessages: 'messages.outboundRecent',
   pipelineEvents: 'pipeline.eventLog',
@@ -577,6 +579,62 @@ export async function fetchNeonOverviewSummary(
   )
   const row = page.items[0]
   if (!row) throw new Error(`${READ_OPS.overviewSummary}: response contained no summary row`)
+  return row
+}
+
+export interface LeadsSearchQuery {
+  readonly inst: string
+  readonly camp: string
+  readonly stage: string
+  readonly risk: string
+  readonly pipe: string
+  readonly who: string
+  readonly gender: string
+  readonly agebucket: string
+  readonly follow: string
+  readonly repliedSince: string | null
+  readonly sentiment: string | null
+  readonly intent: string | null
+  readonly q: string
+  readonly sort: string
+  readonly dir: 'asc' | 'desc'
+  readonly today: string
+  readonly page: number
+  readonly pageSize?: number
+}
+
+/** One exact Leads/Replies explorer page; no tenant-wide relation walks. */
+export async function fetchNeonLeadsSearchPage(
+  query: LeadsSearchQuery,
+  fetchImpl: ApiFetch = authFetch,
+): Promise<LeadsSearchPage> {
+  const page = await readPage<LeadsSearchPage>(
+    READ_OPS.leadsSearchPage,
+    {
+      instance_id: query.inst === 'all' ? null : query.inst,
+      camp: query.camp === 'all' ? null : query.camp,
+      stage: query.stage === 'all' ? null : query.stage,
+      risk: query.risk === 'all' ? null : query.risk,
+      pipe: query.pipe === 'all' ? null : query.pipe,
+      who: query.who === 'all' ? null : query.who,
+      gender: query.gender === 'all' ? null : query.gender,
+      agebucket: query.agebucket === 'all' ? null : query.agebucket,
+      follow: query.follow === 'all' ? null : query.follow,
+      replied_since: query.repliedSince,
+      sentiment: query.sentiment,
+      intent: query.intent,
+      q: query.q,
+      sort: query.sort,
+      dir: query.dir,
+      today: query.today,
+      page: query.page,
+      page_size: query.pageSize ?? 50,
+      limit: 1,
+    },
+    fetchImpl,
+  )
+  const row = page.items[0]
+  if (!row) throw new Error(`${READ_OPS.leadsSearchPage}: response contained no page`)
   return row
 }
 

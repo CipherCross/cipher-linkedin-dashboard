@@ -240,7 +240,9 @@ export function Layout() {
         <div className="page" id="main-content">
           {data?.error && <ErrorBanner message={data.error} onRetry={refetch} />}
 
-          {loading || !data || (location.pathname !== '/' && phase !== 'full') ? (
+          {loading || !data || (
+            location.pathname !== '/' && location.pathname !== '/leads' && phase !== 'full'
+          ) ? (
             <PageSkeleton variant={skeletonVariant(location.pathname)} />
           ) : (
             <ConversationProvider>

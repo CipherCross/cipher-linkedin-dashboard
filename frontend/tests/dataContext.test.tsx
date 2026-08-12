@@ -165,6 +165,17 @@ describe('DataProvider dispatch', () => {
     await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
   })
 
+  it('keeps Leads on bootstrap data instead of starting the full tenant snapshot', async () => {
+    window.history.replaceState(null, '', '#/leads')
+    resolveReadPath.mockResolvedValue('neon')
+    fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))
+
+    paint()
+
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('bootstrap'))
+    expect(fetchNeonDashboard).not.toHaveBeenCalled()
+  })
+
   it('takes the Neon fetcher on the Neon flag and opens no Supabase connection', async () => {
     resolveReadPath.mockResolvedValue('neon')
     fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))

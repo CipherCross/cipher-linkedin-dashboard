@@ -166,6 +166,33 @@ export interface OverviewSummary {
   funnel: OverviewFunnelSummary
 }
 
+export interface LeadsSearchReply {
+  body: string
+  sentiment: Sentiment | null
+  reason: string | null
+  intent_level: ReplyIntent | null
+  intent_reason: string | null
+  highest_intent: ReplyIntent | null
+  sent_at: string
+}
+
+export interface LeadsSearchItem {
+  lead: Lead
+  reply: LeadsSearchReply | null
+  highestIntent: ReplyIntent | null
+  followUp: FollowUpState | null
+}
+
+export interface LeadsSearchPage {
+  items: LeadsSearchItem[]
+  total: number
+  allTotal: number
+  replyCounts: {
+    total: number
+    c: Record<string, number>
+  }
+}
+
 export interface DailyActivity {
   day: string
   instance_id: string
