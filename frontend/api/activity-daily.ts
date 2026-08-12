@@ -193,6 +193,17 @@ export function safeErrorLabel(error: unknown): string {
   return 'UnknownError'
 }
 
+/** SQLSTATE is a five-character PostgreSQL standard code and contains no SQL,
+ * values, hostnames or credentials. Keep it separate from the driver message so
+ * production can distinguish a timeout from a malformed aggregate safely. */
+export function safeSqlState(error: unknown): string | null {
+  if (!(error instanceof DataStoreContractError)) return null
+  const cause = (error as Error & { cause?: unknown }).cause
+  if (typeof cause !== 'object' || cause === null || !('code' in cause)) return null
+  const code = (cause as { code?: unknown }).code
+  return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null
+}
+
 // ---------------------------------------------------------------------------
 // The read-path flag (`config.readPath`).
 // ---------------------------------------------------------------------------
@@ -1051,7 +1062,11 @@ async function handle(
     if (error instanceof DataStoreContractError) {
       // The operation name is adapter-owned constant text, so it is loggable —
       // unlike the error's message, which embeds the database hostname.
-      console.error(`Read ${spec.operation} failed:`, safeErrorLabel(error))
+      console.error(
+        `Read ${spec.operation} failed:`,
+        safeErrorLabel(error),
+        safeSqlState(error) ?? 'sqlstate=none',
+      )
       // A read that could not reach the database is a different answer from one
       // the database refused, and `readAll` prefixes whichever it gets with the
       // operation name — so this is the sentence that lands in the banner.

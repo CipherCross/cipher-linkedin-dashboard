@@ -9,8 +9,8 @@
  *   Acquiring a database connection: getaddrinfo ENOTFOUND <host>
  *
  * So `error.message` is unsafe to log even though it is a contract error, and
- * the error object is worse. `safeErrorLabel` is the only thing that may reach
- * a log line.
+ * the error object is worse. Only `safeErrorLabel` and a validated SQLSTATE may
+ * reach a log line.
  *
  * No database and no network: the hazard is reproduced by building the same
  * error shape the driver builds.
@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { safeErrorLabel } from '../api/activity-daily.js'
+import { safeErrorLabel, safeSqlState } from '../api/activity-daily.js'
 import {
   DataStoreAuthorizationError,
   DataStoreTransactionError,
@@ -50,6 +50,17 @@ describe('handler logging cannot name the database', () => {
     expect(safeErrorLabel(new PaginationError('bad cursor'))).toBe(
       'PaginationError/PAGINATION_INVALID',
     )
+  })
+
+  it('exposes only a validated SQLSTATE from a wrapped driver error', () => {
+    const wrapped = new DataStoreTransactionError('statement failed') as Error & {
+      cause?: unknown
+    }
+    wrapped.cause = { code: '42803', message: `details at ${HOST}` }
+    expect(safeSqlState(wrapped)).toBe('42803')
+
+    wrapped.cause = { code: HOST, message: HOST }
+    expect(safeSqlState(wrapped)).toBeNull()
   })
 
   it('never returns the message for a non-contract error either', () => {
