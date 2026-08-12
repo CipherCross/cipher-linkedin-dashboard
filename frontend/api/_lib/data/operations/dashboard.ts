@@ -675,7 +675,7 @@ SELECT (g.value || jsonb_build_object(
     'last_activity_at', c.last_activity_at,
     'briefing_context', c.briefing_context,
     'briefing_context_updated_at', c.briefing_context_updated_at
-  ) ORDER BY c.invites_sent DESC, c.campaign_name), '[]'::jsonb),
+  ) ORDER BY c.invites_sent DESC, c.campaign_name)), '[]'::jsonb),
   'activity', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.day, x.instance_id, x.event_type)
                            FROM activity_rows x), '[]'::jsonb),
   'velocity', COALESCE((SELECT jsonb_agg(to_jsonb(v) ORDER BY v.week)
