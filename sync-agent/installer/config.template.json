@@ -1,0 +1,31 @@
+{
+  "ingest_mode": "only",
+  "auto_update": false,
+  "sync_steps": true,
+  "sync_messages": true,
+  "sync_photos": false,
+  "lh2_db_path": "",
+  "account_name": "",
+  "account_url": "",
+  "account_avatar": "",
+  "mapping": {
+    "campaigns": {
+      "table": "campaigns",
+      "id": "id",
+      "name": "name",
+      "status": "state"
+    },
+    "leads": {
+      "query": "select\n  pic.campaign_id            as campaign_id,\n  'https://www.linkedin.com/in/' || pei.external_id as profile_url,\n  pmp.full_name              as full_name,\n  pmp.headline               as headline,\n  pic.add_to_target_date     as added_at,\n  pic.invited_at             as invited_at,\n  pic.connected_at           as connected_at,\n  pic.replied_at             as replied_at,\n  pic.updated_at             as last_action_at\nfrom person_in_campaigns_history pic\njoin (\n  select person_id, external_id from (\n    select person_id, external_id,\n           row_number() over (partition by person_id\n             order by (external_id like 'AC%'), rowid desc) as rn\n    from person_external_ids where type_group = 'public'\n  ) where rn = 1\n) pei on pei.person_id = pic.person_id\nleft join person_original_mini_profile pmp\n  on pmp.person_id = pic.person_id",
+      "campaign_id": "campaign_id",
+      "profile_url": "profile_url",
+      "full_name": "full_name",
+      "headline": "headline",
+      "added_at": "added_at",
+      "invited_at": "invited_at",
+      "connected_at": "connected_at",
+      "replied_at": "replied_at",
+      "last_action_at": "last_action_at"
+    }
+  }
+}
