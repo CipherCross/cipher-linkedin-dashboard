@@ -7,6 +7,19 @@
     { "path": "/api/briefing?kind=weekly", "schedule": "0 7 * * 1" },
     { "path": "/api/briefing?kind=daily", "schedule": "30 7 * * 1-5" }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "cipher-linkedin-dashboard.*\\.vercel\\.app"
+        }
+      ],
+      "destination": "https://ciphercross.dev/:path*",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/api/reclassify", "destination": "/api/classify?mode=reclassify" },
     { "source": "/(.*)", "destination": "/index.html" }
