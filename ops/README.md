@@ -43,11 +43,13 @@ provider-free and fail-closed. `--p4c` and the S26-only
 exclusive. The S26 configuration contains approved non-secret provider scopes,
 catalogs, profile data, HTTPS bases, and Keychain label names only.
 
-The local P4-C implementation is checkpointed, but live provisioning is
-currently `blocked/incomplete`; it is not P4-C acceptance. See
-[`P4-C-pre-provisioning-checkpoint.md`](../docs/implementation-handoffs/P4-C-pre-provisioning-checkpoint.md)
+The Supabase-era P4-C provisioning path was never completed and **must not be
+resumed**; it was superseded by the `--s26` runtime, which has since onboarded a
+real tenant (`uitop`) end to end against live Neon, Vercel and Resend. The two
+checkpoint documents for the abandoned path are archived at
+[`P4-C-pre-provisioning-checkpoint.md`](../docs/archive/implementation-handoffs/P4-C-pre-provisioning-checkpoint.md)
 and
-[`p4-c-deferred-provisioning-plan.md`](../docs/platform-ops/p4-c-deferred-provisioning-plan.md).
+[`p4-c-deferred-provisioning-plan.md`](../docs/archive/platform-ops/p4-c-deferred-provisioning-plan.md).
 
 Requires Node.js 22.5 or newer because it uses the built-in `node:sqlite` API.
 

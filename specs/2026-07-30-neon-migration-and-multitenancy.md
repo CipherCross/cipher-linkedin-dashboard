@@ -154,12 +154,12 @@ Supabase описывает себя как набор Postgres, Auth, PostgREST
   signed access и copy/reconciliation.
 - **G0:** принят владельцем 2026-07-31. Полная матрица доказательств,
   alternatives, security/cost assumptions и review triggers находится в
-  [`neon-provider-decisions.md`](../docs/platform-ops/neon-provider-decisions.md).
+  [`neon-provider-decisions.md`](../docs/archive/platform-ops/neon-provider-decisions.md).
 
 ## N0 session status
 
 - **S01 — complete:** source measurements recorded in
-  `docs/platform-ops/neon-migration-source-measurements.md`, commit `794875d`.
+  `docs/archive/platform-ops/neon-migration-source-measurements.md`, commit `794875d`.
 - **S02 — complete:** S01 fast-forward integrated into `main`; the P4-C archive
   tag and G0 decisions above were recorded on the S02 documentation branch.
 - **S03:** not started. It may start only from the accepted G0 boundary and owns
@@ -451,8 +451,8 @@ downtime и decommission всегда требуют отдельного owner 
 > **Note — owner decision at gate G2, 2026-08-03.** Записано по решению
 > владельца при закрытии `G2` (`status = approved`, `decision =
 > conditional-go`). Таблица сессий выше **не переписана**; это дополнение к ней.
-> Источник: `docs/platform-ops/g2-datacontext-migration-go-no-go.json`
-> (`owner_decision`) и `docs/implementation-handoffs/N-S12.md`, раздел
+> Источник: `docs/archive/platform-ops/g2-datacontext-migration-go-no-go.json`
+> (`owner_decision`) и `docs/archive/implementation-handoffs/N-S12.md`, раздел
 > "Owner decisions, 2026-08-03".
 >
 > 1. **Reordering: `S16 → G3 → S17 → S13 → S18`.** Identity идет первым.
@@ -483,8 +483,8 @@ downtime и decommission всегда требуют отдельного owner 
 > **Amendment — owner decision at gate G3, 2026-08-03.** `G3`: `status =
 > approved`, `decision = accept-candidate` — self-hosted Better Auth принят как
 > production `IdentityProvider`, все шесть условий без изменений. Источник:
-> `docs/platform-ops/g3-auth-candidate-go-no-go.json` (`owner_decision`) и
-> `docs/implementation-handoffs/N-S16.md`, раздел "Owner decisions,
+> `docs/archive/platform-ops/g3-auth-candidate-go-no-go.json` (`owner_decision`) и
+> `docs/archive/implementation-handoffs/N-S16.md`, раздел "Owner decisions,
 > 2026-08-03". `S16` закрыт.
 >
 > Пункт 2 выше изменяется в одном месте: **`B4` больше не отдельная сессия.**

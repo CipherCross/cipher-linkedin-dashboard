@@ -9,13 +9,42 @@ several remote notebooks. Each notebook = one "instance" = one real LinkedIn
 account. Data flows one direction:
 
 ```
-LH2 notebooks → sync-agent (Python, cron) → Supabase (Postgres+RLS) → React SPA + Vercel serverless /api
+LH2 notebooks → sync-agent (Python, cron) → /api/import gateway → Neon (Postgres+RLS) → React SPA + Vercel serverless /api
 ```
 
 Three deployable parts, each its own toolchain:
 - `sync-agent/` — single-file Python agent (`agent.py`) run on each notebook.
-- `supabase/migrations/` — sequential numbered SQL: schema + views + RLS + AI SQL guard.
+- `postgres/tenant-baseline/v1/` + its append-only ledger — the live schema every
+  Neon tenant is built from. `supabase/migrations/` is the frozen legacy schema.
 - `frontend/` — React 18 + Vite SPA **and** Vercel serverless functions in `frontend/api/`.
+
+**Data layer as of 2026-08-12**: production serves real data from Neon, lead photos
+from Cloudflare R2, and all four notebooks ingest through the authenticated gateway
+rather than writing Postgres directly. Each path picks its provider from the
+credential it holds, not from a flag. The Supabase path survives only as a fallback;
+deleting it is the last open migration step, and it is blocked on the auth flip
+(`docs/implementation-handoffs/N-S27-SUPABASE-EXIT.md`). Sections further down this
+file that name Supabase as the store have not all been reconciled with this yet —
+where they disagree with the code, the code wins.
+
+## Documentation map
+
+Read as current: this file, `CLAUDE.md`, and the live code. `README.md` is the setup
+front door but its data-layer sections still describe the pre-Neon system.
+
+Three directories hold only live material — anything finished has been moved out:
+- `specs/` — open or unbuilt work only.
+- `docs/implementation-handoffs/` — only sessions with open work. (Five files here
+  are finished records that tests pin in place; see `docs/archive/README.md`.)
+- `docs/platform-ops/` — binding contracts, runbooks, and artifacts loaded by code
+  or tests at their exact paths. Don't move files out of it without grepping first.
+
+`docs/archive/**` is history: finished plans, closed gates, shipped specs, and
+status logs that later events falsified. **Do not read it while orienting yourself,
+and never quote it as current state.** Open a file there only when you specifically
+need the reasoning behind an already-implemented decision, or the defects a past
+session hit in the subsystem you are about to touch — and then treat every status
+claim in it as true only on that doc's date. `docs/archive/README.md` is the index.
 
 ## Commands
 

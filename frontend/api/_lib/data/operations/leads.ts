@@ -44,7 +44,7 @@
  * The column crosses this boundary as the integer it is. Nothing here joins it to
  * `team_members`, and no roster is served beside it, because the two id spaces
  * name different people: source id 1 is the real admin, target id 1 is the
- * immutable S06 fixture "Active One" (`docs/implementation-handoffs/N-B2.md`). A
+ * immutable S06 fixture "Active One" (`docs/archive/implementation-handoffs/N-B2.md`). A
  * join would mislabel every owner chip without failing anything. The pairing
  * invariant that follows — `leads` and `team_members` must move together, with the
  * source→target map applied — is recorded in the handoff and asserted in

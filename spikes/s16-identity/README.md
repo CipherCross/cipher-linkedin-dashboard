@@ -8,8 +8,8 @@ separate npm package on purpose: `better-auth` never enters
 Its one job is to make gate **G3 — accept or change the Auth candidate** —
 decidable on evidence about the mechanism alone, before identity is entangled
 with the product. The evidence and the recommendation live in
-`docs/platform-ops/g3-auth-candidate-go-no-go.json`; the session record is
-`docs/implementation-handoffs/N-S16.md`.
+`docs/archive/platform-ops/g3-auth-candidate-go-no-go.json`; the session record is
+`docs/archive/implementation-handoffs/N-S16.md`.
 
 The candidate under test is **self-hosted Better Auth 1.6.25**, the initial
 `IdentityProvider` adapter accepted at G0 on 2026-07-31.

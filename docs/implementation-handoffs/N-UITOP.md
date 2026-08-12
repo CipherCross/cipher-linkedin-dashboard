@@ -91,7 +91,7 @@ session, and it is what these divergences are waiting for.
 
 
 Onboarding the first tenant that is not the S26 drill. Read
-`docs/implementation-handoffs/N-S26.md` first: it holds the 13-step procedure,
+`docs/archive/implementation-handoffs/N-S26.md` first: it holds the 13-step procedure,
 the one-call-per-step discipline, and the nine defects that made the machinery
 work at all.
 

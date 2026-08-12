@@ -464,6 +464,25 @@ explicit opt-out.
 | the owner's, after step 5 | present | unset | `neon` — flips itself, at exactly the right moment |
 | anyone, deliberately held back | present | `supabase` | `supabase` |
 
+> **CORRECTION, 2026-08-11 — row 2 of this table was already false when this was
+> written, and it caused a live incident.** The owner's Vercel Production
+> environment had held `NEON_DATABASE_URL` since ~2026-08-05, bound for the S17/S18
+> identity smoke test, not because that deployment was ready to serve from Neon.
+> So the merge did **not** leave it on `supabase`: production deployed seven
+> minutes after `5e3fe90` and resolved `readPath: neon`, `writePath: neon` and
+> `photoPath: neon` against the **S11/S13 test-fixture database** — the only Neon
+> database it can reach. The owner was served as a fixture team member with role
+> `member`; the other four teammates got 403. No real write landed there and
+> Supabase stayed authoritative. Full account and evidence:
+> `N-S28-OWNER-DATA-MIGRATION.md`.
+>
+> The design is still right — deriving the default is what makes step 5 safe. The
+> flaw is narrower and worth stating precisely: **a credential's presence is not
+> evidence of intent.** `dataStoreConfigured` cannot distinguish "this deployment
+> is ready to serve from Neon" from "somebody needed a connection string once".
+> Anything reasoning about this table should check the live environment rather than
+> trusting the row.
+
 Three properties this buys, each of which was a real risk:
 
 1. **The merge is safe on its own.** No coordinated env change, no ordering
@@ -603,8 +622,10 @@ Each step ends in a state the owner can stop at.
    with. The default is **derived from the credential each path needs**, so no
    environment change is required anywhere and the merge cannot take the live
    dashboard down. This is the reversible midpoint and the right place for a gate.
-5. **Migrate the owner's data**, if in scope: schema, rows, storage objects,
-   then agents (`ingest_mode` → a Supabase-off mode), then cron.
+5. **Migrate the owner's data** — planned and tooled, not yet applied. See
+   `N-S28-OWNER-DATA-MIGRATION.md`. **Read its first section before step 4's
+   below**: step 4's premise about the owner's deployment was false at deploy
+   time, and the merge flipped that deployment onto a fixture database by itself.
 6. **Delete.** Client, branches, flags, env, `supabase/migrations`, the
    dependency. Only after nothing selects them.
 
