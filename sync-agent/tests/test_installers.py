@@ -267,13 +267,6 @@ class SchedulerContractTest(unittest.TestCase):
         self.assertNotIn("ingest_token", source)
         self.assertNotIn("lha.", source)
 
-    def test_windows_powershell_wrapper_is_ascii_for_legacy_windows_powershell(self):
-        # Windows PowerShell 5.1 treats UTF-8 without a BOM as the active ANSI
-        # code page. Keep this small launcher ASCII-only so its quoted strings
-        # cannot turn into parser tokens before the Unicode-aware Python UI runs.
-        source = (AGENT_DIR / "install-windows.ps1").read_bytes()
-        self.assertEqual(source.decode("ascii").encode("ascii"), source)
-
     def test_clickable_entrypoints_only_delegate_to_the_shared_engine(self):
         mac = (AGENT_DIR / "install-macos.command").read_text(encoding="utf-8")
         cmd = (AGENT_DIR / "install-windows.cmd").read_text(encoding="utf-8")

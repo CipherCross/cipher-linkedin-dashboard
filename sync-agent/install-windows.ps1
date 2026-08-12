@@ -88,7 +88,7 @@ try {
 
     $installer = Join-Path $PSScriptRoot 'installer\install.py'
     if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
-        throw 'The installer bundle is missing installer\install.py.'
+        throw 'В наборе установщика нет installer\install.py.'
     }
 
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
@@ -103,9 +103,9 @@ try {
         exit $LASTEXITCODE
     }
 
-    throw 'Python 3.10 or newer was not found. Install it from https://www.python.org/downloads/ and run this file again.'
+    throw 'Python 3.10 или новее не найден. Установите его с https://www.python.org/downloads/ и запустите файл снова.'
 }
 catch {
-    [Console]::Error.WriteLine("STOPPED: $($_.Exception.Message)")
+    [Console]::Error.WriteLine("ОСТАНОВЛЕНО: $($_.Exception.Message)")
     exit 2
 }
