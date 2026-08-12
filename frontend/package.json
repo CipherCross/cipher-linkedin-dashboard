@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:neon": "vitest run --config vitest.neon.config.ts",
+    "test:cleanroom": "vitest run --config vitest.cleanroom.config.ts",
     "typecheck:api": "tsc -p tsconfig.api.json"
   },
   "dependencies": {

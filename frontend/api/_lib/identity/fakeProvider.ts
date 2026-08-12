@@ -29,6 +29,7 @@ import {
   type IdentitySession,
   type PreparedAccount,
 } from './provider.js'
+import { currentMailPurpose, recordMailAttempt, type MailPurpose } from './resetMail.js'
 
 /** Matches the real adapter's `advanced.cookiePrefix`. */
 export const FAKE_SESSION_COOKIE = 'lh2.session_token'
@@ -51,6 +52,13 @@ export interface FakeIdentityProviderOptions {
   readonly now?: () => number
 }
 
+/** One `/request-password-reset` the fake was asked to deliver. */
+export interface FakeResetRequest {
+  readonly email: string
+  /** What the sink would have been told this letter was for. */
+  readonly purpose: MailPurpose
+}
+
 /**
  * Hashing stand-in. Deliberately *not* a real KDF and deliberately obvious
  * about it: a fake that looked like it hashed would invite someone to trust it.
@@ -67,6 +75,18 @@ export class FakeIdentityProvider implements IdentityProvider {
   private readonly accounts = new Map<string, FakeAccount>()
   private readonly byEmail = new Map<string, string>()
   private readonly sessions = new Map<string, FakeSession>()
+  /** Every reset link this provider was asked to send, in order. */
+  readonly resetRequests: FakeResetRequest[] = []
+  /** Set by a test to make delivery refuse, the way a mail provider can. */
+  failResetDelivery: Error | null = null
+  /** The status such a refusal carries, when the provider answered one. */
+  failResetDeliveryStatus: number | null = null
+  /**
+   * Set by a test to answer 200 while sending nothing — what the real candidate
+   * does for an address it has no user for, and what it also does when the sink
+   * throws, because it swallows that.
+   */
+  silentResetDelivery = false
   private readonly basePath: string
   private readonly expiresInSeconds: number
   private readonly now: () => number
@@ -141,6 +161,31 @@ export class FakeIdentityProvider implements IdentityProvider {
             `Max-Age=${this.expiresInSeconds}`,
         },
       })
+    }
+
+    // The route `admin.invite` drives to get the invited person a link, and the
+    // one `password.requestReset` forwards. The fake records the purpose the
+    // real sink would have read, because that — not the token, which is the
+    // candidate's business — is what the product decides.
+    if (route === '/request-password-reset' && request.method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as { email?: unknown }
+      const email = typeof body.email === 'string' ? body.email.toLowerCase() : ''
+      // The fake stands in for the sink here, which is why it records an
+      // attempt: the product decides "delivered" from the sink's own record and
+      // never from this response, because the real candidate answers 200 even
+      // when the send it awaited threw.
+      if (this.failResetDelivery) {
+        recordMailAttempt({ ok: false, ...(this.failResetDeliveryStatus === null ? {} : { status: this.failResetDeliveryStatus }) })
+        throw this.failResetDelivery
+      }
+      this.resetRequests.push({ email, purpose: currentMailPurpose() })
+      if (!this.silentResetDelivery) recordMailAttempt({ ok: true, status: 200 })
+      // 200 whether or not the address is known: the candidate refuses to be an
+      // account-existence oracle, and a fake that answered 404 for an unknown
+      // address would let a caller depend on behaviour the real provider does
+      // not have. The record above is not that oracle — it is what the product
+      // asked for, which is the half this suite is here to measure.
+      return json(200, { status: true })
     }
 
     if (route === '/sign-out' && request.method === 'POST') {

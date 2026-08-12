@@ -8,6 +8,11 @@ import { defineConfig } from 'vitest/config'
  * when it runs it must either reach the database or fail loudly, never report
  * green after testing nothing.
  *
+ * `*.cleanroom.test.ts` is excluded for the same reason and run by the harness
+ * in `postgres/tests/`, which builds a throwaway PostgreSQL through the
+ * migration ledger and exports the credentials. Those files create people, so
+ * they must never be pointed at a database by accident.
+ *
  * ## The rendering files, and why `environment` stays `node`
  *
  * `*.test.tsx` files render components with `@testing-library/react` and declare
@@ -29,6 +34,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/**/*.neon.test.ts'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'tests/**/*.neon.test.ts',
+      'tests/**/*.cleanroom.test.ts',
+    ],
   },
 })

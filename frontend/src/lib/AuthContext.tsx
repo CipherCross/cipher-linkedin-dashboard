@@ -17,9 +17,11 @@
  *   cannot widen anyone's access.
  * - **`setting_password`.** A Supabase invite/recovery link lands back on the
  *   SPA with `token_hash` in the query string and the person sets a password
- *   there. The identity path has no such callback and no email delivery — SMTP
- *   is the external gate the spec names for this slice — so that state is
- *   unreachable there and `setPassword` says so instead of pretending.
+ *   there, against a recovery *session*. The identity path has no such
+ *   callback: its link carries a one-time token in the hash and is answered by
+ *   the `/reset-password` screen, which spends the token directly. So this
+ *   state stays unreachable there and `setPassword` says so instead of
+ *   pretending it has a session it does not have.
  * - **`unavailable`.** New, and it belongs to both paths conceptually but only
  *   the identity path can currently reach it: the auth service being down is not
  *   the same as being signed out, and rendering it as a sign-in form asks
@@ -279,11 +281,12 @@ function IdentityAuthProvider({ children }: { children: ReactNode }) {
 
   const setPassword = useCallback(async (_password: string) => {
     void _password
-    // Not a stub: there is no recovery session to set a password against on
-    // this path, because there is no delivered link to create one. Saying so is
-    // the honest surface; silently resolving would look like it had worked.
+    // Not a stub: there is no recovery *session* to set a password against on
+    // this path. The emailed link carries a one-time token instead, and the
+    // `/reset-password` screen spends it. Saying so is the honest surface;
+    // silently resolving would look like it had worked.
     throw new Error(
-      'Setting a password from a link needs email delivery, which this deployment does not have yet.',
+      'Open the link from your email to set a password — this screen has no recovery session.',
     )
   }, [])
 

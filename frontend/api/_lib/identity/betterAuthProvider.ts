@@ -64,13 +64,16 @@ const STATEMENT_TIMEOUT_MS = 8_000
 /**
  * Where a password-reset link is delivered.
  *
- * There is no SMTP provider in this deployment — the spec treats mail as an
- * external gate, and S16 sent none. The default sink therefore *drops* the link
- * and logs only that a reset was requested, with **no token and no address**: a
- * reset link is a single-use credential and an email address is personal data,
- * so neither belongs in a log line. Reset is consequently not a working
- * end-to-end flow yet; that is recorded as a known limit rather than papered
- * over with a log line someone might mistake for delivery.
+ * A deployment that binds a sender gets the real sink from `resetMail.ts`;
+ * `runtime.ts` decides. The default here *drops* the link and logs only that a
+ * reset was requested, with **no token and no address**: a reset link is a
+ * single-use credential and an email address is personal data, so neither
+ * belongs in a log line.
+ *
+ * Dropping rather than throwing is deliberate — mail is a capability a
+ * deployment may genuinely not have — but it is why a caller must never read
+ * "delivered" off a successful response. Nothing downstream can tell this sink
+ * from a real one, which is what `recordMailAttempt` is for.
  */
 export type ResetLinkSink = (link: {
   readonly email: string

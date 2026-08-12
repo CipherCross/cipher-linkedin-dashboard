@@ -428,6 +428,15 @@ export interface InviteInput {
   readonly role: IdentityRole
 }
 
+/**
+ * Create a teammate's account and send them the link that opens it.
+ *
+ * Both halves are the server's, and only one of them can fail on its own: the
+ * account is written in a transaction, then the invitation email is sent. So a
+ * 200 here can still carry a `warning` — the person exists and cannot be
+ * reached — and that is a state the caller must render, not swallow. It is the
+ * same partial-success shape `setMemberActive` already answers with.
+ */
 export async function inviteMember(
   input: InviteInput,
   fetchImpl: FetchLike = defaultFetch,

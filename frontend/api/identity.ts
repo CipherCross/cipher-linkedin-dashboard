@@ -25,7 +25,7 @@
  * | `password.change` | POST | signed in, knows current password | candidate's `/change-password` |
  * | `session.current` | GET | any signed-in caller | the resolver, then nothing |
  * | `team.roster` | GET | any active member | `public.team_roster()` |
- * | `admin.invite` | POST | admin | `identity_admin_invite_member_atomic` |
+ * | `admin.invite` | POST | admin | `identity_admin_invite_member_atomic`, then the invitation link |
  * | `admin.setActive` | POST | admin | `identity_admin_set_member_active` + revoke |
  * | `admin.setRole` | POST | admin | `identity_admin_set_member_role` |
  * | `maintenance.pruneSessions` | POST | admin or `CRON_SECRET` | expired rows only |
@@ -73,7 +73,7 @@ import {
   readIdentityConfig,
 } from './_lib/identity/config.js'
 import { checkRequestOrigin, originRefusal } from './_lib/identity/origin.js'
-import { ResetMailDeliveryError } from './_lib/identity/resetMail.js'
+import { ResetMailDeliveryError, withMailPurpose } from './_lib/identity/resetMail.js'
 import {
   IdentityProviderError,
   type IdentityProvider,
@@ -322,10 +322,35 @@ async function forwardToCandidate(
   })
 
   try {
-    const response = await deps.identity.handle(forwarded)
+    const { result: response, attempts } = await withMailPurpose('reset', () =>
+      deps.identity.handle(forwarded),
+    )
     // Housekeeping rides along on the cheapest state-changing path there is,
     // after the response is built so it cannot alter it. See C4 in runtime.ts.
     await pruneSessionsIfDue(deps.identity)
+
+    // `password.requestReset` answers 200 even when the mail provider refused:
+    // the candidate awaits the sink and then swallows what it throws, so the
+    // `catch` below never sees a `ResetMailDeliveryError` from this route. The
+    // sink's own record is what makes the refusal visible, and a person who
+    // asked for a link that is not coming needs to be told to try again rather
+    // than to keep checking an inbox.
+    const failed = attempts.find((attempt) => !attempt.ok)
+    if (response.ok && failed) {
+      console.error('identity: reset link delivery refused by the mail provider')
+      return json(
+        {
+          error: 'Authentication is unavailable',
+          subsystem: 'reset_delivery',
+          ...(failed.status === undefined ? {} : { providerStatus: failed.status }),
+        },
+        503,
+      )
+    }
+    // No attempt at all stays exactly what the candidate said. It is what an
+    // address with no account produces, and turning that into anything other
+    // than the ordinary answer would make this endpoint an oracle for which
+    // addresses are registered.
     return response
   } catch (error) {
     console.error('identity: candidate route failed:', safeErrorLabel(error))
@@ -479,11 +504,133 @@ async function adminInvite(
         },
       }),
     )
+    // The account exists now, so the letter is sent from here rather than from
+    // inside the transaction: a mail provider having a bad minute must not roll
+    // back a membership that is already correct.
+    const invitation = await deliverInvitationLink(email, deps)
+
     // The subject is deliberately not echoed: it is the store's internal id and
     // the caller has no use for it.
-    return json({ ok: true, member: result })
+    return json({
+      ok: true,
+      member: result,
+      invitation,
+      // A 200 with a `warning` is this endpoint's existing shape for "the thing
+      // you asked for happened, and something beside it did not" — see
+      // `admin.setActive` when a session survives a disable. The admin has to
+      // learn that this person did not get an email, because the recovery is
+      // theirs to drive: nobody else knows the account is unreachable.
+      ...(invitation.delivered
+        ? {}
+        : {
+            warning:
+              'The account was created, but the invitation email could not be ' +
+              'sent. Ask them to use “Forgot password?” on the sign-in screen, ' +
+              'or check the mail sender for this deployment.',
+          }),
+    })
   } catch (error) {
     return adminFailure(error, 'invite the member')
+  }
+}
+
+/**
+ * Exported for the clean-room harness, which drives exactly this against the
+ * real candidate and a real identity store. A test that rebuilt the request
+ * itself would prove the candidate accepts *a* request, not the one the product
+ * sends — and the route name in `CANDIDATE_ROUTES` was wrong for its entire
+ * life precisely because nothing ever sent the real thing.
+ */
+export interface InvitationDelivery {
+  readonly delivered: boolean
+  readonly subsystem?: string
+  readonly providerStatus?: number
+}
+
+/**
+ * What the invited person actually receives.
+ *
+ * **Why this drives the candidate's own reset route** rather than minting
+ * anything here. The link is a single-use credential and the candidate is the
+ * only thing that may issue one: it hashes and stores the token, decides its
+ * lifetime, and burns it on use. A second token-minting path in this file would
+ * be a second place to get that wrong, and the reset flow is already the one an
+ * invited person was always told to use — the invite just stops making them
+ * guess that unprompted.
+ *
+ * **Why the request is minted rather than forwarded.** The admin's own request
+ * is a different request by a different person: forwarding it would carry their
+ * session cookie into a flow that must not have one. This one carries the
+ * deployment's own origin — the value the candidate's C1 check is guaranteed to
+ * trust, and the only header it needs.
+ *
+ * Never throws. Delivery is reported, never assumed, and never allowed to turn
+ * a committed membership into an error the admin reads as "nothing happened".
+ */
+export async function deliverInvitationLink(
+  email: string,
+  deps: IdentityHandlerDeps,
+): Promise<InvitationDelivery> {
+  const basePath = deps.basePath ?? IDENTITY_BASE_PATH
+  const route = CANDIDATE_ROUTES['password.requestReset']
+  let target: URL
+  try {
+    target = new URL(`${basePath}${route}`, deps.trustedOrigin)
+  } catch {
+    return { delivered: false, subsystem: 'reset_delivery' }
+  }
+
+  const forwarded = new Request(target, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: deps.trustedOrigin },
+    // `redirectTo` is same-origin: an off-origin one is refused 403
+    // INVALID_REDIRECT_URL, which F14 measured. The sink builds the link the
+    // recipient actually follows and ignores this, but the candidate validates
+    // it either way.
+    body: JSON.stringify({ email, redirectTo: `${target.origin}/` }),
+  })
+
+  try {
+    const { result: response, attempts } = await withMailPurpose('invitation', () =>
+      deps.identity.handle(forwarded),
+    )
+    if (!response.ok) {
+      // The candidate refused before any mail was attempted. Its status is a
+      // number and carries no address, so it can travel.
+      console.error(`identity: invitation link refused with status ${response.status}`)
+      return { delivered: false, subsystem: 'identity_provider', providerStatus: response.status }
+    }
+
+    // A 200 from the candidate is **not** evidence that mail went out. It hands
+    // the send to `runInBackgroundOrAwait`, which logs whatever the sink throws
+    // and answers 200 regardless, so the sink's own record is the only honest
+    // account of what happened. Believing the status here would be this
+    // endpoint reporting an email it never sent — which is the whole reason the
+    // invite was broken to begin with.
+    const failed = attempts.find((attempt) => !attempt.ok)
+    if (failed) {
+      console.error('identity: invitation delivery refused by the mail provider')
+      return {
+        delivered: false,
+        subsystem: 'reset_delivery',
+        ...(failed.status === undefined ? {} : { providerStatus: failed.status }),
+      }
+    }
+    if (attempts.length === 0) {
+      // Nothing was even attempted: this deployment has no sender bound, or the
+      // candidate found no user for the address it was just given. Either way
+      // the person cannot be reached and the admin has to hear so.
+      console.error('identity: invitation caused no delivery attempt')
+      return { delivered: false, subsystem: 'reset_delivery' }
+    }
+    return { delivered: true }
+  } catch (error) {
+    console.error('identity: invitation delivery failed:', safeErrorLabel(error))
+    return {
+      delivered: false,
+      subsystem: 'reset_delivery',
+      ...(error instanceof ResetMailDeliveryError ? { providerStatus: error.status } : {}),
+    }
   }
 }
 

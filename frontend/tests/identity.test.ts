@@ -30,6 +30,7 @@ import {
   resolveSelfOperation,
 } from '../api/_lib/data/operations/index.js'
 import { FakeIdentityProvider, FAKE_SESSION_COOKIE } from '../api/_lib/identity/fakeProvider.js'
+import { ResetMailDeliveryError } from '../api/_lib/identity/resetMail.js'
 import {
   IdentityPostureError,
   assertCandidateSecurityPosture,
@@ -510,6 +511,147 @@ describe('admin denial', () => {
     // The provider hashed a passphrase the endpoint invented and never returns.
     expect(params.passwordHash).toMatch(/^fake-scrypt\$/)
     expect(params.providerSubject).toBeTruthy()
+  })
+
+  it('emails the invited person a link, marked as an invitation and not a reset', async () => {
+    const token = h.identity.seedSession(ADMIN.subject)
+    const response = await h.handler(
+      withCookie(
+        post('admin.invite', { email: 'New@Example.test', name: 'New', role: 'member' }),
+        token,
+      ),
+    )
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      invitation: { delivered: boolean }
+      warning?: string
+    }
+    expect(body.invitation.delivered).toBe(true)
+    // A clean invite carries no warning: the account exists and its owner can
+    // reach it, which is the whole of what was asked for.
+    expect(body.warning).toBeUndefined()
+    // The account was created with a passphrase nobody knows, so this letter is
+    // the only route in. Without it the invite creates an unreachable account —
+    // which is what it did, in production, for a real tenant.
+    expect(h.identity.resetRequests).toEqual([
+      { email: 'new@example.test', purpose: 'invitation' },
+    ])
+  })
+
+  it('creates the member anyway when the invitation email cannot be sent, and says so', async () => {
+    h.identity.failResetDelivery = new ResetMailDeliveryError(422)
+    h.identity.failResetDeliveryStatus = 422
+    const token = h.identity.seedSession(ADMIN.subject)
+    const response = await h.handler(
+      withCookie(
+        post('admin.invite', { email: 'new@example.test', name: 'New', role: 'member' }),
+        token,
+      ),
+    )
+    // 200, because the membership committed and rolling it back over a mail
+    // provider's bad minute would be worse. But not a silent 200: the admin is
+    // the only person who can tell this teammate the email is not coming.
+    expect(response.status).toBe(200)
+    expect(h.executed).toHaveLength(1)
+    expect(h.executed[0].operation).toBe(IDENTITY_ADMIN_COMMANDS.invite)
+    const body = (await response.json()) as {
+      ok: boolean
+      warning?: string
+      invitation: { delivered: boolean; subsystem?: string; providerStatus?: number }
+    }
+    expect(body.ok).toBe(true)
+    expect(body.invitation).toMatchObject({
+      delivered: false,
+      subsystem: 'reset_delivery',
+      providerStatus: 422,
+    })
+    expect(body.warning).toContain('could not be')
+  })
+
+  it('does not call a 200 with no send a delivered invitation', async () => {
+    // The candidate answers 200 whatever the sink did: it awaits the send and
+    // then swallows what it throws (better-auth 1.6.25). An endpoint that read
+    // delivery off that status would tell the admin an email was on its way to
+    // somebody who is never going to get one — which is the failure this whole
+    // change exists to end, reintroduced one layer up.
+    h.identity.silentResetDelivery = true
+    const token = h.identity.seedSession(ADMIN.subject)
+    const response = await h.handler(
+      withCookie(
+        post('admin.invite', { email: 'new@example.test', name: 'New', role: 'member' }),
+        token,
+      ),
+    )
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { warning?: string; invitation: { delivered: boolean } }
+    expect(body.invitation.delivered).toBe(false)
+    expect(body.warning).toBeTruthy()
+  })
+
+  it('sends the invitation without the admin\'s session, and with the deployment\'s own origin', async () => {
+    const seen: Request[] = []
+    const handle = h.identity.handle.bind(h.identity)
+    h.identity.handle = async (request: Request) => {
+      seen.push(request.clone())
+      return handle(request)
+    }
+    const token = h.identity.seedSession(ADMIN.subject)
+    await h.handler(
+      withCookie(
+        post('admin.invite', { email: 'new@example.test', name: 'New', role: 'member' }),
+        token,
+      ),
+    )
+    expect(seen).toHaveLength(1)
+    // The admin's cookie is not this person's to carry into a flow that mints a
+    // credential for somebody else.
+    expect(seen[0].headers.get('cookie')).toBeNull()
+    // C1 is the candidate's too: a POST it does not recognise the origin of is
+    // refused, so the request carries the origin the deployment is.
+    expect(seen[0].headers.get('origin')).toBe(ORIGIN)
+    expect(new URL(seen[0].url).pathname).toBe(
+      `${IDENTITY_BASE_PATH}${CANDIDATE_ROUTES['password.requestReset']}`,
+    )
+  })
+
+  it('refuses to report a reset link the mail provider would not take', async () => {
+    h.identity.failResetDelivery = new ResetMailDeliveryError(422)
+    h.identity.failResetDeliveryStatus = 422
+    const response = await h.handler(
+      post('password.requestReset', { email: MEMBER.email, redirectTo: `${ORIGIN}/` }),
+    )
+    // Not the candidate's 200. Somebody waiting on a link that is not coming
+    // should be told to try again, not left refreshing an inbox.
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({
+      subsystem: 'reset_delivery',
+      providerStatus: 422,
+    })
+  })
+
+  it('still answers an unknown address exactly as the candidate does', async () => {
+    // No send attempted is not a failure: it is what an address with no account
+    // produces. Turning it into a 503 would make this endpoint an oracle for
+    // which addresses are registered.
+    h.identity.silentResetDelivery = true
+    const response = await h.handler(
+      post('password.requestReset', { email: 'nobody@example.test', redirectTo: `${ORIGIN}/` }),
+    )
+    expect(response.status).toBe(200)
+  })
+
+  it('leaves an ordinary reset an ordinary reset', async () => {
+    // The forwarded operation shares the candidate route with the invite, so
+    // the purpose has to come from the caller and not from the route. A person
+    // who forgot their password must not be told an account was just made for
+    // them.
+    const response = await h.handler(
+      post('password.requestReset', { email: MEMBER.email, redirectTo: `${ORIGIN}/` }),
+    )
+    expect(response.status).toBe(200)
+    expect(h.identity.resetRequests).toEqual([
+      { email: MEMBER.email, purpose: 'reset' },
+    ])
   })
 
   it('never returns the invented passphrase or the hash', async () => {

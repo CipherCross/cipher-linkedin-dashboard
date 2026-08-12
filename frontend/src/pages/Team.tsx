@@ -129,18 +129,23 @@ function IdentityTeam() {
     if (!inviteName.trim() || !inviteEmail.trim() || inviteBusy) return
     setInviteBusy(true)
     try {
+      const address = inviteEmail.trim()
       const result = await inviteMember({
-        email: inviteEmail,
+        email: address,
         name: inviteName,
         role: inviteRole,
       })
       if (result.kind === 'error') throw new Error(result.message)
       // The account exists with a passphrase nobody knows — not even whoever
-      // ran this — so it is not a working login yet. Saying "invitation sent"
-      // would describe an email this deployment cannot send.
-      toast.success(
-        'Teammate created. They cannot sign in until a password is set for them.',
-      )
+      // ran this — so the email carrying the one-time link is the whole route
+      // in. When it did not go out the teammate is unreachable, and only the
+      // admin standing here knows it: an error toast, which does not
+      // auto-dismiss, rather than a success one that scrolls away.
+      if (result.warning) {
+        toast.error(result.warning)
+      } else {
+        toast.success(`Teammate created. An invitation email is on its way to ${address}.`)
+      }
       resetInvite()
       await load()
     } catch (error) {
@@ -242,8 +247,8 @@ function IdentityTeam() {
             <div>
               <h2>Add teammate</h2>
               <p className="muted small">
-                Creates the account and its team membership in one transaction.
-                Email delivery is not configured, so no invitation is sent.
+                Creates the account and its team membership in one transaction,
+                then emails them a one-time link for setting their own password.
               </p>
             </div>
             <button className="btn ghost sm" type="button" onClick={resetInvite}>Cancel</button>
