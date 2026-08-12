@@ -31,9 +31,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RosterPath } from '../src/lib/types'
 
 const fetchNeonDashboard = vi.fn()
+const fetchNeonBootstrap = vi.fn()
 const resolveReadPath = vi.fn()
 
 vi.mock('../src/lib/dashboardReads', () => ({
+  fetchNeonBootstrap: (...a: unknown[]) => fetchNeonBootstrap(...a),
   fetchNeonDashboard: (...a: unknown[]) => fetchNeonDashboard(...a),
   resolveReadPath: () => resolveReadPath(),
 }))
@@ -83,10 +85,11 @@ const { DataProvider, useData } = await import('../src/lib/DataContext')
 
 /** Renders the two fields under test, so an assertion is a DOM read. */
 function Probe() {
-  const { data, loading } = useData()
+  const { data, loading, phase } = useData()
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
+      <span data-testid="phase">{phase}</span>
       <span data-testid="roster">{data ? data.rosterPath : 'none'}</span>
       <span data-testid="error">{data?.error ?? ''}</span>
     </div>
@@ -131,13 +134,37 @@ const neonAnswer = (rosterPath: RosterPath) => ({
 afterEach(cleanup)
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '#/health')
   fetchNeonDashboard.mockReset()
+  fetchNeonBootstrap.mockReset()
+  fetchNeonBootstrap.mockResolvedValue({
+    rosterPath: 'neon',
+    instances: [],
+    campaigns: [],
+    teamMembers: [],
+  })
   resolveReadPath.mockReset()
   fromCalls.length = 0
   client = { from: (t: string) => (fromCalls.push(t), query()) }
 })
 
 describe('DataProvider dispatch', () => {
+  it('paints the Neon bootstrap before starting the tenant-wide snapshot on Overview', async () => {
+    window.history.replaceState(null, '', '#/')
+    resolveReadPath.mockResolvedValue('neon')
+    fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))
+
+    paint()
+
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('bootstrap'))
+    expect(screen.getByTestId('loading').textContent).toBe('false')
+    expect(fetchNeonDashboard).not.toHaveBeenCalled()
+
+    window.dispatchEvent(new Event('dashboard:overview-ready'))
+    await waitFor(() => expect(fetchNeonDashboard).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
+  })
+
   it('takes the Neon fetcher on the Neon flag and opens no Supabase connection', async () => {
     resolveReadPath.mockResolvedValue('neon')
     fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))

@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import type { Lead } from '../lib/types'
+import type { Lead, OverviewFunnelSummary } from '../lib/types'
 import { num, pct } from '../lib/format'
 import { useData } from '../lib/DataContext'
 import { leadKey } from '../lib/leads'
@@ -45,7 +45,15 @@ const PIPELINE_VERB: Record<string, string> = {
   client: 'became clients',
 }
 
-export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: boolean }) {
+export function Funnel({
+  leads = [],
+  showPipeline,
+  summary,
+}: {
+  leads?: Lead[]
+  showPipeline?: boolean
+  summary?: OverviewFunnelSummary
+}) {
   const { data } = useData()
   // Merge lead ROWS into persons by leadKey(instance, profile) before counting:
   // the same person can hold a row in several campaigns of one instance (e.g. an
@@ -67,25 +75,40 @@ export function Funnel({ leads, showPipeline }: { leads: Lead[]; showPipeline?: 
   // from the automated half and disclosed in the footer instead — counting them
   // as "Accepted" would inflate invite acceptance. They still count in the
   // manual-pipeline half below: a staged deal is a deal wherever it came from.
-  const total = persons.size
-  let invited = 0
-  let accepted = 0
-  let replied = 0
-  let pending = 0
-  let preExisting = 0
-  for (const p of persons.values()) {
-    if (p.invited) invited++
-    if (p.invited && p.connected) accepted++
-    if (p.invited && p.connected && p.replied) replied++
-    if (p.invited && !p.connected) pending++
-    if (p.connected && !p.invited) preExisting++
+  const total = summary?.leads ?? persons.size
+  let invited = summary?.invited ?? 0
+  let accepted = summary?.accepted ?? 0
+  let replied = summary?.replied ?? 0
+  let pending = summary?.pending ?? 0
+  let preExisting = summary?.preExisting ?? 0
+  if (!summary) {
+    for (const p of persons.values()) {
+      if (p.invited) invited++
+      if (p.invited && p.connected) accepted++
+      if (p.invited && p.connected && p.replied) replied++
+      if (p.invited && !p.connected) pending++
+      if (p.connected && !p.invited) preExisting++
+    }
   }
 
   // How far each person reached in the manual pipeline (current stage ∪ event
   // history), scoped to the leads passed in (events are filtered to these ids).
-  const reach = showPipeline ? reachByPerson(leads, data?.pipelineEvents ?? []) : null
-  const pipelineRows =
-    reach && reach.size > 0
+  const reach = showPipeline && !summary
+    ? reachByPerson(leads, data?.pipelineEvents ?? [])
+    : null
+  const summaryCounts: Record<string, number> = summary
+    ? {
+        interested: summary.interested,
+        negotiations_call: summary.negotiationsCall,
+        call_booked: summary.callBooked,
+        call_done: summary.callDone,
+        proposal_presented: summary.proposalPresented,
+        client: summary.client,
+      }
+    : {}
+  const pipelineRows = summary && showPipeline && summary.pipelineAvailable
+    ? PIPELINE_CHECKPOINTS.map((cp) => ({ ...cp, count: summaryCounts[cp.id] ?? 0 }))
+    : reach && reach.size > 0
       ? PIPELINE_CHECKPOINTS.map((cp) => ({ ...cp, count: checkpointCount(reach, cp) }))
       : null
 

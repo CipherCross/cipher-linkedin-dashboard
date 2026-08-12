@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import { supabase } from './supabase'
 import { fetchConversationReplyIntents, isMissingRelation } from './conversationPaging'
-import { fetchNeonDashboard, resolveReadPath } from './dashboardReads'
+import { fetchNeonBootstrap, fetchNeonDashboard, resolveReadPath } from './dashboardReads'
 import type { RosterPath } from './rosterWrites'
 import type {
   Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
@@ -268,6 +268,12 @@ function mergeById<T extends { id: string | number }>(existing: T[], updates: T[
 // landed mid-fetch; overlapping rows just re-merge idempotently (never missed).
 const REFRESH_OVERLAP_MS = 2 * 60_000
 
+function isOverviewLocation(): boolean {
+  if (typeof window === 'undefined') return false
+  const route = window.location.hash.replace(/^#/, '').split('?')[0] || '/'
+  return route === '/'
+}
+
 // The always-full-refetched small tables get a fresh array every cycle even when
 // their data is unchanged. Keep the previous reference when the payload is
 // deep-equal so consumers memoized on a data slice don't recompute on a no-op
@@ -473,6 +479,7 @@ async function fetchNeonDashboardData(
 const Ctx = createContext<{
   data: DashboardData | null
   loading: boolean
+  phase: 'empty' | 'bootstrap' | 'full'
   refetch: () => void
   /** Merge a partial update into one lead in place (no refetch). Used by the
    *  manual-pipeline optimistic writes so a stage/assignee change reflects
@@ -513,6 +520,7 @@ const Ctx = createContext<{
 }>({
   data: null,
   loading: true,
+  phase: 'empty',
   refetch: () => {},
   patchLead: () => {},
   patchCampaign: () => {},
@@ -533,6 +541,8 @@ const Ctx = createContext<{
 export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [phase, setPhase] = useState<'empty' | 'bootstrap' | 'full'>('empty')
+  const bootstrapReady = useRef(false)
   // Only the most recent load() wins, so a manual refetch can't be clobbered by
   // an in-flight interval load (or vice versa).
   const reqId = useRef(0)
@@ -792,6 +802,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const delta = mode === 'delta' && deltaSupported.current && cursor != null
     const startedAt = Date.now()
     try {
+        if (readPath === 'neon' && mode === 'full' && !bootstrapReady.current) {
+          const bootstrap = await fetchNeonBootstrap()
+          if (id !== reqId.current) return
+          bootstrapReady.current = true
+          setData({
+            ...EMPTY,
+            instances: bootstrap.instances,
+            campaigns: bootstrap.campaigns,
+            teamMembers: bootstrap.teamMembers,
+            rosterPath: bootstrap.rosterPath,
+          })
+          setPhase('bootstrap')
+          setLoading(false)
+          if (typeof performance !== 'undefined') {
+            performance.mark('dashboard_bootstrap_ready')
+          }
+          // On the default route, let `overview.summary` use the connection pool
+          // before any tenant-wide walks begin. Overview emits
+          // `dashboard:overview-ready` after its compact result paints; deep links
+          // continue straight into the full route dataset below.
+          if (isOverviewLocation()) return
+        }
         const since = new Date(startedAt - 90 * 86_400_000)
           .toISOString()
           .slice(0, 10)
@@ -886,6 +918,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           })
           // Advance the cursor for the next delta (start-time minus overlap).
           cursorRef.current = new Date(startedAt - REFRESH_OVERLAP_MS).toISOString()
+          setPhase('full')
+          if (typeof performance !== 'undefined') {
+            performance.mark('dashboard_full_ready')
+          }
         }
       } catch (e) {
         // A delta query hit a missing updated_at column (migration 031 pending):
@@ -916,14 +952,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void load('full')
+    const ensureFull = () => {
+      if (!isOverviewLocation()) void load('full')
+    }
+    const afterOverview = () => {
+      // Yield one task so React can paint the useful metrics before background
+      // relation walks compete for network, JSON parsing and the database pool.
+      setTimeout(() => void load('full'), 0)
+    }
+    window.addEventListener('hashchange', ensureFull)
+    window.addEventListener('dashboard:overview-ready', afterOverview)
     const timer = setInterval(() => void load('delta'), 5 * 60_000)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('hashchange', ensureFull)
+      window.removeEventListener('dashboard:overview-ready', afterOverview)
+    }
   }, [load])
 
   return (
     <Ctx.Provider
       value={{
-        data, loading, refetch, patchLead, patchCampaign, patchFollowUpState,
+        data, loading, phase, refetch, patchLead, patchCampaign, patchFollowUpState,
         upsertSavedSearch, removeSavedSearch,
         upsertIcp, removeIcp, upsertIcpPersona, removeIcpPersona,
         upsertIcpIndustry, removeIcpIndustry, upsertHypothesis, removeHypothesis,

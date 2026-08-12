@@ -1,13 +1,17 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Users } from 'lucide-react'
+import { Loader2, Users } from 'lucide-react'
 import { useData } from '../lib/DataContext'
+import { fetchNeonOverviewSummary, resolveReadPath } from '../lib/dashboardReads'
 import {
   latestRepliesByLead, leadsToActivity, presetRanges, previousRange, rangeFromParam,
   rangeToParam, rangeTotals, replyIntentMetrics, tsInRange,
 } from '../lib/leads'
-import type { DateRange } from '../lib/leads'
-import type { Lead } from '../lib/types'
+import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
+import type {
+  CampaignMetrics, DailyActivity, Lead, OverviewAccountSummary,
+  OverviewIntentSummary, OverviewSummary,
+} from '../lib/types'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { AccountCard } from '../components/AccountCard'
@@ -17,113 +21,164 @@ import { DateRangePicker } from '../components/DateRangePicker'
 import { EmptyState } from '../components/EmptyState'
 
 const STALE_HOURS = 24
-
-// Shared empty-leads reference for instances with no leads, so the AccountCard
-// `leads` prop stays reference-equal across refreshes instead of a fresh `[]`.
 const NO_LEADS: Lead[] = []
 
+function intentMetrics(value: OverviewIntentSummary): ReplyIntentMetrics {
+  const rate = (n: number, d: number) => (d > 0 ? (100 * n) / d : null)
+  return {
+    ...value,
+    p3BookingRate: rate(value.p3Booked, value.p3),
+    matureP3BookingRate: rate(value.matureP3Booked, value.matureP3),
+    p3GhostingRate: rate(value.p3Ghosted, value.p3),
+  }
+}
+
 export function Overview() {
-  const { data } = useData()
+  const { data, phase } = useData()
   const [params, setParams] = useSearchParams()
-  const RANGES = useMemo(() => presetRanges(), [])
+  const ranges = useMemo(() => presetRanges(), [])
   const rangeParam = params.get('range')
   const range = useMemo<DateRange>(
     () =>
-      rangeFromParam(rangeParam, RANGES) ??
-      RANGES.find((r) => r.id === '3_months') ??
-      RANGES[RANGES.length - 1],
-    [rangeParam, RANGES],
+      rangeFromParam(rangeParam, ranges) ??
+      ranges.find((item) => item.id === '3_months') ??
+      ranges[ranges.length - 1],
+    [rangeParam, ranges],
   )
-  const setRange = (r: DateRange) => {
+  const setRange = (nextRange: DateRange) => {
     const next = new URLSearchParams(params)
-    next.set('range', rangeToParam(r))
+    next.set('range', rangeToParam(nextRange))
     setParams(next, { replace: true })
   }
 
-  // Each derivation is keyed on the exact data slice(s) it reads (not the whole
-  // `data`, whose identity changes every 5-min refresh) and each slice is now
-  // reference-stable across a no-op refresh (see DataContext). So on a no-op tick
-  // these memos return their cached values, every AccountCard prop stays identical,
-  // and React.memo skips the whole grid — the periodic-refresh target.
+  const [summary, setSummary] = useState<OverviewSummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [legacyPath, setLegacyPath] = useState(false)
 
-  // Buckets keyed on data.leads only, so an instance-only change (e.g. a
-  // last_sync_at bump) doesn't hand AccountCard fresh per-instance arrays.
+  useEffect(() => {
+    let cancelled = false
+    let shouldReleaseDetails = false
+    setSummaryLoading(true)
+    setSummaryError(null)
+    ;(async () => {
+      try {
+        const path = await resolveReadPath()
+        if (cancelled) return
+        if (path !== 'neon') {
+          setLegacyPath(true)
+          setSummary(null)
+          return
+        }
+        shouldReleaseDetails = true
+        setLegacyPath(false)
+        const next = await fetchNeonOverviewSummary(range)
+        if (cancelled) return
+        setSummary(next)
+        performance.mark('dashboard_overview_useful')
+        requestAnimationFrame(() => performance.mark('dashboard_overview_interactive'))
+      } catch (error) {
+        if (cancelled) return
+        setSummaryError(error instanceof Error ? error.message : String(error))
+      } finally {
+        if (!cancelled) {
+          setSummaryLoading(false)
+          if (shouldReleaseDetails) {
+            window.dispatchEvent(new Event('dashboard:overview-ready'))
+          }
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [range, data?.campaigns])
+
+  // Legacy fallback remains exact for the owner's not-yet-cut-over deployment.
+  // It runs only after that path's complete snapshot is ready.
   const leadsByInstance = useMemo(() => {
     const map = new Map<string, Lead[]>()
-    for (const l of data?.leads ?? []) {
-      const arr = map.get(l.instance_id)
-      if (arr) arr.push(l)
-      else map.set(l.instance_id, [l])
+    if (!legacyPath) return map
+    for (const lead of data?.leads ?? []) {
+      const rows = map.get(lead.instance_id)
+      if (rows) rows.push(lead)
+      else map.set(lead.instance_id, [lead])
     }
     return map
-  }, [data?.leads])
+  }, [data?.leads, legacyPath])
 
-  // Fresh accounts first, then by pipeline size.
+  const accountSummary = useMemo(
+    () => new Map((summary?.accounts ?? []).map((row) => [row.instance_id, row])),
+    [summary?.accounts],
+  )
+  const summaryCampaigns = useMemo(() => {
+    const map = new Map<string, CampaignMetrics[]>()
+    for (const campaign of summary?.campaigns ?? []) {
+      const rows = map.get(campaign.instance_id)
+      if (rows) rows.push(campaign)
+      else map.set(campaign.instance_id, [campaign])
+    }
+    return map
+  }, [summary?.campaigns])
+  const summaryActivity = useMemo(() => {
+    const map = new Map<string, DailyActivity[]>()
+    for (const row of summary?.activity ?? []) {
+      const rows = map.get(row.instance_id)
+      if (rows) rows.push(row)
+      else map.set(row.instance_id, [row])
+    }
+    return map
+  }, [summary?.activity])
+
   const instances = useMemo(() => {
     if (!data) return []
     const staleCutoff = Date.now() - STALE_HOURS * 3_600_000
     return [...data.instances].sort((a, b) => {
-      const freshA = a.last_sync_at ? new Date(a.last_sync_at).getTime() > staleCutoff : false
-      const freshB = b.last_sync_at ? new Date(b.last_sync_at).getTime() > staleCutoff : false
+      const freshA = a.last_sync_at ? Date.parse(a.last_sync_at) > staleCutoff : false
+      const freshB = b.last_sync_at ? Date.parse(b.last_sync_at) > staleCutoff : false
       if (freshA !== freshB) return freshA ? -1 : 1
-      return (leadsByInstance.get(b.id)?.length ?? 0) - (leadsByInstance.get(a.id)?.length ?? 0)
+      const countA = summary
+        ? accountSummary.get(a.id)?.totals.leads ?? 0
+        : leadsByInstance.get(a.id)?.length ?? 0
+      const countB = summary
+        ? accountSummary.get(b.id)?.totals.leads ?? 0
+        : leadsByInstance.get(b.id)?.length ?? 0
+      return countB - countA
     })
-  }, [data?.instances, leadsByInstance])
+  }, [data?.instances, summary, accountSummary, leadsByInstance])
 
-  const latest = useMemo(() => latestRepliesByLead(data?.messages ?? []), [data?.messages])
-  const intentByInstance = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof replyIntentMetrics>>()
-    if (!data) return map
-    for (const inst of data.instances) {
-      map.set(
-        inst.id,
-        replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
-          instanceId: inst.id,
-          intentRows: data.conversationReplyIntents,
-        }),
-      )
-    }
-    return map
-  }, [
-    data?.instances,
-    data?.leads,
-    data?.messages,
-    data?.pipelineEvents,
-    data?.conversationReplyIntents,
-    range,
-  ])
-
-  // KPI / funnel aggregates (not consumed by AccountCard).
-  const kpis = useMemo(() => {
-    if (!data) return null
-    const prevRange = previousRange(range)
+  const legacy = useMemo(() => {
+    if (!legacyPath || !data || phase !== 'full') return null
+    const latest = latestRepliesByLead(data.messages)
+    const previous = previousRange(range)
+    const intent = replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
+      intentRows: data.conversationReplyIntents,
+    })
     return {
+      latest,
       totals: rangeTotals(data.leads, range, latest),
-      prevTotals: prevRange ? rangeTotals(data.leads, prevRange, latest) : undefined,
-      intent: replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
-        intentRows: data.conversationReplyIntents,
-      }),
-      intentPrev: prevRange
-        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, prevRange, {
+      prevTotals: previous ? rangeTotals(data.leads, previous, latest) : undefined,
+      intent,
+      intentPrev: previous
+        ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, previous, {
             intentRows: data.conversationReplyIntents,
           })
         : undefined,
-      added: data.leads.filter((l) => tsInRange(l.added_at, range)).length,
-      addedPrev: prevRange
-        ? data.leads.filter((l) => tsInRange(l.added_at, prevRange)).length
+      added: data.leads.filter((lead) => tsInRange(lead.added_at, range)).length,
+      addedPrev: previous
+        ? data.leads.filter((lead) => tsInRange(lead.added_at, previous)).length
         : undefined,
       activity: leadsToActivity(data.leads),
     }
-  }, [
-    data?.leads,
-    data?.messages,
-    data?.pipelineEvents,
-    data?.conversationReplyIntents,
-    range,
-    latest,
-  ])
+  }, [legacyPath, data, phase, range])
 
-  if (!data || !kpis) return null
+  if (!data) return null
+
+  const metricsReady = summary !== null || legacy !== null
+  const globalIntent = summary ? intentMetrics(summary.intent) : legacy?.intent
+  const globalIntentPrev = summary?.intentPrev
+    ? intentMetrics(summary.intentPrev)
+    : legacy?.intentPrev
 
   return (
     <>
@@ -135,26 +190,43 @@ export function Overview() {
           </div>
         </div>
         <div className="controls">
-          <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
+          <DateRangePicker presets={ranges} value={range} onChange={setRange} />
         </div>
       </header>
 
-      <KpiCards
-        totals={kpis.totals}
-        prev={kpis.prevTotals}
-        activity={kpis.activity}
-        range={range}
-        flowLabel={range.label}
-        intent={kpis.intent}
-        intentPrev={kpis.intentPrev}
-        added={kpis.added}
-        addedPrev={kpis.addedPrev}
-        velocityLeads={data.leads}
-      />
+      {summaryError && !legacy && (
+        <div className="card error-state">
+          <strong>Overview metrics could not load.</strong>
+          <div className="muted small">{summaryError}</div>
+        </div>
+      )}
 
-      <FollowUpCalloutCard />
+      {!metricsReady ? (
+        <div className="card empty-state">
+          <Loader2 size={20} className="spin" />
+          <div>{summaryLoading ? 'Loading exact metrics…' : 'Metrics are not available yet.'}</div>
+        </div>
+      ) : (
+        <KpiCards
+          totals={summary?.totals ?? legacy!.totals}
+          prev={summary?.prevTotals ?? legacy?.prevTotals}
+          activity={summary?.activity ?? legacy!.activity}
+          range={range}
+          flowLabel={range.label}
+          intent={globalIntent}
+          intentPrev={globalIntentPrev}
+          added={summary?.totals.added ?? legacy!.added}
+          addedPrev={summary?.prevTotals?.added ?? legacy?.addedPrev}
+          velocityLeads={summary ? undefined : data.leads}
+          velocitySummary={summary ? {
+            buckets: summary.velocity,
+            undated: summary.velocityUndated,
+          } : undefined}
+        />
+      )}
 
-      <ImportCalloutCard />
+      {phase === 'full' && <FollowUpCalloutCard />}
+      {phase === 'full' && <ImportCalloutCard />}
 
       {instances.length === 0 ? (
         <EmptyState
@@ -164,28 +236,44 @@ export function Overview() {
           hint="Run the sync agent on a notebook to register your first LinkedIn account."
           action={<Link className="link-btn" to="/health">Open Sync health</Link>}
         />
-      ) : (
+      ) : metricsReady ? (
         <div className="account-grid">
-          {instances.map((inst) => (
-            <AccountCard
-              key={inst.id}
-              inst={inst}
-              // Shared stable empty ref for zero-lead instances so the prop stays
-              // reference-equal across refreshes (keeps React.memo skipping).
-              leads={leadsByInstance.get(inst.id) ?? NO_LEADS}
-              campaignsMeta={data.campaigns}
-              range={range}
-              latest={latest}
-              intent={intentByInstance.get(inst.id)}
-            />
-          ))}
+          {instances.map((instance) => {
+            const account = accountSummary.get(instance.id)
+            const legacyLeads = leadsByInstance.get(instance.id) ?? NO_LEADS
+            const accountIntent = account
+              ? intentMetrics(account.intent)
+              : legacy
+                ? replyIntentMetrics(data.leads, data.messages, data.pipelineEvents, range, {
+                    instanceId: instance.id,
+                    intentRows: data.conversationReplyIntents,
+                  })
+                : undefined
+            return (
+              <AccountCard
+                key={instance.id}
+                inst={instance}
+                leads={summary ? undefined : legacyLeads}
+                campaignsMeta={data.campaigns}
+                range={range}
+                latest={legacy?.latest}
+                intent={accountIntent}
+                summary={account as OverviewAccountSummary | undefined}
+                summaryActivity={summaryActivity.get(instance.id)}
+                summaryCampaigns={summaryCampaigns.get(instance.id)}
+              />
+            )
+          })}
         </div>
-      )}
+      ) : null}
 
-      {/* Global funnel across every account — its Manual-pipeline section is
-          self-hiding when no lead has been staged, so this is a no-op until the
-          team starts using the pipeline board. */}
-      <Funnel leads={data.leads} showPipeline />
+      {metricsReady && (
+        <Funnel
+          leads={summary ? undefined : data.leads}
+          showPipeline
+          summary={summary?.funnel}
+        />
+      )}
     </>
   )
 }

@@ -81,9 +81,11 @@ import {
 } from '../api/_lib/data/operations/index.js'
 import {
   annotationsTimelineOperation,
+  dashboardBootstrapOperation,
   campaignsPerformanceOperation,
   campaignsSequenceStepsOperation,
   instancesOverviewOperation,
+  overviewSummaryOperation,
   syncRecentRunsOperation,
 } from '../api/_lib/data/operations/dashboard.js'
 import {
@@ -150,6 +152,8 @@ type Slice = ReadonlyArray<
 
 /** Every read the dispatching endpoint offers, paired with its definition. */
 const READ_SLICE = [
+  [DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation],
+  [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
   [ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation],
   [DASHBOARD_OPERATIONS.instancesOverview, instancesOverviewOperation],
   [DASHBOARD_OPERATIONS.campaignsPerformance, campaignsPerformanceOperation],
@@ -198,10 +202,13 @@ const ROSTER_FREE_SLICE = READ_SLICE.filter(
  * for the same reason `MEMBER_ID_BEARING` is: a second one has to be written
  * here as a decision.
  */
-const ROSTER_READING = [IDENTITY_OPERATIONS.teamRoster] as readonly string[]
+const ROSTER_READING = [
+  DASHBOARD_OPERATIONS.bootstrap,
+  IDENTITY_OPERATIONS.teamRoster,
+] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists twenty-five reads and no more', () => {
+  it('allowlists twenty-seven reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -223,6 +230,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'conversations.followUpState',
       'conversations.latestMessage',
       'conversations.replyIntent',
+      'dashboard.bootstrap',
       'hypotheses.campaigns',
       'hypotheses.list',
       'icp.industries',
@@ -235,6 +243,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'messages.inboundHistory',
       'messages.outboundRecent',
       'messages.thread',
+      'overview.summary',
       'pipeline.eventLog',
       'searches.saved',
       'sync.recentRuns',
@@ -302,7 +311,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
     expect(TOLERANT_OPERATION_NAMES).not.toContain(IDENTITY_OPERATIONS.teamRoster)
   })
 
-  it('offers the roster under exactly one name', () => {
+  it('offers one roster vocabulary and reuses it inside bootstrap', () => {
     // Narrowed from "offers no roster at all", which held only while `leads` was
     // read from the other provider — see this file's header. What replaces it is
     // a named permission: the roster is here, it is `identity.teamRoster`, and
@@ -312,7 +321,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       if (ROSTER_READING.includes(name)) continue
       expect(name).not.toMatch(/roster|member|identity|team/i)
     }
-    expect(ROSTER_READING).toHaveLength(1)
+    expect(ROSTER_READING).toHaveLength(2)
 
     // And the endpoint still offers none of the identity *writes*, which live on
     // `/api/identity` and are the reason this allowlist is a list rather than a
@@ -356,6 +365,10 @@ describe('no operation on the read path resolves a member id', () => {
     // function's own seven columns are the whole projection.
     expect(sql).not.toMatch(/\bjoin\b/)
     expect(sql.match(/\bfrom\b/g) ?? []).toHaveLength(1)
+
+    const bootstrapSql = sqlOf(inspectable(dashboardBootstrapOperation)).toLowerCase()
+    expect(bootstrapSql).toContain('public.team_roster()')
+    expect(bootstrapSql).not.toMatch(/from\s+public\.team_members/)
   })
 
   it('orders the roster on a unique column so an offset walk cannot skip', () => {

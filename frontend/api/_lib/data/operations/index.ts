@@ -47,9 +47,11 @@ import { ACTIVITY_OPERATIONS, dailySeriesOperation } from './activity.js'
 import {
   DASHBOARD_OPERATIONS,
   annotationsTimelineOperation,
+  dashboardBootstrapOperation,
   campaignsPerformanceOperation,
   campaignsSequenceStepsOperation,
   instancesOverviewOperation,
+  overviewSummaryOperation,
   syncRecentRunsOperation,
 } from './dashboard.js'
 import {
@@ -294,7 +296,13 @@ export {
   type AnnotationRow,
   type CampaignMetricsRow,
   type CampaignStepRow,
+  type DashboardBootstrapRow,
   type InstanceRow,
+  type OverviewAccountSummaryRow,
+  type OverviewFunnelRow,
+  type OverviewIntentMetricsRow,
+  type OverviewSummaryRow,
+  type OverviewTotalsRow,
   type SyncRunRow,
 } from './dashboard.js'
 export {
@@ -360,6 +368,9 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
 
   registry.registerQuery(IDENTITY_OPERATIONS.teamRoster, teamRosterOperation)
   registry.registerQuery(ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation)
+
+  registry.registerQuery(DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation)
+  registry.registerQuery(DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation)
 
   // S13's first DataContext slice.
   registry.registerQuery(

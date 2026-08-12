@@ -61,7 +61,7 @@ import type {
   ConversationLatestMessage, ConversationReplyIntent, DailyActivity,
   FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
-  SavedSearch, SyncRun, TeamMember,
+  OverviewSummary, SavedSearch, SyncRun, TeamMember,
 } from './types'
 
 /**
@@ -82,6 +82,8 @@ export const READ_ENDPOINT = '/api/activity-daily'
  * That assertion is what closes "eleven of twenty-two reads have no caller".
  */
 export const READ_OPS = {
+  bootstrap: 'dashboard.bootstrap',
+  overviewSummary: 'overview.summary',
   dailySeries: 'activity.dailySeries',
   instances: 'instances.overview',
   campaigns: 'campaigns.performance',
@@ -526,6 +528,57 @@ export interface NeonDashboardOptions {
  * not walking is the same "newest 200 runs" the page has always rendered.
  */
 export const SYNC_RUN_LIMIT = 200
+
+export interface NeonDashboardBootstrap {
+  readonly rosterPath: 'neon'
+  readonly instances: Instance[]
+  readonly campaigns: CampaignMetrics[]
+  readonly teamMembers: TeamMember[]
+}
+
+interface BootstrapWireRow {
+  readonly instances: Instance[]
+  readonly campaigns: CampaignMetrics[]
+  readonly teamMembers: TeamMember[]
+}
+
+/**
+ * One-row shell payload. Unlike the historical initial load this does not walk
+ * a relation and does not touch leads/messages, so the app shell has one actor
+ * resolution and one database query on its critical path.
+ */
+export async function fetchNeonBootstrap(
+  fetchImpl: ApiFetch = authFetch,
+): Promise<NeonDashboardBootstrap> {
+  const page = await readPage<BootstrapWireRow>(
+    READ_OPS.bootstrap,
+    { limit: 1 },
+    fetchImpl,
+  )
+  const row = page.items[0]
+  if (!row) throw new Error(`${READ_OPS.bootstrap}: response contained no bootstrap row`)
+  return {
+    rosterPath: 'neon',
+    instances: row.instances,
+    campaigns: row.campaigns,
+    teamMembers: row.teamMembers,
+  }
+}
+
+/** Exact, compact Overview aggregates for an inclusive UTC calendar range. */
+export async function fetchNeonOverviewSummary(
+  range: { readonly from: string | null; readonly to: string | null },
+  fetchImpl: ApiFetch = authFetch,
+): Promise<OverviewSummary> {
+  const page = await readPage<OverviewSummary>(
+    READ_OPS.overviewSummary,
+    { from: range.from, to: range.to, limit: 1 },
+    fetchImpl,
+  )
+  const row = page.items[0]
+  if (!row) throw new Error(`${READ_OPS.overviewSummary}: response contained no summary row`)
+  return row
+}
 
 /**
  * Load the whole dashboard from the application API.

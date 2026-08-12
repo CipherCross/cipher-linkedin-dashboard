@@ -116,7 +116,7 @@ function pageName(pathname: string): string | null {
 }
 
 export function Layout() {
-  const { data, loading, refetch } = useData()
+  const { data, loading, phase, refetch } = useData()
   const location = useLocation()
   // Mobile off-canvas drawer state. On desktop the sidebar is always visible and
   // this is ignored; on narrow viewports the hamburger toggles it.
@@ -240,7 +240,7 @@ export function Layout() {
         <div className="page" id="main-content">
           {data?.error && <ErrorBanner message={data.error} onRetry={refetch} />}
 
-          {loading || !data ? (
+          {loading || !data || (location.pathname !== '/' && phase !== 'full') ? (
             <PageSkeleton variant={skeletonVariant(location.pathname)} />
           ) : (
             <ConversationProvider>

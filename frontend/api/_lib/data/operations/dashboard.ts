@@ -53,6 +53,10 @@
 import type { NeonQueryOperation, NeonRow } from '../neon.js'
 
 export const DASHBOARD_OPERATIONS = {
+  /** Minimal shell/navigation data, returned as one row and one actor check. */
+  bootstrap: 'dashboard.bootstrap',
+  /** Exact route-level aggregates for Overview; never returns raw lead/message rows. */
+  overviewSummary: 'overview.summary',
   /** Every notebook/account this team syncs, with its health fields. */
   instancesOverview: 'instances.overview',
   /** Per-campaign funnel totals and rates — the topline table. */
@@ -64,6 +68,84 @@ export const DASHBOARD_OPERATIONS = {
   /** Operator notes pinned to a day, an instance or a campaign. */
   annotationsTimeline: 'annotations.timeline',
 } as const
+
+export interface DashboardBootstrapRow {
+  readonly instances: readonly InstanceRow[]
+  readonly campaigns: readonly CampaignMetricsRow[]
+  readonly teamMembers: readonly {
+    id: number
+    name: string
+    active: boolean
+    created_at: string
+    auth_user_id: null
+    email: string | null
+    role: 'member' | 'admin'
+  }[]
+}
+
+export interface OverviewTotalsRow {
+  readonly leads: number
+  readonly invites: number
+  readonly accepted: number
+  readonly replies: number
+  readonly positive: number
+  readonly acceptedOfInvited: number
+  readonly repliedOfConnected: number
+  readonly added: number
+}
+
+export interface OverviewIntentMetricsRow {
+  readonly p1: number
+  readonly p2: number
+  readonly p3: number
+  readonly p3Booked: number
+  readonly matureP3: number
+  readonly matureP3Booked: number
+  readonly p3Ghosted: number
+}
+
+export interface OverviewAccountSummaryRow {
+  readonly instance_id: string
+  readonly totals: OverviewTotalsRow
+  readonly prevTotals: OverviewTotalsRow | null
+  readonly intent: OverviewIntentMetricsRow
+  readonly intentPrev: OverviewIntentMetricsRow | null
+  readonly weeklyAdded: number
+}
+
+export interface OverviewFunnelRow {
+  readonly leads: number
+  readonly invited: number
+  readonly accepted: number
+  readonly replied: number
+  readonly pending: number
+  readonly preExisting: number
+  readonly pipelineAvailable: boolean
+  readonly interested: number
+  readonly negotiationsCall: number
+  readonly callBooked: number
+  readonly callDone: number
+  readonly proposalPresented: number
+  readonly client: number
+}
+
+export interface OverviewSummaryRow {
+  readonly totals: OverviewTotalsRow
+  readonly prevTotals: OverviewTotalsRow | null
+  readonly intent: OverviewIntentMetricsRow
+  readonly intentPrev: OverviewIntentMetricsRow | null
+  readonly accounts: readonly OverviewAccountSummaryRow[]
+  readonly campaigns: readonly CampaignMetricsRow[]
+  readonly activity: readonly {
+    day: string
+    instance_id: string
+    event_type: string
+    cnt: number
+  }[]
+  readonly velocity: readonly { week: string; added: number }[]
+  readonly velocityUndated: number
+  readonly funnel: OverviewFunnelRow
+}
 
 // ---------------------------------------------------------------------------
 // Row shapes. Declared here rather than imported from `frontend/src/lib/types.ts`
@@ -148,6 +230,426 @@ const nullableNumber = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value)
 
 const requiredNumber = (value: unknown): number => Number(value)
+
+// ---------------------------------------------------------------------------
+// dashboard.bootstrap
+// ---------------------------------------------------------------------------
+
+/**
+ * The application shell used to wait for twenty independently authenticated
+ * relation walks. This operation deliberately contains only the rows needed to
+ * render navigation and route identity: accounts, campaign names and the team
+ * roster. It is one actor-scoped statement and never scans leads or messages.
+ */
+const DASHBOARD_BOOTSTRAP_SQL = `SELECT jsonb_build_object(
+          'instances', COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', i.id,
+              'label', i.label,
+              'last_sync_at', i.last_sync_at,
+              'agent_version', i.agent_version,
+              'account_name', i.account_name,
+              'account_url', i.account_url,
+              'account_avatar', i.account_avatar,
+              'config', i.config,
+              'config_updated_at', i.config_updated_at
+            ) ORDER BY i.id)
+              FROM public.instances i
+          ), '[]'::jsonb),
+          'campaigns', COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'campaign_id', c.id,
+              'campaign_name', c.name,
+              'instance_id', c.instance_id,
+              'status', c.status,
+              'total_leads', 0,
+              'invites_sent', 0,
+              'accepted', 0,
+              'replies', 0,
+              'acceptance_rate', NULL,
+              'reply_rate', NULL,
+              'last_activity_at', NULL,
+              'briefing_context', c.briefing_context,
+              'briefing_context_updated_at', c.briefing_context_updated_at
+            ) ORDER BY c.name, c.id)
+              FROM public.campaigns c
+          ), '[]'::jsonb),
+          'teamMembers', COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', r.id,
+              'name', r.name,
+              'active', r.active,
+              'created_at', r.created_at,
+              'auth_user_id', NULL,
+              'email', r.email,
+              'role', r.role
+            ) ORDER BY r.name, r.id)
+              FROM public.team_roster() AS r
+          ), '[]'::jsonb)
+        ) AS bootstrap`
+
+export const dashboardBootstrapOperation: NeonQueryOperation<DashboardBootstrapRow> = {
+  build: () => ({ text: DASHBOARD_BOOTSTRAP_SQL }),
+  mapRow: (row: NeonRow): DashboardBootstrapRow =>
+    (row.bootstrap ?? { instances: [], campaigns: [], teamMembers: [] }) as DashboardBootstrapRow,
+}
+
+// ---------------------------------------------------------------------------
+// overview.summary
+// ---------------------------------------------------------------------------
+
+/**
+ * Exact Overview aggregates in one database round trip. The selected range is
+ * the same half-open UTC range produced by `dayRangeToUtcRange`; its previous
+ * comparison window is the immediately preceding equal-length interval. An
+ * open-ended range has no previous interval.
+ *
+ * The query intentionally mirrors the browser helpers instead of using the
+ * all-time campaign view for range metrics: counts are lead-row counts, the
+ * global automated funnel deduplicates by `(instance_id, profile_url)`, and the
+ * manual funnel takes the deepest current-or-event stage while treating `lost`
+ * as an off-ramp rather than rank seven. Intent chronology comes from the
+ * authoritative full-thread projection and booking events/current-stage
+ * compatibility path used by `replyIntentMetrics`.
+ */
+const OVERVIEW_SUMMARY_SQL = `WITH bounds AS (
+  SELECT $1::timestamptz AS cur_from,
+         $2::timestamptz AS cur_to,
+         CASE WHEN $1::timestamptz IS NOT NULL AND $2::timestamptz IS NOT NULL
+              THEN $1::timestamptz - ($2::timestamptz - $1::timestamptz)
+              ELSE NULL END AS prev_from,
+         CASE WHEN $1::timestamptz IS NOT NULL AND $2::timestamptz IS NOT NULL
+              THEN $1::timestamptz ELSE NULL END AS prev_to,
+         current_timestamp AS as_of,
+         date_trunc('week', current_timestamp AT TIME ZONE 'UTC')::date AS current_monday
+),
+lead_rows AS (
+  SELECT l.*,
+         COALESCE(l.added_at, LEAST(l.invited_at, l.connected_at, l.first_message_at, l.replied_at))
+           AS effective_added_at
+    FROM public.leads l
+),
+lead_stats AS (
+  SELECT CASE WHEN GROUPING(l.instance_id) = 1 THEN NULL ELSE l.instance_id END AS scope_id,
+         count(*)::int AS leads,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.invited_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.invited_at < b.cur_to))::int AS invites,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS accepted,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.replied_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replies,
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL
+                            AND (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS accepted_of_invited,
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL
+                            AND (b.cur_from IS NULL OR l.replied_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replied_of_connected,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.added_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.added_at < b.cur_to))::int AS added,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND l.invited_at >= b.prev_from AND l.invited_at < b.prev_to)::int AS prev_invites,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND l.connected_at >= b.prev_from AND l.connected_at < b.prev_to)::int AS prev_accepted,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND l.replied_at >= b.prev_from AND l.replied_at < b.prev_to)::int AS prev_replies,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL AND l.invited_at IS NOT NULL
+                            AND l.connected_at >= b.prev_from AND l.connected_at < b.prev_to)::int AS prev_accepted_of_invited,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL AND l.connected_at IS NOT NULL
+                            AND l.replied_at >= b.prev_from AND l.replied_at < b.prev_to)::int AS prev_replied_of_connected,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND l.added_at >= b.prev_from AND l.added_at < b.prev_to)::int AS prev_added,
+         count(*) FILTER (WHERE l.effective_added_at >= (b.current_monday::timestamp AT TIME ZONE 'UTC')
+                            AND l.effective_added_at < ((b.current_monday + 7)::timestamp AT TIME ZONE 'UTC'))::int
+           AS weekly_added
+    FROM lead_rows l CROSS JOIN bounds b
+   GROUP BY GROUPING SETS ((), (l.instance_id))
+),
+booking_events AS (
+  SELECT l.instance_id, l.profile_url, e.occurred_at AS booked_at
+    FROM public.pipeline_events e
+    JOIN public.leads l ON l.id = e.lead_id
+   WHERE e.kind = 'stage' AND e.to_stage = 'call_booked'
+  UNION ALL
+  SELECT l.instance_id, l.profile_url, l.pipeline_stage_changed_at AS booked_at
+    FROM public.leads l
+   WHERE l.pipeline_stage = 'call_booked' AND l.pipeline_stage_changed_at IS NOT NULL
+),
+bookings AS (
+  SELECT instance_id, profile_url, max(booked_at) AS last_booking_at
+    FROM booking_events
+   GROUP BY instance_id, profile_url
+),
+intent_rows AS (
+  SELECT i.*, bk.last_booking_at
+    FROM public.conversation_reply_intent i
+    LEFT JOIN bookings bk USING (instance_id, profile_url)
+),
+intent_stats AS (
+  SELECT CASE WHEN GROUPING(i.instance_id) = 1 THEN NULL ELSE i.instance_id END AS scope_id,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p1_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p1_at < b.cur_to))::int AS p1,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p2_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p2_at < b.cur_to))::int AS p2,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p3_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p3_at < b.cur_to))::int AS p3,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p3_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p3_at < b.cur_to)
+                            AND i.last_booking_at > i.first_p3_at)::int AS p3_booked,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p3_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p3_at < b.cur_to)
+                            AND i.first_p3_at <= b.as_of - interval '14 days')::int AS mature_p3,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p3_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p3_at < b.cur_to)
+                            AND i.first_p3_at <= b.as_of - interval '14 days'
+                            AND i.last_booking_at > i.first_p3_at)::int AS mature_p3_booked,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR i.first_p3_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR i.first_p3_at < b.cur_to)
+                            AND NOT COALESCE(i.last_booking_at > i.first_p3_at, false)
+                            AND i.last_out_after_p3_at <= b.as_of - interval '30 days'
+                            AND NOT COALESCE(i.last_in_after_p3_at > i.last_out_after_p3_at, false))::int AS p3_ghosted,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p1_at >= b.prev_from AND i.first_p1_at < b.prev_to)::int AS prev_p1,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p2_at >= b.prev_from AND i.first_p2_at < b.prev_to)::int AS prev_p2,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p3_at >= b.prev_from AND i.first_p3_at < b.prev_to)::int AS prev_p3,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p3_at >= b.prev_from AND i.first_p3_at < b.prev_to
+                            AND i.last_booking_at > i.first_p3_at)::int AS prev_p3_booked,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p3_at >= b.prev_from AND i.first_p3_at < b.prev_to
+                            AND i.first_p3_at <= b.as_of - interval '14 days')::int AS prev_mature_p3,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p3_at >= b.prev_from AND i.first_p3_at < b.prev_to
+                            AND i.first_p3_at <= b.as_of - interval '14 days'
+                            AND i.last_booking_at > i.first_p3_at)::int AS prev_mature_p3_booked,
+         count(*) FILTER (WHERE b.prev_from IS NOT NULL
+                            AND i.first_p3_at >= b.prev_from AND i.first_p3_at < b.prev_to
+                            AND NOT COALESCE(i.last_booking_at > i.first_p3_at, false)
+                            AND i.last_out_after_p3_at <= b.as_of - interval '30 days'
+                            AND NOT COALESCE(i.last_in_after_p3_at > i.last_out_after_p3_at, false))::int AS prev_p3_ghosted
+    FROM intent_rows i CROSS JOIN bounds b
+   GROUP BY GROUPING SETS ((), (i.instance_id))
+),
+campaign_stats AS (
+  SELECT l.campaign_id,
+         c.name AS campaign_name,
+         l.instance_id,
+         c.status,
+         count(*)::int AS total_leads,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.added_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.added_at < b.cur_to))::int AS leads_added,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.invited_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.invited_at < b.cur_to))::int AS invites_sent,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS accepted,
+         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.replied_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replies,
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL
+                            AND (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS accepted_of_invited,
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL
+                            AND (b.cur_from IS NULL OR l.replied_at >= b.cur_from)
+                            AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replied_of_connected,
+         max(GREATEST(l.invited_at, l.connected_at, l.replied_at)) AS last_activity_at,
+         c.briefing_context,
+         c.briefing_context_updated_at
+    FROM public.leads l
+    JOIN public.campaigns c ON c.id = l.campaign_id
+    CROSS JOIN bounds b
+   GROUP BY l.campaign_id, c.name, l.instance_id, c.status,
+            c.briefing_context, c.briefing_context_updated_at
+),
+activity_rows AS (
+  SELECT to_char(e.ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+         l.instance_id,
+         e.event_type,
+         count(*)::int AS cnt
+    FROM public.leads l
+    CROSS JOIN bounds b
+    CROSS JOIN LATERAL (VALUES
+      (l.invited_at, 'invite_sent'::text),
+      (l.connected_at, 'invite_accepted'::text),
+      (l.replied_at, 'reply_received'::text)
+    ) AS e(ts, event_type)
+   WHERE e.ts IS NOT NULL
+     AND (b.cur_from IS NULL OR e.ts >= b.cur_from)
+     AND (b.cur_to IS NULL OR e.ts < b.cur_to)
+   GROUP BY 1, l.instance_id, e.event_type
+),
+velocity_rows AS (
+  SELECT to_char(date_trunc('week', l.added_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS week,
+         count(*)::int AS added
+    FROM public.leads l CROSS JOIN bounds b
+   WHERE l.added_at IS NOT NULL
+     AND date_trunc('week', l.added_at AT TIME ZONE 'UTC')::date
+           BETWEEN b.current_monday - 84 AND b.current_monday
+   GROUP BY 1
+),
+persons AS (
+  SELECT l.instance_id, l.profile_url,
+         bool_or(l.invited_at IS NOT NULL) AS invited,
+         bool_or(l.connected_at IS NOT NULL) AS connected,
+         bool_or(l.replied_at IS NOT NULL) AS replied
+    FROM public.leads l
+   GROUP BY l.instance_id, l.profile_url
+),
+pipeline_touches AS (
+  SELECT l.instance_id, l.profile_url, l.pipeline_stage AS stage
+    FROM public.leads l
+   WHERE l.pipeline_stage IS NOT NULL
+  UNION ALL
+  SELECT l.instance_id, l.profile_url, e.to_stage AS stage
+    FROM public.pipeline_events e
+    JOIN public.leads l ON l.id = e.lead_id
+   WHERE e.kind = 'stage' AND e.to_stage IS NOT NULL
+),
+pipeline_ranked AS (
+  SELECT instance_id, profile_url, stage,
+         CASE stage
+           WHEN 'lost' THEN 0
+           WHEN 'first_contact' THEN 0
+           WHEN 'interested' THEN 1
+           WHEN 'neutral' THEN 1
+           WHEN 'negative' THEN 1
+           WHEN 'following_up' THEN 1
+           WHEN 'negotiations_call' THEN 2
+           WHEN 'call_booked' THEN 3
+           WHEN 'call_done' THEN 4
+           WHEN 'proposal_in_progress' THEN 5
+           WHEN 'proposal_presented' THEN 6
+           WHEN 'client' THEN 7
+           ELSE -1
+         END AS rank
+    FROM pipeline_touches
+),
+pipeline_reach AS (
+  SELECT instance_id, profile_url, max(rank) AS rank,
+         bool_or(stage = 'client') AS is_client
+    FROM pipeline_ranked
+   WHERE rank >= 0
+   GROUP BY instance_id, profile_url
+),
+funnel AS (
+  SELECT jsonb_build_object(
+    'leads', count(*)::int,
+    'invited', count(*) FILTER (WHERE invited)::int,
+    'accepted', count(*) FILTER (WHERE invited AND connected)::int,
+    'replied', count(*) FILTER (WHERE invited AND connected AND replied)::int,
+    'pending', count(*) FILTER (WHERE invited AND NOT connected)::int,
+    'preExisting', count(*) FILTER (WHERE connected AND NOT invited)::int,
+    'pipelineAvailable', EXISTS (SELECT 1 FROM pipeline_reach),
+    'interested', (SELECT count(*)::int FROM pipeline_reach WHERE rank >= 1),
+    'negotiationsCall', (SELECT count(*)::int FROM pipeline_reach WHERE rank >= 2),
+    'callBooked', (SELECT count(*)::int FROM pipeline_reach WHERE rank >= 3),
+    'callDone', (SELECT count(*)::int FROM pipeline_reach WHERE rank >= 4),
+    'proposalPresented', (SELECT count(*)::int FROM pipeline_reach WHERE rank >= 6),
+    'client', (SELECT count(*)::int FROM pipeline_reach WHERE is_client)
+  ) AS value
+    FROM persons
+),
+account_payload AS (
+  SELECT jsonb_agg(jsonb_build_object(
+    'instance_id', l.scope_id,
+    'totals', jsonb_build_object(
+      'leads', l.leads, 'invites', l.invites, 'accepted', l.accepted,
+      'replies', l.replies, 'positive', 0,
+      'acceptedOfInvited', l.accepted_of_invited,
+      'repliedOfConnected', l.replied_of_connected, 'added', l.added
+    ),
+    'prevTotals', CASE WHEN b.prev_from IS NULL THEN NULL ELSE jsonb_build_object(
+      'leads', l.leads, 'invites', l.prev_invites, 'accepted', l.prev_accepted,
+      'replies', l.prev_replies, 'positive', 0,
+      'acceptedOfInvited', l.prev_accepted_of_invited,
+      'repliedOfConnected', l.prev_replied_of_connected, 'added', l.prev_added
+    ) END,
+    'intent', jsonb_build_object(
+      'p1', COALESCE(i.p1, 0), 'p2', COALESCE(i.p2, 0), 'p3', COALESCE(i.p3, 0),
+      'p3Booked', COALESCE(i.p3_booked, 0), 'matureP3', COALESCE(i.mature_p3, 0),
+      'matureP3Booked', COALESCE(i.mature_p3_booked, 0), 'p3Ghosted', COALESCE(i.p3_ghosted, 0)
+    ),
+    'intentPrev', CASE WHEN b.prev_from IS NULL THEN NULL ELSE jsonb_build_object(
+      'p1', COALESCE(i.prev_p1, 0), 'p2', COALESCE(i.prev_p2, 0), 'p3', COALESCE(i.prev_p3, 0),
+      'p3Booked', COALESCE(i.prev_p3_booked, 0), 'matureP3', COALESCE(i.prev_mature_p3, 0),
+      'matureP3Booked', COALESCE(i.prev_mature_p3_booked, 0),
+      'p3Ghosted', COALESCE(i.prev_p3_ghosted, 0)
+    ) END,
+    'weeklyAdded', l.weekly_added
+  ) ORDER BY l.scope_id) AS value
+    FROM lead_stats l
+    LEFT JOIN intent_stats i ON i.scope_id = l.scope_id
+    CROSS JOIN bounds b
+   WHERE l.scope_id IS NOT NULL
+),
+global_payload AS (
+  SELECT jsonb_build_object(
+    'totals', jsonb_build_object(
+      'leads', l.leads, 'invites', l.invites, 'accepted', l.accepted,
+      'replies', l.replies, 'positive', 0,
+      'acceptedOfInvited', l.accepted_of_invited,
+      'repliedOfConnected', l.replied_of_connected, 'added', l.added
+    ),
+    'prevTotals', CASE WHEN b.prev_from IS NULL THEN NULL ELSE jsonb_build_object(
+      'leads', l.leads, 'invites', l.prev_invites, 'accepted', l.prev_accepted,
+      'replies', l.prev_replies, 'positive', 0,
+      'acceptedOfInvited', l.prev_accepted_of_invited,
+      'repliedOfConnected', l.prev_replied_of_connected, 'added', l.prev_added
+    ) END,
+    'intent', jsonb_build_object(
+      'p1', COALESCE(i.p1, 0), 'p2', COALESCE(i.p2, 0), 'p3', COALESCE(i.p3, 0),
+      'p3Booked', COALESCE(i.p3_booked, 0), 'matureP3', COALESCE(i.mature_p3, 0),
+      'matureP3Booked', COALESCE(i.mature_p3_booked, 0), 'p3Ghosted', COALESCE(i.p3_ghosted, 0)
+    ),
+    'intentPrev', CASE WHEN b.prev_from IS NULL THEN NULL ELSE jsonb_build_object(
+      'p1', COALESCE(i.prev_p1, 0), 'p2', COALESCE(i.prev_p2, 0), 'p3', COALESCE(i.prev_p3, 0),
+      'p3Booked', COALESCE(i.prev_p3_booked, 0), 'matureP3', COALESCE(i.prev_mature_p3, 0),
+      'matureP3Booked', COALESCE(i.prev_mature_p3_booked, 0),
+      'p3Ghosted', COALESCE(i.prev_p3_ghosted, 0)
+    ) END
+  ) AS value
+    FROM lead_stats l
+    LEFT JOIN intent_stats i ON i.scope_id IS NULL
+    CROSS JOIN bounds b
+   WHERE l.scope_id IS NULL
+)
+SELECT (g.value || jsonb_build_object(
+  'accounts', COALESCE(a.value, '[]'::jsonb),
+  'campaigns', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+    'campaign_id', c.campaign_id,
+    'campaign_name', c.campaign_name,
+    'instance_id', c.instance_id,
+    'status', c.status,
+    'total_leads', c.total_leads,
+    'leads_added', c.leads_added,
+    'invites_sent', c.invites_sent,
+    'accepted', c.accepted,
+    'replies', c.replies,
+    'acceptance_rate', CASE WHEN c.invites_sent > 0
+      THEN (100.0 * c.accepted_of_invited / c.invites_sent) ELSE NULL END,
+    'reply_rate', CASE WHEN c.accepted > 0
+      THEN (100.0 * c.replied_of_connected / c.accepted) ELSE NULL END,
+    'last_activity_at', c.last_activity_at,
+    'briefing_context', c.briefing_context,
+    'briefing_context_updated_at', c.briefing_context_updated_at
+  ) ORDER BY c.invites_sent DESC, c.campaign_name), '[]'::jsonb),
+  'activity', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.day, x.instance_id, x.event_type)
+                           FROM activity_rows x), '[]'::jsonb),
+  'velocity', COALESCE((SELECT jsonb_agg(to_jsonb(v) ORDER BY v.week)
+                           FROM velocity_rows v), '[]'::jsonb),
+  'velocityUndated', (SELECT count(*)::int FROM public.leads WHERE added_at IS NULL),
+  'funnel', f.value
+)) AS summary
+  FROM global_payload g
+  CROSS JOIN account_payload a
+  CROSS JOIN funnel f`
+
+export const overviewSummaryOperation: NeonQueryOperation<OverviewSummaryRow> = {
+  build: ({ range }) => ({
+    text: OVERVIEW_SUMMARY_SQL,
+    values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
+  }),
+  mapRow: (row: NeonRow): OverviewSummaryRow => row.summary as OverviewSummaryRow,
+}
 
 // ---------------------------------------------------------------------------
 // instances.overview

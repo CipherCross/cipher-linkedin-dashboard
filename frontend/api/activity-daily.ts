@@ -105,10 +105,10 @@ import { getObjectStorageProvider } from './_lib/storage/runtime.js'
 
 export const maxDuration = 10
 
-const json = (body: unknown, status = 200) =>
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers },
   })
 
 /** Inclusive UTC calendar day, exactly as `frontend/src/lib/leads.ts` spells it. */
@@ -482,6 +482,13 @@ interface ReadOperationSpec {
  * moment one was added. This list is the endpoint's own surface.
  */
 const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
+  [DASHBOARD_OPERATIONS.bootstrap]: {
+    operation: DASHBOARD_OPERATIONS.bootstrap,
+  },
+  [DASHBOARD_OPERATIONS.overviewSummary]: {
+    operation: DASHBOARD_OPERATIONS.overviewSummary,
+    ranged: true,
+  },
   [ACTIVITY_OPERATIONS.dailySeries]: {
     operation: ACTIVITY_OPERATIONS.dailySeries,
     ranged: true,
@@ -772,6 +779,9 @@ async function handle(
   req: Request,
   deps: ActivityDailyDeps = {},
 ): Promise<Response> {
+  const requestStartedAt = performance.now()
+  const requestId = globalThis.crypto?.randomUUID?.() ??
+    `read-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
   if (req.method !== 'GET') {
     return json({ error: 'method not allowed' }, 405)
   }
@@ -824,6 +834,7 @@ async function handle(
   // at 196 ms of a 525 ms request, so a slice that resolved per read would pay it
   // once per relation.
   let actor
+  const actorStartedAt = performance.now()
   try {
     const resolved = await resolveApplicationActor(req, {
       store: getDataStore(),
@@ -842,6 +853,7 @@ async function handle(
     console.error('Neon actor resolution failed:', safeErrorLabel(error))
     return json({ error: 'Could not verify team access' }, 500)
   }
+  const actorMs = performance.now() - actorStartedAt
 
   // After authentication, before the generic read machinery — this operation
   // parses its own parameters and does not page.
@@ -893,12 +905,14 @@ async function handle(
     // and each operation owns its own shape, so naming one of them here would be
     // a claim the dispatcher cannot keep. The operation's `mapRow` is where the
     // shape is enforced.
+    const queryStartedAt = performance.now()
     const page = await getDataStore().query<unknown>(actor, {
       operation: spec.operation,
       params,
       range,
       page: { limit, cursor },
     })
+    const queryMs = performance.now() - queryStartedAt
 
     const body = {
       items: page.items,
@@ -907,7 +921,27 @@ async function handle(
     }
     // The legacy response keeps its own key. Two names for one array is worth
     // less than S12's page continuing to work untouched.
-    return json(legacy ? { activity: page.items, ...body } : body)
+    const responseBody = legacy ? { activity: page.items, ...body } : body
+    const responseBytes = new TextEncoder().encode(JSON.stringify(responseBody)).byteLength
+    const totalMs = performance.now() - requestStartedAt
+    console.info('dashboard_read', JSON.stringify({
+      request_id: requestId,
+      operation: spec.operation,
+      status: 200,
+      rows: page.items.length,
+      bytes: responseBytes,
+      actor_ms: Math.round(actorMs * 10) / 10,
+      query_ms: Math.round(queryMs * 10) / 10,
+      total_ms: Math.round(totalMs * 10) / 10,
+      has_more: page.hasMore,
+      limit,
+    }))
+    return json(responseBody, 200, {
+      'server-timing': `actor;dur=${actorMs.toFixed(1)}, db;dur=${queryMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`,
+      'x-request-id': requestId,
+      'x-result-rows': String(page.items.length),
+      'x-response-bytes': String(responseBytes),
+    })
   } catch (error) {
     // A cursor from another scope is the caller's mistake, not a server fault.
     if (error instanceof PaginationError) {

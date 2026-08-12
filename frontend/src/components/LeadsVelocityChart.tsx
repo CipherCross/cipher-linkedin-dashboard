@@ -9,6 +9,11 @@ import { SERIES, TOOLTIP, dateTick } from './chartTheme'
 const WINDOWS = [4, 8, 12] as const
 type WindowWeeks = (typeof WINDOWS)[number]
 
+export interface LeadsVelocitySummary {
+  buckets: Array<{ week: string; added: number }>
+  undated: number
+}
+
 /** Last `weeks` complete Mon–Sun (UTC) weeks, plus the current week-to-date.
  *  The partial current week is drawn on the trend line but excluded from the
  *  average, so the headline number doesn't crater every Monday morning. */
@@ -38,12 +43,39 @@ function velocityByWeek(leads: Lead[], weeks: WindowWeeks) {
   return { data, avg, undated }
 }
 
+function velocitySummaryByWeek(summary: LeadsVelocitySummary, weeks: WindowWeeks) {
+  const thisMonday = weekStart(new Date().toISOString())
+  const start = new Date(`${thisMonday}T00:00:00Z`)
+  start.setUTCDate(start.getUTCDate() - weeks * 7)
+  const firstMonday = start.toISOString().slice(0, 10)
+  const buckets = new Map(summary.buckets.map((row) => [row.week, row.added]))
+  const data: { week: string; added: number }[] = []
+  for (const d = new Date(`${firstMonday}T00:00:00Z`); ; d.setUTCDate(d.getUTCDate() + 7)) {
+    const week = d.toISOString().slice(0, 10)
+    data.push({ week, added: buckets.get(week) ?? 0 })
+    if (week >= thisMonday) break
+  }
+  const avg = Math.round(data.slice(0, -1).reduce((a, d) => a + d.added, 0) / weeks)
+  return { data, avg, undated: summary.undated }
+}
+
 /** Compact KPI-tile version of lead-intake velocity: avg leads added per week
  *  over a fixed rolling window (4/8/12 complete weeks, toggleable), independent
  *  of the page's date-range picker. Sits inline in KpiCards' grid. */
-export function LeadsVelocityChart({ leads }: { leads: Lead[] }) {
+export function LeadsVelocityChart({
+  leads,
+  summary,
+}: {
+  leads?: Lead[]
+  summary?: LeadsVelocitySummary
+}) {
   const [weeks, setWeeks] = useState<WindowWeeks>(4)
-  const { data, avg, undated } = useMemo(() => velocityByWeek(leads, weeks), [leads, weeks])
+  const { data, avg, undated } = useMemo(
+    () => summary
+      ? velocitySummaryByWeek(summary, weeks)
+      : velocityByWeek(leads ?? [], weeks),
+    [leads, summary, weeks],
+  )
   const title = undated > 0
     ? `${num(undated)} lead${undated === 1 ? '' : 's'} with no known add date not shown`
     : undefined

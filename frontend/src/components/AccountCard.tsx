@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import type { CampaignMetrics, Instance, Lead } from '../lib/types'
+import type {
+  CampaignMetrics, DailyActivity, Instance, Lead, OverviewAccountSummary,
+} from '../lib/types'
 import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
 import type { ReplyInfo } from '../lib/leads'
 import {
@@ -22,32 +24,52 @@ export const AccountCard = memo(function AccountCard({
   range,
   latest,
   intent,
+  summary,
+  summaryActivity,
+  summaryCampaigns,
 }: {
   inst: Instance
-  leads: Lead[]
+  leads?: Lead[]
   campaignsMeta: CampaignMetrics[]
   range: DateRange
   latest?: Map<string, ReplyInfo>
   intent?: ReplyIntentMetrics
+  summary?: OverviewAccountSummary
+  summaryActivity?: DailyActivity[]
+  summaryCampaigns?: CampaignMetrics[]
 }) {
   const last = inst.last_sync_at ? new Date(inst.last_sync_at).getTime() : 0
   const fresh = Date.now() - last < STALE_HOURS * 3_600_000
   // Each derivation is memoized on just the inputs it uses, so a re-render that
   // changes only one prop (e.g. range) doesn't recompute the rest — and React.memo
   // skips the whole card when Overview re-renders with the same props.
-  const stats = useMemo(() => accountStats(leads, range, latest), [leads, range, latest])
+  const stats = useMemo(() => {
+    if (summary) {
+      const t = summary.totals
+      const percent = (n: number, d: number) => (d > 0 ? `${((100 * n) / d).toFixed(1)}%` : '—')
+      return {
+        ...t,
+        acceptPct: percent(t.acceptedOfInvited, t.invites),
+        replyPct: percent(t.repliedOfConnected, t.accepted),
+      }
+    }
+    return accountStats(leads ?? [], range, latest)
+  }, [leads, range, latest, summary])
   const activity = useMemo(
-    () =>
-      leadsToActivity(leads).filter(
+    () => summaryActivity ??
+      leadsToActivity(leads ?? []).filter(
         (a) => (!range.from || a.day >= range.from) && (!range.to || a.day <= range.to),
       ),
-    [leads, range],
+    [leads, range, summaryActivity],
   )
   const campaigns = useMemo(
-    () => rangedCampaigns(leads, campaignsMeta, range),
-    [leads, campaignsMeta, range],
+    () => summaryCampaigns ?? rangedCampaigns(leads ?? [], campaignsMeta, range),
+    [leads, campaignsMeta, range, summaryCampaigns],
   )
-  const weekAdded = useMemo(() => weeklyAdded(leads, inst.id), [leads, inst.id])
+  const weekAdded = useMemo(
+    () => summary?.weeklyAdded ?? weeklyAdded(leads ?? [], inst.id),
+    [leads, inst.id, summary],
+  )
   const addedFrac = weekAdded / WEEKLY_ADD_LIMIT
   const capTone = addedFrac >= 1 ? 'danger' : addedFrac >= 0.7 ? 'warning' : 'success'
 

@@ -105,6 +105,67 @@ export interface CampaignMetrics {
   leads_added?: number
 }
 
+/** Compact, exact route-level metrics returned by `overview.summary`. */
+export interface OverviewTotals {
+  leads: number
+  invites: number
+  accepted: number
+  replies: number
+  positive: number
+  acceptedOfInvited: number
+  repliedOfConnected: number
+  added: number
+}
+
+/** Count-only wire shape; rates are derived in the browser without raw rows. */
+export interface OverviewIntentSummary {
+  p1: number
+  p2: number
+  p3: number
+  p3Booked: number
+  matureP3: number
+  matureP3Booked: number
+  p3Ghosted: number
+}
+
+export interface OverviewAccountSummary {
+  instance_id: string
+  totals: OverviewTotals
+  prevTotals: OverviewTotals | null
+  intent: OverviewIntentSummary
+  intentPrev: OverviewIntentSummary | null
+  weeklyAdded: number
+}
+
+export interface OverviewFunnelSummary {
+  leads: number
+  invited: number
+  accepted: number
+  replied: number
+  pending: number
+  preExisting: number
+  pipelineAvailable: boolean
+  interested: number
+  negotiationsCall: number
+  callBooked: number
+  callDone: number
+  proposalPresented: number
+  client: number
+}
+
+export interface OverviewSummary {
+  totals: OverviewTotals
+  prevTotals: OverviewTotals | null
+  intent: OverviewIntentSummary
+  intentPrev: OverviewIntentSummary | null
+  accounts: OverviewAccountSummary[]
+  campaigns: CampaignMetrics[]
+  activity: DailyActivity[]
+  velocity: Array<{ week: string; added: number }>
+  velocityUndated: number
+  funnel: OverviewFunnelSummary
+}
+
 export interface DailyActivity {
   day: string
   instance_id: string

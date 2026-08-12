@@ -9,6 +9,7 @@ import { rangeToParam } from '../lib/leads'
 import { num, pct } from '../lib/format'
 import { Sparkline } from './Sparkline'
 import { LeadsVelocityChart } from './LeadsVelocityChart'
+import type { LeadsVelocitySummary } from './LeadsVelocityChart'
 
 interface Props {
   campaigns?: CampaignMetrics[]
@@ -30,6 +31,8 @@ interface Props {
    *  tile with its own fixed 4/8/12-week rolling window, independent of the
    *  page's date-range picker (Overview only). */
   velocityLeads?: Lead[]
+  /** Server-aggregated replacement for `velocityLeads` on Overview. */
+  velocitySummary?: LeadsVelocitySummary
 }
 
 interface Card {
@@ -51,7 +54,7 @@ interface Card {
 
 export function KpiCards({
   campaigns = [], totals, prev, activity, range, flowLabel, intent, intentPrev,
-  added, addedPrev, velocityLeads,
+  added, addedPrev, velocityLeads, velocitySummary,
 }: Props) {
   const invites = totals ? totals.invites : sum(campaigns, (c) => c.invites_sent)
   const accepted = totals ? totals.accepted : sum(campaigns, (c) => c.accepted)
@@ -167,7 +170,9 @@ export function KpiCards({
           <div className="card kpi" key={c.key}>{body}</div>
         )
       })}
-      {velocityLeads && <LeadsVelocityChart leads={velocityLeads} />}
+      {(velocityLeads || velocitySummary) && (
+        <LeadsVelocityChart leads={velocityLeads} summary={velocitySummary} />
+      )}
     </div>
   )
 }

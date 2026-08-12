@@ -34,7 +34,9 @@ import {
   READ_OPS,
   READ_PATH_OPERATION,
   SYNC_RUN_LIMIT,
+  fetchNeonBootstrap,
   fetchNeonDashboard,
+  fetchNeonOverviewSummary,
   fetchNeonFollowUpHistory,
   fetchNeonCoachingDigests,
   fetchNeonLeadNotes,
@@ -118,9 +120,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names twenty-five reads: S13\'s slice, the roster and the coaching pair', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(25)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(25)
+  it('names twenty-seven reads including shell and Overview route contracts', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(27)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(27)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -500,6 +502,8 @@ describe('the dashboard load', () => {
     // collapsed by default on another, so folding either into the first load
     // would pay for a request nobody is looking at on every dashboard open.
     const pageLocalReads = [
+      READ_OPS.bootstrap,
+      READ_OPS.overviewSummary,
       READ_OPS.thread,
       READ_OPS.leadNotes,
       READ_OPS.followUpHistory,
@@ -516,6 +520,39 @@ describe('the dashboard load', () => {
     // the Pipeline board, so a roster fetched later would render a page of
     // nameless owners first.
     expect(requested).toContain(READ_OPS.teamRoster)
+  })
+
+  it('loads the shell through one bootstrap request', async () => {
+    const rec = recorder((url) => {
+      expect(url.searchParams.get('op')).toBe(READ_OPS.bootstrap)
+      return jsonResponse(emptyPage([{
+        instances: [{ id: 'n1' }],
+        campaigns: [{ campaign_id: 'n1:1' }],
+        teamMembers: [{ id: 7, name: 'A' }],
+      }]))
+    })
+    const result = await fetchNeonBootstrap(rec.fetchImpl)
+    expect(rec.urls).toHaveLength(1)
+    expect(result.rosterPath).toBe('neon')
+    expect(result.instances).toHaveLength(1)
+    expect(result.teamMembers[0]?.id).toBe(7)
+  })
+
+  it('requests one exact Overview summary for the inclusive UTC range', async () => {
+    const payload = {
+      totals: { leads: 10 }, accounts: [], campaigns: [], activity: [], velocity: [],
+      velocityUndated: 0, funnel: { leads: 10 },
+    }
+    const rec = recorder(() => jsonResponse(emptyPage([payload])))
+    const result = await fetchNeonOverviewSummary(
+      { from: '2026-05-01', to: '2026-05-31' },
+      rec.fetchImpl,
+    )
+    const query = onlyQuery(rec, READ_OPS.overviewSummary)
+    expect(query.get('from')).toBe('2026-05-01')
+    expect(query.get('to')).toBe('2026-05-31')
+    expect(query.get('limit')).toBe('1')
+    expect(result.totals.leads).toBe(10)
   })
 
   it('preserves the inbound/outbound fetch asymmetry', async () => {
