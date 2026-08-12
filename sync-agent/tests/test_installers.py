@@ -8,6 +8,7 @@ import os
 import pathlib
 import plistlib
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -93,6 +94,20 @@ class ConfigAndSecretTest(unittest.TestCase):
         self.assertNotIn("supabase_url", config)
         self.assertNotIn("supabase_service_key", config)
         self.assertEqual(rendered.count(TOKEN), 1)
+
+    def test_profile_config_pins_database_and_account_identity(self):
+        rendered = installer.render_config(
+            "uitop-1",
+            "Win Erika — Alyona Kirilchenko",
+            TOKEN,
+            lh2_db_path=r"C:\Users\user\AppData\Roaming\linked-helper\Partitions\a\lh.db",
+            account_name="Alyona Kirilchenko",
+        )
+        config = json.loads(rendered)
+        self.assertEqual(config["account_name"], "Alyona Kirilchenko")
+        self.assertTrue(config["lh2_db_path"].endswith(r"a\lh.db"))
+        self.assertIn("action_results", config["mapping"]["leads"]["query"])
+        self.assertNotIn("pic.invited_at", config["mapping"]["leads"]["query"])
 
     def test_template_has_no_tenant_secret_or_placeholder(self):
         template = (AGENT_DIR / "installer" / "config.template.json").read_text()
@@ -262,10 +277,19 @@ class SchedulerContractTest(unittest.TestCase):
             "-StartWhenAvailable",
             "-LogonType Interactive",
             "-RunLevel Limited",
+            "[string]$TaskName",
+            "[int]$StartOffsetMinutes",
+            "AddMinutes(30 + $StartOffsetMinutes)",
         ):
             self.assertIn(fragment, source)
         self.assertNotIn("ingest_token", source)
         self.assertNotIn("lha.", source)
+
+    def test_two_windows_profiles_have_distinct_task_names_and_offsets(self):
+        first, second = installer.WINDOWS_PROFILES
+        self.assertEqual(installer.windows_task_name(first.instance_id), "LH2 Sync Agent -- uitop-1")
+        self.assertEqual(installer.windows_task_name(second.instance_id), "LH2 Sync Agent -- uitop-2")
+        self.assertEqual((first.schedule_offset_minutes, second.schedule_offset_minutes), (0, 15))
 
     def test_windows_powershell_wrapper_is_ascii_for_legacy_windows_powershell(self):
         # Windows PowerShell 5.1 treats UTF-8 without a BOM as the active ANSI
@@ -332,6 +356,138 @@ class StateMachineTest(unittest.TestCase):
             self.assertEqual(saved["status"], "software_installed")
             self.assertEqual(saved["instance_id"], "uitop-1")
             self.assertEqual(saved["agent_sha256"], "abc")
+
+
+class MultiProfileDiscoveryTest(unittest.TestCase):
+    @staticmethod
+    def make_identity_db(root: pathlib.Path, folder: str, name: str) -> pathlib.Path:
+        path = root / folder / "lh.db"
+        path.parent.mkdir(parents=True)
+        connection = sqlite3.connect(path)
+        connection.execute("CREATE TABLE li_accounts (id INTEGER, full_name TEXT)")
+        connection.execute("INSERT INTO li_accounts VALUES (1, ?)", (name,))
+        connection.commit()
+        connection.close()
+        return path
+
+    def test_two_databases_are_mapped_by_stored_name_not_path_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            katerina = self.make_identity_db(root, "linked-helper-account-462413-main", "Katerina Bulkina")
+            alyona = self.make_identity_db(root, "linked-helper-account-518576-main", "Alyona Kirilchenko")
+            found = installer.discover_windows_profile_databases(candidates=(katerina, alyona))
+        self.assertEqual(found["uitop-1"], alyona)
+        self.assertEqual(found["uitop-2"], katerina)
+
+    def test_missing_duplicate_and_unexpected_identities_are_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            alyona = self.make_identity_db(root, "a", "Alyona Kirilchenko")
+            duplicate = self.make_identity_db(root, "b", "Alyona Kirilchenko")
+            unexpected = self.make_identity_db(root, "c", "Someone Else")
+            with self.assertRaises(installer.InstallerError):
+                installer.discover_windows_profile_databases(candidates=(alyona,))
+            with self.assertRaises(installer.InstallerError):
+                installer.discover_windows_profile_databases(candidates=(alyona, duplicate))
+            with self.assertRaises(installer.InstallerError):
+                installer.discover_windows_profile_databases(candidates=(alyona, unexpected))
+
+    def test_owned_partial_uitop_1_is_moved_without_copying_its_secret(self):
+        profile = installer.WINDOWS_PROFILES[0]
+        with tempfile.TemporaryDirectory() as directory:
+            home = pathlib.Path(directory)
+            legacy = home / installer.LEGACY_INSTALL_DIR
+            target = home / installer.WINDOWS_PROFILE_PARENT / profile.instance_id
+            legacy.mkdir()
+            installer.write_state(legacy, {
+                "instance_id": profile.instance_id,
+                "status": "software_installed",
+            })
+            (legacy / "config.yaml").write_text(f"ingest_token: {TOKEN}\n", encoding="utf-8")
+            with mock.patch.object(pathlib.Path, "home", return_value=home):
+                self.assertTrue(installer.migrate_legacy_windows_install(profile, target))
+            self.assertFalse(legacy.exists())
+            self.assertTrue((target / "config.yaml").is_file())
+            self.assertEqual((target / "config.yaml").read_text().count(TOKEN), 1)
+
+    def test_scheduler_commands_are_namespaced_per_profile(self):
+        helper = installer.BUNDLE_ROOT / "install-windows.ps1"
+        self.assertTrue(helper.is_file())
+        for profile in installer.WINDOWS_PROFILES:
+            calls = []
+
+            def runner(args, cwd, timeout):
+                calls.append(tuple(str(value) for value in args))
+                return installer.CommandResult(0, "", "")
+
+            with tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                installer.write_state(root, {
+                    "instance_id": profile.instance_id,
+                    "schedule_offset_minutes": profile.schedule_offset_minutes,
+                })
+                with mock.patch.object(installer, "config_instance_id", return_value=profile.instance_id):
+                    installer.register_windows_schedule(root, runner=runner, verify=False)
+            command = calls[0]
+            self.assertIn(installer.windows_task_name(profile.instance_id), command)
+            self.assertIn(str(profile.schedule_offset_minutes), command)
+
+
+class CurrentLh2MappingTest(unittest.TestCase):
+    def test_current_schema_mapping_derives_milestones_and_dedupes_slug(self):
+        config = json.loads((AGENT_DIR / "installer" / "config.template.json").read_text())
+        query = config["mapping"]["leads"]["query"]
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        connection.executescript("""
+            CREATE TABLE person_in_campaigns_history (
+              campaign_id INTEGER, person_id INTEGER, add_to_target_date TEXT
+            );
+            CREATE TABLE person_external_ids (
+              person_id INTEGER, external_id TEXT, type_group TEXT
+            );
+            CREATE TABLE person_original_mini_profile (
+              person_id INTEGER, full_name TEXT, headline TEXT
+            );
+            CREATE TABLE action_results (
+              id INTEGER, action_version_id INTEGER, person_id INTEGER,
+              result TEXT, created_at TEXT
+            );
+            CREATE TABLE action_versions (id INTEGER, action_id INTEGER, config_id INTEGER);
+            CREATE TABLE actions (id INTEGER, campaign_id INTEGER);
+            CREATE TABLE action_configs (id INTEGER, actionType TEXT);
+            CREATE TABLE action_result_messages (
+              action_result_id INTEGER, type TEXT
+            );
+            CREATE TABLE person_connect (person_id INTEGER, connected_at TEXT);
+            INSERT INTO person_in_campaigns_history VALUES
+              (7, 11, '2026-01-01T09:00:00Z'),
+              (7, 11, '2026-01-02T09:00:00Z');
+            INSERT INTO person_external_ids VALUES
+              (11, 'ACopaque', 'public'), (11, 'alyona-lead', 'public');
+            INSERT INTO person_original_mini_profile VALUES
+              (11, 'Lead One', 'Founder');
+            INSERT INTO action_configs VALUES (101, 'InvitePerson'), (102, 'CheckForReplies');
+            INSERT INTO actions VALUES (201, 7), (202, 7);
+            INSERT INTO action_versions VALUES (301, 201, 101), (302, 202, 102);
+            INSERT INTO action_results VALUES
+              (401, 301, 11, '0', '2026-01-03T10:00:00Z'),
+              (402, 301, 11, '1', '2026-01-04T10:00:00Z'),
+              (403, 302, 11, '1', '2026-01-10T10:00:00Z'),
+              (404, 302, 11, '1', '2026-01-11T10:00:00Z');
+            INSERT INTO action_result_messages VALUES (403, 'Replied'), (404, 'Replied');
+            INSERT INTO person_connect VALUES (11, '2026-01-06T10:00:00Z');
+        """)
+        rows = connection.execute(query).fetchall()
+        connection.close()
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["profile_url"], "https://www.linkedin.com/in/alyona-lead")
+        self.assertEqual(row["added_at"], "2026-01-01T09:00:00Z")
+        self.assertEqual(row["invited_at"], "2026-01-04T10:00:00Z")
+        self.assertEqual(row["connected_at"], "2026-01-06T10:00:00Z")
+        self.assertEqual(row["replied_at"], "2026-01-10T10:00:00Z")
+        self.assertEqual(row["last_action_at"], "2026-01-11T10:00:00Z")
 
 
 class BundleTest(unittest.TestCase):

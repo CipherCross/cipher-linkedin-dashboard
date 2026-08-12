@@ -16,7 +16,7 @@
       "status": "state"
     },
     "leads": {
-      "query": "select\n  pic.campaign_id            as campaign_id,\n  'https://www.linkedin.com/in/' || pei.external_id as profile_url,\n  pmp.full_name              as full_name,\n  pmp.headline               as headline,\n  pic.add_to_target_date     as added_at,\n  pic.invited_at             as invited_at,\n  pic.connected_at           as connected_at,\n  pic.replied_at             as replied_at,\n  pic.updated_at             as last_action_at\nfrom person_in_campaigns_history pic\njoin (\n  select person_id, external_id from (\n    select person_id, external_id,\n           row_number() over (partition by person_id\n             order by (external_id like 'AC%'), rowid desc) as rn\n    from person_external_ids where type_group = 'public'\n  ) where rn = 1\n) pei on pei.person_id = pic.person_id\nleft join person_original_mini_profile pmp\n  on pmp.person_id = pic.person_id",
+      "query": "with membership as (\n  select campaign_id, person_id, min(add_to_target_date) as added_at\n  from person_in_campaigns_history\n  where campaign_id is not null and person_id is not null\n  group by campaign_id, person_id\n),\npei as (\n  select person_id, external_id from (\n    select person_id, external_id,\n           row_number() over (partition by person_id\n             order by (external_id like 'AC%'), rowid desc) as rn\n    from person_external_ids\n    where type_group = 'public'\n  ) where rn = 1\n),\ninvites as (\n  select a.campaign_id, ar.person_id, min(ar.created_at) as invited_at\n  from action_results ar\n  join action_versions av on av.id = ar.action_version_id\n  join actions a on a.id = av.action_id\n  join action_configs ac on ac.id = av.config_id\n  where ac.actionType = 'InvitePerson' and cast(ar.result as text) = '1'\n  group by a.campaign_id, ar.person_id\n),\nconnections as (\n  select person_id, min(connected_at) as connected_at\n  from person_connect\n  where connected_at is not null\n  group by person_id\n),\nreplies as (\n  select a.campaign_id, ar.person_id, min(ar.created_at) as replied_at\n  from action_result_messages arm\n  join action_results ar on ar.id = arm.action_result_id\n  join action_versions av on av.id = ar.action_version_id\n  join actions a on a.id = av.action_id\n  where arm.type = 'Replied'\n  group by a.campaign_id, ar.person_id\n),\nlast_actions as (\n  select a.campaign_id, ar.person_id, max(ar.created_at) as last_action_at\n  from action_results ar\n  join action_versions av on av.id = ar.action_version_id\n  join actions a on a.id = av.action_id\n  group by a.campaign_id, ar.person_id\n)\nselect m.campaign_id as campaign_id,\n       'https://www.linkedin.com/in/' || pei.external_id as profile_url,\n       pmp.full_name as full_name,\n       pmp.headline as headline,\n       m.added_at as added_at,\n       i.invited_at as invited_at,\n       c.connected_at as connected_at,\n       r.replied_at as replied_at,\n       la.last_action_at as last_action_at\nfrom membership m\njoin pei on pei.person_id = m.person_id\nleft join person_original_mini_profile pmp on pmp.person_id = m.person_id\nleft join invites i on i.campaign_id = m.campaign_id and i.person_id = m.person_id\nleft join connections c on c.person_id = m.person_id\nleft join replies r on r.campaign_id = m.campaign_id and r.person_id = m.person_id\nleft join last_actions la on la.campaign_id = m.campaign_id and la.person_id = m.person_id",
       "campaign_id": "campaign_id",
       "profile_url": "profile_url",
       "full_name": "full_name",
@@ -26,6 +26,11 @@
       "connected_at": "connected_at",
       "replied_at": "replied_at",
       "last_action_at": "last_action_at"
+    },
+    "owner": {
+      "query": "select full_name as name, avatar as avatar_url from li_accounts limit 1",
+      "name": "name",
+      "avatar_url": "avatar_url"
     }
   }
 }

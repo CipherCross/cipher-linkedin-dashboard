@@ -14,13 +14,21 @@ param(
     [Parameter(ParameterSetName = 'Unregister', Mandatory = $true)]
     [string]$InstallRoot,
 
+    [Parameter(ParameterSetName = 'Register', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'Start', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'Unregister', Mandatory = $true)]
+    [ValidatePattern('^LH2 Sync Agent -- [A-Za-z0-9_-]{1,64}$')]
+    [string]$TaskName,
+
+    [Parameter(ParameterSetName = 'Register', Mandatory = $true)]
+    [ValidateRange(0, 29)]
+    [int]$StartOffsetMinutes,
+
     [Parameter(ParameterSetName = 'Installer', ValueFromRemainingArguments = $true)]
     [string[]]$InstallerArgs
 )
 
 $ErrorActionPreference = 'Stop'
-$TaskName = 'LH2 Sync Agent'
-
 function Assert-InstallRoot {
     param([string]$Root)
 
@@ -47,7 +55,7 @@ try {
             -WorkingDirectory $InstallRoot
         $trigger = New-ScheduledTaskTrigger `
             -Once `
-            -At (Get-Date).AddMinutes(30) `
+            -At (Get-Date).AddMinutes(30 + $StartOffsetMinutes) `
             -RepetitionInterval (New-TimeSpan -Minutes 30)
         $settings = New-ScheduledTaskSettingsSet `
             -StartWhenAvailable `

@@ -170,30 +170,76 @@ mapping:
     #  - person_external_ids has ~2 'public' rows per person (human slug +
     #    opaque 'AC...' id) — joining it raw duplicates every lead with an
     #    arbitrary slug pick. Dedupe to one slug per person as shown below.
-    # Prefer copying a proven config.yaml from an already-synced notebook.
-    # Verify with `agent.py sync --dry-run` before the first real sync.
+    # This query matches current Windows LH2 builds, where milestones live in
+    # action_results/action_result_messages/person_connect rather than as
+    # columns on person_in_campaigns_history. Verify every new build with
+    # `agent.py sync --dry-run` before the first real sync.
     query: |
-      select
-        pic.campaign_id            as campaign_id,
-        'https://www.linkedin.com/in/' || pei.external_id as profile_url,
-        pmp.full_name              as full_name,
-        pmp.headline               as headline,
-        pic.add_to_target_date     as added_at,
-        pic.invited_at             as invited_at,
-        pic.connected_at           as connected_at,
-        pic.replied_at             as replied_at,
-        pic.updated_at             as last_action_at
-      from person_in_campaigns_history pic
-      join (
+      with membership as (
+        select campaign_id, person_id, min(add_to_target_date) as added_at
+        from person_in_campaigns_history
+        where campaign_id is not null and person_id is not null
+        group by campaign_id, person_id
+      ),
+      pei as (
         select person_id, external_id from (
           select person_id, external_id,
                  row_number() over (partition by person_id
                    order by (external_id like 'AC%'), rowid desc) as rn
           from person_external_ids where type_group = 'public'
         ) where rn = 1
-      ) pei on pei.person_id = pic.person_id
+      ),
+      invites as (
+        select a.campaign_id, ar.person_id, min(ar.created_at) as invited_at
+        from action_results ar
+        join action_versions av on av.id = ar.action_version_id
+        join actions a on a.id = av.action_id
+        join action_configs ac on ac.id = av.config_id
+        where ac.actionType = 'InvitePerson' and cast(ar.result as text) = '1'
+        group by a.campaign_id, ar.person_id
+      ),
+      connections as (
+        select person_id, min(connected_at) as connected_at
+        from person_connect where connected_at is not null
+        group by person_id
+      ),
+      replies as (
+        select a.campaign_id, ar.person_id, min(ar.created_at) as replied_at
+        from action_result_messages arm
+        join action_results ar on ar.id = arm.action_result_id
+        join action_versions av on av.id = ar.action_version_id
+        join actions a on a.id = av.action_id
+        where arm.type = 'Replied'
+        group by a.campaign_id, ar.person_id
+      ),
+      last_actions as (
+        select a.campaign_id, ar.person_id, max(ar.created_at) as last_action_at
+        from action_results ar
+        join action_versions av on av.id = ar.action_version_id
+        join actions a on a.id = av.action_id
+        group by a.campaign_id, ar.person_id
+      )
+      select
+        m.campaign_id              as campaign_id,
+        'https://www.linkedin.com/in/' || pei.external_id as profile_url,
+        pmp.full_name              as full_name,
+        pmp.headline               as headline,
+        m.added_at                 as added_at,
+        i.invited_at               as invited_at,
+        c.connected_at             as connected_at,
+        r.replied_at               as replied_at,
+        la.last_action_at          as last_action_at
+      from membership m
+      join pei on pei.person_id = m.person_id
       left join person_original_mini_profile pmp
-        on pmp.person_id = pic.person_id
+        on pmp.person_id = m.person_id
+      left join invites i
+        on i.campaign_id = m.campaign_id and i.person_id = m.person_id
+      left join connections c on c.person_id = m.person_id
+      left join replies r
+        on r.campaign_id = m.campaign_id and r.person_id = m.person_id
+      left join last_actions la
+        on la.campaign_id = m.campaign_id and la.person_id = m.person_id
     campaign_id: "campaign_id"
     profile_url: "profile_url"
     full_name: "full_name"
@@ -203,6 +249,13 @@ mapping:
     connected_at: "connected_at"
     replied_at: "replied_at"
     last_action_at: "last_action_at"
+
+  owner:
+    query: |
+      select full_name as name, avatar as avatar_url
+      from li_accounts limit 1
+    name: "name"
+    avatar_url: "avatar_url"
 
   # Conversation history is BUILT IN (see sync_messages above) — the agent reads
   # the full thread from action_result_messages with no mapping. Uncomment and

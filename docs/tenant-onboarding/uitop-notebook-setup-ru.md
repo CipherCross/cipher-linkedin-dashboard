@@ -17,7 +17,7 @@ assuming this historical state is still current.
 | 1 | Set the `app_machine` password on uitop's Neon project, then bind `NEON_MACHINE_DATABASE_URL` | uitop Vercel, production | ❌ — N-S29 item 3(a)–(c) |
 | 2 | `APP_TENANT_ID=uitop` | uitop Vercel, production | ❌ — must be exactly `uitop` |
 | 3 | Redeploy uitop from a build that exports `GET` on `/api/import` | uitop Vercel | ❌ — the serving release predated that fix |
-| 4 | Mint one credential per notebook | `POST https://uitop.ciphercross.dev/api/identity?op=admin.agentCredentialIssue` | ❌ |
+| 4 | Mint one credential per LinkedIn account | `POST https://uitop.ciphercross.dev/api/identity?op=admin.agentCredentialIssue` | ❌ |
 | 5 | `AGENT_RELEASE_*` read pair plus one `sync-agent/deploy.sh` publish | uitop Vercel and operator shell | ❌ — optional after item 3 |
 
 Missing items 1 or 2 make the first live sync fail with HTTP 503 after bounded
@@ -50,11 +50,17 @@ real credential was minted correctly or that a live ingest will succeed.
 
 ## Credential issuance
 
-There is no end-user UI. Issue one credential per notebook using an admin
+There is no end-user UI. Issue one credential per LinkedIn account using an admin
 session on uitop's own hostname. The request body is:
 
 ```json
-{ "tenant_id": "uitop", "instance_id": "uitop-1", "label": "Notebook 1 — <name>" }
+{ "tenant_id": "uitop", "instance_id": "uitop-1", "label": "Win Erika — Alyona Kirilchenko" }
+```
+
+For the second account on the same Windows computer, issue a different token:
+
+```json
+{ "tenant_id": "uitop", "instance_id": "uitop-2", "label": "Win Erika — Katerina Bulkina" }
 ```
 
 The plaintext `lha.<uuid>.<secret>` appears in that response once and is not
@@ -167,8 +173,10 @@ archives. Never point an onboarding bundle at a moving branch.
 
 - macOS uses the current user's LaunchAgent
   `dev.ciphercross.lh2-sync` with a 30-minute interval and absolute paths.
-- Windows uses the current user's limited-privilege Task Scheduler task
-  `LH2 Sync Agent`, with `StartWhenAvailable` and `MultipleInstances=IgnoreNew`.
+- Windows uses one limited-privilege current-user task per account:
+  `LH2 Sync Agent -- uitop-1` and `LH2 Sync Agent -- uitop-2`, with
+  `StartWhenAvailable` and `MultipleInstances=IgnoreNew`. Their initial triggers
+  are offset by 15 minutes.
 - Neither schedule runs before login or stores the machine token in its
   arguments.
 - The raw token remains in `config.yaml`, protected by mode `0600` on macOS or a

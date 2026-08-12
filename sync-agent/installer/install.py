@@ -18,6 +18,7 @@ import platform
 import plistlib
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,8 @@ SYNC_LOG_NAME = "sync.log"
 SYNC_ERROR_LOG_NAME = "sync-error.log"
 MACOS_LABEL = "dev.ciphercross.lh2-sync"
 WINDOWS_TASK_NAME = "LH2 Sync Agent"
+WINDOWS_PROFILE_PARENT = "sync-agents"
+LEGACY_INSTALL_DIR = "sync-agent"
 
 TOKEN_RE = re.compile(
     r"lha\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
@@ -76,14 +79,41 @@ class ValidationResult:
     leads: int | None
 
 
+@dataclass(frozen=True)
+class WindowsProfile:
+    instance_id: str
+    account_name: str
+    label: str
+    schedule_offset_minutes: int
+
+
+WINDOWS_PROFILES = (
+    WindowsProfile("uitop-1", "Alyona Kirilchenko", "Win Erika — Alyona Kirilchenko", 0),
+    WindowsProfile("uitop-2", "Katerina Bulkina", "Win Erika — Katerina Bulkina", 15),
+)
+
+
 CommandRunner = Callable[[Sequence[str], pathlib.Path | None, int | None], CommandResult]
 
 
-def default_install_root(system: str | None = None) -> pathlib.Path:
+def default_install_root(
+    system: str | None = None,
+    instance_id: str | None = None,
+) -> pathlib.Path:
     system = system or platform.system()
     if system not in {"Darwin", "Windows"}:
         raise InstallerError("Поддерживаются только macOS и Windows.")
-    return pathlib.Path.home() / "sync-agent"
+    if system == "Windows" and instance_id:
+        return pathlib.Path.home() / WINDOWS_PROFILE_PARENT / validate_instance_id(instance_id)
+    return pathlib.Path.home() / LEGACY_INSTALL_DIR
+
+
+def windows_profile_root(profile: WindowsProfile) -> pathlib.Path:
+    return default_install_root("Windows", profile.instance_id)
+
+
+def windows_task_name(instance_id: str) -> str:
+    return f"{WINDOWS_TASK_NAME} -- {validate_instance_id(instance_id)}"
 
 
 def venv_python(root: pathlib.Path, system: str | None = None) -> pathlib.Path:
@@ -235,13 +265,22 @@ def validate_label(value: str, fallback: str) -> str:
     return value
 
 
-def render_config(instance_id: str, label: str, token: str) -> str:
+def render_config(
+    instance_id: str,
+    label: str,
+    token: str,
+    *,
+    lh2_db_path: str = "",
+    account_name: str = "",
+) -> str:
     metadata = release_metadata()
     config = load_json(TEMPLATE_PATH)
     config = {
         **config,
         "instance_id": validate_instance_id(instance_id),
         "instance_label": validate_label(label, instance_id),
+        "lh2_db_path": lh2_db_path,
+        "account_name": account_name,
         "ingest_url": metadata["ingest_url"],
         "ingest_token": validate_token(token),
         "release_public_key": metadata["release_public_key"],
@@ -323,7 +362,7 @@ def read_state(root: pathlib.Path) -> dict | None:
     return load_json(path) if path.is_file() else None
 
 
-def config_instance_id(root: pathlib.Path) -> str:
+def load_local_config(root: pathlib.Path) -> dict:
     python = venv_python(root)
     config = root / "config.yaml"
     if not python.is_file() or not config.is_file():
@@ -331,16 +370,22 @@ def config_instance_id(root: pathlib.Path) -> str:
     code = (
         "import json,sys,yaml; "
         "c=yaml.safe_load(open(sys.argv[1],encoding='utf-8')) or {}; "
-        "print(json.dumps(c.get('instance_id')))"
+        "print(json.dumps(c,ensure_ascii=False))"
     )
     result = run_command([str(python), "-c", code, str(config)], root, 30)
     if result.returncode != 0:
         raise InstallerError("config.yaml больше не является корректным YAML.")
     try:
-        identity = json.loads(result.stdout.strip())
+        parsed = json.loads(result.stdout.strip())
     except ValueError as error:
-        raise InstallerError("Не удалось проверить instance_id в config.yaml.") from error
-    return validate_instance_id(identity or "")
+        raise InstallerError("Не удалось безопасно прочитать config.yaml.") from error
+    if not isinstance(parsed, dict):
+        raise InstallerError("config.yaml должен содержать объект настроек.")
+    return parsed
+
+
+def config_instance_id(root: pathlib.Path) -> str:
+    return validate_instance_id(str(load_local_config(root).get("instance_id") or ""))
 
 
 def ensure_identity_unchanged(root: pathlib.Path, state: dict) -> str:
@@ -392,7 +437,11 @@ def run_agent(
     )
 
 
-def evaluate_dry_run(inspect: CommandResult, dry_run: CommandResult) -> ValidationResult:
+def evaluate_dry_run(
+    inspect: CommandResult,
+    dry_run: CommandResult,
+    expected_account_name: str = "",
+) -> ValidationResult:
     inspect_output = redact(inspect.combined)
     dry_output = redact(dry_run.combined)
     reasons: list[str] = []
@@ -417,6 +466,8 @@ def evaluate_dry_run(inspect: CommandResult, dry_run: CommandResult) -> Validati
         reasons.append("режим отправки не подтверждён как only")
     if not re.search(r"(?m)^\s*parity\s+ok\b", dry_output):
         reasons.append("нет подтверждения parity ok")
+    if expected_account_name and f"account identity: name={expected_account_name}" not in dry_output:
+        reasons.append("имя LinkedIn-аккаунта в dry-run не совпало с профилем")
 
     summary = re.search(
         r"(?m)^(\d+) campaigns, (\d+) leads, (\d+) messages, (\d+) steps\.",
@@ -445,7 +496,10 @@ def perform_validation(
 ) -> ValidationResult:
     inspect = run_agent(root, ["inspect"], runner, 180)
     dry_run = run_agent(root, ["sync", "--dry-run"], runner, 600)
-    result = evaluate_dry_run(inspect, dry_run)
+    expected_account_name = ""
+    if (root / "config.yaml").is_file() and venv_python(root).is_file():
+        expected_account_name = str(load_local_config(root).get("account_name") or "")
+    result = evaluate_dry_run(inspect, dry_run, expected_account_name)
     secure_write(root / INSPECT_NAME, result.inspect_output, 0o600)
     secure_write(root / DRY_RUN_NAME, result.dry_run_output, 0o600)
     return result
@@ -459,6 +513,8 @@ def report_text(state: dict, validation: ValidationResult, status: str) -> str:
         "================================\n"
         f"Статус: {status}\n"
         f"Ноутбук: {state['instance_id']}\n"
+        f"LinkedIn-аккаунт: {state.get('account_name') or 'не указан'}\n"
+        f"Название: {state.get('instance_label') or state['instance_id']}\n"
         f"ОС: {platform.system()}\n"
         f"Версия агента: {metadata['version']}\n"
         f"SHA-256 проверен: {state.get('agent_sha256') == metadata['sha256']}\n"
@@ -492,6 +548,130 @@ def existing_install_conflict(root: pathlib.Path) -> bool:
         return False
     names = {"agent.py", "config.yaml", ".venv", STATE_NAME}
     return any((root / name).exists() for name in names)
+
+
+def read_lh2_account_name(path: pathlib.Path) -> str:
+    """Read the one account identity stored in an LH2 database, read-only."""
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        rows = connection.execute(
+            "SELECT full_name FROM li_accounts WHERE full_name IS NOT NULL"
+        ).fetchall()
+        connection.close()
+    except sqlite3.Error as error:
+        raise InstallerError(f"Не удалось проверить владельца базы {path.name}.") from error
+    names = {str(row[0]).strip() for row in rows if str(row[0]).strip()}
+    if len(names) != 1:
+        raise InstallerError(
+            f"В базе {path.name} не найдено ровно одно имя LinkedIn-аккаунта."
+        )
+    return next(iter(names))
+
+
+def windows_lh2_candidates(appdata: pathlib.Path | None = None) -> tuple[pathlib.Path, ...]:
+    base = appdata or pathlib.Path(os.environ.get("APPDATA", ""))
+    if not str(base):
+        raise InstallerError("Windows не сообщил путь APPDATA для поиска Linked Helper.")
+    roots = (base / "linked-helper", base / "Linked Helper 2")
+    candidates = {
+        candidate.resolve()
+        for root in roots
+        if root.is_dir()
+        for candidate in root.glob("**/linked-helper-account-*-main/lh.db")
+        if candidate.is_file()
+    }
+    return tuple(sorted(candidates))
+
+
+def discover_windows_profile_databases(
+    profiles: Sequence[WindowsProfile] = WINDOWS_PROFILES,
+    candidates: Sequence[pathlib.Path] | None = None,
+) -> dict[str, pathlib.Path]:
+    candidates = tuple(candidates) if candidates is not None else windows_lh2_candidates()
+    expected = {profile.account_name: profile for profile in profiles}
+    found: dict[str, pathlib.Path] = {}
+    unexpected: list[str] = []
+    for path in candidates:
+        name = read_lh2_account_name(path)
+        if name not in expected:
+            unexpected.append(name)
+            continue
+        if name in found:
+            raise InstallerError(f"Для {name} найдено больше одной базы LH2.")
+        found[name] = path
+    missing = [name for name in expected if name not in found]
+    if missing:
+        raise InstallerError("Не найдены базы LH2 для: " + ", ".join(missing) + ".")
+    if unexpected:
+        raise InstallerError(
+            "Найдены неожиданные LinkedIn-аккаунты: " + ", ".join(sorted(unexpected)) + "."
+        )
+    return {profile.instance_id: found[profile.account_name] for profile in profiles}
+
+
+def profile_state(profile: WindowsProfile, database: pathlib.Path) -> dict:
+    return {
+        "schema_version": 2,
+        "instance_id": profile.instance_id,
+        "instance_label": profile.label,
+        "account_name": profile.account_name,
+        "lh2_db_path": str(database),
+        "schedule_offset_minutes": profile.schedule_offset_minutes,
+        "status": "installing",
+        "agent_version": release_metadata()["agent"]["version"],
+    }
+
+
+def migrate_legacy_windows_install(profile: WindowsProfile, target: pathlib.Path) -> bool:
+    legacy = default_install_root("Windows")
+    if target.exists() or not legacy.exists():
+        return False
+    state = read_state(legacy)
+    if not state:
+        if existing_install_conflict(legacy):
+            raise InstallerError(f"В {legacy} есть установка без метки; она не перемещена.")
+        return False
+    if state.get("instance_id") != profile.instance_id:
+        raise InstallerError(
+            f"Старая установка принадлежит {state.get('instance_id')}, а не {profile.instance_id}."
+        )
+    if state.get("status") == "active":
+        raise InstallerError("Активную старую установку нужно остановить перед переносом.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(legacy), str(target))
+    return True
+
+
+def refresh_windows_profile(
+    root: pathlib.Path,
+    profile: WindowsProfile,
+    database: pathlib.Path,
+) -> dict:
+    """Adopt an owned profile, preserving only its one-time machine token."""
+    state = read_state(root)
+    if not state or state.get("instance_id") != profile.instance_id:
+        raise InstallerError(f"Папка {root} не принадлежит профилю {profile.instance_id}.")
+    current = load_local_config(root)
+    token = validate_token(str(current.get("ingest_token") or ""))
+    create_virtualenv(root)
+    digest = download_verified_agent(root)
+    secure_write(
+        root / "config.yaml",
+        render_config(
+            profile.instance_id,
+            profile.label,
+            token,
+            lh2_db_path=str(database),
+            account_name=profile.account_name,
+        ),
+        0o600,
+    )
+    protect_secret_file(root / "config.yaml")
+    state.update(profile_state(profile, database))
+    state["status"] = "software_installed"
+    state["agent_sha256"] = digest
+    write_state(root, state)
+    return state
 
 
 def install_action(root: pathlib.Path) -> None:
@@ -540,6 +720,8 @@ def complete_install(root: pathlib.Path, state: dict, token: str) -> None:
             ensure,
             validate_label(str(state.get("instance_label") or ""), ensure),
             token,
+            lh2_db_path=str(state.get("lh2_db_path") or ""),
+            account_name=str(state.get("account_name") or ""),
         ),
         0o600,
     )
@@ -656,9 +838,16 @@ def register_windows_schedule(
     if not helper.is_file():
         raise InstallerError("В наборе установщика нет install-windows.ps1.")
     secure_write(root / "run-sync.cmd", windows_runner_contents(), 0o600)
+    state = read_state(root) or {}
+    instance_id = config_instance_id(root)
+    task_name = windows_task_name(instance_id)
+    offset = int(state.get("schedule_offset_minutes", 0))
+    if not 0 <= offset <= 29:
+        raise InstallerError("Сдвиг расписания должен быть от 0 до 29 минут.")
     args = [
         windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", str(helper), "-RegisterSchedule", "-InstallRoot", str(root),
+        "-TaskName", task_name, "-StartOffsetMinutes", str(offset),
     ]
     registered = runner(args, None, 60)
     if registered.returncode != 0:
@@ -669,14 +858,16 @@ def register_windows_schedule(
     offset = log.stat().st_size if log.exists() else 0
     started = runner(
         [windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(helper), "-StartSchedule", "-InstallRoot", str(root)],
+         "-File", str(helper), "-StartSchedule", "-InstallRoot", str(root),
+         "-TaskName", task_name],
         None,
         60,
     )
     if started.returncode != 0 or not wait_for_sync_log(log, offset):
         runner(
             [windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-File", str(helper), "-UnregisterSchedule", "-InstallRoot", str(root)],
+             "-File", str(helper), "-UnregisterSchedule", "-InstallRoot", str(root),
+             "-TaskName", task_name],
             None,
             60,
         )
@@ -696,9 +887,11 @@ def unregister_schedule(
         return
     if system == "Windows":
         helper = BUNDLE_ROOT / "install-windows.ps1"
+        task_name = windows_task_name(config_instance_id(root))
         runner(
             [windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-File", str(helper), "-UnregisterSchedule", "-InstallRoot", str(root)],
+             "-File", str(helper), "-UnregisterSchedule", "-InstallRoot", str(root),
+             "-TaskName", task_name],
             None,
             60,
         )
@@ -785,7 +978,11 @@ def schedule_status(root: pathlib.Path, runner: CommandRunner = run_command) -> 
         service = f"gui/{os.getuid()}/{MACOS_LABEL}"
         result = runner(["launchctl", "print", service], None, 30)
     elif system == "Windows":
-        result = runner(["schtasks", "/Query", "/TN", WINDOWS_TASK_NAME], None, 30)
+        result = runner(
+            ["schtasks", "/Query", "/TN", windows_task_name(config_instance_id(root))],
+            None,
+            30,
+        )
     else:
         return "не поддерживается"
     return "зарегистрирован" if result.returncode == 0 else "не зарегистрирован"
@@ -831,6 +1028,72 @@ ACTION_LABELS = {
 }
 
 
+def install_windows_profile(profile: WindowsProfile, database: pathlib.Path) -> None:
+    root = windows_profile_root(profile)
+    if root.exists():
+        state = refresh_windows_profile(root, profile, database)
+        print(f"\n{profile.account_name} ({profile.instance_id}): конфигурация обновлена.")
+        recheck_action(root, state)
+        return
+    print(f"\nНастройка {profile.account_name} ({profile.instance_id}).")
+    print(f"Папка профиля: {root}")
+    token = validate_token(getpass.getpass(
+        "Вставьте отдельный ключ lha. через Ctrl+V и нажмите Enter "
+        "(символы не отображаются): "
+    ))
+    print(f"Ключ принят: lha.…{token[-4:]}")
+    state = profile_state(profile, database)
+    protect_install_root(root)
+    write_state(root, state)
+    complete_install(root, state, token)
+
+
+def windows_multi_status() -> None:
+    for profile in WINDOWS_PROFILES:
+        root = windows_profile_root(profile)
+        print(f"\n{profile.account_name} ({profile.instance_id})")
+        status_action(root)
+
+
+def windows_multi_main() -> int:
+    databases = discover_windows_profile_databases()
+    migrated = migrate_legacy_windows_install(
+        WINDOWS_PROFILES[0], windows_profile_root(WINDOWS_PROFILES[0])
+    )
+    if migrated:
+        print("Существующая установка uitop-1 перенесена в отдельный профиль Alyona.")
+
+    missing = [profile for profile in WINDOWS_PROFILES if not windows_profile_root(profile).exists()]
+    if missing:
+        print("Найдены две базы Linked Helper. Настраиваю два независимых профиля.")
+        for profile in WINDOWS_PROFILES:
+            install_windows_profile(profile, databases[profile.instance_id])
+        return 0
+
+    print("\nПрофили на этом компьютере:")
+    for index, profile in enumerate(WINDOWS_PROFILES, 1):
+        state = read_state(windows_profile_root(profile)) or {}
+        print(f"  {index}. {profile.account_name} — {profile.instance_id} — "
+              f"{state.get('status', 'неизвестно')}")
+    print("\nВыберите действие:")
+    print("  1. Обновить конфигурацию и безопасно проверить оба аккаунта")
+    print("  2. Активировать Alyona Kirilchenko после одобрения")
+    print("  3. Активировать Katerina Bulkina после одобрения")
+    print("  4. Показать состояние обоих аккаунтов")
+    answer = input("Номер: ").strip()
+    if answer == "1":
+        for profile in WINDOWS_PROFILES:
+            install_windows_profile(profile, databases[profile.instance_id])
+    elif answer in {"2", "3"}:
+        profile = WINDOWS_PROFILES[int(answer) - 2]
+        activate_action(windows_profile_root(profile))
+    elif answer == "4":
+        windows_multi_status()
+    else:
+        raise InstallerError("Неизвестный пункт меню.")
+    return 0
+
+
 def choose_action(root: pathlib.Path) -> str:
     actions = available_actions(read_state(root))
     if len(actions) == 1:
@@ -858,6 +1121,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
         check_python_version()
+        if platform.system() == "Windows" and args.install_root is None and args.action is None:
+            return windows_multi_main()
         root = (args.install_root or default_install_root()).expanduser().resolve()
         action = args.action or choose_action(root)
         if action == "install":
