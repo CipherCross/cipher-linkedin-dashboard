@@ -58,7 +58,6 @@ export function Overview() {
 
   useEffect(() => {
     let cancelled = false
-    let shouldReleaseDetails = false
     setSummaryLoading(true)
     setSummaryError(null)
     ;(async () => {
@@ -70,7 +69,6 @@ export function Overview() {
           setSummary(null)
           return
         }
-        shouldReleaseDetails = true
         setLegacyPath(false)
         const next = await fetchNeonOverviewSummary(range)
         if (cancelled) return
@@ -83,9 +81,6 @@ export function Overview() {
       } finally {
         if (!cancelled) {
           setSummaryLoading(false)
-          if (shouldReleaseDetails) {
-            window.dispatchEvent(new Event('dashboard:overview-ready'))
-          }
         }
       }
     })()

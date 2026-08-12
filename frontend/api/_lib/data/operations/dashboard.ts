@@ -311,6 +311,12 @@ export const dashboardBootstrapOperation: NeonQueryOperation<DashboardBootstrapR
  * as an off-ramp rather than rank seven. Intent chronology comes from the
  * authoritative full-thread projection and booking events/current-stage
  * compatibility path used by `replyIntentMetrics`.
+ *
+ * Keep the two tenant-sized inputs materialized. PostgreSQL 12+ may otherwise
+ * inline a CTE and repeat the RLS-filtered table walk for every downstream
+ * aggregate. Intent milestones are derived directly from `messages`: selecting
+ * the `conversation_reply_intent` view here made PostgreSQL execute its two
+ * window sorts and full-thread join inside an already large aggregate query.
  */
 const OVERVIEW_SUMMARY_SQL = `WITH bounds AS (
   SELECT $1::timestamptz AS cur_from,
@@ -323,8 +329,18 @@ const OVERVIEW_SUMMARY_SQL = `WITH bounds AS (
          current_timestamp AS as_of,
          date_trunc('week', current_timestamp AT TIME ZONE 'UTC')::date AS current_monday
 ),
-lead_rows AS (
-  SELECT l.*,
+lead_rows AS MATERIALIZED (
+  SELECT l.id,
+         l.instance_id,
+         l.profile_url,
+         l.campaign_id,
+         l.added_at,
+         l.invited_at,
+         l.connected_at,
+         l.first_message_at,
+         l.replied_at,
+         l.pipeline_stage,
+         l.pipeline_stage_changed_at,
          COALESCE(l.added_at, LEAST(l.invited_at, l.connected_at, l.first_message_at, l.replied_at))
            AS effective_added_at
     FROM public.leads l
@@ -367,11 +383,11 @@ lead_stats AS (
 booking_events AS (
   SELECT l.instance_id, l.profile_url, e.occurred_at AS booked_at
     FROM public.pipeline_events e
-    JOIN public.leads l ON l.id = e.lead_id
+    JOIN lead_rows l ON l.id = e.lead_id
    WHERE e.kind = 'stage' AND e.to_stage = 'call_booked'
   UNION ALL
   SELECT l.instance_id, l.profile_url, l.pipeline_stage_changed_at AS booked_at
-    FROM public.leads l
+    FROM lead_rows l
    WHERE l.pipeline_stage = 'call_booked' AND l.pipeline_stage_changed_at IS NOT NULL
 ),
 bookings AS (
@@ -379,10 +395,38 @@ bookings AS (
     FROM booking_events
    GROUP BY instance_id, profile_url
 ),
+intent_milestones AS MATERIALIZED (
+  SELECT m.instance_id,
+         m.profile_url,
+         min(m.sent_at) FILTER (WHERE m.intent_level = 'p1') AS first_p1_at,
+         min(m.sent_at) FILTER (WHERE m.intent_level = 'p2') AS first_p2_at,
+         min(m.sent_at) FILTER (WHERE m.intent_level = 'p3') AS first_p3_at
+    FROM public.messages m
+   WHERE m.direction = 'in' AND m.intent_level IS NOT NULL
+   GROUP BY m.instance_id, m.profile_url
+),
 intent_rows AS (
-  SELECT i.*, bk.last_booking_at
-    FROM public.conversation_reply_intent i
+  SELECT i.instance_id,
+         i.profile_url,
+         i.first_p1_at,
+         i.first_p2_at,
+         i.first_p3_at,
+         bk.last_booking_at,
+         max(m.sent_at) FILTER (
+           WHERE m.direction = 'out' AND m.sent_at > i.first_p3_at
+         ) AS last_out_after_p3_at,
+         max(m.sent_at) FILTER (
+           WHERE m.direction = 'in' AND m.sent_at > i.first_p3_at
+         ) AS last_in_after_p3_at
+    FROM intent_milestones i
     LEFT JOIN bookings bk USING (instance_id, profile_url)
+    LEFT JOIN public.messages m
+      ON i.first_p3_at IS NOT NULL
+     AND m.instance_id = i.instance_id
+     AND m.profile_url = i.profile_url
+     AND m.sent_at > i.first_p3_at
+   GROUP BY i.instance_id, i.profile_url, i.first_p1_at, i.first_p2_at,
+            i.first_p3_at, bk.last_booking_at
 ),
 intent_stats AS (
   SELECT CASE WHEN GROUPING(i.instance_id) = 1 THEN NULL ELSE i.instance_id END AS scope_id,
@@ -454,7 +498,7 @@ campaign_stats AS (
          max(GREATEST(l.invited_at, l.connected_at, l.replied_at)) AS last_activity_at,
          c.briefing_context,
          c.briefing_context_updated_at
-    FROM public.leads l
+    FROM lead_rows l
     JOIN public.campaigns c ON c.id = l.campaign_id
     CROSS JOIN bounds b
    GROUP BY l.campaign_id, c.name, l.instance_id, c.status,
@@ -465,7 +509,7 @@ activity_rows AS (
          l.instance_id,
          e.event_type,
          count(*)::int AS cnt
-    FROM public.leads l
+    FROM lead_rows l
     CROSS JOIN bounds b
     CROSS JOIN LATERAL (VALUES
       (l.invited_at, 'invite_sent'::text),
@@ -480,7 +524,7 @@ activity_rows AS (
 velocity_rows AS (
   SELECT to_char(date_trunc('week', l.added_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS week,
          count(*)::int AS added
-    FROM public.leads l CROSS JOIN bounds b
+    FROM lead_rows l CROSS JOIN bounds b
    WHERE l.added_at IS NOT NULL
      AND date_trunc('week', l.added_at AT TIME ZONE 'UTC')::date
            BETWEEN b.current_monday - 84 AND b.current_monday
@@ -491,17 +535,17 @@ persons AS (
          bool_or(l.invited_at IS NOT NULL) AS invited,
          bool_or(l.connected_at IS NOT NULL) AS connected,
          bool_or(l.replied_at IS NOT NULL) AS replied
-    FROM public.leads l
+    FROM lead_rows l
    GROUP BY l.instance_id, l.profile_url
 ),
 pipeline_touches AS (
   SELECT l.instance_id, l.profile_url, l.pipeline_stage AS stage
-    FROM public.leads l
+    FROM lead_rows l
    WHERE l.pipeline_stage IS NOT NULL
   UNION ALL
   SELECT l.instance_id, l.profile_url, e.to_stage AS stage
     FROM public.pipeline_events e
-    JOIN public.leads l ON l.id = e.lead_id
+    JOIN lead_rows l ON l.id = e.lead_id
    WHERE e.kind = 'stage' AND e.to_stage IS NOT NULL
 ),
 pipeline_ranked AS (
@@ -636,7 +680,7 @@ SELECT (g.value || jsonb_build_object(
                            FROM activity_rows x), '[]'::jsonb),
   'velocity', COALESCE((SELECT jsonb_agg(to_jsonb(v) ORDER BY v.week)
                            FROM velocity_rows v), '[]'::jsonb),
-  'velocityUndated', (SELECT count(*)::int FROM public.leads WHERE added_at IS NULL),
+  'velocityUndated', (SELECT count(*)::int FROM lead_rows WHERE added_at IS NULL),
   'funnel', f.value
 )) AS summary
   FROM global_payload g

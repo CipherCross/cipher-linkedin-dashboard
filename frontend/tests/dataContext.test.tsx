@@ -149,7 +149,7 @@ beforeEach(() => {
 })
 
 describe('DataProvider dispatch', () => {
-  it('paints the Neon bootstrap before starting the tenant-wide snapshot on Overview', async () => {
+  it('keeps Overview on route-owned metrics without starting the tenant-wide snapshot', async () => {
     window.history.replaceState(null, '', '#/')
     resolveReadPath.mockResolvedValue('neon')
     fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))
@@ -160,9 +160,9 @@ describe('DataProvider dispatch', () => {
     expect(screen.getByTestId('loading').textContent).toBe('false')
     expect(fetchNeonDashboard).not.toHaveBeenCalled()
 
-    window.dispatchEvent(new Event('dashboard:overview-ready'))
-    await waitFor(() => expect(fetchNeonDashboard).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(fetchNeonDashboard).not.toHaveBeenCalled()
+    expect(screen.getByTestId('phase').textContent).toBe('bootstrap')
   })
 
   it('keeps Leads on bootstrap data instead of starting the full tenant snapshot', async () => {

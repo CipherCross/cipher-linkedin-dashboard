@@ -559,6 +559,15 @@ describe('the server-side Leads explorer', () => {
   })
 })
 
+describe('the server-side Overview summary', () => {
+  it('does not expand the expensive durable-intent view inside the aggregate', () => {
+    const sql = sqlOf(inspectable(overviewSummaryOperation)).toLowerCase()
+    expect(sql).toContain('lead_rows as materialized')
+    expect(sql).toContain('intent_milestones as materialized')
+    expect(sql).not.toContain('conversation_reply_intent')
+  })
+})
+
 describe('the inbound history cannot be windowed', () => {
   it('ignores a range even when one is supplied', () => {
     // The invariant from CLAUDE.md: inbound is fetched in full because sentiment

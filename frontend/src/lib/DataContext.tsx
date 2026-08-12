@@ -956,20 +956,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const ensureFull = () => {
       if (!isProgressiveLocation()) void load('full')
     }
-    const afterOverview = () => {
-      // Yield one task so React can paint the useful metrics before background
-      // relation walks compete for network, JSON parsing and the database pool.
-      setTimeout(() => void load('full'), 0)
-    }
     window.addEventListener('hashchange', ensureFull)
-    window.addEventListener('dashboard:overview-ready', afterOverview)
     const timer = setInterval(() => {
       if (fullSnapshotReady.current || !isProgressiveLocation()) void load('delta')
     }, 5 * 60_000)
     return () => {
       clearInterval(timer)
       window.removeEventListener('hashchange', ensureFull)
-      window.removeEventListener('dashboard:overview-ready', afterOverview)
     }
   }, [load])
 
