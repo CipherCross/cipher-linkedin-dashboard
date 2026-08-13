@@ -242,18 +242,30 @@ const REVIEW_SQL = `SELECT jsonb_build_object(
       'id', l.id,
       'instance_id', l.instance_id,
       'campaign_id', l.campaign_id,
-      'profile_url', l.profile_url,
+      'profile_url', md5(l.profile_url),
       'added_at', l.added_at,
       'invited_at', l.invited_at,
       'connected_at', l.connected_at,
-      'first_message_at', l.first_message_at,
       'replied_at', l.replied_at,
       'pipeline_stage', l.pipeline_stage,
       'pipeline_stage_changed_at', l.pipeline_stage_changed_at
     ) ORDER BY l.id) FROM public.leads l
   ), ${EMPTY_ARRAY}),
   'messages', COALESCE((
-    SELECT jsonb_agg(to_jsonb(m) - 'content_hash' - 'updated_at' ORDER BY m.sent_at DESC, m.id DESC)
+    SELECT jsonb_agg(jsonb_build_object(
+      'id', m.id,
+      'instance_id', m.instance_id,
+      'campaign_id', m.campaign_id,
+      'profile_url', md5(m.profile_url),
+      'direction', m.direction,
+      'body', m.body,
+      'sent_at', m.sent_at,
+      'sentiment', m.sentiment,
+      'reason', m.reason,
+      'classified_at', m.classified_at,
+      'intent_level', m.intent_level,
+      'intent_reason', m.intent_reason
+    ) ORDER BY m.sent_at DESC, m.id DESC)
       FROM public.messages m
      WHERE m.direction = 'in'
        AND m.sent_at >= date_trunc('week', current_timestamp AT TIME ZONE 'UTC') - interval '15 weeks'
@@ -261,9 +273,20 @@ const REVIEW_SQL = `SELECT jsonb_build_object(
   'pipelineEvents', COALESCE((
     SELECT jsonb_agg(to_jsonb(e) ORDER BY e.occurred_at, e.id)
       FROM public.pipeline_events e
+     WHERE e.occurred_at >= date_trunc('week', current_timestamp AT TIME ZONE 'UTC') - interval '15 weeks'
   ), ${EMPTY_ARRAY}),
   'conversationReplyIntents', COALESCE((
-    SELECT jsonb_agg(to_jsonb(i) ORDER BY i.instance_id, i.profile_url)
+    SELECT jsonb_agg(jsonb_build_object(
+      'instance_id', i.instance_id,
+      'profile_url', md5(i.profile_url),
+      'highest_intent', i.highest_intent,
+      'first_p1_at', i.first_p1_at,
+      'first_p2_at', i.first_p2_at,
+      'first_p3_at', i.first_p3_at,
+      'first_p3_campaign_id', i.first_p3_campaign_id,
+      'last_out_after_p3_at', i.last_out_after_p3_at,
+      'last_in_after_p3_at', i.last_in_after_p3_at
+    ) ORDER BY i.instance_id, i.profile_url)
       FROM public.conversation_reply_intent i
   ), ${EMPTY_ARRAY}),
   'steps', COALESCE((
