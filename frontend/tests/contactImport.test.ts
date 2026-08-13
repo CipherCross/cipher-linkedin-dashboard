@@ -6,6 +6,7 @@ import {
   isCleanPersonLinkedin,
   normalizeDomain,
   normalizeLinkedin,
+  resolvedCompanyMatch,
 } from '../api/_lib/contactImport'
 import type { CompanyRecord, PreviewRow } from '../api/_lib/contactImport'
 
@@ -84,5 +85,20 @@ describe('Airtable company matching', () => {
     )
     expect(match.status).toBe('company_action')
     expect(match.reason).toBe('ambiguous')
+  })
+
+  it('keeps an explicitly resolved Company authoritative for Contact preview', () => {
+    const companies = [
+      company('rec00000000000001'),
+      company('rec00000000000002', { name: 'Another Company' }),
+    ]
+    const match = resolvedCompanyMatch('rec00000000000002', companies)
+    expect(match?.status).toBe('ready')
+    expect(match?.company?.id).toBe('rec00000000000002')
+    expect(match?.matchMethod).toBe('resolved')
+    expect(resolvedCompanyMatch('rec00000000000999', companies)).toEqual({
+      status: 'invalid',
+      reason: 'Resolved Company no longer exists in Airtable',
+    })
   })
 })

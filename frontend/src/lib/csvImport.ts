@@ -41,6 +41,10 @@ export interface ContactImportRow {
   companyLinkedin: string
 }
 
+export interface UnifiedContactImportRow extends ContactImportRow {
+  accountId: string
+}
+
 export const COMPANY_TARGET_FIELDS = [
   'companyName',
   'mailingName',
@@ -78,6 +82,16 @@ export interface CompanyImportRow {
   keywords: string
   description: string
   foundedYear: string
+}
+
+export interface UnifiedCompanyImportRow extends CompanyImportRow {
+  accountId: string
+  sourceRowNumbers: number[]
+}
+
+export interface UnifiedImportRows {
+  contacts: UnifiedContactImportRow[]
+  companies: UnifiedCompanyImportRow[]
 }
 
 export interface ImportRowOutcome {
@@ -399,6 +413,95 @@ export function buildCompanyRows(
   }))
 }
 
+export function buildUnifiedImportRows(
+  document: CsvDocument,
+  mapping: CsvMapping,
+): UnifiedImportRows {
+  const contacts = buildContactRows(document, mapping)
+  const accountIdHeader = findHeader(document.headers, 'Apollo Account Id')
+  if (!accountIdHeader) {
+    throw new Error('This Apollo people export is missing the required “Apollo Account Id” column.')
+  }
+
+  const companyMapping = suggestApolloCompanyMapping(document.headers)
+  if (!companyMapping.companyName) {
+    throw new Error('This Apollo people export is missing the required “Company Name” column.')
+  }
+
+  const unifiedContacts: UnifiedContactImportRow[] = contacts.map((contact, index) => {
+    const accountId = document.rows[index]?.[accountIdHeader]?.trim() ?? ''
+    if (!accountId) {
+      throw new Error(`CSV row ${contact.rowNumber} is missing Apollo Account Id.`)
+    }
+    return { ...contact, accountId }
+  })
+
+  const grouped = new Map<
+    string,
+    { sourceRowNumbers: number[]; values: Record<CompanyTargetField, string[]> }
+  >()
+  const companyValue = (
+    source: Record<string, string>,
+    target: CompanyTargetField,
+  ): string => {
+    const header = companyMapping[target]
+    return header ? source[header]?.trim() ?? '' : ''
+  }
+
+  unifiedContacts.forEach((contact, index) => {
+    const group = grouped.get(contact.accountId) ?? {
+      sourceRowNumbers: [],
+      values: Object.fromEntries(
+        COMPANY_TARGET_FIELDS.map((target) => [target, [] as string[]]),
+      ) as unknown as Record<CompanyTargetField, string[]>,
+    }
+    group.sourceRowNumbers.push(contact.rowNumber)
+    const source = document.rows[index]
+    for (const target of COMPANY_TARGET_FIELDS) {
+      const value = companyValue(source, target)
+      if (value) group.values[target].push(value)
+    }
+    grouped.set(contact.accountId, group)
+  })
+
+  const companies: UnifiedCompanyImportRow[] = []
+  for (const [accountId, group] of grouped) {
+    const selected = {} as Record<CompanyTargetField, string>
+    for (const target of COMPANY_TARGET_FIELDS) {
+      const unique = [...new Set(group.values[target])]
+      if (unique.length > 1) {
+        throw new Error(
+          `Apollo Account Id ${accountId} has conflicting ${COMPANY_TARGET_LABELS[target]} values in rows ${group.sourceRowNumbers.join(', ')}.`,
+        )
+      }
+      selected[target] = unique[0] ?? ''
+    }
+    if (!selected.companyName) {
+      throw new Error(
+        `Apollo Account Id ${accountId} has no Company name in rows ${group.sourceRowNumbers.join(', ')}.`,
+      )
+    }
+    companies.push({
+      accountId,
+      sourceRowNumbers: [...group.sourceRowNumbers],
+      rowNumber: group.sourceRowNumbers[0],
+      companyName: selected.companyName,
+      mailingName: selected.mailingName,
+      employees: selected.employees,
+      industry: selected.industry,
+      website: selected.website,
+      linkedin: selected.linkedin,
+      country: selected.country,
+      keywords: selected.keywords,
+      description: selected.description,
+      foundedYear: selected.foundedYear,
+    })
+  }
+
+  companies.sort((left, right) => left.rowNumber - right.rowNumber)
+  return { contacts: unifiedContacts, companies }
+}
+
 function csvCell(value: unknown): string {
   const text = value == null ? '' : String(value)
   return `"${text.replace(/"/g, '""')}"`
@@ -486,6 +589,64 @@ export function downloadCompanyImportResults(
   const link = window.document.createElement('a')
   link.href = url
   link.download = `${fileName.replace(/\.csv$/i, '')}-import-results.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+export function downloadUnifiedImportResults(
+  fileName: string,
+  contacts: UnifiedContactImportRow[],
+  companies: UnifiedCompanyImportRow[],
+  companyOutcomes: ImportRowOutcome[],
+  contactOutcomes: ImportRowOutcome[],
+) {
+  const companyOutcomeByAccount = new Map<string, ImportRowOutcome>()
+  const companyByRow = new Map(companies.map((company) => [company.rowNumber, company]))
+  for (const outcome of companyOutcomes) {
+    const company = companyByRow.get(outcome.rowNumber)
+    if (company) companyOutcomeByAccount.set(company.accountId, outcome)
+  }
+  const contactByRow = new Map(contactOutcomes.map((outcome) => [outcome.rowNumber, outcome]))
+  const headers = [
+    'Source Row',
+    'Apollo Account Id',
+    'Person LinkedIn',
+    'Full Name',
+    'Company',
+    'Company Status',
+    'Company Detail',
+    'Airtable Company ID',
+    'Contact Status',
+    'Contact Detail',
+    'Airtable Contact ID',
+  ]
+  const lines = [
+    headers.map(csvCell).join(','),
+    ...contacts.map((contact) => {
+      const company = companyOutcomeByAccount.get(contact.accountId)
+      const person = contactByRow.get(contact.rowNumber)
+      return [
+        contact.rowNumber,
+        contact.accountId,
+        contact.personLinkedin,
+        contact.fullName,
+        company?.companyName ?? contact.companyName,
+        company?.status ?? 'not_imported',
+        company?.detail ?? '',
+        company?.companyId ?? person?.companyId ?? '',
+        person?.status ?? 'not_imported',
+        person?.detail ?? '',
+        person?.contactId ?? '',
+      ]
+        .map(csvCell)
+        .join(',')
+    }),
+  ]
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = `${fileName.replace(/\.csv$/i, '')}-unified-import-results.csv`
   link.click()
   URL.revokeObjectURL(url)
 }

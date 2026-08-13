@@ -308,7 +308,7 @@ figures; range- and subset-specific analysis is recomputed client-side in
 | `/icp` **ICP** | ICP definitions with personas and sub-industries |
 | `/hypotheses` **Hypotheses** | Hypotheses with linked campaigns and their funnels |
 | `/team` **Team** | Team directory; renders the identity or Supabase variant per authenticator |
-| `/csv-import` **CSV import** (admin) | Apollo people and company CSV upload: fixed field mapping, duplicate detection, existing-company matching, batched creation in Airtable. Requires `Added by`; never creates a Company or updates an existing Contact. Up to 500 rows / 5 MB, results kept for the browser session only |
+| `/csv-import` **CSV import** (admin) | One Apollo People CSV creates missing Airtable Companies first, then imports Contacts linked to the resolved Company records. Groups Companies by required `Apollo Account Id`, reviews name-only/ambiguous matches, skips existing Contacts, and supports safe retry plus a downloadable combined report. Requires one shared `Added by`; up to 500 Contact rows / 5 MB |
 | `/chat` **Chat** | AI copilot with streamed markdown, reasoning, and visible tool calls |
 | `/health` **Health** | Sync-run history, per-instance freshness and errors, plus the per-notebook **Configure** editor |
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCompanyRows,
   buildContactRows,
+  buildUnifiedImportRows,
   companyMappingErrors,
   mappingErrors,
   parseCompanyCsvFile,
@@ -140,5 +141,79 @@ describe('Apollo Company CSV import parsing', () => {
     expect(companyMappingErrors(mapping).join(' ')).toContain('Company name is required')
     mapping.companyName = mapping.website
     expect(companyMappingErrors(mapping).join(' ')).toContain('only be mapped once')
+  })
+})
+
+describe('Unified Apollo People import parsing', () => {
+  const headers = [
+    ...APOLLO_HEADERS,
+    'Company Name for Emails',
+    '# Employees',
+    'Industry',
+    'Company Country',
+    'Keywords',
+    'Apollo Account Id',
+    'Email',
+    'Mobile Phone',
+    'Annual Revenue',
+  ]
+
+  const sourceRow = (firstName: string, personSlug: string, companyName = 'Analytical Engines') => [
+    firstName,
+    'Lovelace',
+    'Founder',
+    companyName,
+    `https://linkedin.com/in/${personSlug}`,
+    'https://analytical.test',
+    'https://linkedin.com/company/analytical-engines',
+    'Analytical Engines',
+    '35',
+    'Computer Software',
+    'United Kingdom',
+    '"analysis, engines"',
+    'apollo-account-1',
+    'private@example.test',
+    '+1 555 0100',
+    '1000000',
+  ]
+
+  it('groups repeated People rows into one allowlisted Company candidate', async () => {
+    const csv = [
+      headers.join(','),
+      sourceRow('Ada', 'ada').join(','),
+      sourceRow('Grace', 'grace').join(','),
+    ].join('\n')
+    const document = await parseCsvFile(new File([csv], 'apollo-people.csv'))
+    const result = buildUnifiedImportRows(document, document.mapping)
+
+    expect(result.contacts).toHaveLength(2)
+    expect(result.companies).toHaveLength(1)
+    expect(result.companies[0]).toMatchObject({
+      accountId: 'apollo-account-1',
+      sourceRowNumbers: [2, 3],
+      companyName: 'Analytical Engines',
+      employees: '35',
+    })
+    expect(result.contacts[0]).not.toHaveProperty('Email')
+    expect(result.companies[0]).not.toHaveProperty('annualRevenue')
+  })
+
+  it('fails closed when Apollo Account Id is missing', async () => {
+    const row = sourceRow('Ada', 'ada')
+    row[headers.indexOf('Apollo Account Id')] = ''
+    const document = await parseCsvFile(
+      new File([[headers.join(','), row.join(',')].join('\n')], 'apollo-people.csv'),
+    )
+    expect(() => buildUnifiedImportRows(document, document.mapping)).toThrow('missing Apollo Account Id')
+  })
+
+  it('fails the group when repeated rows contain conflicting Company data', async () => {
+    const csv = [
+      headers.join(','),
+      sourceRow('Ada', 'ada').join(','),
+      sourceRow('Grace', 'grace', 'Different Company').join(','),
+    ].join('\n')
+    const document = await parseCsvFile(new File([csv], 'apollo-people.csv'))
+    expect(() => buildUnifiedImportRows(document, document.mapping)).toThrow('conflicting Company name')
   })
 })

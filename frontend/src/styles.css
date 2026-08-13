@@ -3513,7 +3513,7 @@ td .pipe-stage-select.quiet:focus-visible {
   margin: 0 0 var(--space-8);
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 .csv-import-steps li {
@@ -3584,6 +3584,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .csv-mapping-card,
 .csv-company-actions,
 .csv-preview-card,
+.csv-results-card,
 .csv-result-hero { margin-bottom: var(--space-7); }
 .csv-setup-card h2,
 .csv-mapping-card h2,
@@ -3637,6 +3638,7 @@ td .pipe-stage-select.quiet:focus-visible {
 }
 .csv-map-row:last-child { border-bottom: 0; }
 .csv-map-row > span:nth-child(2) { text-align: center; color: var(--text-muted); }
+.csv-map-value { color: var(--text); font-weight: 600; }
 .csv-map-row select { width: 100%; }
 .csv-map-row.locked { background: var(--surface-2); color: var(--text-secondary); }
 .csv-card-actions {
@@ -3666,6 +3668,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .csv-summary-card.warning { border-left-color: var(--warning); }
 .csv-summary-card.danger { border-left-color: var(--danger); }
 .csv-summary-card.muted { border-left-color: var(--text-muted); color: var(--text); }
+.csv-summary-chips { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 
 .csv-company-action-list { display: flex; flex-direction: column; }
 .csv-company-action-row {

@@ -42,6 +42,7 @@ export interface PreviewRow {
   companyName: string
   companyWebsite: string
   companyLinkedin: string
+  companyId?: string
 }
 
 interface CommitRow {
@@ -242,6 +243,25 @@ export function buildCompanyMaps(companies: CompanyRecord[]) {
   }
 }
 
+export function resolvedCompanyMatch(
+  companyId: string | undefined,
+  companies: CompanyRecord[],
+) {
+  if (!companyId) return null
+  const company = companies.find((candidate) => candidate.id === companyId)
+  if (!company) {
+    return {
+      status: 'invalid' as const,
+      reason: 'Resolved Company no longer exists in Airtable',
+    }
+  }
+  return {
+    status: 'ready' as const,
+    company,
+    matchMethod: 'resolved' as const,
+  }
+}
+
 export function companyMatch(
   row: PreviewRow,
   maps: {
@@ -318,11 +338,14 @@ function validPreviewRow(value: unknown): value is PreviewRow {
     row.companyWebsite,
     row.companyLinkedin,
   ]
+  const companyId = row.companyId
   return (
     typeof row.rowNumber === 'number' &&
     Number.isInteger(row.rowNumber) &&
     row.rowNumber > 1 &&
-    strings.every((item) => typeof item === 'string' && item.length <= MAX_TEXT)
+    strings.every((item) => typeof item === 'string' && item.length <= MAX_TEXT) &&
+    (companyId === undefined ||
+      (typeof companyId === 'string' && /^rec[a-zA-Z0-9]{14}$/.test(companyId)))
   )
 }
 
@@ -349,7 +372,10 @@ async function preview(payload: Record<string, unknown>) {
   }
 
   await getImportSchema()
-  const [companies, contacts] = await Promise.all([getCompanies(), getContacts()])
+  const [companies, contacts] = await Promise.all([
+    getCompanies(payload.forceCompanies === true),
+    getContacts(),
+  ])
   const companyMaps = buildCompanyMaps(companies)
   const contactMap = toMap(contacts, (contact) => normalizeLinkedin(contact.personaLinkedin))
   const seen = new Set<string>()
@@ -387,6 +413,8 @@ async function preview(payload: Record<string, unknown>) {
         contactIds: existing.map((contact) => contact.id),
       }
     }
+    const resolved = resolvedCompanyMatch(row.companyId, companies)
+    if (resolved) return { rowNumber: row.rowNumber, ...resolved }
     return { rowNumber: row.rowNumber, ...companyMatch(row, companyMaps) }
   })
 

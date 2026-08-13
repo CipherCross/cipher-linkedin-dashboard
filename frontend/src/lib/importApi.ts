@@ -22,7 +22,7 @@ export interface PreviewRowResult {
   status: PreviewStatus
   reason?: string
   company?: AirtableCompany
-  matchMethod?: 'linkedin' | 'domain' | 'name'
+  matchMethod?: 'linkedin' | 'domain' | 'name' | 'resolved'
   suggestions?: AirtableCompany[]
   contactIds?: string[]
 }
@@ -112,8 +112,15 @@ export function fetchImportMetadata(): Promise<ImportMetadata> {
   return importPost<ImportMetadata>({ action: 'contact_metadata' })
 }
 
-export function previewContacts(rows: ContactImportRow[]): Promise<PreviewResponse> {
-  return importPost<PreviewResponse>({ action: 'contact_preview', rows })
+export function previewContacts(
+  rows: Array<ContactImportRow & { companyId?: string }>,
+  options: { forceCompanies?: boolean } = {},
+): Promise<PreviewResponse> {
+  return importPost<PreviewResponse>({
+    action: 'contact_preview',
+    rows,
+    forceCompanies: options.forceCompanies === true,
+  })
 }
 
 export async function searchAirtableCompanies(query: string): Promise<AirtableCompany[]> {
