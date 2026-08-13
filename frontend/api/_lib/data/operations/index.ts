@@ -95,6 +95,10 @@ import {
 } from './messages.js'
 import { PIPELINE_OPERATIONS, pipelineEventLogOperation } from './pipeline.js'
 import {
+  ROUTE_SNAPSHOT_OPERATION,
+  routeSnapshotOperation,
+} from './routeSnapshots.js'
+import {
   PIPELINE_WRITE_COMMANDS,
   PIPELINE_WRITE_OPERATIONS,
   actorDisplayNameOperation,
@@ -224,6 +228,13 @@ export {
   type FollowUpStateRow,
 } from './conversations.js'
 export { COACHING_OPERATIONS, type CoachingDigestRow } from './coaching.js'
+export {
+  ROUTE_SNAPSHOT_OPERATION,
+  ROUTE_SNAPSHOT_ROUTES,
+  type RouteSnapshotParams,
+  type RouteSnapshotRoute,
+  type RouteSnapshotRow,
+} from './routeSnapshots.js'
 export {
   LIBRARY_OPERATIONS,
   type HypothesisCampaignRow,
@@ -374,6 +385,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
 
   registry.registerQuery(DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation)
+  registry.registerQuery(ROUTE_SNAPSHOT_OPERATION, routeSnapshotOperation)
 
   // S13's first DataContext slice.
   registry.registerQuery(
@@ -774,6 +786,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   ACTIVITY_OPERATIONS.dailySeries,
   DASHBOARD_OPERATIONS.bootstrap,
   DASHBOARD_OPERATIONS.overviewSummary,
+  ROUTE_SNAPSHOT_OPERATION,
   DASHBOARD_OPERATIONS.instancesOverview,
   DASHBOARD_OPERATIONS.campaignsPerformance,
   DASHBOARD_OPERATIONS.campaignsSequenceSteps,

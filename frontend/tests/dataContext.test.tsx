@@ -25,18 +25,26 @@
  * run. Replaced: `dashboardReads` (the flag and the Neon fetcher) and the Supabase
  * client, which is a chainable stub every query resolves against.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { HashRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RosterPath } from '../src/lib/types'
 
 const fetchNeonDashboard = vi.fn()
 const fetchNeonBootstrap = vi.fn()
+const fetchNeonRouteSnapshot = vi.fn()
 const resolveReadPath = vi.fn()
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonBootstrap: (...a: unknown[]) => fetchNeonBootstrap(...a),
   fetchNeonDashboard: (...a: unknown[]) => fetchNeonDashboard(...a),
+  fetchNeonRouteSnapshot: (...a: unknown[]) => fetchNeonRouteSnapshot(...a),
+  routeSnapshotRequest: (hash: string) => {
+    const path = hash.replace(/^#/, '').split('?')[0] || '/'
+    if (path === '/health') return { route: 'health', key: 'health' }
+    return null
+  },
   resolveReadPath: () => resolveReadPath(),
 }))
 
@@ -85,22 +93,25 @@ const { DataProvider, useData } = await import('../src/lib/DataContext')
 
 /** Renders the two fields under test, so an assertion is a DOM read. */
 function Probe() {
-  const { data, loading, phase } = useData()
+  const { data, loading, phase, refetch } = useData()
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="phase">{phase}</span>
       <span data-testid="roster">{data ? data.rosterPath : 'none'}</span>
       <span data-testid="error">{data?.error ?? ''}</span>
+      <button onClick={() => void refetch()}>Refresh</button>
     </div>
   )
 }
 
 const paint = () =>
   render(
-    <DataProvider>
-      <Probe />
-    </DataProvider>,
+    <HashRouter>
+      <DataProvider>
+        <Probe />
+      </DataProvider>
+    </HashRouter>,
   )
 
 const roster = () => screen.getByTestId('roster').textContent
@@ -137,6 +148,8 @@ beforeEach(() => {
   window.history.replaceState(null, '', '#/health')
   fetchNeonDashboard.mockReset()
   fetchNeonBootstrap.mockReset()
+  fetchNeonRouteSnapshot.mockReset()
+  fetchNeonRouteSnapshot.mockResolvedValue({})
   fetchNeonBootstrap.mockResolvedValue({
     rosterPath: 'neon',
     instances: [],
@@ -156,13 +169,13 @@ describe('DataProvider dispatch', () => {
 
     paint()
 
-    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('bootstrap'))
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
     expect(screen.getByTestId('loading').textContent).toBe('false')
     expect(fetchNeonDashboard).not.toHaveBeenCalled()
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(fetchNeonDashboard).not.toHaveBeenCalled()
-    expect(screen.getByTestId('phase').textContent).toBe('bootstrap')
+    expect(screen.getByTestId('phase').textContent).toBe('full')
   })
 
   it('keeps Leads on bootstrap data instead of starting the full tenant snapshot', async () => {
@@ -172,18 +185,18 @@ describe('DataProvider dispatch', () => {
 
     paint()
 
-    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('bootstrap'))
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
     expect(fetchNeonDashboard).not.toHaveBeenCalled()
   })
 
   it('takes the Neon fetcher on the Neon flag and opens no Supabase connection', async () => {
     resolveReadPath.mockResolvedValue('neon')
-    fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))
+    fetchNeonRouteSnapshot.mockResolvedValue(neonAnswer('neon'))
 
     paint()
 
     await waitFor(() => expect(roster()).toBe('neon'))
-    expect(fetchNeonDashboard).toHaveBeenCalledTimes(1)
+    expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
     // The point of the whole read slice: no PostgREST query at all.
     expect(fromCalls).toEqual([])
   })
@@ -210,11 +223,16 @@ describe('DataProvider dispatch', () => {
     // is by *reading* the fetcher's field. Any literal in `DataContext.tsx`,
     // whichever value it names, fails this.
     resolveReadPath.mockResolvedValue('neon')
-    fetchNeonDashboard.mockResolvedValue(neonAnswer('supabase'))
+    fetchNeonBootstrap.mockResolvedValue({
+      rosterPath: 'supabase',
+      instances: [],
+      campaigns: [],
+      teamMembers: [],
+    })
 
     paint()
 
-    await waitFor(() => expect(fetchNeonDashboard).toHaveBeenCalled())
+    await waitFor(() => expect(fetchNeonRouteSnapshot).toHaveBeenCalled())
     await waitFor(() => expect(roster()).toBe('supabase'))
   })
 
@@ -223,12 +241,32 @@ describe('DataProvider dispatch', () => {
     // lookup is memoized in `dashboardReads` for the same reason. Asserted here
     // because `load()` is where a stray second call would appear.
     resolveReadPath.mockResolvedValue('neon')
-    fetchNeonDashboard.mockResolvedValue(neonAnswer('neon'))
+    fetchNeonRouteSnapshot.mockResolvedValue(neonAnswer('neon'))
 
     paint()
 
     await waitFor(() => expect(roster()).toBe('neon'))
     expect(resolveReadPath).toHaveBeenCalledTimes(1)
+  })
+
+  it('coalesces repeated refreshes while the active route snapshot is in flight', async () => {
+    resolveReadPath.mockResolvedValue('neon')
+
+    let finishSnapshot!: (value: ReturnType<typeof neonAnswer>) => void
+    fetchNeonRouteSnapshot.mockImplementation(
+      () => new Promise((resolve) => { finishSnapshot = resolve }),
+    )
+
+    paint()
+    await waitFor(() => expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
+
+    act(() => finishSnapshot(neonAnswer('neon')))
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
   })
 })
 
@@ -252,10 +290,10 @@ describe('DataProvider failure handling', () => {
     // error, and the invariant is that `rosterPath` is not quietly set to
     // something while no roster was read.
     resolveReadPath.mockResolvedValue('neon')
-    fetchNeonDashboard.mockRejectedValue(new Error('leads.directory: boom'))
+    fetchNeonRouteSnapshot.mockRejectedValue(new Error('dashboard.routeSnapshot: boom'))
 
     paint()
 
-    await waitFor(() => expect(errorText()).toMatch(/leads\.directory: boom/))
+    await waitFor(() => expect(errorText()).toMatch(/dashboard\.routeSnapshot: boom/))
   })
 })

@@ -78,6 +78,7 @@ import {
   LIBRARY_OPERATIONS,
   MESSAGES_OPERATIONS,
   PIPELINE_OPERATIONS,
+  ROUTE_SNAPSHOT_OPERATION,
 } from '../api/_lib/data/operations/index.js'
 import {
   annotationsTimelineOperation,
@@ -117,6 +118,7 @@ import { pipelineEventLogOperation } from '../api/_lib/data/operations/pipeline.
 import { teamRosterOperation } from '../api/_lib/data/operations/identity.js'
 import { coachingDigestsOperation } from '../api/_lib/data/operations/coaching.js'
 import { coachPlaybookOperation } from '../api/_lib/data/operations/aiWrites.js'
+import { routeSnapshotOperation } from '../api/_lib/data/operations/routeSnapshots.js'
 
 /**
  * Every operation asserted below either ignores its context or reads it through
@@ -142,6 +144,12 @@ const inspectable = (operation: {
   keyset?: { readonly columns: readonly string[] }
 }): Inspectable => operation as unknown as Inspectable
 
+const routeSnapshotInspectable = {
+  build: () => routeSnapshotOperation.build({
+    params: { route: 'health', routeId: null },
+  } as never),
+}
+
 const sqlOf = (operation: Inspectable): string => {
   const statement: NeonStatement = operation.build(NO_CONTEXT)
   return statement.text
@@ -155,6 +163,7 @@ type Slice = ReadonlyArray<
 const READ_SLICE = [
   [DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation],
   [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
+  [ROUTE_SNAPSHOT_OPERATION, routeSnapshotInspectable],
   [ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation],
   [DASHBOARD_OPERATIONS.instancesOverview, instancesOverviewOperation],
   [DASHBOARD_OPERATIONS.campaignsPerformance, campaignsPerformanceOperation],
@@ -193,6 +202,7 @@ const MEMBER_ID_BEARING = [
   LEADS_OPERATIONS.searchPage,
   CONVERSATION_OPERATIONS.followUpState,
   CONVERSATION_OPERATIONS.followUpHistory,
+  ROUTE_SNAPSHOT_OPERATION,
 ] as readonly string[]
 
 /** The subset that must not so much as mention a member id, in any spelling. */
@@ -211,7 +221,7 @@ const ROSTER_READING = [
 ] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists twenty-eight reads and no more', () => {
+  it('allowlists twenty-nine reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -234,6 +244,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'conversations.latestMessage',
       'conversations.replyIntent',
       'dashboard.bootstrap',
+      'dashboard.routeSnapshot',
       'hypotheses.campaigns',
       'hypotheses.list',
       'icp.industries',

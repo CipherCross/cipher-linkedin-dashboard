@@ -38,6 +38,7 @@ import {
   fetchNeonDashboard,
   fetchNeonLeadsSearchPage,
   fetchNeonOverviewSummary,
+  fetchNeonRouteSnapshot,
   fetchNeonFollowUpHistory,
   fetchNeonCoachingDigests,
   fetchNeonLeadNotes,
@@ -50,6 +51,7 @@ import {
   resetReadPath,
   resolvePhotoPath,
   resolveReadPath,
+  routeSnapshotRequest,
 } from '../src/lib/dashboardReads'
 import type { ApiFetch, ReadPage } from '../src/lib/dashboardReads'
 
@@ -121,9 +123,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names twenty-eight reads including route-owned performance contracts', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(28)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(28)
+  it('names twenty-nine reads including route-owned performance contracts', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(29)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(29)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -505,6 +507,7 @@ describe('the dashboard load', () => {
     const pageLocalReads = [
       READ_OPS.bootstrap,
       READ_OPS.overviewSummary,
+      READ_OPS.routeSnapshot,
       READ_OPS.leadsSearchPage,
       READ_OPS.thread,
       READ_OPS.leadNotes,
@@ -538,6 +541,40 @@ describe('the dashboard load', () => {
     expect(result.rosterPath).toBe('neon')
     expect(result.instances).toHaveLength(1)
     expect(result.teamMembers[0]?.id).toBe(7)
+  })
+
+  it('maps every non-local page to a deterministic route snapshot key', () => {
+    expect(routeSnapshotRequest('#/account/notebook-1?range=all')).toEqual({
+      route: 'account', routeId: 'notebook-1', key: 'account:notebook-1',
+    })
+    expect(routeSnapshotRequest('#/campaign/notebook-1%3A42')).toEqual({
+      route: 'campaign', routeId: 'notebook-1:42', key: 'campaign:notebook-1:42:compare:',
+    })
+    expect(routeSnapshotRequest('#/campaign/notebook-1%3A42?cmp=notebook-2%3A7,notebook-3%3A8')).toEqual({
+      route: 'campaign',
+      routeId: 'notebook-1:42',
+      compareIds: 'notebook-2:7,notebook-3:8',
+      key: 'campaign:notebook-1:42:compare:notebook-2:7,notebook-3:8',
+    })
+    for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses']) {
+      expect(routeSnapshotRequest(`#/${route}?q=ignored`)).toEqual({ route, key: route })
+    }
+    for (const local of ['#/', '#/leads', '#/team', '#/playbook', '#/chat', '#/csv-import', '#/neon-activity']) {
+      expect(routeSnapshotRequest(local)).toBeNull()
+    }
+  })
+
+  it('loads one route snapshot row with validated route parameters', async () => {
+    const payload = { leads: [{ id: 'l1' }], followUpsAvailable: true }
+    const rec = recorder(() => jsonResponse(emptyPage([payload])))
+    await expect(fetchNeonRouteSnapshot({
+      route: 'account', routeId: 'notebook-1', key: 'account:notebook-1',
+    }, rec.fetchImpl)).resolves.toEqual(payload)
+    const query = onlyQuery(rec, READ_OPS.routeSnapshot)
+    expect(query.get('route')).toBe('account')
+    expect(query.get('route_id')).toBe('notebook-1')
+    expect(query.has('compare_ids')).toBe(false)
+    expect(query.get('limit')).toBe('1')
   })
 
   it('requests one exact Overview summary for the inclusive UTC range', async () => {

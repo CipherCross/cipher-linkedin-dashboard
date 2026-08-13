@@ -1,8 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from './supabase'
 import { fetchConversationReplyIntents, isMissingRelation } from './conversationPaging'
-import { fetchNeonBootstrap, fetchNeonDashboard, resolveReadPath } from './dashboardReads'
+import {
+  fetchNeonBootstrap,
+  fetchNeonRouteSnapshot,
+  resolveReadPath,
+  routeSnapshotRequest,
+  type NeonRouteSnapshot,
+} from './dashboardReads'
 import type { RosterPath } from './rosterWrites'
 import type {
   Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
@@ -268,12 +275,6 @@ function mergeById<T extends { id: string | number }>(existing: T[], updates: T[
 // landed mid-fetch; overlapping rows just re-merge idempotently (never missed).
 const REFRESH_OVERLAP_MS = 2 * 60_000
 
-function isProgressiveLocation(): boolean {
-  if (typeof window === 'undefined') return false
-  const route = window.location.hash.replace(/^#/, '').split('?')[0] || '/'
-  return route === '/' || route === '/leads'
-}
-
 // The always-full-refetched small tables get a fresh array every cycle even when
 // their data is unchanged. Keep the previous reference when the payload is
 // deep-equal so consumers memoized on a data slice don't recompute on a no-op
@@ -438,40 +439,41 @@ async function fetchSupabaseDashboard(
   }
 }
 
-/**
- * The application API's read path, behind the deployment's `NEON_READS_DEFAULT`
- * flag. Everything it decides lives in `dashboardReads.ts`; this is the adapter
- * from that module's result to `Fetched`, and it is two facts long.
- *
- * **The roster arrives with the leads, and `rosterPath` says whose ids these
- * are.** S13's switch left `teamMembers` empty here, on the argument that a
- * Supabase roster beside Neon leads would put a confidently wrong name on every
- * owner chip. That argument was right and it expired with its premise: both ends
- * of the join now come from the same database. What it left behind was a worse
- * artefact — a Team page stating "0 Active teammates" — so the roster moves on
- * the same flag rather than a second one.
- *
- * The marker is not decoration. The ids in these rows are this provider's, and
- * `/api/pipeline`'s member-keyed actions resolve ids against the *other* one; it
- * is what `rosterWrites.ts` reads to refuse the round trip.
- */
-async function fetchNeonDashboardData(
-  since: string,
-  delta: boolean,
-  cursor: string | null,
-): Promise<Fetched> {
-  const fetched = await fetchNeonDashboard({
-    since,
-    updatedSince: delta ? cursor : null,
-  })
-  // `rosterPath` arrives inside `fetched` rather than being written here, and
-  // that is a correction the mutation pass forced: a literal in this file is a
-  // literal no test can reach, and this one decides whether a member id may be
-  // written back to the other provider.
+type NeonBootstrap = Awaited<ReturnType<typeof fetchNeonBootstrap>>
+
+/** Adapt one route-owned payload to the provider-neutral commit shape. */
+function routeSnapshotFetched(
+  bootstrap: NeonBootstrap,
+  snapshot: NeonRouteSnapshot,
+): Fetched {
+  const campaignById = new Map(
+    bootstrap.campaigns.map((campaign) => [campaign.campaign_id, campaign]),
+  )
+  for (const campaign of snapshot.campaigns ?? []) {
+    campaignById.set(campaign.campaign_id, campaign)
+  }
   return {
-    ...fetched,
-    // Never set: on this path a read either answers or throws, and the throw is
-    // reported by `load()`'s outer catch.
+    rosterPath: bootstrap.rosterPath,
+    instances: bootstrap.instances,
+    campaigns: [...campaignById.values()],
+    activity: [],
+    syncRuns: snapshot.syncRuns ?? [],
+    annotations: snapshot.annotations ?? [],
+    steps: snapshot.steps ?? [],
+    teamMembers: bootstrap.teamMembers,
+    savedSearches: snapshot.savedSearches ?? [],
+    icps: snapshot.icps ?? [],
+    icpPersonas: snapshot.icpPersonas ?? [],
+    icpIndustries: snapshot.icpIndustries ?? [],
+    hypotheses: snapshot.hypotheses ?? [],
+    hypothesisCampaigns: snapshot.hypothesisCampaigns ?? [],
+    leads: snapshot.leads ?? [],
+    messages: snapshot.messages ?? [],
+    pipelineEvents: snapshot.pipelineEvents ?? [],
+    followUpStates: snapshot.followUpStates ?? [],
+    latestConversationMessages: snapshot.latestConversationMessages ?? [],
+    followUpsAvailable: snapshot.followUpsAvailable ?? false,
+    conversationReplyIntents: snapshot.conversationReplyIntents ?? [],
     error: null,
   }
 }
@@ -539,11 +541,14 @@ const Ctx = createContext<{
 })
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const activeRouteHash = `#${location.pathname}${location.search}`
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [phase, setPhase] = useState<'empty' | 'bootstrap' | 'full'>('empty')
   const bootstrapReady = useRef(false)
-  const fullSnapshotReady = useRef(false)
+  const bootstrapData = useRef<NeonBootstrap | null>(null)
+  const inFlightRouteKey = useRef<string | null>(null)
   // Only the most recent load() wins, so a manual refetch can't be clobbered by
   // an in-flight interval load (or vice versa).
   const reqId = useRef(0)
@@ -785,13 +790,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // cursor and merges them, falling back to a full refetch if the DB has no
   // updated_at column yet (migration 031 pending).
   const load = useCallback(async (mode: 'full' | 'delta' = 'full') => {
-    const id = ++reqId.current
     // Which provider answers this load. Memoized for the page's lifetime, so
     // this costs one unauthenticated round trip per session and every later
     // load — and every component read — sees the same answer. Any failure
     // resolves to `supabase`, so a flag lookup can never take the working
     // dashboard down.
     const readPath = await resolveReadPath()
+    const routeRequest = readPath === 'neon'
+      ? routeSnapshotRequest(activeRouteHash)
+      : null
+    const routeKey = routeRequest?.key ?? `local:${location.pathname || '/'}`
+    // Manual refresh and the timer may meet the route's first load. A route
+    // payload is complete, so a second request for the same key only adds load
+    // and makes the first result stale; coalesce it here.
+    if (readPath === 'neon' && inFlightRouteKey.current === routeKey) return
+    const id = ++reqId.current
+    if (readPath === 'neon') {
+      inFlightRouteKey.current = routeKey
+      setLoading(true)
+      if (bootstrapReady.current) setPhase('bootstrap')
+    }
     if (readPath === 'supabase' && !supabase) {
       showError(
         'Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
@@ -800,13 +818,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return
     }
     const cursor = cursorRef.current
-    const delta = mode === 'delta' && deltaSupported.current && cursor != null
+    // Route snapshots are complete replacements and intentionally do not carry
+    // the legacy replication cursor. Delta merge remains a Supabase fallback
+    // concern until that path is retired.
+    const delta = readPath === 'supabase' && mode === 'delta' && deltaSupported.current && cursor != null
     const startedAt = Date.now()
     try {
-        if (readPath === 'neon' && mode === 'full' && !bootstrapReady.current) {
+        if (readPath === 'neon' && !bootstrapReady.current) {
           const bootstrap = await fetchNeonBootstrap()
           if (id !== reqId.current) return
           bootstrapReady.current = true
+          bootstrapData.current = bootstrap
           setData({
             ...EMPTY,
             instances: bootstrap.instances,
@@ -819,10 +841,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (typeof performance !== 'undefined') {
             performance.mark('dashboard_bootstrap_ready')
           }
-          // Overview and Leads both have compact route-owned reads, so neither
-          // starts the historical tenant-wide snapshot on its critical path.
-          // Other deep links still continue into the full route dataset below.
-          if (isProgressiveLocation()) return
         }
         const since = new Date(startedAt - 90 * 86_400_000)
           .toISOString()
@@ -831,7 +849,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // everything below this point is provider-independent and did not change.
         const fetched =
           readPath === 'neon'
-            ? await fetchNeonDashboardData(since, delta, cursor)
+            ? routeSnapshotFetched(
+                bootstrapData.current!,
+                routeRequest ? await fetchNeonRouteSnapshot(routeRequest) : {},
+              )
             : await fetchSupabaseDashboard(since, delta, cursor)
         const {
           instances, campaigns, activity, syncRuns, annotations, steps, teamMembers,
@@ -919,7 +940,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // Advance the cursor for the next delta (start-time minus overlap).
           cursorRef.current = new Date(startedAt - REFRESH_OVERLAP_MS).toISOString()
           setPhase('full')
-          fullSnapshotReady.current = true
           if (typeof performance !== 'undefined') {
             performance.mark('dashboard_full_ready')
           }
@@ -942,8 +962,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (id === reqId.current)
           showError(e instanceof Error ? e.message : String(e))
       }
+      if (readPath === 'neon' && inFlightRouteKey.current === routeKey) {
+        inFlightRouteKey.current = null
+      }
       if (id === reqId.current) setLoading(false)
-  }, [showError, applyPending, applyPendingFollowUps])
+  }, [activeRouteHash, location.pathname, showError, applyPending, applyPendingFollowUps])
 
   // Manual refetch (post-write) always forces a full fetch — a delta could miss
   // a row the caller just changed if updated_at ordering/skew raced the commit.
@@ -953,16 +976,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void load('full')
-    const ensureFull = () => {
-      if (!isProgressiveLocation()) void load('full')
-    }
-    window.addEventListener('hashchange', ensureFull)
     const timer = setInterval(() => {
-      if (fullSnapshotReady.current || !isProgressiveLocation()) void load('delta')
+      void load('delta')
     }, 5 * 60_000)
     return () => {
       clearInterval(timer)
-      window.removeEventListener('hashchange', ensureFull)
     }
   }, [load])
 

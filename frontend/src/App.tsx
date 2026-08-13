@@ -67,9 +67,9 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <AuthGate>
-            <DataProvider>
-              <ToastProvider>
-                <HashRouter>
+            <HashRouter>
+              <DataProvider>
+                <ToastProvider>
                   <Routes>
                     <Route element={<Layout />}>
                       <Route index element={<Overview />} />
@@ -96,9 +96,9 @@ export default function App() {
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>
                   </Routes>
-                </HashRouter>
-              </ToastProvider>
-            </DataProvider>
+                </ToastProvider>
+              </DataProvider>
+            </HashRouter>
           </AuthGate>
         </AuthProvider>
       </ThemeProvider>

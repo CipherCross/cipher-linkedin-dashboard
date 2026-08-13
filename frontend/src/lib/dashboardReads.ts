@@ -59,7 +59,7 @@ import { toTeamMember, type RosterMember } from './identityAuth'
 import type {
   Annotation, CampaignMetrics, CampaignStep, CoachingDigest,
   ConversationLatestMessage, ConversationReplyIntent, DailyActivity,
-  FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
+  DashboardData, FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
   LeadsSearchPage,
@@ -85,6 +85,7 @@ export const READ_ENDPOINT = '/api/activity-daily'
 export const READ_OPS = {
   bootstrap: 'dashboard.bootstrap',
   overviewSummary: 'overview.summary',
+  routeSnapshot: 'dashboard.routeSnapshot',
   dailySeries: 'activity.dailySeries',
   instances: 'instances.overview',
   campaigns: 'campaigns.performance',
@@ -125,6 +126,83 @@ export const READ_OPS = {
   /** Every account's coaching digest, for the Leads Explorer's panel. */
   coachingDigests: 'coaching.digests',
 } as const
+
+export type RouteSnapshotRoute =
+  | 'account'
+  | 'campaign'
+  | 'pipeline'
+  | 'follow-ups'
+  | 'review'
+  | 'health'
+  | 'searches'
+  | 'icp'
+  | 'hypotheses'
+
+export interface RouteSnapshotRequest {
+  readonly route: RouteSnapshotRoute
+  readonly routeId?: string
+  readonly compareIds?: string
+  readonly key: string
+}
+
+export type NeonRouteSnapshot = Partial<Pick<
+  DashboardData,
+  | 'campaigns'
+  | 'leads'
+  | 'messages'
+  | 'pipelineEvents'
+  | 'conversationReplyIntents'
+  | 'annotations'
+  | 'steps'
+  | 'syncRuns'
+  | 'followUpStates'
+  | 'latestConversationMessages'
+  | 'followUpsAvailable'
+  | 'savedSearches'
+  | 'icps'
+  | 'icpPersonas'
+  | 'icpIndustries'
+  | 'hypotheses'
+  | 'hypothesisCampaigns'
+>>
+
+/**
+ * Canonical route key for the datasets that are not already page-local.
+ * Query parameters intentionally do not participate: these snapshots contain
+ * the page's complete workflow dataset and the page filters it without another
+ * network read. Detail ids do participate because they change database scope.
+ */
+export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null {
+  const [path = '/', query = ''] = hash.replace(/^#/, '').split('?', 2)
+  const account = path.match(/^\/account\/(.+)$/)
+  if (account) {
+    const routeId = decodeURIComponent(account[1])
+    return { route: 'account', routeId, key: `account:${routeId}` }
+  }
+  const campaign = path.match(/^\/campaign\/(.+)$/)
+  if (campaign) {
+    const routeId = decodeURIComponent(campaign[1])
+    const compareIds = [...new Set(
+      (new URLSearchParams(query).get('cmp') ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id && id !== routeId),
+    )].slice(0, 8).join(',')
+    return {
+      route: 'campaign',
+      routeId,
+      ...(compareIds ? { compareIds } : {}),
+      key: `campaign:${routeId}:compare:${compareIds}`,
+    }
+  }
+  const route = path.slice(1) as RouteSnapshotRoute
+  if ([
+    'pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses',
+  ].includes(route)) {
+    return { route, key: route }
+  }
+  return null
+}
 
 /** The flag lookup. Dispatched before authentication and reads no database. */
 export const READ_PATH_OPERATION = 'config.readPath'
@@ -771,8 +849,30 @@ export async function fetchNeonDashboard(
 }
 
 // ---------------------------------------------------------------------------
-// The five page-local reads
+// Route and component-local reads
 // ---------------------------------------------------------------------------
+
+/** One bounded payload for the active route. The operation itself returns one
+ * JSON row, so following a cursor would indicate a server contract defect. */
+export async function fetchNeonRouteSnapshot(
+  request: RouteSnapshotRequest,
+  fetchImpl?: ApiFetch,
+): Promise<NeonRouteSnapshot> {
+  const page = await readPage<NeonRouteSnapshot>(
+    READ_OPS.routeSnapshot,
+    {
+      route: request.route,
+      route_id: request.routeId,
+      compare_ids: request.compareIds,
+      limit: 1,
+    },
+    fetchImpl,
+  )
+  if (page.hasMore) {
+    throw new Error(`${READ_OPS.routeSnapshot}: expected one route payload`)
+  }
+  return page.items[0] ?? {}
+}
 
 /** The fields `ConversationDrawer` renders. The operation's projection is
  *  narrower than the message cache's: the caller already holds the lead, so

@@ -76,6 +76,8 @@ import {
   LIBRARY_OPERATIONS,
   MESSAGES_OPERATIONS,
   PIPELINE_OPERATIONS,
+  ROUTE_SNAPSHOT_OPERATION,
+  ROUTE_SNAPSHOT_ROUTES,
 } from './_lib/data/operations/index.js'
 import { dataStoreConfigured } from './_lib/data/neonConfig.js'
 import {
@@ -499,6 +501,21 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
   [DASHBOARD_OPERATIONS.overviewSummary]: {
     operation: DASHBOARD_OPERATIONS.overviewSummary,
     ranged: true,
+  },
+  [ROUTE_SNAPSHOT_OPERATION]: {
+    operation: ROUTE_SNAPSHOT_OPERATION,
+    params: (url) => {
+      const route = readOptionalEnum(url, 'route', ROUTE_SNAPSHOT_ROUTES)
+      if (route === null) throw new BadRequest('route is required')
+      const routeId = readOptionalBoundedText(url, 'route_id')
+      if ((route === 'account' || route === 'campaign') && routeId === null) {
+        throw new BadRequest('route_id is required for detail routes')
+      }
+      const compareIds = route === 'campaign'
+        ? readOptionalBoundedText(url, 'compare_ids')
+        : null
+      return { route, routeId, compareIds }
+    },
   },
   [ACTIVITY_OPERATIONS.dailySeries]: {
     operation: ACTIVITY_OPERATIONS.dailySeries,
