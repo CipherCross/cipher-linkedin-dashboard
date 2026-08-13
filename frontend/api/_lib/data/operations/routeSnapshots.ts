@@ -53,21 +53,55 @@ export interface RouteSnapshotRow {
 
 const EMPTY_ARRAY = `'[]'::jsonb`
 
-const ACCOUNT_SQL = `SELECT jsonb_build_object(
+const ACCOUNT_SQL = `WITH scoped_messages AS MATERIALIZED (
+  SELECT m.*,
+         row_number() OVER (
+           PARTITION BY m.instance_id, m.profile_url
+           ORDER BY m.sent_at DESC, m.id DESC
+         ) AS latest_rank
+    FROM public.messages m
+   WHERE m.instance_id = $1 AND m.direction = 'in'
+)
+SELECT jsonb_build_object(
   'campaigns', COALESCE((
     SELECT jsonb_agg(to_jsonb(c) ORDER BY c.campaign_name, c.campaign_id)
       FROM public.campaign_metrics c WHERE c.instance_id = $1
   ), ${EMPTY_ARRAY}),
   'leads', COALESCE((
-    SELECT jsonb_agg(to_jsonb(l) - 'updated_at' ORDER BY l.id)
+    SELECT jsonb_agg(jsonb_build_object(
+      'id', l.id,
+      'instance_id', l.instance_id,
+      'campaign_id', l.campaign_id,
+      'profile_url', l.profile_url,
+      'added_at', l.added_at,
+      'invited_at', l.invited_at,
+      'connected_at', l.connected_at,
+      'first_message_at', l.first_message_at,
+      'replied_at', l.replied_at,
+      'last_action_at', l.last_action_at,
+      'pipeline_stage', l.pipeline_stage,
+      'pipeline_stage_changed_at', l.pipeline_stage_changed_at
+    ) ORDER BY l.id)
       FROM public.leads l
      WHERE l.instance_id = $1
   ), ${EMPTY_ARRAY}),
   'messages', COALESCE((
-    SELECT jsonb_agg(to_jsonb(m) - 'content_hash' - 'updated_at' ORDER BY m.sent_at DESC, m.id DESC)
-      FROM public.messages m
-     WHERE m.instance_id = $1
-       AND (m.direction = 'in' OR m.sent_at >= current_timestamp - interval '90 days')
+    SELECT jsonb_agg(jsonb_build_object(
+      'id', m.id,
+      'instance_id', m.instance_id,
+      'campaign_id', m.campaign_id,
+      'profile_url', m.profile_url,
+      'direction', m.direction,
+      'body', CASE WHEN m.latest_rank = 1 THEN m.body ELSE NULL END,
+      'sent_at', m.sent_at,
+      'sentiment', m.sentiment,
+      'reason', CASE WHEN m.latest_rank = 1 THEN m.reason ELSE NULL END,
+      'classified_at', m.classified_at,
+      'intent_level', m.intent_level,
+      'intent_reason', CASE WHEN m.latest_rank = 1 THEN m.intent_reason ELSE NULL END
+    ) ORDER BY m.sent_at DESC, m.id DESC)
+      FROM scoped_messages m
+     WHERE m.latest_rank = 1 OR m.intent_level IS NOT NULL
   ), ${EMPTY_ARRAY}),
   'pipelineEvents', COALESCE((
     SELECT jsonb_agg(to_jsonb(e) ORDER BY e.occurred_at, e.id)
@@ -88,6 +122,15 @@ const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
       OR campaign_id = ANY(string_to_array(COALESCE($2, ''), ','))
 ), scoped_threads AS MATERIALIZED (
   SELECT DISTINCT instance_id, profile_url FROM scoped_leads
+), scoped_messages AS MATERIALIZED (
+  SELECT m.*,
+         row_number() OVER (
+           PARTITION BY m.instance_id, m.profile_url
+           ORDER BY m.sent_at DESC, m.id DESC
+         ) AS latest_rank
+    FROM public.messages m
+    JOIN scoped_threads t USING (instance_id, profile_url)
+   WHERE m.direction = 'in'
 )
 SELECT jsonb_build_object(
   'campaigns', COALESCE((
@@ -98,10 +141,22 @@ SELECT jsonb_build_object(
     SELECT jsonb_agg(to_jsonb(l) - 'updated_at' ORDER BY l.id) FROM scoped_leads l
   ), ${EMPTY_ARRAY}),
   'messages', COALESCE((
-    SELECT jsonb_agg(to_jsonb(m) - 'content_hash' - 'updated_at' ORDER BY m.sent_at DESC, m.id DESC)
-      FROM public.messages m
-      JOIN scoped_threads t USING (instance_id, profile_url)
-     WHERE m.direction = 'in' OR m.sent_at >= current_timestamp - interval '90 days'
+    SELECT jsonb_agg(jsonb_build_object(
+      'id', m.id,
+      'instance_id', m.instance_id,
+      'campaign_id', m.campaign_id,
+      'profile_url', m.profile_url,
+      'direction', m.direction,
+      'body', CASE WHEN m.latest_rank = 1 THEN m.body ELSE NULL END,
+      'sent_at', m.sent_at,
+      'sentiment', m.sentiment,
+      'reason', CASE WHEN m.latest_rank = 1 THEN m.reason ELSE NULL END,
+      'classified_at', m.classified_at,
+      'intent_level', m.intent_level,
+      'intent_reason', CASE WHEN m.latest_rank = 1 THEN m.intent_reason ELSE NULL END
+    ) ORDER BY m.sent_at DESC, m.id DESC)
+      FROM scoped_messages m
+     WHERE m.latest_rank = 1 OR m.intent_level IS NOT NULL
   ), ${EMPTY_ARRAY}),
   'pipelineEvents', COALESCE((
     SELECT jsonb_agg(to_jsonb(e) ORDER BY e.occurred_at, e.id)
