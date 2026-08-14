@@ -105,10 +105,10 @@ else
         && bad "cookie omits Secure" "present on a plain-http origin; the browser will drop it" \
         || ok "cookie omits Secure (http origin)" ;;
   esac
-  # C4: 12 hours, deliberately not the candidate's 7-day default.
-  printf '%s' "$cookie_line" | grep -qi 'Max-Age=43200' \
-    && ok "cookie Max-Age is 12 h" \
-    || bad "cookie Max-Age is 12 h" "expected Max-Age=43200 — expiresIn was inherited, not chosen"
+  # C4: deliberately pinned to 7 days rather than inherited from the candidate.
+  printf '%s' "$cookie_line" | grep -qi 'Max-Age=604800' \
+    && ok "cookie Max-Age is 7 days" \
+    || bad "cookie Max-Age is 7 days" "expected Max-Age=604800 — expiresIn drifted"
 fi
 
 # ---------------------------------------------------------------------------

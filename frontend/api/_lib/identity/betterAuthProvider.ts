@@ -135,7 +135,8 @@ export function buildCandidateOptions(
       },
     },
     session: {
-      // C4. Deliberate, not the inherited 7 days. See config.ts for the reasoning.
+      // C4. Deliberately pinned to 7 days rather than inherited from the
+      // candidate, so an upstream default change cannot shorten the session.
       expiresIn: SESSION_EXPIRES_IN_SECONDS,
       updateAge: SESSION_UPDATE_AGE_SECONDS,
       freshAge: SESSION_FRESH_AGE_SECONDS,

@@ -84,11 +84,10 @@ function readRequired(env: EnvSource, name: string, purpose: string): string {
 /**
  * Session lifetime. **C4's deliberate choice, not the candidate's default.**
  *
- * The default is 7 days. F9 measured that the session token does **not** rotate
- * while a session slides forward, so the window is exactly how long a captured
- * cookie stays useful once it stops being refreshed. Twelve hours means a
- * cookie stolen from a closed laptop is dead by morning, while an SDR working a
- * normal day signs in once.
+ * F9 measured that the session token does **not** rotate while a session slides
+ * forward, so the window is exactly how long a captured cookie stays useful
+ * once it stops being refreshed. Seven days keeps a normal browser signed in
+ * across nights and weekends instead of forcing a new sign-in every morning.
  *
  * What this does *not* bound: a cookie an attacker actively uses slides forward
  * like any other, because `updateAge` refreshes expiry without issuing a new
@@ -96,7 +95,7 @@ function readRequired(env: EnvSource, name: string, purpose: string): string {
  * F5 measured as immediate and available in two independent places — not a
  * shorter `expiresIn`.
  */
-export const SESSION_EXPIRES_IN_SECONDS = 12 * 60 * 60
+export const SESSION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60
 
 /**
  * How often a live session's expiry is pushed forward. One hour keeps the write

@@ -23,6 +23,7 @@
 
 import { randomUUID } from 'node:crypto'
 
+import { SESSION_EXPIRES_IN_SECONDS } from './config.js'
 import {
   IdentityProviderError,
   type IdentityProvider,
@@ -94,7 +95,7 @@ export class FakeIdentityProvider implements IdentityProvider {
 
   constructor(options: FakeIdentityProviderOptions = {}) {
     this.basePath = options.basePath ?? '/api/identity'
-    this.expiresInSeconds = options.expiresInSeconds ?? 12 * 60 * 60
+    this.expiresInSeconds = options.expiresInSeconds ?? SESSION_EXPIRES_IN_SECONDS
     this.now = options.now ?? (() => Date.now())
   }
 

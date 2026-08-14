@@ -209,9 +209,8 @@ describe('the candidate security posture (C1, C2, C4, C6)', () => {
     expect(() => assertCandidateSecurityPosture(options)).toThrow(/C4/)
   })
 
-  it('C4: the chosen lifetime is deliberate and shorter than the 7-day default', () => {
-    expect(SESSION_EXPIRES_IN_SECONDS).toBe(12 * 60 * 60)
-    expect(SESSION_EXPIRES_IN_SECONDS).toBeLessThan(7 * 24 * 60 * 60)
+  it('C4: the chosen lifetime is deliberately pinned to 7 days', () => {
+    expect(SESSION_EXPIRES_IN_SECONDS).toBe(7 * 24 * 60 * 60)
   })
 
   it('C6: refuses a build that enables the session cookie cache', () => {
