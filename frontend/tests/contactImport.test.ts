@@ -42,6 +42,7 @@ describe('Airtable company matching', () => {
     expect(isCleanPersonLinkedin('https://linkedin.com/in/ada-lovelace/')).toBe(true)
     expect(isCleanPersonLinkedin('https://linkedin.com/sales/lead/abc')).toBe(false)
     expect(isPlausibleAddedBy('Anastasia Prokopenko')).toBe(true)
+    expect(isPlausibleAddedBy('David')).toBe(true)
     expect(isPlausibleAddedBy('Company Phone')).toBe(false)
     expect(isPlausibleAddedBy('+1 604-626-3301')).toBe(false)
   })

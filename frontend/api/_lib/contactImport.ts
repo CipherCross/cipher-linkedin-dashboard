@@ -75,6 +75,7 @@ const asString = (value: unknown) => (typeof value === 'string' ? value.trim() :
 // cannot reappear in the SDR selector.
 export function isPlausibleAddedBy(value: string): boolean {
   const name = value.trim()
+  if (/^David$/iu.test(name)) return true
   if (!/^[\p{L}\p{M}'’.-]+(?:\s+[\p{L}\p{M}'’.-]+){1,4}$/u.test(name)) return false
   return !/\b(company|contact|phone|email|owner|title|first|last)\b/i.test(name)
 }
