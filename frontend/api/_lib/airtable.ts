@@ -197,6 +197,7 @@ export async function listAllRecords(
 export async function createRecords(
   tableId: string,
   fields: Array<Record<string, unknown>>,
+  options: { typecast?: boolean } = {},
 ): Promise<AirtableRecord[]> {
   if (fields.length === 0 || fields.length > 10) {
     throw new AirtableError('Airtable create batch must contain 1–10 records', 500)
@@ -208,7 +209,7 @@ export async function createRecords(
     {
       method: 'POST',
       body: JSON.stringify({
-        typecast: false,
+        typecast: options.typecast === true,
         records: fields.map((recordFields) => ({ fields: recordFields })),
       }),
     },

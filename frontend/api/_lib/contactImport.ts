@@ -80,6 +80,26 @@ export function isPlausibleAddedBy(value: string): boolean {
   return !/\b(company|contact|phone|email|owner|title|first|last)\b/i.test(name)
 }
 
+const MANAGED_ADDED_BY_CHOICES = ['David'] as const
+
+export function importAddedByChoices(values: string[]): string[] {
+  const choices = values
+    .map((value) => value.trim())
+    .filter(isPlausibleAddedBy)
+  for (const name of MANAGED_ADDED_BY_CHOICES) {
+    const existingIndex = choices.findIndex(
+      (choice) => normalizeName(choice) === normalizeName(name),
+    )
+    if (existingIndex >= 0) choices[existingIndex] = name
+    else choices.push(name)
+  }
+  return choices
+}
+
+export function shouldTypecastAddedBy(value: string): boolean {
+  return MANAGED_ADDED_BY_CHOICES.some((name) => name === value)
+}
+
 export function normalizeName(value: string): string {
   return value
     .normalize('NFKD')
@@ -171,9 +191,9 @@ async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
   }
 
   const added = contacts.fields.find((item) => item.id === AIRTABLE_IDS.contacts.addedBy)
-  const addedBy = (added?.options?.choices ?? [])
-    .map((choice) => choice.name.trim())
-    .filter(isPlausibleAddedBy)
+  const addedBy = importAddedByChoices(
+    (added?.options?.choices ?? []).map((choice) => choice.name),
+  )
   if (!addedBy.length) {
     throw new AirtableError('Contacts.Added by has no available choices', 503)
   }
@@ -551,6 +571,7 @@ async function commit(payload: Record<string, unknown>) {
       const created = await createRecords(
         AIRTABLE_IDS.contactsTable,
         chunk.map((item) => item.fields),
+        { typecast: shouldTypecastAddedBy(addedBy) },
       )
       chunk.forEach((item, itemIndex) => {
         const record = created[itemIndex]
@@ -591,7 +612,11 @@ async function commit(payload: Record<string, unknown>) {
       }
       for (const item of chunk) {
         try {
-          const [created] = await createRecords(AIRTABLE_IDS.contactsTable, [item.fields])
+          const [created] = await createRecords(
+            AIRTABLE_IDS.contactsTable,
+            [item.fields],
+            { typecast: shouldTypecastAddedBy(addedBy) },
+          )
           results.push({
             rowNumber: item.row.rowNumber,
             status: 'created',

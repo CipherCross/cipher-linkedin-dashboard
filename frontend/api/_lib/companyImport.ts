@@ -7,10 +7,11 @@ import {
 } from './airtable.js'
 import {
   buildCompanyMaps,
-  isPlausibleAddedBy,
+  importAddedByChoices,
   normalizeDomain,
   normalizeLinkedin,
   normalizeName,
+  shouldTypecastAddedBy,
 } from './contactImport.js'
 
 const MAX_ROWS = 500
@@ -120,9 +121,9 @@ async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
     throw new AirtableError('Companies.Approve Status is missing the New choice', 503)
   }
   const added = companies.fields.find((item) => item.id === AIRTABLE_IDS.companies.addedBy)
-  const addedBy = (added?.options?.choices ?? [])
-    .map((choice) => choice.name.trim())
-    .filter(isPlausibleAddedBy)
+  const addedBy = importAddedByChoices(
+    (added?.options?.choices ?? []).map((choice) => choice.name),
+  )
   if (!addedBy.length) {
     throw new AirtableError('Companies.Added by has no available choices', 503)
   }
@@ -453,6 +454,7 @@ async function commit(payload: Record<string, unknown>) {
       const created = await createRecords(
         AIRTABLE_IDS.companiesTable,
         chunk.map((item) => item.fields),
+        { typecast: shouldTypecastAddedBy(addedBy) },
       )
       chunk.forEach((item, itemIndex) => {
         const record = created[itemIndex]
@@ -497,7 +499,11 @@ async function commit(payload: Record<string, unknown>) {
       }
       for (const item of chunk) {
         try {
-          const [created] = await createRecords(AIRTABLE_IDS.companiesTable, [item.fields])
+          const [created] = await createRecords(
+            AIRTABLE_IDS.companiesTable,
+            [item.fields],
+            { typecast: shouldTypecastAddedBy(addedBy) },
+          )
           if (!created) throw new Error('Airtable did not return the created record')
           results.push({
             rowNumber: item.row.rowNumber,

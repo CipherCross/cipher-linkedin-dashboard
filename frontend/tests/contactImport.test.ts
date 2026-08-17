@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCompanyMaps,
   companyMatch,
+  importAddedByChoices,
   isPlausibleAddedBy,
   isCleanPersonLinkedin,
   normalizeDomain,
   normalizeLinkedin,
   resolvedCompanyMatch,
+  shouldTypecastAddedBy,
 } from '../api/_lib/contactImport'
 import type { CompanyRecord, PreviewRow } from '../api/_lib/contactImport'
 
@@ -45,6 +47,17 @@ describe('Airtable company matching', () => {
     expect(isPlausibleAddedBy('David')).toBe(true)
     expect(isPlausibleAddedBy('Company Phone')).toBe(false)
     expect(isPlausibleAddedBy('+1 604-626-3301')).toBe(false)
+  })
+
+  it('offers the managed David attribution even when one Airtable field lacks it', () => {
+    expect(importAddedByChoices(['Daria Krut', 'Company Phone'])).toEqual([
+      'Daria Krut',
+      'David',
+    ])
+    expect(importAddedByChoices(['David', 'Daria Krut'])).toEqual(['David', 'Daria Krut'])
+    expect(importAddedByChoices([' david ', 'Daria Krut'])).toEqual(['David', 'Daria Krut'])
+    expect(shouldTypecastAddedBy('David')).toBe(true)
+    expect(shouldTypecastAddedBy('Daria Krut')).toBe(false)
   })
 
   it('automatically selects one stable LinkedIn/domain match', () => {
