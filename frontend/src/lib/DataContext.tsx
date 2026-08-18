@@ -454,7 +454,11 @@ function routeSnapshotFetched(
   }
   return {
     rosterPath: bootstrap.rosterPath,
-    instances: bootstrap.instances,
+    // Health owns the live account heartbeat. The shell bootstrap is loaded
+    // once per tab, while route snapshots refresh every five minutes; keeping
+    // the bootstrap rows here made `last_sync_at` age indefinitely in an open
+    // tab even as newer sync runs appeared directly beside it.
+    instances: snapshot.instances ?? bootstrap.instances,
     campaigns: [...campaignById.values()],
     activity: [],
     syncRuns: snapshot.syncRuns ?? [],

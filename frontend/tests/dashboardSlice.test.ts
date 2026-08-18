@@ -386,6 +386,14 @@ describe('no operation on the read path resolves a member id', () => {
     expect(bootstrapSql).not.toMatch(/from\s+public\.team_members/)
   })
 
+  it('refreshes Health account heartbeats together with recent runs', () => {
+    const sql = sqlOf(routeSnapshotInspectable as unknown as Inspectable).toLowerCase()
+    expect(sql).toContain("'instances'")
+    expect(sql).toContain('from public.instances i')
+    expect(sql).toContain("'last_sync_at', i.last_sync_at")
+    expect(sql).toContain("'syncruns'")
+  })
+
   it('orders the roster on a unique column so an offset walk cannot skip', () => {
     // It has no keyset, so the driver pages it with LIMIT/OFFSET — which is only
     // correct over a **total** order. `name` alone is not unique; `id` is the

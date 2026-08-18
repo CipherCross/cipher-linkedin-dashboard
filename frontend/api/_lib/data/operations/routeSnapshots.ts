@@ -32,6 +32,7 @@ export interface RouteSnapshotParams {
 }
 
 export interface RouteSnapshotRow {
+  readonly instances?: readonly unknown[]
   readonly campaigns?: readonly unknown[]
   readonly leads?: readonly unknown[]
   readonly messages?: readonly unknown[]
@@ -296,6 +297,20 @@ const REVIEW_SQL = `SELECT jsonb_build_object(
 ) AS payload`
 
 const HEALTH_SQL = `SELECT jsonb_build_object(
+  'instances', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+      'id', i.id,
+      'label', i.label,
+      'last_sync_at', i.last_sync_at,
+      'agent_version', i.agent_version,
+      'account_name', i.account_name,
+      'account_url', i.account_url,
+      'account_avatar', i.account_avatar,
+      'config', i.config,
+      'config_updated_at', i.config_updated_at
+    ) ORDER BY i.id)
+      FROM public.instances i
+  ), ${EMPTY_ARRAY}),
   'syncRuns', COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
       'id', r.id::text,

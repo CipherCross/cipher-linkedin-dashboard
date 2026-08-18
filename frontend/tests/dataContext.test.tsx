@@ -99,6 +99,7 @@ function Probe() {
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="phase">{phase}</span>
       <span data-testid="roster">{data ? data.rosterPath : 'none'}</span>
+      <span data-testid="last-sync">{data?.instances[0]?.last_sync_at ?? ''}</span>
       <span data-testid="error">{data?.error ?? ''}</span>
       <button onClick={() => void refetch()}>Refresh</button>
     </div>
@@ -199,6 +200,27 @@ describe('DataProvider dispatch', () => {
     expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
     // The point of the whole read slice: no PostgREST query at all.
     expect(fromCalls).toEqual([])
+  })
+
+  it('replaces the one-time bootstrap heartbeat with the Health snapshot heartbeat', async () => {
+    resolveReadPath.mockResolvedValue('neon')
+    fetchNeonBootstrap.mockResolvedValue({
+      rosterPath: 'neon',
+      instances: [{ id: 'notebook-1', last_sync_at: '2026-08-17T08:00:00.000Z' }],
+      campaigns: [],
+      teamMembers: [],
+    })
+    fetchNeonRouteSnapshot.mockResolvedValue({
+      instances: [{ id: 'notebook-1', last_sync_at: '2026-08-18T08:00:00.000Z' }],
+      syncRuns: [],
+    })
+
+    paint()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('last-sync').textContent)
+        .toBe('2026-08-18T08:00:00.000Z')
+    })
   })
 
   it('takes the Supabase fetcher on the default flag and commits its own marker', async () => {

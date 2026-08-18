@@ -147,6 +147,7 @@ export interface RouteSnapshotRequest {
 
 export type NeonRouteSnapshot = Partial<Pick<
   DashboardData,
+  | 'instances'
   | 'campaigns'
   | 'leads'
   | 'messages'
