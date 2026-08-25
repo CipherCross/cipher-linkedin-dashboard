@@ -12,7 +12,7 @@ const data = {
     account_name: 'Alyona Account',
   } as Instance],
   campaigns: [],
-} as DashboardData
+} as unknown as DashboardData
 
 function LocationProbe() {
   return <output data-testid="location">{useLocation().pathname}</output>

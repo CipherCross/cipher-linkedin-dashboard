@@ -217,7 +217,7 @@ export function createIdentityHandler(
       return json({ error: 'op is required' }, 400)
     }
 
-    const isCandidateRoute = Object.hasOwn(CANDIDATE_ROUTES, op)
+    const isCandidateRoute = Object.prototype.hasOwnProperty.call(CANDIDATE_ROUTES, op)
     const isRead = READ_OPERATIONS.includes(op)
     const isWrite = WRITE_OPERATIONS.includes(op)
 
