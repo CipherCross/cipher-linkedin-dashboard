@@ -1,17 +1,8 @@
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
-  KanbanSquare,
-  CalendarCheck2,
-  ClipboardCheck,
-  BookOpen,
-  Search,
-  Target,
-  FlaskConical,
-  Activity,
-  Sparkles,
+  Command,
   RotateCw,
   Sun,
   Moon,
@@ -20,11 +11,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
-  FileSpreadsheet,
   LogOut,
-  UserCog,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useTheme } from '../lib/ThemeContext'
 import { ConversationProvider } from '../lib/ConversationContext'
@@ -33,107 +21,33 @@ import { instanceName } from '../lib/leads'
 import { ago } from '../lib/format'
 import { freshnessLevel } from '../lib/freshness'
 import { useAuth } from '../lib/AuthContext'
-import { Avatar } from './Avatar'
+import {
+  NAVIGATION_SECTIONS,
+  navigationItemMatches,
+  pageNameForPath,
+  skeletonVariantForPath,
+  type NavigationSection,
+  type NavigationSectionId,
+} from '../lib/navigation'
 import { Logo } from './Logo'
 import { PageSkeleton } from './Skeleton'
 import { ErrorBoundary } from './ErrorBoundary'
-
-type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; admin?: boolean }
-type NavSection = {
-  label: string
-  emphasis?: boolean
-  collapsible?: boolean
-  links: NavItem[]
-}
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    label: 'Daily work',
-    emphasis: true,
-    links: [
-      { to: '/follow-ups', label: 'Follow-ups', icon: CalendarCheck2 },
-      { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
-      { to: '/leads', label: 'Leads', icon: Users },
-      { to: '/chat', label: 'Chat', icon: Sparkles },
-    ],
-  },
-  {
-    label: 'Insights & strategy',
-    collapsible: true,
-    links: [
-      { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-      { to: '/review', label: 'Review', icon: ClipboardCheck },
-      { to: '/playbook', label: 'Playbook', icon: BookOpen },
-      { to: '/searches', label: 'Searches', icon: Search },
-      { to: '/icp', label: 'ICPs', icon: Target },
-      { to: '/hypotheses', label: 'Hypotheses', icon: FlaskConical },
-    ],
-  },
-  {
-    label: 'System',
-    collapsible: true,
-    links: [
-      { to: '/team', label: 'Team', icon: UserCog },
-      { to: '/csv-import', label: 'CSV Import', icon: FileSpreadsheet, admin: true },
-      { to: '/health', label: 'Health', icon: Activity },
-    ],
-  },
-]
-
-const LINKS = NAV_SECTIONS.flatMap((section) => section.links)
-
-function navItemMatches(pathname: string, item: NavItem) {
-  return item.end
-    ? pathname === item.to
-    : pathname === item.to || pathname.startsWith(`${item.to}/`)
-}
-
-function readSidebarCollapsed() {
-  try {
-    return localStorage.getItem('sidebar-collapsed') === '1'
-  } catch {
-    return false
-  }
-}
-
-// Which loading skeleton best matches the route the user landed on (deep links
-// can open any page first). Keeps the first paint shaped like the real page.
-function skeletonVariant(pathname: string): 'overview' | 'table' | 'list' | 'simple' {
-  if (pathname.startsWith('/leads') || pathname.startsWith('/health') || pathname.startsWith('/review') || pathname.startsWith('/csv-import') || pathname.startsWith('/pipeline') || pathname.startsWith('/follow-ups')) return 'table'
-  if (
-    pathname.startsWith('/playbook') || pathname.startsWith('/chat') ||
-    pathname.startsWith('/searches') || pathname.startsWith('/icp') ||
-    pathname.startsWith('/hypotheses')
-  ) return 'simple'
-  return 'overview'
-}
-
-// Human page name for the current route, derived from the same nav config that
-// drives the links. Unlisted routes (campaign/account detail) fall back to null.
-function pageName(pathname: string): string | null {
-  const link = LINKS.find((item) => navItemMatches(pathname, item))
-  return link ? link.label : null
-}
+import { QuickNavigation } from './QuickNavigation'
 
 export function Layout() {
   const { data, loading, phase, refetch } = useData()
+  const { isAdmin } = useAuth()
   const location = useLocation()
-  // Mobile off-canvas drawer state. On desktop the sidebar is always visible and
-  // this is ignored; on narrow viewports the hamburger toggles it.
   const [navOpen, setNavOpen] = useState(false)
-  // Desktop collapse state: shrinks the rail to an icon-only strip. Persisted so
-  // the choice survives reloads. Ignored on mobile, where the drawer takes over.
-  const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
-  const toggleCollapsed = () =>
-    setCollapsed((c) => {
-      const next = !c
-      try {
-        localStorage.setItem('sidebar-collapsed', next ? '1' : '0')
-      } catch {
-        // Restricted storage must not make the application shell unusable.
-      }
-      return next
-    })
+  const [sidebarHidden, setSidebarHidden] = useState(false)
+  const [quickNavigationOpen, setQuickNavigationOpen] = useState(false)
+  const [mobileViewport, setMobileViewport] = useState(
+    () => window.matchMedia('(max-width: 900px)').matches,
+  )
+  const mobileToggleRef = useRef<HTMLButtonElement>(null)
+  const mobileTopbarRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLElement>(null)
+  const desktopRestoreRef = useRef<HTMLButtonElement>(null)
 
   // Reset scroll on every navigation. Separate from the title effect below,
   // which also depends on `data` — the periodic refetch must not yank the
@@ -147,11 +61,37 @@ export function Layout() {
     setNavOpen(false)
   }, [location.pathname])
 
+  // The desktop-only hidden state must never leak into the mobile drawer.
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 900px)')
+    const resetForMobile = () => {
+      setMobileViewport(media.matches)
+      if (media.matches) setSidebarHidden(false)
+    }
+    resetForMobile()
+    media.addEventListener('change', resetForMobile)
+    return () => media.removeEventListener('change', resetForMobile)
+  }, [])
+
+  // While the mobile drawer is open, its visual backdrop is also a real input
+  // boundary: page content and the top bar leave the focus order entirely.
+  useEffect(() => {
+    const targets = [mobileTopbarRef.current, contentRef.current].filter(
+      (target): target is HTMLElement => target !== null,
+    )
+    for (const target of targets) {
+      navOpen ? target.setAttribute('inert', '') : target.removeAttribute('inert')
+    }
+    return () => {
+      for (const target of targets) target.removeAttribute('inert')
+    }
+  }, [navOpen])
+
   // Document title. Detail routes (campaign/account) title by the entity they
   // show, resolved from data — so this also re-runs when data first arrives on
   // a deep link.
   useEffect(() => {
-    let name = pageName(location.pathname)
+    let name = pageNameForPath(location.pathname)
     if (!name && data) {
       const m = location.pathname.match(/^\/(campaign|account)\/(.+)$/)
       if (m) {
@@ -166,7 +106,7 @@ export function Layout() {
   }, [location.pathname, data])
 
   return (
-    <div className={`app${collapsed ? ' nav-collapsed' : ''}`}>
+    <div className={`app${sidebarHidden ? ' nav-hidden' : ''}`}>
       {/* Tier-2 "liquid glass" displacement filter. Referenced from styles.css
           via `backdrop-filter: url(#liquid-glass)` — a Chromium-only path gated
           behind @supports, so Safari/Firefox never reach it. Rendered once,
@@ -202,8 +142,9 @@ export function Layout() {
 
       {/* Mobile-only bar: hamburger toggles the off-canvas sidebar; the rail
           itself is display:none here and only appears ≥900px. */}
-      <div className="mobile-topbar">
+      <div className="mobile-topbar" ref={mobileTopbarRef}>
         <button
+          ref={mobileToggleRef}
           type="button"
           className="nav-toggle"
           onClick={() => setNavOpen((o) => !o)}
@@ -232,18 +173,44 @@ export function Layout() {
       <Sidebar
         data={data}
         open={navOpen}
-        collapsed={collapsed}
-        onToggleCollapse={toggleCollapsed}
+        hidden={sidebarHidden}
+        mobile={mobileViewport}
+        mobileReturnFocusRef={mobileToggleRef}
+        onClose={() => setNavOpen(false)}
+        onHide={() => {
+          setSidebarHidden(true)
+          requestAnimationFrame(() => desktopRestoreRef.current?.focus())
+        }}
+        onOpenQuickNavigation={() => {
+          setNavOpen(false)
+          setQuickNavigationOpen(true)
+        }}
       />
 
-      <div className="content">
-        <div className="page" id="main-content">
+      <button
+        ref={desktopRestoreRef}
+        type="button"
+        className="desktop-nav-restore"
+        onClick={() => {
+          setSidebarHidden(false)
+          requestAnimationFrame(() => {
+            document.querySelector<HTMLElement>('.quick-nav-trigger')?.focus()
+          })
+        }}
+        aria-label="Show navigation"
+      >
+        <PanelLeftOpen size={18} aria-hidden="true" />
+        <span>Show navigation</span>
+      </button>
+
+      <main className="content" id="main-content" ref={contentRef} tabIndex={-1}>
+        <div className="page">
           {data?.error && <ErrorBanner message={data.error} onRetry={refetch} />}
 
           {loading || !data || (
             location.pathname !== '/' && location.pathname !== '/leads' && phase !== 'full'
           ) ? (
-            <PageSkeleton variant={skeletonVariant(location.pathname)} />
+            <PageSkeleton variant={skeletonVariantForPath(location.pathname)} />
           ) : (
             <ConversationProvider>
               {/* Keyed by pathname so navigating to another page auto-resets a
@@ -251,45 +218,66 @@ export function Layout() {
               <ErrorBoundary variant="inline" key={location.pathname}>
                 {/* Pages are lazy-loaded (code-split in App); show the route-shaped
                     skeleton while a chunk streams in. */}
-                <Suspense fallback={<PageSkeleton variant={skeletonVariant(location.pathname)} />}>
+                <Suspense fallback={<PageSkeleton variant={skeletonVariantForPath(location.pathname)} />}>
                   <Outlet />
                 </Suspense>
               </ErrorBoundary>
             </ConversationProvider>
           )}
         </div>
-      </div>
+      </main>
+
+      <QuickNavigation
+        open={quickNavigationOpen}
+        data={data}
+        isAdmin={isAdmin}
+        onOpen={() => setQuickNavigationOpen(true)}
+        onClose={() => setQuickNavigationOpen(false)}
+      />
     </div>
   )
 }
 
-/** Left navigation rail: brand, the fixed page links, then a filterable tree of
- *  every account with its campaigns nested beneath — for jumping straight to any
- *  detail page. On desktop it's a sticky always-on column; on mobile it becomes
- *  an off-canvas drawer driven by `open`. */
+function sidebarFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => !element.hasAttribute('hidden') && element.getClientRects().length > 0)
+}
+
+/** Stable, page-first navigation. Accounts and campaigns deliberately live only
+ * in Quick Navigation and their existing detail routes, never in this rail. */
 function Sidebar({
   data,
   open,
-  collapsed,
-  onToggleCollapse,
+  hidden,
+  mobile,
+  mobileReturnFocusRef,
+  onClose,
+  onHide,
+  onOpenQuickNavigation,
 }: {
   data: DashboardData | null
   open: boolean
-  collapsed: boolean
-  onToggleCollapse: () => void
+  hidden: boolean
+  mobile: boolean
+  mobileReturnFocusRef: RefObject<HTMLButtonElement>
+  onClose: () => void
+  onHide: () => void
+  onOpenQuickNavigation: () => void
 }) {
   const { member, isAdmin, signOut } = useAuth()
   const location = useLocation()
-  const [filter, setFilter] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const asideRef = useRef<HTMLElement>(null)
+  const mobileCloseRef = useRef<HTMLButtonElement>(null)
+  const wasOpenRef = useRef(false)
   const activePageSection = useMemo(
-    () => NAV_SECTIONS.find(
+    () => NAVIGATION_SECTIONS.find(
       (section) => section.collapsible &&
-        section.links.some((item) => navItemMatches(location.pathname, item)),
-    )?.label ?? null,
+        section.items.some((item) => navigationItemMatches(location.pathname, item)),
+    )?.id ?? null,
     [location.pathname],
   )
-  const [openPageSection, setOpenPageSection] = useState<string | null>(
+  const [openPageSection, setOpenPageSection] = useState<NavigationSectionId | null>(
     () => activePageSection,
   )
 
@@ -299,67 +287,98 @@ function Sidebar({
     if (activePageSection) setOpenPageSection(activePageSection)
   }, [activePageSection])
 
-  // The account whose detail page — or one of whose campaigns — is currently
-  // open. Used to auto-reveal the relevant group so the active item is visible.
-  const activeInstance = useMemo(() => {
-    const acct = location.pathname.match(/^\/account\/(.+)$/)
-    if (acct) return decodeURIComponent(acct[1])
-    const camp = location.pathname.match(/^\/campaign\/(.+)$/)
-    if (camp && data) {
-      const id = decodeURIComponent(camp[1])
-      return data.campaigns.find((c) => c.campaign_id === id)?.instance_id ?? null
-    }
-    return null
-  }, [location.pathname, data])
+  useEffect(() => {
+    const aside = asideRef.current
+    if (!aside) return
+    const shouldBeInert = hidden || (mobile && !open)
+    shouldBeInert ? aside.setAttribute('inert', '') : aside.removeAttribute('inert')
+    return () => aside.removeAttribute('inert')
+  }, [hidden, mobile, open])
 
   useEffect(() => {
-    if (!activeInstance) return
-    setExpanded((prev) =>
-      prev.size === 1 && prev.has(activeInstance) ? prev : new Set([activeInstance]),
-    )
-  }, [activeInstance])
-
-  // Each account paired with its campaigns (sorted by name), in account order.
-  const groups = useMemo(() => {
-    if (!data) return []
-    const byInstance = new Map<string, typeof data.campaigns>()
-    for (const c of data.campaigns) {
-      const arr = byInstance.get(c.instance_id) ?? []
-      arr.push(c)
-      byInstance.set(c.instance_id, arr)
+    if (open) {
+      wasOpenRef.current = true
+      requestAnimationFrame(() => mobileCloseRef.current?.focus())
+      return
     }
-    return data.instances.map((inst) => ({
-      inst,
-      campaigns: (byInstance.get(inst.id) ?? [])
-        .slice()
-        .sort((a, b) => a.campaign_name.localeCompare(b.campaign_name)),
-    }))
-  }, [data])
+    if (wasOpenRef.current) {
+      wasOpenRef.current = false
+      requestAnimationFrame(() => mobileReturnFocusRef.current?.focus())
+    }
+  }, [mobileReturnFocusRef, open])
 
-  const q = filter.trim().toLowerCase()
-  // While filtering, keep only groups that match on the account name or have a
-  // matching campaign; a group matched by name keeps all its campaigns.
-  const visibleGroups = useMemo(() => {
-    if (!q) return groups
-    return groups
-      .map(({ inst, campaigns }) => {
-        const acctHit = instanceName(inst).toLowerCase().includes(q)
-        const camps = acctHit
-          ? campaigns
-          : campaigns.filter((c) => c.campaign_name.toLowerCase().includes(q))
-        return acctHit || camps.length > 0 ? { inst, campaigns: camps } : null
-      })
-      .filter((g): g is { inst: Instance; campaigns: typeof groups[number]['campaigns'] } => g !== null)
-  }, [groups, q])
+  const renderSection = (section: NavigationSection) => {
+    const links = section.items.filter((item) => !item.adminOnly || isAdmin)
+    if (links.length === 0) return null
+    const hasActiveItem = links.some((item) => navigationItemMatches(location.pathname, item))
+    const isOpen = !section.collapsible || openPageSection === section.id
+    const linksId = `nav-section-links-${section.id}`
 
-  const toggle = (id: string) =>
-    setExpanded((prev) => {
-      // Keep browsing compact: at most one account exposes its campaigns.
-      return prev.has(id) ? new Set() : new Set([id])
-    })
+    return (
+      <div
+        className={`nav-section${section.id === 'primary' ? ' primary' : ''}`}
+        key={section.id}
+      >
+        {section.collapsible ? (
+          <button
+            type="button"
+            className={`nav-section-trigger${isOpen ? ' open' : ''}${hasActiveItem ? ' active' : ''}`}
+            onClick={() => setOpenPageSection(
+              (current) => current === section.id ? null : section.id,
+            )}
+            aria-expanded={isOpen}
+            aria-controls={linksId}
+          >
+            <span className="nav-section-title">{section.label}</span>
+            <ChevronRight size={14} aria-hidden="true" />
+          </button>
+        ) : section.label ? (
+          <div className="nav-section-title">{section.label}</div>
+        ) : null}
+        <div className={`nav-section-links${isOpen ? '' : ' collapsed'}`} id={linksId}>
+          {links.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
+            >
+              <Icon size={17} className="navlink-icon" aria-hidden="true" />
+              <span className="navlink-label">{label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <aside className={`sidebar${open ? ' open' : ''}`} aria-label="Primary">
+    <aside
+      ref={asideRef}
+      className={`sidebar${open ? ' open' : ''}`}
+      aria-label="Primary"
+      aria-hidden={(hidden || (mobile && !open)) || undefined}
+      onKeyDown={(event) => {
+        if (!open || !asideRef.current) return
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          onClose()
+          return
+        }
+        if (event.key !== 'Tab') return
+        const focusable = sidebarFocusableElements(asideRef.current)
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }}
+    >
       <div className="sidebar-inner">
         <div className="side-head">
           <Link to="/" className="brand" aria-label="Outreach Deck — home">
@@ -368,161 +387,36 @@ function Sidebar({
           </Link>
           <button
             type="button"
-            className="side-collapse"
-            onClick={onToggleCollapse}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!collapsed}
+            className="side-hide"
+            onClick={onHide}
+            aria-label="Hide navigation"
+            title="Hide navigation"
           >
-            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-            <span className="side-tooltip" aria-hidden="true">
-              {collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            </span>
+            <PanelLeftClose size={18} aria-hidden="true" />
+          </button>
+          <button
+            ref={mobileCloseRef}
+            type="button"
+            className="side-mobile-close"
+            onClick={onClose}
+            aria-label="Close navigation"
+          >
+            <X size={19} aria-hidden="true" />
           </button>
         </div>
 
-        <nav className="side-nav" aria-label="Pages">
-          {NAV_SECTIONS.map((section, index) => {
-            const isOpen = !section.collapsible || openPageSection === section.label
-            const linksId = `nav-section-links-${index}`
-            return (
-              <div
-                className={`nav-section${section.emphasis ? ' primary' : ''}`}
-                key={section.label}
-              >
-                {section.collapsible ? (
-                  <button
-                    type="button"
-                    className={`nav-section-trigger${isOpen ? ' open' : ''}`}
-                    onClick={() => setOpenPageSection(
-                      (current) => current === section.label ? null : section.label,
-                    )}
-                    aria-expanded={isOpen}
-                    aria-controls={linksId}
-                  >
-                    <span className="nav-section-title">{section.label}</span>
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                ) : (
-                  <div className="nav-section-title">{section.label}</div>
-                )}
-                <div
-                  className={`nav-section-links${isOpen ? '' : ' collapsed'}`}
-                  id={linksId}
-                >
-                  {section.links.filter((link) => !link.admin || isAdmin).map(({ to, label, icon: Icon, end }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={end}
-                      className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
-                      aria-label={collapsed ? label : undefined}
-                    >
-                      <Icon size={17} className="navlink-icon" aria-hidden="true" />
-                      <span className="navlink-label">{label}</span>
-                      <span className="side-tooltip" aria-hidden="true">{label}</span>
-                    </NavLink>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+        <button type="button" className="quick-nav-trigger" onClick={onOpenQuickNavigation}>
+          <Command size={16} aria-hidden="true" />
+          <span>Go to…</span>
+          <kbd>⌘K</kbd>
+        </button>
+
+        <nav className="side-nav side-main-nav" aria-label="Pages">
+          {NAVIGATION_SECTIONS.filter((section) => section.placement === 'main').map(renderSection)}
         </nav>
 
-        <nav className="side-scroll" aria-label="Accounts and campaigns">
-          <div className="side-section-heading">
-            <div>
-              <span className="side-section-eyebrow">Workspace</span>
-              <span className="side-section-head">Accounts &amp; campaigns</span>
-            </div>
-            {data && (
-              <span className="side-section-count" aria-label={`${data.instances.length} accounts`}>
-                {data.instances.length}
-              </span>
-            )}
-          </div>
-          {data && data.instances.length > 3 && (
-            <div className="side-filter-wrap">
-              <Search size={14} aria-hidden="true" />
-              <input
-                className="side-filter"
-                type="search"
-                placeholder="Find account or campaign"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                aria-label="Filter accounts and campaigns"
-              />
-            </div>
-          )}
-
-          <div className="side-groups-scroll">
-            <ul className="side-groups">
-              {visibleGroups.map(({ inst, campaigns }) => {
-                const isOpen = !!q || expanded.has(inst.id)
-                const accountName = instanceName(inst)
-                const level = freshnessLevel(inst.last_sync_at)
-                const freshness = inst.last_sync_at
-                  ? `${level === 'ok' ? 'Healthy' : level === 'warn' ? 'Sync aging' : 'Sync stale'}, synced ${ago(inst.last_sync_at)}`
-                  : 'Sync stale, never synced'
-                const campaignListId = `sidebar-campaigns-${encodeURIComponent(inst.id)}`
-                return (
-                  <li className="side-group" key={inst.id}>
-                    <div className="side-acct-row">
-                      <button
-                        type="button"
-                        className={`side-acct-toggle${isOpen ? ' open' : ''}`}
-                        onClick={() => toggle(inst.id)}
-                        aria-label={`${isOpen ? 'Collapse' : 'Expand'} campaigns for ${accountName}`}
-                        aria-expanded={isOpen}
-                        aria-controls={campaignListId}
-                        disabled={!!q}
-                      >
-                        <ChevronRight size={15} aria-hidden="true" />
-                      </button>
-                      <NavLink
-                        to={`/account/${encodeURIComponent(inst.id)}`}
-                        className={({ isActive }) => (isActive ? 'side-acct active' : 'side-acct')}
-                      >
-                        <span className="side-acct-avatar" aria-hidden="true">
-                          <Avatar inst={inst} size={24} />
-                        </span>
-                        <span className="side-acct-copy">
-                          <span className="side-acct-name">{accountName}</span>
-                          <span className="side-acct-meta">
-                            {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
-                          </span>
-                        </span>
-                        <span className={`side-dot ${level}`} aria-hidden="true" />
-                        <span className="sr-only">{freshness}</span>
-                      </NavLink>
-                    </div>
-                    {isOpen && (
-                      <ul className="side-campaigns" id={campaignListId}>
-                        {campaigns.map((c) => (
-                          <li key={c.campaign_id}>
-                            <NavLink
-                              to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
-                              className={({ isActive }) =>
-                                isActive ? 'side-campaign active' : 'side-campaign'
-                              }
-                              title={c.campaign_name}
-                            >
-                              <span>{c.campaign_name}</span>
-                            </NavLink>
-                          </li>
-                        ))}
-                        {campaigns.length === 0 && (
-                          <li className="side-empty">No campaigns</li>
-                        )}
-                      </ul>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-            {data && visibleGroups.length === 0 && (
-              <div className="side-empty">{q ? 'No matches' : 'No accounts synced'}</div>
-            )}
-          </div>
+        <nav className="side-nav side-secondary-nav" aria-label="Administration">
+          {NAVIGATION_SECTIONS.filter((section) => section.placement === 'footer').map(renderSection)}
         </nav>
 
         <div className="side-footer">
@@ -631,7 +525,6 @@ function ThemeToggle() {
       ) : (
         <Moon size={16} aria-hidden="true" />
       )}
-      <span className="side-tooltip" aria-hidden="true">Switch to {next} theme</span>
     </button>
   )
 }
@@ -647,7 +540,6 @@ function SyncChip({ instances }: { instances: Instance[] }) {
     >
       <span className="sync-dot" aria-hidden="true" />
       <span className="sync-chip-label">{label}</span>
-      <span className="side-tooltip" aria-hidden="true">{label} — open Sync health</span>
     </Link>
   )
 }

@@ -7,6 +7,7 @@ import { ThemeProvider } from './lib/ThemeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { ResetPassword, resetTokenFromHash } from './pages/ResetPassword'
+import { APP_ROUTE_SEGMENTS } from './lib/navigation'
 
 // Pages are code-split so each route ships its own chunk — the initial bundle no
 // longer carries all nine. These modules use named exports, so map to default.
@@ -73,26 +74,26 @@ export default function App() {
                   <Routes>
                     <Route element={<Layout />}>
                       <Route index element={<Overview />} />
-                      <Route path="campaign/:id" element={<CampaignDetail />} />
-                      <Route path="accounts" element={<Navigate to="/" replace />} />
-                      <Route path="account/:id" element={<AccountDetail />} />
-                      <Route path="leads" element={<LeadsExplorer />} />
-                      <Route path="pipeline" element={<Pipeline />} />
-                      <Route path="follow-ups" element={<FollowUps />} />
+                      <Route path={APP_ROUTE_SEGMENTS.campaign} element={<CampaignDetail />} />
+                      <Route path={APP_ROUTE_SEGMENTS.accountsRedirect} element={<Navigate to="/" replace />} />
+                      <Route path={APP_ROUTE_SEGMENTS.account} element={<AccountDetail />} />
+                      <Route path={APP_ROUTE_SEGMENTS.leads} element={<LeadsExplorer />} />
+                      <Route path={APP_ROUTE_SEGMENTS.pipeline} element={<Pipeline />} />
+                      <Route path={APP_ROUTE_SEGMENTS.followUps} element={<FollowUps />} />
                       {/* Replies folded into Leads — deep links land on replied leads. */}
-                      <Route path="replies" element={<RepliesRedirect />} />
-                      <Route path="review" element={<Review />} />
-                      <Route path="csv-import" element={<AdminOnly><CsvImport /></AdminOnly>} />
-                      <Route path="playbook" element={<Playbook />} />
-                      <Route path="searches" element={<SearchLibrary />} />
-                      <Route path="icp" element={<Icp />} />
-                      <Route path="hypotheses" element={<Hypotheses />} />
-                      <Route path="health" element={<Health />} />
-                      <Route path="team" element={<Team />} />
-                      <Route path="chat" element={<Chat />} />
+                      <Route path={APP_ROUTE_SEGMENTS.repliesRedirect} element={<RepliesRedirect />} />
+                      <Route path={APP_ROUTE_SEGMENTS.review} element={<Review />} />
+                      <Route path={APP_ROUTE_SEGMENTS.csvImport} element={<AdminOnly><CsvImport /></AdminOnly>} />
+                      <Route path={APP_ROUTE_SEGMENTS.playbook} element={<Playbook />} />
+                      <Route path={APP_ROUTE_SEGMENTS.searches} element={<SearchLibrary />} />
+                      <Route path={APP_ROUTE_SEGMENTS.icp} element={<Icp />} />
+                      <Route path={APP_ROUTE_SEGMENTS.hypotheses} element={<Hypotheses />} />
+                      <Route path={APP_ROUTE_SEGMENTS.health} element={<Health />} />
+                      <Route path={APP_ROUTE_SEGMENTS.team} element={<Team />} />
+                      <Route path={APP_ROUTE_SEGMENTS.chat} element={<Chat />} />
                       {/* S12: one read-only slice served from Neon, beside the
                           Supabase path every other route still uses. */}
-                      <Route path="neon-activity" element={<NeonActivity />} />
+                      <Route path={APP_ROUTE_SEGMENTS.neonActivity} element={<NeonActivity />} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>
                   </Routes>
