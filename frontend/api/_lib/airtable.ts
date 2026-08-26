@@ -47,6 +47,10 @@ interface AirtableCreateResponse {
   records?: AirtableRecord[]
 }
 
+interface AirtableUpdateResponse {
+  records?: AirtableRecord[]
+}
+
 export interface AirtableFieldSchema {
   id: string
   name: string
@@ -211,6 +215,32 @@ export async function createRecords(
       body: JSON.stringify({
         typecast: options.typecast === true,
         records: fields.map((recordFields) => ({ fields: recordFields })),
+      }),
+    },
+  )
+  return response.records ?? []
+}
+
+export async function updateRecords(
+  tableId: string,
+  records: Array<{ id: string; fields: Record<string, unknown> }>,
+  options: { typecast?: boolean } = {},
+): Promise<AirtableRecord[]> {
+  if (records.length === 0 || records.length > 10) {
+    throw new AirtableError('Airtable update batch must contain 1–10 records', 500)
+  }
+  if (records.some((record) => !/^rec[a-zA-Z0-9]{14}$/.test(record.id))) {
+    throw new AirtableError('Airtable update batch contains an invalid record ID', 400)
+  }
+  const { baseId } = config()
+  const params = new URLSearchParams({ returnFieldsByFieldId: 'true' })
+  const response = await airtableFetch<AirtableUpdateResponse>(
+    `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        typecast: options.typecast === true,
+        records,
       }),
     },
   )

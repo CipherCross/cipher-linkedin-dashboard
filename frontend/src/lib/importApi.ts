@@ -72,18 +72,19 @@ export interface CompanyPreviewResponse {
 
 export interface CompanyCommitInputRow extends CompanyImportRow {
   allowNameDuplicate: boolean
+  existingCompanyId?: string
 }
 
 export interface CompanyCommitRowResult {
   rowNumber: number
-  status: 'created' | 'duplicate' | 'failed'
+  status: 'created' | 'updated' | 'duplicate' | 'failed'
   companyId?: string
   error?: string
 }
 
 export interface CompanyCommitResponse {
   results: CompanyCommitRowResult[]
-  counts: { created: number; duplicate: number; failed: number }
+  counts: { created: number; updated: number; duplicate: number; failed: number }
 }
 
 const MAX_IMPORT_BODY_BYTES = 3_800_000

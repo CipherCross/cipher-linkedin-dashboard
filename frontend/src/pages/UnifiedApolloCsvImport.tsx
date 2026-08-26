@@ -56,6 +56,7 @@ const COMPANY_STATUS: Record<string, string> = {
   invalid: 'Invalid',
   skipped: 'Skipped',
   created: 'Created',
+  updated: 'Updated',
   failed: 'Failed',
 }
 
@@ -168,7 +169,9 @@ export function UnifiedApolloCsvImport() {
       const outcome = outcomeByRow.get(company.rowNumber)
       if (
         outcome?.companyId &&
-        (outcome.status === 'created' || outcome.status === 'duplicate')
+        (outcome.status === 'created' ||
+          outcome.status === 'updated' ||
+          outcome.status === 'duplicate')
       ) {
         result.set(company.accountId, outcome.companyId)
       }
@@ -249,7 +252,9 @@ export function UnifiedApolloCsvImport() {
       const outcome = outcomeByRow.get(company.rowNumber)
       if (
         outcome?.companyId &&
-        (outcome.status === 'created' || outcome.status === 'duplicate')
+        (outcome.status === 'created' ||
+          outcome.status === 'updated' ||
+          outcome.status === 'duplicate')
       ) {
         ids.set(company.accountId, outcome.companyId)
       }
@@ -289,12 +294,20 @@ export function UnifiedApolloCsvImport() {
         .filter((company) => {
           const preview = companyPreviewByRow.get(company.rowNumber)
           const decision = companyDecisions[company.accountId]
-          return preview?.status === 'ready' || decision?.kind === 'create'
+          return (
+            preview?.status === 'ready' ||
+            decision?.kind === 'create' ||
+            decision?.kind === 'existing'
+          )
         })
-        .map((company) => ({
-          ...apiCompanyRow(company),
-          allowNameDuplicate: companyDecisions[company.accountId]?.kind === 'create',
-        }))
+        .map((company) => {
+          const decision = companyDecisions[company.accountId]
+          return {
+            ...apiCompanyRow(company),
+            allowNameDuplicate: decision?.kind === 'create',
+            existingCompanyId: decision?.kind === 'existing' ? decision.company.id : undefined,
+          }
+        })
       const response = committable.length
         ? await commitCompanies(addedBy, committable)
         : { results: [] }
@@ -625,7 +638,7 @@ export function UnifiedApolloCsvImport() {
               <div>
                 <h2>3. Resolve Companies</h2>
                 <div className="muted small">
-                  New Companies will be created. Name-only and conflicting matches require your decision.
+                  New Companies will be created. Choosing an existing Company fills only its blank Airtable fields from Apollo.
                 </div>
               </div>
               <span className="badge status-running">{unresolvedCompanies.length} unresolved</span>
@@ -645,7 +658,7 @@ export function UnifiedApolloCsvImport() {
                       </span>
                       {preview?.reason && <span className="muted small">{companyReason(preview.reason)}</span>}
                       {decision?.kind === 'create' && <span className="csv-resolution success">Create new Company</span>}
-                      {decision?.kind === 'existing' && <span className="csv-resolution skipped">Use {decision.company.name}</span>}
+                      {decision?.kind === 'existing' && <span className="csv-resolution skipped">Use {decision.company.name} · fill blank fields</span>}
                       {decision?.kind === 'skip' && <span className="csv-resolution skipped">Skip this group</span>}
                     </div>
                     {needsDecision && (
@@ -756,7 +769,7 @@ export function UnifiedApolloCsvImport() {
             <div>
               <h2>Import results</h2>
               <div className="muted small">
-                Companies: {companyCounts.created ?? 0} created, {companyCounts.duplicate ?? 0} existing · Contacts: {contactCounts.created ?? 0} created, {contactCounts.duplicate ?? 0} existing
+                Companies: {companyCounts.created ?? 0} created, {companyCounts.updated ?? 0} updated, {companyCounts.duplicate ?? 0} existing · Contacts: {contactCounts.created ?? 0} created, {contactCounts.duplicate ?? 0} existing
               </div>
             </div>
             <CheckCircle2 size={28} className="csv-result-icon" />

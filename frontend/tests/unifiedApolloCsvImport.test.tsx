@@ -160,4 +160,51 @@ describe('Unified Apollo CSV import page', () => {
     const adoptedRows = api.previewContacts.mock.calls[0][0]
     expect(adoptedRows.every((row: { companyId?: string }) => row.companyId === company.id)).toBe(true)
   })
+
+  it('sends an explicitly selected existing Company for blank-field enrichment', async () => {
+    const incompleteCompany = { ...company, website: '', linkedin: '' }
+    api.previewCompanies.mockResolvedValueOnce({
+      results: [{
+        rowNumber: 2,
+        status: 'company_action',
+        reason: 'name_match',
+        suggestions: [incompleteCompany],
+        canCreate: true,
+      }],
+      counts: { company_action: 1 },
+    })
+    api.commitCompanies.mockResolvedValueOnce({
+      results: [{ rowNumber: 2, status: 'updated', companyId: incompleteCompany.id }],
+      counts: { created: 0, updated: 1, duplicate: 0, failed: 0 },
+    })
+
+    const { container } = render(<UnifiedApolloCsvImport />)
+    fireEvent.change(await screen.findByLabelText(/Added by/), {
+      target: { value: 'Ada Operator' },
+    })
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File([csv], 'apollo-people.csv', { type: 'text/csv' })] },
+    })
+    await screen.findByText(/2 Contacts · 1 unique Companies/)
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Companies' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose existing' }))
+    const option = (await screen.findByText('No website or LinkedIn stored')).closest('button')
+    expect(option).toBeTruthy()
+    fireEvent.click(option!)
+    expect(await screen.findByText(/fill blank fields/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Process Companies' }))
+
+    await screen.findByRole('heading', { name: '4. Review Contacts' })
+    expect(api.commitCompanies).toHaveBeenCalledTimes(1)
+    const committedRows = api.commitCompanies.mock.calls[0][1]
+    expect(committedRows).toHaveLength(1)
+    expect(committedRows[0]).toMatchObject({
+      rowNumber: 2,
+      existingCompanyId: incompleteCompany.id,
+      allowNameDuplicate: false,
+      website: 'https://analytical.test',
+    })
+    const previewRows = api.previewContacts.mock.calls[0][0]
+    expect(previewRows.every((row: { companyId?: string }) => row.companyId === company.id)).toBe(true)
+  })
 })
