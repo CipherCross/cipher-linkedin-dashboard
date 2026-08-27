@@ -149,7 +149,9 @@ describe('Airtable Company updates', () => {
   it('uses PATCH with stable record and field IDs', async () => {
     vi.stubEnv('AIRTABLE_TOKEN', 'pat-test-token')
     vi.stubEnv('AIRTABLE_BASE_ID', 'app12345678901234')
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+    const fetcher = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async () => new Response(JSON.stringify({
       records: [{ id: 'rec00000000000001', fields: {} }],
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetcher)
