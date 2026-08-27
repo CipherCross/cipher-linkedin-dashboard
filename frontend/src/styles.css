@@ -4172,7 +4172,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .sequence-commented-copy mark { padding: 1px 0; background: var(--warning-subtle); color: var(--text); box-shadow: inset 0 -1px var(--warning); }
 .sequence-move-variation { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--text-muted); font-size: 10px; }
 .sequence-move-variation select { min-width: 0; padding: 3px 20px 3px 5px; font-size: 10px; }
-.sequence-add-variation { min-height: 48px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 5px; padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: 10px; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }
+.sequence-add-variation { align-self: start; min-height: 48px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 5px; padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: 10px; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .sequence-add-variation:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-subtle); }
 .sequence-add-step { align-self: center; display: flex; align-items: center; justify-content: center; gap: 7px; width: min(320px, 100%); padding: 11px; border: 1px dashed var(--accent-border); border-radius: 12px; background: var(--accent-subtle); color: var(--accent); font: inherit; font-weight: 650; cursor: pointer; }
 
