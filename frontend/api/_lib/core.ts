@@ -437,6 +437,14 @@ saved_searches — the Search Library: shared, named sourcing-search RECIPES
   (hidden by default in the UI). Unique per (platform, lower(name)) — same name can
   exist under different platforms but not twice within one platform.
 
+sequence_documents / sequence_versions / sequence_comment_threads /
+sequence_comment_messages — the Sequence Builder's shared creative drafting
+  workspace. It stores revisioned JSON sequence documents, immutable autosave
+  snapshots, and threaded block/selection comments. This is authored copy, not
+  measured campaign telemetry and not an LH2 execution surface. These four
+  relations are intentionally OUTSIDE the AI SQL runner's SELECT allowlist in
+  v1; do not query them with run_sql or infer that a draft was ever sent.
+
 icps — Ideal Customer Profile definitions (migration 043), fully structured (no
   Markdown body). Editable via the /icp page; the AI never writes these.
   id bigint PK, name text (unique), airtable_url text,

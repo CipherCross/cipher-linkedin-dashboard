@@ -179,6 +179,14 @@
       "owner_role_entered_by": "artifact",
       "session": "S21",
       "description": "One grant: USAGE on schema public to app_machine, and nothing else. Step 009 gave the machine principal tables, sequences, functions and policies but not the right to reach the schema they live in, so every one of them raised 42501 before any of its own privileges were consulted; app_machine was the first role to arrive at that boundary with no prior grants, which is why the omission was invisible beside app_runtime's in step 002 and app_system's in step 003. Found by the live suite on its first run against a real app_machine login. It is a new step rather than an edit to 009 because the ledger is append-only, 009 is applied and its digest is recorded: a correction to an applied step is a step. Grants no object privilege, adds no policy, creates nothing, touches no other role, and deliberately omits CREATE, so the machine principal still cannot add an object to public. Written under the same owner decision as steps 007 through 009: applied only by explicit owner approval, never automatically."
+    },
+    {
+      "step": 11,
+      "artifact": "011_sequence_builder_workspace.sql",
+      "sha256": "b4612536015860a46f8a46fa9e0b9ecbb3168c0e52587939b180021b5dca8904",
+      "owner_role_entered_by": "artifact",
+      "session": "sequence-builder",
+      "description": "The shared Sequence Builder drafting workspace: revisioned sequence JSON documents, immutable version snapshots, threaded block/selection comments, active-member RLS, and least-privilege runtime grants. It is intentionally independent from LH2-synchronized campaign_steps and adds no publish or execution path."
     }
   ]
 }

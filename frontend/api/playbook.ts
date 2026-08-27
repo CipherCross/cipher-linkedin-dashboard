@@ -14,11 +14,13 @@
 // 'save_icp_industry' | 'delete_icp_industry' | 'save_hypothesis' | 'delete_hypothesis' |
 // 'set_hypothesis_campaigns' | 'assign_search' hits the ICP/Hypothesis layer (see
 // _lib/icp.ts); action:'save_campaign_context' updates the team background supplied
-// to AI briefings. All paths share the same guard.
+// to AI briefings. Sequence Builder's list/detail/save/archive/comment actions
+// also share this endpoint to stay within the function cap, but require any
+// active member rather than an admin. All older paths keep the admin guard.
 //
 // Every path requires a verified application admin.
 import { db } from './_lib/core.js'
-import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse, guardAdmin, guardMember } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import { validateSearch } from './_lib/savedSearch.js'
 import {
@@ -39,6 +41,7 @@ import {
   type LibraryEntity,
 } from './_lib/neonLibraryWrites.js'
 import { neonWriter } from './_lib/neonWrites.js'
+import { handleSequenceAction, isSequenceAction } from './_lib/sequenceBuilder.js'
 
 export const maxDuration = 10
 
@@ -404,6 +407,32 @@ async function saveCampaignContext(
 
 async function handle(req: Request): Promise<Response> {
   const neon = deploymentWritePath() === 'neon'
+  // Sequence Builder shares this endpoint to stay within the Vercel Hobby
+  // function cap, but unlike the older strategy libraries it is a workspace for
+  // every active member. Peek through a cloned body so the existing admin paths
+  // keep their original authenticate-before-parse behavior.
+  let sequencePayload: Record<string, unknown> | null = null
+  try {
+    const candidate = (await req.clone().json()) as unknown
+    if (candidate !== null && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      sequencePayload = candidate as Record<string, unknown>
+    }
+  } catch {
+    // The canonical parse below preserves the existing invalid-JSON response.
+  }
+  if (isSequenceAction(sequencePayload?.action)) {
+    if (neon) return handleSequenceAction(req, sequencePayload as Record<string, unknown>)
+    const auth = await guardMember(req)
+    if (auth.response) return auth.response
+    return json(
+      {
+        error: 'Sequence Builder requires the Neon data path.',
+        code: 'NEON_PATH_REQUIRED',
+      },
+      503,
+    )
+  }
+
   if (neon) {
     try {
       const writer = await neonWriter(req)

@@ -312,7 +312,7 @@ fi
 
 expect_probe "a fully migrated database still reports every bootstrap applied" \
   bootstrap_prepared "t|t|t|t"
-expect_presence "the ledger-presence probe still reports present after all ten steps" \
+expect_presence "the ledger-presence probe still reports present after all eleven steps" \
   bootstrap_prepared "t"
 
 # A second run must change nothing: this is the retry the live operation makes.

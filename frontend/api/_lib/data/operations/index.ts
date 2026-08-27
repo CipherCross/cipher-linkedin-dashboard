@@ -190,6 +190,21 @@ import {
   briefingUpsertBriefingOperation,
   briefingWeeklyReferenceOperation,
 } from './briefingWrites.js'
+import {
+  SEQUENCE_COMMANDS,
+  SEQUENCE_OPERATIONS,
+  addCommentMessageOperation,
+  archiveSequenceOperation,
+  createCommentThreadOperation,
+  createSequenceOperation,
+  insertSequenceVersionOperation,
+  listSequencesOperation,
+  saveSequenceOperation,
+  sequenceCommentsOperation,
+  sequenceDetailOperation,
+  sequenceVersionsOperation,
+  setCommentResolvedOperation,
+} from './sequences.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
 export {
@@ -244,6 +259,24 @@ export {
   type IcpRow,
   type SavedSearchRow,
 } from './library.js'
+export {
+  SEQUENCE_COMMANDS,
+  SEQUENCE_OPERATIONS,
+  type AddCommentMessageParams,
+  type ArchiveSequenceParams,
+  type CommentThreadWriteResult,
+  type CreateCommentThreadParams,
+  type CreateSequenceParams,
+  type InsertSequenceVersionParams,
+  type RowCountResult as SequenceRowCountResult,
+  type SaveSequenceParams,
+  type SequenceCommentRow,
+  type SequenceDocumentRow,
+  type SequenceDocumentWriteResult,
+  type SequenceIdParams,
+  type SequenceVersionRow,
+  type SetCommentResolvedParams,
+} from './sequences.js'
 export {
   PIPELINE_OPERATIONS,
   type PipelineEventLogParams,
@@ -408,6 +441,10 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     DASHBOARD_OPERATIONS.annotationsTimeline,
     annotationsTimelineOperation,
   )
+  registry.registerQuery(SEQUENCE_OPERATIONS.list, listSequencesOperation)
+  registry.registerQuery(SEQUENCE_OPERATIONS.detail, sequenceDetailOperation)
+  registry.registerQuery(SEQUENCE_OPERATIONS.versions, sequenceVersionsOperation)
+  registry.registerQuery(SEQUENCE_OPERATIONS.comments, sequenceCommentsOperation)
 
   // The full-snapshot base-table walks plus the route-owned Leads page.
   registry.registerQuery(LEADS_OPERATIONS.directory, leadsDirectoryOperation)
@@ -639,6 +676,25 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     LIBRARY_WRITE_COMMANDS.savePlaybook,
     savePlaybookOperation,
   )
+  registry.registerCommand(SEQUENCE_COMMANDS.create, createSequenceOperation)
+  registry.registerCommand(SEQUENCE_COMMANDS.save, saveSequenceOperation)
+  registry.registerCommand(SEQUENCE_COMMANDS.archive, archiveSequenceOperation)
+  registry.registerCommand(
+    SEQUENCE_COMMANDS.insertVersion,
+    insertSequenceVersionOperation,
+  )
+  registry.registerCommand(
+    SEQUENCE_COMMANDS.createCommentThread,
+    createCommentThreadOperation,
+  )
+  registry.registerCommand(
+    SEQUENCE_COMMANDS.addCommentMessage,
+    addCommentMessageOperation,
+  )
+  registry.registerCommand(
+    SEQUENCE_COMMANDS.setCommentResolved,
+    setCommentResolvedOperation,
+  )
 
   // S15 — the AI layer's HUMAN-ACTOR half. The guard reads run as app_system
   // in the separate AI registry (`operations/ai.ts`); everything registered
@@ -810,6 +866,10 @@ export const APPLICATION_QUERY_OPERATIONS = [
   LIBRARY_OPERATIONS.icpIndustries,
   LIBRARY_OPERATIONS.hypotheses,
   LIBRARY_OPERATIONS.hypothesisCampaigns,
+  SEQUENCE_OPERATIONS.list,
+  SEQUENCE_OPERATIONS.detail,
+  SEQUENCE_OPERATIONS.versions,
+  SEQUENCE_OPERATIONS.comments,
   PIPELINE_WRITE_OPERATIONS.leadPipelineFields,
   PIPELINE_WRITE_OPERATIONS.leadAssignment,
   PIPELINE_WRITE_OPERATIONS.teamMemberById,
@@ -885,6 +945,13 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   LIBRARY_WRITE_COMMANDS.assignSearchHypothesis,
   LIBRARY_WRITE_COMMANDS.saveCampaignContext,
   LIBRARY_WRITE_COMMANDS.savePlaybook,
+  SEQUENCE_COMMANDS.create,
+  SEQUENCE_COMMANDS.save,
+  SEQUENCE_COMMANDS.archive,
+  SEQUENCE_COMMANDS.insertVersion,
+  SEQUENCE_COMMANDS.createCommentThread,
+  SEQUENCE_COMMANDS.addCommentMessage,
+  SEQUENCE_COMMANDS.setCommentResolved,
   AI_WRITE_OPERATIONS.coachUpsert,
   AI_WRITE_OPERATIONS.coachDigestUpsert,
   AI_WRITE_OPERATIONS.classifyWriteLabels,
