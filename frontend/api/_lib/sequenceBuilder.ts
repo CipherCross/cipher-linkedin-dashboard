@@ -491,6 +491,6 @@ export async function handleSequenceAction(
 
     return json({ error: 'unknown action' }, 400)
   } catch (error) {
-    return failure(error, action.replaceAll('_', ' '))
+    return failure(error, action.split('_').join(' '))
   }
 }

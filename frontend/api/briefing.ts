@@ -334,8 +334,8 @@ function composeTeamContext(rows: TeamContextRows): string {
     })
       // Keep team text from imitating the surrounding delimiter. The model still
       // receives the exact characters as JSON unicode escapes.
-      .replaceAll('<', '\\u003c')
-      .replaceAll('>', '\\u003e')
+      .split('<').join('\\u003c')
+      .split('>').join('\\u003e')
 
   return [
     'TEAM-PROVIDED CONTEXT — background supplied by the team, not measured telemetry.',

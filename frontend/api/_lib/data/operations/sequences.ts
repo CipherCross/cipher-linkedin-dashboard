@@ -278,7 +278,7 @@ export const createSequenceOperation: NeonCommandOperation<
     text: `INSERT INTO public.sequence_documents
               (name, document, created_by, created_by_name, updated_by, updated_by_name)
            VALUES ($1, $2::jsonb, $3::uuid, $4, $3::uuid, $4)
-        RETURNING ${DOCUMENT_COLUMNS.replaceAll('d.', '')}`,
+        RETURNING ${DOCUMENT_COLUMNS.split('d.').join('')}`,
     values: [params?.name, params?.documentJson, actor.actorId, params?.actorName],
   }),
   mapResult: mapDocumentWrite,
