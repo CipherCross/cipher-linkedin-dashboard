@@ -12,6 +12,7 @@ import {
   Target,
   UserCog,
   Users,
+  Workflow,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { instanceName } from './leads'
@@ -35,6 +36,8 @@ export const APP_ROUTE_SEGMENTS = {
   searches: 'searches',
   icp: 'icp',
   hypotheses: 'hypotheses',
+  sequences: 'sequences',
+  sequence: 'sequences/:id',
   health: 'health',
   team: 'team',
   chat: 'chat',
@@ -147,6 +150,14 @@ const ITEMS: Record<string, Omit<NavigationItem, 'section'>> = {
     skeleton: 'simple',
     keywords: ['experiments', 'ideas'],
   },
+  sequences: {
+    id: 'sequences',
+    to: routeTo(APP_ROUTE_SEGMENTS.sequences),
+    label: 'Sequence Builder',
+    icon: Workflow,
+    skeleton: 'simple',
+    keywords: ['messages', 'copy', 'linkedin', 'ab test', 'variations'],
+  },
   team: {
     id: 'team',
     to: routeTo(APP_ROUTE_SEGMENTS.team),
@@ -206,6 +217,7 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
       inSection('strategy', ITEMS.searches),
       inSection('strategy', ITEMS.icps),
       inSection('strategy', ITEMS.hypotheses),
+      inSection('strategy', ITEMS.sequences),
     ],
   },
   {

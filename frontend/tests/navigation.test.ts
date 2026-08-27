@@ -57,6 +57,8 @@ describe('sidebar information architecture', () => {
     expect(pageNameForPath('/account/notebook-1')).toBeNull()
     expect(skeletonVariantForPath('/follow-ups')).toBe('table')
     expect(skeletonVariantForPath('/playbook')).toBe('simple')
+    expect(pageNameForPath('/sequences')).toBe('Sequence Builder')
+    expect(pageNameForPath('/sequences/example-id')).toBe('Sequence Builder')
     expect(skeletonVariantForPath('/campaign/notebook-1%3A42')).toBe('overview')
   })
 })

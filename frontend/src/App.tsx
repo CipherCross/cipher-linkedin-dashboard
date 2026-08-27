@@ -21,6 +21,7 @@ const Playbook = lazy(() => import('./pages/Playbook').then((m) => ({ default: m
 const SearchLibrary = lazy(() => import('./pages/SearchLibrary').then((m) => ({ default: m.SearchLibrary })))
 const Icp = lazy(() => import('./pages/Icp').then((m) => ({ default: m.Icp })))
 const Hypotheses = lazy(() => import('./pages/Hypotheses').then((m) => ({ default: m.Hypotheses })))
+const SequenceBuilder = lazy(() => import('./pages/SequenceBuilder').then((m) => ({ default: m.SequenceBuilder })))
 const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })))
 const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })))
 const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
@@ -88,6 +89,8 @@ export default function App() {
                       <Route path={APP_ROUTE_SEGMENTS.searches} element={<SearchLibrary />} />
                       <Route path={APP_ROUTE_SEGMENTS.icp} element={<Icp />} />
                       <Route path={APP_ROUTE_SEGMENTS.hypotheses} element={<Hypotheses />} />
+                      <Route path={APP_ROUTE_SEGMENTS.sequences} element={<SequenceBuilder />} />
+                      <Route path={APP_ROUTE_SEGMENTS.sequence} element={<SequenceBuilder />} />
                       <Route path={APP_ROUTE_SEGMENTS.health} element={<Health />} />
                       <Route path={APP_ROUTE_SEGMENTS.team} element={<Team />} />
                       <Route path={APP_ROUTE_SEGMENTS.chat} element={<Chat />} />
