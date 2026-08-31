@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.4"
+AGENT_VERSION = "1.16.5"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -454,7 +454,11 @@ def probe_linked_helper_runtime(profile):
           peopleCampaigns: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns,
           createCampaign: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.createCampaign,
           setCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.setCampaignPaused,
-          isCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.isCampaignPaused
+          isCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.isCampaignPaused,
+          getCampaigns: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.getCampaigns,
+          getCampaign: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.getCampaign,
+          getCampaignActions: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.getCampaignActions,
+          getCampaignPeopleCount: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.getCampaignPeopleCount
         }))()""")
         if not isinstance(value, dict):
             raise CdpError("CDP_PROBE_RESULT_INVALID")
@@ -462,7 +466,9 @@ def probe_linked_helper_runtime(profile):
             "create_campaign": value.get("createCampaign") == "function",
             "pause_campaign": value.get("setCampaignPaused") == "function",
             "canonical_readback": value.get("isCampaignPaused") == "function",
-            "zero_target_readback": value.get("peopleCampaigns") == "object",
+            "zero_target_readback": (
+                value.get("peopleCampaigns") == "object"
+                and value.get("getCampaignPeopleCount") == "function"),
             "direct_sql_repair": False,
         }
         target.update({"location_host": str(value.get("locationHost") or "")[:120]})
@@ -552,10 +558,8 @@ def probe_linked_helper(cfg):
             elif profile.get("cdp_security_ack") != CDP_SECURITY_ACK:
                 result["error_code"] = "CDP_SECURITY_ACK_REQUIRED"
             else:
-                # Runtime capability is useful evidence, but the mutating
-                # executor is not shipped yet. Keep the server target
-                # incompatible until that path exists and is tested.
-                result["error_code"] = "CDP_PUBLISH_PATH_NOT_IMPLEMENTED"
+                result["compatible"] = True
+                result["error_code"] = None
     return result
 
 
@@ -594,10 +598,34 @@ def cmd_publish_probe(args):
             print(f"publish probe report failed ({type(error).__name__}) — local result retained")
 
 
+class PublishExecutionError(RuntimeError):
+    """A bounded, non-sensitive failure from one publish branch."""
+    def __init__(self, code):
+        self.code = str(code)
+        super().__init__(self.code)
+
+
+class PublishConflictError(PublishExecutionError):
+    """An existing exact-name campaign must not be changed."""
+
+
+def _js_literal(value):
+    """Encode an immutable job value as a JavaScript expression literal."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"),
+                      allow_nan=False)
+
+
 class LinkedHelperPublisher:
-    """Minimal adapter boundary. No operation exists for start/unpause/targets."""
+    """Create, pause and verify empty campaigns through the LH2 UI service.
+
+    The adapter intentionally has no methods for targets, runner start/unpause,
+    archive, rename, delete, or direct SQLite repair. Every CDP expression is
+    built from the immutable job payload and returns only bounded verification
+    metadata to the agent process.
+    """
     def __init__(self, profile):
         self.profile = profile
+        self.runtime_snapshot = None
 
     def preflight(self):
         if self.profile.get("enable_cdp_adapter") is not True:
@@ -611,10 +639,343 @@ class LinkedHelperPublisher:
         if not runtime.get("compatible"):
             return False, str(runtime.get("error_code") or "COMPATIBILITY_CAPABILITY_MISSING")
         self.runtime_snapshot = runtime
-        # The read-only probe is deliberately shipped before the mutating
-        # branch executor. Never claim a job and then silently leave it leased
-        # just because the renderer exposes the expected method names.
-        return False, "CDP_PUBLISH_PATH_NOT_IMPLEMENTED"
+        return True, None
+
+    def _connect(self):
+        target = discover_cdp_target(self.profile)
+        try:
+            return CdpClient(target["_websocket_url"])
+        except CdpError:
+            raise
+        except (OSError, TimeoutError) as error:
+            raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+
+    @staticmethod
+    def _call_expression(method, payload=None):
+        value = "" if payload is None else _js_literal(payload)
+        if method == "list":
+            return """(async () => {
+              const pc = window.mainWindowService.mainWindow.source.people.campaigns;
+              const rows = await pc.getCampaigns();
+              const unwrap = (v) => {
+                let current = v;
+                for (let i = 0; i < 4; i += 1) {
+                  if (!current || typeof current !== 'object') break;
+                  const source = current.source;
+                  if (!source || typeof source !== 'object' || source === current) break;
+                  current = source;
+                }
+                return current;
+              };
+              const readPath = (root, parts) => {
+                let current = root;
+                for (const part of parts) {
+                  try { current = current == null ? undefined : current[part]; }
+                  catch { return undefined; }
+                }
+                return current;
+              };
+              const text = (root, paths) => {
+                for (const path of paths) {
+                  const value = readPath(root, path);
+                  if (typeof value === 'string' && value.trim()) return value.trim();
+                }
+                return null;
+              };
+              const items = Array.isArray(rows) ? rows : [];
+              return items.map((row) => {
+                const source = unwrap(row);
+                const id = Number(row?.id ?? source?.id);
+                const liAccountId = Number(row?.liAccountId ?? source?.liAccountId ?? source?.li_account_id);
+                return {
+                  id: Number.isFinite(id) ? id : null,
+                  liAccountId: Number.isFinite(liAccountId) ? liAccountId : null,
+                  name: text(row, [['name'], ['source', 'name'], ['source', 'source', 'name'], ['campaign', 'name'], ['source', 'campaign', 'name'], ['title']]),
+                };
+              });
+            })()"""
+        if method == "create":
+            return f"""(async () => {{
+              const pc = window.mainWindowService.mainWindow.source.people.campaigns;
+              const result = await pc.createCampaign({value});
+              const id = Number(result?.id ?? result?.campaignId ?? result?.source?.id);
+              if (!Number.isFinite(id)) throw new Error('invalid create result');
+              return id;
+            }})()"""
+        if method == "pause":
+            return f"""(async () => {{
+              const src = window.mainWindowService.mainWindow.source.campaigns;
+              const args = {value};
+              await src.setCampaignPaused(Number(args.id), true, Number(args.liAccountId));
+              return true;
+            }})()"""
+        if method == "readback":
+            return f"""(async () => {{
+              const svc = window.mainWindowService.mainWindow.source;
+              const pc = svc.people.campaigns;
+              const campaigns = svc.campaigns;
+              const args = {value};
+              const id = Number(args.id);
+              const unwrap = (v) => {{
+                let current = v;
+                for (let i = 0; i < 4; i += 1) {{
+                  if (!current || typeof current !== 'object') break;
+                  const source = current.source;
+                  if (!source || typeof source !== 'object' || source === current) break;
+                  current = source;
+                }}
+                return current;
+              }};
+              const readPath = (root, parts) => {{
+                let current = root;
+                for (const part of parts) {{
+                  try {{ current = current == null ? undefined : current[part]; }}
+                  catch {{ return undefined; }}
+                }}
+                return current;
+              }};
+              const number = (root, paths) => {{
+                for (const path of paths) {{
+                  const value = Number(readPath(root, path));
+                  if (Number.isFinite(value)) return value;
+                }}
+                return null;
+              }};
+              const text = (root, paths) => {{
+                for (const path of paths) {{
+                  const value = readPath(root, path);
+                  if (typeof value === 'string' && value.trim()) return value.trim();
+                }}
+                return null;
+              }};
+              const materialize = (value) => {{
+                const current = unwrap(value);
+                if (Array.isArray(current)) return current;
+                for (const key of ['items', 'data', 'values', 'models']) {{
+                  try {{ if (Array.isArray(current?.[key])) return current[key]; }} catch {{}}
+                }}
+                try {{
+                  if (current && typeof current[Symbol.iterator] === 'function') return Array.from(current);
+                }} catch {{}}
+                return [];
+              }};
+              const plain = (value, depth = 0) => {{
+                if (value == null || typeof value === 'string' || typeof value === 'boolean') return value;
+                if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+                if (depth > 10) return null;
+                if (Array.isArray(value)) return value.slice(0, 500).map((item) => plain(item, depth + 1));
+                if (typeof value !== 'object') return null;
+                const output = {{}};
+                for (const key of Object.keys(value).slice(0, 200)) output[key] = plain(value[key], depth + 1);
+                return output;
+              }};
+              const configFor = (action) => {{
+                const versions = materialize(readPath(action, ['versions']));
+                const roots = [action, unwrap(action), readPath(action, ['source']), unwrap(readPath(action, ['source']))]
+                  .concat(versions, versions.map(unwrap));
+                for (const root of roots) {{
+                  if (!root || typeof root !== 'object') continue;
+                  const candidates = [root, root.config, root.actionConfig, root.source, root.source?.config];
+                  for (const candidate of candidates) {{
+                    const value = unwrap(candidate);
+                    if (value && (value.actionType !== undefined || value.type !== undefined)) return value;
+                  }}
+                }}
+                return null;
+              }};
+              const campaign = await pc.getCampaign(id);
+              const actionRows = await pc.getCampaignActions(id);
+              const actionList = Array.isArray(actionRows) ? actionRows : materialize(actionRows);
+              const peopleCount = Number(await pc.getCampaignPeopleCount(id));
+              const paused = await campaigns.isCampaignPaused(id);
+              const source = unwrap(campaign);
+              return {{
+                id: number(campaign, [['id'], ['source', 'id']]),
+                liAccountId: number(campaign, [['liAccountId'], ['source', 'liAccountId'], ['source', 'li_account_id']]),
+                name: text(campaign, [['name'], ['source', 'name'], ['source', 'source', 'name'], ['campaign', 'name'], ['source', 'campaign', 'name'], ['title']]),
+                actions: actionList.map((action) => {{
+                  const config = configFor(action);
+                  if (!config) return null;
+                  const settings = config.actionSettings ?? config.settings ?? {{}};
+                  return {{
+                    type: String(config.actionType ?? config.type ?? ''),
+                    settings: plain(unwrap(settings)) || {{}},
+                    coolDown: number(config, [['coolDown'], ['cooldown']]),
+                    maxActionResultsPerIteration: number(config, [['maxActionResultsPerIteration'], ['maxResultsPerIteration']]),
+                  }};
+                }}),
+                peopleCount: Number.isFinite(peopleCount) ? peopleCount : null,
+                paused: paused === true,
+              }};
+            }})()"""
+        raise ValueError(f"unknown LH2 expression {method}")
+
+    def _evaluate(self, method, payload=None):
+        client = self._connect()
+        try:
+            return client.evaluate(self._call_expression(method, payload))
+        except CdpError:
+            raise
+        except (OSError, TimeoutError) as error:
+            raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+        finally:
+            client.close()
+
+    def list_campaigns(self):
+        value = self._evaluate("list")
+        if not isinstance(value, list):
+            raise PublishExecutionError("LH_CAMPAIGN_LIST_INVALID")
+        for row in value:
+            if (not isinstance(row, dict) or
+                    isinstance(row.get("id"), bool) or
+                    not isinstance(row.get("id"), (int, float)) or
+                    not float(row["id"]).is_integer() or
+                    isinstance(row.get("liAccountId"), bool) or
+                    not isinstance(row.get("liAccountId"), (int, float)) or
+                    not float(row["liAccountId"]).is_integer() or
+                    not isinstance(row.get("name"), str)):
+                raise PublishExecutionError("LH_CAMPAIGN_LIST_SHAPE_INVALID")
+        return value
+
+    def create_campaign(self, payload):
+        value = self._evaluate("create", payload)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not float(value).is_integer():
+            raise PublishExecutionError("LH_CREATE_RESULT_INVALID")
+        return int(value)
+
+    def pause_campaign(self, campaign_id, account_id):
+        value = self._evaluate("pause", {"id": campaign_id, "liAccountId": account_id})
+        if value is not True:
+            raise PublishExecutionError("LH_PAUSE_RESULT_INVALID")
+
+    def readback(self, campaign_id):
+        value = self._evaluate("readback", {"id": campaign_id})
+        if not isinstance(value, dict):
+            raise PublishExecutionError("LH_READBACK_INVALID")
+        return value
+
+    @staticmethod
+    def _canonical_json(value):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                          allow_nan=False)
+
+    def _verify(self, branch, account):
+        expected_actions = branch.get("compiled_action_chain")
+        if not isinstance(expected_actions, list) or not expected_actions:
+            raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+        expected = []
+        for action in expected_actions:
+            if not isinstance(action, dict):
+                raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+            action_type = action.get("type")
+            settings = action.get("settings")
+            if not isinstance(action_type, str) or not action_type or not isinstance(settings, dict):
+                raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+            cooldown = action.get("coolDown")
+            maximum = action.get("maxActionResultsPerIteration")
+            if isinstance(cooldown, bool) or not isinstance(cooldown, (int, float)):
+                raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+            if isinstance(maximum, bool) or not isinstance(maximum, (int, float)):
+                raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+            expected.append({"type": action_type, "settings": settings,
+                             "coolDown": cooldown,
+                             "maxActionResultsPerIteration": maximum})
+        actual = self.readback(int(branch["lh_campaign_id"]))
+        expected_name = str(branch.get("campaign_name") or "")
+        expected_account = int(account["account_id"])
+        actual_name = actual.get("name")
+        actual_account = actual.get("liAccountId")
+        actual_actions = actual.get("actions")
+        if (actual.get("id") != int(branch["lh_campaign_id"]) or
+                actual_name != expected_name or actual_account != expected_account or
+                not isinstance(actual_actions, list) or any(item is None for item in actual_actions) or
+                len(actual_actions) != len(expected)):
+            raise PublishExecutionError("LH_CANONICAL_READBACK_MISMATCH")
+        normalized_actual = []
+        for item in actual_actions:
+            if not isinstance(item, dict) or not isinstance(item.get("type"), str) or not isinstance(item.get("settings"), dict):
+                raise PublishExecutionError("LH_CANONICAL_READBACK_MISMATCH")
+            if not isinstance(item.get("coolDown"), (int, float)) or isinstance(item.get("coolDown"), bool):
+                raise PublishExecutionError("LH_CANONICAL_READBACK_MISMATCH")
+            if not isinstance(item.get("maxActionResultsPerIteration"), (int, float)) or isinstance(item.get("maxActionResultsPerIteration"), bool):
+                raise PublishExecutionError("LH_CANONICAL_READBACK_MISMATCH")
+            normalized_actual.append({"type": item["type"], "settings": item["settings"],
+                                     "coolDown": item["coolDown"],
+                                     "maxActionResultsPerIteration": item["maxActionResultsPerIteration"]})
+        compiler_version = str(account.get("compiler_version") or "")
+        fingerprint_input = {"compilerVersion": compiler_version,
+                             "accountId": str(account["account_id"]),
+                             "actions": normalized_actual}
+        actual_fingerprint = hashlib.sha256(self._canonical_json(fingerprint_input).encode("utf-8")).hexdigest()
+        expected_fingerprint = str(branch.get("action_fingerprint") or "")
+        if actual_fingerprint != expected_fingerprint:
+            raise PublishExecutionError("LH_ACTION_FINGERPRINT_MISMATCH")
+        people_count = actual.get("peopleCount")
+        if isinstance(people_count, bool) or not isinstance(people_count, (int, float)) or people_count != 0:
+            raise PublishExecutionError("LH_NONZERO_TARGET_COUNT")
+        if actual.get("paused") is not True:
+            raise PublishExecutionError("LH_CAMPAIGN_NOT_PAUSED")
+        return {
+            "campaign_id": int(branch["lh_campaign_id"]),
+            "account_match": True,
+            "name_match": True,
+            "action_count": len(normalized_actual),
+            "action_fingerprint": actual_fingerprint,
+            "zero_targets": True,
+            "paused": True,
+        }
+
+    def publish_branch(self, branch, account):
+        name = str(branch.get("campaign_name") or "").strip()
+        if not name or len(name) > 160:
+            raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+        try:
+            account_id = int(account["account_id"])
+        except (KeyError, TypeError, ValueError):
+            raise PublishExecutionError("ACCOUNT_ID_INVALID")
+        campaigns = self.list_campaigns()
+        matches = [row for row in campaigns
+                   if isinstance(row, dict) and row.get("name") == name and
+                   row.get("liAccountId") == account_id]
+        if len(matches) > 1:
+            raise PublishExecutionError("LH_DUPLICATE_CAMPAIGN_NAME")
+        if matches:
+            existing_id = matches[0].get("id")
+            if isinstance(existing_id, bool) or not isinstance(existing_id, (int, float)) or not float(existing_id).is_integer():
+                raise PublishExecutionError("LH_CAMPAIGN_ID_INVALID")
+            branch_with_id = dict(branch, lh_campaign_id=int(existing_id))
+            try:
+                return self._verify(branch_with_id, account), "created"
+            except PublishExecutionError as error:
+                raise PublishConflictError("LH_EXISTING_CAMPAIGN_MISMATCH") from error
+        actions = []
+        for action in branch.get("compiled_action_chain") or []:
+            if not isinstance(action, dict):
+                raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+            action_type = action.get("type")
+            settings = action.get("settings")
+            if not isinstance(action_type, str) or not isinstance(settings, dict):
+                raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
+            actions.append({
+                "name": action_type,
+                "description": "",
+                "target": [],
+                "config": {
+                    "actionType": action_type,
+                    "coolDown": action.get("coolDown"),
+                    "maxActionResultsPerIteration": action.get("maxActionResultsPerIteration"),
+                    "actionSettings": settings,
+                },
+            })
+        campaign_id = self.create_campaign({
+            "name": name,
+            "liAccount": account_id,
+            "excludeList": [],
+            "actions": actions,
+        })
+        self.pause_campaign(campaign_id, account_id)
+        verified = self._verify(dict(branch, lh_campaign_id=campaign_id), account)
+        return verified, "created"
 
 
 def cmd_publish_once(args):
@@ -623,6 +984,9 @@ def cmd_publish_once(args):
     if not machine_configured(cfg):
         sys.exit("publish-once requires ingest_url and a machine credential")
     profile, profile_error = _publish_profile(cfg)
+    if not str(cfg.get("machine_key") or "").strip():
+        print("publish-once: failed MACHINE_KEY_MISSING")
+        return
     try:
         answer = publish_request(cfg, "agent.publishClaim", {})
     except Exception as error:
@@ -647,12 +1011,105 @@ def cmd_publish_once(args):
         report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "failed", "error_code": profile_error or "COMPATIBILITY_PROFILE_MISSING"})
         print(f"publish-once: failed {profile_error or 'COMPATIBILITY_PROFILE_MISSING'}")
         return
-    report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "preflight"})
-    compatible, error_code = LinkedHelperPublisher(profile).preflight()
+    if not report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "preflight"}):
+        print("publish-once: journal unavailable before preflight")
+        return
+    publisher = LinkedHelperPublisher(profile)
+    compatible, error_code = publisher.preflight()
     if not compatible:
         report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "failed", "error_code": error_code})
         print(f"publish-once: failed {error_code}")
         return
+    expected_instance = str(job.get("target_instance_id") or "")
+    if expected_instance != str(cfg.get("instance_id") or ""):
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_TARGET_INSTANCE_MISMATCH"})
+        print("publish-once: failed PUBLISH_TARGET_INSTANCE_MISMATCH")
+        return
+    if str(job.get("target_machine_key") or "") != str(cfg.get("machine_key") or ""):
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_TARGET_MACHINE_MISMATCH"})
+        print("publish-once: failed PUBLISH_TARGET_MACHINE_MISMATCH")
+        return
+    job_account = job.get("target_account_snapshot")
+    if not isinstance(job_account, dict):
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_ACCOUNT_SNAPSHOT_INVALID"})
+        print("publish-once: failed PUBLISH_ACCOUNT_SNAPSHOT_INVALID")
+        return
+    # The job stores a camelCase account snapshot. Accepting only an exact
+    # match prevents a machine from publishing another account's job.
+    expected_snapshot = {
+        "accountId": profile.get("account_id"), "accountName": profile.get("account_name"),
+        "senderName": profile.get("sender_name"), "workspaceId": profile.get("workspace_id"),
+        "lhVersion": profile.get("lh_version"), "compatibilityProfile": profile.get("compatibility_profile"),
+    }
+    if any(str(job_account.get(key, "")) != str(value) for key, value in expected_snapshot.items()):
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH"})
+        print("publish-once: failed PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH")
+        return
+    account = dict(job_account)
+    account["compiler_version"] = job.get("compiler_version")
+    branches = job.get("branches")
+    if not isinstance(branches, list) or not branches:
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_BRANCHES_MISSING"})
+        print("publish-once: failed PUBLISH_BRANCHES_MISSING")
+        return
+    if not report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "publishing"}):
+        print("publish-once: journal unavailable before publishing")
+        return
+    branch_failed = False
+    for branch in branches:
+        if not isinstance(branch, dict) or not isinstance(branch.get("branch_id"), str):
+            branch_failed = True
+            report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
+                                            "branch_id": str(branch.get("branch_id") or "invalid") if isinstance(branch, dict) else "invalid",
+                                            "status": "failed", "error_code": "PUBLISH_BRANCH_PAYLOAD_INVALID"})
+            continue
+        branch_id = branch["branch_id"]
+        if not report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
+                                               "branch_id": branch_id, "status": "publishing"}):
+            print("publish-once: journal unavailable before branch mutation")
+            return
+        if not report("agent.publishHeartbeat", {"job_id": job_id, "claim_generation": generation}):
+            print("publish-once: lease heartbeat failed before branch mutation")
+            return
+        try:
+            verification, status = publisher.publish_branch(branch, account)
+        except PublishConflictError as error:
+            branch_failed = True
+            report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
+                                            "branch_id": branch_id, "status": "conflict",
+                                            "error_code": error.code})
+            print(f"publish-once: branch {branch_id} conflict {error.code}")
+            continue
+        except PublishExecutionError as error:
+            branch_failed = True
+            report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
+                                            "branch_id": branch_id, "status": "failed",
+                                            "error_code": error.code})
+            print(f"publish-once: branch {branch_id} failed {error.code}")
+            continue
+        except (CdpError, OSError, TimeoutError) as error:
+            branch_failed = True
+            code = str(error) if isinstance(error, CdpError) else "CDP_ENDPOINT_UNREACHABLE"
+            report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
+                                            "branch_id": branch_id, "status": "failed",
+                                            "error_code": code})
+            print(f"publish-once: branch {branch_id} failed {code}")
+            continue
+        report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
+                                        "branch_id": branch_id, "status": status,
+                                        "lh_campaign_id": str(verification["campaign_id"]),
+                                        "verification_summary": verification})
+    if not report("agent.publishFinish", {"job_id": job_id, "claim_generation": generation}):
+        print("publish-once: finish failed")
+    elif branch_failed:
+        print("publish-once: completed with branch failures")
+    else:
+        print("publish-once: completed")
 
 
 def canonical_release_manifest(manifest):

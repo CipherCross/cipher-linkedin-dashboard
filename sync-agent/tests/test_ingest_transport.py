@@ -26,6 +26,7 @@ Three things are checked here that a single-language test could not:
 
 import base64
 import copy
+import hashlib
 import json
 import os
 import py_compile
@@ -341,7 +342,7 @@ class PublishProbeTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(code, "CDP_SECURITY_ACK_REQUIRED")
 
-    def test_preflight_keeps_mutating_path_closed_after_runtime_probe(self):
+    def test_preflight_opens_executor_after_runtime_probe(self):
         profile = {
             "enable_cdp_adapter": True,
             "cdp_security_ack": agent.CDP_SECURITY_ACK,
@@ -351,8 +352,94 @@ class PublishProbeTest(unittest.TestCase):
         runtime = {"compatible": True, "capability_snapshot": {}}
         with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
             ok, code = agent.LinkedHelperPublisher(profile).preflight()
-        self.assertFalse(ok)
-        self.assertEqual(code, "CDP_PUBLISH_PATH_NOT_IMPLEMENTED")
+        self.assertTrue(ok)
+        self.assertIsNone(code)
+
+
+class PublishExecutorTest(unittest.TestCase):
+    PROFILE = {
+        "enable_cdp_adapter": True,
+        "cdp_security_ack": agent.CDP_SECURITY_ACK,
+        "cdp_host": "127.0.0.1",
+        "cdp_port": 50454,
+        "cdp_target_url_contains": "index.html",
+    }
+
+    @staticmethod
+    def account():
+        return {"account_id": "524650", "compiler_version": "lh2-sequence-v1"}
+
+    @staticmethod
+    def branch(action_settings=None):
+        settings = action_settings if action_settings is not None else {"delay": 24}
+        action = {
+            "type": "Waiter", "settings": settings,
+            "coolDown": 0, "maxActionResultsPerIteration": -1,
+        }
+        fingerprint_input = {
+            "compilerVersion": "lh2-sequence-v1", "accountId": "524650",
+            "actions": [action],
+        }
+        fingerprint = hashlib.sha256(
+            agent.LinkedHelperPublisher._canonical_json(fingerprint_input).encode("utf-8")
+        ).hexdigest()
+        return {
+            "branch_id": "branch-a", "campaign_name": "Sequence A",
+            "compiled_action_chain": [action], "action_fingerprint": fingerprint,
+        }
+
+    def test_create_pauses_and_canonically_verifies_empty_campaign(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        branch = self.branch()
+        readback = {
+            "id": 101, "liAccountId": 524650, "name": "Sequence A",
+            "actions": branch["compiled_action_chain"],
+            "peopleCount": 0, "paused": True,
+        }
+        with mock.patch.object(publisher, "_evaluate", side_effect=[[], 101, True, readback]) as evaluate:
+            verification, status = publisher.publish_branch(branch, self.account())
+        self.assertEqual(status, "created")
+        self.assertEqual(verification["campaign_id"], 101)
+        self.assertTrue(verification["zero_targets"])
+        self.assertTrue(verification["paused"])
+        self.assertEqual(evaluate.call_count, 4)
+        create_expression = publisher._call_expression("create", evaluate.call_args_list[1].args[1])
+        self.assertIn('"target":[]', create_expression)
+        self.assertIn('"excludeList":[]', create_expression)
+        self.assertNotIn("start", create_expression.lower())
+        self.assertNotIn("unpause", create_expression.lower())
+
+    def test_existing_exact_name_mismatch_is_conflict_without_mutation(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        branch = self.branch()
+        existing = {
+            "id": 77, "liAccountId": 524650, "name": "Sequence A",
+        }
+        mismatched = {
+            "id": 77, "liAccountId": 524650, "name": "Sequence A",
+            "actions": [{"type": "Follow", "settings": {}, "coolDown": 60000,
+                          "maxActionResultsPerIteration": 10}],
+            "peopleCount": 0, "paused": True,
+        }
+        with mock.patch.object(publisher, "_evaluate", side_effect=[[existing], mismatched]) as evaluate:
+            with self.assertRaises(agent.PublishConflictError) as context:
+                publisher.publish_branch(branch, self.account())
+        self.assertEqual(context.exception.code, "LH_EXISTING_CAMPAIGN_MISMATCH")
+        self.assertEqual(evaluate.call_count, 2)
+        self.assertEqual(evaluate.call_args_list[0].args[0], "list")
+
+    def test_readback_rejects_nonzero_targets_or_unpaused_campaign(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        branch = self.branch()
+        readback = {
+            "id": 101, "liAccountId": 524650, "name": "Sequence A",
+            "actions": branch["compiled_action_chain"],
+            "peopleCount": 1, "paused": False,
+        }
+        with mock.patch.object(publisher, "readback", return_value=readback):
+            with self.assertRaises(agent.PublishExecutionError) as context:
+                publisher._verify(dict(branch, lh_campaign_id=101), self.account())
+        self.assertEqual(context.exception.code, "LH_NONZERO_TARGET_COUNT")
 
 
 class TokenTest(unittest.TestCase):
