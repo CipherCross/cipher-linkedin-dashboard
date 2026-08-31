@@ -20,6 +20,7 @@ import {
   canonicalJson,
   sequencePublishPayloadDigest,
   sha256Hex,
+  normalizeVerifiedAccountSnapshot,
   SequencePublishValidationError,
   type SequencePublishOptions,
   type VerifiedAccountSnapshot,
@@ -45,20 +46,10 @@ const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 
 function accountSnapshot(target: SequencePublishTargetRow): VerifiedAccountSnapshot | null {
-  const value = target.account_snapshot
-  const text = (key: string) => typeof value[key] === 'string' && String(value[key]).trim() ? String(value[key]).trim() : null
-  const accountId = text('accountId')
-  const accountName = text('accountName')
-  const senderName = text('senderName')
-  const workspaceId = text('workspaceId')
-  const lhVersion = text('lhVersion')
-  const compatibilityProfile = text('compatibilityProfile')
-  if (!accountId || !accountName || !senderName || !workspaceId || !lhVersion || !compatibilityProfile) return null
-  return {
+  return normalizeVerifiedAccountSnapshot(target.account_snapshot, {
     instanceId: target.instance_id,
     machineKey: target.machine_key,
-    accountId, accountName, senderName, workspaceId, lhVersion, compatibilityProfile,
-  }
+  })
 }
 
 function publishOptions(value: unknown): SequencePublishOptions | null {

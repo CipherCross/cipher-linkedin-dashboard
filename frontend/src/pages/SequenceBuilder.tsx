@@ -101,7 +101,7 @@ import {
   type SequencePublishJob,
   type SequencePublishTarget,
 } from '../lib/sequenceBuilderApi'
-import { compileSequenceCampaigns, type SequencePublishOptions, type VerifiedAccountSnapshot } from '../lib/sequencePublish'
+import { compileSequenceCampaigns, normalizeVerifiedAccountSnapshot, type SequencePublishOptions } from '../lib/sequencePublish'
 
 type EditorTab = 'build' | 'branches' | 'preview'
 type PreviewDevice = 'web' | 'mobile'
@@ -893,11 +893,10 @@ function PublishWizard({
   }, [toast])
 
   const target = targets.find((item) => item.instance_id === targetId)
-  const account = target && ({
+  const account = target && normalizeVerifiedAccountSnapshot(target.account_snapshot, {
     instanceId: target.instance_id,
     machineKey: target.machine_key,
-    ...(target.account_snapshot as Omit<VerifiedAccountSnapshot, 'instanceId' | 'machineKey'>),
-  } as VerifiedAccountSnapshot)
+  })
   const options: SequencePublishOptions = {
     branchIds,
     visit,
@@ -932,7 +931,7 @@ function PublishWizard({
         <div className="sequence-publish-steps"><span className={step >= 1 ? 'active' : ''}>1 Target</span><span className={step >= 2 ? 'active' : ''}>2 Branches</span><span className={step >= 3 ? 'active' : ''}>3 Preview</span></div>
         {step === 1 && <div className="sequence-publish-form">
           <p className="muted">Choose the allowlisted Windows machine and account. Only targets that passed compatibility preflight are available.</p>
-          <label>Machine and account<select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Select a compatible target</option>{targets.map((item) => <option key={item.instance_id} value={item.instance_id} disabled={!item.compatible}>{item.instance_id} · {String(item.account_snapshot.accountName ?? 'Unknown')} {!item.compatible ? `(${item.compatibility_error_code ?? 'not ready'})` : ''}</option>)}</select></label>
+          <label>Machine and account<select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Select a compatible target</option>{targets.map((item) => { const accountName = item.account_snapshot.accountName ?? item.account_snapshot.account_name ?? 'Unknown'; return <option key={item.instance_id} value={item.instance_id} disabled={!item.compatible}>{item.instance_id} · {String(accountName)} {!item.compatible ? `(${item.compatibility_error_code ?? 'not ready'})` : ''}</option> })}</select></label>
           <div className="modal-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!target?.compatible} onClick={() => setStep(2)}>Continue</button></div>
         </div>}
         {step === 2 && <div className="sequence-publish-form">

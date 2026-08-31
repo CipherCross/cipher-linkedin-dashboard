@@ -3,6 +3,7 @@ import { createSequenceDocument } from '../src/lib/sequenceBuilder'
 import {
   compileSequenceCampaigns,
   compileTemplate,
+  normalizeVerifiedAccountSnapshot,
   SequencePublishValidationError,
   sha256Hex,
   type VerifiedAccountSnapshot,
@@ -32,6 +33,18 @@ function document() {
 }
 
 describe('Sequence publishing compiler', () => {
+  it('normalizes snake_case agent snapshots and rejects conflicting aliases', () => {
+    expect(normalizeVerifiedAccountSnapshot({
+      account_id: 'account-1', account_name: 'Alyona', sender_name: 'Alyona',
+      workspace_id: 'workspace-1', lh_version: 'fixture', compatibility_profile: 'fixture-v1',
+    }, { instanceId: 'uitop-1', machineKey: 'machine-a' })).toEqual(account)
+    expect(normalizeVerifiedAccountSnapshot({
+      accountId: 'account-1', account_id: 'account-2', accountName: 'Alyona',
+      senderName: 'Alyona', workspaceId: 'workspace-1', lhVersion: 'fixture',
+      compatibilityProfile: 'fixture-v1',
+    }, { instanceId: 'uitop-1', machineKey: 'machine-a' })).toBeNull()
+  })
+
   it('matches the fixture action contract and keeps an empty invite AST valid', () => {
     const campaign = compileSequenceCampaigns('Founder outreach', document(), {
       branchIds: ['branch_a'],

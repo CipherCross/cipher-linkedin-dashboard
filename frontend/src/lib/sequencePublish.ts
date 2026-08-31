@@ -24,6 +24,38 @@ export interface VerifiedAccountSnapshot {
   compatibilityProfile: string
 }
 
+/** Normalize account snapshots from either agent wire-format spelling. */
+export function normalizeVerifiedAccountSnapshot(
+  value: unknown,
+  identity: Pick<VerifiedAccountSnapshot, 'instanceId' | 'machineKey'>,
+): VerifiedAccountSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const read = (camel: string, snake: string): string | null => {
+    const left = typeof raw[camel] === 'string' && raw[camel].trim() ? raw[camel].trim() : null
+    const right = typeof raw[snake] === 'string' && raw[snake].trim() ? raw[snake].trim() : null
+    if (left && right && left !== right) return null
+    return left ?? right
+  }
+  const accountId = read('accountId', 'account_id')
+  const accountName = read('accountName', 'account_name')
+  const senderName = read('senderName', 'sender_name')
+  const workspaceId = read('workspaceId', 'workspace_id')
+  const lhVersion = read('lhVersion', 'lh_version')
+  const compatibilityProfile = read('compatibilityProfile', 'compatibility_profile')
+  if (!accountId || !accountName || !senderName || !workspaceId || !lhVersion || !compatibilityProfile) return null
+  return {
+    instanceId: identity.instanceId,
+    machineKey: identity.machineKey,
+    accountId,
+    accountName,
+    senderName,
+    workspaceId,
+    lhVersion,
+    compatibilityProfile,
+  }
+}
+
 export interface TemplateGroup {
   type: 'group'
   children: Array<{ type: 'text'; value: string } | { type: 'var'; name: string }>
