@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.8"
+AGENT_VERSION = "1.16.9"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -632,8 +632,9 @@ def cmd_publish_probe(args):
 
 class PublishExecutionError(RuntimeError):
     """A bounded, non-sensitive failure from one publish branch."""
-    def __init__(self, code):
+    def __init__(self, code, details=None):
         self.code = str(code)
+        self.details = details if isinstance(details, dict) else None
         super().__init__(self.code)
 
 
@@ -739,10 +740,40 @@ class LinkedHelperPublisher:
         if method == "create":
             return f"""(async () => {{
               const pc = window.mainWindowService.mainWindow.source.people.campaigns;
-              const result = await pc.createCampaign({value});
+              const campaigns = window.mainWindowService.mainWindow.source.campaigns;
+              const args = {value};
+              let result = null;
+              let createRejected = false;
+              try {{ result = await pc.createCampaign(args); }}
+              catch {{ createRejected = true; }}
               const id = Number(result?.id ?? result?.campaignId ?? result?.source?.id);
-              if (!Number.isFinite(id)) throw new Error('invalid create result');
-              return id;
+              if (Number.isFinite(id)) return {{outcome: 'result', campaignId: id}};
+              // A successful IPC call can return a non-plain model. Reconcile
+              // only one exact name/account match; never issue a second create.
+              const rows = await pc.getCampaigns();
+              const items = Array.isArray(rows) ? rows : [];
+              const nameFor = async (campaignId, row) => {{
+                try {{
+                  if (typeof campaigns?.getCampaignName === 'function' && Number.isFinite(campaignId)) {{
+                    const value = await campaigns.getCampaignName(campaignId);
+                    if (typeof value === 'string' && value.trim()) return value.trim();
+                  }}
+                }} catch {{}}
+                for (const candidate of [row?.name, row?.source?.name, row?.source?.source?.name]) {{
+                  if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+                }}
+                return null;
+              }};
+              const matches = [];
+              for (const row of items) {{
+                const campaignId = Number(row?.id ?? row?.source?.id);
+                const liAccountId = Number(row?.liAccountId ?? row?.source?.liAccountId ?? row?.source?.li_account_id);
+                if (!Number.isFinite(campaignId) || liAccountId !== Number(args.liAccount)) continue;
+                if (await nameFor(campaignId, row) === args.name) matches.push(campaignId);
+              }}
+              if (matches.length === 1) return {{outcome: 'reconciled', campaignId: matches[0]}};
+              if (matches.length > 1) return {{outcome: 'ambiguous'}};
+              return {{outcome: createRejected ? 'rejected' : 'result_invalid'}};
             }})()"""
         if method == "pause":
             return f"""(async () => {{
@@ -890,9 +921,21 @@ class LinkedHelperPublisher:
 
     def create_campaign(self, payload):
         value = self._evaluate("create", payload)
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not float(value).is_integer():
+        if not isinstance(value, dict):
             raise PublishExecutionError("LH_CREATE_RESULT_INVALID")
-        return int(value)
+        outcome = value.get("outcome")
+        campaign_id = value.get("campaignId")
+        if outcome in ("result", "reconciled"):
+            if (isinstance(campaign_id, bool) or not isinstance(campaign_id, (int, float)) or
+                    not float(campaign_id).is_integer()):
+                raise PublishExecutionError("LH_CREATE_RESULT_INVALID")
+            return int(campaign_id)
+        if outcome == "rejected":
+            raise PublishExecutionError("LH_CREATE_REJECTED", {"create_outcome": "rejected"})
+        if outcome == "ambiguous":
+            raise PublishExecutionError("LH_CREATE_RECONCILIATION_AMBIGUOUS",
+                                        {"create_outcome": "ambiguous"})
+        raise PublishExecutionError("LH_CREATE_RESULT_INVALID", {"create_outcome": "result_invalid"})
 
     def pause_campaign(self, campaign_id, account_id):
         value = self._evaluate("pause", {"id": campaign_id, "liAccountId": account_id})
@@ -1144,9 +1187,12 @@ def cmd_publish_once(args):
             continue
         except PublishExecutionError as error:
             branch_failed = True
-            report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
-                                            "branch_id": branch_id, "status": "failed",
-                                            "error_code": error.code})
+            payload = {"job_id": job_id, "claim_generation": generation,
+                       "branch_id": branch_id, "status": "failed",
+                       "error_code": error.code}
+            if error.details:
+                payload["error_details"] = error.details
+            report("agent.publishBranch", payload)
             print(f"publish-once: branch {branch_id} failed {error.code}")
             continue
         except (CdpError, OSError, TimeoutError) as error:

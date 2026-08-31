@@ -419,7 +419,7 @@ class PublishExecutorTest(unittest.TestCase):
             "actions": branch["compiled_action_chain"],
             "peopleCount": 0, "paused": True,
         }
-        with mock.patch.object(publisher, "_evaluate", side_effect=[[], 101, True, readback]) as evaluate:
+        with mock.patch.object(publisher, "_evaluate", side_effect=[[], {"outcome": "result", "campaignId": 101}, True, readback]) as evaluate:
             verification, status = publisher.publish_branch(branch, self.account())
         self.assertEqual(status, "created")
         self.assertEqual(verification["campaign_id"], 101)
@@ -431,6 +431,29 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertIn('"excludeList":[]', create_expression)
         self.assertNotIn("start", create_expression.lower())
         self.assertNotIn("unpause", create_expression.lower())
+
+    def test_create_reconciles_one_exact_campaign_after_nonplain_result(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        with mock.patch.object(publisher, "_evaluate", return_value={
+            "outcome": "reconciled", "campaignId": 101,
+        }):
+            self.assertEqual(publisher.create_campaign({"name": "Sequence A"}), 101)
+
+    def test_create_rejection_is_reported_without_raw_cdp_error(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        with mock.patch.object(publisher, "_evaluate", return_value={"outcome": "rejected"}):
+            with self.assertRaises(agent.PublishExecutionError) as context:
+                publisher.create_campaign({"name": "Sequence A"})
+        self.assertEqual(context.exception.code, "LH_CREATE_REJECTED")
+        self.assertEqual(context.exception.details, {"create_outcome": "rejected"})
+
+    def test_create_expression_reconciles_instead_of_retrying_mutation(self):
+        expression = agent.LinkedHelperPublisher._call_expression("create", {
+            "name": "Sequence A", "liAccount": 524650, "excludeList": [], "actions": [],
+        })
+        self.assertEqual(expression.count("createCampaign("), 1)
+        self.assertIn("getCampaigns", expression)
+        self.assertIn("getCampaignName", expression)
 
     def test_campaign_list_reads_names_through_lh_accessor(self):
         expression = agent.LinkedHelperPublisher._call_expression("list")
