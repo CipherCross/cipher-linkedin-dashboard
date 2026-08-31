@@ -292,6 +292,54 @@ class PublishProbeTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(code, "CDP_ADAPTER_NOT_ENABLED")
 
+    def test_runtime_probe_replaces_declared_capabilities(self):
+        profile = {
+            "cdp_port": 50454, "cdp_host": "127.0.0.1",
+            "cdp_target_url_contains": "li.protechts.net",
+            "compatible": True, "create_campaign": False,
+            "pause_campaign": False, "canonical_readback": False,
+            "zero_target_readback": False,
+            "lh_version": "2.130.28", "account_id": "524650",
+            "account_name": "Mykyta Shevchenko", "sender_name": "Mykyta",
+            "workspace_id": "601896", "compatibility_profile": "lh2-2.130.28",
+        }
+        runtime = {
+            "browser": "Chrome/142.0.7444.265", "protocol": "1.3",
+            "target_host": "li.protechts.net", "target_title": "Linked Helper",
+            "location_host": "li.protechts.net", "websocket_path": "/devtools/page/x",
+            "capability_snapshot": {
+                "create_campaign": True, "pause_campaign": True,
+                "canonical_readback": True, "zero_target_readback": True,
+                "direct_sql_repair": False,
+            },
+            "compatible": True, "error_code": None,
+        }
+        with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
+            result = agent.probe_linked_helper({"instance_id": "uitop-1", "lh2_publish": profile})
+        self.assertTrue(result["compatible"])
+        self.assertIsNone(result["error_code"])
+        self.assertTrue(result["capability_snapshot"]["create_campaign"])
+        self.assertNotIn("websocket_url", result["runtime_snapshot"])
+
+    def test_preflight_requires_explicit_security_ack(self):
+        profile = {"enable_cdp_adapter": True}
+        ok, code = agent.LinkedHelperPublisher(profile).preflight()
+        self.assertFalse(ok)
+        self.assertEqual(code, "CDP_SECURITY_ACK_REQUIRED")
+
+    def test_preflight_uses_live_runtime_capabilities(self):
+        profile = {
+            "enable_cdp_adapter": True,
+            "cdp_security_ack": agent.CDP_SECURITY_ACK,
+            "cdp_host": "127.0.0.1", "cdp_port": 50454,
+            "cdp_target_url_contains": "li.protechts.net",
+        }
+        runtime = {"compatible": True, "capability_snapshot": {}}
+        with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
+            ok, code = agent.LinkedHelperPublisher(profile).preflight()
+        self.assertTrue(ok)
+        self.assertIsNone(code)
+
 
 class TokenTest(unittest.TestCase):
     def test_a_real_token_parses_to_its_credential_id(self):

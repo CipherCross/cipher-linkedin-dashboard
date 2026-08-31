@@ -41,6 +41,8 @@ import json
 import os
 import re
 import sqlite3
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -51,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.0"
+AGENT_VERSION = "1.16.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -247,6 +249,223 @@ PUBLISH_PROFILE_REQUIRED_KEYS = (
     "compatibility_profile",
 )
 
+CDP_SECURITY_ACK = "loopback-operator-approved-v1"
+
+
+class CdpError(RuntimeError):
+    """Bounded, non-sensitive error from the local CDP endpoint."""
+
+
+def _cdp_target_host(value):
+    try:
+        return urllib.parse.urlsplit(str(value or "")).hostname or ""
+    except ValueError:
+        return ""
+
+
+def _cdp_http(profile, path):
+    host = str(profile.get("cdp_host") or "127.0.0.1")
+    port = int(profile["cdp_port"])
+    if host != "127.0.0.1":
+        raise CdpError("CDP_LOOPBACK_REQUIRED")
+    try:
+        response = requests.get(f"http://{host}:{port}{path}", timeout=3)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError, TypeError) as error:
+        raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+
+
+def discover_cdp_target(profile):
+    """Discover one explicitly selected LH2 renderer target, read-only."""
+    version = _cdp_http(profile, "/json/version")
+    targets = _cdp_http(profile, "/json/list")
+    if not isinstance(targets, list):
+        raise CdpError("CDP_TARGET_LIST_INVALID")
+    wanted = str(profile.get("cdp_target_url_contains") or "").strip()
+    if not wanted:
+        raise CdpError("CDP_TARGET_SELECTOR_MISSING")
+    candidates = [item for item in targets if isinstance(item, dict)
+                  and item.get("type") == "page"
+                  and wanted in str(item.get("url") or "")
+                  and isinstance(item.get("webSocketDebuggerUrl"), str)]
+    if len(candidates) != 1:
+        raise CdpError("CDP_TARGET_AMBIGUOUS" if candidates else "CDP_TARGET_NOT_FOUND")
+    target = candidates[0]
+    endpoint = str(target["webSocketDebuggerUrl"])
+    if urllib.parse.urlsplit(endpoint).hostname != "127.0.0.1":
+        raise CdpError("CDP_WEBSOCKET_NOT_LOOPBACK")
+    return {
+        "browser": str(version.get("Browser") or "")[:120],
+        "protocol": str(version.get("Protocol-Version") or "")[:32],
+        "target_type": "page",
+        "target_host": _cdp_target_host(target.get("url")),
+        "target_title": str(target.get("title") or "")[:160],
+        "websocket_path": urllib.parse.urlsplit(endpoint).path[:256],
+        "_websocket_url": endpoint,
+    }
+
+
+class CdpClient:
+    """Tiny CDP WebSocket client using only the Python standard library."""
+
+    def __init__(self, endpoint, timeout=5):
+        parsed = urllib.parse.urlsplit(str(endpoint or ""))
+        if parsed.scheme != "ws" or parsed.hostname != "127.0.0.1" or not parsed.port:
+            raise CdpError("CDP_WEBSOCKET_NOT_LOOPBACK")
+        try:
+            self.sock = socket.create_connection((parsed.hostname, parsed.port), timeout=timeout)
+        except (OSError, TimeoutError) as error:
+            raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+        self.sock.settimeout(timeout)
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        path = parsed.path or "/"
+        if parsed.query:
+            path += "?" + parsed.query
+        request = (f"GET {path} HTTP/1.1\r\nHost: {parsed.hostname}:{parsed.port}\r\n"
+                   f"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                   f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+        try:
+            self.sock.sendall(request.encode("ascii"))
+        except (OSError, TimeoutError) as error:
+            self.close()
+            raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+        headers = self._read_until(b"\r\n\r\n", 16 * 1024)
+        if not headers.startswith(b"HTTP/1.1 101"):
+            self.close()
+            raise CdpError("CDP_WEBSOCKET_HANDSHAKE_FAILED")
+        self.next_id = 1
+
+    def _read_until(self, marker, limit):
+        data = b""
+        while marker not in data and len(data) <= limit:
+            try:
+                chunk = self.sock.recv(4096)
+            except (OSError, TimeoutError) as error:
+                raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+            if not chunk:
+                break
+            data += chunk
+        if marker not in data:
+            raise CdpError("CDP_PROTOCOL_INVALID")
+        return data
+
+    def _recv_exact(self, size):
+        data = b""
+        while len(data) < size:
+            try:
+                chunk = self.sock.recv(size - len(data))
+            except (OSError, TimeoutError) as error:
+                raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+            if not chunk:
+                raise CdpError("CDP_CONNECTION_CLOSED")
+            data += chunk
+        return data
+
+    def _send_frame(self, payload, opcode=1):
+        body = bytes(payload)
+        length = len(body)
+        first = 0x80 | (opcode & 0x0F)
+        mask = os.urandom(4)
+        masked = bytes(value ^ mask[index % 4] for index, value in enumerate(body))
+        if length < 126:
+            header = bytes((first, 0x80 | length))
+        elif length <= 0xFFFF:
+            header = bytes((first, 0x80 | 126)) + struct.pack("!H", length)
+        else:
+            header = bytes((first, 0x80 | 127)) + struct.pack("!Q", length)
+        try:
+            self.sock.sendall(header + mask + masked)
+        except (OSError, TimeoutError) as error:
+            raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
+
+    def _read_frame(self):
+        header = self._recv_exact(2)
+        first, second = header
+        length = second & 0x7F
+        if length == 126:
+            length = struct.unpack("!H", self._recv_exact(2))[0]
+        elif length == 127:
+            length = struct.unpack("!Q", self._recv_exact(8))[0]
+        if length > 8 * 1024 * 1024:
+            raise CdpError("CDP_FRAME_TOO_LARGE")
+        masked = bool(second & 0x80)
+        mask = self._recv_exact(4) if masked else b""
+        body = self._recv_exact(length) if length else b""
+        if masked:
+            body = bytes(value ^ mask[index % 4] for index, value in enumerate(body))
+        opcode = first & 0x0F
+        if opcode == 9:
+            self._send_frame(body, 10)
+            return self._read_frame()
+        if opcode == 8:
+            raise CdpError("CDP_CONNECTION_CLOSED")
+        if opcode != 1:
+            return self._read_frame()
+        try:
+            return json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise CdpError("CDP_RESPONSE_INVALID") from error
+
+    def evaluate(self, expression):
+        request_id = self.next_id
+        self.next_id += 1
+        self._send_frame(json.dumps({
+            "id": request_id,
+            "method": "Runtime.evaluate",
+            "params": {"expression": expression, "awaitPromise": True,
+                        "returnByValue": True, "userGesture": False},
+        }, separators=(",", ":")).encode("utf-8"))
+        while True:
+            response = self._read_frame()
+            if response.get("id") != request_id:
+                continue
+            if response.get("error") or response.get("result", {}).get("exceptionDetails"):
+                raise CdpError("CDP_EVALUATION_FAILED")
+            value = response.get("result", {}).get("result", {}).get("value")
+            return value
+
+    def close(self):
+        try:
+            self.sock.close()
+        except (AttributeError, OSError):
+            pass
+
+
+def probe_linked_helper_runtime(profile):
+    """Read-only Runtime probe; no LH2 mutating API is ever called."""
+    target = discover_cdp_target(profile)
+    client = None
+    try:
+        client = CdpClient(target["_websocket_url"])
+        value = client.evaluate("""(() => ({
+          locationHost: String(window.location && window.location.host || ''),
+          mainWindowService: typeof window.mainWindowService,
+          peopleCampaigns: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns,
+          createCampaign: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.createCampaign,
+          setCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.setCampaignPaused,
+          isCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.isCampaignPaused
+        }))()""")
+        if not isinstance(value, dict):
+            raise CdpError("CDP_PROBE_RESULT_INVALID")
+        capability = {
+            "create_campaign": value.get("createCampaign") == "function",
+            "pause_campaign": value.get("setCampaignPaused") == "function",
+            "canonical_readback": value.get("isCampaignPaused") == "function",
+            "zero_target_readback": value.get("peopleCampaigns") == "object",
+            "direct_sql_repair": False,
+        }
+        target.update({"location_host": str(value.get("locationHost") or "")[:120]})
+        target["capability_snapshot"] = capability
+        target["compatible"] = all(capability[key] for key in (
+            "create_campaign", "pause_campaign", "canonical_readback", "zero_target_readback"))
+        target["error_code"] = None if target["compatible"] else "COMPATIBILITY_CAPABILITY_MISSING"
+        target.pop("_websocket_url", None)
+        return target
+    finally:
+        if client:
+            client.close()
+
 
 def _publish_profile(cfg):
     """Return the explicitly configured local LH profile, or a safe failure."""
@@ -279,7 +498,7 @@ def probe_linked_helper(cfg):
             "instance_id": cfg.get("instance_id"),
             "machine_key": str(cfg.get("machine_key") or cfg.get("instance_id") or ""),
         }
-    return {
+    result = {
         "compatible": bool(profile.get("compatible", False)),
         "error_code": None if profile.get("compatible", False) else "COMPATIBILITY_PROFILE_UNVERIFIED",
         "instance_id": cfg.get("instance_id"),
@@ -294,6 +513,29 @@ def probe_linked_helper(cfg):
             "direct_sql_repair": False,
         },
     }
+    # A profile is not trusted merely because its booleans say so. Once the
+    # operator records an exact renderer target selector, replace those claims
+    # with the live, read-only CDP capability result. The websocket URL itself
+    # never leaves this function or appears in a report.
+    if str(profile.get("cdp_target_url_contains") or "").strip():
+        try:
+            runtime = probe_linked_helper_runtime(profile)
+        except (CdpError, OSError, TimeoutError) as error:
+            result["compatible"] = False
+            result["error_code"] = str(error) if isinstance(error, CdpError) else "CDP_ENDPOINT_UNREACHABLE"
+        else:
+            result["capability_snapshot"] = runtime["capability_snapshot"]
+            result["runtime_snapshot"] = {
+                "browser": runtime.get("browser"),
+                "protocol": runtime.get("protocol"),
+                "target_host": runtime.get("target_host"),
+                "target_title": runtime.get("target_title"),
+                "location_host": runtime.get("location_host"),
+                "websocket_path": runtime.get("websocket_path"),
+            }
+            result["compatible"] = bool(runtime.get("compatible"))
+            result["error_code"] = runtime.get("error_code")
+    return result
 
 
 def publish_request(cfg, operation, payload=None, timeout=30):
@@ -337,10 +579,18 @@ class LinkedHelperPublisher:
         self.profile = profile
 
     def preflight(self):
-        required = ("create_campaign", "pause_campaign", "canonical_readback", "zero_target_readback")
-        if not all(self.profile.get(key) is True for key in required):
-            return False, "COMPATIBILITY_CAPABILITY_MISSING"
-        return False, "CDP_ADAPTER_NOT_ENABLED"
+        if self.profile.get("enable_cdp_adapter") is not True:
+            return False, "CDP_ADAPTER_NOT_ENABLED"
+        if self.profile.get("cdp_security_ack") != CDP_SECURITY_ACK:
+            return False, "CDP_SECURITY_ACK_REQUIRED"
+        try:
+            runtime = probe_linked_helper_runtime(self.profile)
+        except CdpError as error:
+            return False, str(error)
+        if not runtime.get("compatible"):
+            return False, str(runtime.get("error_code") or "COMPATIBILITY_CAPABILITY_MISSING")
+        self.runtime_snapshot = runtime
+        return True, None
 
 
 def cmd_publish_once(args):

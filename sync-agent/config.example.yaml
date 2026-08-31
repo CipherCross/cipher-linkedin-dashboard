@@ -117,6 +117,23 @@ sync_photos: false
 # self-update; it never prevents the scheduled sync from running.
 # release_public_key: "<base64url-ed25519-public-key>"
 
+# Optional, approval-gated Linked Helper campaign publishing profile. These
+# values must come from a read-only `publish-probe` on the exact LH2 account;
+# never guess the capability booleans. Publishing remains disabled unless both
+# explicit gates below are set by an operator after the machine is approved.
+# lh2_publish:
+#   lh_version: "2.130.28"
+#   account_id: "524650"
+#   account_name: "Account name"
+#   sender_name: "Sender name"
+#   workspace_id: "601896"
+#   compatibility_profile: "lh2-2.130.28"
+#   cdp_host: "127.0.0.1"
+#   cdp_port: 50454
+#   cdp_target_url_contains: "li.protechts.net"
+#   enable_cdp_adapter: false
+#   cdp_security_ack: ""
+
 # LH2 campaign ids this notebook must NEVER sync (test campaigns, etc.).
 # Archiving in LH2 is not enough — archived campaigns stay in lh.db and would
 # be re-created in Supabase on the next sync. Also settable remotely from the
