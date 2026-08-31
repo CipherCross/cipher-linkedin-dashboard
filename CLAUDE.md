@@ -39,6 +39,12 @@ Three directories hold only live material — anything finished has been moved o
 - `docs/platform-ops/` — binding contracts, runbooks, and artifacts loaded by code
   or tests at their exact paths. Don't move files out of it without grepping first.
 
+For planning requests, save the resulting implementation plan in `specs/` by
+default. A request to keep implementation read-only or to wait for “делай” blocks
+changes to code, databases, external systems, and product state; it does not block
+creating or updating the requested planning document unless the user explicitly
+forbids documentation changes too.
+
 `docs/archive/**` is history: finished plans, closed gates, shipped specs, and
 status logs that later events falsified. **Do not read it while orienting yourself,
 and never quote it as current state.** Open a file there only when you specifically
