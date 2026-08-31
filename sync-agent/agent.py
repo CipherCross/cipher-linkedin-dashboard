@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.1"
+AGENT_VERSION = "1.16.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -590,7 +590,10 @@ class LinkedHelperPublisher:
         if not runtime.get("compatible"):
             return False, str(runtime.get("error_code") or "COMPATIBILITY_CAPABILITY_MISSING")
         self.runtime_snapshot = runtime
-        return True, None
+        # The read-only probe is deliberately shipped before the mutating
+        # branch executor. Never claim a job and then silently leave it leased
+        # just because the renderer exposes the expected method names.
+        return False, "CDP_PUBLISH_PATH_NOT_IMPLEMENTED"
 
 
 def cmd_publish_once(args):

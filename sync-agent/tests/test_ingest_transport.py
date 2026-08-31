@@ -327,7 +327,7 @@ class PublishProbeTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(code, "CDP_SECURITY_ACK_REQUIRED")
 
-    def test_preflight_uses_live_runtime_capabilities(self):
+    def test_preflight_keeps_mutating_path_closed_after_runtime_probe(self):
         profile = {
             "enable_cdp_adapter": True,
             "cdp_security_ack": agent.CDP_SECURITY_ACK,
@@ -337,8 +337,8 @@ class PublishProbeTest(unittest.TestCase):
         runtime = {"compatible": True, "capability_snapshot": {}}
         with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
             ok, code = agent.LinkedHelperPublisher(profile).preflight()
-        self.assertTrue(ok)
-        self.assertIsNone(code)
+        self.assertFalse(ok)
+        self.assertEqual(code, "CDP_PUBLISH_PATH_NOT_IMPLEMENTED")
 
 
 class TokenTest(unittest.TestCase):
