@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.17.0"
+AGENT_VERSION = "1.17.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -517,6 +517,9 @@ def _publish_profile(cfg):
     profile["cdp_port"] = port
     profile["li_account_id"] = li_account_id
     profile["cdp_host"] = "127.0.0.1"
+    # Read-only canonical verification needs the same local database as sync.
+    # An empty path is resolved fail-closed by the publisher, never repaired.
+    profile["_lh2_db_path"] = str(cfg.get("lh2_db_path") or "")
     return profile, None
 
 
@@ -950,10 +953,83 @@ class LinkedHelperPublisher:
             raise PublishExecutionError("LH_PAUSE_RESULT_INVALID")
 
     def readback(self, campaign_id):
-        value = self._evaluate("readback", {"id": campaign_id})
-        if not isinstance(value, dict):
-            raise PublishExecutionError("LH_READBACK_INVALID")
-        return value
+        """Read the created campaign from LH2 SQLite in strict read-only mode.
+
+        Electron exposes the action models through nested observable/IPC wrappers;
+        their generic ``type`` property is not the stored action type. The exact
+        configuration tables are already read by this agent during normal sync,
+        so canonical verification reads that stable, local representation. This
+        function never opens the DB writable and never repairs its contents.
+        """
+        configured = str(self.profile.get("_lh2_db_path") or "").strip()
+        try:
+            db_path = os.path.expanduser(configured) if configured else discover_db_path()
+        except (OSError, RuntimeError):
+            raise PublishExecutionError("LH_SQLITE_READBACK_UNAVAILABLE")
+        if not os.path.isfile(db_path):
+            raise PublishExecutionError("LH_SQLITE_READBACK_UNAVAILABLE")
+        con = None
+        try:
+            con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            con.row_factory = sqlite3.Row
+            campaign = con.execute("""
+                SELECT id, name, li_account_id, is_paused
+                FROM campaigns WHERE id = ?
+            """, (campaign_id,)).fetchone()
+            if campaign is None:
+                raise PublishExecutionError("LH_SQLITE_READBACK_MISSING")
+            rows = con.execute("""
+                WITH latest_version AS (
+                  SELECT MAX(id) AS id FROM campaign_versions WHERE campaign_id = ?
+                )
+                SELECT ac.actionType AS action_type,
+                       ac.actionSettings AS action_settings,
+                       ac.coolDown AS cooldown,
+                       ac.maxActionResultsPerIteration AS max_results
+                FROM campaign_version_actions cva
+                JOIN actions a ON a.id = cva.action_id
+                JOIN latest_version lv ON lv.id = cva.version_id
+                JOIN action_configs ac ON ac.id = (
+                  SELECT config_id FROM action_versions
+                  WHERE action_id = a.id ORDER BY id DESC LIMIT 1
+                )
+                ORDER BY cva.id
+            """, (campaign_id,)).fetchall()
+            target_row = con.execute("""
+                SELECT COUNT(*) AS count
+                FROM action_target_people atp
+                JOIN actions a ON a.id = atp.action_id
+                WHERE a.campaign_id = ?
+            """, (campaign_id,)).fetchone()
+        except PublishExecutionError:
+            raise
+        except sqlite3.Error:
+            raise PublishExecutionError("LH_SQLITE_READBACK_UNAVAILABLE")
+        finally:
+            if con is not None:
+                con.close()
+        actions = []
+        try:
+            for row in rows:
+                settings = json.loads(row["action_settings"])
+                if not isinstance(settings, dict):
+                    raise ValueError("settings must be an object")
+                actions.append({
+                    "type": str(row["action_type"]),
+                    "settings": settings,
+                    "coolDown": row["cooldown"],
+                    "maxActionResultsPerIteration": row["max_results"],
+                })
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raise PublishExecutionError("LH_SQLITE_READBACK_INVALID")
+        return {
+            "id": campaign["id"],
+            "liAccountId": campaign["li_account_id"],
+            "name": campaign["name"],
+            "actions": actions,
+            "peopleCount": target_row["count"],
+            "paused": campaign["is_paused"] == 1,
+        }
 
     @staticmethod
     def _canonical_json(value):

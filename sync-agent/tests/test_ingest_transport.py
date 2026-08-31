@@ -31,6 +31,7 @@ import json
 import os
 import py_compile
 import re
+import tempfile
 import sys
 import unittest
 from unittest import mock
@@ -420,13 +421,14 @@ class PublishExecutorTest(unittest.TestCase):
             "actions": branch["compiled_action_chain"],
             "peopleCount": 0, "paused": True,
         }
-        with mock.patch.object(publisher, "_evaluate", side_effect=[[], {"outcome": "result", "campaignId": 101}, True, readback]) as evaluate:
+        with mock.patch.object(publisher, "_evaluate", side_effect=[[], {"outcome": "result", "campaignId": 101}, True]) as evaluate, \
+             mock.patch.object(publisher, "readback", return_value=readback):
             verification, status = publisher.publish_branch(branch, self.account())
         self.assertEqual(status, "created")
         self.assertEqual(verification["campaign_id"], 101)
         self.assertTrue(verification["zero_targets"])
         self.assertTrue(verification["paused"])
-        self.assertEqual(evaluate.call_count, 4)
+        self.assertEqual(evaluate.call_count, 3)
         create_expression = publisher._call_expression("create", evaluate.call_args_list[1].args[1])
         self.assertIn('"target":[]', create_expression)
         self.assertIn('"excludeList":[]', create_expression)
@@ -466,6 +468,36 @@ class PublishExecutorTest(unittest.TestCase):
         expression = agent.LinkedHelperPublisher._call_expression("readback", {"id": 101})
         self.assertIn("getCampaignName", expression)
 
+    def test_sqlite_readback_uses_latest_campaign_version_without_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "lh.db")
+            con = agent.sqlite3.connect(path)
+            con.executescript("""
+                CREATE TABLE campaigns (id INTEGER, name TEXT, li_account_id INTEGER, is_paused INTEGER);
+                CREATE TABLE campaign_versions (id INTEGER, campaign_id INTEGER);
+                CREATE TABLE campaign_version_actions (id INTEGER, version_id INTEGER, action_id INTEGER);
+                CREATE TABLE actions (id INTEGER, campaign_id INTEGER);
+                CREATE TABLE action_versions (id INTEGER, action_id INTEGER, config_id INTEGER);
+                CREATE TABLE action_configs (id INTEGER, actionType TEXT, actionSettings TEXT, coolDown INTEGER, maxActionResultsPerIteration INTEGER);
+                CREATE TABLE action_target_people (id INTEGER, action_id INTEGER);
+                INSERT INTO campaigns VALUES (7, 'Sequence A', 1, 1);
+                INSERT INTO campaign_versions VALUES (9, 7);
+                INSERT INTO campaign_version_actions VALUES (1, 9, 20);
+                INSERT INTO actions VALUES (20, 7);
+                INSERT INTO action_versions VALUES (30, 20, 40);
+                INSERT INTO action_configs VALUES (40, 'Waiter', '{"delay":24}', 0, -1);
+            """)
+            con.commit()
+            con.close()
+            profile = dict(self.PROFILE, _lh2_db_path=path)
+            result = agent.LinkedHelperPublisher(profile).readback(7)
+        self.assertEqual(result, {
+            "id": 7, "liAccountId": 1, "name": "Sequence A",
+            "actions": [{"type": "Waiter", "settings": {"delay": 24},
+                         "coolDown": 0, "maxActionResultsPerIteration": -1}],
+            "peopleCount": 0, "paused": True,
+        })
+
     def test_existing_exact_name_mismatch_is_conflict_without_mutation(self):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
@@ -478,11 +510,12 @@ class PublishExecutorTest(unittest.TestCase):
                           "maxActionResultsPerIteration": 10}],
             "peopleCount": 0, "paused": True,
         }
-        with mock.patch.object(publisher, "_evaluate", side_effect=[[existing], mismatched]) as evaluate:
+        with mock.patch.object(publisher, "_evaluate", return_value=[existing]) as evaluate, \
+             mock.patch.object(publisher, "readback", return_value=mismatched):
             with self.assertRaises(agent.PublishConflictError) as context:
                 publisher.publish_branch(branch, self.account())
         self.assertEqual(context.exception.code, "LH_EXISTING_CAMPAIGN_MISMATCH")
-        self.assertEqual(evaluate.call_count, 2)
+        self.assertEqual(evaluate.call_count, 1)
         self.assertEqual(evaluate.call_args_list[0].args[0], "list")
 
     def test_readback_rejects_nonzero_targets_or_unpaused_campaign(self):
