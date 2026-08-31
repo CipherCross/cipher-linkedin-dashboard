@@ -31,6 +31,7 @@ import {
   AgentReleaseStore,
   AgentReleaseConfigurationError,
 } from '../storage/releaseArtifacts.js'
+import { normalizeVerifiedAccountSnapshot } from '../../../src/lib/sequencePublish.js'
 
 export const AGENT_CONFIG_OP = 'agent.config'
 export const AGENT_PHOTO_UPLOAD_OP = 'agent.photoUpload'
@@ -92,13 +93,23 @@ export function createAgentPublishHandler(
     try {
       if (operation === AGENT_PUBLISH_PROBE_OP) {
         const machineKey = boundedString(body, 'machine_key')
-        const accountJson = boundedObject(body, 'account_snapshot')
         const capabilityJson = boundedObject(body, 'capability_snapshot')
-        if (!machineKey || !accountJson || !capabilityJson || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot and compatible are required' }, 400)
+        const account = machineKey
+          ? normalizeVerifiedAccountSnapshot(body.account_snapshot, {
+            instanceId: principal.instanceId,
+            machineKey,
+          })
+          : null
+        if (!machineKey || !account || !capabilityJson || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot and compatible are required' }, 400)
         const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({
           operation: MACHINE_PUBLISH_COMMANDS.reportTarget,
           params: {
-            instanceId: principal.instanceId, machineKey, accountJson, capabilityJson,
+            instanceId: principal.instanceId, machineKey,
+            accountJson: JSON.stringify({
+              accountId: account.accountId, accountName: account.accountName,
+              senderName: account.senderName, workspaceId: account.workspaceId,
+              lhVersion: account.lhVersion, compatibilityProfile: account.compatibilityProfile,
+            }), capabilityJson,
             compatible: body.compatible as boolean, errorCode: boundedString(body, 'error_code', 120) ?? '', credentialId: principal.credentialId,
           },
         }))
