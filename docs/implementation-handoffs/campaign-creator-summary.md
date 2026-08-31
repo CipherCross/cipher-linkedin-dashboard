@@ -13,7 +13,18 @@ sent to LinkedIn.
 
 Released versions, in order: `1.18.0` (wrong fix), `1.19.0` (verifier only,
 committed but never published), `1.20.0` (correct payload, but would have
-failed closed on every good publish), `1.21.0` (**current**).
+failed closed on every good publish), `1.21.0`, `1.21.1` (**current**).
+
+`1.21.1` fixes a fourth defect found after `1.21.0` shipped: `discover_cdp_target`
+rebound `endpoint` — the resolved-endpoint dict — to the websocket URL string,
+then indexed it as a dict, so **every successful discovery raised
+`TypeError: string indices must be integers`** and preflight died with an
+unhandled traceback. Because `cmd_publish_once` claims the job before it
+preflights, a two-minute timer would have claimed and abandoned one job per
+tick. The only discovery test asserted a rejection and returned before the
+summary was built, so the sole path a notebook takes was never executed; the
+success-path test added with the fix reproduces the exact production
+`TypeError` when the old binding is restored.
 
 The remaining work is in "Open items" at the end of this document. None of it
 blocks a publish on the pilot notebook; the largest item is that `publish-once`
@@ -334,7 +345,7 @@ with the notebook's existing virtualenv:
 .venv\Scripts\python.exe agent.py publish-probe
 ```
 
-The probe should report agent `1.21.0`, the current LH2 endpoint, and
+The probe should report agent `1.21.1`, the current LH2 endpoint, and
 `compatible: true`. The probe now discovers the rotated port itself and reports
 `cdp_port` beside `cdp_port_configured` and `lh_version_measured` beside
 `lh_version_configured` — check those two pairs first if it fails.
@@ -412,7 +423,7 @@ Closed on 2026-08-31, after the pilot:
   the configuration banner. An unusable value is now treated exactly like a
   missing one, which every consumer already handles.
 - **`installer/release.json` was four versions stale** (1.17.1 while the fleet
-  ran 1.18.0) and nothing checked it. It now pins 1.21.0, and `deploy.sh` runs
+  ran 1.18.0) and nothing checked it. It now pins the shipped version (1.21.1), and `deploy.sh` runs
   `tests/test_installers.py`, which is the gate that asserts the pin matches the
   exact `agent.py` being published.
 
@@ -420,12 +431,14 @@ Still open:
 
 ### 1. `lh_version` still disagrees with the running build
 
-The measured build is `2.130.17`; `config.yaml` and the dashboard publish
-profile say `2.130.29`. Since `1.21.0` fails closed on `LH_VERSION_MISMATCH`,
-both must be corrected. Note the ordering: the account snapshot is part of the
+The running build is **`2.130.30`** — LH2 auto-updated 2.130.25 → 2.130.30 on
+2026-08-31, and `app-2.130.17` is marked `.dead` with its files deleted. The
+earlier `2.130.17` figure in this document described the pre-update process and
+is superseded. `config.yaml` already reads `2.130.30` / `lh2-2.130.30` and
+matches reality, so **only the dashboard publish profile is stale**. Since
+`1.21.1` fails closed on `LH_VERSION_MISMATCH`, it must be corrected. Note the ordering: the account snapshot is part of the
 job, so a job queued against the old value fails
-`PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Update the dashboard profile first, then
-`config.yaml`, then recreate the job.
+`PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Update the dashboard profile, then recreate the job.
 
 The CDP port needs no maintenance — discovery finds the rotated port itself.
 
