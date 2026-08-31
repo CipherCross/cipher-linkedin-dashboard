@@ -19,21 +19,27 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   Archive,
   ArchiveRestore,
+  AlertCircle,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Check,
+  CheckCircle2,
   ChevronRight,
   Clock3,
   Eye,
   GripVertical,
   History,
   Laptop,
+  LoaderCircle,
   MessageCircle,
   MessageSquarePlus,
   MoreHorizontal,
   Plus,
   RotateCcw,
   Search,
+  Send,
+  ShieldCheck,
   Smartphone,
   Sparkles,
   Split,
@@ -863,7 +869,32 @@ function CommentsPanel({
   )
 }
 
-function PublishWizard({
+const PUBLISH_ACTION_LABELS: Record<string, string> = {
+  VisitAndExtract: 'Visit profile',
+  Follow: 'Follow profile',
+  Waiter: 'Wait',
+  InvitePerson: 'Send connection request',
+  FilterContactsOutOfMyNetwork: 'Wait for connection',
+  MessageToPerson: 'Send message',
+  CheckForReplies: 'Check for reply',
+}
+
+function publishAccountName(target: SequencePublishTarget): string {
+  const value = target.account_snapshot.accountName ?? target.account_snapshot.account_name
+  return typeof value === 'string' && value.trim() ? value.trim() : 'Account unavailable'
+}
+
+function publishStatusLabel(status: string): string {
+  return ({
+    queued: 'Queued',
+    claimed: 'Preparing',
+    creating: 'Creating campaigns',
+    succeeded: 'Published',
+    failed: 'Needs attention',
+  } as Record<string, string>)[status] ?? status.split('_').join(' ')
+}
+
+export function PublishWizard({
   sequence,
   document,
   onClose,
@@ -880,17 +911,36 @@ function PublishWizard({
   const [branchIds, setBranchIds] = useState<string[]>(document.branches.map((branch) => branch.id))
   const [visit, setVisit] = useState(false)
   const [follow, setFollow] = useState(false)
+  const [preInviteDelay, setPreInviteDelay] = useState('')
   const [inviteDelay, setInviteDelay] = useState('24')
+  const [messageDelays, setMessageDelays] = useState<string[]>(() => document.steps.slice(2).map(() => '24'))
+  const [loadingTargets, setLoadingTargets] = useState(true)
+  const [targetsError, setTargetsError] = useState('')
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState(1)
+  const [furthestStep, setFurthestStep] = useState(1)
 
-  useEffect(() => {
+  const loadTargets = useCallback(() => {
+    setLoadingTargets(true)
+    setTargetsError('')
     void listSequencePublishTargets().then((items) => {
       setTargets(items)
-      const first = items.find((item) => item.compatible)
-      if (first) setTargetId(first.instance_id)
-    }).catch((error) => toast.error(error instanceof Error ? error.message : 'Could not load publishing targets.'))
-  }, [toast])
+      const first = items.find((item) => item.compatible && normalizeVerifiedAccountSnapshot(item.account_snapshot, {
+        instanceId: item.instance_id,
+        machineKey: item.machine_key,
+      }))
+      setTargetId((current) => current || first?.instance_id || '')
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'Could not load publishing targets.'
+      setTargetsError(message)
+    }).finally(() => setLoadingTargets(false))
+  }, [])
+
+  useEffect(() => { loadTargets() }, [loadTargets])
+
+  useEffect(() => {
+    setMessageDelays((current) => document.steps.slice(2).map((_, index) => current[index] ?? '24'))
+  }, [document.steps.length])
 
   const target = targets.find((item) => item.instance_id === targetId)
   const account = target && normalizeVerifiedAccountSnapshot(target.account_snapshot, {
@@ -901,14 +951,24 @@ function PublishWizard({
     branchIds,
     visit,
     follow,
+    preInviteDelayHours: preInviteDelay === '' ? undefined : Number(preInviteDelay),
     inviteToFirstMessageDelayHours: inviteDelay === '' ? undefined : Number(inviteDelay),
-    interMessageDelayHours: document.steps.slice(2).map(() => 24),
+    interMessageDelayHours: messageDelays.map(Number),
   }
   let preview: ReturnType<typeof compileSequenceCampaigns> = []
   let previewError = ''
   if (account) {
     try { preview = compileSequenceCampaigns(sequence.name, document, options, account) } catch (error) { previewError = error instanceof Error ? error.message : 'Preview is invalid.' }
   }
+  const goToStep = (next: number) => {
+    setStep(next)
+    setFurthestStep((current) => Math.max(current, next))
+  }
+  const allBranchesSelected = document.branches.length > 0 && branchIds.length === document.branches.length
+  const unavailableTargets = targets.filter((item) => !item.compatible || !normalizeVerifiedAccountSnapshot(item.account_snapshot, {
+    instanceId: item.instance_id,
+    machineKey: item.machine_key,
+  }))
   const submit = async () => {
     if (!target || !account || previewError) return
     setBusy(true)
@@ -925,28 +985,120 @@ function PublishWizard({
     } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not queue publishing.') } finally { setBusy(false) }
   }
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div className="pipe-modal sequence-publish-modal" role="dialog" aria-modal="true" aria-label="Publish sequence" onClick={(event) => event.stopPropagation()}>
-        <div className="pipe-modal-head"><span>Publish paused campaigns</span><button className="conv-close" onClick={onClose} aria-label="Close"><X size={16} /></button></div>
-        <div className="sequence-publish-steps"><span className={step >= 1 ? 'active' : ''}>1 Target</span><span className={step >= 2 ? 'active' : ''}>2 Branches</span><span className={step >= 3 ? 'active' : ''}>3 Preview</span></div>
-        {step === 1 && <div className="sequence-publish-form">
-          <p className="muted">Choose the allowlisted Windows machine and account. Only targets that passed compatibility preflight are available.</p>
-          <label>Machine and account<select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Select a compatible target</option>{targets.map((item) => { const accountName = item.account_snapshot.accountName ?? item.account_snapshot.account_name ?? 'Unknown'; return <option key={item.instance_id} value={item.instance_id} disabled={!item.compatible}>{item.instance_id} · {String(accountName)} {!item.compatible ? `(${item.compatibility_error_code ?? 'not ready'})` : ''}</option> })}</select></label>
-          <div className="modal-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!target?.compatible} onClick={() => setStep(2)}>Continue</button></div>
-        </div>}
-        {step === 2 && <div className="sequence-publish-form">
-          <p className="muted">One selected branch becomes one separate campaign. Branch letters stay stable in document order.</p>
-          <div className="sequence-publish-branch-list">{document.branches.map((branch, index) => <label key={branch.id}><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={(event) => setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id))} /> {String.fromCharCode(65 + index)} · {branch.name}</label>)}</div>
-          <label><input type="checkbox" checked={visit} onChange={(event) => setVisit(event.target.checked)} /> Visit and extract</label>
-          <label><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> Follow</label>
-          <label>Invite-to-first-message delay (hours)<input type="number" min="1" max="720" value={inviteDelay} onChange={(event) => setInviteDelay(event.target.value)} /></label>
-          <div className="modal-actions"><button className="btn" onClick={() => setStep(1)}>Back</button><button className="btn primary" disabled={!branchIds.length} onClick={() => setStep(3)}>Review preview</button></div>
-        </div>}
-        {step === 3 && <div className="sequence-publish-form">
-          <p className="muted">This immutable preview is captured at revision {sequence.revision}. Campaigns will be empty and explicitly paused.</p>
-          {previewError ? <p className="sequence-inline-warning">{previewError}</p> : preview.map((campaign) => <article key={campaign.branchId} className="sequence-publish-preview"><strong>{campaign.campaignName}</strong><small>{campaign.actions.map((action) => action.type).join(' → ')}</small><code>{campaign.actionFingerprint.slice(0, 16)}…</code></article>)}
-          <div className="modal-actions"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn primary" disabled={busy || !preview.length || Boolean(previewError)} onClick={() => void submit()}>{busy ? 'Queueing…' : 'Create paused campaigns'}</button></div>
-        </div>}
+    <div className="pipe-modal-overlay sequence-publish-overlay" onClick={() => { if (!busy) onClose() }}>
+      <div className="pipe-modal sequence-publish-modal" role="dialog" aria-modal="true" aria-labelledby="sequence-publish-title" onClick={(event) => event.stopPropagation()}>
+        <header className="sequence-publish-head">
+          <div className="sequence-publish-head-icon"><Send size={19} /></div>
+          <div>
+            <span className="eyebrow">Linked Helper</span>
+            <h2 id="sequence-publish-title">Publish campaign</h2>
+            <p>{sequence.name} · revision {sequence.revision}</p>
+          </div>
+          <button className="conv-close" onClick={onClose} disabled={busy} aria-label="Close publish campaign"><X size={17} /></button>
+        </header>
+
+        <ol className="sequence-publish-steps" aria-label="Publishing steps">
+          {[
+            { number: 1, label: 'Destination' },
+            { number: 2, label: 'Setup' },
+            { number: 3, label: 'Review' },
+          ].map((item) => (
+            <li key={item.number} className={step === item.number ? 'active' : item.number < step ? 'complete' : ''}>
+              <button type="button" disabled={item.number > furthestStep} onClick={() => setStep(item.number)} aria-current={step === item.number ? 'step' : undefined}>
+                <span>{item.number < step ? <Check size={13} /> : item.number}</span>
+                <b>{item.label}</b>
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        <div className="sequence-publish-body">
+          {step === 1 && <section className="sequence-publish-section" aria-labelledby="publish-destination-title">
+            <div className="sequence-publish-section-head">
+              <div><span>Step 1 of 3</span><h3 id="publish-destination-title">Where should these campaigns go?</h3><p>Choose the LinkedIn account that will own the campaigns in Linked Helper.</p></div>
+            </div>
+            {loadingTargets && <div className="sequence-publish-loading"><LoaderCircle size={20} /><span>Checking available accounts…</span></div>}
+            {!loadingTargets && targetsError && <div className="sequence-publish-state error"><AlertCircle size={20} /><div><strong>Accounts could not be loaded</strong><p>{targetsError}</p></div><button className="btn sm" onClick={loadTargets}>Try again</button></div>}
+            {!loadingTargets && !targetsError && targets.length === 0 && <div className="sequence-publish-state"><Laptop size={22} /><div><strong>No publishing destinations yet</strong><p>Open Linked Helper on an approved machine and wait for its next sync.</p></div></div>}
+            {!loadingTargets && !targetsError && targets.length > 0 && <div className="sequence-publish-target-list">
+              {targets.map((item) => {
+                const normalized = normalizeVerifiedAccountSnapshot(item.account_snapshot, { instanceId: item.instance_id, machineKey: item.machine_key })
+                const available = item.compatible && Boolean(normalized)
+                const selected = item.instance_id === targetId
+                return <label key={item.instance_id} className={`sequence-publish-target ${selected ? 'selected' : ''} ${!available ? 'unavailable' : ''}`}>
+                  <input type="radio" name="publish-target" value={item.instance_id} checked={selected} disabled={!available} onChange={() => setTargetId(item.instance_id)} />
+                  <span className="sequence-publish-target-avatar">{publishAccountName(item).slice(0, 1).toUpperCase()}</span>
+                  <span className="sequence-publish-target-copy">
+                    <strong>{publishAccountName(item)}</strong>
+                    <small>{item.machine_key} · {item.instance_id}</small>
+                  </span>
+                  <span className={`sequence-publish-readiness ${available ? 'ready' : ''}`}>{available ? <><CheckCircle2 size={13} /> Ready</> : <><AlertCircle size={13} /> Not ready</>}</span>
+                  {!available && <small className="sequence-publish-target-error">{item.compatibility_error_code ? item.compatibility_error_code.split('_').join(' ') : 'Account details could not be verified'}</small>}
+                </label>
+              })}
+            </div>}
+            {unavailableTargets.length > 0 && <p className="sequence-publish-help"><ShieldCheck size={14} /> Unavailable machines stay visible so you know why they cannot receive a campaign.</p>}
+          </section>}
+
+          {step === 2 && <section className="sequence-publish-section" aria-labelledby="publish-setup-title">
+            <div className="sequence-publish-section-head with-action">
+              <div><span>Step 2 of 3</span><h3 id="publish-setup-title">Choose branches and timing</h3><p>Each selected branch becomes a separate paused campaign.</p></div>
+              <button className="link-btn" onClick={() => setBranchIds(allBranchesSelected ? [] : document.branches.map((branch) => branch.id))}>{allBranchesSelected ? 'Clear all' : 'Select all'}</button>
+            </div>
+            <div className="sequence-publish-branch-list">
+              {document.branches.length === 0 && <div className="sequence-publish-no-branches"><Split size={18} /><span>No branches configured yet. Add a branch in the Branches tab before publishing.</span></div>}
+              {document.branches.map((branch, index) => {
+                const checked = branchIds.includes(branch.id)
+                return <label key={branch.id} className={checked ? 'selected' : ''}>
+                  <input type="checkbox" checked={checked} onChange={(event) => setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id))} />
+                  <span className="sequence-publish-branch-letter">{String.fromCharCode(65 + index)}</span>
+                  <span><strong>{branch.name}</strong><small>{sequence.name} {String.fromCharCode(65 + index)}</small></span>
+                  <Check size={15} />
+                </label>
+              })}
+            </div>
+            <div className="sequence-publish-config-grid">
+              <div className="sequence-publish-config-card">
+                <div className="sequence-publish-config-title"><Laptop size={16} /><div><strong>Profile actions</strong><small>Optional actions before the invite</small></div></div>
+                <label className="sequence-publish-switch"><span><strong>Visit profile</strong><small>Open and extract the profile first</small></span><input type="checkbox" checked={visit} onChange={(event) => setVisit(event.target.checked)} /><i /></label>
+                <label className="sequence-publish-switch"><span><strong>Follow profile</strong><small>Follow before sending the invite</small></span><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /><i /></label>
+              </div>
+              <div className="sequence-publish-config-card">
+                <div className="sequence-publish-config-title"><Clock3 size={16} /><div><strong>Timing</strong><small>Hours between campaign actions</small></div></div>
+                <label className="sequence-publish-delay"><span><strong>Before connection request</strong><small>Optional</small></span><input aria-label="Hours before connection request" type="number" min="1" max="720" placeholder="None" value={preInviteDelay} onChange={(event) => setPreInviteDelay(event.target.value)} /><b>hours</b></label>
+                <label className="sequence-publish-delay"><span><strong>After connection</strong><small>Before Message 1</small></span><input aria-label="Hours after connection" type="number" min="1" max="720" value={inviteDelay} onChange={(event) => setInviteDelay(event.target.value)} /><b>hours</b></label>
+                {messageDelays.map((value, index) => <label key={index} className="sequence-publish-delay"><span><strong>After Message {index + 1}</strong><small>Before Message {index + 2}</small></span><input aria-label={`Hours after message ${index + 1}`} type="number" min="1" max="720" value={value} onChange={(event) => setMessageDelays((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /><b>hours</b></label>)}
+              </div>
+            </div>
+            {previewError && <div className="sequence-publish-validation"><AlertCircle size={15} /><span>{previewError}</span></div>}
+          </section>}
+
+          {step === 3 && <section className="sequence-publish-section" aria-labelledby="publish-review-title">
+            <div className="sequence-publish-section-head">
+              <div><span>Step 3 of 3</span><h3 id="publish-review-title">Review before publishing</h3><p>Confirm the destination and campaign flow. This snapshot will not change if the sequence is edited later.</p></div>
+            </div>
+            <div className="sequence-publish-summary">
+              <div><span>Destination</span><strong>{account?.accountName}</strong><small>{target?.machine_key}</small></div>
+              <div><span>Campaigns</span><strong>{preview.length}</strong><small>{branchIds.length} selected {branchIds.length === 1 ? 'branch' : 'branches'}</small></div>
+              <div><span>Sequence version</span><strong>Revision {sequence.revision}</strong><small>Immutable snapshot</small></div>
+            </div>
+            {previewError ? <div className="sequence-publish-state error"><AlertCircle size={20} /><div><strong>Preview needs attention</strong><p>{previewError}</p></div></div> : <div className="sequence-publish-preview-list">
+              {preview.map((campaign) => <article key={campaign.branchId} className="sequence-publish-preview">
+                <div className="sequence-publish-preview-head"><span>{campaign.branchLetter}</span><div><strong>{campaign.campaignName}</strong><small>{campaign.actions.length} campaign actions</small></div><CheckCircle2 size={17} /></div>
+                <div className="sequence-publish-action-flow">{campaign.actions.map((action, index) => <span key={`${action.type}-${index}`}>{PUBLISH_ACTION_LABELS[action.type] ?? action.type}</span>)}</div>
+              </article>)}
+            </div>}
+            <div className="sequence-publish-safety"><ShieldCheck size={18} /><div><strong>Safe by default</strong><p>Campaigns are created empty and paused. Nothing is sent on LinkedIn until someone adds leads and starts a campaign in Linked Helper.</p></div></div>
+          </section>}
+        </div>
+
+        <footer className="sequence-publish-footer">
+          <span>{step === 2 ? `${branchIds.length} of ${document.branches.length} branches selected` : step === 3 ? `${preview.length} paused ${preview.length === 1 ? 'campaign' : 'campaigns'} will be queued` : 'No changes are made until the final step'}</span>
+          <div>
+            {step === 1 ? <button className="btn" onClick={onClose}>Cancel</button> : <button className="btn" onClick={() => setStep(step - 1)} disabled={busy}>Back</button>}
+            {step < 3 ? <button className="btn primary" disabled={step === 1 ? !target?.compatible || !account : !branchIds.length || Boolean(previewError)} onClick={() => goToStep(step + 1)}>Continue <ChevronRight size={14} /></button> : <button className="btn primary sequence-publish-submit" disabled={busy || !preview.length || Boolean(previewError)} onClick={() => void submit()}>{busy ? <><LoaderCircle size={14} /> Queueing…</> : <><Send size={14} /> Queue {preview.length} paused {preview.length === 1 ? 'campaign' : 'campaigns'}</>}</button>}
+          </div>
+        </footer>
       </div>
     </div>
   )
@@ -1096,7 +1248,7 @@ function SequenceEditor({ id }: { id: string }) {
         <SaveIndicator state={saveState} />
         <button className="btn" onClick={() => setCommentTarget({ stepId: null, variationId: null, anchor: null, label: 'Whole sequence' })}><MessageCircle size={14} /> Comment</button>
         <button className="btn primary" onClick={() => setTab('preview')}><Eye size={14} /> Preview</button>
-        {isAdmin && <button className="btn" onClick={() => setPublishOpen(true)}><Laptop size={14} /> Publish</button>}
+        {isAdmin && <button className="btn" disabled={saveState !== 'saved'} title={saveState === 'saved' ? 'Publish this saved sequence' : 'Wait for the latest changes to save'} onClick={() => setPublishOpen(true)}><Laptop size={14} /> Publish</button>}
       </header>
 
       {conflict && (
@@ -1104,6 +1256,14 @@ function SequenceEditor({ id }: { id: string }) {
           <div><strong>This sequence changed in another session.</strong><span>Your local draft has not been overwritten. Load the newer saved version before continuing.</span></div>
           <button className="btn" onClick={() => void load()}>Load newer version</button>
         </div>
+      )}
+
+      {isAdmin && publishJobs.length > 0 && (
+        <section className={`sequence-publish-job-strip ${publishJobs[0].status}`} aria-label="Latest campaign publishing status">
+          <span className="sequence-publish-job-icon">{publishJobs[0].status === 'succeeded' ? <CheckCircle2 size={17} /> : publishJobs[0].status === 'failed' ? <AlertCircle size={17} /> : <LoaderCircle size={17} />}</span>
+          <div><strong>{publishStatusLabel(publishJobs[0].status)}</strong><small>{publishJobs[0].target_machine_key} · revision {publishJobs[0].sequence_revision}</small></div>
+          <span>{publishJobs[0].branches.length} {publishJobs[0].branches.length === 1 ? 'campaign' : 'campaigns'}</span>
+        </section>
       )}
 
       <nav className="sequence-editor-tabs" aria-label="Sequence Builder sections">
@@ -1145,7 +1305,6 @@ function SequenceEditor({ id }: { id: string }) {
 
       {commentTarget && <CommentComposer target={commentTarget} busy={commentBusy} onClose={() => setCommentTarget(null)} onSubmit={(body) => void submitComment(body)} />}
       {publishOpen && <PublishWizard sequence={detail.sequence} document={document} onClose={() => setPublishOpen(false)} onCreated={(job) => setPublishJobs((current) => [job, ...current])} />}
-      {isAdmin && publishJobs.length > 0 && <div className="sequence-publish-status card"><strong>Publishing</strong>{publishJobs.slice(0, 3).map((job) => <span key={job.id}>{job.status} · {job.target_machine_key}</span>)}</div>}
     </div>
   )
 }

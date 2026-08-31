@@ -38,6 +38,8 @@ vi.mock('../src/lib/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, info: vi.fn() }),
 }))
 
+vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: false }) }))
+
 const { SequenceBuilder } = await import('../src/pages/SequenceBuilder')
 
 function record(patch: Partial<SequenceRecord> = {}): SequenceRecord {
