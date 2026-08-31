@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.7"
+AGENT_VERSION = "1.16.8"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -688,6 +688,7 @@ class LinkedHelperPublisher:
         if method == "list":
             return """(async () => {
               const pc = window.mainWindowService.mainWindow.source.people.campaigns;
+              const campaigns = window.mainWindowService.mainWindow.source.campaigns;
               const rows = await pc.getCampaigns();
               const unwrap = (v) => {
                 let current = v;
@@ -714,17 +715,26 @@ class LinkedHelperPublisher:
                 }
                 return null;
               };
+              const campaignName = async (id, row) => {
+                try {
+                  if (typeof campaigns?.getCampaignName === 'function' && Number.isFinite(id)) {
+                    const value = await campaigns.getCampaignName(id);
+                    if (typeof value === 'string' && value.trim()) return value.trim();
+                  }
+                } catch {}
+                return text(row, [['name'], ['source', 'name'], ['source', 'source', 'name'], ['campaign', 'name'], ['source', 'campaign', 'name'], ['title']]);
+              };
               const items = Array.isArray(rows) ? rows : [];
-              return items.map((row) => {
+              return await Promise.all(items.map(async (row) => {
                 const source = unwrap(row);
                 const id = Number(row?.id ?? source?.id);
                 const liAccountId = Number(row?.liAccountId ?? source?.liAccountId ?? source?.li_account_id);
                 return {
                   id: Number.isFinite(id) ? id : null,
                   liAccountId: Number.isFinite(liAccountId) ? liAccountId : null,
-                  name: text(row, [['name'], ['source', 'name'], ['source', 'source', 'name'], ['campaign', 'name'], ['source', 'campaign', 'name'], ['title']]),
+                  name: await campaignName(id, row),
                 };
-              });
+              }));
             })()"""
         if method == "create":
             return f"""(async () => {{
@@ -780,6 +790,15 @@ class LinkedHelperPublisher:
                 }}
                 return null;
               }};
+              const campaignName = async (id, row) => {{
+                try {{
+                  if (typeof campaigns?.getCampaignName === 'function' && Number.isFinite(id)) {{
+                    const value = await campaigns.getCampaignName(id);
+                    if (typeof value === 'string' && value.trim()) return value.trim();
+                  }}
+                }} catch {{}}
+                return text(row, [['name'], ['source', 'name'], ['source', 'source', 'name'], ['campaign', 'name'], ['source', 'campaign', 'name'], ['title']]);
+              }};
               const materialize = (value) => {{
                 const current = unwrap(value);
                 if (Array.isArray(current)) return current;
@@ -824,7 +843,7 @@ class LinkedHelperPublisher:
               return {{
                 id: number(campaign, [['id'], ['source', 'id']]),
                 liAccountId: number(campaign, [['liAccountId'], ['source', 'liAccountId'], ['source', 'li_account_id']]),
-                name: text(campaign, [['name'], ['source', 'name'], ['source', 'source', 'name'], ['campaign', 'name'], ['source', 'campaign', 'name'], ['title']]),
+                name: await campaignName(id, campaign),
                 actions: actionList.map((action) => {{
                   const config = configFor(action);
                   if (!config) return null;

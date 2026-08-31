@@ -432,6 +432,15 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertNotIn("start", create_expression.lower())
         self.assertNotIn("unpause", create_expression.lower())
 
+    def test_campaign_list_reads_names_through_lh_accessor(self):
+        expression = agent.LinkedHelperPublisher._call_expression("list")
+        self.assertIn("getCampaignName", expression)
+        self.assertIn("Promise.all", expression)
+
+    def test_readback_reads_name_through_lh_accessor(self):
+        expression = agent.LinkedHelperPublisher._call_expression("readback", {"id": 101})
+        self.assertIn("getCampaignName", expression)
+
     def test_existing_exact_name_mismatch_is_conflict_without_mutation(self):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
