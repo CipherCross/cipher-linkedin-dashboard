@@ -1,19 +1,22 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { formatAgentToken, hashAgentSecret } from '../api/_lib/agent/credentials.js'
 import {
   AGENT_CONFIG_OP,
   AGENT_PHOTO_UPLOAD_OP,
+  AGENT_PUBLISH_BRANCH_OP,
   AGENT_RELEASE_OP,
   createAgentConfigHandler,
   createAgentPhotoUploadHandler,
+  createAgentPublishHandler,
   createAgentReleaseHandler,
 } from '../api/_lib/agent/machineOps.js'
 import { authenticateMachine } from '../api/_lib/agent/machineAuth.js'
 import { FakeDataStore } from '../api/_lib/data/fake.js'
 import { MACHINE_COMMANDS, MACHINE_OPERATIONS } from '../api/_lib/data/operations/agentIngest.js'
+import { MACHINE_PUBLISH_COMMANDS } from '../api/_lib/data/operations/sequencePublishing.js'
 import { FakeObjectStorageProvider } from '../api/_lib/storage/fakeProvider.js'
 import {
   AgentReleaseStore,
@@ -247,5 +250,42 @@ describe('S23 signed release artifacts', () => {
       download_url: 'https://objects.test/download',
       download_expires_at: '2026-08-07T13:02:00.000Z',
     })
+  })
+})
+
+describe('machine publish diagnostics', () => {
+  it('logs a safe SQLSTATE from a wrapped branch journal failure', async () => {
+    const store = machineStore()
+    store.registerCommand(MACHINE_PUBLISH_COMMANDS.branchResult, () => {
+      const driverError = Object.assign(new Error('driver text must not be logged'), {
+        code: '42703',
+      })
+      throw driverError
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const response = await createAgentPublishHandler(
+        { store, tenantId: TENANT },
+        AGENT_PUBLISH_BRANCH_OP,
+      )(
+        request(AGENT_PUBLISH_BRANCH_OP, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            job_id: '9f1b0000-0000-4000-8000-00000000c099',
+            claim_generation: 1,
+            branch_id: 'branch_a',
+            status: 'publishing',
+          }),
+        }),
+      )
+      expect(response.status).toBe(502)
+      expect(log).toHaveBeenCalledWith(
+        'machine agent.publishBranch failed',
+        'TRANSACTION_INVALID_SQLSTATE_42703',
+      )
+    } finally {
+      log.mockRestore()
+    }
   })
 })

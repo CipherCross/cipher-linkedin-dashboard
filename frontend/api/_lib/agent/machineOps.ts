@@ -75,8 +75,31 @@ function boundedObject(body: Record<string, unknown>, key: string): string | nul
   return value && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : null
 }
 
+/**
+ * Return a PostgreSQL SQLSTATE from a contract error's non-enumerable cause
+ * chain. SQLSTATEs are five-character public diagnostic codes; unlike a
+ * driver's message they do not contain connection names, SQL text or values.
+ */
+function publishSqlstate(error: unknown): string | null {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  for (let depth = 0; depth < 8 && current && !seen.has(current); depth += 1) {
+    seen.add(current)
+    if (typeof current === 'object') {
+      const code = (current as { code?: unknown }).code
+      if (typeof code === 'string' && /^[0-9A-Za-z]{5}$/.test(code)) return code
+      current = (current as { cause?: unknown }).cause
+    } else {
+      break
+    }
+  }
+  return null
+}
+
 function publishError(error: unknown): string {
-  return error instanceof DataStoreContractError ? error.code : error instanceof Error ? error.name : 'unknown'
+  const label = error instanceof DataStoreContractError ? error.code : error instanceof Error ? error.name : 'unknown'
+  const sqlstate = publishSqlstate(error)
+  return sqlstate ? `${label}_SQLSTATE_${sqlstate}` : label
 }
 
 export function createAgentPublishHandler(
