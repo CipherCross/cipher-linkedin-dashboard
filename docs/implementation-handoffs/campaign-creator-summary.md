@@ -435,10 +435,23 @@ The running build is **`2.130.30`** — LH2 auto-updated 2.130.25 → 2.130.30 o
 2026-08-31, and `app-2.130.17` is marked `.dead` with its files deleted. The
 earlier `2.130.17` figure in this document described the pre-update process and
 is superseded. `config.yaml` already reads `2.130.30` / `lh2-2.130.30` and
-matches reality, so **only the dashboard publish profile is stale**. Since
-`1.21.1` fails closed on `LH_VERSION_MISMATCH`, it must be corrected. Note the ordering: the account snapshot is part of the
-job, so a job queued against the old value fails
-`PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Update the dashboard profile, then recreate the job.
+matches reality, so **only the dashboard's stored snapshot is stale**.
+
+There is no dashboard field to edit, and earlier notes in this chain that said
+to "update the dashboard profile" were wrong. The stored `lhVersion` is written
+only by `agent.publish.probe` → `reportTarget`, and the probe builds
+`account_snapshot` from the local `config.yaml` profile
+(`PUBLISH_PROFILE_REQUIRED_KEYS`). Since that file already reads `2.130.30`,
+running `publish-probe` on the notebook overwrites the stale snapshot with the
+correct value on its own.
+
+Ordering still matters: the account snapshot is copied into the job, so a job
+queued against the old value fails `PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Run the
+probe first, then recreate the job.
+
+The notebook self-updates to `1.21.1` at its next scheduled `sync` — `self_update`
+runs from the `sync` path only, so `publish-probe` and `publish-once` never
+upgrade the agent themselves.
 
 The CDP port needs no maintenance — discovery finds the rotated port itself.
 
