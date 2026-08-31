@@ -17,6 +17,7 @@ import {
 import { neonWriter } from './neonWrites.js'
 import {
   compileSequenceCampaigns,
+  canonicalJson,
   sequencePublishPayloadDigest,
   sha256Hex,
   SequencePublishValidationError,
@@ -151,7 +152,7 @@ export async function handleSequencePublishAction(request: Request, payload: Rec
         if (error instanceof SequencePublishValidationError) return { response: json({ error: error.message, issues: error.issues }, 400) }
         throw error
       }
-      const documentJson = JSON.stringify(sequence.document)
+      const documentJson = canonicalJson(sequence.document)
       const documentFingerprint = sha256Hex(documentJson)
       const immutablePayload = {
         sequenceId, revision: sequence.revision, versionId: version.id, sequenceName: sequence.name,
