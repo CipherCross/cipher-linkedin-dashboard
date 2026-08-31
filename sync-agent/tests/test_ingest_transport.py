@@ -366,6 +366,45 @@ class PublishProbeTest(unittest.TestCase):
                 agent.discover_cdp_target(profile)
         self.assertEqual(str(context.exception), "CDP_TARGET_NOT_FOUND")
 
+    def test_cdp_discovery_returns_the_resolved_port_on_the_success_path(self):
+        # The rejection test above returns before the summary is built, so it
+        # never executed the only path a notebook takes. That gap let a name
+        # collision on `endpoint` ship: every real discovery raised TypeError.
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 61121,
+                   "cdp_target_url_contains": "li.protechts.net"}
+        targets = [
+            {"type": "page", "url": "https://www.linkedin.com/feed",
+             "webSocketDebuggerUrl": "ws://127.0.0.1:51358/devtools/page/linkedin"},
+            {"type": "page", "url": "file:///C:/li.protechts.net/index.html",
+             "title": "Linked Helper",
+             "webSocketDebuggerUrl": "ws://127.0.0.1:51358/devtools/page/lh2"},
+        ]
+        endpoint = {"port": 51358, "pid": 1688, "source": "scanned",
+                    "executable_path": r"C:\Users\DELL\AppData\Local\linked-helper\Instances\2.130.30\linked-helper.exe"}
+        with mock.patch.object(agent, "resolve_cdp_endpoint", return_value=endpoint), \
+             mock.patch.object(agent, "_cdp_http", side_effect=[{"Browser": "Chrome/142.0.7444.265",
+                                                                "Protocol-Version": "1.3"}, targets]):
+            result = agent.discover_cdp_target(profile, measure=True)
+        # The rotated port wins over the stale configured hint.
+        self.assertEqual(result["cdp_port"], 51358)
+        self.assertEqual(result["cdp_port_source"], "scanned")
+        self.assertEqual(result["lh_version_measured"], "2.130.30")
+        self.assertEqual(result["websocket_path"], "/devtools/page/lh2")
+        self.assertEqual(result["_websocket_url"], "ws://127.0.0.1:51358/devtools/page/lh2")
+        self.assertEqual(result["browser"], "Chrome/142.0.7444.265")
+
+    def test_cdp_discovery_refuses_a_non_loopback_websocket(self):
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 51358,
+                   "cdp_target_url_contains": "li.protechts.net"}
+        targets = [{"type": "page", "url": "file:///C:/li.protechts.net/index.html",
+                    "webSocketDebuggerUrl": "ws://10.0.0.4:51358/devtools/page/lh2"}]
+        endpoint = {"port": 51358, "pid": 1688, "source": "configured", "executable_path": ""}
+        with mock.patch.object(agent, "resolve_cdp_endpoint", return_value=endpoint), \
+             mock.patch.object(agent, "_cdp_http", side_effect=[{}, targets]):
+            with self.assertRaises(agent.CdpError) as context:
+                agent.discover_cdp_target(profile)
+        self.assertEqual(str(context.exception), "CDP_WEBSOCKET_NOT_LOOPBACK")
+
     NETSTAT = """
 Active Connections
 

@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.21.0"
+AGENT_VERSION = "1.21.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -490,8 +490,12 @@ def discover_cdp_target(profile, measure=False):
     if len(candidates) != 1:
         raise CdpError("CDP_TARGET_AMBIGUOUS" if candidates else "CDP_TARGET_NOT_FOUND")
     target = candidates[0]
-    endpoint = str(target["webSocketDebuggerUrl"])
-    if urllib.parse.urlsplit(endpoint).hostname != "127.0.0.1":
+    # Keep `endpoint` bound to the resolved-endpoint dict: the return value below
+    # reads its port, source and executable path. Rebinding this name to the
+    # websocket string made every successful discovery raise TypeError.
+    websocket_url = str(target["webSocketDebuggerUrl"])
+    parsed_websocket = urllib.parse.urlsplit(websocket_url)
+    if parsed_websocket.hostname != "127.0.0.1":
         raise CdpError("CDP_WEBSOCKET_NOT_LOOPBACK")
     return {
         "browser": str(version.get("Browser") or "")[:120],
@@ -505,8 +509,8 @@ def discover_cdp_target(profile, measure=False):
         "target_type": "page",
         "target_host": _cdp_target_host(target.get("url")),
         "target_title": str(target.get("title") or "")[:160],
-        "websocket_path": urllib.parse.urlsplit(endpoint).path[:256],
-        "_websocket_url": endpoint,
+        "websocket_path": parsed_websocket.path[:256],
+        "_websocket_url": websocket_url,
     }
 
 
