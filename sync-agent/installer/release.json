@@ -1,8 +1,8 @@
 {
   "agent": {
     "version": "1.16.1",
-    "commit": "4827e6a",
-    "url": "https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/4827e6a/sync-agent/agent.py",
+    "commit": "4827e6a04f9a3e104027b17efbffe2a55ba9a261",
+    "url": "https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/4827e6a04f9a3e104027b17efbffe2a55ba9a261/sync-agent/agent.py",
     "sha256": "0381bb4646b51c4884b272642ae68612bf5169f27b2dd72124c841484493798a",
     "bytes": 151177
   },
