@@ -431,7 +431,7 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertEqual(evaluate.call_count, 3)
         create_expression = publisher._call_expression("create", evaluate.call_args_list[1].args[1])
         self.assertIn('"target":[]', create_expression)
-        self.assertIn('"excludeList":[]', create_expression)
+        self.assertNotIn('"excludeList"', create_expression)
         self.assertIn('"liAccount":1', create_expression)
         self.assertNotIn("start", create_expression.lower())
         self.assertNotIn("unpause", create_expression.lower())
@@ -453,7 +453,7 @@ class PublishExecutorTest(unittest.TestCase):
 
     def test_create_expression_reconciles_instead_of_retrying_mutation(self):
         expression = agent.LinkedHelperPublisher._call_expression("create", {
-            "name": "Sequence A", "liAccount": 1, "excludeList": [], "actions": [],
+            "name": "Sequence A", "liAccount": 1, "actions": [],
         })
         self.assertEqual(expression.count("createCampaign("), 1)
         self.assertIn("getCampaigns", expression)

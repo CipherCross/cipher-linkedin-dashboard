@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.17.1"
+AGENT_VERSION = "1.18.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -1150,7 +1150,6 @@ class LinkedHelperPublisher:
         campaign_id = self.create_campaign({
             "name": name,
             "liAccount": li_account_id,
-            "excludeList": [],
             "actions": actions,
         })
         self.pause_campaign(campaign_id, li_account_id)
