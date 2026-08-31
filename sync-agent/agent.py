@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.9"
+AGENT_VERSION = "1.17.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -245,7 +245,7 @@ def machine_api_headers(cfg):
 
 PUBLISH_LEASE_SECONDS = 120
 PUBLISH_PROFILE_REQUIRED_KEYS = (
-    "lh_version", "account_id", "account_name", "sender_name", "workspace_id",
+    "lh_version", "account_id", "li_account_id", "account_name", "sender_name", "workspace_id",
     "compatibility_profile",
 )
 
@@ -505,10 +505,17 @@ def _publish_profile(cfg):
         port = int(raw.get("cdp_port"))
     except (TypeError, ValueError):
         return None, "CDP_PORT_INVALID"
+    try:
+        li_account_id = int(raw.get("li_account_id"))
+    except (TypeError, ValueError):
+        return None, "LH_ACCOUNT_ID_INVALID"
     if port < 1 or port > 65535 or str(raw.get("cdp_host", "127.0.0.1")) != "127.0.0.1":
         return None, "CDP_LOOPBACK_REQUIRED"
+    if li_account_id < 1:
+        return None, "LH_ACCOUNT_ID_INVALID"
     profile = dict(raw)
     profile["cdp_port"] = port
+    profile["li_account_id"] = li_account_id
     profile["cdp_host"] = "127.0.0.1"
     return profile, None
 
@@ -976,7 +983,7 @@ class LinkedHelperPublisher:
                              "maxActionResultsPerIteration": maximum})
         actual = self.readback(int(branch["lh_campaign_id"]))
         expected_name = str(branch.get("campaign_name") or "")
-        expected_account = int(account["account_id"])
+        expected_account = int(self.profile["li_account_id"])
         actual_name = actual.get("name")
         actual_account = actual.get("liAccountId")
         actual_actions = actual.get("actions")
@@ -1027,12 +1034,13 @@ class LinkedHelperPublisher:
             raise PublishExecutionError("PUBLISH_BRANCH_PAYLOAD_INVALID")
         try:
             account_id = int(account["account_id"])
+            li_account_id = int(self.profile["li_account_id"])
         except (KeyError, TypeError, ValueError):
             raise PublishExecutionError("ACCOUNT_ID_INVALID")
         campaigns = self.list_campaigns()
         matches = [row for row in campaigns
                    if isinstance(row, dict) and row.get("name") == name and
-                   row.get("liAccountId") == account_id]
+                   row.get("liAccountId") == li_account_id]
         if len(matches) > 1:
             raise PublishExecutionError("LH_DUPLICATE_CAMPAIGN_NAME")
         if matches:
@@ -1065,11 +1073,11 @@ class LinkedHelperPublisher:
             })
         campaign_id = self.create_campaign({
             "name": name,
-            "liAccount": account_id,
+            "liAccount": li_account_id,
             "excludeList": [],
             "actions": actions,
         })
-        self.pause_campaign(campaign_id, account_id)
+        self.pause_campaign(campaign_id, li_account_id)
         verified = self._verify(dict(branch, lh_campaign_id=campaign_id), account)
         return verified, "created"
 

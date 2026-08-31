@@ -123,6 +123,9 @@ sync_photos: false
 # explicit gates below are set by an operator after the machine is approved.
 # lh2_publish:
 #   lh_version: "2.130.28"
+#   # Local LH2 database/UI account key, not the public LinkedIn/LH account ID.
+#   # Obtain it by read-only runtime inventory; do not infer it from account_id.
+#   li_account_id: "1"
 #   account_id: "524650"
 #   account_name: "Account name"
 #   sender_name: "Sender name"

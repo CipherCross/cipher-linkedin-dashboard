@@ -299,7 +299,7 @@ class PublishProbeTest(unittest.TestCase):
             "instance_id": "uitop-1",
             "lh2_publish": {
                 "cdp_host": "0.0.0.0", "cdp_port": 9222,
-                "lh_version": "x", "account_id": "a", "account_name": "A",
+                "lh_version": "x", "account_id": "a", "li_account_id": "1", "account_name": "A",
                 "sender_name": "A", "workspace_id": "w", "compatibility_profile": "p",
             },
         })
@@ -323,7 +323,7 @@ class PublishProbeTest(unittest.TestCase):
             "compatible": True, "create_campaign": False,
             "pause_campaign": False, "canonical_readback": False,
             "zero_target_readback": False,
-            "lh_version": "2.130.28", "account_id": "524650",
+            "lh_version": "2.130.28", "account_id": "524650", "li_account_id": "1",
             "account_name": "Mykyta Shevchenko", "sender_name": "Mykyta",
             "workspace_id": "601896", "compatibility_profile": "lh2-2.130.28",
         }
@@ -385,6 +385,7 @@ class PublishExecutorTest(unittest.TestCase):
         "cdp_security_ack": agent.CDP_SECURITY_ACK,
         "cdp_host": "127.0.0.1",
         "cdp_port": 50454,
+        "li_account_id": 1,
         "cdp_target_url_contains": "index.html",
     }
 
@@ -415,7 +416,7 @@ class PublishExecutorTest(unittest.TestCase):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
         readback = {
-            "id": 101, "liAccountId": 524650, "name": "Sequence A",
+            "id": 101, "liAccountId": 1, "name": "Sequence A",
             "actions": branch["compiled_action_chain"],
             "peopleCount": 0, "paused": True,
         }
@@ -429,6 +430,7 @@ class PublishExecutorTest(unittest.TestCase):
         create_expression = publisher._call_expression("create", evaluate.call_args_list[1].args[1])
         self.assertIn('"target":[]', create_expression)
         self.assertIn('"excludeList":[]', create_expression)
+        self.assertIn('"liAccount":1', create_expression)
         self.assertNotIn("start", create_expression.lower())
         self.assertNotIn("unpause", create_expression.lower())
 
@@ -449,7 +451,7 @@ class PublishExecutorTest(unittest.TestCase):
 
     def test_create_expression_reconciles_instead_of_retrying_mutation(self):
         expression = agent.LinkedHelperPublisher._call_expression("create", {
-            "name": "Sequence A", "liAccount": 524650, "excludeList": [], "actions": [],
+            "name": "Sequence A", "liAccount": 1, "excludeList": [], "actions": [],
         })
         self.assertEqual(expression.count("createCampaign("), 1)
         self.assertIn("getCampaigns", expression)
@@ -468,10 +470,10 @@ class PublishExecutorTest(unittest.TestCase):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
         existing = {
-            "id": 77, "liAccountId": 524650, "name": "Sequence A",
+            "id": 77, "liAccountId": 1, "name": "Sequence A",
         }
         mismatched = {
-            "id": 77, "liAccountId": 524650, "name": "Sequence A",
+            "id": 77, "liAccountId": 1, "name": "Sequence A",
             "actions": [{"type": "Follow", "settings": {}, "coolDown": 60000,
                           "maxActionResultsPerIteration": 10}],
             "peopleCount": 0, "paused": True,
@@ -487,7 +489,7 @@ class PublishExecutorTest(unittest.TestCase):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
         readback = {
-            "id": 101, "liAccountId": 524650, "name": "Sequence A",
+            "id": 101, "liAccountId": 1, "name": "Sequence A",
             "actions": branch["compiled_action_chain"],
             "peopleCount": 1, "paused": False,
         }
