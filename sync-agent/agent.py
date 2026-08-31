@@ -283,8 +283,15 @@ CDP_PORT_SCAN_LIMIT = 16
 
 
 def _process_is_lh2(name):
-    lowered = str(name or "").lower()
-    return any(hint in lowered for hint in LH2_PROCESS_HINTS)
+    lowered = str(name or "").strip().lower()
+    if not lowered:
+        return False
+    if any(hint in lowered for hint in LH2_PROCESS_HINTS):
+        return True
+    # lsof truncates COMMAND to nine characters ("linked-he"), so also accept a
+    # name that is itself a prefix of a known LH2 process name. The length floor
+    # keeps that from matching something merely LinkedIn-ish.
+    return len(lowered) >= 8 and any(hint.startswith(lowered) for hint in LH2_PROCESS_HINTS)
 
 
 def _run_text(command, timeout=8):
@@ -345,9 +352,13 @@ def _listening_loopback_processes_posix():
         parts = line.split()
         if len(parts) < 9 or not parts[1].isdigit():
             continue
-        _, _, port = parts[-1].rpartition(":")
-        if port.isdigit():
-            found.append((int(port), int(parts[1]), parts[0]))
+        # The NAME column is followed by a literal "(LISTEN)", so the address is
+        # not the last token. Find the token that actually ends in a port.
+        address = next((token for token in reversed(parts)
+                        if ":" in token and token.rpartition(":")[2].isdigit()), "")
+        if not address:
+            continue
+        found.append((int(address.rpartition(":")[2]), int(parts[1]), parts[0]))
     return found
 
 

@@ -366,6 +366,68 @@ class PublishProbeTest(unittest.TestCase):
                 agent.discover_cdp_target(profile)
         self.assertEqual(str(context.exception), "CDP_TARGET_NOT_FOUND")
 
+    NETSTAT = """
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1084
+  TCP    127.0.0.1:51358        0.0.0.0:0              LISTENING       12345
+  TCP    127.0.0.1:61121        0.0.0.0:0              LISTENING       999
+  TCP    127.0.0.1:7890         0.0.0.0:0              LISTENING       4321
+  TCP    127.0.0.1:51358        127.0.0.1:52001        ESTABLISHED     12345
+  TCP    [::1]:51358            [::]:0                 LISTENING       12345
+"""
+
+    TASKLIST = (
+        '"svchost.exe","1084","Services","0","12,345 K"\n'
+        '"linked-helper.exe","12345","Console","1","456,789 K"\n'
+        '"chrome.exe","4321","Console","1","98,765 K"\n'
+    )
+
+    LSOF = """COMMAND      PID             USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+linked-he  12345 mykytashevchenko   30u  IPv4 0x8703069d0e402099      0t0  TCP 127.0.0.1:51358 (LISTEN)
+Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 127.0.0.1:7890 (LISTEN)
+"""
+
+    def test_the_windows_listener_scan_keeps_only_loopback_lh2_listeners(self):
+        """Pinned against real netstat/tasklist output: a parser that silently
+        matches nothing is indistinguishable from "LH2 is not running"."""
+        with mock.patch.object(agent, "_run_text", side_effect=lambda cmd, **kw:
+                               self.TASKLIST if cmd[0] == "tasklist" else self.NETSTAT), \
+             mock.patch.object(agent.sys, "platform", "win32"):
+            candidates = agent.lh2_cdp_candidates()
+        # 51358 only: 135 is not loopback, 7890 belongs to chrome, 999 has no
+        # process row, the ESTABLISHED row is not a listener, and [::1] is not
+        # the loopback address this adapter is allowed to use.
+        self.assertEqual([port for port, _, _ in candidates], [51358])
+        self.assertEqual(candidates[0][1], 12345)
+
+    def test_the_posix_listener_scan_reads_past_the_listen_marker(self):
+        """lsof puts a literal "(LISTEN)" after the address, so the port is not
+        in the last column."""
+        with mock.patch.object(agent, "_run_text", return_value=self.LSOF):
+            listeners = agent._listening_loopback_processes_posix()
+        self.assertEqual(listeners, [(51358, 12345, "linked-he"),
+                                     (7890, 54321, "Python")])
+        with mock.patch.object(agent, "_run_text", return_value=self.LSOF), \
+             mock.patch.object(agent.sys, "platform", "darwin"):
+            self.assertEqual([port for port, _, _ in agent.lh2_cdp_candidates()], [51358])
+
+    def test_a_truncated_process_name_still_identifies_lh2(self):
+        self.assertTrue(agent._process_is_lh2("linked-helper.exe"))
+        self.assertTrue(agent._process_is_lh2("Linked Helper"))
+        self.assertTrue(agent._process_is_lh2("linked-he"))   # lsof truncation
+        self.assertFalse(agent._process_is_lh2("linkedin"))
+        self.assertFalse(agent._process_is_lh2("chrome.exe"))
+        self.assertFalse(agent._process_is_lh2(""))
+        self.assertFalse(agent._process_is_lh2(None))
+
+    def test_unavailable_process_tooling_is_an_empty_scan_not_a_crash(self):
+        with mock.patch.object(agent, "_run_text", return_value=""):
+            self.assertEqual(agent.lh2_cdp_candidates(), [])
+        with mock.patch.object(agent.subprocess, "run", side_effect=OSError("no netstat")):
+            self.assertEqual(agent._run_text(["netstat"]), "")
+
     def test_the_lh_version_comes_from_the_running_instance_path(self):
         """A machine holds several builds side by side, so only the running
         instance's path is authoritative."""
