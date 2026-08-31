@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.3"
+AGENT_VERSION = "1.16.4"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -285,10 +285,20 @@ def discover_cdp_target(profile):
     wanted = str(profile.get("cdp_target_url_contains") or "").strip()
     if not wanted:
         raise CdpError("CDP_TARGET_SELECTOR_MISSING")
-    candidates = [item for item in targets if isinstance(item, dict)
-                  and item.get("type") == "page"
-                  and wanted in str(item.get("url") or "")
-                  and isinstance(item.get("webSocketDebuggerUrl"), str)]
+    candidates = []
+    for item in targets:
+        if not isinstance(item, dict) or item.get("type") != "page":
+            continue
+        target_url = str(item.get("url") or "")
+        parsed_target_url = urllib.parse.urlsplit(target_url)
+        # Never evaluate inside LinkedIn, anti-bot or any other HTTP page.
+        # The LH2 application renderer is a local/non-HTTP target.
+        if parsed_target_url.scheme.lower() in ("http", "https"):
+            continue
+        if parsed_target_url.hostname not in (None, ""):
+            continue
+        if wanted in target_url and isinstance(item.get("webSocketDebuggerUrl"), str):
+            candidates.append(item)
     if len(candidates) != 1:
         raise CdpError("CDP_TARGET_AMBIGUOUS" if candidates else "CDP_TARGET_NOT_FOUND")
     target = candidates[0]

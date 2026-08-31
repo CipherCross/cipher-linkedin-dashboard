@@ -321,6 +321,20 @@ class PublishProbeTest(unittest.TestCase):
         self.assertTrue(result["capability_snapshot"]["create_campaign"])
         self.assertNotIn("websocket_url", result["runtime_snapshot"])
 
+    def test_cdp_discovery_refuses_http_and_antibot_pages(self):
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 50454,
+                   "cdp_target_url_contains": "li.protechts.net"}
+        targets = [
+            {"type": "page", "url": "https://www.linkedin.com/feed",
+             "webSocketDebuggerUrl": "ws://127.0.0.1:50454/devtools/page/linkedin"},
+            {"type": "page", "url": "https://li.protechts.net/challenge",
+             "webSocketDebuggerUrl": "ws://127.0.0.1:50454/devtools/page/antibot"},
+        ]
+        with mock.patch.object(agent, "_cdp_http", side_effect=[{}, targets]):
+            with self.assertRaises(agent.CdpError) as context:
+                agent.discover_cdp_target(profile)
+        self.assertEqual(str(context.exception), "CDP_TARGET_NOT_FOUND")
+
     def test_preflight_requires_explicit_security_ack(self):
         profile = {"enable_cdp_adapter": True}
         ok, code = agent.LinkedHelperPublisher(profile).preflight()

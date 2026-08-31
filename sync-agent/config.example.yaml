@@ -130,7 +130,7 @@ sync_photos: false
 #   compatibility_profile: "lh2-2.130.28"
 #   cdp_host: "127.0.0.1"
 #   cdp_port: 50454
-#   cdp_target_url_contains: "li.protechts.net"
+#   cdp_target_url_contains: "<verified-local-app-renderer-selector>"
 #   enable_cdp_adapter: false
 #   cdp_security_ack: ""
 
