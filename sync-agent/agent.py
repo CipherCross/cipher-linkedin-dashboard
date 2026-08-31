@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.5"
+AGENT_VERSION = "1.16.6"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -902,6 +902,8 @@ class LinkedHelperPublisher:
             normalized_actual.append({"type": item["type"], "settings": item["settings"],
                                      "coolDown": item["coolDown"],
                                      "maxActionResultsPerIteration": item["maxActionResultsPerIteration"]})
+        if self._canonical_json(normalized_actual) != self._canonical_json(expected):
+            raise PublishExecutionError("LH_CANONICAL_READBACK_MISMATCH")
         compiler_version = str(account.get("compiler_version") or "")
         fingerprint_input = {"compilerVersion": compiler_version,
                              "accountId": str(account["account_id"]),
