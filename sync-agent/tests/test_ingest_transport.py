@@ -265,6 +265,29 @@ class ContractPinTest(unittest.TestCase):
 
 
 class PublishProbeTest(unittest.TestCase):
+    def test_normalizes_gateway_snapshot_for_the_local_publisher(self):
+        snapshot = {
+            "accountId": "524650", "accountName": "Mykyta Shevchenko",
+            "senderName": "Mykyta Shevchenko", "workspaceId": "601896",
+            "lhVersion": "2.130.29", "compatibilityProfile": "lh2-2.130.29",
+        }
+        normalized = agent.normalize_publish_account_snapshot(
+            snapshot, "lh2-sequence-v1",
+        )
+        self.assertIsNotNone(normalized)
+        self.assertEqual(normalized["account_id"], "524650")
+        self.assertEqual(normalized["account_name"], "Mykyta Shevchenko")
+        self.assertEqual(normalized["workspace_id"], "601896")
+        self.assertEqual(normalized["compiler_version"], "lh2-sequence-v1")
+
+    def test_rejects_conflicting_snapshot_aliases(self):
+        self.assertIsNone(agent.normalize_publish_account_snapshot({
+            "accountId": "524650", "account_id": "524178",
+            "accountName": "Mykyta Shevchenko", "senderName": "Mykyta",
+            "workspaceId": "601896", "lhVersion": "2.130.29",
+            "compatibilityProfile": "lh2-2.130.29",
+        }))
+
     def test_missing_profile_fails_closed_without_sensitive_facts(self):
         result = agent.probe_linked_helper({"instance_id": "uitop-1"})
         self.assertFalse(result["compatible"])

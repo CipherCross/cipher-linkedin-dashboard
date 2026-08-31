@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.6"
+AGENT_VERSION = "1.16.7"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -247,6 +247,15 @@ PUBLISH_LEASE_SECONDS = 120
 PUBLISH_PROFILE_REQUIRED_KEYS = (
     "lh_version", "account_id", "account_name", "sender_name", "workspace_id",
     "compatibility_profile",
+)
+
+PUBLISH_ACCOUNT_SNAPSHOT_FIELDS = (
+    ("account_id", "accountId"),
+    ("account_name", "accountName"),
+    ("sender_name", "senderName"),
+    ("workspace_id", "workspaceId"),
+    ("lh_version", "lhVersion"),
+    ("compatibility_profile", "compatibilityProfile"),
 )
 
 CDP_SECURITY_ACK = "loopback-operator-approved-v1"
@@ -502,6 +511,29 @@ def _publish_profile(cfg):
     profile["cdp_port"] = port
     profile["cdp_host"] = "127.0.0.1"
     return profile, None
+
+
+def normalize_publish_account_snapshot(snapshot, compiler_version=None):
+    """Map the gateway's camelCase account snapshot to publisher keys.
+
+    The job contract uses the dashboard's JSON naming convention while the
+    local publisher consumes the config's snake_case convention. Accept both
+    spellings for compatibility, but refuse a snapshot that carries both with
+    conflicting values rather than choosing one silently.
+    """
+    if not isinstance(snapshot, dict):
+        return None
+    normalized = dict(snapshot)
+    for snake, camel in PUBLISH_ACCOUNT_SNAPSHOT_FIELDS:
+        has_snake = snake in snapshot
+        has_camel = camel in snapshot
+        if not has_snake and not has_camel:
+            return None
+        if has_snake and has_camel and str(snapshot[snake]) != str(snapshot[camel]):
+            return None
+        normalized[snake] = snapshot[camel] if has_camel else snapshot[snake]
+    normalized["compiler_version"] = compiler_version
+    return normalized
 
 
 def probe_linked_helper(cfg):
@@ -1051,8 +1083,12 @@ def cmd_publish_once(args):
                                        "status": "failed", "error_code": "PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH"})
         print("publish-once: failed PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH")
         return
-    account = dict(job_account)
-    account["compiler_version"] = job.get("compiler_version")
+    account = normalize_publish_account_snapshot(job_account, job.get("compiler_version"))
+    if account is None:
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_ACCOUNT_SNAPSHOT_INVALID"})
+        print("publish-once: failed PUBLISH_ACCOUNT_SNAPSHOT_INVALID")
+        return
     branches = job.get("branches")
     if not isinstance(branches, list) or not branches:
         report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
