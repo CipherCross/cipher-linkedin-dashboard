@@ -3,7 +3,23 @@
 **Updated:** 2026-08-31  
 **Scope:** Sequence Builder → Linked Helper 2 paused, zero-target campaign creation
 
-## Current outcome
+## Status
+
+**The pilot succeeded on 2026-08-31 with signed agent `1.21.0`.** The first
+structurally complete campaign was created on `notebook-1`: paused, zero
+targets, `is_valid = 1`, a campaign-level exclude list, one empty placeholder
+collection per action version, and it opens normally in the LH2 UI. Nothing was
+sent to LinkedIn.
+
+Released versions, in order: `1.18.0` (wrong fix), `1.19.0` (verifier only,
+committed but never published), `1.20.0` (correct payload, but would have
+failed closed on every good publish), `1.21.0` (**current**).
+
+The remaining work is in "Open items" at the end of this document. None of it
+blocks a publish on the pilot notebook; the largest item is that `publish-once`
+is still run by hand.
+
+## How the fix was found
 
 The root cause is established from the installed LH2 `2.130.25` bundle, and the
 fix is in signed version `1.20.0`. It is the opposite of what `1.18.0` assumed.
@@ -310,8 +326,8 @@ fixture still verifies, which is what stops the new checks being vacuous.
 
 ## Windows rollout checklist
 
-The signed release is available, but the real notebook must still self-update.
-Run from `C:\Claude\sync-agent` with the notebook's existing virtualenv:
+Kept as the procedure for the next release. Run from `C:\Claude\sync-agent`
+with the notebook's existing virtualenv:
 
 ```powershell
 .venv\Scripts\python.exe -c "import agent; cfg=agent.load_config(); print('updated=', agent.self_update(cfg)); print('version=', agent.AGENT_VERSION)"
@@ -349,9 +365,7 @@ The agent now performs all of those checks itself: `publish-once` reports
 `FAILED` and exits non-zero unless every one of them holds.
 
 Do not run `sync` as part of this publishing verification, and do not manually
-edit SQLite. Campaigns 7, 8 and 9 remain known malformed test artifacts until a
-supported LH2 UI/vendor operation is available to remove or repair them. All
-three are paused with zero targets and nothing was sent to LinkedIn.
+edit SQLite. See "Open items" for the state of campaigns 7, 8 and 9.
 
 ## Safety and licensing decisions
 
@@ -374,3 +388,67 @@ therefore performed by publishing a new higher version containing reverted code,
 not by republishing an older version. LH2 campaign 7 is a separate data-state
 problem and cannot be rolled back by changing the agent release.
 
+## Open items
+
+### 1. `publish-once` is not scheduled anywhere
+
+`register_windows_publish_schedule` in `sync-agent/installer/install.py` has no
+caller. The PowerShell side is complete — `install-windows.ps1
+-RegisterPublishSchedule` registers a namespaced task repeating every two
+minutes, separate from the 30-minute sync task — but nothing invokes it, so
+every publish so far has been a manual `agent.py publish-once`.
+
+For an allowlist of one machine, registering it by hand on the pilot notebook is
+consistent with the specification:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 `
+  -RegisterPublishSchedule -InstallRoot C:\Claude\sync-agent `
+  -TaskName "LH2 Publish Agent -- notebook-1"
+```
+
+Wiring it into the installer needs an explicit per-machine opt-in first, so that
+adding a notebook does not silently give it a publish worker.
+
+### 2. `lh_version` still disagrees with the running build
+
+The measured build is `2.130.17`; `config.yaml` and the dashboard publish
+profile say `2.130.29`. Since `1.21.0` fails closed on `LH_VERSION_MISMATCH`,
+both must be corrected. Note the ordering: the account snapshot is part of the
+job, so a job queued against the old value fails
+`PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Update the dashboard profile first, then
+`config.yaml`, then recreate the job.
+
+The CDP port no longer needs maintaining — discovery finds the rotated port
+itself.
+
+### 3. LH2 campaigns 7, 8 and 9
+
+Three malformed test artifacts remain. All are paused with zero targets and
+nothing was sent from them. Removing them needs a supported LH2 UI or vendor
+operation; the adapter has no delete path and direct SQL repair was rejected.
+
+### 4. Test gaps against the specification's definition of done
+
+The compiler is covered by `frontend/tests/sequencePublish.test.ts` (7 tests
+pinning chain order, the invite filter insertion, inter-message
+`CheckForReplies` timeouts and the final `null`). But the fixture CSV named in
+the specification is **not** loaded as an oracle by any test — the expected
+`actionSettings` are hand-written instead. "Fixture tests cover every supported
+`actionSettings`, cooldown and per-iteration limit" is therefore not literally
+satisfied.
+
+### 5. Credentialed test suites cannot run on the current checkout
+
+`frontend/.env.local` was produced by `vercel env pull`, which redacts secret
+values as `[SENSITIVE]`. `npm run test:cleanroom` fails on
+`IDENTITY_STORE_DATABASE_URL`, and three `npm test` files fail at import on an
+invalid `VITE_SUPABASE_URL`. With real values present, `npm test` is
+53 files / 1032 tests green. This is a local-environment gap, not a code defect,
+but it means those gates are currently unrunnable.
+
+### 6. Cosmetic difference from a natively created campaign
+
+The publisher writes the action type into `actions.name`; the LH2 UI leaves that
+column empty. It has no effect on validity and is deliberately kept as the more
+informative value.

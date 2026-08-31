@@ -195,6 +195,15 @@ const PROTECTED_PATHS = [
   // in app_ledger.applied_migration on every database that received it.
   'postgres/tenant-baseline/v1/009_machine_ingest_path.sql',
   'postgres/tenant-baseline/v1/010_machine_schema_usage.sql',
+  // Added by the LH2 publishing session, on the same schedule for the same
+  // reason: 011 backs the Sequence Builder workspace in daily use and 012 backs
+  // the publish queue that carried a real job end to end on 2026-08-31 — a
+  // machine claimed it, published a campaign and reported a verified result,
+  // which is only possible against an applied 012. Neither could be promoted by
+  // the session that wrote it: this list is checked against the diff since the
+  // merge base, so a session's own new file would flag itself.
+  'postgres/tenant-baseline/v1/011_sequence_builder_workspace.sql',
+  'postgres/tenant-baseline/v1/012_sequence_publish_jobs.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
