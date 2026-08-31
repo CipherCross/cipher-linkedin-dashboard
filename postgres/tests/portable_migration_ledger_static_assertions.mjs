@@ -122,6 +122,8 @@ const S08_ARTIFACTS = [
   'docs/implementation-handoffs/N-S21.md',
   // Sequence Builder's additive shared drafting workspace (step 011).
   'postgres/tenant-baseline/v1/011_sequence_builder_workspace.sql',
+  // Approval-gated Sequence Builder -> Linked Helper publishing queue (step 012).
+  'postgres/tenant-baseline/v1/012_sequence_publish_jobs.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -334,8 +336,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares eleven steps in order 1 -> 2 -> ... -> 11',
-  manifest.steps.length === 11 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twelve steps in order 1 -> 2 -> ... -> 12',
+  manifest.steps.length === 12 && manifest.steps.every((s, i) => s.step === i + 1));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index

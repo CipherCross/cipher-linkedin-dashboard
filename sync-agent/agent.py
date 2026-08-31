@@ -51,7 +51,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.15.1"
+AGENT_VERSION = "1.16.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -237,6 +237,148 @@ def machine_api_url(cfg, operation):
 def machine_api_headers(cfg):
     token = (cfg.get("ingest_token") or "").strip()
     return {"Authorization": f"Bearer {token}"}
+
+
+# ---------------------------------------------------------------- Linked Helper publishing
+
+PUBLISH_LEASE_SECONDS = 120
+PUBLISH_PROFILE_REQUIRED_KEYS = (
+    "lh_version", "account_id", "account_name", "sender_name", "workspace_id",
+    "compatibility_profile",
+)
+
+
+def _publish_profile(cfg):
+    """Return the explicitly configured local LH profile, or a safe failure."""
+    raw = cfg.get("lh2_publish")
+    if not isinstance(raw, dict):
+        return None, "COMPATIBILITY_PROFILE_MISSING"
+    missing = [key for key in PUBLISH_PROFILE_REQUIRED_KEYS
+               if not isinstance(raw.get(key), str) or not raw[key].strip()]
+    if missing:
+        return None, "COMPATIBILITY_PROFILE_INCOMPLETE"
+    try:
+        port = int(raw.get("cdp_port"))
+    except (TypeError, ValueError):
+        return None, "CDP_PORT_INVALID"
+    if port < 1 or port > 65535 or str(raw.get("cdp_host", "127.0.0.1")) != "127.0.0.1":
+        return None, "CDP_LOOPBACK_REQUIRED"
+    profile = dict(raw)
+    profile["cdp_port"] = port
+    profile["cdp_host"] = "127.0.0.1"
+    return profile, None
+
+
+def probe_linked_helper(cfg):
+    """Read-only compatibility facts for the exact local pilot profile."""
+    profile, error = _publish_profile(cfg)
+    if error:
+        return {
+            "compatible": False,
+            "error_code": error,
+            "instance_id": cfg.get("instance_id"),
+            "machine_key": str(cfg.get("machine_key") or cfg.get("instance_id") or ""),
+        }
+    return {
+        "compatible": bool(profile.get("compatible", False)),
+        "error_code": None if profile.get("compatible", False) else "COMPATIBILITY_PROFILE_UNVERIFIED",
+        "instance_id": cfg.get("instance_id"),
+        "machine_key": str(cfg.get("machine_key") or cfg.get("instance_id") or ""),
+        "account_snapshot": {key: profile[key] for key in PUBLISH_PROFILE_REQUIRED_KEYS},
+        "capability_snapshot": {
+            "cdp_host": "127.0.0.1", "cdp_port": profile["cdp_port"],
+            "create_campaign": bool(profile.get("create_campaign", False)),
+            "pause_campaign": bool(profile.get("pause_campaign", False)),
+            "canonical_readback": bool(profile.get("canonical_readback", False)),
+            "zero_target_readback": bool(profile.get("zero_target_readback", False)),
+            "direct_sql_repair": False,
+        },
+    }
+
+
+def publish_request(cfg, operation, payload=None, timeout=30):
+    """Call one namespaced publish operation; keep errors bounded and redacted."""
+    url = machine_api_url(cfg, operation)
+    token = (cfg.get("ingest_token") or "").strip()
+    if not url or not token:
+        raise RuntimeError("PUBLISH_TRANSPORT_UNCONFIGURED")
+    response = requests.post(url, headers=dict(machine_api_headers(cfg), **{
+        "Content-Type": "application/json",
+    }), data=json.dumps(payload or {}), timeout=timeout)
+    if response.status_code >= 400:
+        raise RuntimeError(f"PUBLISH_HTTP_{response.status_code}")
+    try:
+        return response.json()
+    except ValueError:
+        return {}
+
+
+def cmd_publish_probe(args):
+    cfg = load_config()
+    set_local_tz(cfg)
+    result = probe_linked_helper(cfg)
+    print(json.dumps(result, sort_keys=True))
+    if machine_configured(cfg):
+        try:
+            publish_request(cfg, "agent.publishProbe", {
+                "machine_key": result.get("machine_key", ""),
+                "account_snapshot": result.get("account_snapshot", {}),
+                "capability_snapshot": result.get("capability_snapshot", {}),
+                "compatible": bool(result.get("compatible")),
+                "error_code": result.get("error_code") or "",
+            })
+        except Exception as error:
+            print(f"publish probe report failed ({type(error).__name__}) — local result retained")
+
+
+class LinkedHelperPublisher:
+    """Minimal adapter boundary. No operation exists for start/unpause/targets."""
+    def __init__(self, profile):
+        self.profile = profile
+
+    def preflight(self):
+        required = ("create_campaign", "pause_campaign", "canonical_readback", "zero_target_readback")
+        if not all(self.profile.get(key) is True for key in required):
+            return False, "COMPATIBILITY_CAPABILITY_MISSING"
+        return False, "CDP_ADAPTER_NOT_ENABLED"
+
+
+def cmd_publish_once(args):
+    cfg = load_config()
+    set_local_tz(cfg)
+    if not machine_configured(cfg):
+        sys.exit("publish-once requires ingest_url and a machine credential")
+    profile, profile_error = _publish_profile(cfg)
+    try:
+        answer = publish_request(cfg, "agent.publishClaim", {})
+    except Exception as error:
+        sys.exit(f"publish-once claim failed ({type(error).__name__})")
+    job = answer.get("job") if isinstance(answer, dict) else None
+    if not job:
+        print("publish-once: no queued job")
+        return
+    job_id = job.get("id")
+    generation = job.get("claim_generation")
+    if not isinstance(job_id, str) or not isinstance(generation, int):
+        print("publish-once: gateway returned an invalid claim")
+        return
+    def report(operation, payload):
+        try:
+            publish_request(cfg, operation, payload)
+            return True
+        except Exception as error:
+            print(f"publish-once: {operation} failed ({type(error).__name__})")
+            return False
+    if profile_error or not profile:
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "failed", "error_code": profile_error or "COMPATIBILITY_PROFILE_MISSING"})
+        print(f"publish-once: failed {profile_error or 'COMPATIBILITY_PROFILE_MISSING'}")
+        return
+    report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "preflight"})
+    compatible, error_code = LinkedHelperPublisher(profile).preflight()
+    if not compatible:
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "failed", "error_code": error_code})
+        print(f"publish-once: failed {error_code}")
+        return
 
 
 def canonical_release_manifest(manifest):
@@ -2724,6 +2866,12 @@ def main():
     pi = sub.add_parser("inspect", help="discover LH2 SQLite databases and schemas")
     pi.add_argument("--path", help="explicit LH2 data directory to scan")
     pi.set_defaults(func=cmd_inspect)
+
+    pp = sub.add_parser("publish-probe", help="read-only Linked Helper publishing compatibility probe")
+    pp.set_defaults(func=cmd_publish_probe)
+
+    po = sub.add_parser("publish-once", help="claim one approved publish job and run the fail-closed publisher")
+    po.set_defaults(func=cmd_publish_once)
 
     ps = sub.add_parser("sync",
                         help="sync the local LH2 DB to whichever destination "

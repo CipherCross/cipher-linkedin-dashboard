@@ -187,6 +187,14 @@
       "owner_role_entered_by": "artifact",
       "session": "sequence-builder",
       "description": "The shared Sequence Builder drafting workspace: revisioned sequence JSON documents, immutable version snapshots, threaded block/selection comments, active-member RLS, and least-privilege runtime grants. It is intentionally independent from LH2-synchronized campaign_steps and adds no publish or execution path."
+    },
+    {
+      "step": 12,
+      "artifact": "012_sequence_publish_jobs.sql",
+      "sha256": "44be8a9bb0876ae79ea81d699925aa0d8a4f98c827e107e3294fef0a4f91af5c",
+      "owner_role_entered_by": "artifact",
+      "session": "sequence-publishing",
+      "description": "Admin-gated Sequence Builder publishing queue for separately compiled Linked Helper campaigns, with immutable snapshots, machine-scoped compatibility targets, renewable leases, generation-guarded results, and per-branch canonical verification. It grants no campaign start, target, overwrite, archive or delete path."
     }
   ]
 }

@@ -55,6 +55,15 @@ import type {
   NeonQueryOperation,
   NeonRow,
 } from '../neon.js'
+import {
+  MACHINE_PUBLISH_COMMANDS,
+  claimSequencePublishJobOperation,
+  finishSequencePublishJobOperation,
+  heartbeatSequencePublishJobOperation,
+  reportSequencePublishTargetOperation,
+  setSequencePublishBranchResultOperation,
+  setSequencePublishJobStateOperation,
+} from './sequencePublishing.js'
 
 export const MACHINE_OPERATIONS = {
   /** The batch already recorded under this key, if there is one. */
@@ -789,6 +798,12 @@ export function buildMachineRegistry(): NeonOperationRegistry {
     MACHINE_COMMANDS.recordSyncRun,
     recordSyncRunOperation,
   )
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.reportTarget, reportSequencePublishTargetOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.claim, claimSequencePublishJobOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.heartbeat, heartbeatSequencePublishJobOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.setState, setSequencePublishJobStateOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.branchResult, setSequencePublishBranchResultOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.finish, finishSequencePublishJobOperation)
 
   return registry
 }

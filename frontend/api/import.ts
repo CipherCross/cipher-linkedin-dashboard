@@ -21,9 +21,16 @@ import {
   AGENT_CONFIG_OP,
   AGENT_PHOTO_UPLOAD_OP,
   AGENT_RELEASE_OP,
+  AGENT_PUBLISH_PROBE_OP,
+  AGENT_PUBLISH_CLAIM_OP,
+  AGENT_PUBLISH_HEARTBEAT_OP,
+  AGENT_PUBLISH_STATE_OP,
+  AGENT_PUBLISH_BRANCH_OP,
+  AGENT_PUBLISH_FINISH_OP,
   createAgentConfigHandler,
   createAgentPhotoUploadHandler,
   createAgentReleaseHandler,
+  createAgentPublishHandler,
   type MachineApiDeps,
 } from './_lib/agent/machineOps.js'
 import { readDeploymentTenantId } from './_lib/agent/tenant.js'
@@ -74,6 +81,7 @@ let agentIngest: ((request: Request) => Promise<Response>) | null = null
 let agentConfig: ((request: Request) => Promise<Response>) | null = null
 let agentPhotoUpload: ((request: Request) => Promise<Response>) | null = null
 let agentRelease: ((request: Request) => Promise<Response>) | null = null
+const publishHandlers = new Map<string, (request: Request) => Promise<Response>>()
 
 function getMachineDeps(): MachineApiDeps {
   if (!machineDeps) {
@@ -107,12 +115,21 @@ function agentReleaseHandler(): (request: Request) => Promise<Response> {
   return agentRelease
 }
 
+function agentPublishHandler(operation: string): (request: Request) => Promise<Response> {
+  const existing = publishHandlers.get(operation)
+  if (existing) return existing
+  const handler = createAgentPublishHandler(getMachineDeps(), operation)
+  publishHandlers.set(operation, handler)
+  return handler
+}
+
 async function handle(req: Request): Promise<Response> {
   const op = (new URL(req.url).searchParams.get('op') ?? '').trim()
   if (op === AGENT_INGEST_OP) return agentIngestHandler()(req)
   if (op === AGENT_CONFIG_OP) return agentConfigHandler()(req)
   if (op === AGENT_PHOTO_UPLOAD_OP) return agentPhotoUploadHandler()(req)
   if (op === AGENT_RELEASE_OP) return agentReleaseHandler()(req)
+  if ([AGENT_PUBLISH_PROBE_OP, AGENT_PUBLISH_CLAIM_OP, AGENT_PUBLISH_HEARTBEAT_OP, AGENT_PUBLISH_STATE_OP, AGENT_PUBLISH_BRANCH_OP, AGENT_PUBLISH_FINISH_OP].includes(op)) return agentPublishHandler(op)(req)
   if (op !== '') {
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }

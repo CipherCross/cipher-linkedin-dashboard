@@ -42,6 +42,7 @@ import {
 } from './_lib/neonLibraryWrites.js'
 import { neonWriter } from './_lib/neonWrites.js'
 import { handleSequenceAction, isSequenceAction } from './_lib/sequenceBuilder.js'
+import { handleSequencePublishAction, isSequencePublishAction } from './_lib/sequencePublish.js'
 
 export const maxDuration = 10
 
@@ -431,6 +432,12 @@ async function handle(req: Request): Promise<Response> {
       },
       503,
     )
+  }
+  if (isSequencePublishAction(sequencePayload?.action)) {
+    if (neon) return handleSequencePublishAction(req, sequencePayload as Record<string, unknown>)
+    const auth = await guardAdmin(req)
+    if (auth.response) return auth.response
+    return json({ error: 'Sequence publishing requires the Neon data path.', code: 'NEON_PATH_REQUIRED' }, 503)
   }
 
   if (neon) {

@@ -19,6 +19,7 @@ import step008 from "../../../postgres/tenant-baseline/v1/008_ai_system_auto_adv
 import step009 from "../../../postgres/tenant-baseline/v1/009_machine_ingest_path.sql";
 import step010 from "../../../postgres/tenant-baseline/v1/010_machine_schema_usage.sql";
 import step011 from "../../../postgres/tenant-baseline/v1/011_sequence_builder_workspace.sql";
+import step012 from "../../../postgres/tenant-baseline/v1/012_sequence_publish_jobs.sql";
 import liveRlsRoleBoundaries from "../../../postgres/tests/portable_live_rls_role_boundaries.sql";
 import restoreVerification from "../../../postgres/tests/portable_restore_reconciliation.sql";
 
@@ -56,6 +57,7 @@ const textByArtifact: Readonly<Record<string, string>> = {
   "009_machine_ingest_path.sql": step009,
   "010_machine_schema_usage.sql": step010,
   "011_sequence_builder_workspace.sql": step011,
+  "012_sequence_publish_jobs.sql": step012,
 };
 
 /**
@@ -108,7 +110,7 @@ async function sha256Hex(text: string): Promise<string> {
 }
 
 async function assertPinnedArtifacts(): Promise<void> {
-  if (manifest.ledger_contract !== "portable-tenant-baseline-ledger" || manifest.steps.length !== 11) {
+  if (manifest.ledger_contract !== "portable-tenant-baseline-ledger" || manifest.steps.length !== 12) {
     throw new OpsError("unsupported_contract", "Pinned portable migration manifest is unsupported");
   }
   const entries = [

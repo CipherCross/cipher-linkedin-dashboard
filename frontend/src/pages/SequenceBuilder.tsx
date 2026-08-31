@@ -52,6 +52,7 @@ import {
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useToast } from '../lib/ToastContext'
+import { useAuth } from '../lib/AuthContext'
 import {
   CONNECTION_REQUEST_WARNING_LIMIT,
   PERSONALIZATION_TOKENS,
@@ -94,7 +95,13 @@ import {
   saveSequence,
   setSequenceArchived,
   setSequenceCommentResolved,
+  createSequencePublishJob,
+  listSequencePublishJobs,
+  listSequencePublishTargets,
+  type SequencePublishJob,
+  type SequencePublishTarget,
 } from '../lib/sequenceBuilderApi'
+import { compileSequenceCampaigns, type SequencePublishOptions, type VerifiedAccountSnapshot } from '../lib/sequencePublish'
 
 type EditorTab = 'build' | 'branches' | 'preview'
 type PreviewDevice = 'web' | 'mobile'
@@ -856,9 +863,100 @@ function CommentsPanel({
   )
 }
 
+function PublishWizard({
+  sequence,
+  document,
+  onClose,
+  onCreated,
+}: {
+  sequence: SequenceRecord
+  document: SequenceDocument
+  onClose: () => void
+  onCreated: (job: SequencePublishJob) => void
+}) {
+  const toast = useToast()
+  const [targets, setTargets] = useState<SequencePublishTarget[]>([])
+  const [targetId, setTargetId] = useState('')
+  const [branchIds, setBranchIds] = useState<string[]>(document.branches.map((branch) => branch.id))
+  const [visit, setVisit] = useState(false)
+  const [follow, setFollow] = useState(false)
+  const [inviteDelay, setInviteDelay] = useState('24')
+  const [busy, setBusy] = useState(false)
+  const [step, setStep] = useState(1)
+
+  useEffect(() => {
+    void listSequencePublishTargets().then((items) => {
+      setTargets(items)
+      const first = items.find((item) => item.compatible)
+      if (first) setTargetId(first.instance_id)
+    }).catch((error) => toast.error(error instanceof Error ? error.message : 'Could not load publishing targets.'))
+  }, [toast])
+
+  const target = targets.find((item) => item.instance_id === targetId)
+  const account = target && ({
+    instanceId: target.instance_id,
+    machineKey: target.machine_key,
+    ...(target.account_snapshot as Omit<VerifiedAccountSnapshot, 'instanceId' | 'machineKey'>),
+  } as VerifiedAccountSnapshot)
+  const options: SequencePublishOptions = {
+    branchIds,
+    visit,
+    follow,
+    inviteToFirstMessageDelayHours: inviteDelay === '' ? undefined : Number(inviteDelay),
+    interMessageDelayHours: document.steps.slice(2).map(() => 24),
+  }
+  let preview: ReturnType<typeof compileSequenceCampaigns> = []
+  let previewError = ''
+  if (account) {
+    try { preview = compileSequenceCampaigns(sequence.name, document, options, account) } catch (error) { previewError = error instanceof Error ? error.message : 'Preview is invalid.' }
+  }
+  const submit = async () => {
+    if (!target || !account || previewError) return
+    setBusy(true)
+    try {
+      const job = await createSequencePublishJob({
+        sequenceId: sequence.id,
+        targetInstanceId: target.instance_id,
+        idempotencyKey: `sequence-publish-${crypto.randomUUID()}`,
+        options: options as unknown as Record<string, unknown>,
+      })
+      onCreated(job)
+      toast.success('Paused campaign creation queued.')
+      onClose()
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not queue publishing.') } finally { setBusy(false) }
+  }
+  return (
+    <div className="pipe-modal-overlay" onClick={onClose}>
+      <div className="pipe-modal sequence-publish-modal" role="dialog" aria-modal="true" aria-label="Publish sequence" onClick={(event) => event.stopPropagation()}>
+        <div className="pipe-modal-head"><span>Publish paused campaigns</span><button className="conv-close" onClick={onClose} aria-label="Close"><X size={16} /></button></div>
+        <div className="sequence-publish-steps"><span className={step >= 1 ? 'active' : ''}>1 Target</span><span className={step >= 2 ? 'active' : ''}>2 Branches</span><span className={step >= 3 ? 'active' : ''}>3 Preview</span></div>
+        {step === 1 && <div className="sequence-publish-form">
+          <p className="muted">Choose the allowlisted Windows machine and account. Only targets that passed compatibility preflight are available.</p>
+          <label>Machine and account<select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Select a compatible target</option>{targets.map((item) => <option key={item.instance_id} value={item.instance_id} disabled={!item.compatible}>{item.instance_id} · {String(item.account_snapshot.accountName ?? 'Unknown')} {!item.compatible ? `(${item.compatibility_error_code ?? 'not ready'})` : ''}</option>)}</select></label>
+          <div className="modal-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!target?.compatible} onClick={() => setStep(2)}>Continue</button></div>
+        </div>}
+        {step === 2 && <div className="sequence-publish-form">
+          <p className="muted">One selected branch becomes one separate campaign. Branch letters stay stable in document order.</p>
+          <div className="sequence-publish-branch-list">{document.branches.map((branch, index) => <label key={branch.id}><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={(event) => setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id))} /> {String.fromCharCode(65 + index)} · {branch.name}</label>)}</div>
+          <label><input type="checkbox" checked={visit} onChange={(event) => setVisit(event.target.checked)} /> Visit and extract</label>
+          <label><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> Follow</label>
+          <label>Invite-to-first-message delay (hours)<input type="number" min="1" max="720" value={inviteDelay} onChange={(event) => setInviteDelay(event.target.value)} /></label>
+          <div className="modal-actions"><button className="btn" onClick={() => setStep(1)}>Back</button><button className="btn primary" disabled={!branchIds.length} onClick={() => setStep(3)}>Review preview</button></div>
+        </div>}
+        {step === 3 && <div className="sequence-publish-form">
+          <p className="muted">This immutable preview is captured at revision {sequence.revision}. Campaigns will be empty and explicitly paused.</p>
+          {previewError ? <p className="sequence-inline-warning">{previewError}</p> : preview.map((campaign) => <article key={campaign.branchId} className="sequence-publish-preview"><strong>{campaign.campaignName}</strong><small>{campaign.actions.map((action) => action.type).join(' → ')}</small><code>{campaign.actionFingerprint.slice(0, 16)}…</code></article>)}
+          <div className="modal-actions"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn primary" disabled={busy || !preview.length || Boolean(previewError)} onClick={() => void submit()}>{busy ? 'Queueing…' : 'Create paused campaigns'}</button></div>
+        </div>}
+      </div>
+    </div>
+  )
+}
+
 function SequenceEditor({ id }: { id: string }) {
   const navigate = useNavigate()
   const toast = useToast()
+  const { isAdmin } = useAuth()
   const [detail, setDetail] = useState<SequenceDetail | null>(null)
   const [name, setName] = useState('')
   const [document, setDocument] = useState<SequenceDocument | null>(null)
@@ -871,6 +969,8 @@ function SequenceEditor({ id }: { id: string }) {
   const [commentBusy, setCommentBusy] = useState(false)
   const [selections, setSelections] = useState<Record<string, { start: number; end: number }>>({})
   const [previewBranch, setPreviewBranch] = useState<string | null>(null)
+  const [publishOpen, setPublishOpen] = useState(false)
+  const [publishJobs, setPublishJobs] = useState<SequencePublishJob[]>([])
   const lastSavedRef = useRef('')
   const draftKeyRef = useRef('')
   const savingRef = useRef(false)
@@ -886,12 +986,13 @@ function SequenceEditor({ id }: { id: string }) {
       lastSavedRef.current = JSON.stringify({ name: next.sequence.name, document: next.sequence.document })
       setSaveState('saved')
       setConflict(null)
+      if (isAdmin) void listSequencePublishJobs(id).then(setPublishJobs).catch(() => undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load sequence.')
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, isAdmin])
 
   useEffect(() => { void load() }, [load])
 
@@ -996,6 +1097,7 @@ function SequenceEditor({ id }: { id: string }) {
         <SaveIndicator state={saveState} />
         <button className="btn" onClick={() => setCommentTarget({ stepId: null, variationId: null, anchor: null, label: 'Whole sequence' })}><MessageCircle size={14} /> Comment</button>
         <button className="btn primary" onClick={() => setTab('preview')}><Eye size={14} /> Preview</button>
+        {isAdmin && <button className="btn" onClick={() => setPublishOpen(true)}><Laptop size={14} /> Publish</button>}
       </header>
 
       {conflict && (
@@ -1043,6 +1145,8 @@ function SequenceEditor({ id }: { id: string }) {
       </div>
 
       {commentTarget && <CommentComposer target={commentTarget} busy={commentBusy} onClose={() => setCommentTarget(null)} onSubmit={(body) => void submitComment(body)} />}
+      {publishOpen && <PublishWizard sequence={detail.sequence} document={document} onClose={() => setPublishOpen(false)} onCreated={(job) => setPublishJobs((current) => [job, ...current])} />}
+      {isAdmin && publishJobs.length > 0 && <div className="sequence-publish-status card"><strong>Publishing</strong>{publishJobs.slice(0, 3).map((job) => <span key={job.id}>{job.status} · {job.target_machine_key}</span>)}</div>}
     </div>
   )
 }

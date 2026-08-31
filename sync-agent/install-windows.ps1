@@ -3,21 +3,35 @@ param(
     [Parameter(ParameterSetName = 'Register', Mandatory = $true)]
     [switch]$RegisterSchedule,
 
+    [Parameter(ParameterSetName = 'PublishRegister', Mandatory = $true)]
+    [switch]$RegisterPublishSchedule,
+
     [Parameter(ParameterSetName = 'Start', Mandatory = $true)]
     [switch]$StartSchedule,
+
+    [Parameter(ParameterSetName = 'PublishStart', Mandatory = $true)]
+    [switch]$StartPublishSchedule,
 
     [Parameter(ParameterSetName = 'Unregister', Mandatory = $true)]
     [switch]$UnregisterSchedule,
 
+    [Parameter(ParameterSetName = 'PublishUnregister', Mandatory = $true)]
+    [switch]$UnregisterPublishSchedule,
+
     [Parameter(ParameterSetName = 'Register', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Start', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Unregister', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'PublishRegister', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'PublishStart', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'PublishUnregister', Mandatory = $true)]
     [string]$InstallRoot,
 
     [Parameter(ParameterSetName = 'Register', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Start', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Unregister', Mandatory = $true)]
-    [ValidatePattern('^LH2 Sync Agent -- [A-Za-z0-9_-]{1,64}$')]
+    [Parameter(ParameterSetName = 'PublishRegister', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'PublishStart', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'PublishUnregister', Mandatory = $true)]
     [string]$TaskName,
 
     [Parameter(ParameterSetName = 'Register', Mandatory = $true)]
@@ -50,7 +64,36 @@ function Assert-InstallRoot {
 }
 
 try {
+    if ($RegisterPublishSchedule -or $StartPublishSchedule -or $UnregisterPublishSchedule) {
+        if ($TaskName -notmatch '^LH2 Publish Agent -- [A-Za-z0-9_-]{1,64}$') {
+            throw 'Publish task name must match LH2 Publish Agent -- <instance>.'
+        }
+        if ($RegisterPublishSchedule) {
+            Assert-InstallRoot -Root $InstallRoot
+            if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'run-publish.cmd') -PathType Leaf)) {
+                throw 'run-publish.cmd is missing from InstallRoot.'
+            }
+            $runner = Join-Path $InstallRoot 'run-publish.cmd'
+            $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+            $taskArguments = '/d /s /c ""{0}""' -f $runner
+            $action = New-ScheduledTaskAction -Execute $cmd -Argument $taskArguments -WorkingDirectory $InstallRoot
+            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Minutes 2)
+            $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+            $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+            $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
+            Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description 'Claims one paused Linked Helper publish job every two minutes' -Force | Out-Null
+            exit 0
+        }
+        if ($StartPublishSchedule) {
+            Assert-InstallRoot -Root $InstallRoot
+            Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+            exit 0
+        }
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        exit 0
+    }
     if ($RegisterSchedule) {
+        if ($TaskName -notmatch '^LH2 Sync Agent -- [A-Za-z0-9_-]{1,64}$') { throw 'Sync task name must match LH2 Sync Agent -- <instance>.' }
         Assert-InstallRoot -Root $InstallRoot
         $runner = Join-Path $InstallRoot 'run-sync.cmd'
         $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'

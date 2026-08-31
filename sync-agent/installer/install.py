@@ -824,6 +824,37 @@ def windows_runner_contents() -> str:
     )
 
 
+def windows_publish_runner_contents() -> str:
+    return (
+        "@echo off\r\n"
+        "set PYTHONUTF8=1\r\n"
+        "cd /d \"%~dp0\"\r\n"
+        "\".venv\\Scripts\\python.exe\" agent.py publish-once >> publish.log 2>&1\r\n"
+    )
+
+
+def windows_publish_task_name(instance_id: str) -> str:
+    return f"LH2 Publish Agent -- {validate_instance_id(instance_id)}"
+
+
+def register_windows_publish_schedule(
+    root: pathlib.Path,
+    runner: CommandRunner = run_command,
+    verify: bool = False,
+) -> None:
+    helper = BUNDLE_ROOT / "install-windows.ps1"
+    if not helper.is_file():
+        raise InstallerError("В наборе установщика нет install-windows.ps1.")
+    secure_write(root / "run-publish.cmd", windows_publish_runner_contents(), 0o600)
+    task_name = windows_publish_task_name(config_instance_id(root))
+    args = [windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", str(helper), "-RegisterPublishSchedule", "-InstallRoot", str(root),
+            "-TaskName", task_name]
+    registered = runner(args, None, 60)
+    if registered.returncode != 0:
+        raise InstallerError(f"Task Scheduler отклонил задание публикации: {registered.stderr.strip()}")
+
+
 def windows_powershell() -> str:
     system_root = os.environ.get("SystemRoot", r"C:\Windows")
     return str(pathlib.Path(system_root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe")

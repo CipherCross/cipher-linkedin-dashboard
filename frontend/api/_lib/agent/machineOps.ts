@@ -17,6 +17,10 @@ import {
   MACHINE_OPERATIONS,
   type InstanceConfigRow,
 } from '../data/operations/agentIngest.js'
+import {
+  MACHINE_PUBLISH_COMMANDS,
+  type SequencePublishJobRow,
+} from '../data/operations/sequencePublishing.js'
 import { authenticateMachine, machineUnauthorized } from './machineAuth.js'
 import { leadPhotoObjectKey, sniffImageContentType } from '../storage/leadPhotoObjects.js'
 import { getObjectStorageProvider } from '../storage/runtime.js'
@@ -31,6 +35,12 @@ import {
 export const AGENT_CONFIG_OP = 'agent.config'
 export const AGENT_PHOTO_UPLOAD_OP = 'agent.photoUpload'
 export const AGENT_RELEASE_OP = 'agent.release'
+export const AGENT_PUBLISH_PROBE_OP = 'agent.publishProbe'
+export const AGENT_PUBLISH_CLAIM_OP = 'agent.publishClaim'
+export const AGENT_PUBLISH_HEARTBEAT_OP = 'agent.publishHeartbeat'
+export const AGENT_PUBLISH_STATE_OP = 'agent.publishState'
+export const AGENT_PUBLISH_BRANCH_OP = 'agent.publishBranch'
+export const AGENT_PUBLISH_FINISH_OP = 'agent.publishFinish'
 
 export const PHOTO_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
 
@@ -45,6 +55,92 @@ export interface MachineApiDeps {
   readonly tenantId: string | null
   readonly objectStorage?: (tenantId: string) => ObjectStorageProvider
   readonly releaseStore?: AgentReleaseStore
+}
+
+async function jsonBody(request: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await request.json()
+    return body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null
+  } catch { return null }
+}
+
+function boundedString(body: Record<string, unknown>, key: string, max = 160): string | null {
+  const value = body[key]
+  return typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null
+}
+
+function boundedObject(body: Record<string, unknown>, key: string): string | null {
+  const value = body[key]
+  return value && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : null
+}
+
+function publishError(error: unknown): string {
+  return error instanceof DataStoreContractError ? error.code : error instanceof Error ? error.name : 'unknown'
+}
+
+export function createAgentPublishHandler(
+  deps: MachineApiDeps,
+  operation: string,
+): (request: Request) => Promise<Response> {
+  return async (request) => {
+    if (request.method.toUpperCase() !== 'POST') return methodNotAllowed(request.method)
+    const authenticated = await auth(request, deps, operation)
+    if (authenticated.response) return authenticated.response
+    const { principal } = authenticated
+    const body = await jsonBody(request)
+    if (!body) return json({ error: 'JSON body must be an object' }, 400)
+    try {
+      if (operation === AGENT_PUBLISH_PROBE_OP) {
+        const machineKey = boundedString(body, 'machine_key')
+        const accountJson = boundedObject(body, 'account_snapshot')
+        const capabilityJson = boundedObject(body, 'capability_snapshot')
+        if (!machineKey || !accountJson || !capabilityJson || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot and compatible are required' }, 400)
+        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({
+          operation: MACHINE_PUBLISH_COMMANDS.reportTarget,
+          params: {
+            instanceId: principal.instanceId, machineKey, accountJson, capabilityJson,
+            compatible: body.compatible as boolean, errorCode: boundedString(body, 'error_code', 120) ?? '', credentialId: principal.credentialId,
+          },
+        }))
+        return json({ ok: count === 1, instance_id: principal.instanceId, compatible: body.compatible })
+      }
+      if (operation === AGENT_PUBLISH_CLAIM_OP) {
+        const job = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<SequencePublishJobRow | null>({
+          operation: MACHINE_PUBLISH_COMMANDS.claim,
+          params: { credentialId: principal.credentialId, leaseSeconds: 120 },
+        }))
+        return json({ ok: true, job })
+      }
+      const jobId = boundedString(body, 'job_id', 80)
+      const generation = Number(body.claim_generation)
+      if (!jobId || !Number.isInteger(generation) || generation < 1) return json({ error: 'job_id and claim_generation are required' }, 400)
+      if (operation === AGENT_PUBLISH_HEARTBEAT_OP) {
+        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({ operation: MACHINE_PUBLISH_COMMANDS.heartbeat, params: { jobId, generation, leaseSeconds: 120 } }))
+        return count === 1 ? json({ ok: true }) : json({ error: 'stale or expired publish claim' }, 409)
+      }
+      if (operation === AGENT_PUBLISH_STATE_OP) {
+        const status = boundedString(body, 'status', 40)
+        if (!status || !['preflight', 'publishing', 'failed'].includes(status)) return json({ error: 'invalid publish state' }, 400)
+        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({ operation: MACHINE_PUBLISH_COMMANDS.setState, params: { jobId, generation, status, leaseSeconds: 120, errorCode: boundedString(body, 'error_code', 120) ?? '', errorJson: boundedObject(body, 'error_details') ?? '' } }))
+        return count === 1 ? json({ ok: true }) : json({ error: 'stale or expired publish claim' }, 409)
+      }
+      if (operation === AGENT_PUBLISH_BRANCH_OP) {
+        const branchId = boundedString(body, 'branch_id', 100)
+        const status = boundedString(body, 'status', 40)
+        if (!branchId || !status || !['publishing', 'created', 'conflict', 'failed'].includes(status)) return json({ error: 'branch_id and valid status are required' }, 400)
+        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({ operation: MACHINE_PUBLISH_COMMANDS.branchResult, params: { jobId, branchId, generation, status, campaignId: boundedString(body, 'lh_campaign_id', 160) ?? '', verificationJson: boundedObject(body, 'verification_summary') ?? '', errorCode: boundedString(body, 'error_code', 120) ?? '', errorJson: boundedObject(body, 'error_details') ?? '' } }))
+        return count === 1 ? json({ ok: true }) : json({ error: 'stale or expired publish claim' }, 409)
+      }
+      if (operation === AGENT_PUBLISH_FINISH_OP) {
+        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({ operation: MACHINE_PUBLISH_COMMANDS.finish, params: { jobId, generation } }))
+        return count === 1 ? json({ ok: true }) : json({ error: 'publish job is not ready to finish' }, 409)
+      }
+      return json({ error: 'unknown publish operation' }, 400)
+    } catch (error) {
+      console.error(`machine ${operation} failed`, publishError(error))
+      return json({ error: 'the publish operation failed' }, 502)
+    }
+  }
 }
 
 function methodNotAllowed(method: string): Response {

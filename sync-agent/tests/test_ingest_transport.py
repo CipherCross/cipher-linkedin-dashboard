@@ -263,6 +263,36 @@ class ContractPinTest(unittest.TestCase):
                 self.assertNotIn("instance_id", row)
 
 
+class PublishProbeTest(unittest.TestCase):
+    def test_missing_profile_fails_closed_without_sensitive_facts(self):
+        result = agent.probe_linked_helper({"instance_id": "uitop-1"})
+        self.assertFalse(result["compatible"])
+        self.assertEqual(result["error_code"], "COMPATIBILITY_PROFILE_MISSING")
+        self.assertNotIn("account_snapshot", result)
+
+    def test_non_loopback_profile_is_refused(self):
+        result = agent.probe_linked_helper({
+            "instance_id": "uitop-1",
+            "lh2_publish": {
+                "cdp_host": "0.0.0.0", "cdp_port": 9222,
+                "lh_version": "x", "account_id": "a", "account_name": "A",
+                "sender_name": "A", "workspace_id": "w", "compatibility_profile": "p",
+            },
+        })
+        self.assertFalse(result["compatible"])
+        self.assertEqual(result["error_code"], "CDP_LOOPBACK_REQUIRED")
+
+    def test_unverified_profile_never_enables_adapter(self):
+        profile = {
+            "cdp_port": 9222, "cdp_host": "127.0.0.1",
+            "create_campaign": True, "pause_campaign": True,
+            "canonical_readback": True, "zero_target_readback": True,
+        }
+        ok, code = agent.LinkedHelperPublisher(profile).preflight()
+        self.assertFalse(ok)
+        self.assertEqual(code, "CDP_ADAPTER_NOT_ENABLED")
+
+
 class TokenTest(unittest.TestCase):
     def test_a_real_token_parses_to_its_credential_id(self):
         token = a_token()

@@ -205,6 +205,15 @@ import {
   sequenceVersionsOperation,
   setCommentResolvedOperation,
 } from './sequences.js'
+import {
+  SEQUENCE_PUBLISH_COMMANDS,
+  SEQUENCE_PUBLISH_OPERATIONS,
+  createSequencePublishBranchesOperation,
+  createSequencePublishJobOperation,
+  sequencePublishJobByKeyOperation,
+  sequencePublishJobsOperation,
+  sequencePublishTargetsOperation,
+} from './sequencePublishing.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
 export {
@@ -218,6 +227,13 @@ export {
   type IssuedCredential,
   type RevokedCredential,
 } from './agentIngest.js'
+export {
+  MACHINE_PUBLISH_COMMANDS,
+  SEQUENCE_PUBLISH_COMMANDS,
+  SEQUENCE_PUBLISH_OPERATIONS,
+  type SequencePublishJobRow,
+  type SequencePublishTargetRow,
+} from './sequencePublishing.js'
 export {
   LEADS_OPERATIONS,
   type LeadNoteRow,
@@ -445,6 +461,9 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(SEQUENCE_OPERATIONS.detail, sequenceDetailOperation)
   registry.registerQuery(SEQUENCE_OPERATIONS.versions, sequenceVersionsOperation)
   registry.registerQuery(SEQUENCE_OPERATIONS.comments, sequenceCommentsOperation)
+  registry.registerQuery(SEQUENCE_PUBLISH_OPERATIONS.targets, sequencePublishTargetsOperation)
+  registry.registerQuery(SEQUENCE_PUBLISH_OPERATIONS.jobs, sequencePublishJobsOperation)
+  registry.registerQuery(SEQUENCE_PUBLISH_OPERATIONS.jobByKey, sequencePublishJobByKeyOperation)
 
   // The full-snapshot base-table walks plus the route-owned Leads page.
   registry.registerQuery(LEADS_OPERATIONS.directory, leadsDirectoryOperation)
@@ -695,6 +714,8 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     SEQUENCE_COMMANDS.setCommentResolved,
     setCommentResolvedOperation,
   )
+  registry.registerCommand(SEQUENCE_PUBLISH_COMMANDS.createJob, createSequencePublishJobOperation)
+  registry.registerCommand(SEQUENCE_PUBLISH_COMMANDS.createBranches, createSequencePublishBranchesOperation)
 
   // S15 — the AI layer's HUMAN-ACTOR half. The guard reads run as app_system
   // in the separate AI registry (`operations/ai.ts`); everything registered
@@ -870,6 +891,9 @@ export const APPLICATION_QUERY_OPERATIONS = [
   SEQUENCE_OPERATIONS.detail,
   SEQUENCE_OPERATIONS.versions,
   SEQUENCE_OPERATIONS.comments,
+  SEQUENCE_PUBLISH_OPERATIONS.targets,
+  SEQUENCE_PUBLISH_OPERATIONS.jobs,
+  SEQUENCE_PUBLISH_OPERATIONS.jobByKey,
   PIPELINE_WRITE_OPERATIONS.leadPipelineFields,
   PIPELINE_WRITE_OPERATIONS.leadAssignment,
   PIPELINE_WRITE_OPERATIONS.teamMemberById,
@@ -952,6 +976,8 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   SEQUENCE_COMMANDS.createCommentThread,
   SEQUENCE_COMMANDS.addCommentMessage,
   SEQUENCE_COMMANDS.setCommentResolved,
+  SEQUENCE_PUBLISH_COMMANDS.createJob,
+  SEQUENCE_PUBLISH_COMMANDS.createBranches,
   AI_WRITE_OPERATIONS.coachUpsert,
   AI_WRITE_OPERATIONS.coachDigestUpsert,
   AI_WRITE_OPERATIONS.classifyWriteLabels,
