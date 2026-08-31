@@ -316,8 +316,8 @@ class PublishProbeTest(unittest.TestCase):
         }
         with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
             result = agent.probe_linked_helper({"instance_id": "uitop-1", "lh2_publish": profile})
-        self.assertTrue(result["compatible"])
-        self.assertIsNone(result["error_code"])
+        self.assertFalse(result["compatible"])
+        self.assertEqual(result["error_code"], "CDP_ADAPTER_NOT_ENABLED")
         self.assertTrue(result["capability_snapshot"]["create_campaign"])
         self.assertNotIn("websocket_url", result["runtime_snapshot"])
 

@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.16.2"
+AGENT_VERSION = "1.16.3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -533,8 +533,19 @@ def probe_linked_helper(cfg):
                 "location_host": runtime.get("location_host"),
                 "websocket_path": runtime.get("websocket_path"),
             }
-            result["compatible"] = bool(runtime.get("compatible"))
-            result["error_code"] = runtime.get("error_code")
+            runtime_compatible = bool(runtime.get("compatible"))
+            result["compatible"] = False
+            if not runtime_compatible:
+                result["error_code"] = runtime.get("error_code") or "COMPATIBILITY_CAPABILITY_MISSING"
+            elif profile.get("enable_cdp_adapter") is not True:
+                result["error_code"] = "CDP_ADAPTER_NOT_ENABLED"
+            elif profile.get("cdp_security_ack") != CDP_SECURITY_ACK:
+                result["error_code"] = "CDP_SECURITY_ACK_REQUIRED"
+            else:
+                # Runtime capability is useful evidence, but the mutating
+                # executor is not shipped yet. Keep the server target
+                # incompatible until that path exists and is tested.
+                result["error_code"] = "CDP_PUBLISH_PATH_NOT_IMPLEMENTED"
     return result
 
 
