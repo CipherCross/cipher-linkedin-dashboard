@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.19.0"
+AGENT_VERSION = "1.20.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -1023,10 +1023,23 @@ class LinkedHelperPublisher:
             # exclude-list placeholder. LH2 renders a campaign whose action
             # versions have no such reference as unopenable, so a NULL here is
             # a structural failure even when name, actions and pause match.
+            # The campaign-level list is a separate reference from the
+            # per-action ones and has its own creation guard, so it is read and
+            # checked separately. LH2 campaign 9 differed from 7 and 8 in
+            # exactly this column.
+            campaign_exclude_known = "exclude_list_id" in _sqlite_columns(con, "campaign_versions")
+            campaign_exclude = None
+            if campaign_exclude_known:
+                row = con.execute("""
+                    SELECT exclude_list_id FROM campaign_versions
+                    WHERE campaign_id = ? ORDER BY id DESC LIMIT 1
+                """, (campaign_id,)).fetchone()
+                campaign_exclude = row["exclude_list_id"] if row is not None else None
             version_columns = _sqlite_columns(con, "action_versions")
             version_count = None
             excludes_missing = None
             excludes_unresolved = None
+            exclude_people = None
             if version_columns:
                 version_count = int(con.execute("""
                     SELECT COUNT(*) AS count
@@ -1051,6 +1064,28 @@ class LinkedHelperPublisher:
                             SELECT 1 FROM collection_people_versions cpv
                             WHERE cpv.id = av.exclude_list_id)
                     """, (campaign_id,)).fetchone()["count"] or 0)
+                    # A freshly published campaign's exclude lists are empty
+                    # placeholders. This is reported, not enforced: an operator
+                    # may legitimately have populated an adopted campaign's
+                    # lists, and an excluded person is never contacted.
+                    if _sqlite_columns(con, "collection_people"):
+                        # The campaign-level list joins in only on a build that
+                        # has that column; otherwise count the action-level
+                        # lists alone rather than failing the whole readback.
+                        lists = """SELECT av.exclude_list_id FROM action_versions av
+                                   JOIN actions a ON a.id = av.action_id
+                                   WHERE a.campaign_id = ? AND av.exclude_list_id IS NOT NULL"""
+                        params = [campaign_id]
+                        if campaign_exclude_known:
+                            lists += """ UNION
+                                   SELECT cv.exclude_list_id FROM campaign_versions cv
+                                   WHERE cv.campaign_id = ? AND cv.exclude_list_id IS NOT NULL"""
+                            params.append(campaign_id)
+                        exclude_people = int(con.execute(
+                            "SELECT COUNT(*) AS count FROM collection_people cp"
+                            " WHERE cp.collection_id IN ("
+                            "   SELECT cpv.collection_id FROM collection_people_versions cpv"
+                            f"  WHERE cpv.id IN ({lists}))", params).fetchone()["count"] or 0)
         except PublishExecutionError:
             raise
         except sqlite3.Error:
@@ -1084,6 +1119,9 @@ class LinkedHelperPublisher:
             "actionVersionCount": version_count,
             "excludeListsMissing": excludes_missing,
             "excludeListsUnresolved": excludes_unresolved,
+            "excludeListPeople": exclude_people,
+            "campaignExcludeListKnown": campaign_exclude_known,
+            "campaignExcludeList": campaign_exclude,
         }
 
     @staticmethod
@@ -1156,11 +1194,24 @@ class LinkedHelperPublisher:
         # good one are indistinguishable to this agent.
         if actual.get("isValidKnown") is not True:
             raise PublishExecutionError("LH_CAMPAIGN_VALIDITY_UNKNOWN")
+        # `campaigns.is_valid` is a nullable tri-state: LH2's
+        # `_resetCampaignValid()` writes NULL to mean "not validated yet", which
+        # is a different fact from an explicit 0. Keep the two apart so an
+        # operator is not sent looking for the wrong defect.
         is_valid = actual.get("isValid")
+        if is_valid is None:
+            raise PublishExecutionError("LH_CAMPAIGN_VALIDITY_PENDING")
         if isinstance(is_valid, bool) or not isinstance(is_valid, int) or is_valid != 1:
             raise PublishExecutionError("LH_CAMPAIGN_NOT_VALID", {
                 "is_valid": is_valid if isinstance(is_valid, int) and not isinstance(is_valid, bool) else None,
             })
+        # The campaign-level exclude list has its own creation guard and its own
+        # failure mode: LH2 campaigns 7 and 8 had it while campaign 9 did not.
+        if actual.get("campaignExcludeListKnown") is not True:
+            raise PublishExecutionError("LH_CAMPAIGN_EXCLUDE_LIST_UNKNOWN")
+        campaign_exclude = actual.get("campaignExcludeList")
+        if isinstance(campaign_exclude, bool) or not isinstance(campaign_exclude, int):
+            raise PublishExecutionError("LH_CAMPAIGN_EXCLUDE_LIST_MISSING")
         version_count = actual.get("actionVersionCount")
         excludes_missing = actual.get("excludeListsMissing")
         if (isinstance(version_count, bool) or not isinstance(version_count, int) or
@@ -1194,6 +1245,8 @@ class LinkedHelperPublisher:
                 excludes_unresolved
                 if isinstance(excludes_unresolved, int) and not isinstance(excludes_unresolved, bool)
                 else None),
+            "campaign_exclude_list": campaign_exclude,
+            "exclude_list_people": actual.get("excludeListPeople"),
         }
 
     def publish_branch(self, branch, account):
@@ -1232,6 +1285,16 @@ class LinkedHelperPublisher:
                 "name": action_type,
                 "description": "",
                 "target": [],
+                # LH2 creates each action's empty exclude-list placeholder only
+                # when this property is TRUTHY: `_createAction` tests bare
+                # `entry.excludeList`, with no undefined check and no inherit
+                # branch. An empty array is truthy, so `[]` selects creation and
+                # `_addPeopleCollectionItems` still writes the addToTarget
+                # version row because `_createPeopleCollection` passes
+                # forceCreateVersion=true. Omitting the key leaves
+                # `action_versions.exclude_list_id` NULL and the campaign cannot
+                # be opened in LH2.
+                "excludeList": [],
                 "config": {
                     "actionType": action_type,
                     "coolDown": action.get("coolDown"),
@@ -1242,6 +1305,12 @@ class LinkedHelperPublisher:
         campaign_id = self.create_campaign({
             "name": name,
             "liAccount": li_account_id,
+            # The campaign-level guard is a different test:
+            # `_createCampaignVersion` checks `void 0 !== arg.excludeList` and
+            # its undefined branch INHERITS the previous version's list rather
+            # than creating one — which on a new campaign means NULL. So the key
+            # must be present here too, and `[]` is again the creating value.
+            "excludeList": [],
             "actions": actions,
         })
         self.pause_campaign(campaign_id, li_account_id)
@@ -1324,6 +1393,8 @@ def cmd_publish_verify(args):
             "action_version_count": actual.get("actionVersionCount"),
             "action_versions_missing_exclude_list": actual.get("excludeListsMissing"),
             "action_versions_unresolved_exclude_list": actual.get("excludeListsUnresolved"),
+            "campaign_exclude_list": actual.get("campaignExcludeList"),
+            "exclude_list_people": actual.get("excludeListPeople"),
             "target_people": actual.get("peopleCount"),
             "action_types": [item.get("type") for item in actions],
             "references": campaign_reference_links(db_path, int(campaign_id)),

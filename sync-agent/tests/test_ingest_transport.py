@@ -404,6 +404,8 @@ class PublishExecutorTest(unittest.TestCase):
             "isValidKnown": True, "isValid": 1,
             "actionVersionCount": len(actions),
             "excludeListsMissing": 0, "excludeListsUnresolved": 0,
+            "excludeListPeople": 0,
+            "campaignExcludeListKnown": True, "campaignExcludeList": 51,
         }
         facts.update(overrides)
         return facts
@@ -448,8 +450,18 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertEqual(evaluate.call_count, 3)
         create_expression = publisher._call_expression("create", evaluate.call_args_list[1].args[1])
         self.assertIn('"target":[]', create_expression)
-        self.assertNotIn('"excludeList"', create_expression)
         self.assertIn('"liAccount":1', create_expression)
+        # LH2 creates its empty exclude-list placeholders only for a TRUTHY
+        # excludeList, and the two levels have separate guards, so the key must
+        # be present as `[]` on the campaign AND on every action entry.
+        # Omitting it either way is what produced LH2 campaigns 7, 8 and 9.
+        payload = evaluate.call_args_list[1].args[1]
+        self.assertEqual(payload["excludeList"], [])
+        self.assertTrue(payload["actions"])
+        for entry in payload["actions"]:
+            self.assertEqual(entry["excludeList"], [])
+        self.assertEqual(create_expression.count('"excludeList":[]'),
+                         1 + len(payload["actions"]))
         self.assertNotIn("start", create_expression.lower())
         self.assertNotIn("unpause", create_expression.lower())
 
@@ -486,8 +498,9 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertIn("getCampaignName", expression)
 
     @staticmethod
-    def lh_db(directory, *, is_valid=1, exclude_list_id=50, with_is_valid=True,
-              with_exclude_column=True, with_collection_versions=True):
+    def lh_db(directory, *, is_valid=1, exclude_list_id=50, campaign_exclude_id=51,
+              with_is_valid=True, with_exclude_column=True,
+              with_collection_versions=True, with_campaign_exclude_column=True):
         """Build a minimal LH2 database with one campaign and one action.
 
         The named keyword arguments reproduce the exact structural states the
@@ -501,7 +514,8 @@ class PublishExecutorTest(unittest.TestCase):
             CREATE TABLE campaigns (id INTEGER, name TEXT, li_account_id INTEGER,
                                     is_paused INTEGER
                                     {', is_valid INTEGER' if with_is_valid else ''});
-            CREATE TABLE campaign_versions (id INTEGER, campaign_id INTEGER);
+            CREATE TABLE campaign_versions (id INTEGER, campaign_id INTEGER
+                                            {', exclude_list_id INTEGER' if with_campaign_exclude_column else ''});
             CREATE TABLE campaign_version_actions (id INTEGER, version_id INTEGER, action_id INTEGER);
             CREATE TABLE actions (id INTEGER, campaign_id INTEGER);
             CREATE TABLE action_versions (id INTEGER, action_id INTEGER, config_id INTEGER
@@ -510,7 +524,8 @@ class PublishExecutorTest(unittest.TestCase):
             CREATE TABLE action_target_people (id INTEGER, action_id INTEGER);
             INSERT INTO campaigns VALUES (7, 'Sequence A', 1, 1
                                           {', ' + ('NULL' if is_valid is None else str(is_valid)) if with_is_valid else ''});
-            INSERT INTO campaign_versions VALUES (9, 7);
+            INSERT INTO campaign_versions VALUES (9, 7
+                                                  {', ' + ('NULL' if campaign_exclude_id is None else str(campaign_exclude_id)) if with_campaign_exclude_column else ''});
             INSERT INTO campaign_version_actions VALUES (1, 9, 20);
             INSERT INTO actions VALUES (20, 7);
             INSERT INTO action_versions VALUES (30, 20, 40
@@ -519,8 +534,11 @@ class PublishExecutorTest(unittest.TestCase):
         """)
         if with_collection_versions:
             con.executescript("""
-                CREATE TABLE collection_people_versions (id INTEGER, collection_id INTEGER, kind TEXT);
+                CREATE TABLE collection_people_versions (id INTEGER, collection_id INTEGER,
+                                                         version_operation_status TEXT);
+                CREATE TABLE collection_people (id INTEGER, collection_id INTEGER, person_id INTEGER);
                 INSERT INTO collection_people_versions VALUES (50, 60, 'addToTarget');
+                INSERT INTO collection_people_versions VALUES (51, 61, 'addToTarget');
             """)
         con.commit()
         con.close()
@@ -539,6 +557,8 @@ class PublishExecutorTest(unittest.TestCase):
             "isValidKnown": True, "isValid": 1,
             "actionVersionCount": 1,
             "excludeListsMissing": 0, "excludeListsUnresolved": 0,
+            "excludeListPeople": 0,
+            "campaignExcludeListKnown": True, "campaignExcludeList": 51,
         })
 
     def _verify_db(self, **kwargs):
@@ -564,9 +584,6 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertEqual(error.code, "LH_CAMPAIGN_NOT_VALID")
         self.assertEqual(error.details, {"is_valid": 0})
 
-    def test_a_null_validity_flag_is_not_a_success(self):
-        self.assertEqual(self._verify_db(is_valid=None).code, "LH_CAMPAIGN_NOT_VALID")
-
     def test_an_unknown_validity_column_fails_closed_with_its_own_code(self):
         self.assertEqual(self._verify_db(with_is_valid=False).code,
                          "LH_CAMPAIGN_VALIDITY_UNKNOWN")
@@ -574,6 +591,24 @@ class PublishExecutorTest(unittest.TestCase):
     def test_an_unknown_exclude_list_column_fails_closed_with_its_own_code(self):
         self.assertEqual(self._verify_db(with_exclude_column=False).code,
                          "LH_ACTION_EXCLUDE_LIST_UNKNOWN")
+
+    def test_a_campaign_with_no_campaign_level_exclude_list_is_not_a_success(self):
+        """LH2 campaign 9: unlike 7 and 8 it also had no campaign-level list,
+        because the campaign-level guard's undefined branch inherits from the
+        previous version and a new campaign has none."""
+        self.assertEqual(self._verify_db(campaign_exclude_id=None).code,
+                         "LH_CAMPAIGN_EXCLUDE_LIST_MISSING")
+
+    def test_an_unknown_campaign_exclude_list_column_fails_closed(self):
+        self.assertEqual(self._verify_db(with_campaign_exclude_column=False).code,
+                         "LH_CAMPAIGN_EXCLUDE_LIST_UNKNOWN")
+
+    def test_an_unvalidated_campaign_is_reported_apart_from_an_invalid_one(self):
+        """`is_valid` is a nullable tri-state; NULL means LH2 has not validated
+        the campaign, which is not the same defect as an explicit 0."""
+        self.assertEqual(self._verify_db(is_valid=None).code,
+                         "LH_CAMPAIGN_VALIDITY_PENDING")
+        self.assertEqual(self._verify_db(is_valid=0).code, "LH_CAMPAIGN_NOT_VALID")
 
     def test_a_dangling_exclude_list_reference_is_not_a_success(self):
         error = self._verify_db(exclude_list_id=999)
@@ -588,24 +623,34 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertTrue(verification["is_valid"])
         self.assertEqual(verification["exclude_lists_present"], 1)
         self.assertEqual(verification["exclude_lists_unresolved"], 0)
+        self.assertEqual(verification["campaign_exclude_list"], 51)
+        self.assertEqual(verification["exclude_list_people"], 0)
 
     def test_publishing_the_campaign_9_shape_reports_failure_not_completion(self):
         """The regression this closes: publish_branch used to return "created"
         for a campaign LH2 itself cannot open."""
         branch = self.branch()
         with tempfile.TemporaryDirectory() as directory:
-            path = self.lh_db(directory, is_valid=0, exclude_list_id=None)
+            path = self.lh_db(directory, is_valid=None, exclude_list_id=None,
+                              campaign_exclude_id=None)
             publisher = agent.LinkedHelperPublisher(dict(self.PROFILE, _lh2_db_path=path))
             with mock.patch.object(publisher, "_evaluate", side_effect=[
                 [], {"outcome": "result", "campaignId": 7}, True,
             ]):
                 with self.assertRaises(agent.PublishExecutionError) as context:
                     publisher.publish_branch(branch, self.account())
-        self.assertEqual(context.exception.code, "LH_CAMPAIGN_NOT_VALID")
+        self.assertEqual(context.exception.code, "LH_CAMPAIGN_VALIDITY_PENDING")
+
+    def test_publishing_the_campaign_7_and_8_shape_reports_failure_too(self):
+        """7 and 8 read back is_valid=1 with a campaign-level list; only the
+        per-action lists were missing. That must still not be a success."""
+        error = self._verify_db(exclude_list_id=None)
+        self.assertEqual(error.code, "LH_ACTION_EXCLUDE_LIST_MISSING")
 
     def test_the_readonly_report_names_every_structural_fact_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = self.lh_db(directory, is_valid=0, exclude_list_id=None)
+            path = self.lh_db(directory, is_valid=None, exclude_list_id=None,
+                              campaign_exclude_id=None)
             before = os.path.getmtime(path)
             cfg = {"instance_id": "notebook-1", "lh2_db_path": path}
             buffer = io.StringIO()
@@ -616,7 +661,8 @@ class PublishExecutorTest(unittest.TestCase):
             self.assertEqual(before, os.path.getmtime(path))
         report = json.loads(buffer.getvalue())
         healthy, missing = report["campaigns"]
-        self.assertEqual(healthy["is_valid"], 0)
+        self.assertIsNone(healthy["is_valid"])
+        self.assertIsNone(healthy["campaign_exclude_list"])
         self.assertEqual(healthy["action_versions_missing_exclude_list"], 1)
         self.assertEqual(healthy["action_version_count"], 1)
         self.assertEqual(healthy["target_people"], 0)

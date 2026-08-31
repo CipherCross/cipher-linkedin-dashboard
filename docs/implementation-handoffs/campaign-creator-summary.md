@@ -5,78 +5,120 @@
 
 ## Current outcome
 
-The `1.18.0` exclude-list fix **did not work**, and it made the result worse.
-The pilot run of `1.18.0` created LH2 campaign **9** with:
+The root cause is established from the installed LH2 `2.130.25` bundle, and the
+fix is in signed version `1.20.0`. It is the opposite of what `1.18.0` assumed.
 
-- all 13 action versions still at `exclude_list_id IS NULL` — the same state as
-  campaigns 7 and 8, which were created *with* `excludeList: []`;
-- `campaigns.is_valid = 0` — a new regression. Campaigns 7 and 8 were at
-  `is_valid = 1`.
+**LH2 creates an empty exclude-list placeholder only for a TRUTHY
+`excludeList`, and the two levels have separate guards.**
 
-Removing the top-level `excludeList` key therefore changed the validity flag
-without changing the action-level references at all. That is evidence the
-campaign-level key is the wrong lever: `exclude_list_id` is a **per action
-version** reference, and a healthy campaign holds one distinct collection per
-action version. Whatever suppresses LH2's native placeholder setup is in the
-per-action part of the payload, not in the campaign-level key.
+- Action level, `_createAction`: a bare truthiness test on `entry.excludeList`.
+  No `undefined` check, no inherit branch. Falsy or omitted →
+  `action_versions.exclude_list_id` is written NULL.
+- Campaign level, `_createCampaignVersion`: `void 0 !== arg.excludeList`, whose
+  `undefined` branch **inherits the previous version's list** rather than
+  creating one. On a brand-new campaign there is no previous version, so
+  `undefined` yields NULL.
 
-The publisher payload is unchanged in `1.19.0`. The failing hypothesis has not
-been replaced with another guess.
+`[]` is truthy in JavaScript, so it selects creation at both levels — and the
+chain does not bail on emptiness: `_createPeopleCollection` passes
+`forceCreateVersion = true` to `_addPeopleCollectionItems`, so the
+`addToTarget` version row is written even with zero items. That produces
+exactly the reference shape: a nameless collection, zero `collection_people`
+rows, one `collection_people_versions` row.
 
-### What `1.19.0` does change: the verifier
+So `1.18.0` removed the one key that was working and never added the key that
+was missing. `1.20.0` sends `"excludeList": []` on the campaign argument **and
+on every action entry**.
 
-The decisive problem found by the pilot was not the payload — it was that the
-agent reported `publish-once: completed` for a campaign LH2 itself cannot open.
-Canonical readback checked id, name, `liAccountId` and the action chain, but
-checked neither `exclude_list_id` nor `is_valid`, so a successful publish and a
-structurally broken one were indistinguishable. Further runs would have
-accumulated broken campaigns silently.
+### What this explains
 
-`1.19.0` closes that first:
+| campaign | campaign-level `excludeList` sent | per-action sent | `campaign_versions.exclude_list_id` | action versions NULL | `is_valid` |
+|---|---|---|---|---|---|
+| 6 (native reference) | — | — | set (all 15) | 0 of 12 | 1 |
+| 7, 8 (≤ 1.17.1) | `[]` | no | set (139 / 140) | 11 of 11 | 1 |
+| 9 (1.18.0) | omitted | no | **NULL** | 13 of 13 | **NULL** |
 
-- readback now also reads `campaigns.is_valid` and, for every action version of
-  the campaign, `action_versions.exclude_list_id`;
-- verification fails closed on `LH_CAMPAIGN_NOT_VALID`,
-  `LH_ACTION_EXCLUDE_LIST_MISSING`, `LH_ACTION_EXCLUDE_LIST_UNRESOLVED` and
-  `LH_ACTION_VERSION_COUNT_MISMATCH`;
-- a build whose schema lacks either column fails closed with its own code
-  (`LH_CAMPAIGN_VALIDITY_UNKNOWN`, `LH_ACTION_EXCLUDE_LIST_UNKNOWN`) rather than
-  skipping the check it was supposed to perform;
-- the verification summary sent to the dashboard now carries `is_valid`,
-  `action_version_count`, `exclude_lists_present` and `exclude_lists_unresolved`;
-- `publish-once` no longer prints `completed` when a branch failed. It prints
-  `publish-once: FAILED — n of m branch(es) did not verify` and exits non-zero.
+Two corrections to what the pilot report assumed:
 
-Replayed against the campaign 7/8/9 states, the new verifier rejects all three.
+- Campaign 9's `is_valid` is **NULL, not 0**. `is_valid` is a nullable
+  tri-state and `_resetCampaignValid()` writes NULL for "not yet validated".
+- Campaigns 7 and 8 were **not** identically broken to 9: they each did get a
+  campaign-level list. Campaign 9 is missing 14 placeholder collections; 7 and
+  8 are missing 11 each.
+
+### Confirmed reference model
+
+Every `exclude_list_id` is a `collection_people_versions.id` — not a
+`collections.id`:
+
+```text
+action_versions.exclude_list_id  →  collection_people_versions.id
+campaign_versions.exclude_list_id                ↓
+                                     collections.id → li_accounts.id
+```
+
+For reference campaign 6: collection 106 + version 126 at campaign-insert time,
+then one new collection and one `addToTarget` version per action insert
+(107–118 / 127–138). The campaign-level list is created once and reused
+unchanged across all later `campaign_versions` rows. All 13 collections have
+`name = NULL` and zero `collection_people` rows. The only two
+`version_operation_status` values in the whole database are `addToTarget` and
+`removeFromTarget`.
+
+The action entry as `_createAction` consumes it: `name`, `description`,
+`target`, `excludeList`, `config`, `workingHours`, plus optional mutually
+exclusive `at` / `after` / `before`, plus `campaignId` / `liAccount` which
+`_createCampaignVersion` injects. The campaign argument to `createCampaign` is
+`name`, `description`, `actions`, `excludeList`, `liAccount`.
+
+One remaining cosmetic difference from native: campaign 6 leaves
+`actions.name` empty on all rows, while the publisher writes the action type
+there. It did not affect validity (7 and 8 also carried names and were
+`is_valid = 1`) and is left as the more informative value.
+
+### The verifier was hardened first
+
+The decisive failure was not the payload — it was that the agent reported
+`publish-once: completed` for a campaign LH2 cannot open. Readback checked id,
+name, `liAccountId`, the action chain, zero targets and `is_paused`, but neither
+exclude-list level nor `is_valid`. A broken publish and a good one were
+indistinguishable, so further runs would have accumulated broken campaigns
+silently. Version `1.19.0` closed that (committed, never published); `1.20.0`
+is the first release carrying both it and the fix.
+
+Verification now also requires, fail-closed with its own code each:
+
+| code | condition |
+|---|---|
+| `LH_CAMPAIGN_NOT_VALID` | `is_valid = 0` |
+| `LH_CAMPAIGN_VALIDITY_PENDING` | `is_valid IS NULL` — reset, not yet validated |
+| `LH_CAMPAIGN_EXCLUDE_LIST_MISSING` | latest `campaign_versions.exclude_list_id` NULL |
+| `LH_ACTION_EXCLUDE_LIST_MISSING` | any action version's exclude list NULL |
+| `LH_ACTION_EXCLUDE_LIST_UNRESOLVED` | reference with no `collection_people_versions` row |
+| `LH_ACTION_VERSION_COUNT_MISMATCH` | action count ≠ action-version count |
+| `LH_CAMPAIGN_VALIDITY_UNKNOWN`, `LH_CAMPAIGN_EXCLUDE_LIST_UNKNOWN`, `LH_ACTION_EXCLUDE_LIST_UNKNOWN` | the build's schema lacks the column |
+
+People in the referenced exclude collections are reported but **not** enforced:
+an operator may legitimately populate an adopted campaign's lists, and an
+excluded person is never contacted. The verification summary sent to the
+dashboard carries `is_valid`, `action_version_count`, `exclude_lists_present`,
+`exclude_lists_unresolved`, `campaign_exclude_list` and `exclude_list_people`.
+
+`publish-once` no longer prints `completed` when a branch failed: it prints
+`publish-once: FAILED — n of m branch(es) did not verify` and exits non-zero.
 
 ### New read-only command
 
-`agent.py publish-verify --campaign 6 --campaign 9` prints the structural state
-of local campaigns without contacting LH2 and without creating anything to look
-at. Per campaign it reports paused, `is_valid`, action count, action-version
-count, action versions missing an exclude list, unresolved exclude-list
-references, target people, action types, and — the part that should identify the
-suppressed placeholder setup — which `action_versions` reference columns LH2
-populated and which it left NULL, by column name.
+```powershell
+agent.py publish-verify --campaign 6 --campaign 7 --campaign 8 --campaign 9
+```
 
-Comparing the natively created reference campaign 6 against published campaign 9
-with this command is the next diagnostic step. It reads the database `mode=ro`
-and reports no stored values, only column names and NULL/set.
-
-### Leading hypothesis, not yet tested
-
-Each action entry in the create payload is built as
-`{"name", "description", "target": [], "config": {...}}`. If LH2 guards its
-native `_createPeopleCollection()` + `createPeopleCollectionVersion(id,
-"addToTarget")` path on the action's list argument being `undefined` — the same
-`!== undefined` shape already observed at the campaign level — then `"target":
-[]` has been suppressing that setup on every run, which would explain why the
-campaign-level change moved `is_valid` and nothing else. The healthy reference
-campaign's `exclude_list_id` values point at `addToTarget` collection versions,
-which is consistent with one native path creating both.
-
-This is a hypothesis. It should be checked against the `publish-verify`
-comparison of campaigns 6 and 9 before another campaign is created.
+Prints each campaign's structural state without contacting LH2 and without
+creating anything to look at: paused, `is_valid`, action and action-version
+counts, action versions missing an exclude list, unresolved references, the
+campaign-level list, people in exclude collections, target people, action types,
+and which `action_versions` reference columns LH2 populated versus left NULL.
+It opens the database `mode=ro` and reports no stored values.
 
 ## Pilot notebook and LH2 state
 
@@ -139,10 +181,12 @@ paused with zero targets.
     exclude-list references NULL, and now `is_valid = 0`. The agent reported
     `completed`. The campaign-level key was the wrong lever, and the verifier
     could not tell the outcome apart from a success.
-14. `1.19.0` leaves the payload alone and closes the verifier gap instead:
-    `is_valid` and the per-action-version exclude-list references are now part
-    of canonical verification, and `publish-verify` reports the structural
-    difference between a native campaign and a published one read-only.
+14. `1.19.0` left the payload alone and closed the verifier gap instead:
+    both exclude-list levels and `is_valid` became part of canonical
+    verification. It was committed but never published.
+15. A read-only diagnosis on the notebook — SQLite `mode=ro` plus the
+    `app.asar` bundle read in place — established the two guards and inverted
+    the `1.18.0` hypothesis. `1.20.0` sends `"excludeList": []` at both levels.
 
 ## Confirmed data model
 
@@ -172,28 +216,34 @@ the missing action-level links valid to the LH2 UI.
 
 ## Code change
 
-The publisher now builds this payload shape for a new campaign:
+The publisher builds this payload shape for a new campaign:
 
 ```python
 {
     "name": name,
     "liAccount": li_account_id,
-    "actions": actions,
+    "excludeList": [],
+    "actions": [
+        {"name": action_type, "description": "", "target": [],
+         "excludeList": [], "config": {...}},
+        ...
+    ],
 }
 ```
 
-It intentionally does **not** include `"excludeList": []`. LH2 must own the
-creation of its empty placeholder collections and versions. The adapter still
-creates only empty-target campaigns, explicitly pauses them, and performs
-canonical readback. It has no start/unpause, target population, archive, rename,
-delete, or direct-SQL repair path.
+Both `excludeList` keys are required and both must be `[]`. LH2 still owns the
+creation of the placeholder collections and versions — `[]` selects its native
+path rather than supplying a list. The adapter still creates only empty-target
+campaigns, explicitly pauses them, and performs canonical readback. It has no
+start/unpause, target population, archive, rename, delete, or direct-SQL repair
+path.
 
 ## Verification performed locally
 
 From `sync-agent/` using the project virtualenv:
 
 ```text
-123 tests passed
+126 tests passed
 python -m py_compile agent.py: passed
 ```
 
@@ -215,7 +265,7 @@ Run from `C:\Claude\sync-agent` with the notebook's existing virtualenv:
 .venv\Scripts\python.exe agent.py publish-probe
 ```
 
-The probe should report agent `1.19.0`, the current LH2 endpoint, and
+The probe should report agent `1.20.0`, the current LH2 endpoint, and
 `compatible: true`. Recheck the ephemeral CDP port if LH2 restarted.
 
 After an approved job is present in the dashboard, run:
