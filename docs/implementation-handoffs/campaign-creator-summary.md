@@ -76,6 +76,51 @@ One remaining cosmetic difference from native: campaign 6 leaves
 there. It did not affect validity (7 and 8 also carried names and were
 `is_valid = 1`) and is left as the more informative value.
 
+### Three defects found after 1.20.0 was published (fixed in 1.21.0)
+
+**`is_valid` is never computed during creation.** LH2 writes that column from
+exactly two places: `_resetCampaignValid()` — which runs at the end of every
+`_createAction`, writing NULL — and `_validateCampaign`. Nothing computes it
+while a campaign is being built, so a *correct* campaign always reads back NULL.
+1.20.0's `is_valid == 1` assertion would therefore have failed closed with
+`LH_CAMPAIGN_VALIDITY_PENDING` on **every good publish**. The publisher now
+calls `source.campaigns.validate(campaignId)` after the pause and verifies
+again; run by hand on campaign 9 this flipped the flag to 1 with no errors.
+
+Validation is attempted only after every other canonical check has already
+passed — name, account, action chain, fingerprint, zero targets, paused — so a
+campaign that is not this branch's fails before validation could write to it.
+That keeps the recovery/adoption path non-mutating, and it also makes crash
+recovery work: a campaign created but not yet validated is adopted and
+validated rather than reported as a conflict. `validate_campaign` is now part
+of the capability gate, so a build without it fails preflight.
+
+**The CDP port cannot be pinned.** It rotated `61121 → 51358` when LH2
+auto-updated, and `DevToolsActivePort` is unreliable here — it still named
+61121 with nothing listening. The port belongs to the instance process
+(`Instances\<version>\linked-helper.exe`). Discovery now scans loopback TCP
+listeners owned by an LH2 process and probes `/json/version` on each. The
+configured port stays a hint and is tried first, so the scan is a fallback
+rather than a per-connection cost; `preflight` pins the verified port for the
+rest of the run.
+
+**`lh_version` was echoed from config, never measured.** The probe reported
+`2.130.29` while the process was running `2.130.17` — the drift that caused the
+mid-session breakage. It is now measured from the running instance's executable
+path, and preflight fails closed with `LH_VERSION_MISMATCH` when a measured
+build contradicts the pinned one, naming both values. A build that cannot be
+measured is reported, not blocked; the endpoint is then labelled
+`configured-unverified` because process ownership was not established.
+
+Note the operational consequence: correcting `lh_version` in `config.yaml`
+changes the account snapshot, and a queued job whose stored snapshot still
+carries the old value will fail `PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Update the
+dashboard-side profile and recreate the job.
+
+The `app-<version>` directory is a weaker signal than the running instance:
+this machine had `app-2.130.25` on disk while the running instance was
+`2.130.17`. Discovery prefers `Instances\<version>`.
+
 ### The verifier was hardened first
 
 The decisive failure was not the payload — it was that the agent reported
@@ -106,6 +151,9 @@ dashboard carries `is_valid`, `action_version_count`, `exclude_lists_present`,
 
 `publish-once` no longer prints `completed` when a branch failed: it prints
 `publish-once: FAILED — n of m branch(es) did not verify` and exits non-zero.
+
+`LH_CAMPAIGN_VALIDITY_PENDING` survives as a real failure: it now means LH2
+refused to validate the campaign, not merely that validation had not run.
 
 ### New read-only command
 
@@ -187,6 +235,11 @@ paused with zero targets.
 15. A read-only diagnosis on the notebook — SQLite `mode=ro` plus the
     `app.asar` bundle read in place — established the two guards and inverted
     the `1.18.0` hypothesis. `1.20.0` sends `"excludeList": []` at both levels.
+16. `1.20.0` was published and verified from the release bucket, then three
+    further defects were found on the notebook: `is_valid` is never computed at
+    creation (so 1.20.0 would fail every good publish), the CDP port had
+    rotated `61121 → 51358`, and `lh_version` was echoed from config rather
+    than measured. `1.21.0` fixes all three.
 
 ## Confirmed data model
 
@@ -243,7 +296,7 @@ path.
 From `sync-agent/` using the project virtualenv:
 
 ```text
-126 tests passed
+140 tests passed
 python -m py_compile agent.py: passed
 ```
 
@@ -265,8 +318,10 @@ Run from `C:\Claude\sync-agent` with the notebook's existing virtualenv:
 .venv\Scripts\python.exe agent.py publish-probe
 ```
 
-The probe should report agent `1.20.0`, the current LH2 endpoint, and
-`compatible: true`. Recheck the ephemeral CDP port if LH2 restarted.
+The probe should report agent `1.21.0`, the current LH2 endpoint, and
+`compatible: true`. The probe now discovers the rotated port itself and reports
+`cdp_port` beside `cdp_port_configured` and `lh_version_measured` beside
+`lh_version_configured` — check those two pairs first if it fails.
 
 After an approved job is present in the dashboard, run:
 

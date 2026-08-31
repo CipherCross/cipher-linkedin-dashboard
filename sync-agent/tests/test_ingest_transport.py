@@ -337,6 +337,7 @@ class PublishProbeTest(unittest.TestCase):
             "location_host": "li.protechts.net", "websocket_path": "/devtools/page/x",
             "capability_snapshot": {
                 "create_campaign": True, "pause_campaign": True,
+                "validate_campaign": True,
                 "canonical_readback": True, "zero_target_readback": True,
                 "direct_sql_repair": False,
             },
@@ -358,10 +359,159 @@ class PublishProbeTest(unittest.TestCase):
             {"type": "page", "url": "https://li.protechts.net/challenge",
              "webSocketDebuggerUrl": "ws://127.0.0.1:50454/devtools/page/antibot"},
         ]
-        with mock.patch.object(agent, "_cdp_http", side_effect=[{}, targets]):
+        endpoint = {"port": 50454, "pid": 4242, "executable_path": "", "source": "configured"}
+        with mock.patch.object(agent, "resolve_cdp_endpoint", return_value=endpoint), \
+             mock.patch.object(agent, "_cdp_http", side_effect=[{}, targets]):
             with self.assertRaises(agent.CdpError) as context:
                 agent.discover_cdp_target(profile)
         self.assertEqual(str(context.exception), "CDP_TARGET_NOT_FOUND")
+
+    def test_the_lh_version_comes_from_the_running_instance_path(self):
+        """A machine holds several builds side by side, so only the running
+        instance's path is authoritative."""
+        self.assertEqual(agent.lh2_version_from_path(
+            r"C:\Users\u\AppData\Local\linked-helper\Instances\2.130.17\linked-helper.exe"),
+            "2.130.17")
+        # The app- directory is a weaker fallback: it was 2.130.25 on a machine
+        # whose running instance was 2.130.17.
+        self.assertEqual(agent.lh2_version_from_path(
+            r"C:\Users\u\AppData\Local\linked-helper\app-2.130.25\resources\app.asar"),
+            "2.130.25")
+        self.assertIsNone(agent.lh2_version_from_path(""))
+        self.assertIsNone(agent.lh2_version_from_path(r"C:\linked-helper\linked-helper.exe"))
+
+    def test_a_rotated_cdp_port_is_discovered_instead_of_failing(self):
+        """The configured port went stale when LH2 auto-updated (61121 →
+        51358) and DevToolsActivePort still named the dead one."""
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 61121}
+        candidates = [(51358, 4242, r"C:\...\Instances\2.130.17\linked-helper.exe")]
+        with mock.patch.object(agent, "lh2_cdp_candidates", return_value=candidates), \
+             mock.patch.object(agent, "_cdp_port_answers",
+                               side_effect=lambda host, port: {"Browser": "Chrome/142"} if port == 51358 else None):
+            endpoint = agent.resolve_cdp_endpoint(profile)
+        self.assertEqual(endpoint["port"], 51358)
+        self.assertEqual(endpoint["source"], "discovered")
+        self.assertEqual(agent.lh2_version_from_path(endpoint["executable_path"]), "2.130.17")
+
+    def test_a_configured_port_that_still_answers_is_kept_without_scanning(self):
+        """Discovery is the fallback, not the default: the scan costs several
+        local subprocesses and must not run on every CDP connection."""
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 51358}
+        with mock.patch.object(agent, "lh2_cdp_candidates") as scan, \
+             mock.patch.object(agent, "_cdp_port_answers", return_value={"Browser": "x"}):
+            endpoint = agent.resolve_cdp_endpoint(profile)
+        self.assertEqual(endpoint["port"], 51358)
+        self.assertEqual(endpoint["source"], "configured")
+        scan.assert_not_called()
+
+    def test_discovery_falls_back_to_the_configured_port_without_process_tooling(self):
+        """A machine whose netstat/tasklist are unavailable must keep working,
+        but its endpoint is labelled unverified: ownership was not established."""
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 51358}
+        with mock.patch.object(agent, "lh2_cdp_candidates", return_value=[]), \
+             mock.patch.object(agent, "_cdp_port_answers", return_value={"Browser": "x"}):
+            endpoint = agent.resolve_cdp_endpoint(profile, measure=True)
+        self.assertEqual(endpoint["port"], 51358)
+        self.assertEqual(endpoint["source"], "configured-unverified")
+        self.assertIsNone(endpoint["pid"])
+
+    def test_no_lh2_listener_anywhere_fails_closed(self):
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 51358}
+        with mock.patch.object(agent, "lh2_cdp_candidates", return_value=[]), \
+             mock.patch.object(agent, "_cdp_port_answers", return_value=None):
+            with self.assertRaises(agent.CdpError) as context:
+                agent.resolve_cdp_endpoint(profile, measure=True)
+        self.assertEqual(str(context.exception), "CDP_ENDPOINT_UNREACHABLE")
+
+    def test_discovery_never_leaves_the_loopback_interface(self):
+        with self.assertRaises(agent.CdpError) as context:
+            agent.resolve_cdp_endpoint({"cdp_host": "0.0.0.0", "cdp_port": 9222})
+        self.assertEqual(str(context.exception), "CDP_LOOPBACK_REQUIRED")
+
+    def test_a_running_build_that_contradicts_the_pinned_one_fails_closed(self):
+        """The probe used to echo lh_version straight from config, reporting
+        2.130.29 while the process ran 2.130.17."""
+        profile = {
+            "cdp_host": "127.0.0.1", "cdp_port": 61121,
+            "cdp_target_url_contains": "index.html",
+            "lh_version": "2.130.29",
+        }
+        target = {"lh_version_measured": "2.130.17", "browser": "Chrome/142",
+                  "protocol": "1.3", "cdp_port": 51358, "cdp_port_source": "discovered"}
+        runtime_value = {
+            "locationHost": "", "mainWindowService": "object",
+            "peopleCampaigns": "object", "createCampaign": "function",
+            "setCampaignPaused": "function", "validate": "function",
+            "isCampaignPaused": "function", "getCampaigns": "function",
+            "getCampaign": "function", "getCampaignActions": "function",
+            "getCampaignPeopleCount": "function",
+        }
+        client = mock.Mock()
+        client.evaluate.return_value = runtime_value
+        with mock.patch.object(agent, "discover_cdp_target", return_value=dict(target, _websocket_url="ws://127.0.0.1:51358/x")), \
+             mock.patch.object(agent, "CdpClient", return_value=client):
+            result = agent.probe_linked_helper_runtime(profile)
+        self.assertFalse(result["compatible"])
+        self.assertEqual(result["error_code"], "LH_VERSION_MISMATCH")
+        self.assertEqual(result["lh_version_measured"], "2.130.17")
+        self.assertEqual(result["lh_version_configured"], "2.130.29")
+
+    def test_a_matching_build_with_every_capability_is_compatible(self):
+        profile = {"cdp_host": "127.0.0.1", "cdp_port": 51358,
+                   "cdp_target_url_contains": "index.html",
+                   "lh_version": "2.130.17"}
+        target = {"lh_version_measured": "2.130.17", "cdp_port": 51358,
+                  "cdp_port_source": "configured"}
+        runtime_value = {
+            "locationHost": "", "mainWindowService": "object",
+            "peopleCampaigns": "object", "createCampaign": "function",
+            "setCampaignPaused": "function", "validate": "function",
+            "isCampaignPaused": "function", "getCampaigns": "function",
+            "getCampaign": "function", "getCampaignActions": "function",
+            "getCampaignPeopleCount": "function",
+        }
+        client = mock.Mock()
+        client.evaluate.return_value = runtime_value
+        with mock.patch.object(agent, "discover_cdp_target", return_value=dict(target, _websocket_url="ws://127.0.0.1:51358/x")), \
+             mock.patch.object(agent, "CdpClient", return_value=client):
+            result = agent.probe_linked_helper_runtime(profile)
+        self.assertTrue(result["compatible"])
+        self.assertIsNone(result["error_code"])
+        # A build without LH2's validation cannot publish at all.
+        client.evaluate.return_value = dict(runtime_value, validate="undefined")
+        with mock.patch.object(agent, "discover_cdp_target", return_value=dict(target, _websocket_url="ws://127.0.0.1:51358/x")), \
+             mock.patch.object(agent, "CdpClient", return_value=client):
+            result = agent.probe_linked_helper_runtime(profile)
+        self.assertFalse(result["compatible"])
+        self.assertEqual(result["error_code"], "COMPATIBILITY_CAPABILITY_MISSING")
+
+    def test_the_probe_reports_measured_and_configured_values_side_by_side(self):
+        profile = {
+            "cdp_port": 61121, "cdp_host": "127.0.0.1",
+            "cdp_target_url_contains": "index.html",
+            "enable_cdp_adapter": True, "cdp_security_ack": agent.CDP_SECURITY_ACK,
+            "lh_version": "2.130.29", "account_id": "524650", "li_account_id": "1",
+            "account_name": "A", "sender_name": "A", "workspace_id": "601896",
+            "compatibility_profile": "lh2-2.130.29",
+        }
+        runtime = {
+            "browser": "Chrome/142", "protocol": "1.3", "target_host": None,
+            "target_title": "Linked Helper", "location_host": "", "websocket_path": "/x",
+            "cdp_port": 51358, "cdp_port_source": "discovered",
+            "lh_version_measured": "2.130.17",
+            "capability_snapshot": {}, "compatible": False,
+            "error_code": "LH_VERSION_MISMATCH",
+        }
+        with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
+            result = agent.probe_linked_helper({"instance_id": "notebook-1",
+                                                "lh2_publish": profile})
+        snapshot = result["runtime_snapshot"]
+        self.assertEqual(snapshot["cdp_port"], 51358)
+        self.assertEqual(snapshot["cdp_port_configured"], 61121)
+        self.assertEqual(snapshot["lh_version_measured"], "2.130.17")
+        self.assertEqual(snapshot["lh_version_configured"], "2.130.29")
+        self.assertEqual(result["error_code"], "LH_VERSION_MISMATCH")
+        self.assertNotIn("websocket_url", snapshot)
 
     def test_preflight_requires_explicit_security_ack(self):
         profile = {"enable_cdp_adapter": True}
@@ -626,20 +776,105 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertEqual(verification["campaign_exclude_list"], 51)
         self.assertEqual(verification["exclude_list_people"], 0)
 
+    @staticmethod
+    def _lh_evaluate(path, *, campaign_id=7, validates=True):
+        """Stand in for LH2 over CDP, with `validate` doing what LH2 does.
+
+        LH2 writes `campaigns.is_valid` only from its validation, so a fake
+        that leaves the column alone would make every publish test agree with
+        a publisher that never validates at all.
+        """
+        def evaluate(method, payload=None):
+            if method == "list":
+                return []
+            if method == "create":
+                return {"outcome": "result", "campaignId": campaign_id}
+            if method == "validate":
+                if validates:
+                    con = agent.sqlite3.connect(path)
+                    con.execute("UPDATE campaigns SET is_valid = 1 WHERE id = ?",
+                                (int(payload["id"]),))
+                    con.commit()
+                    con.close()
+                return True
+            return True
+        return evaluate
+
+    def test_a_good_campaign_is_validated_after_pause_and_then_verifies(self):
+        """LH2 never computes is_valid while creating a campaign, so a correct
+        campaign always reads back unvalidated. Requiring is_valid = 1 without
+        running LH2's own validation would fail closed on every good publish."""
+        branch = self.branch()
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.lh_db(directory, is_valid=None)
+            publisher = agent.LinkedHelperPublisher(dict(self.PROFILE, _lh2_db_path=path))
+            with mock.patch.object(publisher, "_evaluate",
+                                   side_effect=self._lh_evaluate(path)) as evaluate:
+                verification, status = publisher.publish_branch(branch, self.account())
+        self.assertEqual(status, "created")
+        self.assertTrue(verification["is_valid"])
+        # Validation runs after the pause, never before it.
+        self.assertEqual([call.args[0] for call in evaluate.call_args_list],
+                         ["list", "create", "pause", "validate"])
+
+    def test_validation_that_does_not_help_is_still_not_a_success(self):
+        """A campaign LH2 refuses to validate must not be reported as created,
+        and validation must be attempted at most once."""
+        branch = self.branch()
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.lh_db(directory, is_valid=None)
+            publisher = agent.LinkedHelperPublisher(dict(self.PROFILE, _lh2_db_path=path))
+            with mock.patch.object(publisher, "_evaluate",
+                                   side_effect=self._lh_evaluate(path, validates=False)) as evaluate:
+                with self.assertRaises(agent.PublishExecutionError) as context:
+                    publisher.publish_branch(branch, self.account())
+        self.assertEqual(context.exception.code, "LH_CAMPAIGN_VALIDITY_PENDING")
+        self.assertEqual([call.args[0] for call in evaluate.call_args_list].count("validate"), 1)
+
     def test_publishing_the_campaign_9_shape_reports_failure_not_completion(self):
         """The regression this closes: publish_branch used to return "created"
-        for a campaign LH2 itself cannot open."""
+        for a campaign LH2 itself cannot open. Validation does not paper over
+        the missing exclude lists."""
         branch = self.branch()
         with tempfile.TemporaryDirectory() as directory:
             path = self.lh_db(directory, is_valid=None, exclude_list_id=None,
                               campaign_exclude_id=None)
             publisher = agent.LinkedHelperPublisher(dict(self.PROFILE, _lh2_db_path=path))
-            with mock.patch.object(publisher, "_evaluate", side_effect=[
-                [], {"outcome": "result", "campaignId": 7}, True,
-            ]):
+            with mock.patch.object(publisher, "_evaluate",
+                                   side_effect=self._lh_evaluate(path)):
                 with self.assertRaises(agent.PublishExecutionError) as context:
                     publisher.publish_branch(branch, self.account())
-        self.assertEqual(context.exception.code, "LH_CAMPAIGN_VALIDITY_PENDING")
+        self.assertEqual(context.exception.code, "LH_CAMPAIGN_EXCLUDE_LIST_MISSING")
+
+    def test_a_campaign_that_fails_an_earlier_check_is_never_validated(self):
+        """Validation writes to the campaign, so it must not touch one whose
+        name, actions or fingerprint did not match this branch."""
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        branch = self.branch()
+        mismatched = dict({
+            "id": 77, "liAccountId": 1, "name": "Sequence A",
+            "actions": [{"type": "Follow", "settings": {}, "coolDown": 60000,
+                         "maxActionResultsPerIteration": 10}],
+            "peopleCount": 0, "paused": True,
+        }, **self.structural([1], isValid=None))
+        with mock.patch.object(publisher, "readback", return_value=mismatched), \
+             mock.patch.object(publisher, "validate_campaign") as validate:
+            with self.assertRaises(agent.PublishExecutionError):
+                publisher._verify_validated(dict(branch, lh_campaign_id=77), self.account())
+        validate.assert_not_called()
+
+    def test_a_refused_validation_is_reported_without_a_raw_cdp_error(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        with mock.patch.object(publisher, "_evaluate", return_value=None):
+            with self.assertRaises(agent.PublishExecutionError) as context:
+                publisher.validate_campaign(7)
+        self.assertEqual(context.exception.code, "LH_VALIDATE_RESULT_INVALID")
+
+    def test_the_validate_expression_only_validates(self):
+        expression = agent.LinkedHelperPublisher._call_expression("validate", {"id": 7})
+        self.assertIn(".validate(", expression)
+        for forbidden in ("start", "unpause", "resume", "delete", "archive", "target"):
+            self.assertNotIn(forbidden, expression.lower())
 
     def test_publishing_the_campaign_7_and_8_shape_reports_failure_too(self):
         """7 and 8 read back is_valid=1 with a campaign-level list; only the

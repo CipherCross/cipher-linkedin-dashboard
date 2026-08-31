@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.20.0"
+AGENT_VERSION = "1.21.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -272,6 +272,170 @@ def _cdp_target_host(value):
         return ""
 
 
+# LH2's CDP endpoint belongs to the instance process
+# (`Instances\<version>\linked-helper.exe`) and its port is ephemeral: it
+# rotates whenever LH2 restarts or auto-updates. `DevToolsActivePort` is not
+# reliable here — it has been observed still naming a dead port. So the live
+# endpoint is found by scanning loopback listeners owned by an LH2 process and
+# probing each one, with the configured port used only as a hint.
+LH2_PROCESS_HINTS = ("linked-helper", "linked helper", "linkedhelper")
+CDP_PORT_SCAN_LIMIT = 16
+
+
+def _process_is_lh2(name):
+    lowered = str(name or "").lower()
+    return any(hint in lowered for hint in LH2_PROCESS_HINTS)
+
+
+def _run_text(command, timeout=8):
+    """Run one read-only local command; any failure is an empty result."""
+    try:
+        result = subprocess.run(command, capture_output=True, timeout=timeout,
+                                check=False, text=True, errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout or ""
+
+
+def _listening_loopback_ports_windows():
+    """[(port, pid)] for 127.0.0.1 TCP listeners, from netstat."""
+    found = []
+    for line in _run_text(["netstat", "-ano", "-p", "TCP"]).splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[0].upper() != "TCP" or parts[3].upper() != "LISTENING":
+            continue
+        local, pid = parts[1], parts[4]
+        host, _, port = local.rpartition(":")
+        if host != "127.0.0.1" or not port.isdigit() or not pid.isdigit():
+            continue
+        found.append((int(port), int(pid)))
+    return found
+
+
+def _process_names_windows():
+    """{pid: image name} from ONE tasklist call.
+
+    Resolving names port by port meant one subprocess per listening socket,
+    which on a busy machine is slower than the CDP work it precedes.
+    """
+    names = {}
+    for line in _run_text(["tasklist", "/FO", "CSV", "/NH"]).splitlines():
+        fields = [field.strip().strip('"') for field in line.split('","')]
+        if len(fields) < 2:
+            continue
+        name = fields[0].lstrip('"')
+        pid = fields[1]
+        if pid.isdigit():
+            names[int(pid)] = name
+    return names
+
+
+def _process_path_windows(pid):
+    return _run_text([
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').ExecutablePath",
+    ]).strip()
+
+
+def _listening_loopback_processes_posix():
+    """[(port, pid, name)] for loopback TCP listeners, from lsof."""
+    found = []
+    output = _run_text(["lsof", "-nP", "-iTCP@127.0.0.1", "-sTCP:LISTEN"])
+    for line in output.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 9 or not parts[1].isdigit():
+            continue
+        _, _, port = parts[-1].rpartition(":")
+        if port.isdigit():
+            found.append((int(port), int(parts[1]), parts[0]))
+    return found
+
+
+def lh2_cdp_candidates():
+    """Loopback CDP port candidates owned by an LH2 process, read-only.
+
+    Returns [(port, pid, executable_path)]. Every discovery failure yields an
+    empty list rather than an exception: a notebook whose process tooling is
+    unavailable must fall back to its configured port, not crash.
+    """
+    candidates = []
+    if sys.platform.startswith("win"):
+        names = _process_names_windows()
+        for port, pid in _listening_loopback_ports_windows():
+            if _process_is_lh2(names.get(pid)):
+                candidates.append((port, pid, ""))
+    else:
+        for port, pid, name in _listening_loopback_processes_posix():
+            if _process_is_lh2(name):
+                candidates.append((port, pid, ""))
+    unique = {}
+    for port, pid, path in candidates:
+        unique.setdefault(port, (port, pid, path))
+    return sorted(unique.values())[:CDP_PORT_SCAN_LIMIT]
+
+
+def _process_executable_path(pid):
+    if pid is None or not sys.platform.startswith("win"):
+        return ""
+    return _process_path_windows(pid)
+
+
+def lh2_version_from_path(path):
+    r"""The LH2 build number out of an instance executable path, or None.
+
+    A machine holds several builds side by side (`app-<version>` next to
+    `Instances\<version>`), so only the version of the RUNNING instance is
+    authoritative. The instance directory is preferred for that reason.
+    """
+    text = str(path or "").replace("\\", "/")
+    match = re.search(r"/Instances/(\d+\.\d+\.\d+)(?:/|$)", text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    match = re.search(r"/app-(\d+\.\d+\.\d+)(?:/|$)", text, re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def _cdp_port_answers(host, port):
+    try:
+        response = requests.get(f"http://{host}:{int(port)}/json/version", timeout=2)
+        response.raise_for_status()
+        value = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def resolve_cdp_endpoint(profile, measure=False):
+    """Resolve the live CDP port, preferring the configured one when it answers.
+
+    The process scan is the fallback, not the default, because it costs several
+    local subprocesses. Pass ``measure=True`` — as the compatibility probe does
+    — to always identify the owning process, and with it the RUNNING LH2 build.
+    """
+    host = str(profile.get("cdp_host") or "127.0.0.1")
+    if host != "127.0.0.1":
+        raise CdpError("CDP_LOOPBACK_REQUIRED")
+    configured = int(profile["cdp_port"])
+    if not measure and _cdp_port_answers(host, configured):
+        return {"port": configured, "pid": None, "executable_path": "",
+                "source": "configured"}
+    scanned = lh2_cdp_candidates()
+    ordered = ([entry for entry in scanned if entry[0] == configured] +
+               [entry for entry in scanned if entry[0] != configured])
+    for port, pid, path in ordered:
+        if _cdp_port_answers(host, port):
+            return {"port": port, "pid": pid,
+                    "executable_path": path or _process_executable_path(pid),
+                    "source": "configured" if port == configured else "discovered"}
+    # No LH2-owned listener answered. The configured port is still tried on its
+    # own so a machine whose process tooling is unavailable keeps working — and
+    # is labelled unverified, because process ownership was not established.
+    if _cdp_port_answers(host, configured):
+        return {"port": configured, "pid": None, "executable_path": "",
+                "source": "configured-unverified"}
+    raise CdpError("CDP_ENDPOINT_UNREACHABLE")
+
+
 def _cdp_http(profile, path):
     host = str(profile.get("cdp_host") or "127.0.0.1")
     port = int(profile["cdp_port"])
@@ -285,8 +449,12 @@ def _cdp_http(profile, path):
         raise CdpError("CDP_ENDPOINT_UNREACHABLE") from error
 
 
-def discover_cdp_target(profile):
+def discover_cdp_target(profile, measure=False):
     """Discover one explicitly selected LH2 renderer target, read-only."""
+    endpoint = resolve_cdp_endpoint(profile, measure=measure)
+    # The resolved port replaces the configured hint for the rest of this run,
+    # so a rotated port does not have to be edited by hand on the notebook.
+    profile = dict(profile, cdp_port=endpoint["port"])
     version = _cdp_http(profile, "/json/version")
     targets = _cdp_http(profile, "/json/list")
     if not isinstance(targets, list):
@@ -317,6 +485,12 @@ def discover_cdp_target(profile):
     return {
         "browser": str(version.get("Browser") or "")[:120],
         "protocol": str(version.get("Protocol-Version") or "")[:32],
+        "cdp_port": endpoint["port"],
+        "cdp_port_source": endpoint["source"],
+        # Measured, never echoed from config: the configured `lh_version` was
+        # reported as fact while the process was running a different build,
+        # which is how a version drift went unnoticed until it broke a session.
+        "lh_version_measured": lh2_version_from_path(endpoint.get("executable_path")),
         "target_type": "page",
         "target_host": _cdp_target_host(target.get("url")),
         "target_title": str(target.get("title") or "")[:160],
@@ -453,7 +627,7 @@ class CdpClient:
 
 def probe_linked_helper_runtime(profile):
     """Read-only Runtime probe; no LH2 mutating API is ever called."""
-    target = discover_cdp_target(profile)
+    target = discover_cdp_target(profile, measure=True)
     client = None
     try:
         client = CdpClient(target["_websocket_url"])
@@ -463,6 +637,7 @@ def probe_linked_helper_runtime(profile):
           peopleCampaigns: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns,
           createCampaign: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.createCampaign,
           setCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.setCampaignPaused,
+          validate: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.validate,
           isCampaignPaused: typeof window.mainWindowService?.mainWindow?.source?.campaigns?.isCampaignPaused,
           getCampaigns: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.getCampaigns,
           getCampaign: typeof window.mainWindowService?.mainWindow?.source?.people?.campaigns?.getCampaign,
@@ -474,6 +649,12 @@ def probe_linked_helper_runtime(profile):
         capability = {
             "create_campaign": value.get("createCampaign") == "function",
             "pause_campaign": value.get("setCampaignPaused") == "function",
+            # LH2 never computes `is_valid` while creating a campaign:
+            # `_createAction` ends by resetting it to NULL and only
+            # `_validateCampaign` ever writes it. Publishing therefore depends
+            # on this method existing, so a build without it fails the gate
+            # here rather than at verification time.
+            "validate_campaign": value.get("validate") == "function",
             "canonical_readback": value.get("isCampaignPaused") == "function",
             "zero_target_readback": (
                 value.get("peopleCampaigns") == "object"
@@ -483,8 +664,18 @@ def probe_linked_helper_runtime(profile):
         target.update({"location_host": str(value.get("locationHost") or "")[:120]})
         target["capability_snapshot"] = capability
         target["compatible"] = all(capability[key] for key in (
-            "create_campaign", "pause_campaign", "canonical_readback", "zero_target_readback"))
+            "create_campaign", "pause_campaign", "validate_campaign",
+            "canonical_readback", "zero_target_readback"))
         target["error_code"] = None if target["compatible"] else "COMPATIBILITY_CAPABILITY_MISSING"
+        # A compatibility profile pins an exact build. When the running build
+        # can be measured and disagrees with the pinned one, fail closed and
+        # name both values — an unmeasurable build is reported, not blocked.
+        measured = target.get("lh_version_measured")
+        configured = str(profile.get("lh_version") or "").strip()
+        if target["compatible"] and measured and configured and measured != configured:
+            target["compatible"] = False
+            target["error_code"] = "LH_VERSION_MISMATCH"
+            target["lh_version_configured"] = configured
         target.pop("_websocket_url", None)
         return target
     finally:
@@ -566,6 +757,7 @@ def probe_linked_helper(cfg):
             "cdp_host": "127.0.0.1", "cdp_port": profile["cdp_port"],
             "create_campaign": bool(profile.get("create_campaign", False)),
             "pause_campaign": bool(profile.get("pause_campaign", False)),
+            "validate_campaign": bool(profile.get("validate_campaign", False)),
             "canonical_readback": bool(profile.get("canonical_readback", False)),
             "zero_target_readback": bool(profile.get("zero_target_readback", False)),
             "direct_sql_repair": False,
@@ -590,6 +782,14 @@ def probe_linked_helper(cfg):
                 "target_title": runtime.get("target_title"),
                 "location_host": runtime.get("location_host"),
                 "websocket_path": runtime.get("websocket_path"),
+                # The live port and the running build, both measured. The
+                # configured values are reported beside them so drift is
+                # visible in the probe instead of surfacing as a later failure.
+                "cdp_port": runtime.get("cdp_port"),
+                "cdp_port_configured": profile["cdp_port"],
+                "cdp_port_source": runtime.get("cdp_port_source"),
+                "lh_version_measured": runtime.get("lh_version_measured"),
+                "lh_version_configured": profile.get("lh_version"),
             }
             runtime_compatible = bool(runtime.get("compatible"))
             result["compatible"] = False
@@ -694,6 +894,10 @@ class LinkedHelperPublisher:
             return False, str(error)
         if not runtime.get("compatible"):
             return False, str(runtime.get("error_code") or "COMPATIBILITY_CAPABILITY_MISSING")
+        # Pin the port the probe just verified, so the rest of the run does not
+        # re-scan and cannot drift onto a different endpoint mid-publish.
+        if isinstance(runtime.get("cdp_port"), int):
+            self.profile = dict(self.profile, cdp_port=runtime["cdp_port"])
         self.runtime_snapshot = runtime
         return True, None
 
@@ -803,6 +1007,13 @@ class LinkedHelperPublisher:
               const src = window.mainWindowService.mainWindow.source.campaigns;
               const args = {value};
               await src.setCampaignPaused(Number(args.id), true, Number(args.liAccountId));
+              return true;
+            }})()"""
+        if method == "validate":
+            return f"""(async () => {{
+              const src = window.mainWindowService.mainWindow.source.campaigns;
+              const args = {value};
+              await src.validate(Number(args.id));
               return true;
             }})()"""
         if method == "readback":
@@ -964,6 +1175,22 @@ class LinkedHelperPublisher:
         value = self._evaluate("pause", {"id": campaign_id, "liAccountId": account_id})
         if value is not True:
             raise PublishExecutionError("LH_PAUSE_RESULT_INVALID")
+
+    def validate_campaign(self, campaign_id):
+        """Run LH2's own campaign validation.
+
+        This is the only reason `campaigns.is_valid` ever becomes 1: LH2 does
+        not compute it while creating a campaign — `_createAction` ends by
+        resetting it to NULL and only `_validateCampaign` writes it. Without
+        this call a correctly built campaign reads back unvalidated forever.
+
+        It is not a start, unpause, target or repair operation; it writes only
+        the validity flag, and the campaign's paused state and zero targets are
+        re-checked by the readback that follows it.
+        """
+        value = self._evaluate("validate", {"id": campaign_id})
+        if value is not True:
+            raise PublishExecutionError("LH_VALIDATE_RESULT_INVALID")
 
     def readback(self, campaign_id):
         """Read the created campaign from LH2 SQLite in strict read-only mode.
@@ -1249,6 +1476,23 @@ class LinkedHelperPublisher:
             "exclude_list_people": actual.get("excludeListPeople"),
         }
 
+    def _verify_validated(self, branch, account):
+        """Verify the campaign, running LH2's validation once if it is pending.
+
+        Validation is attempted only after every other canonical check has
+        already passed — name, account, action chain, fingerprint, zero targets
+        and paused. An unrelated or non-matching campaign therefore fails before
+        this method would ever write anything to it, which is what keeps the
+        recovery/adoption path non-mutating.
+        """
+        try:
+            return self._verify(branch, account)
+        except PublishExecutionError as error:
+            if error.code != "LH_CAMPAIGN_VALIDITY_PENDING":
+                raise
+        self.validate_campaign(int(branch["lh_campaign_id"]))
+        return self._verify(branch, account)
+
     def publish_branch(self, branch, account):
         name = str(branch.get("campaign_name") or "").strip()
         if not name or len(name) > 160:
@@ -1270,7 +1514,7 @@ class LinkedHelperPublisher:
                 raise PublishExecutionError("LH_CAMPAIGN_ID_INVALID")
             branch_with_id = dict(branch, lh_campaign_id=int(existing_id))
             try:
-                return self._verify(branch_with_id, account), "created"
+                return self._verify_validated(branch_with_id, account), "created"
             except PublishExecutionError as error:
                 raise PublishConflictError("LH_EXISTING_CAMPAIGN_MISMATCH") from error
         actions = []
@@ -1314,7 +1558,7 @@ class LinkedHelperPublisher:
             "actions": actions,
         })
         self.pause_campaign(campaign_id, li_account_id)
-        verified = self._verify(dict(branch, lh_campaign_id=campaign_id), account)
+        verified = self._verify_validated(dict(branch, lh_campaign_id=campaign_id), account)
         return verified, "created"
 
 
