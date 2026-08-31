@@ -273,7 +273,7 @@ export const setSequencePublishBranchResultOperation: NeonCommandOperation<numbe
     text: `UPDATE public.sequence_publish_branches b SET status = $4,
         lh_campaign_id = NULLIF($5, ''), verification_summary = NULLIF($6, '')::jsonb,
         error_code = NULLIF($7, ''), error_details = NULLIF($8, '')::jsonb,
-        started_at = COALESCE(started_at, now()),
+        started_at = COALESCE(b.started_at, now()),
         finished_at = CASE WHEN $4 IN ('created','conflict','failed') THEN now() ELSE NULL END
       FROM public.sequence_publish_jobs j
       WHERE b.job_id = $1::uuid AND b.branch_id = $2 AND j.id = b.job_id

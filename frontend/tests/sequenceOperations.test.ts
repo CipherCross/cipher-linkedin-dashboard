@@ -7,6 +7,7 @@ import {
   saveSequenceOperation,
   sequenceCommentsOperation,
 } from '../api/_lib/data/operations/sequences.js'
+import { setSequencePublishBranchResultOperation } from '../api/_lib/data/operations/sequencePublishing.js'
 import type { UserActorContext } from '../api/_lib/data/contracts.js'
 
 const actor: UserActorContext = {
@@ -72,5 +73,22 @@ describe('Sequence Builder operation allowlist', () => {
     })
     expect(statement.text).toContain('JOIN public.sequence_comment_messages')
     expect(statement.text).toContain('ORDER BY t.created_at, t.id, m.created_at, m.id')
+  })
+
+  it('qualifies branch timestamps when journaling through the job join', () => {
+    const statement = setSequencePublishBranchResultOperation.build({
+      actor,
+      params: {
+        jobId: '22222222-2222-4222-8222-222222222222',
+        branchId: 'branch_a',
+        generation: 1,
+        status: 'publishing',
+        campaignId: '',
+        verificationJson: '',
+        errorCode: '',
+        errorJson: '',
+      },
+    })
+    expect(statement.text).toContain('COALESCE(b.started_at, now())')
   })
 })
