@@ -24,9 +24,12 @@ Three things are checked here that a single-language test could not:
     'off' is proved by the transport never issuing a request at all.
 """
 
+import argparse
 import base64
+import contextlib
 import copy
 import hashlib
+import io
 import json
 import os
 import py_compile
@@ -395,6 +398,17 @@ class PublishExecutorTest(unittest.TestCase):
         return {"account_id": "524650", "compiler_version": "lh2-sequence-v1"}
 
     @staticmethod
+    def structural(actions, **overrides):
+        """The structural facts a healthy LH2 campaign reads back with."""
+        facts = {
+            "isValidKnown": True, "isValid": 1,
+            "actionVersionCount": len(actions),
+            "excludeListsMissing": 0, "excludeListsUnresolved": 0,
+        }
+        facts.update(overrides)
+        return facts
+
+    @staticmethod
     def branch(action_settings=None):
         settings = action_settings if action_settings is not None else {"delay": 24}
         action = {
@@ -416,11 +430,11 @@ class PublishExecutorTest(unittest.TestCase):
     def test_create_pauses_and_canonically_verifies_empty_campaign(self):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
-        readback = {
+        readback = dict({
             "id": 101, "liAccountId": 1, "name": "Sequence A",
             "actions": branch["compiled_action_chain"],
             "peopleCount": 0, "paused": True,
-        }
+        }, **self.structural(branch["compiled_action_chain"]))
         with mock.patch.object(publisher, "_evaluate", side_effect=[[], {"outcome": "result", "campaignId": 101}, True]) as evaluate, \
              mock.patch.object(publisher, "readback", return_value=readback):
             verification, status = publisher.publish_branch(branch, self.account())
@@ -428,6 +442,9 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertEqual(verification["campaign_id"], 101)
         self.assertTrue(verification["zero_targets"])
         self.assertTrue(verification["paused"])
+        self.assertTrue(verification["is_valid"])
+        self.assertEqual(verification["action_version_count"], 1)
+        self.assertEqual(verification["exclude_lists_present"], 1)
         self.assertEqual(evaluate.call_count, 3)
         create_expression = publisher._call_expression("create", evaluate.call_args_list[1].args[1])
         self.assertIn('"target":[]', create_expression)
@@ -468,27 +485,50 @@ class PublishExecutorTest(unittest.TestCase):
         expression = agent.LinkedHelperPublisher._call_expression("readback", {"id": 101})
         self.assertIn("getCampaignName", expression)
 
+    @staticmethod
+    def lh_db(directory, *, is_valid=1, exclude_list_id=50, with_is_valid=True,
+              with_exclude_column=True, with_collection_versions=True):
+        """Build a minimal LH2 database with one campaign and one action.
+
+        The named keyword arguments reproduce the exact structural states the
+        pilot produced: a healthy native campaign, LH2 campaigns 7/8 whose
+        action versions carry no exclude list, and campaign 9 which is also
+        flagged invalid.
+        """
+        path = os.path.join(directory, "lh.db")
+        con = agent.sqlite3.connect(path)
+        con.executescript(f"""
+            CREATE TABLE campaigns (id INTEGER, name TEXT, li_account_id INTEGER,
+                                    is_paused INTEGER
+                                    {', is_valid INTEGER' if with_is_valid else ''});
+            CREATE TABLE campaign_versions (id INTEGER, campaign_id INTEGER);
+            CREATE TABLE campaign_version_actions (id INTEGER, version_id INTEGER, action_id INTEGER);
+            CREATE TABLE actions (id INTEGER, campaign_id INTEGER);
+            CREATE TABLE action_versions (id INTEGER, action_id INTEGER, config_id INTEGER
+                                          {', exclude_list_id INTEGER' if with_exclude_column else ''});
+            CREATE TABLE action_configs (id INTEGER, actionType TEXT, actionSettings TEXT, coolDown INTEGER, maxActionResultsPerIteration INTEGER);
+            CREATE TABLE action_target_people (id INTEGER, action_id INTEGER);
+            INSERT INTO campaigns VALUES (7, 'Sequence A', 1, 1
+                                          {', ' + ('NULL' if is_valid is None else str(is_valid)) if with_is_valid else ''});
+            INSERT INTO campaign_versions VALUES (9, 7);
+            INSERT INTO campaign_version_actions VALUES (1, 9, 20);
+            INSERT INTO actions VALUES (20, 7);
+            INSERT INTO action_versions VALUES (30, 20, 40
+                                                {', ' + ('NULL' if exclude_list_id is None else str(exclude_list_id)) if with_exclude_column else ''});
+            INSERT INTO action_configs VALUES (40, 'Waiter', '{{"delay":24}}', 0, -1);
+        """)
+        if with_collection_versions:
+            con.executescript("""
+                CREATE TABLE collection_people_versions (id INTEGER, collection_id INTEGER, kind TEXT);
+                INSERT INTO collection_people_versions VALUES (50, 60, 'addToTarget');
+            """)
+        con.commit()
+        con.close()
+        return path
+
     def test_sqlite_readback_uses_latest_campaign_version_without_writing(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "lh.db")
-            con = agent.sqlite3.connect(path)
-            con.executescript("""
-                CREATE TABLE campaigns (id INTEGER, name TEXT, li_account_id INTEGER, is_paused INTEGER);
-                CREATE TABLE campaign_versions (id INTEGER, campaign_id INTEGER);
-                CREATE TABLE campaign_version_actions (id INTEGER, version_id INTEGER, action_id INTEGER);
-                CREATE TABLE actions (id INTEGER, campaign_id INTEGER);
-                CREATE TABLE action_versions (id INTEGER, action_id INTEGER, config_id INTEGER);
-                CREATE TABLE action_configs (id INTEGER, actionType TEXT, actionSettings TEXT, coolDown INTEGER, maxActionResultsPerIteration INTEGER);
-                CREATE TABLE action_target_people (id INTEGER, action_id INTEGER);
-                INSERT INTO campaigns VALUES (7, 'Sequence A', 1, 1);
-                INSERT INTO campaign_versions VALUES (9, 7);
-                INSERT INTO campaign_version_actions VALUES (1, 9, 20);
-                INSERT INTO actions VALUES (20, 7);
-                INSERT INTO action_versions VALUES (30, 20, 40);
-                INSERT INTO action_configs VALUES (40, 'Waiter', '{"delay":24}', 0, -1);
-            """)
-            con.commit()
-            con.close()
+            path = self.lh_db(directory)
             profile = dict(self.PROFILE, _lh2_db_path=path)
             result = agent.LinkedHelperPublisher(profile).readback(7)
         self.assertEqual(result, {
@@ -496,7 +536,107 @@ class PublishExecutorTest(unittest.TestCase):
             "actions": [{"type": "Waiter", "settings": {"delay": 24},
                          "coolDown": 0, "maxActionResultsPerIteration": -1}],
             "peopleCount": 0, "paused": True,
+            "isValidKnown": True, "isValid": 1,
+            "actionVersionCount": 1,
+            "excludeListsMissing": 0, "excludeListsUnresolved": 0,
         })
+
+    def _verify_db(self, **kwargs):
+        """Run canonical verification against one on-disk LH2 state."""
+        branch = dict(self.branch(), lh_campaign_id=7, campaign_name="Sequence A")
+        with tempfile.TemporaryDirectory() as directory:
+            profile = dict(self.PROFILE, _lh2_db_path=self.lh_db(directory, **kwargs))
+            publisher = agent.LinkedHelperPublisher(profile)
+            with self.assertRaises(agent.PublishExecutionError) as context:
+                publisher._verify(branch, self.account())
+        return context.exception
+
+    def test_a_campaign_with_no_action_exclude_lists_is_not_a_success(self):
+        """LH2 campaigns 7 and 8: name, actions, zero targets and paused all
+        matched, but every action version had a NULL exclude list."""
+        error = self._verify_db(exclude_list_id=None)
+        self.assertEqual(error.code, "LH_ACTION_EXCLUDE_LIST_MISSING")
+        self.assertEqual(error.details, {"missing": 1, "action_versions": 1})
+
+    def test_an_invalid_campaign_is_not_a_success(self):
+        """LH2 campaign 9 additionally read back with is_valid = 0."""
+        error = self._verify_db(is_valid=0)
+        self.assertEqual(error.code, "LH_CAMPAIGN_NOT_VALID")
+        self.assertEqual(error.details, {"is_valid": 0})
+
+    def test_a_null_validity_flag_is_not_a_success(self):
+        self.assertEqual(self._verify_db(is_valid=None).code, "LH_CAMPAIGN_NOT_VALID")
+
+    def test_an_unknown_validity_column_fails_closed_with_its_own_code(self):
+        self.assertEqual(self._verify_db(with_is_valid=False).code,
+                         "LH_CAMPAIGN_VALIDITY_UNKNOWN")
+
+    def test_an_unknown_exclude_list_column_fails_closed_with_its_own_code(self):
+        self.assertEqual(self._verify_db(with_exclude_column=False).code,
+                         "LH_ACTION_EXCLUDE_LIST_UNKNOWN")
+
+    def test_a_dangling_exclude_list_reference_is_not_a_success(self):
+        error = self._verify_db(exclude_list_id=999)
+        self.assertEqual(error.code, "LH_ACTION_EXCLUDE_LIST_UNRESOLVED")
+        self.assertEqual(error.details, {"unresolved": 1})
+
+    def test_a_healthy_campaign_still_verifies_against_the_real_schema(self):
+        branch = dict(self.branch(), lh_campaign_id=7, campaign_name="Sequence A")
+        with tempfile.TemporaryDirectory() as directory:
+            profile = dict(self.PROFILE, _lh2_db_path=self.lh_db(directory))
+            verification = agent.LinkedHelperPublisher(profile)._verify(branch, self.account())
+        self.assertTrue(verification["is_valid"])
+        self.assertEqual(verification["exclude_lists_present"], 1)
+        self.assertEqual(verification["exclude_lists_unresolved"], 0)
+
+    def test_publishing_the_campaign_9_shape_reports_failure_not_completion(self):
+        """The regression this closes: publish_branch used to return "created"
+        for a campaign LH2 itself cannot open."""
+        branch = self.branch()
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.lh_db(directory, is_valid=0, exclude_list_id=None)
+            publisher = agent.LinkedHelperPublisher(dict(self.PROFILE, _lh2_db_path=path))
+            with mock.patch.object(publisher, "_evaluate", side_effect=[
+                [], {"outcome": "result", "campaignId": 7}, True,
+            ]):
+                with self.assertRaises(agent.PublishExecutionError) as context:
+                    publisher.publish_branch(branch, self.account())
+        self.assertEqual(context.exception.code, "LH_CAMPAIGN_NOT_VALID")
+
+    def test_the_readonly_report_names_every_structural_fact_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.lh_db(directory, is_valid=0, exclude_list_id=None)
+            before = os.path.getmtime(path)
+            cfg = {"instance_id": "notebook-1", "lh2_db_path": path}
+            buffer = io.StringIO()
+            with mock.patch.object(agent, "load_config", return_value=cfg), \
+                 mock.patch.object(agent, "set_local_tz"), \
+                 contextlib.redirect_stdout(buffer):
+                agent.cmd_publish_verify(argparse.Namespace(campaign=[7, 404]))
+            self.assertEqual(before, os.path.getmtime(path))
+        report = json.loads(buffer.getvalue())
+        healthy, missing = report["campaigns"]
+        self.assertEqual(healthy["is_valid"], 0)
+        self.assertEqual(healthy["action_versions_missing_exclude_list"], 1)
+        self.assertEqual(healthy["action_version_count"], 1)
+        self.assertEqual(healthy["target_people"], 0)
+        self.assertEqual(healthy["action_types"], ["Waiter"])
+        self.assertEqual(missing["error_code"], "LH_SQLITE_READBACK_MISSING")
+        # The report names which action-level references LH2 populated; that
+        # is the comparison that identifies the suppressed placeholder setup.
+        self.assertEqual(healthy["references"]["action_version_columns"],
+                         ["action_id", "config_id", "exclude_list_id"])
+        self.assertEqual(healthy["references"]["action_versions"],
+                         [{"version_id": 30, "set": ["action_id", "config_id"],
+                           "null": ["exclude_list_id"]}])
+
+    def test_the_readonly_report_shows_a_healthy_campaigns_populated_references(self):
+        with tempfile.TemporaryDirectory() as directory:
+            links = agent.campaign_reference_links(self.lh_db(directory), 7)
+        self.assertEqual(links["action_versions"],
+                         [{"version_id": 30,
+                           "set": ["action_id", "config_id", "exclude_list_id"],
+                           "null": []}])
 
     def test_existing_exact_name_mismatch_is_conflict_without_mutation(self):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
@@ -521,11 +661,11 @@ class PublishExecutorTest(unittest.TestCase):
     def test_readback_rejects_nonzero_targets_or_unpaused_campaign(self):
         publisher = agent.LinkedHelperPublisher(self.PROFILE)
         branch = self.branch()
-        readback = {
+        readback = dict({
             "id": 101, "liAccountId": 1, "name": "Sequence A",
             "actions": branch["compiled_action_chain"],
             "peopleCount": 1, "paused": False,
-        }
+        }, **self.structural(branch["compiled_action_chain"]))
         with mock.patch.object(publisher, "readback", return_value=readback):
             with self.assertRaises(agent.PublishExecutionError) as context:
                 publisher._verify(dict(branch, lh_campaign_id=101), self.account())

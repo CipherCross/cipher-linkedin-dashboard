@@ -5,26 +5,78 @@
 
 ## Current outcome
 
-The publishing path is now fixed in the agent and released as signed version
-`1.18.0`. The fix is deliberately small: the publisher no longer sends
-`excludeList: []` in the `createCampaign` payload. In LH2 2.130.29, an absent
-`excludeList` key selects the native initialization branch that creates the
-required empty exclude-list placeholder for every action.
+The `1.18.0` exclude-list fix **did not work**, and it made the result worse.
+The pilot run of `1.18.0` created LH2 campaign **9** with:
 
-The source commit is `d12acde` (`Fix LH2 empty exclude-list initialization`). The
-release pointer and manifest were verified from the private release bucket:
+- all 13 action versions still at `exclude_list_id IS NULL` — the same state as
+  campaigns 7 and 8, which were created *with* `excludeList: []`;
+- `campaigns.is_valid = 0` — a new regression. Campaigns 7 and 8 were at
+  `is_valid = 1`.
 
-- pointer version = `1.18.0`;
-- manifest version = `1.18.0`;
-- downloaded size matches the signed manifest;
-- downloaded SHA-256 matches the signed manifest;
-- Ed25519 signature validates against the notebook-pinned public key;
-- downloaded source contains `AGENT_VERSION = "1.18.0"`.
+Removing the top-level `excludeList` key therefore changed the validity flag
+without changing the action-level references at all. That is evidence the
+campaign-level key is the wrong lever: `exclude_list_id` is a **per action
+version** reference, and a healthy campaign holds one distinct collection per
+action version. Whatever suppresses LH2's native placeholder setup is in the
+per-action part of the payload, not in the campaign-level key.
 
-The two untracked planning specs are intentionally preserved:
+The publisher payload is unchanged in `1.19.0`. The failing hypothesis has not
+been replaced with another guess.
 
-- `specs/2026-08-12-tenant-owner-feature-config.md`;
-- `specs/2026-08-31-sequence-builder-linked-helper-publishing.md`.
+### What `1.19.0` does change: the verifier
+
+The decisive problem found by the pilot was not the payload — it was that the
+agent reported `publish-once: completed` for a campaign LH2 itself cannot open.
+Canonical readback checked id, name, `liAccountId` and the action chain, but
+checked neither `exclude_list_id` nor `is_valid`, so a successful publish and a
+structurally broken one were indistinguishable. Further runs would have
+accumulated broken campaigns silently.
+
+`1.19.0` closes that first:
+
+- readback now also reads `campaigns.is_valid` and, for every action version of
+  the campaign, `action_versions.exclude_list_id`;
+- verification fails closed on `LH_CAMPAIGN_NOT_VALID`,
+  `LH_ACTION_EXCLUDE_LIST_MISSING`, `LH_ACTION_EXCLUDE_LIST_UNRESOLVED` and
+  `LH_ACTION_VERSION_COUNT_MISMATCH`;
+- a build whose schema lacks either column fails closed with its own code
+  (`LH_CAMPAIGN_VALIDITY_UNKNOWN`, `LH_ACTION_EXCLUDE_LIST_UNKNOWN`) rather than
+  skipping the check it was supposed to perform;
+- the verification summary sent to the dashboard now carries `is_valid`,
+  `action_version_count`, `exclude_lists_present` and `exclude_lists_unresolved`;
+- `publish-once` no longer prints `completed` when a branch failed. It prints
+  `publish-once: FAILED — n of m branch(es) did not verify` and exits non-zero.
+
+Replayed against the campaign 7/8/9 states, the new verifier rejects all three.
+
+### New read-only command
+
+`agent.py publish-verify --campaign 6 --campaign 9` prints the structural state
+of local campaigns without contacting LH2 and without creating anything to look
+at. Per campaign it reports paused, `is_valid`, action count, action-version
+count, action versions missing an exclude list, unresolved exclude-list
+references, target people, action types, and — the part that should identify the
+suppressed placeholder setup — which `action_versions` reference columns LH2
+populated and which it left NULL, by column name.
+
+Comparing the natively created reference campaign 6 against published campaign 9
+with this command is the next diagnostic step. It reads the database `mode=ro`
+and reports no stored values, only column names and NULL/set.
+
+### Leading hypothesis, not yet tested
+
+Each action entry in the create payload is built as
+`{"name", "description", "target": [], "config": {...}}`. If LH2 guards its
+native `_createPeopleCollection()` + `createPeopleCollectionVersion(id,
+"addToTarget")` path on the action's list argument being `undefined` — the same
+`!== undefined` shape already observed at the campaign level — then `"target":
+[]` has been suppressing that setup on every run, which would explain why the
+campaign-level change moved `is_valid` and nothing else. The healthy reference
+campaign's `exclude_list_id` values point at `addToTarget` collection versions,
+which is consistent with one native path creating both.
+
+This is a hypothesis. It should be checked against the `publish-verify`
+comparison of campaigns 6 and 9 before another campaign is created.
 
 ## Pilot notebook and LH2 state
 
@@ -82,6 +134,15 @@ paused with zero targets.
 12. The same bundle showed that omitting the key invokes LH2's native path:
     `_createPeopleCollection()` followed by
     `createPeopleCollectionVersion(collectionId, "addToTarget")`.
+13. `1.18.0` shipped that change. Its pilot run created LH2 campaign **9**:
+    paused, zero targets, 13 actions and 13 action versions — but still all 13
+    exclude-list references NULL, and now `is_valid = 0`. The agent reported
+    `completed`. The campaign-level key was the wrong lever, and the verifier
+    could not tell the outcome apart from a success.
+14. `1.19.0` leaves the payload alone and closes the verifier gap instead:
+    `is_valid` and the per-action-version exclude-list references are now part
+    of canonical verification, and `publish-verify` reports the structural
+    difference between a native campaign and a published one read-only.
 
 ## Confirmed data model
 
@@ -132,12 +193,17 @@ delete, or direct-SQL repair path.
 From `sync-agent/` using the project virtualenv:
 
 ```text
-113 tests passed
+123 tests passed
 python -m py_compile agent.py: passed
 ```
 
-The regression assertion verifies that the generated create expression does not
-contain an `excludeList` key.
+The new tests build a minimal LH2 database in each of the observed structural
+states and assert that the verifier rejects each one with its own error code: a
+NULL exclude list (campaigns 7 and 8), `is_valid = 0` (campaign 9), a NULL
+validity flag, a dangling exclude-list reference, and each missing column. One
+test builds the exact campaign 9 shape and asserts `publish_branch` raises
+instead of returning `created` — the regression the pilot found. A healthy
+fixture still verifies, which is what stops the new checks being vacuous.
 
 ## Windows rollout checklist
 
@@ -149,13 +215,20 @@ Run from `C:\Claude\sync-agent` with the notebook's existing virtualenv:
 .venv\Scripts\python.exe agent.py publish-probe
 ```
 
-The probe should report agent `1.18.0`, the current LH2 endpoint, and
+The probe should report agent `1.19.0`, the current LH2 endpoint, and
 `compatible: true`. Recheck the ephemeral CDP port if LH2 restarted.
 
 After an approved job is present in the dashboard, run:
 
 ```powershell
 .venv\Scripts\python.exe agent.py publish-once
+```
+
+Before creating anything, compare the healthy reference campaign with the
+published ones:
+
+```powershell
+.venv\Scripts\python.exe agent.py publish-verify --campaign 6 --campaign 7 --campaign 8 --campaign 9
 ```
 
 Then perform read-only verification:
@@ -167,9 +240,13 @@ Then perform read-only verification:
 - `action_versions_missing_exclude_list = 0`;
 - the campaign opens in the LH2 UI.
 
+The agent now performs all of those checks itself: `publish-once` reports
+`FAILED` and exits non-zero unless every one of them holds.
+
 Do not run `sync` as part of this publishing verification, and do not manually
-edit SQLite. Campaign 7 remains the known malformed test artifact until a
-supported LH2 UI/vendor operation is available to remove or repair it.
+edit SQLite. Campaigns 7, 8 and 9 remain known malformed test artifacts until a
+supported LH2 UI/vendor operation is available to remove or repair them. All
+three are paused with zero targets and nothing was sent to LinkedIn.
 
 ## Safety and licensing decisions
 

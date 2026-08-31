@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.18.0"
+AGENT_VERSION = "1.19.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -658,6 +658,19 @@ def _js_literal(value):
                       allow_nan=False)
 
 
+def _sqlite_columns(con, table):
+    """Return one table's column names, or an empty set when it is absent.
+
+    The publisher reads several LH2 tables whose exact shape varies by build.
+    A missing table or column must make the verification fail closed with its
+    own code, never silently skip the check it was supposed to perform.
+    """
+    try:
+        return {str(row[1]) for row in con.execute(f"PRAGMA table_info({table})")}
+    except sqlite3.Error:
+        return set()
+
+
 class LinkedHelperPublisher:
     """Create, pause and verify empty campaigns through the LH2 UI service.
 
@@ -972,10 +985,15 @@ class LinkedHelperPublisher:
         try:
             con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             con.row_factory = sqlite3.Row
-            campaign = con.execute("""
-                SELECT id, name, li_account_id, is_paused
-                FROM campaigns WHERE id = ?
-            """, (campaign_id,)).fetchone()
+            # `is_valid` is the flag the LH2 UI uses to decide whether a
+            # campaign can be opened at all, so it is part of canonical
+            # verification. Read it only when the column exists; an unknown
+            # shape is reported as unknown rather than assumed valid.
+            has_is_valid = "is_valid" in _sqlite_columns(con, "campaigns")
+            campaign = con.execute(
+                "SELECT id, name, li_account_id, is_paused"
+                + (", is_valid" if has_is_valid else "")
+                + " FROM campaigns WHERE id = ?", (campaign_id,)).fetchone()
             if campaign is None:
                 raise PublishExecutionError("LH_SQLITE_READBACK_MISSING")
             rows = con.execute("""
@@ -1001,6 +1019,38 @@ class LinkedHelperPublisher:
                 JOIN actions a ON a.id = atp.action_id
                 WHERE a.campaign_id = ?
             """, (campaign_id,)).fetchone()
+            # Every action version of a healthy campaign owns its own empty
+            # exclude-list placeholder. LH2 renders a campaign whose action
+            # versions have no such reference as unopenable, so a NULL here is
+            # a structural failure even when name, actions and pause match.
+            version_columns = _sqlite_columns(con, "action_versions")
+            version_count = None
+            excludes_missing = None
+            excludes_unresolved = None
+            if version_columns:
+                version_count = int(con.execute("""
+                    SELECT COUNT(*) AS count
+                    FROM action_versions av
+                    JOIN actions a ON a.id = av.action_id
+                    WHERE a.campaign_id = ?
+                """, (campaign_id,)).fetchone()["count"] or 0)
+            if "exclude_list_id" in version_columns:
+                excludes_missing = int(con.execute("""
+                    SELECT COUNT(*) AS count
+                    FROM action_versions av
+                    JOIN actions a ON a.id = av.action_id
+                    WHERE a.campaign_id = ? AND av.exclude_list_id IS NULL
+                """, (campaign_id,)).fetchone()["count"] or 0)
+                if _sqlite_columns(con, "collection_people_versions"):
+                    excludes_unresolved = int(con.execute("""
+                        SELECT COUNT(*) AS count
+                        FROM action_versions av
+                        JOIN actions a ON a.id = av.action_id
+                        WHERE a.campaign_id = ? AND av.exclude_list_id IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1 FROM collection_people_versions cpv
+                            WHERE cpv.id = av.exclude_list_id)
+                    """, (campaign_id,)).fetchone()["count"] or 0)
         except PublishExecutionError:
             raise
         except sqlite3.Error:
@@ -1029,6 +1079,11 @@ class LinkedHelperPublisher:
             "actions": actions,
             "peopleCount": target_row["count"],
             "paused": campaign["is_paused"] == 1,
+            "isValidKnown": has_is_valid,
+            "isValid": campaign["is_valid"] if has_is_valid else None,
+            "actionVersionCount": version_count,
+            "excludeListsMissing": excludes_missing,
+            "excludeListsUnresolved": excludes_unresolved,
         }
 
     @staticmethod
@@ -1094,6 +1149,36 @@ class LinkedHelperPublisher:
             raise PublishExecutionError("LH_NONZERO_TARGET_COUNT")
         if actual.get("paused") is not True:
             raise PublishExecutionError("LH_CAMPAIGN_NOT_PAUSED")
+        # A campaign with the right name, actions, zero targets and is_paused=1
+        # can still be structurally unusable in LH2. Verification therefore also
+        # requires the campaign validity flag and one exclude-list placeholder
+        # per action version; without these two checks a broken publish and a
+        # good one are indistinguishable to this agent.
+        if actual.get("isValidKnown") is not True:
+            raise PublishExecutionError("LH_CAMPAIGN_VALIDITY_UNKNOWN")
+        is_valid = actual.get("isValid")
+        if isinstance(is_valid, bool) or not isinstance(is_valid, int) or is_valid != 1:
+            raise PublishExecutionError("LH_CAMPAIGN_NOT_VALID", {
+                "is_valid": is_valid if isinstance(is_valid, int) and not isinstance(is_valid, bool) else None,
+            })
+        version_count = actual.get("actionVersionCount")
+        excludes_missing = actual.get("excludeListsMissing")
+        if (isinstance(version_count, bool) or not isinstance(version_count, int) or
+                isinstance(excludes_missing, bool) or not isinstance(excludes_missing, int)):
+            raise PublishExecutionError("LH_ACTION_EXCLUDE_LIST_UNKNOWN")
+        if version_count != len(normalized_actual):
+            raise PublishExecutionError("LH_ACTION_VERSION_COUNT_MISMATCH", {
+                "actions": len(normalized_actual), "action_versions": version_count,
+            })
+        if excludes_missing:
+            raise PublishExecutionError("LH_ACTION_EXCLUDE_LIST_MISSING", {
+                "missing": excludes_missing, "action_versions": version_count,
+            })
+        excludes_unresolved = actual.get("excludeListsUnresolved")
+        if isinstance(excludes_unresolved, int) and not isinstance(excludes_unresolved, bool) and excludes_unresolved:
+            raise PublishExecutionError("LH_ACTION_EXCLUDE_LIST_UNRESOLVED", {
+                "unresolved": excludes_unresolved,
+            })
         return {
             "campaign_id": int(branch["lh_campaign_id"]),
             "account_match": True,
@@ -1102,6 +1187,13 @@ class LinkedHelperPublisher:
             "action_fingerprint": actual_fingerprint,
             "zero_targets": True,
             "paused": True,
+            "is_valid": True,
+            "action_version_count": version_count,
+            "exclude_lists_present": version_count - excludes_missing,
+            "exclude_lists_unresolved": (
+                excludes_unresolved
+                if isinstance(excludes_unresolved, int) and not isinstance(excludes_unresolved, bool)
+                else None),
         }
 
     def publish_branch(self, branch, account):
@@ -1155,6 +1247,89 @@ class LinkedHelperPublisher:
         self.pause_campaign(campaign_id, li_account_id)
         verified = self._verify(dict(branch, lh_campaign_id=campaign_id), account)
         return verified, "created"
+
+
+def campaign_reference_links(db_path, campaign_id):
+    """Report which action-level references LH2 populated, by column name.
+
+    A natively created campaign and a published one differ in *which* of the
+    `action_versions` reference columns LH2 filled in. Naming those columns is
+    what tells us which part of the create payload suppressed LH2's own
+    placeholder-collection setup. Only column names and NULL/set are reported;
+    no stored value is read.
+    """
+    con = None
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        columns = sorted(name for name in _sqlite_columns(con, "action_versions")
+                         if name.endswith("_id"))
+        if not columns:
+            return {"action_version_columns": [], "action_versions": []}
+        rows = con.execute(
+            "SELECT av.id AS version_id, "
+            + ", ".join(f"av.{name}" for name in columns)
+            + " FROM action_versions av JOIN actions a ON a.id = av.action_id"
+              " WHERE a.campaign_id = ? ORDER BY av.id", (campaign_id,)).fetchall()
+        return {
+            "action_version_columns": columns,
+            "action_versions": [{
+                "version_id": row["version_id"],
+                "set": [name for name in columns if row[name] is not None],
+                "null": [name for name in columns if row[name] is None],
+            } for row in rows],
+        }
+    except sqlite3.Error:
+        return {"error_code": "LH_SQLITE_READBACK_UNAVAILABLE"}
+    finally:
+        if con is not None:
+            con.close()
+
+
+def cmd_publish_verify(args):
+    """Print the structural state of local LH2 campaigns. Read-only.
+
+    This exists to compare a natively created reference campaign with a
+    published one without creating another campaign to look at. It opens the
+    database `mode=ro`, never contacts LH2 over CDP, and reports only
+    structural facts — never message bodies or action settings.
+    """
+    cfg = load_config()
+    set_local_tz(cfg)
+    profile, _ = _publish_profile(cfg)
+    if profile is None:
+        profile = {"_lh2_db_path": str(cfg.get("lh2_db_path") or "")}
+    publisher = LinkedHelperPublisher(profile)
+    configured = str(profile.get("_lh2_db_path") or "").strip()
+    try:
+        db_path = os.path.expanduser(configured) if configured else discover_db_path()
+    except (OSError, RuntimeError):
+        db_path = ""
+    report = []
+    for campaign_id in args.campaign:
+        try:
+            actual = publisher.readback(int(campaign_id))
+        except PublishExecutionError as error:
+            report.append({"campaign_id": int(campaign_id), "error_code": error.code})
+            continue
+        actions = [item for item in (actual.get("actions") or []) if isinstance(item, dict)]
+        report.append({
+            "campaign_id": actual.get("id"),
+            "name": actual.get("name"),
+            "li_account_id": actual.get("liAccountId"),
+            "paused": actual.get("paused"),
+            "is_valid": actual.get("isValid"),
+            "is_valid_known": actual.get("isValidKnown"),
+            "action_count": len(actual.get("actions") or []),
+            "action_version_count": actual.get("actionVersionCount"),
+            "action_versions_missing_exclude_list": actual.get("excludeListsMissing"),
+            "action_versions_unresolved_exclude_list": actual.get("excludeListsUnresolved"),
+            "target_people": actual.get("peopleCount"),
+            "action_types": [item.get("type") for item in actions],
+            "references": campaign_reference_links(db_path, int(campaign_id)),
+        })
+    print(json.dumps({"agent_version": AGENT_VERSION, "campaigns": report},
+                     sort_keys=True, ensure_ascii=False))
 
 
 def cmd_publish_once(args):
@@ -1243,10 +1418,10 @@ def cmd_publish_once(args):
     if not report("agent.publishState", {"job_id": job_id, "claim_generation": generation, "status": "publishing"}):
         print("publish-once: journal unavailable before publishing")
         return
-    branch_failed = False
+    branch_failed = 0
     for branch in branches:
         if not isinstance(branch, dict) or not isinstance(branch.get("branch_id"), str):
-            branch_failed = True
+            branch_failed += 1
             report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
                                             "branch_id": str(branch.get("branch_id") or "invalid") if isinstance(branch, dict) else "invalid",
                                             "status": "failed", "error_code": "PUBLISH_BRANCH_PAYLOAD_INVALID"})
@@ -1262,14 +1437,14 @@ def cmd_publish_once(args):
         try:
             verification, status = publisher.publish_branch(branch, account)
         except PublishConflictError as error:
-            branch_failed = True
+            branch_failed += 1
             report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
                                             "branch_id": branch_id, "status": "conflict",
                                             "error_code": error.code})
             print(f"publish-once: branch {branch_id} conflict {error.code}")
             continue
         except PublishExecutionError as error:
-            branch_failed = True
+            branch_failed += 1
             payload = {"job_id": job_id, "claim_generation": generation,
                        "branch_id": branch_id, "status": "failed",
                        "error_code": error.code}
@@ -1279,7 +1454,7 @@ def cmd_publish_once(args):
             print(f"publish-once: branch {branch_id} failed {error.code}")
             continue
         except (CdpError, OSError, TimeoutError) as error:
-            branch_failed = True
+            branch_failed += 1
             code = str(error) if isinstance(error, CdpError) else "CDP_ENDPOINT_UNREACHABLE"
             report("agent.publishBranch", {"job_id": job_id, "claim_generation": generation,
                                             "branch_id": branch_id, "status": "failed",
@@ -1292,10 +1467,15 @@ def cmd_publish_once(args):
                                         "verification_summary": verification})
     if not report("agent.publishFinish", {"job_id": job_id, "claim_generation": generation}):
         print("publish-once: finish failed")
-    elif branch_failed:
-        print("publish-once: completed with branch failures")
-    else:
-        print("publish-once: completed")
+        sys.exit(1)
+    # A run that created structurally incomplete campaigns must not read as a
+    # success in the scheduled-task log: say so in the first word and exit
+    # non-zero, so an operator never has to read the branch lines to tell.
+    if branch_failed:
+        print(f"publish-once: FAILED — {branch_failed} of {len(branches)} "
+              f"branch(es) did not verify")
+        sys.exit(1)
+    print(f"publish-once: verified {len(branches)} branch(es)")
 
 
 def canonical_release_manifest(manifest):
@@ -3789,6 +3969,12 @@ def main():
 
     po = sub.add_parser("publish-once", help="claim one approved publish job and run the fail-closed publisher")
     po.set_defaults(func=cmd_publish_once)
+
+    pv = sub.add_parser("publish-verify",
+                        help="read-only structural report for local LH2 campaigns")
+    pv.add_argument("--campaign", type=int, action="append", required=True,
+                    help="LH2 campaign id to report on (repeat for several)")
+    pv.set_defaults(func=cmd_publish_verify)
 
     ps = sub.add_parser("sync",
                         help="sync the local LH2 DB to whichever destination "
