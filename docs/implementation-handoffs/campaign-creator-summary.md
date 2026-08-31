@@ -390,27 +390,35 @@ problem and cannot be rolled back by changing the agent release.
 
 ## Open items
 
-### 1. `publish-once` is not scheduled anywhere
+Closed on 2026-08-31, after the pilot:
 
-`register_windows_publish_schedule` in `sync-agent/installer/install.py` has no
-caller. The PowerShell side is complete — `install-windows.ps1
--RegisterPublishSchedule` registers a namespaced task repeating every two
-minutes, separate from the 30-minute sync task — but nothing invokes it, so
-every publish so far has been a manual `agent.py publish-once`.
+- **`publish-once` is now scheduled.** `register_schedule` registers the
+  namespaced two-minute publish task when — and only when — the machine's own
+  `config.yaml` carries an `lh2_publish` profile with `enable_cdp_adapter: true`.
+  That is the same gate the agent's preflight requires, so adding a notebook
+  cannot give it a publish worker by accident, and the schedule follows the
+  machine's configuration rather than a separate list that could drift from it.
+  Deactivation removes the publish task unconditionally.
+- **The fixture is now a real oracle.** `frontend/tests/sequencePublishFixture.test.ts`
+  loads LH2's own export of reference campaign 6 from
+  `docs/platform-ops/linked-helper-campaign-settings-fixture.csv`, pins its
+  SHA-256, reconstructs the source text from the fixture's own template ASTs,
+  and asserts deep equality of the entire compiled chain — every action,
+  setting, cooldown and per-iteration limit. Seven perturbations prove the
+  comparison is not vacuous. The compiler matched on the first run.
+- **The browser client no longer dies at import.** `createClient` throws on a
+  malformed `VITE_SUPABASE_URL`, and this module is imported at startup, so a
+  placeholder or a `vercel env pull` redaction produced a blank page instead of
+  the configuration banner. An unusable value is now treated exactly like a
+  missing one, which every consumer already handles.
+- **`installer/release.json` was four versions stale** (1.17.1 while the fleet
+  ran 1.18.0) and nothing checked it. It now pins 1.21.0, and `deploy.sh` runs
+  `tests/test_installers.py`, which is the gate that asserts the pin matches the
+  exact `agent.py` being published.
 
-For an allowlist of one machine, registering it by hand on the pilot notebook is
-consistent with the specification:
+Still open:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 `
-  -RegisterPublishSchedule -InstallRoot C:\Claude\sync-agent `
-  -TaskName "LH2 Publish Agent -- notebook-1"
-```
-
-Wiring it into the installer needs an explicit per-machine opt-in first, so that
-adding a notebook does not silently give it a publish worker.
-
-### 2. `lh_version` still disagrees with the running build
+### 1. `lh_version` still disagrees with the running build
 
 The measured build is `2.130.17`; `config.yaml` and the dashboard publish
 profile say `2.130.29`. Since `1.21.0` fails closed on `LH_VERSION_MISMATCH`,
@@ -419,35 +427,32 @@ job, so a job queued against the old value fails
 `PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH`. Update the dashboard profile first, then
 `config.yaml`, then recreate the job.
 
-The CDP port no longer needs maintaining — discovery finds the rotated port
-itself.
+The CDP port needs no maintenance — discovery finds the rotated port itself.
 
-### 3. LH2 campaigns 7, 8 and 9
+Registering the publish task on the pilot notebook is a re-run of the installer's
+activation, or the one command directly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 `
+  -RegisterPublishSchedule -InstallRoot C:\Claude\sync-agent `
+  -TaskName "LH2 Publish Agent -- notebook-1"
+```
+
+### 2. LH2 campaigns 7, 8 and 9
 
 Three malformed test artifacts remain. All are paused with zero targets and
 nothing was sent from them. Removing them needs a supported LH2 UI or vendor
 operation; the adapter has no delete path and direct SQL repair was rejected.
 
-### 4. Test gaps against the specification's definition of done
+### 3. `test:cleanroom` cannot run on this checkout
 
-The compiler is covered by `frontend/tests/sequencePublish.test.ts` (7 tests
-pinning chain order, the invite filter insertion, inter-message
-`CheckForReplies` timeouts and the final `null`). But the fixture CSV named in
-the specification is **not** loaded as an oracle by any test — the expected
-`actionSettings` are hand-written instead. "Fixture tests cover every supported
-`actionSettings`, cooldown and per-iteration limit" is therefore not literally
-satisfied.
+`frontend/.env.local` came from `vercel env pull`, which redacts secret values as
+`[SENSITIVE]`, so `IDENTITY_STORE_DATABASE_URL` is unusable and the cleanroom
+suite fails. `npm test` is now green regardless (54 files / 1040 tests), because
+it no longer depends on a usable Supabase URL. The cleanroom gate is left failing
+loudly rather than auto-skipped: "skipped" and "passed" must not look the same.
 
-### 5. Credentialed test suites cannot run on the current checkout
-
-`frontend/.env.local` was produced by `vercel env pull`, which redacts secret
-values as `[SENSITIVE]`. `npm run test:cleanroom` fails on
-`IDENTITY_STORE_DATABASE_URL`, and three `npm test` files fail at import on an
-invalid `VITE_SUPABASE_URL`. With real values present, `npm test` is
-53 files / 1032 tests green. This is a local-environment gap, not a code defect,
-but it means those gates are currently unrunnable.
-
-### 6. Cosmetic difference from a natively created campaign
+### 4. Cosmetic difference from a natively created campaign
 
 The publisher writes the action type into `actions.name`; the LH2 UI leaves that
 column empty. It has no effect on validity and is deliberately kept as the more

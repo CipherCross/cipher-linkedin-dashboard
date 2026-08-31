@@ -6,6 +6,13 @@ Everything filed here was checked against the live repo on 2026-08-12 and found 
 be either already implemented, already decided, or explicitly superseded. It is
 kept for reasoning and forensics, not for orientation.
 
+One later addition: `specs/2026-08-31-sequence-builder-linked-helper-publishing.md`
+was filed on 2026-08-31, when its feature reached a verified pilot. Its transport
+research is still the best record of why CDP was chosen over generated CSV and
+UI automation, but its "approval inputs" section is spent and its LH2 behavioural
+claims were partly wrong — see `docs/implementation-handoffs/campaign-creator-summary.md`
+for what the pilot actually established.
+
 ## When to read it
 
 Open a file here only for a specific reason:

@@ -17,10 +17,15 @@ python3 -m py_compile sync-agent/agent.py   # never ship a build that can't pars
 # the build parses. The venv is gitignored, so a fresh checkout may not have one
 # — that case is announced rather than passed over silently, because "the tests
 # were skipped" and "the tests passed" must never look the same here.
+# The installer suite runs here too, because it is the only gate that checks
+# installer/release.json still pins THIS agent.py. That pin is what a fresh
+# notebook installs before its first self-update, and it silently drifted four
+# versions behind while only the transport tests guarded releases.
 if [ -x sync-agent/.venv/bin/python3 ]; then
   sync-agent/.venv/bin/python3 sync-agent/tests/test_ingest_transport.py
+  sync-agent/.venv/bin/python3 sync-agent/tests/test_installers.py
 else
-  echo "WARNING: sync-agent/.venv is missing — transport tests NOT run" >&2
+  echo "WARNING: sync-agent/.venv is missing — agent tests NOT run" >&2
 fi
 
 : "${AGENT_RELEASE_ENDPOINT:?Set the S3-compatible endpoint of the release bucket}"

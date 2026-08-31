@@ -33,14 +33,19 @@ channel can never break a sync.
 
 ```bash
 # 1. bump AGENT_VERSION in sync-agent/agent.py, commit
-# 2. load the operator credentials (never committed; see "Where things live")
+# 2. repoint sync-agent/installer/release.json at that commit: version, the
+#    commit sha, the raw URL, sha256 and byte length of the new agent.py.
+#    deploy.sh refuses to publish until it matches, because that pin is what a
+#    fresh notebook installs before its first self-update. Push the commit too,
+#    or the raw URL 404s for a new install.
+# 3. load the operator credentials (never committed; see "Where things live")
 set -a; . ~/.config/agent-release.env; set +a
-# 3. publish
+# 4. publish
 sync-agent/deploy.sh
 ```
 
-`deploy.sh` runs `py_compile`, the transport tests and a `bash -n` of itself
-before anything is uploaded — it is the last gate before the whole fleet
+`deploy.sh` runs `py_compile`, the transport tests, the installer tests and a
+`bash -n` of itself before anything is uploaded — it is the last gate before the whole fleet
 self-updates. `publish_release.py` then writes, in this order:
 
 ```
@@ -97,6 +102,13 @@ must be *published*, not reverted in git.
 first publish, and useless as proof that self-update works. The first genuine
 end-to-end proof is the first *higher* version — make it small, and let one
 notebook take it before the rest.
+
+**The installer pin drifts silently if you let it.** `installer/release.json`
+sat on 1.17.1 while the fleet ran 1.18.0, because only the transport tests
+guarded releases and nothing checked the pin. `deploy.sh` now runs
+`tests/test_installers.py`, which asserts the pin matches the exact `agent.py`
+being shipped. A fresh install still self-updates on its first sync, so drift
+was survivable — but it meant a new notebook started several versions behind.
 
 **Pin a canary.** `auto_update: false` in a notebook's `config.yaml` holds it
 back. Worth setting on all but one for any release whose blast radius you are

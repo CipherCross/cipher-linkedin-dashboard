@@ -918,16 +918,40 @@ def unregister_schedule(
         return
     if system == "Windows":
         helper = BUNDLE_ROOT / "install-windows.ps1"
-        task_name = windows_task_name(config_instance_id(root))
+        instance_id = config_instance_id(root)
         runner(
             [windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
              "-File", str(helper), "-UnregisterSchedule", "-InstallRoot", str(root),
-             "-TaskName", task_name],
+             "-TaskName", windows_task_name(instance_id)],
+            None,
+            60,
+        )
+        # Deactivation must not leave a publish worker behind. This runs
+        # unconditionally: a machine whose publish profile was removed before
+        # deactivation would otherwise keep its task forever.
+        runner(
+            [windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(helper), "-UnregisterPublishSchedule", "-InstallRoot", str(root),
+             "-TaskName", windows_publish_task_name(instance_id)],
             None,
             60,
         )
         return
     raise InstallerError("Неизвестная платформа для отключения автозапуска.")
+
+
+def publish_worker_enabled(root: pathlib.Path) -> bool:
+    """Whether this machine is configured to claim publish jobs.
+
+    The two-minute publish task is not part of a standard install. A notebook
+    gets one only when its own config.yaml carries an LH2 publish profile with
+    the CDP adapter explicitly enabled — the same gate the agent's own preflight
+    requires. Adding a notebook therefore cannot give it a publish worker by
+    accident, and the schedule follows the machine's configuration rather than a
+    separate list that could drift away from it.
+    """
+    profile = load_local_config(root).get("lh2_publish")
+    return isinstance(profile, dict) and profile.get("enable_cdp_adapter") is True
 
 
 def register_schedule(
@@ -941,6 +965,8 @@ def register_schedule(
         register_macos_schedule(root, runner, verify)
     elif system == "Windows":
         register_windows_schedule(root, runner, verify)
+        if publish_worker_enabled(root):
+            register_windows_publish_schedule(root, runner, verify)
     else:
         raise InstallerError("Автозапуск поддерживается только на macOS и Windows.")
 

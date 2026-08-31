@@ -435,6 +435,64 @@ class MultiProfileDiscoveryTest(unittest.TestCase):
             self.assertIn(installer.windows_task_name(profile.instance_id), command)
             self.assertIn(str(profile.schedule_offset_minutes), command)
 
+    def _schedule_calls(self, config, verify=False):
+        calls = []
+
+        def runner(args, cwd, timeout):
+            calls.append(tuple(str(value) for value in args))
+            return installer.CommandResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            installer.write_state(root, {"instance_id": "notebook-1",
+                                          "schedule_offset_minutes": 0})
+            with mock.patch.object(installer, "config_instance_id", return_value="notebook-1"), \
+                 mock.patch.object(installer, "load_local_config", return_value=config):
+                installer.register_schedule(root, system="Windows", runner=runner, verify=verify)
+        return calls
+
+    def test_a_plain_notebook_gets_no_publish_worker(self):
+        """Installing a notebook must not hand it a publish worker. The task
+        follows the machine's own publish profile, not a separate list."""
+        for config in (
+            {},
+            {"lh2_publish": {}},
+            {"lh2_publish": {"enable_cdp_adapter": False}},
+            {"lh2_publish": {"enable_cdp_adapter": "true"}},
+            {"lh2_publish": "notebook-1"},
+        ):
+            flat = " ".join(" ".join(call) for call in self._schedule_calls(config))
+            self.assertNotIn("-RegisterPublishSchedule", flat)
+            self.assertNotIn("publish", flat.lower())
+
+    def test_an_enabled_publish_profile_registers_the_namespaced_task(self):
+        calls = self._schedule_calls({"lh2_publish": {"enable_cdp_adapter": True}})
+        flat = [" ".join(call) for call in calls]
+        self.assertTrue(any("-RegisterSchedule" in line for line in flat))
+        publish = [line for line in flat if "-RegisterPublishSchedule" in line]
+        self.assertEqual(len(publish), 1)
+        self.assertIn(installer.windows_publish_task_name("notebook-1"), publish[0])
+        # The publish task must be its own task, never the sync task renamed.
+        self.assertNotEqual(installer.windows_publish_task_name("notebook-1"),
+                            installer.windows_task_name("notebook-1"))
+
+    def test_deactivation_removes_the_publish_task_even_without_a_profile(self):
+        """A machine whose publish profile was removed first must not keep its
+        task forever, so the removal is unconditional."""
+        calls = []
+
+        def runner(args, cwd, timeout):
+            calls.append(" ".join(str(value) for value in args))
+            return installer.CommandResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            with mock.patch.object(installer, "config_instance_id", return_value="notebook-1"):
+                installer.unregister_schedule(root, system="Windows", runner=runner)
+        self.assertTrue(any("-UnregisterSchedule" in line for line in calls))
+        self.assertTrue(any("-UnregisterPublishSchedule" in line for line in calls))
+
+
 
 class CurrentLh2MappingTest(unittest.TestCase):
     def test_current_schema_mapping_derives_milestones_and_dedupes_slug(self):
