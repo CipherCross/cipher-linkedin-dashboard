@@ -71,6 +71,7 @@ import {
   makeConnectionStep,
   moveMessageStep,
   moveVariation,
+  publishStatusLabel,
   removeBranch,
   removeStep,
   removeVariation,
@@ -882,19 +883,6 @@ const PUBLISH_ACTION_LABELS: Record<string, string> = {
 function publishAccountName(target: SequencePublishTarget): string {
   const value = target.account_snapshot.accountName ?? target.account_snapshot.account_name
   return typeof value === 'string' && value.trim() ? value.trim() : 'Account unavailable'
-}
-
-function publishStatusLabel(status: string): string {
-  return ({
-    queued: 'Queued',
-    claimed: 'Claimed by notebook',
-    preflight: 'Checking destination',
-    publishing: 'Creating paused campaigns',
-    success: 'Published',
-    partial_failure: 'Partially published',
-    conflict: 'Needs review',
-    failed: 'Failed',
-  } as Record<string, string>)[status] ?? status.split('_').join(' ')
 }
 
 export function PublishWizard({

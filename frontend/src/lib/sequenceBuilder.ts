@@ -1,3 +1,5 @@
+import type { SequencePublishStatus } from './types'
+
 export type SequenceStepKind = 'connection' | 'message'
 
 export interface SequenceVariation {
@@ -101,6 +103,30 @@ export const PERSONALIZATION_TOKENS = [
 ] as const
 
 export const CONNECTION_REQUEST_WARNING_LIMIT = 200
+
+/** The persisted publish-job vocabulary, spelled the way the UI shows it.
+ *  Keep this the single source: the builder's job list, the Sequence Hub cards
+ *  and a campaign's deployment header all read the same status column. */
+export const SEQUENCE_PUBLISH_STATUS_LABEL: Record<SequencePublishStatus, string> = {
+  queued: 'Queued',
+  claimed: 'Claimed by notebook',
+  preflight: 'Checking destination',
+  publishing: 'Creating paused campaigns',
+  success: 'Published',
+  partial_failure: 'Partially published',
+  conflict: 'Needs review',
+  failed: 'Failed',
+}
+
+/** Terminal jobs never change again — the UI stops polling once it sees one. */
+export const SEQUENCE_PUBLISH_TERMINAL: ReadonlySet<string> = new Set<SequencePublishStatus>([
+  'success', 'partial_failure', 'conflict', 'failed',
+])
+
+export function publishStatusLabel(status: string): string {
+  return SEQUENCE_PUBLISH_STATUS_LABEL[status as SequencePublishStatus]
+    ?? status.split('_').join(' ')
+}
 
 let fallbackId = 0
 export function sequenceId(prefix: string): string {
