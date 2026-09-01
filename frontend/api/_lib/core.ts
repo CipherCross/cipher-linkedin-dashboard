@@ -445,6 +445,19 @@ sequence_comment_messages — the Sequence Builder's shared creative drafting
   relations are intentionally OUTSIDE the AI SQL runner's SELECT allowlist in
   v1; do not query them with run_sql or infer that a draft was ever sent.
 
+sequence_publish_targets / sequence_publish_jobs / sequence_publish_branches —
+  immutable, admin-created publishing lineage from one sequence revision and
+  branch to one concrete account and resulting paused campaign. Job status is
+  exactly queued|claimed|preflight|publishing|success|partial_failure|conflict|
+  failed. These relations are outside the AI SQL runner allowlist.
+
+campaign_sequence_links — deliberate human lineage for an externally sourced
+  campaign converted or linked to one master sequence. campaign_id is unique,
+  so a campaign belongs to at most one master. Automatic publish association is
+  derived from sequence_publish_jobs target_instance_id plus the branch's
+  lh_campaign_id; this table must never be populated from name or copy similarity.
+  It is outside the AI SQL runner allowlist.
+
 icps — Ideal Customer Profile definitions (migration 043), fully structured (no
   Markdown body). Editable via the /icp page; the AI never writes these.
   id bigint PK, name text (unique), airtable_url text,

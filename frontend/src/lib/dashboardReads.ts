@@ -62,7 +62,7 @@ import type {
   DashboardData, FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
-  LeadsSearchPage,
+  LeadsSearchPage, SequenceHubSnapshot,
 } from './types'
 
 /**
@@ -85,6 +85,7 @@ export const READ_ENDPOINT = '/api/activity-daily'
 export const READ_OPS = {
   bootstrap: 'dashboard.bootstrap',
   overviewSummary: 'overview.summary',
+  sequenceHub: 'sequences.hub',
   routeSnapshot: 'dashboard.routeSnapshot',
   dailySeries: 'activity.dailySeries',
   instances: 'instances.overview',
@@ -165,6 +166,7 @@ export type NeonRouteSnapshot = Partial<Pick<
   | 'icpIndustries'
   | 'hypotheses'
   | 'hypothesisCampaigns'
+  | 'campaignSequenceContext'
 >>
 
 /**
@@ -174,7 +176,7 @@ export type NeonRouteSnapshot = Partial<Pick<
  * network read. Detail ids do participate because they change database scope.
  */
 export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null {
-  const [path = '/', query = ''] = hash.replace(/^#/, '').split('?', 2)
+  const [path = '/'] = hash.replace(/^#/, '').split('?', 2)
   const account = path.match(/^\/account\/(.+)$/)
   if (account) {
     const routeId = decodeURIComponent(account[1])
@@ -183,17 +185,10 @@ export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null 
   const campaign = path.match(/^\/campaign\/(.+)$/)
   if (campaign) {
     const routeId = decodeURIComponent(campaign[1])
-    const compareIds = [...new Set(
-      (new URLSearchParams(query).get('cmp') ?? '')
-        .split(',')
-        .map((id) => id.trim())
-        .filter((id) => id && id !== routeId),
-    )].slice(0, 8).join(',')
     return {
       route: 'campaign',
       routeId,
-      ...(compareIds ? { compareIds } : {}),
-      key: `campaign:${routeId}:compare:${compareIds}`,
+      key: `campaign:${routeId}`,
     }
   }
   const route = path.slice(1) as RouteSnapshotRoute
@@ -658,6 +653,20 @@ export async function fetchNeonOverviewSummary(
   )
   const row = page.items[0]
   if (!row) throw new Error(`${READ_OPS.overviewSummary}: response contained no summary row`)
+  return row
+}
+
+/** Bounded union of managed sequences, direct campaigns, deployments and reply previews. */
+export async function fetchNeonSequenceHub(
+  fetchImpl: ApiFetch = authFetch,
+): Promise<SequenceHubSnapshot> {
+  const page = await readPage<SequenceHubSnapshot>(
+    READ_OPS.sequenceHub,
+    { limit: 1 },
+    fetchImpl,
+  )
+  const row = page.items[0]
+  if (!row) throw new Error(`${READ_OPS.sequenceHub}: response contained no snapshot`)
   return row
 }
 

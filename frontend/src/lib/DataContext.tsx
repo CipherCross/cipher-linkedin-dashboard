@@ -12,7 +12,7 @@ import {
 } from './dashboardReads'
 import type { RosterPath } from './rosterWrites'
 import type {
-  Annotation, CampaignMetrics, CampaignStep, ConversationLatestMessage,
+  Annotation, CampaignMetrics, CampaignSequenceContext, CampaignStep, ConversationLatestMessage,
   ConversationReplyIntent, DailyActivity, DashboardData, FollowUpState,
   Hypothesis, HypothesisCampaign, Icp, IcpIndustry, IcpPersona, Instance, Lead,
   Message, PipelineEvent, SavedSearch, SyncRun, TeamMember,
@@ -43,6 +43,7 @@ const EMPTY: DashboardData = {
   icpIndustries: [],
   hypotheses: [],
   hypothesisCampaigns: [],
+  campaignSequenceContext: null,
 }
 
 const LEAD_COLUMNS_BASE =
@@ -324,6 +325,7 @@ interface Fetched {
   latestConversationMessages: ConversationLatestMessage[]
   followUpsAvailable: boolean
   conversationReplyIntents: ConversationReplyIntent[]
+  campaignSequenceContext: CampaignSequenceContext | null
   /**
    * A query-level failure that must be *reported* without throwing — the
    * Supabase path's aggregate of the six reads whose errors are not tolerated.
@@ -435,6 +437,7 @@ async function fetchSupabaseDashboard(
     latestConversationMessages: followUps.latest,
     followUpsAvailable: followUps.available,
     conversationReplyIntents,
+    campaignSequenceContext: null,
     error: error ? error.message : null,
   }
 }
@@ -478,6 +481,7 @@ function routeSnapshotFetched(
     latestConversationMessages: snapshot.latestConversationMessages ?? [],
     followUpsAvailable: snapshot.followUpsAvailable ?? false,
     conversationReplyIntents: snapshot.conversationReplyIntents ?? [],
+    campaignSequenceContext: snapshot.campaignSequenceContext ?? null,
     error: null,
   }
 }
@@ -938,6 +942,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 fetched.latestConversationMessages,
               ),
               followUpsAvailable: fetched.followUpsAvailable,
+              campaignSequenceContext: fetched.campaignSequenceContext,
               leads: nextLeads,
             }
           })

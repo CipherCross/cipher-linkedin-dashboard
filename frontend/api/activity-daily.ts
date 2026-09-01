@@ -78,6 +78,7 @@ import {
   PIPELINE_OPERATIONS,
   ROUTE_SNAPSHOT_OPERATION,
   ROUTE_SNAPSHOT_ROUTES,
+  SEQUENCE_HUB_OPERATION,
 } from './_lib/data/operations/index.js'
 import { dataStoreConfigured } from './_lib/data/neonConfig.js'
 import {
@@ -516,6 +517,9 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
         : null
       return { route, routeId, compareIds }
     },
+  },
+  [SEQUENCE_HUB_OPERATION]: {
+    operation: SEQUENCE_HUB_OPERATION,
   },
   [ACTIVITY_OPERATIONS.dailySeries]: {
     operation: ACTIVITY_OPERATIONS.dailySeries,

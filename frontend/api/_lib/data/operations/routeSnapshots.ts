@@ -50,6 +50,7 @@ export interface RouteSnapshotRow {
   readonly icpIndustries?: readonly unknown[]
   readonly hypotheses?: readonly unknown[]
   readonly hypothesisCampaigns?: readonly unknown[]
+  readonly campaignSequenceContext?: unknown | null
 }
 
 const EMPTY_ARRAY = `'[]'::jsonb`
@@ -120,7 +121,6 @@ SELECT jsonb_build_object(
 const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
   SELECT * FROM public.leads
    WHERE campaign_id = $1
-      OR campaign_id = ANY(string_to_array(COALESCE($2, ''), ','))
 ), scoped_threads AS MATERIALIZED (
   SELECT DISTINCT instance_id, profile_url FROM scoped_leads
 ), scoped_messages AS MATERIALIZED (
@@ -132,11 +132,43 @@ const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
     FROM public.messages m
     JOIN scoped_threads t USING (instance_id, profile_url)
    WHERE m.direction = 'in'
+), campaign_context AS (
+  SELECT x.* FROM (
+    SELECT 1 AS priority,
+           'builder'::text AS source,
+           l.sequence_document_id,
+           d.name AS sequence_name,
+           d.revision AS sequence_revision,
+           NULL::text AS branch_id,
+           NULL::text AS branch_letter,
+           NULL::text AS publish_status,
+           'explicit_link'::text AS lineage
+      FROM public.campaign_sequence_links l
+      JOIN public.sequence_documents d ON d.id = l.sequence_document_id
+     WHERE l.campaign_id = $1
+    UNION ALL
+    SELECT 2 AS priority,
+           'builder'::text AS source,
+           j.sequence_document_id,
+           d.name AS sequence_name,
+           j.sequence_revision,
+           b.branch_id,
+           b.branch_letter,
+           j.status AS publish_status,
+           'publish'::text AS lineage
+      FROM public.sequence_publish_jobs j
+      JOIN public.sequence_publish_branches b ON b.job_id = j.id
+      JOIN public.sequence_documents d ON d.id = j.sequence_document_id
+     WHERE b.lh_campaign_id IS NOT NULL
+       AND j.target_instance_id || ':' || b.lh_campaign_id = $1
+  ) x
+  ORDER BY x.priority, x.sequence_revision DESC
+  LIMIT 1
 )
 SELECT jsonb_build_object(
   'campaigns', COALESCE((
     SELECT jsonb_agg(to_jsonb(c) ORDER BY c.campaign_name, c.campaign_id)
-      FROM public.campaign_metrics c
+      FROM public.campaign_metrics c WHERE c.campaign_id = $1
   ), ${EMPTY_ARRAY}),
   'leads', COALESCE((
     SELECT jsonb_agg(to_jsonb(l) - 'updated_at' ORDER BY l.id) FROM scoped_leads l
@@ -169,6 +201,17 @@ SELECT jsonb_build_object(
       FROM public.conversation_reply_intent i
       JOIN scoped_threads t USING (instance_id, profile_url)
   ), ${EMPTY_ARRAY}),
+  'followUpStates', COALESCE((
+    SELECT jsonb_agg(to_jsonb(s) ORDER BY s.instance_id, s.profile_url)
+      FROM public.conversation_follow_up_state s
+      JOIN scoped_threads t USING (instance_id, profile_url)
+  ), ${EMPTY_ARRAY}),
+  'latestConversationMessages', COALESCE((
+    SELECT jsonb_agg(to_jsonb(m) ORDER BY m.instance_id, m.profile_url)
+      FROM public.conversation_latest_message m
+      JOIN scoped_threads t USING (instance_id, profile_url)
+  ), ${EMPTY_ARRAY}),
+  'followUpsAvailable', true,
   'annotations', COALESCE((
     SELECT jsonb_agg(to_jsonb(a) ORDER BY a.noted_at, a.id)
       FROM public.annotations a WHERE a.campaign_id = $1
@@ -176,7 +219,19 @@ SELECT jsonb_build_object(
   'steps', COALESCE((
     SELECT jsonb_agg(to_jsonb(s) ORDER BY s.step_index)
       FROM public.campaign_steps s WHERE s.campaign_id = $1
-  ), ${EMPTY_ARRAY})
+  ), ${EMPTY_ARRAY}),
+  'campaignSequenceContext', (
+    SELECT jsonb_build_object(
+      'source', c.source,
+      'sequence_document_id', c.sequence_document_id,
+      'sequence_name', c.sequence_name,
+      'sequence_revision', c.sequence_revision,
+      'branch_id', c.branch_id,
+      'branch_letter', c.branch_letter,
+      'publish_status', c.publish_status,
+      'lineage', c.lineage
+    ) FROM campaign_context c
+  )
 ) AS payload`
 
 const PIPELINE_SQL = `WITH scoped_leads AS MATERIALIZED (
@@ -416,9 +471,7 @@ export const routeSnapshotOperation: NeonQueryOperation<
     const needsId = route === 'account' || route === 'campaign'
     return {
       text: SQL_BY_ROUTE[route],
-      values: route === 'campaign'
-        ? [params?.routeId ?? null, params?.compareIds ?? '']
-        : needsId ? [params?.routeId ?? null] : [],
+      values: needsId ? [params?.routeId ?? null] : [],
     }
   },
   mapRow: (row: NeonRow): RouteSnapshotRow =>

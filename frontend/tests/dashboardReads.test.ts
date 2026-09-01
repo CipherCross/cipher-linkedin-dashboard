@@ -38,6 +38,7 @@ import {
   fetchNeonDashboard,
   fetchNeonLeadsSearchPage,
   fetchNeonOverviewSummary,
+  fetchNeonSequenceHub,
   fetchNeonRouteSnapshot,
   fetchNeonFollowUpHistory,
   fetchNeonCoachingDigests,
@@ -123,9 +124,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names twenty-nine reads including route-owned performance contracts', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(29)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(29)
+  it('names thirty reads including route-owned performance contracts', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(30)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(30)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -508,6 +509,7 @@ describe('the dashboard load', () => {
       READ_OPS.bootstrap,
       READ_OPS.overviewSummary,
       READ_OPS.routeSnapshot,
+      READ_OPS.sequenceHub,
       READ_OPS.leadsSearchPage,
       READ_OPS.thread,
       READ_OPS.leadNotes,
@@ -548,13 +550,12 @@ describe('the dashboard load', () => {
       route: 'account', routeId: 'notebook-1', key: 'account:notebook-1',
     })
     expect(routeSnapshotRequest('#/campaign/notebook-1%3A42')).toEqual({
-      route: 'campaign', routeId: 'notebook-1:42', key: 'campaign:notebook-1:42:compare:',
+      route: 'campaign', routeId: 'notebook-1:42', key: 'campaign:notebook-1:42',
     })
     expect(routeSnapshotRequest('#/campaign/notebook-1%3A42?cmp=notebook-2%3A7,notebook-3%3A8')).toEqual({
       route: 'campaign',
       routeId: 'notebook-1:42',
-      compareIds: 'notebook-2:7,notebook-3:8',
-      key: 'campaign:notebook-1:42:compare:notebook-2:7,notebook-3:8',
+      key: 'campaign:notebook-1:42',
     })
     for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses']) {
       expect(routeSnapshotRequest(`#/${route}?q=ignored`)).toEqual({ route, key: route })
@@ -592,6 +593,14 @@ describe('the dashboard load', () => {
     expect(query.get('to')).toBe('2026-05-31')
     expect(query.get('limit')).toBe('1')
     expect(result.totals.leads).toBe(10)
+  })
+
+  it('requests one bounded Sequence Hub snapshot', async () => {
+    const payload = { items: [], newestReplies: [] }
+    const rec = recorder(() => jsonResponse(emptyPage([payload])))
+    await expect(fetchNeonSequenceHub(rec.fetchImpl)).resolves.toEqual(payload)
+    const query = onlyQuery(rec, READ_OPS.sequenceHub)
+    expect(query.get('limit')).toBe('1')
   })
 
   it('requests one server-filtered Leads page instead of walking the directory', async () => {

@@ -195,6 +195,14 @@
       "owner_role_entered_by": "artifact",
       "session": "sequence-publishing",
       "description": "Admin-gated Sequence Builder publishing queue for separately compiled Linked Helper campaigns, with immutable snapshots, machine-scoped compatibility targets, renewable leases, generation-guarded results, and per-branch canonical verification. It grants no campaign start, target, overwrite, archive or delete path."
+    },
+    {
+      "step": 13,
+      "artifact": "013_sequence_campaign_links.sql",
+      "sha256": "53d14448536e3d27b570150d20b8a16ecee918504f5eaa01c05aca0de70dfe19",
+      "owner_role_entered_by": "artifact",
+      "session": "sequence-centric-workspace",
+      "description": "Explicit campaign-to-master-sequence lineage for deliberate conversion or linking, plus active-member read access to immutable publishing lineage. Publishing and link writes remain admin-gated; no campaign or machine state can be changed."
     }
   ]
 }

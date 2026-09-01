@@ -98,6 +98,7 @@ import {
   ROUTE_SNAPSHOT_OPERATION,
   routeSnapshotOperation,
 } from './routeSnapshots.js'
+import { SEQUENCE_HUB_OPERATION, sequenceHubOperation } from './sequenceHub.js'
 import {
   PIPELINE_WRITE_COMMANDS,
   PIPELINE_WRITE_OPERATIONS,
@@ -267,6 +268,10 @@ export {
   type RouteSnapshotRow,
 } from './routeSnapshots.js'
 export {
+  SEQUENCE_HUB_OPERATION,
+  type SequenceHubSnapshotRow,
+} from './sequenceHub.js'
+export {
   LIBRARY_OPERATIONS,
   type HypothesisCampaignRow,
   type HypothesisRow,
@@ -435,6 +440,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation)
   registry.registerQuery(ROUTE_SNAPSHOT_OPERATION, routeSnapshotOperation)
+  registry.registerQuery(SEQUENCE_HUB_OPERATION, sequenceHubOperation)
 
   // S13's first DataContext slice.
   registry.registerQuery(
@@ -864,6 +870,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   DASHBOARD_OPERATIONS.bootstrap,
   DASHBOARD_OPERATIONS.overviewSummary,
   ROUTE_SNAPSHOT_OPERATION,
+  SEQUENCE_HUB_OPERATION,
   DASHBOARD_OPERATIONS.instancesOverview,
   DASHBOARD_OPERATIONS.campaignsPerformance,
   DASHBOARD_OPERATIONS.campaignsSequenceSteps,

@@ -124,6 +124,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/011_sequence_builder_workspace.sql',
   // Approval-gated Sequence Builder -> Linked Helper publishing queue (step 012).
   'postgres/tenant-baseline/v1/012_sequence_publish_jobs.sql',
+  // Explicit campaign-to-sequence links and shared deployment reads (step 013).
+  'postgres/tenant-baseline/v1/013_sequence_campaign_links.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -345,8 +347,18 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twelve steps in order 1 -> 2 -> ... -> 12',
-  manifest.steps.length === 12 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares thirteen steps in order 1 -> 2 -> ... -> 13',
+  manifest.steps.length === 13 && manifest.steps.every((s, i) => s.step === i + 1));
+
+const sequenceLinkStep = readFileSync(join(BASELINE_DIR, '013_sequence_campaign_links.sql'), 'utf8');
+check('step 013 makes one campaign link to at most one master sequence',
+  /UNIQUE\s*\(campaign_id\)/i.test(sequenceLinkStep));
+check('step 013 keeps explicit link writes admin-gated',
+  /campaign_sequence_links_admin_write[\s\S]*public\.is_app_admin\(\)/i.test(sequenceLinkStep));
+check('step 013 gives active members read-only publishing lineage',
+  /sequence_publish_jobs_member_read[\s\S]*FOR SELECT[\s\S]*public\.is_active_team_member\(\)/i.test(sequenceLinkStep));
+check('step 013 grants no campaign or publishing DELETE capability',
+  !/GRANT[\s\S]{0,120}\bDELETE\b/i.test(stripComments('013_sequence_campaign_links.sql', sequenceLinkStep)));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index

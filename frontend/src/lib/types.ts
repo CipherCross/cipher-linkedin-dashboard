@@ -166,6 +166,88 @@ export interface OverviewSummary {
   funnel: OverviewFunnelSummary
 }
 
+export type SequencePublishStatus =
+  | 'queued'
+  | 'claimed'
+  | 'preflight'
+  | 'publishing'
+  | 'success'
+  | 'partial_failure'
+  | 'conflict'
+  | 'failed'
+
+export interface SequenceHubReplyPreview {
+  campaign_id: string
+  sequence_id: string | null
+  sequence_name: string
+  instance_id: string
+  account_name: string | null
+  profile_url: string
+  lead_name: string | null
+  company: string | null
+  body: string | null
+  sent_at: string
+  sentiment: Sentiment | null
+  intent_level: ReplyIntent | null
+  needs_attention: boolean
+}
+
+export interface SequenceHubDeployment {
+  key: string
+  lineage: 'publish' | 'explicit_link' | 'external'
+  campaign_id: string | null
+  campaign_name: string
+  campaign_status: string | null
+  instance_id: string
+  account_name: string | null
+  account_avatar: string | null
+  last_sync_at: string | null
+  sequence_revision: number | null
+  branch_id: string | null
+  branch_letter: string | null
+  publish_status: SequencePublishStatus | null
+  awaiting_sync: boolean
+  leads: number
+  replies: number
+  p3: number
+  latest_reply: SequenceHubReplyPreview | null
+}
+
+export interface SequenceHubItem {
+  id: string
+  kind: 'managed' | 'external'
+  source: 'builder' | 'linked_helper'
+  sequence_document_id: string | null
+  name: string
+  revision: number | null
+  archived: boolean
+  branch_count: number
+  updated_at: string | null
+  deployments: SequenceHubDeployment[]
+  deployment_count: number
+  account_count: number
+  leads: number
+  replies: number
+  p3: number
+  latest_reply: SequenceHubReplyPreview | null
+}
+
+export interface SequenceHubSnapshot {
+  items: SequenceHubItem[]
+  newestReplies: SequenceHubReplyPreview[]
+}
+
+export interface CampaignSequenceContext {
+  source: 'builder' | 'linked_helper'
+  sequence_document_id: string | null
+  sequence_name: string | null
+  sequence_revision: number | null
+  branch_id: string | null
+  branch_letter: string | null
+  publish_status: SequencePublishStatus | null
+  lineage: 'publish' | 'explicit_link' | null
+}
+
 export interface LeadsSearchReply {
   body: string
   sentiment: Sentiment | null
@@ -552,5 +634,6 @@ export interface DashboardData {
   icpIndustries: IcpIndustry[]
   hypotheses: Hypothesis[]
   hypothesisCampaigns: HypothesisCampaign[]
+  campaignSequenceContext: CampaignSequenceContext | null
   error?: string
 }

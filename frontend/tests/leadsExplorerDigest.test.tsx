@@ -84,7 +84,8 @@ const EMPTY_DATA: DashboardData = {
   icpPersonas: [],
   icpIndustries: [],
   hypotheses: [],
-  hypothesisCampaigns: [],
+      hypothesisCampaigns: [],
+      campaignSequenceContext: null,
 }
 
 vi.mock('../src/lib/DataContext', () => ({

@@ -79,6 +79,7 @@ import {
   MESSAGES_OPERATIONS,
   PIPELINE_OPERATIONS,
   ROUTE_SNAPSHOT_OPERATION,
+  SEQUENCE_HUB_OPERATION,
 } from '../api/_lib/data/operations/index.js'
 import {
   annotationsTimelineOperation,
@@ -119,6 +120,7 @@ import { teamRosterOperation } from '../api/_lib/data/operations/identity.js'
 import { coachingDigestsOperation } from '../api/_lib/data/operations/coaching.js'
 import { coachPlaybookOperation } from '../api/_lib/data/operations/aiWrites.js'
 import { routeSnapshotOperation } from '../api/_lib/data/operations/routeSnapshots.js'
+import { sequenceHubOperation } from '../api/_lib/data/operations/sequenceHub.js'
 
 /**
  * Every operation asserted below either ignores its context or reads it through
@@ -164,6 +166,7 @@ const READ_SLICE = [
   [DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation],
   [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
   [ROUTE_SNAPSHOT_OPERATION, routeSnapshotInspectable],
+  [SEQUENCE_HUB_OPERATION, sequenceHubOperation],
   [ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation],
   [DASHBOARD_OPERATIONS.instancesOverview, instancesOverviewOperation],
   [DASHBOARD_OPERATIONS.campaignsPerformance, campaignsPerformanceOperation],
@@ -261,6 +264,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'overview.summary',
       'pipeline.eventLog',
       'searches.saved',
+      'sequences.hub',
       'sync.recentRuns',
     ])
   })
@@ -392,6 +396,24 @@ describe('no operation on the read path resolves a member id', () => {
     expect(sql).toContain('from public.instances i')
     expect(sql).toContain("'last_sync_at', i.last_sync_at")
     expect(sql).toContain("'syncruns'")
+  })
+
+  it('builds Sequence Hub provenance only from durable links or publish lineage', () => {
+    const sql = sqlOf(inspectable(sequenceHubOperation)).toLowerCase()
+    expect(sql).toContain('public.campaign_sequence_links')
+    expect(sql).toContain('public.sequence_publish_jobs')
+    expect(sql).toContain("target_instance_id || ':' ||")
+    expect(sql).not.toMatch(/similarity|levenshtein|lower\([^)]*campaign_name/)
+    expect(sql).toContain('limit 12')
+  })
+
+  it('returns campaign deployment context without loading comparison campaigns', () => {
+    const statement = routeSnapshotOperation.build({
+      params: { route: 'campaign', routeId: 'notebook-1:42', compareIds: 'ignored' },
+    } as never)
+    expect(statement.values).toEqual(['notebook-1:42'])
+    expect(statement.text).toContain("'campaignSequenceContext'")
+    expect(statement.text).toContain('public.campaign_sequence_links')
   })
 
   it('orders the roster on a unique column so an offset walk cannot skip', () => {

@@ -887,10 +887,13 @@ function publishAccountName(target: SequencePublishTarget): string {
 function publishStatusLabel(status: string): string {
   return ({
     queued: 'Queued',
-    claimed: 'Preparing',
-    creating: 'Creating campaigns',
-    succeeded: 'Published',
-    failed: 'Needs attention',
+    claimed: 'Claimed by notebook',
+    preflight: 'Checking destination',
+    publishing: 'Creating paused campaigns',
+    success: 'Published',
+    partial_failure: 'Partially published',
+    conflict: 'Needs review',
+    failed: 'Failed',
   } as Record<string, string>)[status] ?? status.split('_').join(' ')
 }
 
@@ -1260,7 +1263,7 @@ function SequenceEditor({ id }: { id: string }) {
 
       {isAdmin && publishJobs.length > 0 && (
         <section className={`sequence-publish-job-strip ${publishJobs[0].status}`} aria-label="Latest campaign publishing status">
-          <span className="sequence-publish-job-icon">{publishJobs[0].status === 'succeeded' ? <CheckCircle2 size={17} /> : publishJobs[0].status === 'failed' ? <AlertCircle size={17} /> : <LoaderCircle size={17} />}</span>
+          <span className="sequence-publish-job-icon">{publishJobs[0].status === 'success' ? <CheckCircle2 size={17} /> : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status) ? <AlertCircle size={17} /> : <LoaderCircle size={17} />}</span>
           <div><strong>{publishStatusLabel(publishJobs[0].status)}</strong><small>{publishJobs[0].target_machine_key} · revision {publishJobs[0].sequence_revision}</small></div>
           <span>{publishJobs[0].branches.length} {publishJobs[0].branches.length === 1 ? 'campaign' : 'campaigns'}</span>
         </section>
