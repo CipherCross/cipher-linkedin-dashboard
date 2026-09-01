@@ -121,6 +121,7 @@ SELECT jsonb_build_object(
 const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
   SELECT * FROM public.leads
    WHERE campaign_id = $1
+      OR campaign_id = ANY(string_to_array(COALESCE($2, ''), ','))
 ), scoped_threads AS MATERIALIZED (
   SELECT DISTINCT instance_id, profile_url FROM scoped_leads
 ), scoped_messages AS MATERIALIZED (
@@ -172,7 +173,9 @@ const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
 SELECT jsonb_build_object(
   'campaigns', COALESCE((
     SELECT jsonb_agg(to_jsonb(c) ORDER BY c.campaign_name, c.campaign_id)
-      FROM public.campaign_metrics c WHERE c.campaign_id = $1
+      FROM public.campaign_metrics c
+     WHERE c.campaign_id = $1
+        OR c.campaign_id = ANY(string_to_array(COALESCE($2, ''), ','))
   ), ${EMPTY_ARRAY}),
   'leads', COALESCE((
     SELECT jsonb_agg(to_jsonb(l) - 'updated_at' ORDER BY l.id) FROM scoped_leads l
@@ -477,7 +480,9 @@ export const routeSnapshotOperation: NeonQueryOperation<
     const needsId = route === 'account' || route === 'campaign'
     return {
       text: SQL_BY_ROUTE[route],
-      values: needsId ? [params?.routeId ?? null] : [],
+      values: route === 'campaign'
+        ? [params?.routeId ?? null, params?.compareIds ?? '']
+        : needsId ? [params?.routeId ?? null] : [],
     }
   },
   mapRow: (row: NeonRow): RouteSnapshotRow =>

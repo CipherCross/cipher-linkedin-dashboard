@@ -176,7 +176,7 @@ export type NeonRouteSnapshot = Partial<Pick<
  * network read. Detail ids do participate because they change database scope.
  */
 export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null {
-  const [path = '/'] = hash.replace(/^#/, '').split('?', 2)
+  const [path = '/', query = ''] = hash.replace(/^#/, '').split('?', 2)
   const account = path.match(/^\/account\/(.+)$/)
   if (account) {
     const routeId = decodeURIComponent(account[1])
@@ -185,10 +185,17 @@ export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null 
   const campaign = path.match(/^\/campaign\/(.+)$/)
   if (campaign) {
     const routeId = decodeURIComponent(campaign[1])
+    const compareIds = [...new Set(
+      (new URLSearchParams(query).get('cmp') ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id && id !== routeId),
+    )].slice(0, 8).join(',')
     return {
       route: 'campaign',
       routeId,
-      key: `campaign:${routeId}`,
+      ...(compareIds ? { compareIds } : {}),
+      key: `campaign:${routeId}:compare:${compareIds}`,
     }
   }
   const route = path.slice(1) as RouteSnapshotRoute

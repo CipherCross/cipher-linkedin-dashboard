@@ -512,9 +512,15 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
       if ((route === 'account' || route === 'campaign') && routeId === null) {
         throw new BadRequest('route_id is required for detail routes')
       }
-      const compareIds = route === 'campaign'
+      const compareValue = route === 'campaign'
         ? readOptionalBoundedText(url, 'compare_ids')
         : null
+      const compareParts = [...new Set((compareValue ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value && value !== routeId))]
+      if (compareParts.length > 8) throw new BadRequest('compare_ids accepts at most 8 campaigns')
+      const compareIds = compareParts.join(',') || null
       return { route, routeId, compareIds }
     },
   },

@@ -407,13 +407,14 @@ describe('no operation on the read path resolves a member id', () => {
     expect(sql).toContain('limit 12')
   })
 
-  it('returns campaign deployment context without loading comparison campaigns', () => {
+  it('returns campaign deployment context with only the requested comparison campaigns', () => {
     const statement = routeSnapshotOperation.build({
       params: { route: 'campaign', routeId: 'notebook-1:42', compareIds: 'ignored' },
     } as never)
-    expect(statement.values).toEqual(['notebook-1:42'])
+    expect(statement.values).toEqual(['notebook-1:42', 'ignored'])
     expect(statement.text).toContain("'campaignSequenceContext'")
     expect(statement.text).toContain('public.campaign_sequence_links')
+    expect(statement.text).toContain("string_to_array(COALESCE($2, ''), ',')")
   })
 
   it('orders the roster on a unique column so an offset walk cannot skip', () => {

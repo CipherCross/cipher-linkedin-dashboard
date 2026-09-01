@@ -550,12 +550,13 @@ describe('the dashboard load', () => {
       route: 'account', routeId: 'notebook-1', key: 'account:notebook-1',
     })
     expect(routeSnapshotRequest('#/campaign/notebook-1%3A42')).toEqual({
-      route: 'campaign', routeId: 'notebook-1:42', key: 'campaign:notebook-1:42',
+      route: 'campaign', routeId: 'notebook-1:42', key: 'campaign:notebook-1:42:compare:',
     })
     expect(routeSnapshotRequest('#/campaign/notebook-1%3A42?cmp=notebook-2%3A7,notebook-3%3A8')).toEqual({
       route: 'campaign',
       routeId: 'notebook-1:42',
-      key: 'campaign:notebook-1:42',
+      compareIds: 'notebook-2:7,notebook-3:8',
+      key: 'campaign:notebook-1:42:compare:notebook-2:7,notebook-3:8',
     })
     for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses']) {
       expect(routeSnapshotRequest(`#/${route}?q=ignored`)).toEqual({ route, key: route })
