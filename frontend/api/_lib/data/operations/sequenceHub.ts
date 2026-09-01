@@ -260,7 +260,7 @@ const SQL = `WITH campaign_threads AS MATERIALIZED (
 ), attributed_replies AS MATERIALIZED (
   SELECT r.campaign_id,
          o.sequence_id,
-         COALESCE(o.sequence_name, c.campaign_name) AS sequence_name,
+         COALESCE(o.sequence_name, c.name) AS sequence_name,
          r.instance_id,
          i.account_name,
          r.profile_url,

@@ -206,6 +206,18 @@ const PROTECTED_PATHS = [
   // merge base, so a session's own new file would flag itself.
   'postgres/tenant-baseline/v1/011_sequence_builder_workspace.sql',
   'postgres/tenant-baseline/v1/012_sequence_publish_jobs.sql',
+  // Added by the session that applied it, which is the earliest any session
+  // could: 013 was written and merged by the phase-1 session, so that session's
+  // own diff would have flagged the file. It is applied to the live project
+  // (ledger 13/13, as app_migration under the owner's explicit authorisation)
+  // and is now as immutable as 001..012.
+  //
+  // It was applied a session late, and that gap was an outage: the campaign
+  // route snapshot and `sequences.hub` both join `campaign_sequence_links`, so
+  // from the moment those reads deployed until the apply, every campaign page
+  // answered 500. A read must not ship ahead of the step that creates what it
+  // names.
+  'postgres/tenant-baseline/v1/013_sequence_campaign_links.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
