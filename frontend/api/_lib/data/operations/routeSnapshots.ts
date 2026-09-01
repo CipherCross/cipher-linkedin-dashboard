@@ -142,7 +142,9 @@ const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
            NULL::text AS branch_id,
            NULL::text AS branch_letter,
            NULL::text AS publish_status,
-           'explicit_link'::text AS lineage
+           'explicit_link'::text AS lineage,
+           NULL::jsonb AS deployed_document,
+           NULL::jsonb AS compiled_action_chain
       FROM public.campaign_sequence_links l
       JOIN public.sequence_documents d ON d.id = l.sequence_document_id
      WHERE l.campaign_id = $1
@@ -155,7 +157,9 @@ const CAMPAIGN_SQL = `WITH scoped_leads AS MATERIALIZED (
            b.branch_id,
            b.branch_letter,
            j.status AS publish_status,
-           'publish'::text AS lineage
+           'publish'::text AS lineage,
+           j.document_snapshot AS deployed_document,
+           b.compiled_action_chain
       FROM public.sequence_publish_jobs j
       JOIN public.sequence_publish_branches b ON b.job_id = j.id
       JOIN public.sequence_documents d ON d.id = j.sequence_document_id
@@ -229,7 +233,9 @@ SELECT jsonb_build_object(
       'branch_id', c.branch_id,
       'branch_letter', c.branch_letter,
       'publish_status', c.publish_status,
-      'lineage', c.lineage
+      'lineage', c.lineage,
+      'deployed_document', c.deployed_document,
+      'compiled_action_chain', c.compiled_action_chain
     ) FROM campaign_context c
   )
 ) AS payload`

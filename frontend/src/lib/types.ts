@@ -246,6 +246,8 @@ export interface CampaignSequenceContext {
   branch_letter: string | null
   publish_status: SequencePublishStatus | null
   lineage: 'publish' | 'explicit_link' | null
+  deployed_document: Record<string, unknown> | null
+  compiled_action_chain: Array<Record<string, unknown>> | null
 }
 
 export interface LeadsSearchReply {

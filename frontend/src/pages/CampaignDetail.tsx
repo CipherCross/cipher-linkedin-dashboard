@@ -7,7 +7,7 @@ import {
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { authPost } from '../lib/api'
-import type { CampaignMetrics, Gender, Lead } from '../lib/types'
+import type { CampaignMetrics, CampaignSequenceContext, Gender, Lead } from '../lib/types'
 import {
   campaignDemographics, daysBetween, instanceName, latestRepliesByLead, leadsToActivity,
   presetRanges, previousRange, rangeFromParam, rangeTotals, rangeToParam, replyIntentMetrics,
@@ -27,6 +27,19 @@ import { ActivityChart } from '../components/ActivityChart'
 import { CampaignCompareTable } from '../components/CampaignCompareTable'
 import { RateVolumeScatter } from '../components/RateVolumeScatter'
 import { MessageSequence } from '../components/MessageSequence'
+import { DeployedSequence } from '../components/DeployedSequence'
+import { LeadsAndRepliesWorkspace } from '../components/leads-and-replies/LeadsAndRepliesWorkspace'
+import { publishStatusLabel } from '../lib/sequenceBuilder'
+
+const TABS = [
+  { id: 'leads', label: 'Leads & replies' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'sequence', label: 'Sequence' },
+] as const
+
+type CampaignTab = (typeof TABS)[number]['id']
+
+const TAB_IDS = new Set<string>(TABS.map((tab) => tab.id))
 
 export function CampaignDetail() {
   const { id } = useParams<{ id: string }>()
@@ -48,6 +61,18 @@ export function CampaignDetail() {
     const next = new URLSearchParams(params)
     next.set('range', rangeToParam(r))
     setParams(next, { replace: true })
+  }
+
+  // A campaign page is a deployment drilldown, and the daily job is reading
+  // replies — so the lead/reply workspace is the landing tab and the analytics
+  // that used to fill this page sit behind Performance.
+  const tabParam = params.get('tab')
+  const tab: CampaignTab = tabParam && TAB_IDS.has(tabParam) ? (tabParam as CampaignTab) : 'leads'
+  const setTab = (next: CampaignTab) => {
+    const search = new URLSearchParams(params)
+    if (next === 'leads') search.delete('tab')
+    else search.set('tab', next)
+    setParams(search, { replace: true })
   }
 
   const campaign = data?.campaigns.find((c) => c.campaign_id === id)
@@ -134,30 +159,79 @@ export function CampaignDetail() {
             </Link>
             {campaign.status ? ` · ${campaign.status}` : ''}
           </div>
+          <DeploymentSource context={data.campaignSequenceContext} />
         </div>
-        <div className="controls">
-          <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) writeCompare([...compareIds, e.target.value])
-            }}
-          >
-            <option value="">Compare with…</option>
-            {data.campaigns
-              .filter((c) => c.campaign_id !== campaign.campaign_id && !compareIds.includes(c.campaign_id))
-              .map((c) => (
-                <option key={c.campaign_id} value={c.campaign_id}>
-                  {c.campaign_name}
-                </option>
-              ))}
-          </select>
-        </div>
+        {tab === 'performance' && (
+          <div className="controls">
+            <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) writeCompare([...compareIds, e.target.value])
+              }}
+            >
+              <option value="">Compare with…</option>
+              {data.campaigns
+                .filter((c) => c.campaign_id !== campaign.campaign_id && !compareIds.includes(c.campaign_id))
+                .map((c) => (
+                  <option key={c.campaign_id} value={c.campaign_id}>
+                    {c.campaign_name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
       </header>
 
-      <CampaignBriefingContext campaign={campaign} />
+      <div className="segmented campaign-tabs" role="tablist" aria-label="Campaign section">
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`segmented-item ${tab === item.id ? 'active' : ''}`}
+            role="tab"
+            aria-selected={tab === item.id}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
-      {compareIds.length > 0 ? (
+      {tab === 'leads' && (
+        <LeadsAndRepliesWorkspace
+          leads={leads}
+          messages={data.messages}
+          intentRows={data.conversationReplyIntents}
+          followUpStates={data.followUpStates}
+          latestMessages={data.latestConversationMessages}
+          instances={data.instances}
+          campaigns={data.campaigns}
+        />
+      )}
+
+      {tab === 'sequence' && (
+        <div className="stack">
+          {data.campaignSequenceContext?.source === 'builder' ? (
+            <DeployedSequence context={data.campaignSequenceContext} />
+          ) : (
+            <div className="card">
+              <h2>Created in Linked Helper</h2>
+              <div className="muted small">
+                This campaign was built directly in Linked Helper, so there is no Builder
+                document, branch or authoring history behind it. The synced steps below are
+                everything the dashboard knows about its copy.
+              </div>
+            </div>
+          )}
+          <MessageSequence
+            steps={data.steps.filter((s) => s.campaign_id === campaign.campaign_id)}
+          />
+          <CampaignBriefingContext campaign={campaign} />
+        </div>
+      )}
+
+      {tab === 'performance' && (compareIds.length > 0 ? (
         <>
           <div className="cmp-chips">
             {selected.map((c) => (
@@ -201,32 +275,6 @@ export function CampaignDetail() {
             <CohortChart leads={leads} />
           </div>
 
-          <DemographicsSection leads={leads} />
-
-          <div className="stack">
-            <LeadAdditionsChart leads={leads} granularity="day" />
-            <AddBatchesTable leads={leads} />
-          </div>
-
-          <div className="stack">
-            <MessageSequence
-              steps={data.steps.filter((s) => s.campaign_id === campaign.campaign_id)}
-            />
-          </div>
-
-          <div className="two-col">
-            <LagHistogram
-              title="Time from invite to accept"
-              color="var(--success)"
-              lags={lagList(leads, 'invited_at', 'connected_at')}
-            />
-            <LagHistogram
-              title="Time from accept to reply"
-              color="var(--warning)"
-              lags={lagList(leads, 'connected_at', 'replied_at')}
-            />
-          </div>
-
           <div className="stack">
             <ActivityChart
               activity={kpis.activity}
@@ -236,9 +284,66 @@ export function CampaignDetail() {
               )}
             />
           </div>
+
+          {/* Diagnostics that answer a specific question rather than the daily
+              one. Collapsed so the funnel and activity stay the headline. */}
+          <details className="card analyze-section">
+            <summary>
+              Analyze
+              <span className="muted small"> · demographics, lead additions, timing</span>
+            </summary>
+            <div className="stack analyze-body">
+              <DemographicsSection leads={leads} />
+              <LeadAdditionsChart leads={leads} granularity="day" />
+              <AddBatchesTable leads={leads} />
+              <div className="two-col">
+                <LagHistogram
+                  title="Time from invite to accept"
+                  color="var(--success)"
+                  lags={lagList(leads, 'invited_at', 'connected_at')}
+                />
+                <LagHistogram
+                  title="Time from accept to reply"
+                  color="var(--warning)"
+                  lags={lagList(leads, 'connected_at', 'replied_at')}
+                />
+              </div>
+            </div>
+          </details>
         </>
-      )}
+      ))}
     </>
+  )
+}
+
+/** Where this campaign came from: a Builder deployment names its sequence,
+ *  revision, branch and publish state; anything else was made by hand in
+ *  Linked Helper and says so rather than implying Builder provenance. */
+function DeploymentSource({ context }: { context: CampaignSequenceContext | null }) {
+  if (!context || context.source !== 'builder') {
+    return (
+      <div className="campaign-source muted small">
+        <span className="badge">Created in Linked Helper</span>
+      </div>
+    )
+  }
+  const parts: string[] = []
+  if (context.sequence_revision != null) parts.push(`revision ${context.sequence_revision}`)
+  if (context.branch_letter) parts.push(`branch ${context.branch_letter}`)
+  if (context.publish_status) parts.push(publishStatusLabel(context.publish_status))
+  if (context.lineage === 'explicit_link') parts.push('linked by hand')
+  return (
+    <div className="campaign-source muted small">
+      <span className="badge">Sequence Builder</span>
+      {context.sequence_document_id ? (
+        <Link className="row-link" to={`/sequences/${encodeURIComponent(context.sequence_document_id)}`}>
+          {context.sequence_name ?? 'Sequence'}
+        </Link>
+      ) : (
+        <span>{context.sequence_name ?? 'Sequence'}</span>
+      )}
+      {parts.length > 0 && <span>· {parts.join(' · ')}</span>}
+    </div>
   )
 }
 
