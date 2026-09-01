@@ -19,7 +19,9 @@ import { instanceName } from './leads'
 import type { CampaignMetrics, Instance } from './types'
 
 export type SkeletonVariant = 'overview' | 'table' | 'list' | 'simple'
-export type NavigationSectionId = 'primary' | 'strategy' | 'administration'
+/** `legacy` is not a rail section — it is where a route lives once it is no
+ *  longer part of anybody's workflow but still has to resolve. */
+export type NavigationSectionId = 'primary' | 'strategy' | 'administration' | 'legacy'
 export type NavigationPlacement = 'main' | 'footer'
 
 export const APP_ROUTE_SEGMENTS = {
@@ -156,7 +158,7 @@ const ITEMS: Record<string, Omit<NavigationItem, 'section'>> = {
     label: 'Sequence Builder',
     icon: Workflow,
     skeleton: 'simple',
-    keywords: ['messages', 'copy', 'linkedin', 'ab test', 'variations'],
+    keywords: ['sequence hub', 'messages', 'copy', 'linkedin', 'ab test', 'variations', 'deployments'],
   },
   team: {
     id: 'team',
@@ -200,6 +202,7 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
     placement: 'main',
     items: [
       inSection('primary', ITEMS.overview),
+      inSection('primary', ITEMS.sequences),
       inSection('primary', ITEMS.followUps),
       inSection('primary', ITEMS.pipeline),
       inSection('primary', ITEMS.leads),
@@ -215,9 +218,6 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
       inSection('strategy', ITEMS.review),
       inSection('strategy', ITEMS.playbook),
       inSection('strategy', ITEMS.searches),
-      inSection('strategy', ITEMS.icps),
-      inSection('strategy', ITEMS.hypotheses),
-      inSection('strategy', ITEMS.sequences),
     ],
   },
   {
@@ -235,6 +235,24 @@ export const NAVIGATION_SECTIONS: NavigationSection[] = [
 
 export const NAVIGATION_ITEMS = NAVIGATION_SECTIONS.flatMap((section) => section.items)
 
+/**
+ * Routes that still work but no longer appear anywhere a person can click.
+ *
+ * ICPs and Hypotheses were retired from the rail when sequences became the
+ * operating object, but their rows, their `/api` contracts and the briefing and
+ * coaching prompts that read them are all untouched — so the routes have to
+ * keep resolving, keep their page title and keep their loading shape. They are
+ * deliberately outside `NAVIGATION_ITEMS`, which is what the rail and the
+ * ⌘K palette render: hidden means unlisted, not unreachable.
+ */
+export const LEGACY_NAVIGATION_ITEMS: NavigationItem[] = [
+  inSection('legacy', ITEMS.icps),
+  inSection('legacy', ITEMS.hypotheses),
+]
+
+/** Every item that owns a route, visible or not. */
+export const ROUTED_NAVIGATION_ITEMS = [...NAVIGATION_ITEMS, ...LEGACY_NAVIGATION_ITEMS]
+
 export function navigationItemMatches(pathname: string, item: NavigationItem): boolean {
   return item.end
     ? pathname === item.to
@@ -242,7 +260,7 @@ export function navigationItemMatches(pathname: string, item: NavigationItem): b
 }
 
 export function navigationItemForPath(pathname: string): NavigationItem | null {
-  return NAVIGATION_ITEMS.find((item) => navigationItemMatches(pathname, item)) ?? null
+  return ROUTED_NAVIGATION_ITEMS.find((item) => navigationItemMatches(pathname, item)) ?? null
 }
 
 export function pageNameForPath(pathname: string): string | null {

@@ -87,6 +87,11 @@ export default function App() {
                       <Route path={APP_ROUTE_SEGMENTS.csvImport} element={<AdminOnly><CsvImport /></AdminOnly>} />
                       <Route path={APP_ROUTE_SEGMENTS.playbook} element={<Playbook />} />
                       <Route path={APP_ROUTE_SEGMENTS.searches} element={<SearchLibrary />} />
+                      {/* Legacy: off the rail since sequences became the operating
+                          object, but still routed. Briefings and coaching read
+                          these rows, so the pages stay reachable by URL until a
+                          later migration proves nothing depends on them.
+                          See LEGACY_NAVIGATION_ITEMS in lib/navigation.ts. */}
                       <Route path={APP_ROUTE_SEGMENTS.icp} element={<Icp />} />
                       <Route path={APP_ROUTE_SEGMENTS.hypotheses} element={<Hypotheses />} />
                       <Route path={APP_ROUTE_SEGMENTS.sequences} element={<SequenceBuilder />} />

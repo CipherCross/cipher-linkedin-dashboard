@@ -4590,3 +4590,88 @@ td .pipe-stage-select.quiet:focus-visible {
   .sequence-publish-submit { min-width: 0; }
   .sequence-publish-action-flow { margin-left: 0; }
 }
+
+/* ── Sequence-centric Overview ──────────────────────────────────────────── */
+
+.overview-operations {
+  display: grid; gap: var(--space-6); margin-bottom: var(--space-6);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.overview-panel { display: flex; flex-direction: column; gap: 12px; }
+.overview-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.overview-panel-head h2 { margin: 0; }
+.overview-panel-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.overview-panel-foot { border-top: 1px solid var(--border); padding-top: 9px; }
+
+.active-sequence-list, .new-reply-list { margin: 0; padding: 0; list-style: none; }
+.active-sequence {
+  display: grid; gap: 6px 14px; align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 10px 0; border-bottom: 1px solid var(--border-subtle, var(--border));
+}
+.active-sequence:last-child { border-bottom: none; }
+.active-sequence-main { min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.active-sequence-name { font-weight: 600; color: var(--text); text-decoration: none; }
+.active-sequence-name:hover { color: var(--accent); }
+.active-sequence-accounts { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.active-sequence-metrics { display: flex; gap: 14px; margin: 0; }
+.active-sequence-metrics dt {
+  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-muted);
+}
+.active-sequence-metrics dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.active-sequence-state { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
+
+.badge.attention-alert { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
+.badge.attention-watch { border-color: var(--warning-border); background: var(--warning-subtle); color: var(--warning); }
+.badge.attention-ok { border-color: var(--success-border); background: var(--success-subtle); color: var(--success); }
+.badge.source-external { color: var(--text-muted); }
+
+.new-reply { border-bottom: 1px solid var(--border-subtle, var(--border)); }
+.new-reply:last-child { border-bottom: none; }
+.new-reply-open {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  color: inherit; font: inherit; cursor: pointer; padding: 10px 6px;
+  border-radius: var(--radius-md); text-decoration: none;
+}
+.new-reply-open:hover { background: var(--surface-2); }
+/* The row is a <button> half the time, so its parts are spans; these three
+   rules restore the layout the elements would have had as divs. */
+.new-reply-open > span { display: block; }
+.new-reply-open > span.new-reply-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.new-reply-open > span.reply-body { display: -webkit-box; }
+.new-reply-name { font-weight: 600; }
+.new-reply-when { margin-left: auto; }
+.new-reply-attribution { margin-top: 4px; }
+
+.overview-summary-strip {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: var(--space-6);
+}
+.overview-summary-cells { display: flex; gap: 22px; margin: 0; flex-wrap: wrap; }
+.overview-summary-cells dt {
+  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-muted);
+}
+.overview-summary-cells dd { margin: 0; font-size: var(--text-lg); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+.overview-section { margin-top: var(--space-6); }
+.overview-section-title {
+  margin: 0 0 var(--space-6); font-size: var(--text-sm); text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted);
+}
+
+@media (max-width: 1100px) {
+  .overview-operations { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .active-sequence { grid-template-columns: minmax(0, 1fr); }
+  .active-sequence-state { align-items: flex-start; text-align: left; }
+  .overview-summary-cells { gap: 14px; }
+}
