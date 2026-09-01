@@ -15,7 +15,7 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { authFetch } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 import { EmptyState } from '../components/EmptyState'
-import { LeadAvatar } from '../components/Avatar'
+import { LeadMilestoneBadge, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
 import { LostReasonModal } from '../components/LostReasonModal'
 import type {
   CoachingDigest, Gender, Lead, LeadsSearchItem, LeadsSearchPage, ReplyIntent, Sentiment,
@@ -23,7 +23,7 @@ import type {
 import {
   AGE_BUCKETS, GENDER_SHORT, INTENT_META, INTENT_ORDER, RISK_LABEL, SENTIMENT_META,
   SENTIMENT_ORDER, STAGES, ageBucketOf, ageRange, downloadCsv, highestIntentByLead,
-  instanceName, latestRepliesByLead, leadKey, riskOf, stageMeta, stageOf, toCsv,
+  instanceName, latestRepliesByLead, leadKey, riskOf, stageOf, toCsv,
 } from '../lib/leads'
 import type { AgeBucket, RiskFlag, Stage } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
@@ -993,11 +993,9 @@ export function LeadsExplorer() {
               const reply = replyActive
                 ? snippets.get(leadKey(l.instance_id, l.profile_url))
                 : undefined
-              const senti = reply?.sentiment ? SENTIMENT_META[reply.sentiment] : null
               const reachedIntent = conversationIntents.get(
                 leadKey(l.instance_id, l.profile_url),
               )?.highest
-              const intentMeta = reachedIntent ? INTENT_META[reachedIntent] : null
               return (
               <tr
                 key={l.id}
@@ -1014,36 +1012,16 @@ export function LeadsExplorer() {
                 }}
               >
                 <td>
-                  <div className="lead-cell">
-                    <LeadAvatar lead={l} size={30} />
-                    <div className="lead-cell-main">
-                      <a
-                        className="row-link"
-                        href={l.profile_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {l.full_name || l.profile_url.replace('https://www.linkedin.com/in/', '')}
-                      </a>
-                      {senti && (
-                        <span className={`badge senti ${senti.cls}`} title={reply?.reason ?? ''}>
-                          {senti.label}
-                        </span>
-                      )}
-                      {intentMeta && (
-                        <span className={`badge senti ${intentMeta.cls}`} title="Highest intent ever reached">
-                          {intentMeta.short} · {intentMeta.label}
-                        </span>
-                      )}
-                      {l.company && <div className="muted small">{l.company}</div>}
-                      {reply && <div className="reply-body">“{reply.body}”</div>}
-                    </div>
-                  </div>
+                  <LeadReplyIdentity
+                    lead={l}
+                    reply={reply}
+                    highestIntent={reachedIntent}
+                    showSnippet={replyActive}
+                  />
                 </td>
                 <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 <td className="muted small">{campaignName(l.campaign_id)}</td>
-                <td><StageBadge lead={l} /></td>
+                <td><LeadMilestoneBadge lead={l} /></td>
                 <td onClick={(e) => e.stopPropagation()}>
                   <select
                     className={`pipe-stage-select${l.pipeline_stage ? '' : ' quiet'}`}
@@ -1157,17 +1135,6 @@ function GenderCell({ lead }: { lead: Lead }) {
       {short}
       {conf != null ? ` ·${conf}%` : ''}
     </span>
-  )
-}
-
-function StageBadge({ lead }: { lead: Lead }) {
-  const stage = stageMeta(stageOf(lead))
-  const risk = riskOf(lead)
-  return (
-    <>
-      <span className={`badge stage-${stage.id}`}>{stage.label}</span>
-      {risk && <span className="badge risk">{RISK_LABEL[risk]}</span>}
-    </>
   )
 }
 
