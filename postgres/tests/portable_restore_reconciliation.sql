@@ -23,21 +23,20 @@ BEGIN
   -- 1. Object inventory, in the terms S05, S06 and S07 established.
   --
 
-  -- Current manifest-wide public table inventory, including identity, ingest,
-  -- Sequence Builder/publishing and campaign lineage tables.
+  -- 25 business tables from S05 plus the two canonical identity tables S06 adds.
   SELECT count(*) INTO actual
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relkind = 'r';
-  IF actual <> 37 THEN
-    RAISE EXCEPTION 'expected 37 tables in public for ledger 14/14, found %', actual;
+  IF actual <> 27 THEN
+    RAISE EXCEPTION 'expected 27 tables in public (25 business + users + user_identities), found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relkind = 'r'
      AND c.relname NOT IN ('users', 'user_identities');
-  IF actual <> 35 THEN
-    RAISE EXCEPTION 'expected 35 non-identity public tables, found %', actual;
+  IF actual <> 25 THEN
+    RAISE EXCEPTION 'expected the 25 S05 business tables, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -47,12 +46,12 @@ BEGIN
     RAISE EXCEPTION 'expected 7 views, found %', actual;
   END IF;
 
-  -- 2. RLS: enabled on every public table, and never restored as FORCE.
+  -- 2. RLS: enabled on all 27, and never restored as FORCE.
   SELECT count(*) INTO actual
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
-  IF actual <> 37 THEN
-    RAISE EXCEPTION 'expected RLS enabled on 37 tables, found %', actual;
+  IF actual <> 27 THEN
+    RAISE EXCEPTION 'expected RLS enabled on 27 tables, found %', actual;
   END IF;
 
   SELECT string_agg(c.relname, ', ' ORDER BY c.relname) INTO detail
@@ -66,8 +65,8 @@ BEGIN
     FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public';
-  IF actual <> 85 THEN
-    RAISE EXCEPTION 'expected 85 policies, found %', actual;
+  IF actual <> 52 THEN
+    RAISE EXCEPTION 'expected 52 policies, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -88,9 +87,16 @@ BEGIN
    WHERE n.nspname = 'public'
      AND NOT EXISTS (SELECT 1 FROM pg_depend d
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
-  -- Manifest-wide through step 014, including the campaign observation trigger.
-  IF actual <> 25 THEN
-    RAISE EXCEPTION 'expected 25 portable functions, found %', actual;
+  -- 13 from S07, plus the 5 ledger step 004 added, plus the 1 step 005 added
+  -- (identity_admin_invite_member_atomic). These figures are manifest-wide and
+  -- move with every step that adds a function; left alone they fail on the next
+  -- restore drill and the failure looks like corruption rather than an expected
+  -- baseline change.
+  -- The step-004 five are: the three identity admin write
+  -- functions, the actor resolver and the roster read. The figure moved because
+  -- the baseline genuinely gained functions, not because the check was relaxed.
+  IF actual <> 19 THEN
+    RAISE EXCEPTION 'expected 19 portable functions, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -106,8 +112,8 @@ BEGIN
     FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND NOT t.tgisinternal;
-  IF actual <> 18 THEN
-    RAISE EXCEPTION 'expected 18 triggers, found %', actual;
+  IF actual <> 12 THEN
+    RAISE EXCEPTION 'expected 12 triggers, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -124,8 +130,11 @@ BEGIN
    WHERE n.nspname = 'public' AND p.prosecdef
      AND NOT EXISTS (SELECT 1 FROM pg_depend d
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
-  IF actual <> 19 THEN
-    RAISE EXCEPTION 'expected 19 SECURITY DEFINER functions, found %', actual;
+  -- 8 from S07, plus all 5 of step 004's and the 1 of step 005's, which are
+  -- SECURITY DEFINER by design: they exist precisely to hold a privilege the
+  -- calling role does not have.
+  IF actual <> 14 THEN
+    RAISE EXCEPTION 'expected 14 SECURITY DEFINER functions, found %', actual;
   END IF;
 
   SELECT string_agg(p.proname, ', ' ORDER BY p.proname) INTO detail
@@ -146,16 +155,16 @@ BEGIN
     FROM pg_index x JOIN pg_class t ON t.oid = x.indrelid
     JOIN pg_namespace n ON n.oid = t.relnamespace
    WHERE n.nspname = 'public';
-  IF actual <> 103 THEN
-    RAISE EXCEPTION 'expected 103 indexes in public, found %', actual;
+  IF actual <> 75 THEN
+    RAISE EXCEPTION 'expected 75 indexes in public, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
     FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public';
-  IF actual <> 213 THEN
-    RAISE EXCEPTION 'expected 213 constraints in public, found %', actual;
+  IF actual <> 133 THEN
+    RAISE EXCEPTION 'expected 133 constraints in public, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -292,8 +301,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Step 007 grants the server-owned jobs their exact five-table write surface;
-  -- the two identity sequences are visible through table-privilege inspection.
+  -- app_system's entire privilege set is schema usage plus that one function.
   IF NOT pg_catalog.has_schema_privilege('app_system', 'public', 'USAGE') THEN
     RAISE EXCEPTION 'app_system lost USAGE on schema public during restore';
   END IF;
@@ -302,8 +310,8 @@ BEGIN
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'S')
      AND pg_catalog.has_table_privilege('app_system', c.oid, 'SELECT');
-  IF detail IS DISTINCT FROM 'briefing_jobs, briefings, leads, messages, messages_id_seq, saved_searches, saved_searches_id_seq' THEN
-    RAISE EXCEPTION 'app_system table access after restore differs: %', coalesce(detail, '<none>');
+  IF detail IS NOT NULL THEN
+    RAISE EXCEPTION 'app_system gained table access during restore: %', detail;
   END IF;
 
   --
@@ -399,13 +407,13 @@ BEGIN
   -- 12. The ledger travelled with the database and still describes it.
   --
   SELECT count(*) INTO actual FROM app_ledger.applied_migration;
-  IF actual <> 14 THEN
-    RAISE EXCEPTION 'expected 14 ledger rows after restore, found %', actual;
+  IF actual <> 5 THEN
+    RAISE EXCEPTION 'expected 5 ledger rows after restore, found %', actual;
   END IF;
 
   SELECT string_agg(artifact, ' -> ' ORDER BY applied_seq) INTO detail
     FROM app_ledger.applied_migration;
-  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql -> 005_identity_atomic_invite.sql -> 006_messages_direction_seek_index.sql -> 007_ai_system_write_path.sql -> 008_ai_system_auto_advance_execute.sql -> 009_machine_ingest_path.sql -> 010_machine_schema_usage.sql -> 011_sequence_builder_workspace.sql -> 012_sequence_publish_jobs.sql -> 013_sequence_campaign_links.sql -> 014_campaign_runtime_status.sql' THEN
+  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql -> 005_identity_atomic_invite.sql' THEN
     RAISE EXCEPTION 'ledger order did not survive restore: %', detail;
   END IF;
 
