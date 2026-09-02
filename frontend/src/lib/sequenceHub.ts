@@ -1,6 +1,5 @@
 import type { SequenceHubDeployment, SequenceHubItem } from './types'
 import { publishStatusLabel } from './sequenceBuilder'
-import { sequenceHasOperationalDeployment } from './campaignRuntime'
 
 /**
  * Reading the Sequence Hub snapshot the way the Overview needs it.
@@ -19,7 +18,7 @@ export interface SequenceAttention {
   label: string
 }
 
-const OK: SequenceAttention = { level: 'ok', label: 'No attention' }
+const OK: SequenceAttention = { level: 'ok', label: 'Running' }
 
 /** Publish states that stopped short of a live campaign on the notebook. */
 const PUBLISH_TROUBLE = new Set(['partial_failure', 'conflict', 'failed'])
@@ -32,8 +31,9 @@ const RANK: Record<SequenceAttentionLevel, number> = { alert: 0, watch: 1, ok: 2
 /**
  * What, if anything, is wrong with one deployment.
  *
- * Runtime/archive is a separate axis. This helper ranks publish and sync health
- * only; the caller renders the normalized Linked Helper state independently.
+ * Deliberately blind to `campaign_status`: that column is whatever string the
+ * notebook's Linked Helper build wrote, and branching on its spelling would
+ * silently mislabel a campaign the day LH2 renames a state.
  */
 export function deploymentAttention(
   deployment: SequenceHubDeployment,
@@ -54,7 +54,7 @@ export function deploymentAttention(
 /** The worst state across a sequence's deployments — one broken account is enough. */
 export function sequenceAttention(item: SequenceHubItem, now = Date.now()): SequenceAttention {
   let worst = OK
-  for (const deployment of item.deployments.filter((candidate) => candidate.is_archived !== true)) {
+  for (const deployment of item.deployments) {
     const attention = deploymentAttention(deployment, now)
     if (RANK[attention.level] < RANK[worst.level]) worst = attention
     if (worst.level === 'alert') break
@@ -84,7 +84,7 @@ export function activeSequences(
   now = Date.now(),
 ): RankedSequence[] {
   return items
-    .filter((item) => !item.archived && sequenceHasOperationalDeployment(item.deployments))
+    .filter((item) => !item.archived && item.deployment_count > 0)
     .map((item) => ({ item, attention: sequenceAttention(item, now) }))
     .sort((left, right) => {
       const byLevel = RANK[left.attention.level] - RANK[right.attention.level]

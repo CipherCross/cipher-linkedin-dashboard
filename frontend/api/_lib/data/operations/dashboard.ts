@@ -170,11 +170,6 @@ export interface CampaignMetricsRow {
   readonly campaign_name: string
   readonly instance_id: string
   readonly status: string
-  readonly runtime_status: string | null
-  readonly is_archived: boolean | null
-  readonly status_observed_at: string | null
-  readonly status_source: string | null
-  readonly status_raw: string | null
   readonly total_leads: number
   readonly invites_sent: number
   readonly accepted: number
@@ -485,11 +480,6 @@ campaign_stats AS (
          c.name AS campaign_name,
          l.instance_id,
          c.status,
-         c.runtime_status,
-         c.is_archived,
-         c.status_observed_at,
-         c.status_source,
-         c.status_raw,
          count(*)::int AS total_leads,
          count(*) FILTER (WHERE (b.cur_from IS NULL OR l.added_at >= b.cur_from)
                             AND (b.cur_to IS NULL OR l.added_at < b.cur_to))::int AS leads_added,
@@ -512,8 +502,6 @@ campaign_stats AS (
     JOIN public.campaigns c ON c.id = l.campaign_id
     CROSS JOIN bounds b
    GROUP BY l.campaign_id, c.name, l.instance_id, c.status,
-            c.runtime_status, c.is_archived, c.status_observed_at,
-            c.status_source, c.status_raw,
             c.briefing_context, c.briefing_context_updated_at
 ),
 activity_rows AS (
@@ -675,11 +663,6 @@ SELECT (g.value || jsonb_build_object(
     'campaign_name', c.campaign_name,
     'instance_id', c.instance_id,
     'status', c.status,
-    'runtime_status', c.runtime_status,
-    'is_archived', c.is_archived,
-    'status_observed_at', c.status_observed_at,
-    'status_source', c.status_source,
-    'status_raw', c.status_raw,
     'total_leads', c.total_leads,
     'leads_added', c.leads_added,
     'invites_sent', c.invites_sent,
@@ -767,11 +750,6 @@ const CAMPAIGN_METRICS_SQL = `SELECT cm.campaign_id,
           cm.campaign_name,
           cm.instance_id,
           cm.status,
-          cm.runtime_status,
-          cm.is_archived,
-          cm.status_observed_at,
-          cm.status_source,
-          cm.status_raw,
           cm.total_leads,
           cm.invites_sent,
           cm.accepted,
@@ -792,13 +770,6 @@ export const campaignsPerformanceOperation: NeonQueryOperation<CampaignMetricsRo
       campaign_name: text(row.campaign_name),
       instance_id: text(row.instance_id),
       status: text(row.status),
-      runtime_status: nullableText(row.runtime_status),
-      is_archived: row.is_archived === null || row.is_archived === undefined
-        ? null
-        : Boolean(row.is_archived),
-      status_observed_at: nullableText(row.status_observed_at),
-      status_source: nullableText(row.status_source),
-      status_raw: nullableText(row.status_raw),
       total_leads: requiredNumber(row.total_leads),
       invites_sent: requiredNumber(row.invites_sent),
       accepted: requiredNumber(row.accepted),

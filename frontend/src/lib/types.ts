@@ -89,11 +89,6 @@ export interface CampaignMetrics {
   campaign_name: string
   instance_id: string
   status: string
-  runtime_status: CampaignRuntimeStatus | null
-  is_archived: boolean | null
-  status_observed_at: string | null
-  status_source: string | null
-  status_raw: string | null
   /** Team-provided operational background used by AI briefings. This is
    *  attributed context, not measured campaign telemetry. */
   briefing_context?: string | null
@@ -181,14 +176,6 @@ export type SequencePublishStatus =
   | 'conflict'
   | 'failed'
 
-export type CampaignRuntimeStatus =
-  | 'draft'
-  | 'running'
-  | 'queued'
-  | 'sleeping'
-  | 'stopped'
-  | 'completed'
-
 export interface SequenceHubReplyPreview {
   campaign_id: string
   sequence_id: string | null
@@ -211,11 +198,6 @@ export interface SequenceHubDeployment {
   campaign_id: string | null
   campaign_name: string
   campaign_status: string | null
-  runtime_status: CampaignRuntimeStatus | null
-  is_archived: boolean | null
-  status_observed_at: string | null
-  status_source: string | null
-  status_raw: string | null
   instance_id: string
   account_name: string | null
   account_avatar: string | null

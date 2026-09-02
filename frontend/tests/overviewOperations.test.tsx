@@ -104,11 +104,6 @@ const deployment = (over: Partial<SequenceHubDeployment>): SequenceHubDeployment
   campaign_id: 'notebook-1:1',
   campaign_name: 'Campaign',
   campaign_status: 'running',
-  runtime_status: 'running',
-  is_archived: false,
-  status_observed_at: '2026-09-01T11:40:00.000Z',
-  status_source: 'fixture-runtime-v1',
-  status_raw: '{"runtime":"running"}',
   instance_id: 'notebook-1',
   account_name: 'Mykyta S',
   account_avatar: null,
@@ -170,7 +165,7 @@ const ALPHA = item({
   branch_count: 3,
   updated_at: '2026-07-01T00:00:00.000Z',
   deployments: [
-    deployment({ campaign_id: 'notebook-1:1', campaign_name: 'Founders NL', leads: 90, replies: 10, p3: 2 }),
+    deployment({ campaign_id: 'notebook-1:1', campaign_name: 'Founders NL', leads: 90 }),
     deployment({
       key: 'notebook-2:2',
       campaign_id: 'notebook-2:2',
@@ -179,8 +174,6 @@ const ALPHA = item({
       account_name: 'Alyona K',
       publish_status: 'partial_failure',
       leads: 30,
-      replies: 4,
-      p3: 1,
     }),
   ],
   deployment_count: 2,
@@ -196,7 +189,7 @@ const BETA = item({
   sequence_document_id: 'seq-beta',
   name: 'Ops leaders',
   updated_at: '2026-08-31T00:00:00.000Z',
-  deployments: [deployment({ key: 'notebook-1:3', campaign_id: 'notebook-1:3', leads: 80, replies: 9, p3: 2 })],
+  deployments: [deployment({ key: 'notebook-1:3', campaign_id: 'notebook-1:3', leads: 80 })],
   deployment_count: 1,
   account_count: 1,
   leads: 80,
@@ -227,7 +220,6 @@ const EXTERNAL = item({
     sequence_revision: null,
     publish_status: null,
     leads: 40,
-    replies: 4,
   })],
   deployment_count: 1,
   account_count: 1,
@@ -347,30 +339,6 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('active sequences', () => {
-  it('excludes archived and archive-unknown deployments from operational card totals', async () => {
-    fetchNeonSequenceHub.mockResolvedValueOnce({
-      items: [item({
-        name: 'Mixed fleet',
-        deployments: [
-          deployment({ key: 'current', leads: 10, replies: 2, p3: 1 }),
-          deployment({ key: 'archived', instance_id: 'notebook-2', account_name: 'Alyona K', runtime_status: 'completed', is_archived: true, leads: 50, replies: 20, p3: 5 }),
-          deployment({ key: 'archive-unknown', instance_id: 'notebook-2', account_name: 'Alyona K', runtime_status: 'running', is_archived: null, leads: 70, replies: 30, p3: 7 }),
-        ],
-        deployment_count: 3, account_count: 2, leads: 130, replies: 52, p3: 13,
-      })],
-      newestReplies: [],
-    })
-    await painted()
-
-    const card = document.querySelector('.active-sequence') as HTMLElement
-    expect(within(card).getByText('10')).toBeTruthy()
-    expect(within(card).getByText('2')).toBeTruthy()
-    expect(within(card).getByText('1 Running')).toBeTruthy()
-    expect(card.textContent).toContain('1 archived excluded')
-    expect(card.textContent).toContain('1 archive unknown excluded')
-    expect(card.textContent).not.toContain('Alyona K')
-  })
-
   it('puts the broken deployment first even though it is the oldest', async () => {
     await painted()
 
@@ -381,7 +349,7 @@ describe('active sequences', () => {
     expect(first.querySelector('.attention-alert')).not.toBeNull()
     // The two healthy ones are not dressed up as problems.
     const healthy = document.querySelectorAll('.active-sequence')[1] as HTMLElement
-    expect(within(healthy).getByText('1 Running')).toBeTruthy()
+    expect(within(healthy).getByText('Running')).toBeTruthy()
   })
 
   it('names every account a sequence runs on, and its aggregate counts', async () => {

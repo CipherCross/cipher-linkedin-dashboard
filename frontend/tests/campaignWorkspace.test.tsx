@@ -64,11 +64,6 @@ const CAMPAIGN = {
   instance_id: 'notebook-1',
   campaign_name: 'Founders Q3',
   status: 'running',
-  runtime_status: 'sleeping',
-  is_archived: false,
-  status_observed_at: '2026-09-01T12:00:00.000Z',
-  status_source: 'fixture-build-v1',
-  status_raw: '{"runtime":"S"}',
   invites_sent: 3,
   accepted: 2,
   replies: 2,
@@ -342,15 +337,6 @@ describe('the campaign page as a reply workspace', () => {
 })
 
 describe('where a campaign came from', () => {
-  it('shows Linked Helper runtime separately from Builder publishing state', () => {
-    paint()
-
-    expect(screen.getByLabelText(/Linked Helper runtime Sleeping, Not archived/)).toBeTruthy()
-    const source = document.querySelector('.campaign-source') as HTMLElement
-    expect(source.textContent).toContain('Published')
-    expect(source.textContent).not.toContain('Sleeping')
-  })
-
   it('names the sequence, revision, branch and publish state of a Builder deployment', () => {
     paint()
 

@@ -77,11 +77,6 @@ const SQL = `WITH campaign_threads AS MATERIALIZED (
   SELECT c.id AS campaign_id,
          c.name AS campaign_name,
          c.status AS campaign_status,
-         c.runtime_status,
-         c.is_archived,
-         c.status_observed_at,
-         c.status_source,
-         c.status_raw,
          c.instance_id,
          i.account_name,
          i.account_avatar,
@@ -168,11 +163,6 @@ const SQL = `WITH campaign_threads AS MATERIALIZED (
                'campaign_id', r.campaign_id,
                'campaign_name', COALESCE(c.campaign_name, r.campaign_name),
                'campaign_status', c.campaign_status,
-               'runtime_status', c.runtime_status,
-               'is_archived', c.is_archived,
-               'status_observed_at', c.status_observed_at,
-               'status_source', c.status_source,
-               'status_raw', c.status_raw,
                'instance_id', r.instance_id,
                'account_name', i.account_name,
                'account_avatar', i.account_avatar,
@@ -230,11 +220,6 @@ const SQL = `WITH campaign_threads AS MATERIALIZED (
              'campaign_id', c.campaign_id,
              'campaign_name', c.campaign_name,
              'campaign_status', c.campaign_status,
-             'runtime_status', c.runtime_status,
-             'is_archived', c.is_archived,
-             'status_observed_at', c.status_observed_at,
-             'status_source', c.status_source,
-             'status_raw', c.status_raw,
              'instance_id', c.instance_id,
              'account_name', c.account_name,
              'account_avatar', c.account_avatar,
@@ -291,7 +276,6 @@ const SQL = `WITH campaign_threads AS MATERIALIZED (
     JOIN public.instances i ON i.id = r.instance_id
     LEFT JOIN campaign_owner o ON o.campaign_id = r.campaign_id
    WHERE r.needs_attention
-     AND c.is_archived = false
 )
 SELECT jsonb_build_object(
   'items', COALESCE((
