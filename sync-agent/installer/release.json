@@ -1,10 +1,10 @@
 {
   "agent": {
-    "version": "1.21.1",
-    "commit": "1cba96dca6e1cf98393d28da073f4ab8fa7b3575",
-    "url": "https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/1cba96dca6e1cf98393d28da073f4ab8fa7b3575/sync-agent/agent.py",
-    "sha256": "d0a49f0519f86cc2315cde51b57b09167fec3f9b9b02c69c154abd829234927c",
-    "bytes": 213310
+    "version": "1.22.0",
+    "commit": "08cec0654d2a2657cf293ee2d3be6895c14c0973",
+    "url": "https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/08cec0654d2a2657cf293ee2d3be6895c14c0973/sync-agent/agent.py",
+    "sha256": "ac1fdaae7e907048b85455fa2cc4d900c9ec4aed16e90f71d9b4a2d022a3de7b",
+    "bytes": 226712
   },
   "ingest_url": "https://uitop.ciphercross.dev/api/import?op=agent.ingest",
   "release_public_key": "v-Zb6qV8GZhMjatTKgNo4BUaTIjfHh1MWEq8jQ4A6Is"
