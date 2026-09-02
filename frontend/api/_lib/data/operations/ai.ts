@@ -81,9 +81,8 @@ export type AiNamedQuery = Exclude<keyof typeof AI_OPERATIONS, 'executeSql'>
 // Per-campaign invite queue: who is still WAITING for an invite (not yet invited,
 // not excluded), how many of those sit in warm-up steps before InvitePerson, and how
 // recently leads were added. This is the ground truth for interpreting a zero-invite
-// stretch. Runtime status is now a separate last-synchronized observation, but
-// the queue remains the evidence for whether a batch is warming up or exhausted;
-// never infer queue mechanics from Running/Sleeping alone.
+// stretch — LH2's runtime state (running/paused) is NOT synced, so the queue is the
+// only observable distinction between "batch still warming up" and "ran out of leads".
 export const INVITE_QUEUE_SQL = `
 with invite_step as (
   select campaign_id, min(step_index) as invite_idx

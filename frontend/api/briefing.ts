@@ -409,11 +409,8 @@ ANALYSIS SAFEGUARDS
   is the point, but do not attach a pile of numbers to every sentence.
 - Reconcile rates and totals. If the sample is small, say so or omit the conclusion.
 - ANOMALY SIGNALS are deterministic leads, not automatic conclusions. Verify them with SQL.
-- LH2 runtime/archive state is only a last-synchronized read-only observation. Use only normalized
-  campaign_metrics.runtime_status/is_archived together with status_observed_at and status_source;
-  call NULL Unknown and old observations stale. Never infer a state from activity, legacy status,
-  publish success or queue shape, and never imply the dashboard changed LH2. Queue evidence may
-  explain invite timing, but an empty queue alone does not prove a runtime state or prescribe one.
+- LH2 running/paused state is not synced. Never say a campaign is paused, stopped, dead, or should be
+  reactivated. A non-empty pre-invite queue means warm-up; an empty queue means it needs new leads.
 - Hand-typed SDR follow-ups are invisible until Import history. Never claim a lead is waiting on us,
   going cold, or being ignored from message chronology. The only exceptions are the deterministic
   following_up pipeline stage and the exact P3-ghosting rule documented in the schema.
@@ -446,9 +443,8 @@ CHECK
   "(query failed: ...)" marker means the source could not be checked.
 - Treat team context as attributed background, never as measured proof. Cut any causal diagnosis
   that lacks explicit context or evidence. Never rank unlike campaigns as if they are comparable.
-- Cut runtime-state guesses, but retain normalized runtime/archive facts only when their observation
-  time and source were queried; label stale or NULL evidence honestly. Cut unsupported follow-up
-  claims, team-completed-action claims, and advice to review copy/targeting based only on a low rate.
+- Cut runtime-state guesses, unsupported follow-up claims, team-completed-action claims, and advice
+  to review copy/targeting based only on a low rate.
 - Compare only with the previous ${kind} briefing. ${
     daily
       ? 'On Monday, remove any point already covered by the supplied weekly anti-duplication reference.'

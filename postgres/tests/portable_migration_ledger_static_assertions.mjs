@@ -88,7 +88,6 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_restore_ai_guard_assertions.sql',
   'postgres/tests/portable_dump_restore_test_roles.sql',
   'postgres/tests/portable_migration_ledger_tests.sh',
-  'postgres/tests/portable_campaign_runtime_status_assertions.sql',
   'postgres/tests/portable_dump_restore_cleanroom.sh',
   'postgres/tests/portable_migration_ledger_static_assertions.mjs',
   'docs/platform-ops/g1-dump-restore-go-no-go.json',
@@ -127,8 +126,6 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/012_sequence_publish_jobs.sql',
   // Explicit campaign-to-sequence links and shared deployment reads (step 013).
   'postgres/tenant-baseline/v1/013_sequence_campaign_links.sql',
-  // Last-observed, read-only Linked Helper runtime/archive state (step 014).
-  'postgres/tenant-baseline/v1/014_campaign_runtime_status.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -362,8 +359,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares fourteen steps in order 1 -> 2 -> ... -> 14',
-  manifest.steps.length === 14 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares thirteen steps in order 1 -> 2 -> ... -> 13',
+  manifest.steps.length === 13 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const sequenceLinkStep = readFileSync(join(BASELINE_DIR, '013_sequence_campaign_links.sql'), 'utf8');
 check('step 013 makes one campaign link to at most one master sequence',
@@ -374,17 +371,6 @@ check('step 013 gives active members read-only publishing lineage',
   /sequence_publish_jobs_member_read[\s\S]*FOR SELECT[\s\S]*public\.is_active_team_member\(\)/i.test(sequenceLinkStep));
 check('step 013 grants no campaign or publishing DELETE capability',
   !/GRANT[\s\S]{0,120}\bDELETE\b/i.test(stripComments('013_sequence_campaign_links.sql', sequenceLinkStep)));
-
-const runtimeStatusStep = readFileSync(join(BASELINE_DIR, '014_campaign_runtime_status.sql'), 'utf8');
-check('step 014 constrains the six Linked Helper runtime values while allowing unknown',
-  /runtime_status IS NULL OR runtime_status IN\s*\(\s*'draft',\s*'running',\s*'queued',\s*'sleeping',\s*'stopped',\s*'completed'/i.test(runtimeStatusStep));
-check('step 014 keeps archive membership separate from runtime status',
-  /ADD COLUMN is_archived boolean/i.test(runtimeStatusStep));
-check('step 014 protects newer observations from out-of-order updates',
-  /NEW\.status_observed_at < OLD\.status_observed_at/i.test(runtimeStatusStep));
-check('step 014 adds no campaign control or DELETE capability',
-  !/\b(START|STOP|PAUSE|RESUME|ARCHIVE|UNARCHIVE)\s+CAMPAIGN\b/i.test(stripComments('014_campaign_runtime_status.sql', runtimeStatusStep))
-  && !/GRANT[\s\S]{0,120}\bDELETE\b/i.test(stripComments('014_campaign_runtime_status.sql', runtimeStatusStep)));
 
 // Step 006 needs no control-plane prerequisite, and saying so is not noise: 004
 // and 005 both do, so "declares none" is the distinguishing fact, and an index

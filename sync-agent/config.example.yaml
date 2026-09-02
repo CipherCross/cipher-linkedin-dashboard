@@ -143,21 +143,6 @@ sync_photos: false
 # Health page. Applies to campaigns, leads, events, steps and messages.
 # exclude_campaigns: [4]
 
-# Read-only Linked Helper campaign runtime/archive observation. A profile name is
-# accepted only when this agent version contains a built-in profile for the exact
-# LH2 build, backed by a `status-probe` comparison with the visible LH2 UI. An
-# unlisted build keeps syncing campaigns/leads/messages but reports a partial run
-# and sends runtime/archive as unknown. Do not copy the publishing profile name or
-# guess SQLite columns here; `mapping.campaigns.status` remains legacy diagnostics.
-#
-# First run:
-#   python3 agent.py status-probe
-# Save the JSON report, compare its candidates with LH2's Campaigns + Archived
-# views, then add a reviewed built-in profile in agent.py before enabling it.
-# lh2_status:
-#   lh_version: "2.130.28"
-#   compatibility_profile: "lh2-2.130.28-runtime-v1"
-
 # Unique per notebook. Use the same value forever so upserts stay idempotent.
 instance_id: "notebook-1"
 instance_label: "Notebook 1 — Alice"
@@ -193,8 +178,6 @@ mapping:
     table: "campaigns"
     id: "id"
     name: "name"
-    # Legacy diagnostic only. It is copied to campaigns.status/status_raw, but
-    # never decides the runtime badge, operational membership or archive filter.
     status: "state"
   leads:
     # Adapt the JOIN to your schema as printed by `inspect`. Example shape

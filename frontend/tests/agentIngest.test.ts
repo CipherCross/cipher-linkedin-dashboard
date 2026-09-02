@@ -67,7 +67,6 @@ import {
   AGENT_ADMIN_OPERATIONS,
   buildMachineRegistry,
 } from '../api/_lib/data/operations/index.js'
-import { upsertCampaignsOperation } from '../api/_lib/data/operations/agentIngest.js'
 
 const TENANT = 'acme'
 const OTHER_TENANT = 'contoso'
@@ -372,62 +371,6 @@ describe('the deployment tenant', () => {
 })
 
 describe('the payload', () => {
-  it('accepts the six exact Linked Helper runtime states and keeps archive separate', () => {
-    const statuses = ['draft', 'running', 'queued', 'sleeping', 'stopped', 'completed']
-    const parsed = parseIngestPayload(body({
-      campaigns: statuses.map((runtimeStatus, index) => ({
-        id: `${INSTANCE}:${index}`,
-        lh_campaign_id: String(index),
-        name: `Campaign ${index}`,
-        status: 'legacy-value-is-diagnostic-only',
-        runtime_status: runtimeStatus,
-        is_archived: index === statuses.length - 1,
-        status_observed_at: '2026-09-01T14:00:00+02:00',
-        status_source: 'fixture-build-v1',
-        status_raw: JSON.stringify({ runtime: runtimeStatus }),
-      })),
-    }))
-
-    expect(parsed.campaigns.map((campaign) => campaign.runtime_status)).toEqual(statuses)
-    expect(parsed.campaigns.at(-1)?.is_archived).toBe(true)
-    expect(parsed.campaigns[0].is_archived).toBe(false)
-    expect(parsed.campaigns[0].status_observed_at).toBe('2026-09-01T12:00:00.000Z')
-  })
-
-  it('keeps a legacy-agent campaign unknown instead of inventing Active', () => {
-    const parsed = parseIngestPayload(body())
-    expect(parsed.campaigns[0]).toMatchObject({
-      runtime_status: null,
-      is_archived: null,
-      status_observed_at: null,
-      status_source: null,
-      status_raw: null,
-    })
-  })
-
-  it('refuses guessed or malformed campaign status observations', () => {
-    const campaign = (patch: Record<string, unknown>) => ({
-      id: `${INSTANCE}:42`, lh_campaign_id: '42', name: 'Outreach',
-      runtime_status: 'running', is_archived: false,
-      status_observed_at: '2026-09-01T12:00:00Z', status_source: 'fixture-v1',
-      ...patch,
-    })
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ runtime_status: 'active' })] })))
-      .toThrow(/runtime_status/)
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ is_archived: 0 })] })))
-      .toThrow(/is_archived/)
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ status_observed_at: 'recently' })] })))
-      .toThrow(/status_observed_at/)
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ status_source: null })] })))
-      .toThrow(/status_source/)
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ status_source: 's'.repeat(121) })] })))
-      .toThrow(/120/)
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ status_raw: 'r'.repeat(501) })] })))
-      .toThrow(/500/)
-    expect(() => parseIngestPayload(body({ campaigns: [campaign({ status_observed_at: null })] })))
-      .toThrow(/status_observed_at is required/)
-  })
-
   it('normalizes every instant to UTC', () => {
     const parsed = parseIngestPayload(
       body({
@@ -591,26 +534,6 @@ describe('the payload', () => {
     expect(() => parseIngestPayload([])).toThrow(/body/)
     expect(() => parseIngestPayload(null)).toThrow(/body/)
     expect(() => parseIngestPayload('a string')).toThrow(/body/)
-  })
-})
-
-describe('the campaign upsert contract', () => {
-  const sql = upsertCampaignsOperation.build({
-    actor: { kind: 'machine', actorId: CREDENTIAL_ID, tenantId: TENANT, role: 'machine' },
-    params: { instanceId: INSTANCE, rows: '[]' },
-  }).text
-
-  it('defaults only the legacy diagnostic field to unknown, never active', () => {
-    expect(sql).toContain("COALESCE(NULLIF(r.status, ''), 'unknown')")
-    expect(sql).not.toMatch(/COALESCE\([^)]*['\"]active['\"]/)
-  })
-
-  it('replaces an observation only when the incoming timestamp is at least as new', () => {
-    expect(sql.match(/EXCLUDED\.status_observed_at >= public\.campaigns\.status_observed_at/g))
-      .toHaveLength(5)
-    for (const field of ['runtime_status', 'is_archived', 'status_source', 'status_raw', 'status_observed_at']) {
-      expect(sql).toContain(`ELSE public.campaigns.${field} END`)
-    }
   })
 })
 

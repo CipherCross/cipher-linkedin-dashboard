@@ -533,11 +533,7 @@ campaign_metrics — per-campaign funnel rollup:
   campaign_id, campaign_name, instance_id, status, total_leads, invites_sent,
   accepted, replies, acceptance_rate (%), reply_rate (% of accepted),
   last_activity_at, briefing_context, briefing_context_updated_at (the two
-  team-context columns carried through from campaigns), plus the last synchronized
-  Linked Helper observation: runtime_status ('draft'|'running'|'queued'|'sleeping'|
-  'stopped'|'completed' or NULL=Unknown), is_archived (boolean or NULL=unknown),
-  status_observed_at, status_source and status_raw. campaigns.status is legacy and
-  MUST NOT be used for runtime decisions.
+  team-context columns carried through from campaigns)
 
 daily_activity — events bucketed per day:
   day date, instance_id, event_type, cnt
@@ -710,13 +706,12 @@ ANALYSIS GUIDANCE
 - When rates differ across weeks, drill into segments: per instance (account),
   per campaign, per campaign step (campaign_steps shows which message in the
   sequence converts), and check annotations for known changes around the date.
-- LH2 RUNTIME state is a last-synchronized read-only observation, never a live
-  control connection. Use campaigns.runtime_status/is_archived only with
-  status_observed_at and status_source. NULL means Unknown; an old observation
-  must be described as stale. Never infer Running from publish success, recent
-  activity or campaigns.status, never imply the dashboard changed LH2, and never
-  prescribe a state-changing action as if it had already been taken. Runtime,
-  Sequence Builder publish state and notebook sync health are separate facts.
+- LH2's RUNTIME state is NOT synced: whether a campaign is running or paused in
+  Linked Helper — or whether LH2 itself is open on the notebook — is invisible
+  here (campaigns.status is a raw unreliable code). NEVER claim a campaign is
+  paused/stopped/dead and never prescribe "resume/reactivate" it: you cannot
+  observe that. Describe the observable instead (invites at 0 for N days) and
+  use the invite queue below to interpret it.
 - "Why aren't invites going out?" — check the INVITE QUEUE before interpreting a
   zero-invite stretch. Warm-up sequences put multi-day Waiter delays before the
   InvitePerson step, so a freshly added batch of leads yields 0 invites for

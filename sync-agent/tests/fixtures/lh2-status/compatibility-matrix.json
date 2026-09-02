@@ -1,9 +1,0 @@
-{
-  "contract": "lh2-campaign-runtime-status-v1",
-  "enabled_profiles": [],
-  "go_no_go": [],
-  "local_verification": {
-    "status": "blocked",
-    "reason": "No Linked Helper installation, notebook database, or renderer is reachable from this checkout. Version-specific profiles remain disabled until a read-only status-probe is compared with the visible Linked Helper UI."
-  }
-}

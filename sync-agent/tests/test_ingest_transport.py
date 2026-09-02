@@ -104,10 +104,7 @@ def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello"):
     """A synthetic extraction in the exact row shapes `extract_local` returns."""
     now = "2026-08-07T00:00:00+00:00"
     cs = [{"id": f"nb:{i}", "instance_id": "nb", "lh_campaign_id": str(i),
-           "name": f"Campaign {i}", "status": "unknown",
-           "runtime_status": "running", "is_archived": False,
-           "status_observed_at": now, "status_source": "fixture-v1",
-           "status_raw": '{"runtime":"run"}', "updated_at": now}
+           "name": f"Campaign {i}", "status": "active", "updated_at": now}
           for i in range(campaigns)]
     ls = []
     for i in range(leads):
@@ -186,135 +183,6 @@ class CompileTest(unittest.TestCase):
         `sync` self-updates before it runs, and a build that does not parse is
         rejected by the updater — but only if somebody checked before deploy."""
         py_compile.compile(os.path.join(AGENT_DIR, "agent.py"), doraise=True)
-
-
-class CampaignRuntimeStatusTest(unittest.TestCase):
-    PROFILE = {
-        "fixture-runtime-v1": {
-            "lh_version": "fixture-build",
-            "schema_fingerprint_sha256": "0" * 64,
-            "table": "campaign_runtime",
-            "id_column": "campaign_id",
-            "runtime_column": "runtime_value",
-            "archive_column": "archive_value",
-            "runtime_map": {
-                "D": "draft", "R": "running", "Q": "queued",
-                "S": "sleeping", "X": "stopped", "C": "completed",
-            },
-            "archive_map": {"0": False, "1": True},
-            "source": "fixture-runtime-v1",
-        },
-    }
-
-    def database(self, rows):
-        con = __import__("sqlite3").connect(":memory:")
-        self.addCleanup(con.close)
-        con.row_factory = __import__("sqlite3").Row
-        con.execute(
-            "CREATE TABLE campaign_runtime "
-            "(campaign_id integer, runtime_value text, archive_value integer)"
-        )
-        con.executemany("INSERT INTO campaign_runtime VALUES (?, ?, ?)", rows)
-        self.PROFILE["fixture-runtime-v1"]["schema_fingerprint_sha256"] = \
-            agent._sqlite_schema_fingerprint(con)
-        return con
-
-    def test_unverified_build_is_unknown_and_partial(self):
-        warnings = []
-        rows, error = agent.extract_campaign_runtime_statuses(
-            self.database([(1, "R", 0)]),
-            {"lh2_status": {"lh_version": "real", "compatibility_profile": "guessed"}},
-            "2026-09-01T12:00:00+00:00", warnings,
-            profiles=self.PROFILE,
-        )
-        self.assertEqual(rows, {})
-        self.assertEqual(error, "STATUS_PROFILE_UNVERIFIED")
-        self.assertTrue(any("campaign_runtime_status" in warning for warning in warnings))
-
-    def test_verified_profile_maps_all_six_states_and_archive_separately(self):
-        con = self.database([
-            (1, "D", 0), (2, "R", 0), (3, "Q", 0),
-            (4, "S", 0), (5, "X", 0), (6, "C", 1),
-        ])
-        rows, error = agent.extract_campaign_runtime_statuses(
-            con,
-            {"lh2_status": {
-                "lh_version": "fixture-build",
-                "compatibility_profile": "fixture-runtime-v1",
-            }},
-            "2026-09-01T12:00:00+00:00", [], profiles=self.PROFILE,
-        )
-        self.assertIsNone(error)
-        self.assertEqual(
-            [rows[str(i)]["runtime_status"] for i in range(1, 7)],
-            list(agent.LH2_RUNTIME_STATUSES),
-        )
-        self.assertFalse(rows["1"]["is_archived"])
-        self.assertTrue(rows["6"]["is_archived"])
-
-    def test_unknown_or_contradictory_values_fail_closed(self):
-        warnings = []
-        con = self.database([
-            (1, "new-state", 0),
-            (2, "R", 0), (2, "X", 0), (2, "R", 0),
-        ])
-        rows, error = agent.extract_campaign_runtime_statuses(
-            con,
-            {"lh2_status": {
-                "lh_version": "fixture-build",
-                "compatibility_profile": "fixture-runtime-v1",
-            }},
-            "2026-09-01T12:00:00+00:00", warnings, profiles=self.PROFILE,
-        )
-        self.assertEqual(error, "STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY")
-        self.assertIsNone(rows["1"]["runtime_status"])
-        self.assertFalse(rows["1"]["is_archived"])
-        self.assertIsNone(rows["2"]["runtime_status"])
-        self.assertFalse(rows["2"]["is_archived"])
-        self.assertTrue(warnings)
-
-    def test_runtime_and_archive_fail_closed_independently(self):
-        rows, error = agent.extract_campaign_runtime_statuses(
-            self.database([(1, "R", 9), (2, "new-state", 1)]),
-            {"lh2_status": {
-                "lh_version": "fixture-build",
-                "compatibility_profile": "fixture-runtime-v1",
-            }},
-            "2026-09-01T12:00:00+00:00", [], profiles=self.PROFILE,
-        )
-        self.assertEqual(error, "STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY")
-        self.assertEqual(rows["1"]["runtime_status"], "running")
-        self.assertIsNone(rows["1"]["is_archived"])
-        self.assertIsNone(rows["2"]["runtime_status"])
-        self.assertTrue(rows["2"]["is_archived"])
-
-    def test_schema_fingerprint_drift_disables_the_whole_profile(self):
-        con = self.database([(1, "R", 0)])
-        con.execute("ALTER TABLE campaign_runtime ADD COLUMN changed_in_new_build text")
-        rows, error = agent.extract_campaign_runtime_statuses(
-            con,
-            {"lh2_status": {
-                "lh_version": "fixture-build",
-                "compatibility_profile": "fixture-runtime-v1",
-            }},
-            "2026-09-01T12:00:00+00:00", [], profiles=self.PROFILE,
-        )
-        self.assertEqual(rows, {})
-        self.assertEqual(error, "STATUS_PROFILE_SCHEMA_FINGERPRINT_MISMATCH")
-
-    def test_frozen_supabase_fallback_drops_only_the_normalized_observation(self):
-        source = {
-            "id": "nb:1", "instance_id": "nb", "lh_campaign_id": "1",
-            "name": "Campaign", "status": "legacy", "updated_at": "now",
-            "runtime_status": "running", "is_archived": False,
-            "status_observed_at": "now", "status_source": "fixture",
-            "status_raw": "R",
-        }
-        self.assertEqual(agent._legacy_supabase_campaigns([source]), [{
-            "id": "nb:1", "instance_id": "nb", "lh_campaign_id": "1",
-            "name": "Campaign", "status": "legacy", "updated_at": "now",
-        }])
-        self.assertEqual(source["runtime_status"], "running")
 
 
 class ReleaseScriptTest(unittest.TestCase):

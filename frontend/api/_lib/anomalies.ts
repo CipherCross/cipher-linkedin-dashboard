@@ -163,8 +163,8 @@ type QueueRow = {
 
 /** Append per-campaign invite-queue context to invite_sent declines, so the model
  *  reads the CAUSE (batch still warming up vs out of leads) from a deterministic
- *  source instead of inventing one ("campaign paused"). Normalized LH2 runtime
- *  is a separate, last-observed signal; queue shape still cannot substitute for it. */
+ *  source instead of inventing one ("campaign paused"). LH2's runtime state isn't
+ *  synced — the queue is the only observable distinction between the two. */
 function withInviteQueueContext(signals: AnomalySignal[], queueRows: QueueRow[]): AnomalySignal[] {
   const byInstance = new Map<string, QueueRow[]>()
   for (const r of queueRows) {
