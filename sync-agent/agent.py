@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.21.1"
+AGENT_VERSION = "1.22.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -1992,7 +1992,7 @@ REMOTE_CONFIG_KEYS = {
     "auto_update", "sync_steps", "sync_messages", "sync_photos",
     "lh2_db_path", "mapping", "local_timezone",
     "notify_url", "exclude_campaigns",
-    "ingest_url", "ingest_mode",
+    "ingest_url", "ingest_mode", "lh2_status",
 }
 
 # Keys a remote blob may NEVER set, whatever the allowlist above says. Two kinds
@@ -2280,7 +2280,26 @@ def _ingest_campaigns(campaigns):
     return [{"id": c["id"],
              "lh_campaign_id": c["lh_campaign_id"],
              "name": c["name"],
-             "status": c.get("status")} for c in campaigns]
+             "status": c.get("status"),
+             "runtime_status": c.get("runtime_status"),
+             "is_archived": c.get("is_archived"),
+             "status_observed_at": c.get("status_observed_at"),
+             "status_source": c.get("status_source"),
+             "status_raw": c.get("status_raw")} for c in campaigns]
+
+
+def _legacy_supabase_campaigns(campaigns):
+    """Project onto the frozen legacy schema without weakening Neon ingest.
+
+    `supabase/migrations/` is immutable and has no normalized observation
+    columns. The fallback transport therefore keeps receiving its historical
+    campaign shape, while the authenticated gateway receives the full contract.
+    """
+    allowed = {
+        "id", "instance_id", "lh_campaign_id", "name", "status", "updated_at",
+    }
+    return [{key: value for key, value in campaign.items() if key in allowed}
+            for campaign in campaigns]
 
 
 def _ingest_steps(steps):
@@ -3051,6 +3070,239 @@ def sanitize_slug(slug):
 
 # ---------------------------------------------------------------- inspect
 
+LH2_RUNTIME_STATUSES = (
+    "draft", "running", "queued", "sleeping", "stopped", "completed",
+)
+
+# A profile enters this registry only after a read-only status-probe from the
+# exact build has been compared with the visible Linked Helper UI. The registry
+# intentionally ships empty in 1.22.0: this checkout has no reachable notebook,
+# so declaring 2.130.x (or any other build) compatible would be a guess. Tests
+# inject a synthetic profile to exercise the extraction contract without
+# turning that fixture into a production compatibility claim.
+LH2_STATUS_COMPATIBILITY_PROFILES = {}
+
+
+def _quoted_sqlite_identifier(value):
+    """Quote a registry-owned SQLite identifier.
+
+    Profile identifiers are code, never config, but quoting them still makes the
+    boundary explicit and keeps a future profile with a reserved word correct.
+    """
+    return '"' + str(value).replace('"', '""') + '"'
+
+
+def _status_profile(cfg, profiles=None):
+    """Return one exact, built-in status profile or a bounded failure code."""
+    settings = cfg.get("lh2_status")
+    if not isinstance(settings, dict):
+        return None, "STATUS_PROFILE_MISSING"
+    name = str(settings.get("compatibility_profile") or "").strip()
+    version = str(settings.get("lh_version") or "").strip()
+    if not name or not version:
+        return None, "STATUS_PROFILE_INCOMPLETE"
+    registry = LH2_STATUS_COMPATIBILITY_PROFILES if profiles is None else profiles
+    profile = registry.get(name)
+    if not isinstance(profile, dict):
+        return None, "STATUS_PROFILE_UNVERIFIED"
+    if str(profile.get("lh_version") or "") != version:
+        return None, "STATUS_PROFILE_VERSION_MISMATCH"
+    required = ("lh_version", "schema_fingerprint_sha256", "table", "id_column",
+                "runtime_column", "archive_column", "runtime_map", "archive_map", "source")
+    if any(key not in profile for key in required):
+        return None, "STATUS_PROFILE_INVALID"
+    runtime_map = profile.get("runtime_map")
+    if not isinstance(runtime_map, dict) or set(runtime_map.values()) != set(LH2_RUNTIME_STATUSES):
+        return None, "STATUS_PROFILE_INCOMPLETE_VOCABULARY"
+    if not isinstance(profile.get("archive_map"), dict):
+        return None, "STATUS_PROFILE_INVALID"
+    if not re.fullmatch(r"[0-9a-f]{64}", str(profile.get("schema_fingerprint_sha256") or "")):
+        return None, "STATUS_PROFILE_INVALID"
+    return profile, None
+
+
+def _bounded_status_raw(runtime_raw, archive_raw):
+    value = json.dumps({"runtime": runtime_raw, "archived": archive_raw},
+                       ensure_ascii=False, sort_keys=True, default=str)
+    return value[:500]
+
+
+def _sqlite_schema_fingerprint(con):
+    """Hash the read-only SQLite table/column inventory used by the probe."""
+    schema = []
+    tables = [row[0] for row in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+    for table in tables:
+        columns = [str(row[1]) for row in con.execute(
+            f"PRAGMA table_info({_quoted_sqlite_identifier(table)})")]
+        schema.append([table, columns])
+    return hashlib.sha256(json.dumps(
+        schema, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")).hexdigest()
+
+
+def extract_campaign_runtime_statuses(con, cfg, observed_at, warnings=None,
+                                      profiles=None):
+    """Return `{lh_campaign_id -> normalized observation}` fail-closed.
+
+    No mapping key can select a runtime or archive field. Only an exact built-in
+    profile may do that, and the profile must map all six Linked Helper states.
+    A missing table, column, value, contradictory duplicate, or unknown value
+    records a partial warning and returns no normalized status for that campaign;
+    the rest of the extraction remains usable.
+    """
+    profile, error = _status_profile(cfg, profiles)
+    if profile is None:
+        if warnings is not None:
+            warnings.append(f"campaign_runtime_status: {error}")
+        return {}, error
+
+    if _sqlite_schema_fingerprint(con) != profile["schema_fingerprint_sha256"]:
+        error = "STATUS_PROFILE_SCHEMA_FINGERPRINT_MISMATCH"
+        if warnings is not None:
+            warnings.append(f"campaign_runtime_status: {error}")
+        return {}, error
+
+    table = _quoted_sqlite_identifier(profile["table"])
+    id_col = _quoted_sqlite_identifier(profile["id_column"])
+    runtime_col = _quoted_sqlite_identifier(profile["runtime_column"])
+    archive_col = _quoted_sqlite_identifier(profile["archive_column"])
+    query = (f"SELECT {id_col} AS campaign_id, {runtime_col} AS runtime_raw, "
+             f"{archive_col} AS archive_raw FROM {table}")
+    rows = {}
+    runtime_conflicts = set()
+    archive_conflicts = set()
+    failed = False
+    try:
+        for row in con.execute(query):
+            campaign_id = row["campaign_id"]
+            if campaign_id is None:
+                failed = True
+                continue
+            key = str(campaign_id)
+            runtime_raw = row["runtime_raw"]
+            archive_raw = row["archive_raw"]
+            runtime_key = str(runtime_raw) if runtime_raw is not None else None
+            archive_key = str(archive_raw) if archive_raw is not None else None
+            runtime = profile["runtime_map"].get(runtime_key)
+            archived = profile["archive_map"].get(archive_key)
+            runtime_valid = runtime in LH2_RUNTIME_STATUSES
+            archive_valid = isinstance(archived, bool)
+            observation = {
+                "runtime_status": runtime if runtime_valid else None,
+                "is_archived": archived if archive_valid else None,
+                "status_observed_at": observed_at,
+                "status_source": str(profile["source"])[:120],
+                "status_raw": _bounded_status_raw(runtime_raw, archive_raw),
+            }
+            previous = rows.get(key)
+            if previous is not None:
+                if previous["runtime_status"] != observation["runtime_status"]:
+                    runtime_conflicts.add(key)
+                if previous["is_archived"] != observation["is_archived"]:
+                    archive_conflicts.add(key)
+            if key in runtime_conflicts:
+                observation["runtime_status"] = None
+            if key in archive_conflicts:
+                observation["is_archived"] = None
+            if key in runtime_conflicts or key in archive_conflicts:
+                # Runtime and archive are independent. A contradiction fails
+                # only the affected axis, and remains failed even if a later
+                # third row happens to match either earlier value.
+                failed = True
+            if not runtime_valid or not archive_valid:
+                failed = True
+            rows[key] = observation
+    except sqlite3.Error as exc:
+        note_warning(warnings, "campaign_runtime_status", exc)
+        return {}, "STATUS_PROFILE_SCHEMA_MISMATCH"
+
+    if failed and warnings is not None:
+        warnings.append("campaign_runtime_status: STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY")
+    return rows, None if not failed else "STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY"
+
+
+def _sqlite_status_inventory(con):
+    """Schema/value evidence for a human compatibility review; never enables one."""
+    candidates = []
+    signal = re.compile(r"(state|status|archiv|paused|queue|sleep|complete)", re.I)
+    tables = [row[0] for row in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+    for table in tables:
+        columns = [str(row[1]) for row in con.execute(
+            f"PRAGMA table_info({_quoted_sqlite_identifier(table)})")]
+        matched = [column for column in columns if signal.search(column)]
+        if not matched:
+            continue
+        values = {}
+        for column in matched[:12]:
+            try:
+                query = (f"SELECT DISTINCT {_quoted_sqlite_identifier(column)} AS value "
+                         f"FROM {_quoted_sqlite_identifier(table)} LIMIT 20")
+                values[column] = [row[0] for row in con.execute(query)]
+            except sqlite3.Error:
+                values[column] = ["<unreadable>"]
+        candidates.append({"table": table, "columns": columns,
+                           "candidate_values": values})
+    fingerprint = _sqlite_schema_fingerprint(con)
+    return fingerprint, candidates
+
+
+def probe_campaign_runtime_status(cfg):
+    """Build a non-mutating compatibility report for the exact local LH2 DB."""
+    configured = str(cfg.get("lh2_db_path") or "").strip()
+    db_path = os.path.expanduser(configured) if configured else discover_db_path()
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    try:
+        fingerprint, candidates = _sqlite_status_inventory(con)
+        profile, error = _status_profile(cfg)
+        observations = {}
+        if profile is not None:
+            observations, extraction_error = extract_campaign_runtime_statuses(
+                con, cfg, dt.datetime.now(dt.timezone.utc).isoformat(), [],
+            )
+            error = extraction_error
+        return {
+            "agent_version": AGENT_VERSION,
+            "instance_id": cfg.get("instance_id"),
+            "database_file": os.path.basename(db_path),
+            "schema_fingerprint_sha256": fingerprint,
+            "configured_lh_version": (cfg.get("lh2_status") or {}).get("lh_version")
+                if isinstance(cfg.get("lh2_status"), dict) else None,
+            "compatibility_profile": (cfg.get("lh2_status") or {}).get("compatibility_profile")
+                if isinstance(cfg.get("lh2_status"), dict) else None,
+            "compatible": profile is not None and error is None,
+            "error_code": error,
+            "candidate_inventory": candidates,
+            "normalized_observations": observations,
+            "operator_check_required": True,
+            "operator_check": (
+                "Compare every candidate with the visible Linked Helper campaign list, "
+                "including archive membership, before adding a built-in profile."
+            ),
+        }
+    finally:
+        con.close()
+
+
+def cmd_status_probe(args):
+    cfg = load_config()
+    cfg = apply_remote_config(cfg)
+    set_local_tz(cfg)
+    try:
+        result = probe_campaign_runtime_status(cfg)
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        result = {
+            "agent_version": AGENT_VERSION,
+            "instance_id": cfg.get("instance_id"),
+            "compatible": False,
+            "error_code": "STATUS_PROBE_UNAVAILABLE",
+            "detail": f"{type(exc).__name__}: {str(exc)[:240]}",
+            "operator_check_required": True,
+        }
+    print(json.dumps(result, sort_keys=True, ensure_ascii=False))
+
 def cmd_inspect(args):
     roots = [args.path] if args.path else LH2_DEFAULT_DIRS
     found_any = False
@@ -3702,14 +3954,34 @@ def extract_local(cfg, warnings=None):
     if cmap.get("table") or cmap.get("query"):
         for row in rows_for(con, cmap):
             lh_id = str(row_get(row, cmap, "id"))
+            legacy_raw = row_get(row, cmap, "status")
             campaigns.append({
                 "id": f"{instance_id}:{lh_id}",
                 "instance_id": instance_id,
                 "lh_campaign_id": lh_id,
                 "name": row_get(row, cmap, "name") or f"Campaign {lh_id}",
-                "status": str(row_get(row, cmap, "status") or "active"),
+                # Compatibility only. Product/runtime semantics never read this
+                # field; unknown legacy values must not be promoted to Active.
+                "status": str(legacy_raw or "unknown"),
                 "updated_at": now,
             })
+
+    status_rows, status_error = extract_campaign_runtime_statuses(
+        con, cfg, now, warnings,
+    )
+    for campaign in campaigns:
+        observation = status_rows.get(campaign["lh_campaign_id"])
+        if observation is None:
+            legacy_raw = campaign.get("status")
+            campaign.update({
+                "runtime_status": None,
+                "is_archived": None,
+                "status_observed_at": now,
+                "status_source": f"unsupported:{status_error or 'STATUS_NOT_OBSERVED'}"[:120],
+                "status_raw": _bounded_status_raw(legacy_raw, None),
+            })
+        else:
+            campaign.update(observation)
 
     leads = []
     lmap = mapping.get("leads", {})
@@ -3830,6 +4102,18 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
         name = names.get(cid, cid)[:40]
         print(f"{name:<42}{n:>7}{inv:>9}{acc:>10}{rep:>9}")
 
+    if campaigns:
+        print("\nLinked Helper runtime observations (read-only):")
+        for campaign in campaigns:
+            runtime = campaign.get("runtime_status") or "unknown"
+            archived = campaign.get("is_archived")
+            archive_label = ("archived" if archived is True else
+                             "not archived" if archived is False else
+                             "archive unknown")
+            print(f"  {campaign['name'][:40]}: {runtime}, {archive_label}; "
+                  f"source={campaign.get('status_source') or 'none'}; "
+                  f"observed={campaign.get('status_observed_at') or 'never'}")
+
     if steps:
         print("\ncampaign steps incl. warm-up (processed -> replied):")
         sh = (f"{'campaign':<24}{'#':>2} {'step':<22}"
@@ -3917,7 +4201,8 @@ def cmd_sync(args):
     warnings = []
     try:
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
-        total += sb.upsert("campaigns", campaigns, on_conflict="id")
+        total += sb.upsert("campaigns", _legacy_supabase_campaigns(campaigns),
+                           on_conflict="id")
         total += sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
         # Merge age-inference start years WITHOUT ever sending NULL (a re-sync must
         # not clobber a stored year). Kept out of the main leads payload (which stays
@@ -4296,6 +4581,12 @@ def main():
 
     pp = sub.add_parser("publish-probe", help="read-only Linked Helper publishing compatibility probe")
     pp.set_defaults(func=cmd_publish_probe)
+
+    pst = sub.add_parser(
+        "status-probe",
+        help="read-only Linked Helper runtime/archive compatibility evidence",
+    )
+    pst.set_defaults(func=cmd_status_probe)
 
     po = sub.add_parser("publish-once", help="claim one approved publish job and run the fail-closed publisher")
     po.set_defaults(func=cmd_publish_once)

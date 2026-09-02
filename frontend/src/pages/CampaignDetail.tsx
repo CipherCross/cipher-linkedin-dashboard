@@ -30,6 +30,7 @@ import { MessageSequence } from '../components/MessageSequence'
 import { DeployedSequence } from '../components/DeployedSequence'
 import { LeadsAndRepliesWorkspace } from '../components/leads-and-replies/LeadsAndRepliesWorkspace'
 import { publishStatusLabel } from '../lib/sequenceBuilder'
+import { CampaignRuntimeStatusView } from '../components/CampaignRuntimeStatus'
 
 const TABS = [
   { id: 'leads', label: 'Leads & replies' },
@@ -157,8 +158,8 @@ export function CampaignDetail() {
             <Link className="row-link muted" to={`/account/${encodeURIComponent(campaign.instance_id)}`}>
               {instanceLabel}
             </Link>
-            {campaign.status ? ` · ${campaign.status}` : ''}
           </div>
+          <CampaignRuntimeStatusView campaign={campaign} />
           <DeploymentSource context={data.campaignSequenceContext} />
         </div>
         {tab === 'performance' && (

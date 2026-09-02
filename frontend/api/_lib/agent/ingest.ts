@@ -95,6 +95,9 @@ const MAX_URL = 500
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/
 const DIRECTIONS = new Set(['in', 'out'])
 const SYNC_STATUSES = new Set(['ok', 'error', 'partial', 'running'])
+const CAMPAIGN_RUNTIME_STATUSES = new Set([
+  'draft', 'running', 'queued', 'sleeping', 'stopped', 'completed',
+])
 
 export class IngestRequestError extends Error {
   readonly status: number
@@ -115,6 +118,11 @@ export interface CampaignRow {
   readonly lh_campaign_id: string
   readonly name: string
   readonly status: string | null
+  readonly runtime_status: string | null
+  readonly is_archived: boolean | null
+  readonly status_observed_at: string | null
+  readonly status_source: string | null
+  readonly status_raw: string | null
 }
 
 export interface CampaignStepRow {
@@ -241,6 +249,21 @@ function optionalInteger(value: unknown, field: string): number | null {
   return parsed
 }
 
+function optionalBoolean(value: unknown, field: string): boolean | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value !== 'boolean') fail(`${field} must be a boolean`)
+  return value
+}
+
+function boundedOptionalString(value: unknown, field: string, max: number): string | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value !== 'string') fail(`${field} must be a string`)
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed.length > max) fail(`${field} must be at most ${max} characters`)
+  return trimmed
+}
+
 function counter(value: unknown, field: string): number {
   const parsed = optionalInteger(value, field) ?? 0
   if (parsed < 0) fail(`${field} must not be negative`)
@@ -289,6 +312,33 @@ export function parseIngestPayload(body: unknown): IngestPayload {
 
   const campaigns = collection(root.campaigns, 'campaigns').map((entry, index) => {
     const row = record(entry, `campaigns[${index}]`)
+    const runtimeStatus = boundedOptionalString(
+      row.runtime_status, `campaigns[${index}].runtime_status`, 20,
+    )
+    if (runtimeStatus !== null && !CAMPAIGN_RUNTIME_STATUSES.has(runtimeStatus)) {
+      fail(
+        `campaigns[${index}].runtime_status must be draft, running, queued, sleeping, stopped or completed`,
+      )
+    }
+    const isArchived = optionalBoolean(row.is_archived, `campaigns[${index}].is_archived`)
+    const statusObservedAt = optionalInstant(
+      row.status_observed_at, `campaigns[${index}].status_observed_at`,
+    )
+    const statusSource = boundedOptionalString(
+      row.status_source, `campaigns[${index}].status_source`, 120,
+    )
+    const statusRaw = boundedOptionalString(
+      row.status_raw, `campaigns[${index}].status_raw`, 500,
+    )
+    if (
+      statusObservedAt === null &&
+      (runtimeStatus !== null || isArchived !== null || statusSource !== null || statusRaw !== null)
+    ) {
+      fail(`campaigns[${index}].status_observed_at is required for a status observation`)
+    }
+    if (statusObservedAt !== null && statusSource === null) {
+      fail(`campaigns[${index}].status_source is required for a status observation`)
+    }
     return {
       id: requiredString(row.id, `campaigns[${index}].id`, MAX_ID),
       lh_campaign_id: requiredString(
@@ -298,6 +348,11 @@ export function parseIngestPayload(body: unknown): IngestPayload {
       ),
       name: requiredString(row.name, `campaigns[${index}].name`, MAX_TEXT),
       status: optionalString(row.status, `campaigns[${index}].status`, 50),
+      runtime_status: runtimeStatus,
+      is_archived: isArchived,
+      status_observed_at: statusObservedAt,
+      status_source: statusSource,
+      status_raw: statusRaw,
     } satisfies CampaignRow
   })
 
