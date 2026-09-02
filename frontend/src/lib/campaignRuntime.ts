@@ -51,17 +51,17 @@ export function campaignObservationHealth(
     ? Date.parse(campaign.status_observed_at)
     : NaN
   if (!Number.isFinite(observedAt)) return 'awaiting_first_sync'
-  if (
-    parseCampaignRuntimeStatus(campaign.runtime_status) === null ||
-    campaign.is_archived === null || campaign.is_archived === undefined ||
-    campaign.status_source?.startsWith('unsupported:')
-  ) return 'unsupported'
+  if (campaign.status_source?.startsWith('unsupported:')) return 'unsupported'
+  if (campaign.is_archived === null || campaign.is_archived === undefined) return 'unsupported'
   return now - observedAt > CAMPAIGN_STATUS_STALE_MINUTES * 60_000 ? 'stale' : 'fresh'
 }
 
 export function isOperationalCampaign(campaign: CampaignRuntimeObservation): boolean {
+  if (campaign.is_archived !== false) return false
   const status = parseCampaignRuntimeStatus(campaign.runtime_status)
-  return campaign.is_archived === false && status !== null && OPERATIONAL.has(status)
+  if (status !== null) return OPERATIONAL.has(status)
+  if (campaign.status_source?.startsWith('unsupported:')) return false
+  return campaign.status_observed_at != null
 }
 
 export function campaignStatusSummary(

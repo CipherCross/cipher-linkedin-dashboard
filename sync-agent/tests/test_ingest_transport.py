@@ -317,6 +317,146 @@ class CampaignRuntimeStatusTest(unittest.TestCase):
         self.assertEqual(source["runtime_status"], "running")
 
 
+class CampaignRuntimeStatusV2Test(unittest.TestCase):
+    """Tests for derivation-based (v2) profiles — partial vocabulary is correct."""
+
+    PROFILE = {
+        "fixture-derivation-v1": {
+            "lh_version": "fixture-build",
+            "schema_fingerprint_sha256": "0" * 64,
+            "derivation_sql": """
+                SELECT
+                  c.id          AS campaign_id,
+                  CASE
+                    WHEN c.is_paused = 1
+                     AND COALESCE(h.hc, 0) = 0 THEN 'draft'
+                    WHEN c.is_paused = 1        THEN 'stopped'
+                    ELSE NULL
+                  END           AS runtime_status,
+                  c.is_archived AS is_archived_int
+                FROM campaigns c
+                LEFT JOIN (
+                  SELECT campaign_id, COUNT(*) AS hc
+                  FROM person_in_campaigns_history
+                  GROUP BY campaign_id
+                ) h ON h.campaign_id = c.id
+            """,
+            "derivable_statuses": ("draft", "stopped"),
+            "archive_map": {0: False, 1: True},
+            "source": "fixture-derivation-v1",
+        },
+    }
+
+    def database(self, campaigns, history_campaign_ids=None, allow_dupes=False):
+        con = __import__("sqlite3").connect(":memory:")
+        self.addCleanup(con.close)
+        con.row_factory = __import__("sqlite3").Row
+        pk = "" if allow_dupes else " PRIMARY KEY"
+        con.execute(
+            f"CREATE TABLE campaigns "
+            f"(id integer{pk}, is_paused integer, is_archived integer)"
+        )
+        con.execute(
+            "CREATE TABLE person_in_campaigns_history "
+            "(campaign_id integer, person_id integer)"
+        )
+        con.executemany(
+            "INSERT INTO campaigns VALUES (?, ?, ?)", campaigns,
+        )
+        for cid in (history_campaign_ids or []):
+            con.execute(
+                "INSERT INTO person_in_campaigns_history VALUES (?, 1)", (cid,),
+            )
+        self.PROFILE["fixture-derivation-v1"]["schema_fingerprint_sha256"] = \
+            agent._sqlite_schema_fingerprint(con)
+        return con
+
+    def test_partial_profile_derives_draft_and_stopped(self):
+        con = self.database(
+            [(1, 1, 0), (2, 1, 1), (3, 0, 0)],
+            history_campaign_ids=[2],
+        )
+        rows, error = agent.extract_campaign_runtime_statuses(
+            con,
+            {"lh2_status": {
+                "lh_version": "fixture-build",
+                "compatibility_profile": "fixture-derivation-v1",
+            }},
+            "2026-09-01T12:00:00+00:00", [], profiles=self.PROFILE,
+        )
+        self.assertIsNone(error)
+        self.assertEqual(rows["1"]["runtime_status"], "draft")
+        self.assertFalse(rows["1"]["is_archived"])
+        self.assertEqual(rows["2"]["runtime_status"], "stopped")
+        self.assertTrue(rows["2"]["is_archived"])
+        self.assertIsNone(rows["3"]["runtime_status"])
+        self.assertFalse(rows["3"]["is_archived"])
+
+    def test_active_campaigns_get_null_runtime_not_unknown_source(self):
+        con = self.database([(1, 0, 0)], history_campaign_ids=[])
+        rows, error = agent.extract_campaign_runtime_statuses(
+            con,
+            {"lh2_status": {
+                "lh_version": "fixture-build",
+                "compatibility_profile": "fixture-derivation-v1",
+            }},
+            "2026-09-01T12:00:00+00:00", [], profiles=self.PROFILE,
+        )
+        self.assertIsNone(error)
+        self.assertIsNone(rows["1"]["runtime_status"])
+        self.assertFalse(rows["1"]["is_archived"])
+        self.assertEqual(rows["1"]["status_source"], "fixture-derivation-v1")
+
+    def test_archive_contradiction_fails_closed(self):
+        con = self.database(
+            [(1, 0, 0), (1, 0, 1)], allow_dupes=True,
+        )
+        warnings = []
+        rows, error = agent.extract_campaign_runtime_statuses(
+            con,
+            {"lh2_status": {
+                "lh_version": "fixture-build",
+                "compatibility_profile": "fixture-derivation-v1",
+            }},
+            "2026-09-01T12:00:00+00:00", warnings, profiles=self.PROFILE,
+        )
+        self.assertEqual(error, "STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY")
+        self.assertIsNone(rows["1"]["is_archived"])
+
+    def test_schema_fingerprint_drift_blocks_v2(self):
+        con = self.database([(1, 0, 0)])
+        con.execute("CREATE TABLE new_table (x integer)")
+        rows, error = agent.extract_campaign_runtime_statuses(
+            con,
+            {"lh2_status": {
+                "lh_version": "fixture-build",
+                "compatibility_profile": "fixture-derivation-v1",
+            }},
+            "2026-09-01T12:00:00+00:00", [], profiles=self.PROFILE,
+        )
+        self.assertEqual(rows, {})
+        self.assertEqual(error, "STATUS_PROFILE_SCHEMA_FINGERPRINT_MISMATCH")
+
+    def test_derivable_statuses_must_be_valid(self):
+        bad_profile = {
+            "bad": {
+                **self.PROFILE["fixture-derivation-v1"],
+                "derivable_statuses": ("draft", "invalid_state"),
+            },
+        }
+        con = self.database([(1, 0, 0)])
+        bad_profile["bad"]["schema_fingerprint_sha256"] = \
+            agent._sqlite_schema_fingerprint(con)
+        _, error = agent._status_profile(
+            {"lh2_status": {
+                "lh_version": "fixture-build",
+                "compatibility_profile": "bad",
+            }},
+            profiles=bad_profile,
+        )
+        self.assertEqual(error, "STATUS_PROFILE_INCOMPLETE_VOCABULARY")
+
+
 class ReleaseScriptTest(unittest.TestCase):
     def test_the_release_script_parses_under_the_system_shell(self):
         """`deploy.sh` is the last gate before the whole fleet self-updates, and

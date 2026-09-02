@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.22.0"
+AGENT_VERSION = "1.23.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -3075,12 +3075,60 @@ LH2_RUNTIME_STATUSES = (
 )
 
 # A profile enters this registry only after a read-only status-probe from the
-# exact build has been compared with the visible Linked Helper UI. The registry
-# intentionally ships empty in 1.22.0: this checkout has no reachable notebook,
-# so declaring 2.130.x (or any other build) compatible would be a guess. Tests
-# inject a synthetic profile to exercise the extraction contract without
-# turning that fixture into a production compatibility claim.
-LH2_STATUS_COMPATIBILITY_PROFILES = {}
+# exact build has been compared with the visible Linked Helper UI on at least
+# one notebook with that schema fingerprint.
+#
+# v2 profile model: a built-in derivation SQL query returns
+# (campaign_id, runtime_status, is_archived_int) directly. SQLite cannot
+# distinguish Running/Queued/Sleeping (volatile engine state) or detect
+# Completed, so those remain null. The profile declares which subset of
+# LH2_RUNTIME_STATUSES it can derive; null is the honest answer for the rest.
+#
+# Probe evidence (2026-09-02, four notebooks):
+#   - is_archived: reliable 1:1 with Main/Archived tab on all builds
+#   - Draft: is_paused=1 AND no person_in_campaigns_history rows
+#   - Stopped: is_paused=1 AND has person_in_campaigns_history rows
+#   - Running/Queued/Sleeping: identical SQLite values (is_paused=0, is_archived=0)
+#   - Completed: never observed on any notebook
+
+_PARTIAL_DERIVATION_SQL_V1 = """
+SELECT
+  c."id"                          AS campaign_id,
+  CASE
+    WHEN c."is_paused" = 1
+     AND COALESCE(h.history_count, 0) = 0 THEN 'draft'
+    WHEN c."is_paused" = 1                THEN 'stopped'
+    ELSE NULL
+  END                             AS runtime_status,
+  c."is_archived"                 AS is_archived_int
+FROM "campaigns" c
+LEFT JOIN (
+  SELECT "campaign_id", COUNT(*) AS history_count
+  FROM "person_in_campaigns_history"
+  GROUP BY "campaign_id"
+) h ON h."campaign_id" = c."id"
+"""
+
+LH2_STATUS_COMPATIBILITY_PROFILES = {
+    "partial-v1-2130-fp57": {
+        "lh_version": "2.130.30",
+        "schema_fingerprint_sha256": "57cea0bc879a64f2d3d0c00d5aa2317f8f6c11f80be5dee8e23890d36057f723",
+        "derivation_sql": _PARTIAL_DERIVATION_SQL_V1,
+        "derivable_statuses": ("draft", "stopped"),
+        "archive_map": {0: False, 1: True},
+        "source": "partial-v1-2130-fp57",
+        "probed_notebooks": ["notebook-1", "notebook-2"],
+    },
+    "partial-v1-2130-fpe2": {
+        "lh_version": "2.130.30",
+        "schema_fingerprint_sha256": "e2adb07b99cb868f63a8c33ae8c0108a47cff8802f0b93ad02f30227d4b0be11",
+        "derivation_sql": _PARTIAL_DERIVATION_SQL_V1,
+        "derivable_statuses": ("draft", "stopped"),
+        "archive_map": {0: False, 1: True},
+        "source": "partial-v1-2130-fpe2",
+        "probed_notebooks": ["karina-1"],
+    },
+}
 
 
 def _quoted_sqlite_identifier(value):
@@ -3093,7 +3141,13 @@ def _quoted_sqlite_identifier(value):
 
 
 def _status_profile(cfg, profiles=None):
-    """Return one exact, built-in status profile or a bounded failure code."""
+    """Return one exact, built-in status profile or a bounded failure code.
+
+    Supports two profile shapes:
+    - v1 (column-map): table/id_column/runtime_column/archive_column/runtime_map/archive_map
+    - v2 (derivation): derivation_sql/derivable_statuses/archive_map
+    Both require lh_version, schema_fingerprint_sha256, and source.
+    """
     settings = cfg.get("lh2_status")
     if not isinstance(settings, dict):
         return None, "STATUS_PROFILE_MISSING"
@@ -3107,17 +3161,28 @@ def _status_profile(cfg, profiles=None):
         return None, "STATUS_PROFILE_UNVERIFIED"
     if str(profile.get("lh_version") or "") != version:
         return None, "STATUS_PROFILE_VERSION_MISMATCH"
-    required = ("lh_version", "schema_fingerprint_sha256", "table", "id_column",
-                "runtime_column", "archive_column", "runtime_map", "archive_map", "source")
-    if any(key not in profile for key in required):
-        return None, "STATUS_PROFILE_INVALID"
-    runtime_map = profile.get("runtime_map")
-    if not isinstance(runtime_map, dict) or set(runtime_map.values()) != set(LH2_RUNTIME_STATUSES):
-        return None, "STATUS_PROFILE_INCOMPLETE_VOCABULARY"
-    if not isinstance(profile.get("archive_map"), dict):
-        return None, "STATUS_PROFILE_INVALID"
     if not re.fullmatch(r"[0-9a-f]{64}", str(profile.get("schema_fingerprint_sha256") or "")):
         return None, "STATUS_PROFILE_INVALID"
+    if not isinstance(profile.get("archive_map"), dict):
+        return None, "STATUS_PROFILE_INVALID"
+    if not isinstance(profile.get("source"), str):
+        return None, "STATUS_PROFILE_INVALID"
+    is_v2 = "derivation_sql" in profile
+    if is_v2:
+        if not isinstance(profile.get("derivation_sql"), str):
+            return None, "STATUS_PROFILE_INVALID"
+        derivable = profile.get("derivable_statuses")
+        if not isinstance(derivable, (list, tuple)):
+            return None, "STATUS_PROFILE_INVALID"
+        if not all(s in LH2_RUNTIME_STATUSES for s in derivable):
+            return None, "STATUS_PROFILE_INCOMPLETE_VOCABULARY"
+    else:
+        required = ("table", "id_column", "runtime_column", "archive_column", "runtime_map")
+        if any(key not in profile for key in required):
+            return None, "STATUS_PROFILE_INVALID"
+        runtime_map = profile.get("runtime_map")
+        if not isinstance(runtime_map, dict) or set(runtime_map.values()) != set(LH2_RUNTIME_STATUSES):
+            return None, "STATUS_PROFILE_INCOMPLETE_VOCABULARY"
     return profile, None
 
 
@@ -3146,7 +3211,8 @@ def extract_campaign_runtime_statuses(con, cfg, observed_at, warnings=None,
     """Return `{lh_campaign_id -> normalized observation}` fail-closed.
 
     No mapping key can select a runtime or archive field. Only an exact built-in
-    profile may do that, and the profile must map all six Linked Helper states.
+    profile may do that. A v2 (derivation) profile maps a verified subset of
+    LH2 states; campaigns whose runtime is not derivable from SQLite get null.
     A missing table, column, value, contradictory duplicate, or unknown value
     records a partial warning and returns no normalized status for that campaign;
     the rest of the extraction remains usable.
@@ -3163,6 +3229,59 @@ def extract_campaign_runtime_statuses(con, cfg, observed_at, warnings=None,
             warnings.append(f"campaign_runtime_status: {error}")
         return {}, error
 
+    is_v2 = "derivation_sql" in profile
+    if is_v2:
+        return _extract_v2(con, profile, observed_at, warnings)
+    return _extract_v1(con, profile, observed_at, warnings)
+
+
+def _extract_v2(con, profile, observed_at, warnings):
+    """Derivation-based extraction (v2 profile)."""
+    derivable = set(profile["derivable_statuses"])
+    archive_map = profile["archive_map"]
+    source = str(profile["source"])[:120]
+    rows = {}
+    archive_conflicts = set()
+    failed = False
+    try:
+        for row in con.execute(profile["derivation_sql"]):
+            campaign_id = row["campaign_id"]
+            if campaign_id is None:
+                failed = True
+                continue
+            key = str(campaign_id)
+            runtime_status = row["runtime_status"]
+            archive_raw = row["is_archived_int"]
+            runtime_valid = runtime_status in derivable
+            archived = archive_map.get(archive_raw)
+            archive_valid = isinstance(archived, bool)
+            observation = {
+                "runtime_status": runtime_status if runtime_valid else None,
+                "is_archived": archived if archive_valid else None,
+                "status_observed_at": observed_at,
+                "status_source": source,
+                "status_raw": _bounded_status_raw(runtime_status, archive_raw),
+            }
+            previous = rows.get(key)
+            if previous is not None:
+                if previous["is_archived"] != observation["is_archived"]:
+                    archive_conflicts.add(key)
+            if key in archive_conflicts:
+                observation["is_archived"] = None
+                failed = True
+            if not archive_valid:
+                failed = True
+            rows[key] = observation
+    except sqlite3.Error as exc:
+        note_warning(warnings, "campaign_runtime_status", exc)
+        return {}, "STATUS_PROFILE_SCHEMA_MISMATCH"
+    if failed and warnings is not None:
+        warnings.append("campaign_runtime_status: STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY")
+    return rows, None if not failed else "STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY"
+
+
+def _extract_v1(con, profile, observed_at, warnings):
+    """Column-map extraction (v1 profile)."""
     table = _quoted_sqlite_identifier(profile["table"])
     id_col = _quoted_sqlite_identifier(profile["id_column"])
     runtime_col = _quoted_sqlite_identifier(profile["runtime_column"])
@@ -3206,9 +3325,6 @@ def extract_campaign_runtime_statuses(con, cfg, observed_at, warnings=None,
             if key in archive_conflicts:
                 observation["is_archived"] = None
             if key in runtime_conflicts or key in archive_conflicts:
-                # Runtime and archive are independent. A contradiction fails
-                # only the affected axis, and remains failed even if a later
-                # third row happens to match either earlier value.
                 failed = True
             if not runtime_valid or not archive_valid:
                 failed = True
@@ -3216,7 +3332,6 @@ def extract_campaign_runtime_statuses(con, cfg, observed_at, warnings=None,
     except sqlite3.Error as exc:
         note_warning(warnings, "campaign_runtime_status", exc)
         return {}, "STATUS_PROFILE_SCHEMA_MISMATCH"
-
     if failed and warnings is not None:
         warnings.append("campaign_runtime_status: STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY")
     return rows, None if not failed else "STATUS_VALUE_UNRECOGNIZED_OR_CONTRADICTORY"
