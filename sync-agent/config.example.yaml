@@ -155,8 +155,8 @@ sync_photos: false
 # Save the JSON report, compare its candidates with LH2's Campaigns + Archived
 # views, then add a reviewed built-in profile in agent.py before enabling it.
 # lh2_status:
-#   lh_version: "2.130.28"
-#   compatibility_profile: "lh2-2.130.28-runtime-v1"
+#   lh_version: "2.130.30"
+#   compatibility_profile: "partial-v1-2130-fp57"
 
 # Unique per notebook. Use the same value forever so upserts stay idempotent.
 instance_id: "notebook-1"

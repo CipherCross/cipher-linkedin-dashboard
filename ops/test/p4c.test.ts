@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   DisposableOnboardingPlanner,
+  catalogDigest,
   FakeAuthProvider,
   FakeDomainProvider,
   FakeSmtpProvider,
@@ -20,11 +21,28 @@ import {
   p4cBusinessInputs,
   p4cProfile,
   type DeploymentVerificationRequest,
+  type DisposableOnboardingProfile,
   type OnboardingProviders,
 } from "../src/index.js";
 import { OWNER_UUID } from "./fixtures.js";
 
-const TEST_CLOCK = new Date();
+// P4-C is a retired, time-bounded fixture. Keep its contract tests inside the
+// exact approval window instead of making the suite depend on today's date.
+const TEST_CLOCK = new Date("2026-08-01T00:00:00.000Z");
+
+function activeTestProfile(): DisposableOnboardingProfile {
+  const profile = p4cProfile();
+  return {
+    ...profile,
+    catalogs: profile.catalogs.map((catalog) => {
+      const candidate = {
+        ...catalog,
+        valid_until: "2099-12-31T23:59:59.000Z",
+      };
+      return { ...candidate, digest: catalogDigest(candidate) };
+    }),
+  };
+}
 
 test("P4-C reviewed SDK ports keep the owner boundary closed", () => {
   const sourceRoot = resolve(
@@ -178,8 +196,11 @@ test("smoke ownership is complete and admin invite remains the following step", 
       domain: new FakeDomainProvider(),
       sourceRepository: new FakeSourceRepositoryProvider(),
     };
-    const clock = () => TEST_CLOCK;
-    const profile = p4cProfile();
+    // This test exercises the executor and registry fencing, whose clock is
+    // intentionally the real wall clock. Only extend the fixture catalogs;
+    // do not revive P4-C in the production runtime.
+    const clock = () => new Date();
+    const profile = activeTestProfile();
     const preflight = new ProviderPreflightService(providers, profile, {
       clock,
     });
@@ -202,7 +223,7 @@ test("smoke ownership is complete and admin invite remains the following step", 
       request,
       "p4c-test",
       planned.preflight.snapshots,
-      TEST_CLOCK,
+      clock(),
     );
     const context = executionContextFromPlan(
       planned.envelope,

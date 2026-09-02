@@ -1,9 +1,45 @@
 {
-  "contract": "lh2-campaign-runtime-status-v1",
-  "enabled_profiles": [],
-  "go_no_go": [],
-  "local_verification": {
-    "status": "blocked",
-    "reason": "No Linked Helper installation, notebook database, or renderer is reachable from this checkout. Version-specific profiles remain disabled until a read-only status-probe is compared with the visible Linked Helper UI."
-  }
+  "contract": "lh2-campaign-runtime-status-v2",
+  "enabled_profiles": [
+    "partial-v1-2130-fp57",
+    "partial-v1-2130-fpe2"
+  ],
+  "go_no_go": [
+    {
+      "profile": "partial-v1-2130-fp57",
+      "lh_version": "2.130.30",
+      "schema_fingerprint": "57cea0bc879a64f2d3d0c00d5aa2317f8f6c11f80be5dee8e23890d36057f723",
+      "notebooks": ["notebook-1", "notebook-2"],
+      "probed_at": "2026-09-02",
+      "archive_verified": true,
+      "derivable_statuses": ["draft", "stopped"],
+      "not_derivable": ["running", "queued", "sleeping", "completed"],
+      "not_derivable_reason": "Running/Queued/Sleeping have identical SQLite values (is_paused=0, is_archived=0); Completed never observed",
+      "verdict": "PARTIAL-GO"
+    },
+    {
+      "profile": "partial-v1-2130-fpe2",
+      "lh_version": "2.130.30",
+      "schema_fingerprint": "e2adb07b99cb868f63a8c33ae8c0108a47cff8802f0b93ad02f30227d4b0be11",
+      "notebooks": ["karina-1"],
+      "probed_at": "2026-09-02",
+      "archive_verified": true,
+      "derivable_statuses": ["draft", "stopped"],
+      "not_derivable": ["running", "queued", "sleeping", "completed"],
+      "not_derivable_reason": "Running/Queued/Sleeping have identical SQLite values (is_paused=0, is_archived=0); Completed never observed",
+      "verdict": "PARTIAL-GO"
+    },
+    {
+      "profile": null,
+      "lh_version": "2.122.17",
+      "schema_fingerprint": "unknown",
+      "notebooks": ["notebook-4 (account #569517)"],
+      "probed_at": "2026-09-02",
+      "archive_verified": true,
+      "derivable_statuses": [],
+      "not_derivable": ["draft", "running", "queued", "sleeping", "stopped", "completed"],
+      "not_derivable_reason": "Schema fingerprint not recorded in probe report; profile cannot be created without it",
+      "verdict": "NO-GO"
+    }
+  ]
 }

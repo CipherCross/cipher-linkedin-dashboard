@@ -68,11 +68,24 @@ describe('Linked Helper runtime semantics', () => {
     expect(isOperationalCampaign({ runtime_status: 'running', is_archived: null, status_observed_at: NOW.toISOString() })).toBe(false)
   })
 
+  it('treats partial-profile campaigns (null runtime, not archived, observed) as operational', () => {
+    expect(isOperationalCampaign({ runtime_status: null, is_archived: false, status_observed_at: NOW.toISOString(), status_source: 'partial-v1-2130-fp57' })).toBe(true)
+    expect(isOperationalCampaign({ runtime_status: null, is_archived: false, status_observed_at: NOW.toISOString(), status_source: 'unsupported:STATUS_PROFILE_UNVERIFIED' })).toBe(false)
+    expect(isOperationalCampaign({ runtime_status: null, is_archived: false, status_observed_at: null })).toBe(false)
+    expect(isOperationalCampaign({ runtime_status: null, is_archived: true, status_observed_at: NOW.toISOString(), status_source: 'partial-v1-2130-fp57' })).toBe(false)
+  })
+
   it('separates stale, unsupported and never-observed states', () => {
     expect(campaignObservationHealth({ runtime_status: 'running', is_archived: false, status_observed_at: '2026-09-01T12:30:00Z', status_source: 'fixture' }, NOW.valueOf())).toBe('fresh')
     expect(campaignObservationHealth({ runtime_status: 'running', is_archived: false, status_observed_at: '2026-09-01T11:59:59Z', status_source: 'fixture' }, NOW.valueOf())).toBe('stale')
     expect(campaignObservationHealth({ runtime_status: null, is_archived: null, status_observed_at: NOW.toISOString(), status_source: 'unsupported:STATUS_PROFILE_UNVERIFIED' }, NOW.valueOf())).toBe('unsupported')
     expect(campaignObservationHealth({ runtime_status: null, is_archived: null, status_observed_at: null }, NOW.valueOf())).toBe('awaiting_first_sync')
+  })
+
+  it('partial-profile observation with known archive but null runtime is fresh, not unsupported', () => {
+    expect(campaignObservationHealth({ runtime_status: null, is_archived: false, status_observed_at: '2026-09-01T12:30:00Z', status_source: 'partial-v1-2130-fp57' }, NOW.valueOf())).toBe('fresh')
+    expect(campaignObservationHealth({ runtime_status: null, is_archived: false, status_observed_at: '2026-09-01T11:59:59Z', status_source: 'partial-v1-2130-fp57' }, NOW.valueOf())).toBe('stale')
+    expect(campaignObservationHealth({ runtime_status: null, is_archived: null, status_observed_at: '2026-09-01T12:30:00Z', status_source: 'partial-v1-2130-fp57' }, NOW.valueOf())).toBe('unsupported')
   })
 
   it('summarizes runtime and archive membership as separate facts', () => {
