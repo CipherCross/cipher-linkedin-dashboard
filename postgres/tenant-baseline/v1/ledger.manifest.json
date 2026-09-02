@@ -203,6 +203,14 @@
       "owner_role_entered_by": "artifact",
       "session": "sequence-centric-workspace",
       "description": "Explicit campaign-to-master-sequence lineage for deliberate conversion or linking, plus active-member read access to immutable publishing lineage. Publishing and link writes remain admin-gated; no campaign or machine state can be changed."
+    },
+    {
+      "step": 14,
+      "artifact": "014_campaign_runtime_status.sql",
+      "sha256": "91d283f0dfbd199a1850fb66655c08c2e58ee5e9321cb34dd532cf9333626732",
+      "owner_role_entered_by": "artifact",
+      "session": "lh2-campaign-runtime-status",
+      "description": "Fail-closed last-observed Linked Helper campaign runtime and archive state, monotonic observation protection across both ingest transports, and normalized campaign metrics read fields. Adds no Linked Helper mutation or campaign control capability."
     }
   ]
 }

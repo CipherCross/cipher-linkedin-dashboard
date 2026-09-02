@@ -423,13 +423,39 @@ export const upsertCampaignsOperation: NeonCommandOperation<
 > = {
   build: ({ params }) => ({
     text:
-      'INSERT INTO public.campaigns (id, instance_id, lh_campaign_id, name, status, updated_at)' +
-      ' SELECT r.id, $1, r.lh_campaign_id, r.name, COALESCE(NULLIF(r.status, \'\'), \'active\'), now()' +
+      'INSERT INTO public.campaigns' +
+      ' (id, instance_id, lh_campaign_id, name, status, runtime_status, is_archived,' +
+      '  status_observed_at, status_source, status_raw, updated_at)' +
+      ' SELECT r.id, $1, r.lh_campaign_id, r.name, COALESCE(NULLIF(r.status, \'\'), \'unknown\'),' +
+      '        r.runtime_status, r.is_archived, r.status_observed_at,' +
+      '        r.status_source, r.status_raw, now()' +
       '   FROM jsonb_to_recordset($2::jsonb)' +
-      '     AS r(id text, lh_campaign_id text, name text, status text)' +
+      '     AS r(id text, lh_campaign_id text, name text, status text,' +
+      '          runtime_status text, is_archived boolean, status_observed_at timestamptz,' +
+      '          status_source text, status_raw text)' +
       ' ON CONFLICT (id) DO UPDATE SET' +
       '   name = EXCLUDED.name,' +
       '   status = EXCLUDED.status,' +
+      '   runtime_status = CASE WHEN EXCLUDED.status_observed_at IS NOT NULL' +
+      '     AND (public.campaigns.status_observed_at IS NULL' +
+      '       OR EXCLUDED.status_observed_at >= public.campaigns.status_observed_at)' +
+      '     THEN EXCLUDED.runtime_status ELSE public.campaigns.runtime_status END,' +
+      '   is_archived = CASE WHEN EXCLUDED.status_observed_at IS NOT NULL' +
+      '     AND (public.campaigns.status_observed_at IS NULL' +
+      '       OR EXCLUDED.status_observed_at >= public.campaigns.status_observed_at)' +
+      '     THEN EXCLUDED.is_archived ELSE public.campaigns.is_archived END,' +
+      '   status_source = CASE WHEN EXCLUDED.status_observed_at IS NOT NULL' +
+      '     AND (public.campaigns.status_observed_at IS NULL' +
+      '       OR EXCLUDED.status_observed_at >= public.campaigns.status_observed_at)' +
+      '     THEN EXCLUDED.status_source ELSE public.campaigns.status_source END,' +
+      '   status_raw = CASE WHEN EXCLUDED.status_observed_at IS NOT NULL' +
+      '     AND (public.campaigns.status_observed_at IS NULL' +
+      '       OR EXCLUDED.status_observed_at >= public.campaigns.status_observed_at)' +
+      '     THEN EXCLUDED.status_raw ELSE public.campaigns.status_raw END,' +
+      '   status_observed_at = CASE WHEN EXCLUDED.status_observed_at IS NOT NULL' +
+      '     AND (public.campaigns.status_observed_at IS NULL' +
+      '       OR EXCLUDED.status_observed_at >= public.campaigns.status_observed_at)' +
+      '     THEN EXCLUDED.status_observed_at ELSE public.campaigns.status_observed_at END,' +
       '   updated_at = now()',
     values: [params?.instanceId ?? '', params?.rows ?? '[]'],
   }),
