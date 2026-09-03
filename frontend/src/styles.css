@@ -4645,23 +4645,26 @@ td .pipe-stage-select.quiet:focus-visible {
 
 .active-sequence-list, .new-reply-list { margin: 0; padding: 0; list-style: none; }
 .active-sequence {
-  display: grid; gap: 6px 14px; align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex; flex-direction: column; gap: 6px;
   padding: 10px 0; border-bottom: 1px solid var(--border-subtle, var(--border));
 }
 .active-sequence:last-child { border-bottom: none; }
 .active-sequence-main { min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .active-sequence-name { font-weight: 600; color: var(--text); text-decoration: none; }
 .active-sequence-name:hover { color: var(--accent); }
-.active-sequence-accounts { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.active-sequence-accounts { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.active-sequence-metrics { display: flex; gap: 14px; margin: 0; }
+.active-sequence-detail {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.active-sequence-metrics { display: flex; gap: 14px; margin: 0; flex-shrink: 0; }
 .active-sequence-metrics dt {
   font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .04em;
   color: var(--text-muted);
 }
 .active-sequence-metrics dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
-.active-sequence-state { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
+.active-sequence-state { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; min-width: 0; }
 
 .badge.attention-alert { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
 .badge.attention-watch { border-color: var(--warning-border); background: var(--warning-subtle); color: var(--warning); }
@@ -4766,7 +4769,7 @@ td .pipe-stage-select.quiet:focus-visible {
   .overview-operations { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
-  .active-sequence { grid-template-columns: minmax(0, 1fr); }
+  .active-sequence-detail { flex-direction: column; }
   .active-sequence-state { align-items: flex-start; text-align: left; }
   .overview-summary-cells { gap: 14px; }
 }

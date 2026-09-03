@@ -94,42 +94,44 @@ export function ActiveSequences({
                       {item.branch_count} branches
                     </span>
                   )}
-                  <div className="muted small active-sequence-accounts">
+                  <span className="muted small active-sequence-accounts">
                     {accounts.join(' · ')}
                     {currentDeployments.length > accounts.length
                       ? ` · ${currentDeployments.length} campaigns`
                       : ''}
-                  </div>
+                  </span>
                 </div>
 
-                <dl className="active-sequence-metrics">
-                  <div><dt>Leads</dt><dd>{num(currentLeads)}</dd></div>
-                  <div><dt>Replies</dt><dd>{num(currentReplies)}</dd></div>
-                  <div><dt>P3</dt><dd>{num(currentP3)}</dd></div>
-                </dl>
+                <div className="active-sequence-detail">
+                  <dl className="active-sequence-metrics">
+                    <div><dt>Leads</dt><dd>{num(currentLeads)}</dd></div>
+                    <div><dt>Replies</dt><dd>{num(currentReplies)}</dd></div>
+                    <div><dt>P3</dt><dd>{num(currentP3)}</dd></div>
+                  </dl>
 
-                <div className="active-sequence-state">
-                  <span className="active-sequence-runtime">{statusSummary}</span>
-                  {attention.level !== 'ok' && (
-                    <span className={`badge attention-${attention.level}`}>{attention.label}</span>
-                  )}
-                  <span className="muted small">
-                    {statusObservedAt ? `Newest observation ${ago(statusObservedAt)}` : 'No compatible observation'}
-                    {health.stale > 0 ? ` · ${health.stale} stale` : ''}
-                    {health.unsupported + health.awaiting_first_sync > 0
-                      ? ` · ${health.unsupported + health.awaiting_first_sync} unknown`
-                      : ''}
-                  </span>
-                  {(excludedArchived > 0 || excludedUnknownArchive > 0) && (
+                  <div className="active-sequence-state">
+                    <span className="active-sequence-runtime">{statusSummary}</span>
+                    {attention.level !== 'ok' && (
+                      <span className={`badge attention-${attention.level}`}>{attention.label}</span>
+                    )}
                     <span className="muted small">
-                      {excludedArchived > 0 ? `${excludedArchived} archived excluded` : ''}
-                      {excludedArchived > 0 && excludedUnknownArchive > 0 ? ' · ' : ''}
-                      {excludedUnknownArchive > 0 ? `${excludedUnknownArchive} archive unknown excluded` : ''}
+                      {statusObservedAt ? `Newest observation ${ago(statusObservedAt)}` : 'No compatible observation'}
+                      {health.stale > 0 ? ` · ${health.stale} stale` : ''}
+                      {health.unsupported + health.awaiting_first_sync > 0
+                        ? ` · ${health.unsupported + health.awaiting_first_sync} unknown`
+                        : ''}
                     </span>
-                  )}
-                  <span className="muted small">
-                    {currentLatestReply ? `Last reply ${ago(currentLatestReply.sent_at)}` : 'No replies yet'}
-                  </span>
+                    {(excludedArchived > 0 || excludedUnknownArchive > 0) && (
+                      <span className="muted small">
+                        {excludedArchived > 0 ? `${excludedArchived} archived excluded` : ''}
+                        {excludedArchived > 0 && excludedUnknownArchive > 0 ? ' · ' : ''}
+                        {excludedUnknownArchive > 0 ? `${excludedUnknownArchive} archive unknown excluded` : ''}
+                      </span>
+                    )}
+                    <span className="muted small">
+                      {currentLatestReply ? `Last reply ${ago(currentLatestReply.sent_at)}` : 'No replies yet'}
+                    </span>
+                  </div>
                 </div>
               </li>
             )
