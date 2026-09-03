@@ -166,7 +166,7 @@ export function Funnel({
 
   return (
     <div className="card">
-      <h2>Funnel</h2>
+      <h3 className="card-title">Funnel</h3>
       <div className="funnel">
         {rows.map((s, i) => (
           <Fragment key={s.key}>

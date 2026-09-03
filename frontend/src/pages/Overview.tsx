@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Loader2, Users } from 'lucide-react'
+import { ChevronDown, Loader2, Users } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { useConversation } from '../lib/ConversationContext'
@@ -139,6 +139,16 @@ export function Overview() {
   }, [data?.campaigns])
 
   const [creating, setCreating] = useState(false)
+  const [analyticsOpen, setAnalyticsOpen] = useState(() => {
+    try { return localStorage.getItem('overview-analytics-open') !== 'false' } catch { return true }
+  })
+  const toggleAnalytics = useCallback(() => {
+    setAnalyticsOpen((prev) => {
+      const next = !prev
+      try { localStorage.setItem('overview-analytics-open', String(next)) } catch { /* noop */ }
+      return next
+    })
+  }, [])
   const createDraft = async () => {
     setCreating(true)
     try {
@@ -356,28 +366,39 @@ export function Overview() {
 
       {metricsReady && (
         <section className="overview-section" aria-labelledby="analytics-title">
-          <h2 id="analytics-title" className="overview-section-title">Analytics</h2>
-          <KpiCards
-            totals={totals!}
-            prev={summary?.prevTotals ?? legacy?.prevTotals}
-            activity={summary?.activity ?? legacy!.activity}
-            range={range}
-            flowLabel={range.label}
-            intent={globalIntent}
-            intentPrev={globalIntentPrev}
-            added={summary?.totals.added ?? legacy!.added}
-            addedPrev={summary?.prevTotals?.added ?? legacy?.addedPrev}
-            velocityLeads={summary ? undefined : data.leads}
-            velocitySummary={summary ? {
-              buckets: summary.velocity,
-              undated: summary.velocityUndated,
-            } : undefined}
-          />
-          <Funnel
-            leads={summary ? undefined : data.leads}
-            showPipeline
-            summary={summary?.funnel}
-          />
+          <button
+            id="analytics-title"
+            className="overview-section-title overview-section-toggle"
+            aria-expanded={analyticsOpen}
+            aria-controls="analytics-content"
+            onClick={toggleAnalytics}
+          >
+            <ChevronDown size={14} className="overview-section-chevron" aria-hidden />
+            Analytics
+          </button>
+          <div id="analytics-content" hidden={!analyticsOpen}>
+            <KpiCards
+              totals={totals!}
+              prev={summary?.prevTotals ?? legacy?.prevTotals}
+              activity={summary?.activity ?? legacy!.activity}
+              range={range}
+              flowLabel={range.label}
+              intent={globalIntent}
+              intentPrev={globalIntentPrev}
+              added={summary?.totals.added ?? legacy!.added}
+              addedPrev={summary?.prevTotals?.added ?? legacy?.addedPrev}
+              velocityLeads={summary ? undefined : data.leads}
+              velocitySummary={summary ? {
+                buckets: summary.velocity,
+                undated: summary.velocityUndated,
+              } : undefined}
+            />
+            <Funnel
+              leads={summary ? undefined : data.leads}
+              showPipeline
+              summary={summary?.funnel}
+            />
+          </div>
         </section>
       )}
     </>

@@ -99,11 +99,14 @@ export function NewReplies({
                   </button>
                 ) : (
                   <Link
-                    className="new-reply-open"
+                    className="new-reply-open new-reply-open--nav"
                     aria-label={`Open ${name} in ${reply.sequence_name}`}
                     to={`/campaign/${encodeURIComponent(reply.campaign_id)}?people=replied`}
                   >
                     {body}
+                    <span className="new-reply-nav-hint">
+                      <ArrowRight size={12} />
+                    </span>
                   </Link>
                 )}
               </li>

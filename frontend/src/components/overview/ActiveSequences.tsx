@@ -140,13 +140,20 @@ export function ActiveSequences({
       {(ranked.length > shown.length || drafts.length > 0) && (
         <div className="overview-panel-foot muted small">
           {ranked.length > shown.length && (
-            <span>{ranked.length - shown.length} more deployed · </span>
+            <Link className="row-link" to="/sequences">
+              {ranked.length - shown.length} more deployed
+            </Link>
+          )}
+          {ranked.length > shown.length && drafts.length > 0 && (
+            <span className="overview-panel-foot-sep"> &middot; </span>
           )}
           {drafts.length > 0 && (
-            <>
-              <Link className="row-link" to={sequenceHref(drafts[0])}>Continue “{drafts[0].name}”</Link>
-              {drafts.length > 1 && <span> · {drafts.length - 1} other drafts</span>}
-            </>
+            <Link className="row-link" to={sequenceHref(drafts[0])}>
+              Continue "{drafts[0].name}"
+            </Link>
+          )}
+          {drafts.length > 1 && (
+            <span> &middot; {drafts.length - 1} other draft{drafts.length > 2 ? 's' : ''}</span>
           )}
         </div>
       )}

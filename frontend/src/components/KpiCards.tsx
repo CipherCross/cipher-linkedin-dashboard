@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import {
-  CalendarCheck, MessageSquare, Send, Sparkles, UserCheck, UserPlus, UserRoundX, Users,
+  MessageSquare, Send, Sparkles, UserCheck, UserPlus, Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CampaignMetrics, DailyActivity, Lead } from '../lib/types'
@@ -99,35 +99,7 @@ export function KpiCards({
       cur: replies, prevCount: prev?.replies, maturing: true,
     },
   )
-  if (intent) {
-    cards.push(
-      {
-        key: 'p1', label: 'P1 · Polite', value: intent.p1, icon: Sparkles,
-        sub: 'polite positive', cur: intent.p1, prevCount: intentPrev?.p1, maturing: true,
-      },
-      {
-        key: 'p2', label: 'P2 · Problem', value: intent.p2, icon: MessageSquare,
-        sub: 'substantive interest', cur: intent.p2, prevCount: intentPrev?.p2, maturing: true,
-      },
-      {
-        key: 'p3', label: 'P3 · Buying intent', value: intent.p3, icon: UserCheck,
-        sub: 'first reached P3', cur: intent.p3, prevCount: intentPrev?.p3, maturing: true,
-      },
-      {
-        key: 'p3-booked', label: 'P3 → Booked', value: intent.p3Booked, icon: CalendarCheck,
-        sub:
-          intent.matureP3BookingRate == null
-            ? 'no mature P3 cohort yet'
-            : `${intent.matureP3BookingRate.toFixed(1)}% of P3 aged 14d+`,
-        maturing: true,
-      },
-      {
-        key: 'p3-ghosted', label: 'P3 ghosted', value: intent.p3Ghosted, icon: UserRoundX,
-        sub: intent.p3 > 0 ? `${pct(intent.p3Ghosted, intent.p3)} of P3 · 30d silence` : '30d silence after follow-up',
-        maturing: true,
-      },
-    )
-  }
+  // Intent tiles are rendered as a grouped card below, not as individual tiles.
 
   const showSpark = !!(activity && range)
 
@@ -170,9 +142,59 @@ export function KpiCards({
           <div className="card kpi" key={c.key}>{body}</div>
         )
       })}
+      {intent && <IntentGroup intent={intent} intentPrev={intentPrev} />}
       {(velocityLeads || velocitySummary) && (
         <LeadsVelocityChart leads={velocityLeads} summary={velocitySummary} />
       )}
+    </div>
+  )
+}
+
+/** Grouped intent card — combines all 5 intent metrics in a single wider tile. */
+function IntentGroup({ intent, intentPrev }: { intent: ReplyIntentMetrics; intentPrev?: ReplyIntentMetrics }) {
+  const rows: { key: string; label: string; value: number; sub: string; cur: number; prev?: number }[] = [
+    {
+      key: 'p1', label: 'P1 · Polite', value: intent.p1,
+      sub: 'polite positive', cur: intent.p1, prev: intentPrev?.p1,
+    },
+    {
+      key: 'p2', label: 'P2 · Problem', value: intent.p2,
+      sub: 'substantive interest', cur: intent.p2, prev: intentPrev?.p2,
+    },
+    {
+      key: 'p3', label: 'P3 · Buying intent', value: intent.p3,
+      sub: 'first reached P3', cur: intent.p3, prev: intentPrev?.p3,
+    },
+    {
+      key: 'p3-booked', label: 'P3 → Booked', value: intent.p3Booked,
+      sub: intent.matureP3BookingRate == null
+        ? 'no mature P3 cohort yet'
+        : `${intent.matureP3BookingRate.toFixed(1)}% of P3 aged 14d+`,
+      cur: intent.p3Booked, prev: intentPrev?.p3Booked,
+    },
+    {
+      key: 'p3-ghosted', label: 'P3 ghosted', value: intent.p3Ghosted,
+      sub: intent.p3 > 0 ? `${pct(intent.p3Ghosted, intent.p3)} of P3 · 30d silence` : '30d silence after follow-up',
+      cur: intent.p3Ghosted, prev: intentPrev?.p3Ghosted,
+    },
+  ]
+  return (
+    <div className="card kpi kpi-intent-group">
+      <div className="kpi-top">
+        <span className="kpi-label"><Sparkles size={14} strokeWidth={2} /> Reply intent</span>
+      </div>
+      {rows.map((r, i) => (
+        <div className={`kpi-intent-row${i < rows.length - 1 ? '' : ' last'}`} key={r.key}>
+          <span className="kpi-intent-row-label">{r.label}</span>
+          <span className="kpi-intent-row-right">
+            <span className="kpi-intent-row-value">{num(r.value)}</span>
+            {r.cur !== undefined && r.prev !== undefined && (
+              <Delta cur={r.cur} prev={r.prev} maturing />
+            )}
+          </span>
+          <span className="kpi-intent-row-sub">{r.sub}</span>
+        </div>
+      ))}
     </div>
   )
 }

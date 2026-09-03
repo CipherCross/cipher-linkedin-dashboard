@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Calendar, ChevronDown } from 'lucide-react'
 import type { DateRange } from '../lib/leads'
 
@@ -78,6 +78,53 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
   // Today as a UTC day-string, so future days are disabled by string compare
   // (matching the UTC day-slices used everywhere else — no local-tz drift).
   const todayStr = new Date().toISOString().slice(0, 10)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [focusedDay, setFocusedDay] = useState(1)
+
+  // Build rows of 7 cells each for the ARIA grid. null = blank spacer.
+  const blanks = firstWeekday(viewY, viewM)
+  const days = daysInMonth(viewY, viewM)
+  const totalCells = blanks + days
+  const rows: (number | null)[][] = []
+  for (let i = 0; i < totalCells; i += 7) {
+    const row: (number | null)[] = []
+    for (let j = i; j < i + 7; j++) {
+      row.push(j < blanks ? null : j - blanks + 1 <= days ? j - blanks + 1 : null)
+    }
+    rows.push(row)
+  }
+  // Pad last row to 7 cells if needed.
+  if (rows.length > 0) {
+    const last = rows[rows.length - 1]
+    while (last.length < 7) last.push(null)
+  }
+
+  // Clamp focusedDay when month changes.
+  const clampedFocus = Math.min(focusedDay, days)
+
+  const focusDayButton = useCallback((d: number) => {
+    setFocusedDay(d)
+    const el = gridRef.current?.querySelector(`[data-day="${d}"]`) as HTMLElement | null
+    el?.focus()
+  }, [])
+
+  const onGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const d = clampedFocus
+    let next: number | null = null
+    switch (e.key) {
+      case 'ArrowRight': next = d < days ? d + 1 : null; break
+      case 'ArrowLeft': next = d > 1 ? d - 1 : null; break
+      case 'ArrowDown': next = d + 7 <= days ? d + 7 : null; break
+      case 'ArrowUp': next = d - 7 >= 1 ? d - 7 : null; break
+      case 'Home': next = 1; break
+      case 'End': next = days; break
+      default: return
+    }
+    if (next != null) {
+      e.preventDefault()
+      focusDayButton(next)
+    }
+  }, [clampedFocus, days, focusDayButton])
 
   const pickPreset = (p: DateRange) => {
     onChange(p)
@@ -132,38 +179,47 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
               <span>{MONTHS[viewM]} {viewY}</span>
               <button className="drp-nav" onClick={() => shiftMonth(1)} aria-label="Next month">›</button>
             </div>
-            <div className="drp-grid">
-              {WEEKDAYS.map((w) => (
-                <span key={w} className="drp-wd">{w}</span>
+            <div className="drp-grid" role="grid" aria-label="Choose date" ref={gridRef} onKeyDown={onGridKeyDown}>
+              <div role="row" className="drp-wd-row">
+                {WEEKDAYS.map((w) => (
+                  <span key={w} role="columnheader" className="drp-wd">{w}</span>
+                ))}
+              </div>
+              {rows.map((row, ri) => (
+                <div role="row" className="drp-wd-row" key={ri}>
+                  {row.map((d, ci) => {
+                    if (d == null) {
+                      return <span key={`b${ri}-${ci}`} role="gridcell" aria-disabled="true" />
+                    }
+                    const day = ymd(viewY, viewM, d)
+                    const isStart = day === draftStart
+                    const isEnd = day === draftEnd
+                    const inRange =
+                      draftStart && draftEnd && day > draftStart && day < draftEnd
+                    const future = day > todayStr
+                    const cls = [
+                      'drp-day',
+                      isStart || isEnd ? 'edge' : '',
+                      inRange ? 'between' : '',
+                      future ? 'disabled' : '',
+                    ].filter(Boolean).join(' ')
+                    return (
+                      <button
+                        key={day}
+                        role="gridcell"
+                        data-day={d}
+                        className={cls}
+                        disabled={future}
+                        tabIndex={d === clampedFocus ? 0 : -1}
+                        onClick={() => clickDay(day)}
+                        onFocus={() => setFocusedDay(d)}
+                      >
+                        {d}
+                      </button>
+                    )
+                  })}
+                </div>
               ))}
-              {Array.from({ length: firstWeekday(viewY, viewM) }).map((_, i) => (
-                <span key={`b${i}`} />
-              ))}
-              {Array.from({ length: daysInMonth(viewY, viewM) }).map((_, i) => {
-                const d = i + 1
-                const day = ymd(viewY, viewM, d)
-                const isStart = day === draftStart
-                const isEnd = day === draftEnd
-                const inRange =
-                  draftStart && draftEnd && day > draftStart && day < draftEnd
-                const future = day > todayStr
-                const cls = [
-                  'drp-day',
-                  isStart || isEnd ? 'edge' : '',
-                  inRange ? 'between' : '',
-                  future ? 'disabled' : '',
-                ].filter(Boolean).join(' ')
-                return (
-                  <button
-                    key={day}
-                    className={cls}
-                    disabled={future}
-                    onClick={() => clickDay(day)}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
             </div>
             <div className="drp-hint muted small">
               {draftStart && !draftEnd
