@@ -2,11 +2,6 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Plus, Workflow } from 'lucide-react'
 import type { SequenceHubItem } from '../../lib/types'
 import { activeSequences, draftSequences, sequenceAccounts, sequenceHref } from '../../lib/sequenceHub'
-import {
-  campaignStatusSummary,
-  newestStatusObservation,
-  statusHealthCounts,
-} from '../../lib/campaignRuntime'
 import { ago, num } from '../../lib/format'
 import { EmptyState } from '../EmptyState'
 
@@ -66,14 +61,9 @@ export function ActiveSequences({
         />
       ) : (
         <ul className="active-sequence-list">
-          {shown.map(({ item, attention }) => {
+          {shown.map(({ item }) => {
             const currentDeployments = item.deployments.filter((deployment) => deployment.is_archived === false)
-            const excludedArchived = item.deployments.filter((deployment) => deployment.is_archived === true).length
-            const excludedUnknownArchive = item.deployments.length - currentDeployments.length - excludedArchived
             const accounts = sequenceAccounts({ ...item, deployments: currentDeployments })
-            const statusSummary = campaignStatusSummary(currentDeployments)
-            const statusObservedAt = newestStatusObservation(currentDeployments)
-            const health = statusHealthCounts(currentDeployments)
             const currentLeads = currentDeployments.reduce((sum, deployment) => sum + deployment.leads, 0)
             const currentReplies = currentDeployments.reduce((sum, deployment) => sum + deployment.replies, 0)
             const currentP3 = currentDeployments.reduce((sum, deployment) => sum + deployment.p3, 0)
@@ -110,24 +100,6 @@ export function ActiveSequences({
                   </dl>
 
                   <div className="active-sequence-state">
-                    <span className="active-sequence-runtime">{statusSummary}</span>
-                    {attention.level !== 'ok' && (
-                      <span className={`badge attention-${attention.level}`}>{attention.label}</span>
-                    )}
-                    <span className="muted small">
-                      {statusObservedAt ? `Newest observation ${ago(statusObservedAt)}` : 'No compatible observation'}
-                      {health.stale > 0 ? ` · ${health.stale} stale` : ''}
-                      {health.unsupported + health.awaiting_first_sync > 0
-                        ? ` · ${health.unsupported + health.awaiting_first_sync} unknown`
-                        : ''}
-                    </span>
-                    {(excludedArchived > 0 || excludedUnknownArchive > 0) && (
-                      <span className="muted small">
-                        {excludedArchived > 0 ? `${excludedArchived} archived excluded` : ''}
-                        {excludedArchived > 0 && excludedUnknownArchive > 0 ? ' · ' : ''}
-                        {excludedUnknownArchive > 0 ? `${excludedUnknownArchive} archive unknown excluded` : ''}
-                      </span>
-                    )}
                     <span className="muted small">
                       {currentLatestReply ? `Last reply ${ago(currentLatestReply.sent_at)}` : 'No replies yet'}
                     </span>
