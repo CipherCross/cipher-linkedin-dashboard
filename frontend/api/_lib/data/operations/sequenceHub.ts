@@ -291,7 +291,9 @@ const SQL = `WITH campaign_threads AS MATERIALIZED (
     JOIN public.instances i ON i.id = r.instance_id
     LEFT JOIN campaign_owner o ON o.campaign_id = r.campaign_id
    WHERE r.needs_attention
-     AND c.is_archived = false
+     -- Unknown archive state must not hide an already-synced reply. Only a
+     -- positively observed archive excludes a campaign from the inbox preview.
+     AND c.is_archived IS DISTINCT FROM true
 )
 SELECT jsonb_build_object(
   'items', COALESCE((
