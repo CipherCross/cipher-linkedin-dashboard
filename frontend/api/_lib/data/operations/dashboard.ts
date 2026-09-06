@@ -181,6 +181,8 @@ export interface CampaignMetricsRow {
   readonly replies: number
   readonly acceptance_rate: number | null
   readonly reply_rate: number | null
+  readonly lifetime_acceptance_rate?: number | null
+  readonly lifetime_reply_rate?: number | null
   readonly last_activity_at: string | null
   readonly briefing_context: string | null
   readonly briefing_context_updated_at: string | null
@@ -491,6 +493,10 @@ campaign_stats AS (
          c.status_source,
          c.status_raw,
          count(*)::int AS total_leads,
+         count(l.invited_at)::int AS lifetime_invites,
+         count(l.connected_at)::int AS lifetime_connected,
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL AND l.connected_at IS NOT NULL)::int AS lifetime_accepted,
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL AND l.replied_at IS NOT NULL)::int AS lifetime_replied,
          count(*) FILTER (WHERE (b.cur_from IS NULL OR l.added_at >= b.cur_from)
                             AND (b.cur_to IS NULL OR l.added_at < b.cur_to))::int AS leads_added,
          count(*) FILTER (WHERE (b.cur_from IS NULL OR l.invited_at >= b.cur_from)
@@ -682,6 +688,8 @@ SELECT (g.value || jsonb_build_object(
     'status_raw', c.status_raw,
     'total_leads', c.total_leads,
     'leads_added', c.leads_added,
+    'lifetime_acceptance_rate', 100.0 * c.lifetime_accepted / NULLIF(c.lifetime_invites, 0),
+    'lifetime_reply_rate', 100.0 * c.lifetime_replied / NULLIF(c.lifetime_connected, 0),
     'invites_sent', c.invites_sent,
     'accepted', c.accepted,
     'replies', c.replies,

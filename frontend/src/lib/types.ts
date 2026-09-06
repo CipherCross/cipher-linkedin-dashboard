@@ -107,6 +107,9 @@ export interface CampaignMetrics {
   last_activity_at: string | null
   /** Leads added within the selected range. Only present on rows computed
    *  client-side by rangedCampaigns — the campaign_metrics view has no ranges. */
+  /** All-time denominators, independent of the summary activity range. */
+  lifetime_acceptance_rate?: number | null
+  lifetime_reply_rate?: number | null
   leads_added?: number
 }
 

@@ -4784,3 +4784,17 @@ td .pipe-stage-select.quiet:focus-visible {
   .funnel-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   [hidden] { display: none !important; }
 }
+
+/* Home: a weekly comparison followed by campaign performance. */
+.weekly-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.weekly-stat { display: flex; flex-direction: column; gap: 8px; padding: 24px; }
+.weekly-stat-value { font-size: 36px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.campaign-performance { padding: 24px; }
+.campaign-performance-scroll { overflow-x: auto; margin: 20px 0; }
+.campaign-performance table { width: 100%; }
+.campaign-performance td:nth-child(n+3), .campaign-performance th:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+.campaign-performance th { white-space: nowrap; }
+@media (max-width: 680px) {
+  .weekly-summary { grid-template-columns: 1fr; gap: 10px; }
+  .weekly-stat, .campaign-performance { padding: 16px; }
+}
