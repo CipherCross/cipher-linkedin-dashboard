@@ -15,7 +15,37 @@ const manifest = JSON.parse(
 ) as RoutingManifest
 
 describe('canonical-host routing', () => {
+  it('permanently redirects the old dashboard domain to the public site', () => {
+    expect(manifest.redirects).toContainEqual({
+      source: '/',
+      has: [
+        {
+          type: 'host',
+          value: 'ciphercross.dev',
+        },
+      ],
+      destination: 'https://ciphercross.com/',
+      permanent: true,
+    })
+    expect(manifest.redirects).toContainEqual({
+      source: '/:path((?!api/).*)',
+      has: [
+        {
+          type: 'host',
+          value: 'ciphercross.dev',
+        },
+      ],
+      destination: 'https://ciphercross.com/:path*',
+      permanent: true,
+    })
+  })
+
   it('never redirects API or cron requests away from their authenticated origin', () => {
+    expect(
+      manifest.redirects
+        .filter(({ source }) => source !== '/')
+        .every(({ source }) => source === '/:path((?!api/).*)'),
+    ).toBe(true)
     expect(manifest.redirects).toContainEqual({
       source: '/:path((?!api/).*)',
       has: [
@@ -24,7 +54,7 @@ describe('canonical-host routing', () => {
           value: 'cipher-linkedin-dashboard.*\\.vercel\\.app',
         },
       ],
-      destination: 'https://ciphercross.dev/:path*',
+      destination: 'https://app.ciphercross.dev/:path*',
       permanent: false,
     })
     expect(manifest.crons).toHaveLength(4)

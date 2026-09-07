@@ -9,6 +9,28 @@
   ],
   "redirects": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "ciphercross.dev"
+        }
+      ],
+      "destination": "https://ciphercross.com/",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "ciphercross.dev"
+        }
+      ],
+      "destination": "https://ciphercross.com/:path*",
+      "permanent": true
+    },
+    {
       "source": "/:path((?!api/).*)",
       "has": [
         {
@@ -16,7 +38,7 @@
           "value": "cipher-linkedin-dashboard.*\\.vercel\\.app"
         }
       ],
-      "destination": "https://ciphercross.dev/:path*",
+      "destination": "https://app.ciphercross.dev/:path*",
       "permanent": false
     }
   ],
