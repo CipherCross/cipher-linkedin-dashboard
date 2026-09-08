@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CartesianGrid,
+  Area,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,7 +12,7 @@ import {
 } from "recharts";
 import { DateRangePicker } from "../DateRangePicker";
 import type { DateRange } from "../../lib/leads";
-import { ago, num, pct } from "../../lib/format";
+import { ago, num, pct, shortDate } from "../../lib/format";
 import { freshnessLevel } from "../../lib/freshness";
 import type {
   CampaignMetrics,
@@ -57,6 +58,11 @@ const colors = {
   connected: "var(--success)",
   replied: "var(--warning)",
 } as const;
+const chartDate = (day: string, weekly: boolean) => {
+  if (weekly) return `Week of ${day}`;
+  return shortDate(day);
+};
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
 function chartRows(a: Analytics | null, r: DateRange, account: string) {
   if (!a) return [];
   const rows = new Map<
@@ -457,7 +463,16 @@ export function OverviewAnalytics({
                 aria-label={`${weeklyChart ? "Weekly" : "Daily"} invited, connected and first replies for ${range.label}`}
               >
                 <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={chart}>
+                    <ComposedChart data={chart}>
+                    <Area
+                      type="linear"
+                      dataKey="invited"
+                      stroke="none"
+                      fill={colors.invited}
+                      fillOpacity={0.08}
+                      tooltipType="none"
+                      isAnimationActive={false}
+                    />
                     <CartesianGrid
                       stroke="var(--border)"
                       strokeDasharray="3 3"
@@ -465,20 +480,20 @@ export function OverviewAnalytics({
                     <XAxis
                       dataKey="day"
                       tick={{ fontSize: 11 }}
-                      tickFormatter={(day: string) =>
-                        weeklyChart ? `Week of ${day}` : day
-                      }
+                      tickFormatter={(day: string) => chartDate(day, weeklyChart)}
                     />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                     <Tooltip
-                      labelFormatter={(day) =>
-                        weeklyChart ? `Week of ${day}` : day
-                      }
+                      labelFormatter={(day) => chartDate(String(day), weeklyChart)}
+                      contentStyle={{ background: "var(--surface-1)", border: "1px solid var(--border-strong)", borderRadius: 10, color: "var(--text)", boxShadow: "0 10px 24px rgb(4 10 24 / .16)" }}
+                      labelStyle={{ color: "var(--text-muted)", fontWeight: 600 }}
+                      itemStyle={{ color: "var(--text)" }}
                     />
                     <Line
                       dataKey="invited"
                       name="Invited"
                       stroke={colors.invited}
+                      strokeWidth={2.5}
                       dot={false}
                       isAnimationActive={false}
                     />
@@ -486,6 +501,7 @@ export function OverviewAnalytics({
                       dataKey="connected"
                       name="Connected"
                       stroke={colors.connected}
+                      strokeWidth={2.5}
                       dot={false}
                       isAnimationActive={false}
                     />
@@ -493,10 +509,11 @@ export function OverviewAnalytics({
                       dataKey="replied"
                       name="First replies"
                       stroke={colors.replied}
+                      strokeWidth={2.5}
                       dot={false}
                       isAnimationActive={false}
                     />
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -696,9 +713,16 @@ export function OverviewAnalytics({
                               <button
                                 className="sa-name"
                                 type="button"
+                                aria-label={i.account_name || i.label || i.id}
                                 onClick={() => onAccountChange(i.id)}
                               >
-                                {i.account_name || i.label || i.id}
+                                <span className="sa-avatar" aria-hidden="true">
+                                  {i.account_avatar ? <img src={i.account_avatar} alt="" /> : initials(i.account_name || i.label || i.id)}
+                                </span>
+                                <span>
+                                  {i.account_name || i.label || i.id}
+                                  {i.account_name && i.label && i.label !== i.account_name && <small className="sa-muted">{i.label}</small>}
+                                </span>
                               </button>
                             </td>
                             <td>{num(t.invited)}</td>
