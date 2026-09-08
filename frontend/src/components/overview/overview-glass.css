@@ -214,20 +214,39 @@
 .overview-glass .sa-panel h2 { font-size: var(--text-xl); letter-spacing: -0.025em; font-weight: 650; }
 
 .overview-glass .sa-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.overview-glass .sa-controls > label {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-width: 168px;
+  color: var(--og-muted);
+  font-size: var(--text-2xs);
+  line-height: 1.2;
+  letter-spacing: .02em;
+}
+.overview-glass .sa-controls > label:first-child { min-width: 178px; }
+.overview-glass .sa-controls > label:has(.drp) { min-width: 220px; }
 .overview-glass .sa-controls select,
 .overview-glass .sa-period {
   border: 1px solid var(--og-line);
-  background: color-mix(in srgb, var(--surface-2) 58%, transparent);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .15), 0 6px 15px rgb(4 10 24 / .08);
   -webkit-backdrop-filter: saturate(150%) blur(12px);
   backdrop-filter: saturate(150%) blur(12px);
 }
+.overview-glass .sa-controls select { background-color: color-mix(in srgb, var(--surface-2) 58%, transparent); }
+.overview-glass .sa-period { background: color-mix(in srgb, var(--surface-2) 58%, transparent); }
 .overview-glass .sa-controls select {
+  width: 100%;
+  height: 40px;
   max-width: 100%;
   padding: 8px 30px 8px 12px;
   border-radius: 12px;
   color: var(--og-ink);
   font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.2;
   cursor: pointer;
 }
 .overview-glass .sa-period { display: flex; gap: 3px; padding: 4px; border-radius: var(--radius-pill); }
@@ -249,7 +268,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
+  width: 100%;
+  height: 40px;
   padding: 7px 12px;
   border: 1px solid var(--og-line);
   border-radius: 12px;
@@ -259,8 +279,16 @@
   -webkit-backdrop-filter: saturate(150%) blur(12px);
   backdrop-filter: saturate(150%) blur(12px);
   font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.2;
   cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  justify-content: flex-start;
 }
+.overview-glass .drp-trigger > svg { flex: 0 0 auto; }
+.overview-glass .drp-trigger .drp-caret { margin-left: auto; }
 .overview-glass .drp-trigger:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--og-line)); }
 .overview-glass .drp-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .overview-glass .drp-cal-icon,
@@ -360,7 +388,7 @@
   .overview-glass .sa-total,
   .overview-glass .sa-panel,
   .overview-glass .drp-pop { background: var(--surface-1); }
-  .overview-glass .sa-controls select,
+  .overview-glass .sa-controls select { background-color: var(--surface-2); }
   .overview-glass .sa-period,
   .overview-glass .drp-trigger { background: var(--surface-2); }
 }
@@ -382,8 +410,11 @@
   .overview-glass .sa-total:last-child { grid-column: 1 / -1; }
   .overview-glass .sa-panel { padding: 16px 13px; border-radius: 18px; }
   .overview-glass .sa-row { align-items: flex-start; flex-direction: column; }
-  .overview-glass .sa-controls { width: 100%; justify-content: flex-start; }
-  .overview-glass .sa-controls select { flex: 1 1 150px; }
+  .overview-glass .sa-controls { width: 100%; align-items: stretch; flex-direction: column; justify-content: flex-start; gap: 10px; }
+  .overview-glass .sa-controls > label,
+  .overview-glass .sa-controls > label:first-child,
+  .overview-glass .sa-controls > label:has(.drp) { width: 100%; min-width: 0; }
+  .overview-glass .sa-controls select { flex: 1 1 auto; }
   .overview-glass .drp { width: 100%; }
   .overview-glass .drp-trigger { width: 100%; justify-content: space-between; }
   .overview-glass .drp-pop {
@@ -412,10 +443,10 @@
 @media (prefers-reduced-transparency: reduce) {
   .overview-glass .sa-total,
   .overview-glass .sa-panel,
+  .overview-glass .drp-pop { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface-1); }
   .overview-glass .sa-controls select,
   .overview-glass .sa-period,
-  .overview-glass .drp-trigger,
-  .overview-glass .drp-pop { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface-1); }
+  .overview-glass .drp-trigger { -webkit-backdrop-filter: none; backdrop-filter: none; background-color: var(--surface-1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
