@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Calendar, ChevronDown } from 'lucide-react'
 import type { DateRange } from '../lib/leads'
 
@@ -36,16 +37,81 @@ interface Props {
   presets: DateRange[]
   value: DateRange
   onChange: (r: DateRange) => void
+  ariaLabel?: string
 }
 
-export function DateRangePicker({ presets, value, onChange }: Props) {
+export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date range' }: Props) {
   const [open, setOpen] = useState(false)
+  const [popupStyle, setPopupStyle] = useState<CSSProperties>({})
   const [draftStart, setDraftStart] = useState<string | null>(value.from)
   const [draftEnd, setDraftEnd] = useState<string | null>(value.to)
   const now = new Date()
   const [viewY, setViewY] = useState(now.getFullYear())
   const [viewM, setViewM] = useState(now.getMonth())
   const wrap = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const reactId = useId()
+  const popupId = `date-range-popup-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`
+
+  const closePicker = useCallback(() => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }, [])
+
+  const positionPopup = useCallback(() => {
+    const trigger = triggerRef.current
+    const popup = popupRef.current
+    const wrapper = wrap.current
+    if (!trigger || !popup || !wrapper) return
+    const triggerRect = trigger.getBoundingClientRect()
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const gap = 6
+    const availableHorizontal = Math.max(180, Math.min(390, viewportWidth - 24))
+    // Apply the horizontal constraint before measuring height: the preset
+    // list/calendar reflow at narrow widths and changes the popup's natural
+    // height. The wrapper is intentionally not a viewport-sized positioning
+    // context, so the offset may be negative when it must align to the window.
+    popup.style.width = `${availableHorizontal}px`
+    popup.style.maxWidth = `${availableHorizontal}px`
+    popup.style.maxHeight = 'none'
+    const naturalHeight = popup.scrollHeight
+    const popupHeight = Math.min(Math.max(120, naturalHeight), Math.max(120, viewportHeight - 24))
+    const belowTop = triggerRect.bottom + gap
+    const aboveTop = triggerRect.top - gap - popupHeight
+    const desiredTop = belowTop + popupHeight <= viewportHeight - 12 ? belowTop : aboveTop
+    const viewportTop = Math.max(12, Math.min(desiredTop, viewportHeight - popupHeight - 12))
+    const viewportLeft = Math.max(12, Math.min(triggerRect.left, viewportWidth - availableHorizontal - 12))
+    const relativeLeft = viewportLeft - wrapperRect.left
+    const relativeTop = viewportTop - wrapperRect.top
+    const style: CSSProperties = {
+      width: `${availableHorizontal}px`,
+      maxWidth: `${availableHorizontal}px`,
+      maxHeight: `${popupHeight}px`,
+      top: `${relativeTop}px`,
+      bottom: 'auto',
+      left: `${relativeLeft}px`,
+      right: 'auto',
+      overflow: 'auto',
+    }
+    setPopupStyle(style)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const entry = popupRef.current?.querySelector<HTMLElement>('[tabindex="0"]:not(:disabled)')
+      ?? popupRef.current?.querySelector<HTMLElement>('button:not(:disabled)')
+    entry?.focus()
+    positionPopup()
+    window.addEventListener('resize', positionPopup)
+    window.addEventListener('scroll', positionPopup, true)
+    return () => {
+      window.removeEventListener('resize', positionPopup)
+      window.removeEventListener('scroll', positionPopup, true)
+    }
+  }, [open, positionPopup])
 
   // Sync the calendar selection from the active range whenever we open.
   useEffect(() => {
@@ -64,8 +130,8 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
     const onDoc = (e: MouseEvent) => {
       if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false)
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') closePicker()
     }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
@@ -73,7 +139,7 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
       document.removeEventListener('mousedown', onDoc)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [closePicker, open])
 
   // Today as a UTC day-string, so future days are disabled by string compare
   // (matching the UTC day-slices used everywhere else — no local-tz drift).
@@ -108,7 +174,7 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
     el?.focus()
   }, [])
 
-  const onGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const onGridKeyDown = useCallback((e: ReactKeyboardEvent) => {
     const d = clampedFocus
     let next: number | null = null
     switch (e.key) {
@@ -128,7 +194,7 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
 
   const pickPreset = (p: DateRange) => {
     onChange(p)
-    setOpen(false)
+    closePicker()
   }
 
   const clickDay = (day: string) => {
@@ -141,7 +207,7 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
     setDraftStart(from)
     setDraftEnd(to)
     onChange(customRange(from, to))
-    setOpen(false)
+    closePicker()
   }
 
   const shiftMonth = (delta: number) => {
@@ -152,14 +218,26 @@ export function DateRangePicker({ presets, value, onChange }: Props) {
 
   return (
     <div className="drp" ref={wrap}>
-      <button className="drp-trigger" onClick={() => setOpen((o) => !o)}>
+      <button
+        ref={triggerRef}
+        className="drp-trigger"
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={popupId}
+        onClick={() => {
+          if (open) closePicker()
+          else setOpen(true)
+        }}
+      >
         <Calendar className="drp-cal-icon" size={14} aria-hidden />
         {rangeButtonLabel(value)}
         <ChevronDown className="drp-caret" size={14} aria-hidden />
       </button>
 
       {open && (
-        <div className="drp-pop">
+        <div ref={popupRef} id={popupId} className="drp-pop" role="dialog" aria-label={`${ariaLabel} calendar`} style={popupStyle}>
           <ul className="drp-presets">
             {presets.map((p) => (
               <li key={p.id}>

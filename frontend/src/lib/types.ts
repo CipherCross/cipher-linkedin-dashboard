@@ -172,6 +172,32 @@ export interface OverviewSummary {
   velocity: Array<{ week: string; added: number }>
   velocityUndated: number
   funnel: OverviewFunnelSummary
+  analytics?: OverviewAnalytics
+}
+
+export interface OverviewAnalyticsTotals {
+  leads: number
+  invited: number
+  connected: number
+  messaged: number
+  replied: number
+  acceptedOfInvited: number
+  repliedOfConnected: number
+}
+
+export interface OverviewAnalyticsAccount {
+  instance_id: string
+  totals: OverviewAnalyticsTotals
+  previous: OverviewAnalyticsTotals | null
+  lifetime: OverviewAnalyticsTotals
+}
+
+export interface OverviewAnalytics {
+  totals: OverviewAnalyticsTotals
+  previous: OverviewAnalyticsTotals | null
+  lifetime: OverviewAnalyticsTotals
+  accounts: OverviewAnalyticsAccount[]
+  activity: DailyActivity[]
 }
 
 export type SequencePublishStatus =

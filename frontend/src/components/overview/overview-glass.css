@@ -1,0 +1,433 @@
+/* Overview liquid glass ---------------------------------------------------
+ *
+ * Contract for analytics_ui:
+ *   .overview-glass                page root / glass context
+ *   .sa-header, .sa-summary        title and five total tiles
+ *   .sa-panel                      chart, rates, account/campaign table panels
+ *   .sa-controls, .sa-period        account and date controls
+ *   .sa-performance, .sa-rates      chart/rate split
+ *   .sa-tablewrap, .sa-detail       data table and drill-in detail
+ *   .sa-bottom                      freshness footer
+ *
+ * The approved concept's IDs and `sa-*` classes remain valid. The root scope
+ * keeps this surface from changing the rest of the dashboard shell.
+ */
+
+.overview-glass {
+  --og-ink: var(--text);
+  --og-muted: var(--text-muted);
+  --og-line: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  --og-panel: color-mix(in srgb, var(--surface-1) 62%, transparent);
+  --og-panel-strong: color-mix(in srgb, var(--surface-1) 78%, transparent);
+  --og-panel-soft: color-mix(in srgb, var(--surface-2) 58%, transparent);
+  --og-highlight: rgb(255 255 255 / 0.22);
+  --og-shadow: 0 24px 60px rgb(4 10 24 / 0.18), 0 3px 10px rgb(4 10 24 / 0.10);
+  --og-shadow-small: 0 12px 30px rgb(4 10 24 / 0.14), 0 2px 6px rgb(4 10 24 / 0.08);
+  --og-blur: clamp(14px, 2vw, 24px);
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  /* Keep calendar/date popovers free to escape the page frame. */
+  overflow: visible;
+  color: var(--og-ink);
+  padding: clamp(18px, 3vw, 34px);
+  border-radius: clamp(18px, 2.2vw, 28px);
+  background:
+    radial-gradient(620px 390px at 8% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%),
+    radial-gradient(700px 520px at 100% 24%, color-mix(in srgb, var(--purple) 13%, transparent), transparent 72%),
+    radial-gradient(580px 500px at 72% 100%, color-mix(in srgb, var(--success) 10%, transparent), transparent 72%),
+    color-mix(in srgb, var(--bg) 84%, transparent);
+}
+
+.overview-glass::before,
+.overview-glass::after {
+  position: absolute;
+  z-index: -1;
+  content: '';
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+.overview-glass::before {
+  width: min(42vw, 500px);
+  height: min(42vw, 500px);
+  top: 0;
+  right: 12%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 68%);
+}
+
+.overview-glass::after {
+  width: min(38vw, 460px);
+  height: min(38vw, 460px);
+  bottom: 0;
+  left: 18%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--success) 12%, transparent), transparent 68%);
+}
+
+.overview-glass h1,
+.overview-glass h2,
+.overview-glass h3,
+.overview-glass p { margin-top: 0; }
+
+.overview-glass .sa-header,
+.overview-glass .sa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.overview-glass .sa-header {
+  margin: 0 0 clamp(20px, 3vw, 30px);
+}
+
+/* The production component calls the page header `.overview-header`; retain
+ * the same hierarchy as the approved concept's `.sa-header`. */
+.overview-glass .overview-header {
+  align-items: center;
+  margin: 0 0 clamp(20px, 3vw, 30px);
+}
+.overview-glass .overview-header h1 {
+  font-size: clamp(24px, 3vw, 32px);
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+  font-weight: 650;
+}
+.overview-glass .overview-header .link-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--og-line));
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .16), 0 6px 15px rgb(4 10 24 / .08);
+}
+.overview-glass .overview-header .link-btn:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+
+.overview-glass .sa-header h1 {
+  font-size: clamp(24px, 3vw, 32px);
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+  font-weight: 650;
+}
+
+.overview-glass .sa-muted,
+.overview-glass .sa-caption,
+.overview-glass .sa-table-note,
+.overview-glass .sa-rate label,
+.overview-glass .sa-rate small,
+.overview-glass .sa-metric label,
+.overview-glass .sa-metric span:last-child,
+.overview-glass .sa-table-note {
+  color: var(--og-muted);
+}
+
+.overview-glass .sa-muted { font-size: var(--text-xs); }
+.overview-glass .sa-caption { margin: 6px 0 16px; font-size: var(--text-xs); }
+.overview-glass .sa-sample {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--og-line));
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .18), 0 4px 14px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.overview-glass .sa-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 clamp(20px, 3vw, 30px);
+}
+
+/* OverviewAnalytics uses a section-level `.sa-summary` wrapper around the
+ * actual five-tile grid. Keep that heading row in normal flow. */
+.overview-glass > .sa-summary {
+  display: block;
+  margin: 0 0 clamp(20px, 3vw, 30px);
+}
+.overview-glass > .sa-summary > .sa-summary { margin: 12px 0 0; }
+
+.overview-glass .sa-total,
+.overview-glass .sa-panel {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--og-line);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / .13), transparent 38%),
+    linear-gradient(180deg, var(--og-panel-strong), var(--og-panel));
+  -webkit-backdrop-filter: saturate(175%) blur(var(--og-blur));
+  backdrop-filter: saturate(175%) blur(var(--og-blur));
+  box-shadow: var(--glass-rim), var(--og-shadow-small);
+}
+
+.overview-glass .sa-total { overflow: hidden; }
+
+.overview-glass .sa-total::before,
+.overview-glass .sa-panel::before {
+  position: absolute;
+  inset: 0 14% auto 0;
+  height: 1px;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--og-highlight), transparent);
+}
+
+.overview-glass .sa-total {
+  padding: 17px 15px;
+  border-radius: 18px;
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.overview-glass .sa-total:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--og-line));
+  box-shadow: var(--glass-rim), 0 18px 35px rgb(4 10 24 / .18);
+}
+
+.overview-glass .sa-total span { color: var(--og-muted); font-size: var(--text-xs); }
+.overview-glass .sa-total strong {
+  display: block;
+  margin: 7px 0 2px;
+  color: var(--og-ink);
+  font-size: clamp(24px, 3vw, 31px);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.overview-glass .sa-total small { color: var(--og-muted); font-size: var(--text-2xs); }
+
+.overview-glass .sa-panel {
+  margin-top: 16px;
+  padding: clamp(17px, 2.8vw, 26px);
+  border-radius: 22px;
+}
+
+.overview-glass .sa-panel > .sa-row h2,
+.overview-glass .sa-panel h2 { font-size: var(--text-xl); letter-spacing: -0.025em; font-weight: 650; }
+
+.overview-glass .sa-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.overview-glass .sa-controls select,
+.overview-glass .sa-period {
+  border: 1px solid var(--og-line);
+  background: color-mix(in srgb, var(--surface-2) 58%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .15), 0 6px 15px rgb(4 10 24 / .08);
+  -webkit-backdrop-filter: saturate(150%) blur(12px);
+  backdrop-filter: saturate(150%) blur(12px);
+}
+.overview-glass .sa-controls select {
+  max-width: 100%;
+  padding: 8px 30px 8px 12px;
+  border-radius: 12px;
+  color: var(--og-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.overview-glass .sa-period { display: flex; gap: 3px; padding: 4px; border-radius: var(--radius-pill); }
+.overview-glass .sa-period button {
+  padding: 7px 11px;
+  border-radius: var(--radius-pill);
+  color: var(--og-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.overview-glass .sa-period button:hover { color: var(--og-ink); background: color-mix(in srgb, var(--surface-3) 60%, transparent); }
+.overview-glass .sa-period button[aria-pressed='true'] { color: var(--on-accent); background: var(--accent); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 32%, transparent), inset 0 1px 0 rgb(255 255 255 / .26); }
+
+/* DateRangePicker: the real Overview control uses `.drp-*`, while the
+ * concept's period pill remains available for the analytics prototype. */
+.overview-glass .drp { position: relative; z-index: 2; }
+.overview-glass .drp-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--og-line);
+  border-radius: 12px;
+  color: var(--og-ink);
+  background: color-mix(in srgb, var(--surface-2) 58%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .15), 0 6px 15px rgb(4 10 24 / .08);
+  -webkit-backdrop-filter: saturate(150%) blur(12px);
+  backdrop-filter: saturate(150%) blur(12px);
+  font: inherit;
+  cursor: pointer;
+}
+.overview-glass .drp-trigger:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--og-line)); }
+.overview-glass .drp-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.overview-glass .drp-cal-icon,
+.overview-glass .drp-caret { color: var(--og-muted); }
+.overview-glass .drp-pop {
+  z-index: 50;
+  width: min(390px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  border-color: var(--og-line);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / .13), transparent 40%),
+    var(--og-panel-strong);
+  box-shadow: var(--glass-rim), var(--og-shadow);
+  -webkit-backdrop-filter: saturate(175%) blur(var(--og-blur));
+  backdrop-filter: saturate(175%) blur(var(--og-blur));
+}
+.overview-glass .drp-presets { border-color: var(--og-line); }
+.overview-glass .drp-presets button:hover,
+.overview-glass .drp-nav:hover,
+.overview-glass .drp-day:hover { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.overview-glass .drp-nav { border-color: var(--og-line); }
+
+/* A picker inside the first analytics panel must paint over the following
+ * panel. `:has` keeps the stacking change limited to an actually open popup. */
+.overview-glass .sa-panel:has(.drp-pop:not([hidden])) { z-index: 20; }
+
+.overview-glass .sa-performance { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 24px; margin-top: 23px; }
+.overview-glass .sa-metrics { display: flex; gap: 28px; flex-wrap: wrap; margin: 0 0 16px; }
+.overview-glass .sa-metric { display: grid; grid-template-columns: 9px auto; gap: 3px 8px; align-items: center; }
+.overview-glass .sa-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 10%, transparent), 0 0 12px currentColor; }
+.overview-glass .sa-metric strong { grid-column: 2; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.overview-glass .sa-metric label { font-size: var(--text-xs); }
+.overview-glass .sa-metric span:last-child { grid-column: 2; min-width: 0; }
+.overview-glass .sa-plot { display: block; width: 100%; height: 280px; min-height: 280px; overflow: visible; }
+.overview-glass .sa-plot > div { min-height: 280px; }
+.overview-glass .sa-plot text { fill: var(--og-muted); font-family: inherit; font-size: var(--text-2xs); }
+.overview-glass .sa-plot line { stroke: var(--og-line); }
+.overview-glass #sa-point { min-height: 19px; margin-top: 8px; color: var(--og-muted); font-size: var(--text-xs); }
+.overview-glass .sa-rates { padding-left: 24px; border-left: 1px solid var(--og-line); }
+.overview-glass .sa-rates h3 { margin: 0 0 18px; color: var(--og-muted); font-size: var(--text-xs); font-weight: 650; text-transform: uppercase; letter-spacing: .05em; }
+.overview-glass .sa-rate { margin-bottom: 22px; }
+.overview-glass .sa-rate strong { display: block; margin: 3px 0; font-size: 28px; line-height: 1.1; font-weight: 650; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+
+.overview-glass .sa-tablewrap { overflow-x: auto; border: 1px solid color-mix(in srgb, var(--og-line) 72%, transparent); border-radius: 15px; background: color-mix(in srgb, var(--surface-2) 20%, transparent); }
+.overview-glass table { width: 100%; min-width: 670px; border-collapse: separate; border-spacing: 0; font-size: var(--text-xs); }
+.overview-glass th { position: sticky; top: 0; z-index: 1; padding: 12px 9px; border-bottom: 1px solid var(--og-line); background: color-mix(in srgb, var(--surface-2) 68%, transparent); color: var(--og-muted); font-weight: 650; text-align: right; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.overview-glass th:first-child, .overview-glass td:first-child { text-align: left; }
+.overview-glass th[aria-sort] button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.overview-glass th[aria-sort] button::after { content: '↕'; opacity: .42; font-size: 10px; }
+.overview-glass th[aria-sort='ascending'] button::after { content: '↑'; opacity: 1; color: var(--accent); }
+.overview-glass th[aria-sort='descending'] button::after { content: '↓'; opacity: 1; color: var(--accent); }
+.overview-glass th[aria-sort] button:hover { color: var(--accent); }
+.overview-glass th[aria-sort] button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.overview-glass th small { display: block; margin-top: 2px; color: var(--og-muted); font-size: 10px; font-weight: 400; }
+.overview-glass td { padding: 15px 9px; border-bottom: 1px solid color-mix(in srgb, var(--og-line) 72%, transparent); text-align: right; font-variant-numeric: tabular-nums; }
+.overview-glass tbody tr:last-child td { border-bottom: 0; }
+.overview-glass tbody tr:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.overview-glass .sa-name { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; color: var(--accent); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.overview-glass .sa-name:hover { color: var(--accent-hover); }
+.overview-glass .sa-name small { display: block; color: var(--og-muted); font-size: var(--text-2xs); }
+.overview-glass .sa-avatar { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); font-size: var(--text-2xs); box-shadow: inset 0 1px 0 rgb(255 255 255 / .22); }
+.overview-glass .sa-detail { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--og-line); }
+.overview-glass .sa-details { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+.overview-glass .sa-details strong { display: block; font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.overview-glass .sa-details span { color: var(--og-muted); font-size: var(--text-2xs); }
+.overview-glass .sa-back { padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); border-radius: var(--radius-pill); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); font: inherit; font-size: var(--text-xs); cursor: pointer; }
+.overview-glass .sa-back:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.overview-glass .sa-bottom { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 20px; color: var(--og-muted); font-size: var(--text-2xs); }
+.overview-glass .sa-bottom button {
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font: inherit;
+  cursor: pointer;
+}
+.overview-glass .sa-bottom button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.overview-glass .sa-bottom button:disabled { border-color: var(--og-line); color: var(--og-muted); background: color-mix(in srgb, var(--surface-2) 40%, transparent); cursor: not-allowed; opacity: .72; }
+.overview-glass .sa-bottom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.overview-glass button:focus-visible,
+.overview-glass select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Backdrop support: keep the same dimensional shape when blur is unavailable. */
+@supports not ((backdrop-filter: blur(1px))) {
+  .overview-glass .sa-total,
+  .overview-glass .sa-panel,
+  .overview-glass .drp-pop { background: var(--surface-1); }
+  .overview-glass .sa-controls select,
+  .overview-glass .sa-period,
+  .overview-glass .drp-trigger { background: var(--surface-2); }
+}
+
+@media (max-width: 760px) {
+  .overview-glass { padding: 16px; }
+  .overview-glass .sa-row { flex-wrap: wrap; }
+  .overview-glass .sa-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overview-glass .sa-performance { grid-template-columns: 1fr; }
+  .overview-glass .sa-rates { display: flex; flex-wrap: wrap; gap: 20px; padding: 16px 0 0; border-top: 1px solid var(--og-line); border-left: 0; }
+  .overview-glass .sa-rates h3 { width: 100%; margin: 0; }
+  .overview-glass .sa-rate { margin: 0; }
+}
+
+@media (max-width: 480px) {
+  .overview-glass { padding: 12px; border-radius: 16px; }
+  .overview-glass .sa-header { align-items: flex-start; flex-direction: column; }
+  .overview-glass .sa-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .overview-glass .sa-total:last-child { grid-column: 1 / -1; }
+  .overview-glass .sa-panel { padding: 16px 13px; border-radius: 18px; }
+  .overview-glass .sa-row { align-items: flex-start; flex-direction: column; }
+  .overview-glass .sa-controls { width: 100%; justify-content: flex-start; }
+  .overview-glass .sa-controls select { flex: 1 1 150px; }
+  .overview-glass .drp { width: 100%; }
+  .overview-glass .drp-trigger { width: 100%; justify-content: space-between; }
+  .overview-glass .drp-pop {
+    left: 0;
+    right: auto;
+    flex-direction: column;
+    width: min(390px, calc(100vw - 24px));
+    max-height: min(560px, calc(100vh - 24px));
+    overflow: auto;
+  }
+  .overview-glass .drp-presets {
+    min-width: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--og-line);
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .overview-glass .drp-presets li { flex: 1 1 105px; }
+  .overview-glass .drp-presets button { white-space: normal; }
+  .overview-glass .sa-period { max-width: 100%; }
+  .overview-glass .sa-period button { padding-inline: 9px; }
+  .overview-glass .sa-metrics { gap: 15px; }
+  .overview-glass .sa-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .overview-glass .sa-total,
+  .overview-glass .sa-panel,
+  .overview-glass .sa-controls select,
+  .overview-glass .sa-period,
+  .overview-glass .drp-trigger,
+  .overview-glass .drp-pop { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface-1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-glass .sa-total { transition: none; }
+  .overview-glass .sa-total:hover { transform: none; }
+}
+
+@media (forced-colors: active) {
+  .overview-glass .sa-total,
+  .overview-glass .sa-panel,
+  .overview-glass .sa-tablewrap { background: Canvas; border: 1px solid CanvasText; box-shadow: none; }
+  .overview-glass .sa-muted,
+  .overview-glass .sa-caption,
+  .overview-glass .sa-table-note { color: CanvasText; }
+}

@@ -145,6 +145,28 @@ export interface OverviewSummaryRow {
   readonly velocity: readonly { week: string; added: number }[]
   readonly velocityUndated: number
   readonly funnel: OverviewFunnelRow
+  readonly analytics?: {
+    totals: OverviewAnalyticsTotalsRow
+    previous: OverviewAnalyticsTotalsRow | null
+    lifetime: OverviewAnalyticsTotalsRow
+    accounts: readonly {
+      instance_id: string
+      totals: OverviewAnalyticsTotalsRow
+      previous: OverviewAnalyticsTotalsRow | null
+      lifetime: OverviewAnalyticsTotalsRow
+    }[]
+    activity: readonly { day: string; instance_id: string; event_type: string; cnt: number }[]
+  }
+}
+
+export interface OverviewAnalyticsTotalsRow {
+  readonly leads: number
+  readonly invited: number
+  readonly connected: number
+  readonly messaged: number
+  readonly replied: number
+  readonly acceptedOfInvited: number
+  readonly repliedOfConnected: number
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +374,56 @@ lead_rows AS MATERIALIZED (
            AS effective_added_at
     FROM public.leads l
 ),
+analytics_people AS MATERIALIZED (
+  SELECT l.instance_id, l.profile_url,
+         min(l.added_at) AS added_at,
+         min(l.invited_at) AS invited_at,
+         min(l.connected_at) AS connected_at,
+         min(l.first_message_at) AS first_message_at,
+         min(l.replied_at) AS replied_at,
+         COALESCE(
+           min(l.added_at),
+           LEAST(min(l.invited_at), min(l.connected_at), min(l.first_message_at), min(l.replied_at))
+         ) AS effective_added_at
+    FROM lead_rows l
+   GROUP BY l.instance_id, l.profile_url
+),
+analytics_periods AS (
+  SELECT 'current'::text AS period, cur_from, cur_to FROM bounds
+  UNION ALL SELECT 'previous', prev_from, prev_to FROM bounds
+  UNION ALL SELECT 'lifetime', NULL::timestamptz, NULL::timestamptz
+),
+analytics_stats AS (
+  SELECT CASE WHEN GROUPING(p.instance_id) = 1 THEN NULL ELSE p.instance_id END AS scope_id,
+         count(p.instance_id) FILTER (WHERE ((b.cur_from IS NULL AND b.cur_to IS NULL) OR (p.effective_added_at IS NOT NULL AND (b.cur_from IS NULL OR p.effective_added_at >= b.cur_from) AND (b.cur_to IS NULL OR p.effective_added_at < b.cur_to))))::int AS leads,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR p.invited_at < b.cur_to))::int AS invited,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR p.connected_at < b.cur_to))::int AS connected,
+         count(p.instance_id) FILTER (WHERE p.first_message_at IS NOT NULL AND (b.cur_from IS NULL OR p.first_message_at >= b.cur_from) AND (b.cur_to IS NULL OR p.first_message_at < b.cur_to))::int AS messaged,
+         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND p.invited_at IS NOT NULL AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR p.connected_at < b.cur_to))::int AS accepted_of_invited,
+         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied_of_connected,
+         b.period
+    FROM analytics_periods b
+    LEFT JOIN analytics_people p ON true
+   GROUP BY GROUPING SETS ((b.period), (b.period, p.instance_id))
+  HAVING GROUPING(p.instance_id) = 1 OR p.instance_id IS NOT NULL
+),
+analytics_activity AS (
+  SELECT to_char(p.ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+         p.instance_id,
+         p.event_type,
+         count(*)::int AS cnt
+    FROM (
+      SELECT instance_id, invited_at AS ts, 'invited'::text AS event_type FROM analytics_people
+      UNION ALL SELECT instance_id, connected_at, 'connected' FROM analytics_people
+      UNION ALL SELECT instance_id, replied_at, 'replied' FROM analytics_people
+    ) p
+    CROSS JOIN bounds b
+   WHERE p.ts IS NOT NULL
+     AND (b.cur_from IS NULL OR p.ts >= b.cur_from)
+     AND (b.cur_to IS NULL OR p.ts < b.cur_to)
+   GROUP BY 1, p.instance_id, p.event_type
+),
 lead_stats AS (
   SELECT CASE WHEN GROUPING(l.instance_id) = 1 THEN NULL ELSE l.instance_id END AS scope_id,
          count(*)::int AS leads,
@@ -497,13 +569,13 @@ campaign_stats AS (
          count(l.connected_at)::int AS lifetime_connected,
          count(*) FILTER (WHERE l.invited_at IS NOT NULL AND l.connected_at IS NOT NULL)::int AS lifetime_accepted,
          count(*) FILTER (WHERE l.connected_at IS NOT NULL AND l.replied_at IS NOT NULL)::int AS lifetime_replied,
-         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.added_at >= b.cur_from)
+         count(*) FILTER (WHERE l.added_at IS NOT NULL AND (b.cur_from IS NULL OR l.added_at >= b.cur_from)
                             AND (b.cur_to IS NULL OR l.added_at < b.cur_to))::int AS leads_added,
-         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.invited_at >= b.cur_from)
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL AND (b.cur_from IS NULL OR l.invited_at >= b.cur_from)
                             AND (b.cur_to IS NULL OR l.invited_at < b.cur_to))::int AS invites_sent,
-         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL AND (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
                             AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS accepted,
-         count(*) FILTER (WHERE (b.cur_from IS NULL OR l.replied_at >= b.cur_from)
+         count(*) FILTER (WHERE l.replied_at IS NOT NULL AND (b.cur_from IS NULL OR l.replied_at >= b.cur_from)
                             AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replies,
          count(*) FILTER (WHERE l.invited_at IS NOT NULL
                             AND (b.cur_from IS NULL OR l.connected_at >= b.cur_from)
@@ -676,6 +748,51 @@ global_payload AS (
 )
 SELECT (g.value || jsonb_build_object(
   'accounts', COALESCE(a.value, '[]'::jsonb),
+  'analytics', jsonb_build_object(
+    'totals', (SELECT jsonb_build_object(
+      'leads', s.leads, 'invited', s.invited, 'connected', s.connected,
+      'messaged', s.messaged, 'replied', s.replied,
+      'acceptedOfInvited', s.accepted_of_invited,
+      'repliedOfConnected', s.replied_of_connected
+    ) FROM analytics_stats s WHERE s.scope_id IS NULL AND s.period = 'current'),
+    'previous', CASE WHEN (SELECT prev_from FROM bounds) IS NULL THEN NULL ELSE
+      (SELECT jsonb_build_object(
+        'leads', s.leads, 'invited', s.invited, 'connected', s.connected,
+        'messaged', s.messaged, 'replied', s.replied,
+        'acceptedOfInvited', s.accepted_of_invited,
+        'repliedOfConnected', s.replied_of_connected
+      ) FROM analytics_stats s WHERE s.scope_id IS NULL AND s.period = 'previous') END,
+    'lifetime', (SELECT jsonb_build_object(
+      'leads', s.leads, 'invited', s.invited, 'connected', s.connected,
+      'messaged', s.messaged, 'replied', s.replied,
+      'acceptedOfInvited', s.accepted_of_invited,
+      'repliedOfConnected', s.replied_of_connected
+    ) FROM analytics_stats s WHERE s.scope_id IS NULL AND s.period = 'lifetime'),
+    'accounts', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+      'instance_id', s.scope_id,
+      'totals', jsonb_build_object(
+        'leads', s.leads, 'invited', s.invited, 'connected', s.connected,
+        'messaged', s.messaged, 'replied', s.replied,
+        'acceptedOfInvited', s.accepted_of_invited,
+        'repliedOfConnected', s.replied_of_connected
+      ),
+      'previous', CASE WHEN (SELECT prev_from FROM bounds) IS NULL THEN NULL ELSE
+        (SELECT jsonb_build_object(
+          'leads', p.leads, 'invited', p.invited, 'connected', p.connected,
+          'messaged', p.messaged, 'replied', p.replied,
+          'acceptedOfInvited', p.accepted_of_invited,
+          'repliedOfConnected', p.replied_of_connected
+        ) FROM analytics_stats p WHERE p.scope_id = s.scope_id AND p.period = 'previous') END,
+      'lifetime', (SELECT jsonb_build_object(
+        'leads', l.leads, 'invited', l.invited, 'connected', l.connected,
+        'messaged', l.messaged, 'replied', l.replied,
+        'acceptedOfInvited', l.accepted_of_invited,
+        'repliedOfConnected', l.replied_of_connected
+      ) FROM analytics_stats l WHERE l.scope_id = s.scope_id AND l.period = 'lifetime')
+    ) ORDER BY s.scope_id) FROM analytics_stats s WHERE s.scope_id IS NOT NULL AND s.period = 'current'), '[]'::jsonb),
+    'activity', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.day, x.instance_id, x.event_type)
+      FROM analytics_activity x), '[]'::jsonb)
+  ),
   'campaigns', COALESCE((SELECT jsonb_agg(jsonb_build_object(
     'campaign_id', c.campaign_id,
     'campaign_name', c.campaign_name,
