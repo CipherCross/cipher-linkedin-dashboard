@@ -20,6 +20,14 @@ export interface SequencePublishTarget {
   compatible: boolean
   compatibility_error_code: string | null
   probed_at: string
+  /** Live LH2 build measured by the notebook; informational, never readiness proof. */
+  measured_lh_version?: string | null
+  /** Contract observed by the latest probe and the approved contract it resolved to. */
+  contract_fingerprint?: string | null
+  approved_contract_fingerprint?: string | null
+  compatibility_state?: 'observed' | 'canary_pending' | 'approved' | 'rejected' | 'unknown' | null
+  canary_state?: 'pending' | 'claimed' | 'succeeded' | 'failed' | 'rejected' | null
+  canary_error_code?: string | null
 }
 
 export interface SequencePublishJob {
@@ -31,6 +39,11 @@ export interface SequencePublishJob {
   claim_generation: number
   branches: Record<string, unknown>[]
   queued_at: string
+  /** Immutable replacement lineage. The failed original remains visible. */
+  replaces_job_id?: string | null
+  replaced_by_job_id?: string | null
+  replacement_attempt?: number | null
+  error_code?: string | null
 }
 
 export class SequenceBuilderApiError extends Error {

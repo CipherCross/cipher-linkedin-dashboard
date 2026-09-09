@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Activity, Megaphone } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Activity, AlertCircle, CheckCircle2, FlaskConical, Megaphone } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useAuth } from '../lib/AuthContext'
 import { authPost } from '../lib/api'
@@ -7,6 +7,7 @@ import { instanceName } from '../lib/leads'
 import { InstancePanel } from '../components/InstancePanel'
 import { EmptyState } from '../components/EmptyState'
 import { ago } from '../lib/format'
+import { listSequencePublishTargets, type SequencePublishTarget } from '../lib/sequenceBuilderApi'
 
 export function Health() {
   const { data } = useData()
@@ -15,6 +16,15 @@ export function Health() {
     'idle' | 'running' | 'done' | 'error'
   >('idle')
   const [briefingMessage, setBriefingMessage] = useState('')
+  const [publishTargets, setPublishTargets] = useState<SequencePublishTarget[]>([])
+  const [publishTargetsError, setPublishTargetsError] = useState('')
+
+  useEffect(() => {
+    if (!isAdmin) return
+    void listSequencePublishTargets()
+      .then(setPublishTargets)
+      .catch((error) => setPublishTargetsError(error instanceof Error ? error.message : 'Could not load publishing compatibility.'))
+  }, [isAdmin])
   if (!data) return null
 
   const label = (id: string) =>
@@ -89,6 +99,28 @@ export function Health() {
             </button>
           </div>
         </div>
+      )}
+
+      {isAdmin && (
+        <section className="card publish-compatibility-card" aria-labelledby="publish-compatibility-title">
+          <div className="publish-compatibility-heading">
+            <div><FlaskConical size={20} aria-hidden="true" /><div><h2 id="publish-compatibility-title">Publishing compatibility</h2><p className="muted small">Measured Linked Helper state. This is separate from sync freshness and campaign runtime.</p></div></div>
+          </div>
+          {publishTargetsError && <div className="sequence-publish-state error"><AlertCircle size={18} /><div><strong>Compatibility could not be loaded</strong><p>{publishTargetsError}</p></div></div>}
+          {!publishTargetsError && publishTargets.length === 0 && <p className="muted small">No publishing probes have been reported yet.</p>}
+          {publishTargets.length > 0 && <div className="table-scroll"><table><thead><tr><th>Notebook</th><th>Measured LH2</th><th>Observed contract</th><th>Approved contract</th><th>Canary</th><th>Publishing</th></tr></thead><tbody>{publishTargets.map((target) => {
+            const approved = target.compatibility_state === 'approved' && target.compatible
+            const short = (value?: string | null) => value ? `${value.slice(0, 12)}…` : '—'
+            return <tr key={target.instance_id}>
+              <td><strong>{label(target.instance_id)}</strong><div className="muted small">{target.machine_key}</div></td>
+              <td>{target.measured_lh_version ?? 'Unknown'}</td>
+              <td><code title={target.contract_fingerprint ?? undefined}>{short(target.contract_fingerprint)}</code></td>
+              <td><code title={(target.approved_contract_fingerprint ?? (target.compatibility_state === 'approved' ? target.contract_fingerprint : null)) ?? undefined}>{short(target.approved_contract_fingerprint ?? (target.compatibility_state === 'approved' ? target.contract_fingerprint : null))}</code></td>
+              <td><span className={`badge compatibility-${target.canary_state ?? target.compatibility_state ?? 'unknown'}`}>{target.canary_state ? target.canary_state.replace(/_/g, ' ') : target.compatibility_state === 'canary_pending' ? 'pending' : 'not required'}</span>{target.canary_error_code && <div className="text-danger small">{target.canary_error_code}</div>}</td>
+              <td><span className={`badge ${approved ? 'status-success' : 'status-failed'}`}>{approved ? <><CheckCircle2 size={12} /> Ready</> : <><AlertCircle size={12} /> Blocked</>}</span>{!approved && <div className="muted small">{target.compatibility_state?.replace(/_/g, ' ') || target.compatibility_error_code || 'unknown'}</div>}</td>
+            </tr>
+          })}</tbody></table></div>}
+        </section>
       )}
 
       <div className="main-grid health-grid">

@@ -987,6 +987,18 @@ function publishAccountName(target: SequencePublishTarget): string {
   return typeof value === 'string' && value.trim() ? value.trim() : 'Account unavailable'
 }
 
+const shortFingerprint = (value?: string | null) => value ? `${value.slice(0, 12)}…` : 'Not measured'
+
+function compatibilityLabel(target: SequencePublishTarget): string {
+  switch (target.compatibility_state) {
+    case 'approved': return 'Approved contract'
+    case 'canary_pending': return 'Canary pending'
+    case 'rejected': return 'Contract rejected'
+    case 'unknown': return 'Unknown contract'
+    default: return target.compatible ? 'Approved contract' : 'Compatibility unknown'
+  }
+}
+
 export function PublishWizard({
   sequence,
   document,
@@ -1124,6 +1136,8 @@ export function PublishWizard({
                   <span className="sequence-publish-target-copy">
                     <strong>{publishAccountName(item)}</strong>
                     <small>{item.machine_key} · {item.instance_id}</small>
+                    <small>LH2 {item.measured_lh_version ?? 'unknown'} · {compatibilityLabel(item)}</small>
+                    <small title={item.contract_fingerprint ?? undefined}>Observed {shortFingerprint(item.contract_fingerprint)}{item.approved_contract_fingerprint ? ` · approved ${shortFingerprint(item.approved_contract_fingerprint)}` : ''}</small>
                   </span>
                   <span className={`sequence-publish-readiness ${available ? 'ready' : ''}`}>{available ? <><CheckCircle2 size={13} /> Ready</> : <><AlertCircle size={13} /> Not ready</>}</span>
                   {!available && <small className="sequence-publish-target-error">{item.compatibility_error_code ? item.compatibility_error_code.split('_').join(' ') : 'Account details could not be verified'}</small>}
@@ -1354,7 +1368,7 @@ function SequenceEditor({ id }: { id: string }) {
       {isAdmin && publishJobs.length > 0 && (
         <section className={`sequence-publish-job-strip ${publishJobs[0].status}`} aria-label="Latest campaign publishing status">
           <span className="sequence-publish-job-icon">{publishJobs[0].status === 'success' ? <CheckCircle2 size={17} /> : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status) ? <AlertCircle size={17} /> : <LoaderCircle size={17} />}</span>
-          <div><strong>{publishStatusLabel(publishJobs[0].status)}</strong><small>{publishJobs[0].target_machine_key} · revision {publishJobs[0].sequence_revision}</small></div>
+          <div><strong>{publishStatusLabel(publishJobs[0].status)}</strong><small>{publishJobs[0].target_machine_key} · revision {publishJobs[0].sequence_revision}</small>{publishJobs[0].replaces_job_id && <small>Replacement for job {publishJobs[0].replaces_job_id.slice(0, 8)}</small>}{publishJobs[0].replaced_by_job_id && <small>Replaced by job {publishJobs[0].replaced_by_job_id.slice(0, 8)}</small>}</div>
           <span>{publishJobs[0].branches.length} {publishJobs[0].branches.length === 1 ? 'campaign' : 'campaigns'}</span>
         </section>
       )}

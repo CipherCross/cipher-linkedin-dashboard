@@ -4512,6 +4512,23 @@ td .pipe-stage-select.quiet:focus-visible {
 .sequence-publish-job-strip.failed { border-color: var(--danger-border); background: var(--danger-subtle); }
 .sequence-publish-job-strip.failed .sequence-publish-job-icon { color: var(--danger); }
 
+.publish-compatibility-card { margin-bottom: 18px; }
+.publish-compatibility-heading { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.publish-compatibility-heading > div { display: flex; align-items: flex-start; gap: 10px; }
+.publish-compatibility-heading svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+.publish-compatibility-heading h2 { margin: 0; }
+.publish-compatibility-heading p { margin: 3px 0 0; }
+.publish-compatibility-card code { font-size: 11px; }
+.publish-compatibility-card .badge { display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize; }
+.compatibility-pending,
+.compatibility-claimed,
+.compatibility-canary_pending { border-color: var(--warning-border); background: var(--warning-subtle); color: var(--warning); }
+.compatibility-succeeded,
+.compatibility-approved { border-color: var(--success-border); background: var(--success-subtle); color: var(--success); }
+.compatibility-failed,
+.compatibility-rejected { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
+.compatibility-unknown { color: var(--text-muted); }
+
 /* ── Campaign deployment drilldown ──────────────────────────────────────── */
 
 .campaign-tabs { display: flex; margin-bottom: var(--space-6); }

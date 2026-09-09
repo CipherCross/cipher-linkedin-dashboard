@@ -297,6 +297,62 @@ export async function postNewRepliesToSlack(
   }
 }
 
+export interface PublishCompatibilityAlertForSlack {
+  machine_key: string
+  instance_id: string
+  measured_lh_version: string | null
+  contract_fingerprint: string | null
+  transition: 'unknown' | 'canary_failed' | 'rejected' | 'stale_probe' | 'replacement_exhausted'
+  error_code?: string | null
+  detail?: string | null
+  dashboard_link?: string
+}
+
+/** Deliver one already-deduplicated publishing compatibility transition. */
+export async function postPublishCompatibilityAlertToSlack(
+  webhookUrl: string | undefined,
+  alert: PublishCompatibilityAlertForSlack,
+): Promise<boolean> {
+  if (!webhookUrl) return false
+  const transition = alert.transition.replace(/_/g, ' ')
+  const fingerprint = alert.contract_fingerprint
+    ? `${alert.contract_fingerprint.slice(0, 12)}…`
+    : 'not measured'
+  const title = `Linked Helper publishing blocked: ${transition}`
+  const detail = [
+    `*Notebook:* ${mrkdwnEscape(alert.instance_id)} (${mrkdwnEscape(alert.machine_key)})`,
+    `*Measured LH2:* ${mrkdwnEscape(alert.measured_lh_version ?? 'unknown')}`,
+    `*Contract:* \`${mrkdwnEscape(fingerprint)}\``,
+    ...(alert.error_code ? [`*Error:* \`${mrkdwnEscape(alert.error_code)}\``] : []),
+    ...(alert.detail ? [mrkdwnEscape(alert.detail).slice(0, 1200)] : []),
+  ].join('\n')
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: `⚠️ ${title} — ${alert.instance_id}`,
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: `⚠️ ${title}`.slice(0, 150) } },
+          { type: 'section', text: { type: 'mrkdwn', text: detail.slice(0, 2900) } },
+          ...(alert.dashboard_link
+            ? [{ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open dashboard' }, url: alert.dashboard_link }] }]
+            : []),
+          { type: 'context', elements: [{ type: 'mrkdwn', text: 'Publishing stays blocked until compatibility is proven.' }] },
+        ],
+      }),
+    })
+    if (!res.ok) {
+      console.error(`Slack webhook returned ${res.status}: ${(await res.text()).slice(0, 200)}`)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('Slack webhook failed:', e instanceof Error ? e.message : String(e))
+    return false
+  }
+}
+
 /** POST the briefing to Slack. No-op when webhookUrl is empty; never throws. */
 export async function postBriefingToSlack(
   webhookUrl: string | undefined,
