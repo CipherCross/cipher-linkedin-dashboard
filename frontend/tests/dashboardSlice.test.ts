@@ -87,6 +87,7 @@ import {
   campaignsPerformanceOperation,
   campaignsSequenceStepsOperation,
   instancesOverviewOperation,
+  overviewSystemTotalsOperation,
   overviewSummaryOperation,
   syncRecentRunsOperation,
 } from '../api/_lib/data/operations/dashboard.js'
@@ -164,6 +165,7 @@ type Slice = ReadonlyArray<
 /** Every read the dispatching endpoint offers, paired with its definition. */
 const READ_SLICE = [
   [DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation],
+  [DASHBOARD_OPERATIONS.overviewSystemTotals, overviewSystemTotalsOperation],
   [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
   [ROUTE_SNAPSHOT_OPERATION, routeSnapshotInspectable],
   [SEQUENCE_HUB_OPERATION, sequenceHubOperation],
@@ -262,6 +264,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'messages.outboundRecent',
       'messages.thread',
       'overview.summary',
+      'overview.systemTotals',
       'pipeline.eventLog',
       'searches.saved',
       'sequences.hub',
@@ -602,6 +605,17 @@ describe('the server-side Leads explorer', () => {
 })
 
 describe('the server-side Overview summary', () => {
+  it('keeps the headline totals on a single deduplicated leads aggregate', () => {
+    const sql = sqlOf(inspectable(overviewSystemTotalsOperation)).toLowerCase()
+    expect(sql).toContain('group by l.instance_id, l.profile_url')
+    expect(sql).toContain('count(p.instance_id)')
+    expect(sql).not.toContain('count(*) filter')
+    expect(sql).toContain("'connected'")
+    expect(sql).not.toContain('campaign_stats')
+    expect(sql).not.toContain('intent_milestones')
+    expect(sql).not.toContain('public.messages')
+  })
+
   it('does not expand the expensive durable-intent view inside the aggregate', () => {
     const sql = sqlOf(inspectable(overviewSummaryOperation)).toLowerCase()
     expect(sql).toContain('lead_rows as materialized')

@@ -55,6 +55,8 @@ import type { NeonQueryOperation, NeonRow } from '../neon.js'
 export const DASHBOARD_OPERATIONS = {
   /** Minimal shell/navigation data, returned as one row and one actor check. */
   bootstrap: 'dashboard.bootstrap',
+  /** Five system-wide funnel totals for the Overview headline card. */
+  overviewSystemTotals: 'overview.systemTotals',
   /** Exact route-level aggregates for Overview; never returns raw lead/message rows. */
   overviewSummary: 'overview.summary',
   /** Every notebook/account this team syncs, with its health fields. */
@@ -167,6 +169,10 @@ export interface OverviewAnalyticsTotalsRow {
   readonly replied: number
   readonly acceptedOfInvited: number
   readonly repliedOfConnected: number
+}
+
+export interface OverviewSystemTotalsRow {
+  readonly totals: OverviewAnalyticsTotalsRow
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +327,84 @@ export const dashboardBootstrapOperation: NeonQueryOperation<DashboardBootstrapR
   build: () => ({ text: DASHBOARD_BOOTSTRAP_SQL }),
   mapRow: (row: NeonRow): DashboardBootstrapRow =>
     (row.bootstrap ?? { instances: [], campaigns: [], teamMembers: [] }) as DashboardBootstrapRow,
+}
+
+// ---------------------------------------------------------------------------
+// overview.systemTotals
+// ---------------------------------------------------------------------------
+
+/**
+ * The Overview headline card needs only five global counts. Keep that request
+ * off the much wider overview.summary path, which also derives campaign rows,
+ * intent, velocity, pipeline funnel state, account breakdowns and chart data.
+ * People remain deduplicated by (instance_id, profile_url), and the range is
+ * the same half-open UTC interval used by the richer summary.
+ */
+const OVERVIEW_SYSTEM_TOTALS_SQL = `WITH bounds AS (
+  SELECT $1::timestamptz AS cur_from, $2::timestamptz AS cur_to
+), people AS MATERIALIZED (
+  SELECT l.instance_id,
+         l.profile_url,
+         min(l.added_at) AS added_at,
+         min(l.invited_at) AS invited_at,
+         min(l.connected_at) AS connected_at,
+         min(l.first_message_at) AS first_message_at,
+         min(l.replied_at) AS replied_at,
+         COALESCE(
+           min(l.added_at),
+           LEAST(min(l.invited_at), min(l.connected_at), min(l.first_message_at), min(l.replied_at))
+         ) AS effective_added_at
+    FROM public.leads l
+   GROUP BY l.instance_id, l.profile_url
+)
+SELECT jsonb_build_object(
+  'leads', count(p.instance_id) FILTER (
+    WHERE (b.cur_from IS NULL OR p.effective_added_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.effective_added_at < b.cur_to)
+  )::int,
+  'invited', count(p.instance_id) FILTER (
+    WHERE p.invited_at IS NOT NULL
+      AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.invited_at < b.cur_to)
+  )::int,
+  'connected', count(p.instance_id) FILTER (
+    WHERE p.connected_at IS NOT NULL
+      AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.connected_at < b.cur_to)
+  )::int,
+  'messaged', count(p.instance_id) FILTER (
+    WHERE p.first_message_at IS NOT NULL
+      AND (b.cur_from IS NULL OR p.first_message_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.first_message_at < b.cur_to)
+  )::int,
+  'replied', count(p.instance_id) FILTER (
+    WHERE p.replied_at IS NOT NULL
+      AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.replied_at < b.cur_to)
+  )::int,
+  'acceptedOfInvited', count(p.instance_id) FILTER (
+    WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL
+      AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.connected_at < b.cur_to)
+  )::int,
+  'repliedOfConnected', count(p.instance_id) FILTER (
+    WHERE p.connected_at IS NOT NULL AND p.replied_at IS NOT NULL
+      AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from)
+      AND (b.cur_to IS NULL OR p.replied_at < b.cur_to)
+  )::int
+) AS totals
+  FROM people p
+  CROSS JOIN bounds b
+ ORDER BY 1`
+
+export const overviewSystemTotalsOperation: NeonQueryOperation<OverviewSystemTotalsRow> = {
+  build: ({ range }) => ({
+    text: OVERVIEW_SYSTEM_TOTALS_SQL,
+    values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
+  }),
+  mapRow: (row: NeonRow): OverviewSystemTotalsRow => ({
+    totals: row.totals as OverviewAnalyticsTotalsRow,
+  }),
 }
 
 // ---------------------------------------------------------------------------

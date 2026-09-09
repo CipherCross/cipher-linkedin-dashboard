@@ -51,6 +51,7 @@ import {
   campaignsPerformanceOperation,
   campaignsSequenceStepsOperation,
   instancesOverviewOperation,
+  overviewSystemTotalsOperation,
   overviewSummaryOperation,
   syncRecentRunsOperation,
 } from './dashboard.js'
@@ -438,6 +439,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation)
 
   registry.registerQuery(DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation)
+  registry.registerQuery(DASHBOARD_OPERATIONS.overviewSystemTotals, overviewSystemTotalsOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation)
   registry.registerQuery(ROUTE_SNAPSHOT_OPERATION, routeSnapshotOperation)
   registry.registerQuery(SEQUENCE_HUB_OPERATION, sequenceHubOperation)

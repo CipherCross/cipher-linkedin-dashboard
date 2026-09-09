@@ -20,6 +20,7 @@ globalThis.ResizeObserver =
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const fetchSummary = vi.fn();
+const fetchSystemTotals = vi.fn();
 const resolvePath = vi.fn();
 let data: DashboardData;
 let phase: "partial" | "full";
@@ -27,6 +28,7 @@ vi.mock("../src/lib/DataContext", () => ({ useData: () => ({ data, phase }) }));
 vi.mock("../src/lib/dashboardReads", () => ({
   resolveReadPath: () => resolvePath(),
   fetchNeonOverviewSummary: (...args: unknown[]) => fetchSummary(...args),
+  fetchNeonOverviewSystemTotals: (...args: unknown[]) => fetchSystemTotals(...args),
 }));
 
 const totals = (o: Record<string, number> = {}) => ({
@@ -146,6 +148,7 @@ beforeEach(() => {
   };
   resolvePath.mockReset().mockResolvedValue("neon");
   fetchSummary.mockReset().mockResolvedValue(summary());
+  fetchSystemTotals.mockReset().mockResolvedValue(analytics().totals);
 });
 afterEach(() => {
   cleanup();
@@ -153,12 +156,13 @@ afterEach(() => {
 });
 
 describe("Overview request orchestration and real analytics UI", () => {
-  it("uses independent system All time and performance previous 7 days requests", async () => {
+  it("uses compact system totals and the richer performance request independently", async () => {
     paint();
-    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(2));
-    expect(fetchSummary).toHaveBeenCalledWith(
+    await waitFor(() => expect(fetchSystemTotals).toHaveBeenCalledTimes(1));
+    expect(fetchSystemTotals).toHaveBeenCalledWith(
       expect.objectContaining({ from: null, to: null }),
     );
+    expect(fetchSummary).toHaveBeenCalledTimes(1);
     expect(fetchSummary).toHaveBeenCalledWith(
       expect.objectContaining({ from: "2026-08-31", to: "2026-09-06" }),
     );
@@ -185,7 +189,7 @@ describe("Overview request orchestration and real analytics UI", () => {
     );
     paint();
     await screen.findByRole("heading", { name: "Performance" });
-    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(1));
     const before = fetchSummary.mock.calls.length;
     fireEvent.change(
       screen.getByRole("combobox", { name: "Performance account" }),
@@ -219,9 +223,7 @@ describe("Overview request orchestration and real analytics UI", () => {
     expect(screen.getAllByText("+0 vs previous")).toHaveLength(3);
   });
   it("keeps system data when performance fails and retries only performance", async () => {
-    fetchSummary
-      .mockResolvedValueOnce(summary())
-      .mockRejectedValueOnce(new Error("performance down"));
+    fetchSummary.mockRejectedValueOnce(new Error("performance down"));
     paint();
     await screen.findByRole("alert");
     expect(screen.getByRole("heading", { name: "System totals" })).toBeTruthy();
@@ -232,26 +234,27 @@ describe("Overview request orchestration and real analytics UI", () => {
       expect.objectContaining({ from: "2026-08-31", to: "2026-09-06" }),
     );
   });
-  it("treats a missing analytics payload as unavailable", async () => {
+  it("keeps compact system totals when the performance payload is unavailable", async () => {
     fetchSummary.mockResolvedValue(summary(false));
     paint();
-    await waitFor(() => expect(screen.getAllByRole("alert").length).toBe(2));
-    expect(screen.getAllByText("Retry").length).toBe(2);
+    await waitFor(() => expect(screen.getAllByRole("alert").length).toBe(1));
+    expect(screen.getAllByText("Retry").length).toBe(1);
+    expect(screen.getByRole("heading", { name: "System totals" })).toBeTruthy();
     expect(
       screen.getByText(
         "Account data unavailable until performance data loads.",
       ),
     ).toBeTruthy();
   });
-  it("ignores out-of-order responses and keeps the latest response", async () => {
+  it("renders independent system and performance responses in either resolution order", async () => {
     const first = deferred<OverviewSummary>();
     const second = deferred<OverviewSummary>();
-    fetchSummary
-      .mockReset()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    fetchSummary.mockReset().mockReturnValueOnce(second.promise);
+    fetchSystemTotals.mockReset().mockReturnValueOnce(
+      first.promise.then(value => value.analytics!.totals),
+    );
     paint();
-    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(1));
     second.resolve(
       summary(true, {
         analytics: analytics({ totals: totals({ invited: 99 }) }),
@@ -263,6 +266,7 @@ describe("Overview request orchestration and real analytics UI", () => {
         analytics: analytics({ totals: totals({ invited: 1 }) }),
       }),
     );
+    expect((await screen.findAllByText("1")).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getByText("99")).toBeTruthy());
   });
   it("fails closed on provider discovery and retries discovery", async () => {

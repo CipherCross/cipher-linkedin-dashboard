@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
-import { fetchNeonOverviewSummary, resolveReadPath } from '../lib/dashboardReads'
+import { fetchNeonOverviewSummary, fetchNeonOverviewSystemTotals, resolveReadPath } from '../lib/dashboardReads'
 import { ALL_TIME_RANGE, rangeFromParam, rangeToParam, presetRanges, rangedCampaigns } from '../lib/leads'
 import { buildOverviewAnalytics } from '../lib/overviewAnalytics'
 import type { DateRange } from '../lib/leads'
@@ -70,11 +70,10 @@ export function Overview() {
     setSystemLoading(true)
     setSystemError(null)
     setSystem(null)
-    fetchNeonOverviewSummary(systemRange)
-      .then(summary => {
+    fetchNeonOverviewSystemTotals(systemRange)
+      .then(totals => {
         if (cancelled) return
-        if (!summary.analytics) throw new Error('System analytics are unavailable')
-        setSystem(summary.analytics)
+        setSystem({ totals, previous: null, lifetime: totals, accounts: [], activity: [] })
         globalThis.performance.mark('dashboard_overview_system_available')
       })
       .catch(error => {

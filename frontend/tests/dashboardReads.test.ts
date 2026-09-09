@@ -37,6 +37,7 @@ import {
   fetchNeonBootstrap,
   fetchNeonDashboard,
   fetchNeonLeadsSearchPage,
+  fetchNeonOverviewSystemTotals,
   fetchNeonOverviewSummary,
   fetchNeonSequenceHub,
   fetchNeonRouteSnapshot,
@@ -124,9 +125,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names thirty reads including route-owned performance contracts', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(30)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(30)
+  it('names thirty-one reads including route-owned performance contracts', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(31)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(31)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -507,6 +508,7 @@ describe('the dashboard load', () => {
     // would pay for a request nobody is looking at on every dashboard open.
     const pageLocalReads = [
       READ_OPS.bootstrap,
+      READ_OPS.overviewSystemTotals,
       READ_OPS.overviewSummary,
       READ_OPS.routeSnapshot,
       READ_OPS.sequenceHub,
@@ -594,6 +596,22 @@ describe('the dashboard load', () => {
     expect(query.get('to')).toBe('2026-05-31')
     expect(query.get('limit')).toBe('1')
     expect(result.totals.leads).toBe(10)
+  })
+
+  it('requests one compact system-totals row for the inclusive UTC range', async () => {
+    const totals = {
+      leads: 10, invited: 8, connected: 4, messaged: 3, replied: 2,
+      acceptedOfInvited: 4, repliedOfConnected: 2,
+    }
+    const rec = recorder(() => jsonResponse(emptyPage([{ totals }])))
+    await expect(fetchNeonOverviewSystemTotals(
+      { from: '2026-05-01', to: '2026-05-31' },
+      rec.fetchImpl,
+    )).resolves.toEqual(totals)
+    const query = onlyQuery(rec, READ_OPS.overviewSystemTotals)
+    expect(query.get('from')).toBe('2026-05-01')
+    expect(query.get('to')).toBe('2026-05-31')
+    expect(query.get('limit')).toBe('1')
   })
 
   it('requests one bounded Sequence Hub snapshot', async () => {

@@ -62,6 +62,7 @@ import type {
   DashboardData, FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
+  OverviewAnalytics,
   LeadsSearchPage, SequenceHubSnapshot,
 } from './types'
 
@@ -84,6 +85,7 @@ export const READ_ENDPOINT = '/api/activity-daily'
  */
 export const READ_OPS = {
   bootstrap: 'dashboard.bootstrap',
+  overviewSystemTotals: 'overview.systemTotals',
   overviewSummary: 'overview.summary',
   sequenceHub: 'sequences.hub',
   routeSnapshot: 'dashboard.routeSnapshot',
@@ -661,6 +663,21 @@ export async function fetchNeonOverviewSummary(
   const row = page.items[0]
   if (!row) throw new Error(`${READ_OPS.overviewSummary}: response contained no summary row`)
   return row
+}
+
+/** Exact system-wide funnel totals without the wider Overview analytics payload. */
+export async function fetchNeonOverviewSystemTotals(
+  range: { readonly from: string | null; readonly to: string | null },
+  fetchImpl: ApiFetch = authFetch,
+): Promise<OverviewAnalytics['totals']> {
+  const page = await readPage<{ totals: OverviewAnalytics['totals'] }>(
+    READ_OPS.overviewSystemTotals,
+    { from: range.from, to: range.to, limit: 1 },
+    fetchImpl,
+  )
+  const row = page.items[0]
+  if (!row) throw new Error(`${READ_OPS.overviewSystemTotals}: response contained no totals row`)
+  return row.totals
 }
 
 /** Bounded union of managed sequences, direct campaigns, deployments and reply previews. */
