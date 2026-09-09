@@ -32,16 +32,19 @@ import {
   AgentReleaseConfigurationError,
 } from '../storage/releaseArtifacts.js'
 import { normalizeVerifiedAccountSnapshot } from '../../../src/lib/sequencePublish.js'
+import { postPublishCompatibilityAlertToSlack } from '../slack.js'
 
 export const AGENT_CONFIG_OP = 'agent.config'
 export const AGENT_PHOTO_UPLOAD_OP = 'agent.photoUpload'
 export const AGENT_RELEASE_OP = 'agent.release'
-export const AGENT_PUBLISH_PROBE_OP = 'agent.publishProbe'
+export const AGENT_PUBLISH_PROBE_OP = 'agent.publishCompatibility'
 export const AGENT_PUBLISH_CLAIM_OP = 'agent.publishClaim'
 export const AGENT_PUBLISH_HEARTBEAT_OP = 'agent.publishHeartbeat'
 export const AGENT_PUBLISH_STATE_OP = 'agent.publishState'
 export const AGENT_PUBLISH_BRANCH_OP = 'agent.publishBranch'
 export const AGENT_PUBLISH_FINISH_OP = 'agent.publishFinish'
+export const AGENT_PUBLISH_CANARY_CLAIM_OP = 'agent.publishCanaryClaim'
+export const AGENT_PUBLISH_CANARY_RESULT_OP = 'agent.publishCanaryResult'
 
 export const PHOTO_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
 
@@ -73,6 +76,16 @@ function boundedString(body: Record<string, unknown>, key: string, max = 160): s
 function boundedObject(body: Record<string, unknown>, key: string): string | null {
   const value = body[key]
   return value && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : null
+}
+
+function validContractEvidence(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const evidence = value as Record<string, unknown>
+  return typeof evidence.native_contract_version === 'string'
+    && evidence.capabilities !== null && typeof evidence.capabilities === 'object'
+    && evidence.response_shapes !== null && typeof evidence.response_shapes === 'object'
+    && typeof evidence.schema_fingerprint === 'string' && /^[0-9a-f]{64}$/.test(evidence.schema_fingerprint)
+    && evidence.schema !== null && typeof evidence.schema === 'object' && !Array.isArray(evidence.schema)
 }
 
 /**
@@ -117,14 +130,19 @@ export function createAgentPublishHandler(
       if (operation === AGENT_PUBLISH_PROBE_OP) {
         const machineKey = boundedString(body, 'machine_key')
         const capabilityJson = boundedObject(body, 'capability_snapshot')
-        const account = machineKey
-          ? normalizeVerifiedAccountSnapshot(body.account_snapshot, {
+        const measuredLhVersion = boundedString(body, 'measured_lh_version', 80)
+        const contractFingerprint = boundedString(body, 'contract_fingerprint', 64)
+        const contractEvidenceJson = boundedObject(body, 'contract_evidence')
+        const rawAccount = body.account_snapshot && typeof body.account_snapshot === 'object' && !Array.isArray(body.account_snapshot)
+          ? body.account_snapshot as Record<string, unknown> : null
+        const account = machineKey && measuredLhVersion && contractFingerprint && rawAccount
+          ? normalizeVerifiedAccountSnapshot({ ...rawAccount, lh_version: measuredLhVersion, compatibility_profile: contractFingerprint }, {
             instanceId: principal.instanceId,
             machineKey,
           })
           : null
-        if (!machineKey || !account || !capabilityJson || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot and compatible are required' }, 400)
-        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({
+        if (!machineKey || !account || !capabilityJson || !measuredLhVersion || !contractFingerprint || !/^[0-9a-f]{64}$/.test(contractFingerprint) || !contractEvidenceJson || !validContractEvidence(body.contract_evidence) || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot, measured_lh_version, contract_fingerprint, valid contract_evidence and compatible are required' }, 400)
+        const result = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<{ status: string; effective_compatible: boolean; canary_available: boolean; replacement_job_id: string | null; alert_claimed: boolean }>({
           operation: MACHINE_PUBLISH_COMMANDS.reportTarget,
           params: {
             instanceId: principal.instanceId, machineKey,
@@ -134,9 +152,34 @@ export function createAgentPublishHandler(
               lhVersion: account.lhVersion, compatibilityProfile: account.compatibilityProfile,
             }), capabilityJson,
             compatible: body.compatible as boolean, errorCode: boundedString(body, 'error_code', 120) ?? '', credentialId: principal.credentialId,
+            measuredLhVersion, contractFingerprint, contractEvidenceJson,
           },
         }))
-        return json({ ok: count === 1, instance_id: principal.instanceId, compatible: body.compatible })
+        if (result.alert_claimed) await postPublishCompatibilityAlertToSlack(
+          process.env.SLACK_REPLIES_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL,
+          { machine_key: machineKey, instance_id: principal.instanceId, measured_lh_version: measuredLhVersion, contract_fingerprint: contractFingerprint, transition: result.status === 'rejected' ? 'rejected' : 'unknown', error_code: boundedString(body, 'error_code', 120) },
+        )
+        return json({ ok: true, instance_id: principal.instanceId, ...result })
+      }
+      if (operation === AGENT_PUBLISH_CANARY_CLAIM_OP) {
+        const canary = await principal.store.transaction(principal.actor, (transaction) => transaction.execute({
+          operation: MACHINE_PUBLISH_COMMANDS.claimCanary,
+          params: { credentialId: principal.credentialId, leaseSeconds: 120 },
+        }))
+        return json({ ok: true, canary })
+      }
+      if (operation === AGENT_PUBLISH_CANARY_RESULT_OP) {
+        const canaryId = boundedString(body, 'canary_id', 80)
+        const generation = Number(body.claim_generation)
+        const fingerprint = boundedString(body, 'contract_fingerprint', 64)
+        const status = boundedString(body, 'status', 20)
+        const evidenceJson = boundedObject(body, 'verification_summary')
+        if (!canaryId || !Number.isInteger(generation) || generation < 1 || !fingerprint || !/^[0-9a-f]{64}$/.test(fingerprint) || !status || !['verified', 'failed'].includes(status) || !evidenceJson) return json({ error: 'canary_id, claim_generation, contract_fingerprint, status and verification_summary are required' }, 400)
+        const count = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<number>({
+          operation: MACHINE_PUBLISH_COMMANDS.finishCanary,
+          params: { canaryId, generation, contractFingerprint: fingerprint, status: status === 'verified' ? 'approved' : 'rejected', evidenceJson, errorCode: boundedString(body, 'error_code', 120) ?? '', campaignId: boundedString(body, 'lh_campaign_id', 160) ?? '' },
+        }))
+        return count === 1 ? json({ ok: true, status: status === 'verified' ? 'approved' : 'rejected' }) : json({ error: 'stale, unauthorized or completed canary claim' }, 409)
       }
       if (operation === AGENT_PUBLISH_CLAIM_OP) {
         const job = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<SequencePublishJobRow | null>({

@@ -28,8 +28,8 @@ BEGIN
   SELECT count(*) INTO actual
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relkind = 'r';
-  IF actual <> 37 THEN
-    RAISE EXCEPTION 'expected 37 tables in public for ledger 14/14, found %', actual;
+  IF actual <> 41 THEN
+    RAISE EXCEPTION 'expected 41 tables in public for ledger 15/15, found %', actual;
   END IF;
 
   SELECT count(*) INTO actual
@@ -399,13 +399,13 @@ BEGIN
   -- 12. The ledger travelled with the database and still describes it.
   --
   SELECT count(*) INTO actual FROM app_ledger.applied_migration;
-  IF actual <> 14 THEN
-    RAISE EXCEPTION 'expected 14 ledger rows after restore, found %', actual;
+  IF actual <> 15 THEN
+    RAISE EXCEPTION 'expected 15 ledger rows after restore, found %', actual;
   END IF;
 
   SELECT string_agg(artifact, ' -> ' ORDER BY applied_seq) INTO detail
     FROM app_ledger.applied_migration;
-  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql -> 005_identity_atomic_invite.sql -> 006_messages_direction_seek_index.sql -> 007_ai_system_write_path.sql -> 008_ai_system_auto_advance_execute.sql -> 009_machine_ingest_path.sql -> 010_machine_schema_usage.sql -> 011_sequence_builder_workspace.sql -> 012_sequence_publish_jobs.sql -> 013_sequence_campaign_links.sql -> 014_campaign_runtime_status.sql' THEN
+  IF detail <> '001_portable_business_baseline.sql -> 002_identity_roles_actor_rls.sql -> 003_functions_triggers_ai_guard.sql -> 004_identity_write_path_and_store.sql -> 005_identity_atomic_invite.sql -> 006_messages_direction_seek_index.sql -> 007_ai_system_write_path.sql -> 008_ai_system_auto_advance_execute.sql -> 009_machine_ingest_path.sql -> 010_machine_schema_usage.sql -> 011_sequence_builder_workspace.sql -> 012_sequence_publish_jobs.sql -> 013_sequence_campaign_links.sql -> 014_campaign_runtime_status.sql -> 015_sequence_publish_compatibility.sql' THEN
     RAISE EXCEPTION 'ledger order did not survive restore: %', detail;
   END IF;
 

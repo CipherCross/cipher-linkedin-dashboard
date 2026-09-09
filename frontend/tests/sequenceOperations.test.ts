@@ -7,7 +7,7 @@ import {
   saveSequenceOperation,
   sequenceCommentsOperation,
 } from '../api/_lib/data/operations/sequences.js'
-import { setSequencePublishBranchResultOperation } from '../api/_lib/data/operations/sequencePublishing.js'
+import { claimSequencePublishCanaryOperation, reportSequencePublishTargetOperation, setSequencePublishBranchResultOperation } from '../api/_lib/data/operations/sequencePublishing.js'
 import type { UserActorContext } from '../api/_lib/data/contracts.js'
 
 const actor: UserActorContext = {
@@ -90,5 +90,23 @@ describe('Sequence Builder operation allowlist', () => {
       },
     })
     expect(statement.text).toContain('COALESCE(b.started_at, now())')
+  })
+
+  it('atomically deduplicates contract canaries and replacement lineage', () => {
+    const report = reportSequencePublishTargetOperation.build({ actor, params: {
+      instanceId: 'notebook-1', machineKey: 'machine', accountJson: '{}', capabilityJson: '{}',
+      compatible: true, errorCode: '', credentialId: actor.actorId,
+      measuredLhVersion: '2.130.35', contractFingerprint: 'a'.repeat(64), contractEvidenceJson: '{}',
+    } })
+    expect(report.text).toContain('ON CONFLICT (contract_fingerprint) DO NOTHING')
+    expect(report.text).toContain("j.error_code IN ('LH_VERSION_MISMATCH','PUBLISH_CONTRACT_MISMATCH')")
+    expect(report.text).toContain('ON CONFLICT (replaces_job_id) DO NOTHING')
+    expect(report.text).toContain("b.status = 'created'")
+  })
+
+  it('claims a canary only for the authenticated notebook identity', () => {
+    const claim = claimSequencePublishCanaryOperation.build({ actor, params: { credentialId: actor.actorId, leaseSeconds: 120 } })
+    expect(claim.text).toContain('instance_id = public.machine_actor_instance()')
+    expect(claim.text).toContain('FOR UPDATE SKIP LOCKED')
   })
 })

@@ -57,10 +57,12 @@ import type {
 } from '../neon.js'
 import {
   MACHINE_PUBLISH_COMMANDS,
+  claimSequencePublishCanaryOperation,
   claimSequencePublishJobOperation,
   finishSequencePublishJobOperation,
   heartbeatSequencePublishJobOperation,
   reportSequencePublishTargetOperation,
+  finishSequencePublishCanaryOperation,
   setSequencePublishBranchResultOperation,
   setSequencePublishJobStateOperation,
 } from './sequencePublishing.js'
@@ -825,6 +827,8 @@ export function buildMachineRegistry(): NeonOperationRegistry {
     recordSyncRunOperation,
   )
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.reportTarget, reportSequencePublishTargetOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.claimCanary, claimSequencePublishCanaryOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.finishCanary, finishSequencePublishCanaryOperation)
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.claim, claimSequencePublishJobOperation)
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.heartbeat, heartbeatSequencePublishJobOperation)
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.setState, setSequencePublishJobStateOperation)

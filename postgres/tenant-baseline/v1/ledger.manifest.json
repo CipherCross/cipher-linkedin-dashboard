@@ -211,6 +211,14 @@
       "owner_role_entered_by": "artifact",
       "session": "lh2-campaign-runtime-status",
       "description": "Fail-closed last-observed Linked Helper campaign runtime and archive state, monotonic observation protection across both ingest transports, and normalized campaign metrics read fields. Adds no Linked Helper mutation or campaign control capability."
+    },
+    {
+      "step": 15,
+      "artifact": "015_sequence_publish_compatibility.sql",
+      "sha256": "d19294624a248915c21c0432ae2be010e716c97d5dde92f62ffecbbd03373392",
+      "owner_role_entered_by": "artifact",
+      "session": "lh2-auto-compatibility",
+      "description": "Measured publishing-contract registry, notebook-1-only one-per-fingerprint canaries, approved build bindings, and immutable one-per-job replacement lineage. Unknown and rejected contracts remain fail-closed; no campaign start, target, delete, archive, or direct SQL repair capability is added."
     }
   ]
 }

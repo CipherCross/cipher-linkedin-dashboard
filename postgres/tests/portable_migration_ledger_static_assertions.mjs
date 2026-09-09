@@ -129,6 +129,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/013_sequence_campaign_links.sql',
   // Last-observed, read-only Linked Helper runtime/archive state (step 014).
   'postgres/tenant-baseline/v1/014_campaign_runtime_status.sql',
+  // Measured LH2 compatibility contracts and notebook-1 canaries (step 015).
+  'postgres/tenant-baseline/v1/015_sequence_publish_compatibility.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -362,8 +364,16 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares fourteen steps in order 1 -> 2 -> ... -> 14',
-  manifest.steps.length === 14 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares fifteen steps in order 1 -> 2 -> ... -> 15',
+  manifest.steps.length === 15 && manifest.steps.every((s, i) => s.step === i + 1));
+
+const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
+check('step 015 enforces one canary per fingerprint and one replacement per job',
+  /contract_fingerprint text NOT NULL UNIQUE/i.test(compatibilityStep)
+  && /sequence_publish_jobs_one_replacement UNIQUE \(replaces_job_id\)/i.test(compatibilityStep));
+check('step 015 restricts automatic canaries to notebook-1 and keeps unknown contracts closed',
+  /instance_id = 'notebook-1'/i.test(compatibilityStep)
+  && /compatibility_state IN \('approved','canary_pending','rejected','unknown'\)/i.test(compatibilityStep));
 
 const sequenceLinkStep = readFileSync(join(BASELINE_DIR, '013_sequence_campaign_links.sql'), 'utf8');
 check('step 013 makes one campaign link to at most one master sequence',

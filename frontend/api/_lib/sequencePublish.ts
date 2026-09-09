@@ -123,7 +123,7 @@ export async function handleSequencePublishAction(request: Request, payload: Rec
         page: { limit: 100 },
       })
       const target = targetPage.items.find((item) => item.instance_id === targetInstanceId)
-      if (!target || !target.compatible) return { response: json({ error: 'The selected machine has not passed publishing compatibility preflight.', code: 'TARGET_NOT_COMPATIBLE' }, 409) }
+      if (!target || !target.compatible || target.compatibility_state !== 'approved' || !target.contract_fingerprint) return { response: json({ error: 'The selected machine has not passed publishing compatibility preflight.', code: 'TARGET_NOT_COMPATIBLE' }, 409) }
       const account = accountSnapshot(target)
       if (!account) return { response: json({ error: 'The selected machine account snapshot is incomplete.', code: 'TARGET_SNAPSHOT_INVALID' }, 409) }
       const sequence = await one<SequenceDocumentRow>(transaction, SEQUENCE_OPERATIONS.detail, { sequenceId })
@@ -165,6 +165,7 @@ export async function handleSequencePublishAction(request: Request, payload: Rec
           documentJson, documentFingerprint, compilerVersion: campaigns[0]?.compilerVersion ?? '',
           optionsJson: JSON.stringify(options), targetInstanceId, targetMachineKey: target.machine_key,
           accountJson: JSON.stringify(account), idempotencyKey, payloadDigest,
+          targetContractFingerprint: target.contract_fingerprint,
         },
       })
       await transaction.execute<number>({

@@ -27,6 +27,8 @@ import {
   AGENT_PUBLISH_STATE_OP,
   AGENT_PUBLISH_BRANCH_OP,
   AGENT_PUBLISH_FINISH_OP,
+  AGENT_PUBLISH_CANARY_CLAIM_OP,
+  AGENT_PUBLISH_CANARY_RESULT_OP,
   createAgentConfigHandler,
   createAgentPhotoUploadHandler,
   createAgentReleaseHandler,
@@ -129,7 +131,7 @@ async function handle(req: Request): Promise<Response> {
   if (op === AGENT_CONFIG_OP) return agentConfigHandler()(req)
   if (op === AGENT_PHOTO_UPLOAD_OP) return agentPhotoUploadHandler()(req)
   if (op === AGENT_RELEASE_OP) return agentReleaseHandler()(req)
-  if ([AGENT_PUBLISH_PROBE_OP, AGENT_PUBLISH_CLAIM_OP, AGENT_PUBLISH_HEARTBEAT_OP, AGENT_PUBLISH_STATE_OP, AGENT_PUBLISH_BRANCH_OP, AGENT_PUBLISH_FINISH_OP].includes(op)) return agentPublishHandler(op)(req)
+  if ([AGENT_PUBLISH_PROBE_OP, AGENT_PUBLISH_CLAIM_OP, AGENT_PUBLISH_HEARTBEAT_OP, AGENT_PUBLISH_STATE_OP, AGENT_PUBLISH_BRANCH_OP, AGENT_PUBLISH_FINISH_OP, AGENT_PUBLISH_CANARY_CLAIM_OP, AGENT_PUBLISH_CANARY_RESULT_OP].includes(op)) return agentPublishHandler(op)(req)
   if (op !== '') {
     return json({ error: `operation is not allowlisted: ${op}` }, 400)
   }
