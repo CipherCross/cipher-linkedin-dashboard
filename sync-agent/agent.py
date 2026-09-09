@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.24.0"
+AGENT_VERSION = "1.24.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -1251,6 +1251,7 @@ class LinkedHelperPublisher:
         value = self._evaluate("list")
         if not isinstance(value, list):
             raise PublishExecutionError("LH_CAMPAIGN_LIST_INVALID")
+        campaigns = []
         for row in value:
             if (not isinstance(row, dict) or
                     isinstance(row.get("id"), bool) or
@@ -1260,8 +1261,13 @@ class LinkedHelperPublisher:
                     not isinstance(row.get("liAccountId"), (int, float)) or
                     not float(row["liAccountId"]).is_integer() or
                     not isinstance(row.get("name"), str)):
-                raise PublishExecutionError("LH_CAMPAIGN_LIST_SHAPE_INVALID")
-        return value
+                # LH2 can retain legacy/partially-created rows whose name is
+                # NULL. They can neither match nor conflict with a requested
+                # campaign name, so ignore them without weakening validation
+                # of rows that are usable by the publisher.
+                continue
+            campaigns.append(row)
+        return campaigns
 
     def create_campaign(self, payload):
         value = self._evaluate("create", payload)

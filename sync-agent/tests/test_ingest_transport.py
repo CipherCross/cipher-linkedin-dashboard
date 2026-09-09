@@ -1154,6 +1154,24 @@ class PublishExecutorTest(unittest.TestCase):
         self.assertIn("getCampaignName", expression)
         self.assertIn("Promise.all", expression)
 
+    def test_campaign_list_skips_unusable_legacy_rows(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        valid = {"id": 6, "liAccountId": 1, "name": "Sequence A"}
+        malformed = [
+            {"id": 5, "liAccountId": 1, "name": None},
+            {"id": "7", "liAccountId": 1, "name": "String id"},
+            None,
+        ]
+        with mock.patch.object(publisher, "_evaluate", return_value=malformed + [valid]):
+            self.assertEqual(publisher.list_campaigns(), [valid])
+
+    def test_campaign_list_still_rejects_a_non_list_result(self):
+        publisher = agent.LinkedHelperPublisher(self.PROFILE)
+        with mock.patch.object(publisher, "_evaluate", return_value={"id": 5}):
+            with self.assertRaises(agent.PublishExecutionError) as context:
+                publisher.list_campaigns()
+        self.assertEqual(context.exception.code, "LH_CAMPAIGN_LIST_INVALID")
+
     def test_readback_reads_name_through_lh_accessor(self):
         expression = agent.LinkedHelperPublisher._call_expression("readback", {"id": 101})
         self.assertIn("getCampaignName", expression)
