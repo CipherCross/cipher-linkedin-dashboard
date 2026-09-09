@@ -219,6 +219,14 @@
       "owner_role_entered_by": "artifact",
       "session": "lh2-auto-compatibility",
       "description": "Measured publishing-contract registry, notebook-1-only one-per-fingerprint canaries, approved build bindings, and immutable one-per-job replacement lineage. Unknown and rejected contracts remain fail-closed; no campaign start, target, delete, archive, or direct SQL repair capability is added."
+    },
+    {
+      "step": 16,
+      "artifact": "016_sequence_publish_replacement_write.sql",
+      "sha256": "2ad81230278e4dabf98069b66d1cfe7ebcaeb32e2a2fe640bd4a47f7af1a660c",
+      "owner_role_entered_by": "artifact",
+      "session": "lh2-auto-compatibility",
+      "description": "Narrow app_machine INSERT policies and column grants for server-authored replacement jobs and their copied branches. Inserts remain scoped to the machine actor, require immutable replacement lineage, and add no update, start, target, archive, delete, or direct client SQL capability."
     }
   ]
 }

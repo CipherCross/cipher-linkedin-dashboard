@@ -364,8 +364,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares fifteen steps in order 1 -> 2 -> ... -> 15',
-  manifest.steps.length === 15 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares sixteen steps in order 1 -> 2 -> ... -> 16',
+  manifest.steps.length === 16 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
 check('step 015 enforces one canary per fingerprint and one replacement per job',
@@ -374,6 +374,14 @@ check('step 015 enforces one canary per fingerprint and one replacement per job'
 check('step 015 restricts automatic canaries to notebook-1 and keeps unknown contracts closed',
   /instance_id = 'notebook-1'/i.test(compatibilityStep)
   && /compatibility_state IN \('approved','canary_pending','rejected','unknown'\)/i.test(compatibilityStep));
+
+const replacementWriteStep = readFileSync(join(BASELINE_DIR, '016_sequence_publish_replacement_write.sql'), 'utf8');
+check('step 016 only permits machine inserts for replacement jobs on its own notebook',
+  /FOR INSERT TO app_machine[\s\S]*target_instance_id = public\.machine_actor_instance\(\)[\s\S]*replaces_job_id IS NOT NULL/i.test(replacementWriteStep)
+  && /sequence_publish_branches_machine_replacement_insert/i.test(replacementWriteStep));
+check('step 016 grants no delete, truncate, or broad table insert capability',
+  !/\b(?:DELETE|TRUNCATE)\b/i.test(stripComments('016_sequence_publish_replacement_write.sql', replacementWriteStep))
+  && !/GRANT INSERT ON/i.test(replacementWriteStep));
 
 const sequenceLinkStep = readFileSync(join(BASELINE_DIR, '013_sequence_campaign_links.sql'), 'utf8');
 check('step 013 makes one campaign link to at most one master sequence',
