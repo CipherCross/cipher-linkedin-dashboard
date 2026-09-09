@@ -117,12 +117,12 @@ sync_photos: false
 # self-update; it never prevents the scheduled sync from running.
 # release_public_key: "<base64url-ed25519-public-key>"
 
-# Optional, approval-gated Linked Helper campaign publishing profile. These
-# values must come from a read-only `publish-probe` on the exact LH2 account;
-# never guess the capability booleans. Publishing remains disabled unless both
-# explicit gates below are set by an operator after the machine is approved.
+# Optional, approval-gated Linked Helper campaign publishing profile. Account,
+# workspace and security values remain local. The running LH2 version and its
+# publishing contract are measured every publisher cycle; do not pin or update
+# version/profile strings after routine LH2 patches. An unknown contract remains
+# blocked until notebook-1 completes the server-issued empty paused canary.
 # lh2_publish:
-#   lh_version: "2.130.28"
 #   # Local LH2 database/UI account key, not the public LinkedIn/LH account ID.
 #   # Obtain it by read-only runtime inventory; do not infer it from account_id.
 #   li_account_id: "1"
@@ -130,7 +130,6 @@ sync_photos: false
 #   account_name: "Account name"
 #   sender_name: "Sender name"
 #   workspace_id: "601896"
-#   compatibility_profile: "lh2-2.130.28"
 #   cdp_host: "127.0.0.1"
 #   cdp_port: 50454
 #   cdp_target_url_contains: "<verified-local-app-renderer-selector>"

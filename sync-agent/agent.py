@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.23.0"
+AGENT_VERSION = "1.24.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -245,9 +245,30 @@ def machine_api_headers(cfg):
 
 PUBLISH_LEASE_SECONDS = 120
 PUBLISH_PROFILE_REQUIRED_KEYS = (
-    "lh_version", "account_id", "li_account_id", "account_name", "sender_name", "workspace_id",
-    "compatibility_profile",
+    "account_id", "li_account_id", "account_name", "sender_name", "workspace_id",
 )
+
+# This inventory is deliberately narrower than the whole LH2 database. A new
+# analytics column or table must not strand publishing, while any field used by
+# native create/pause/canonical verification must change the contract identity.
+PUBLISH_SCHEMA_CONTRACT_VERSION = "lh2-publish-schema-v1"
+PUBLISH_NATIVE_CONTRACT_VERSION = "lh2-sequence-v1"
+PUBLISH_CANARY_ACTIONS = [{
+    "type": "Waiter", "settings": {"delay": 1}, "coolDown": 0,
+    "maxActionResultsPerIteration": -1,
+}]
+PUBLISH_REQUIRED_SCHEMA = {
+    "campaigns": ("id", "name", "li_account_id", "is_paused", "is_valid"),
+    "campaign_versions": ("id", "campaign_id", "exclude_list_id"),
+    "campaign_version_actions": ("id", "version_id", "action_id"),
+    "actions": ("id", "campaign_id"),
+    "action_versions": ("id", "action_id", "config_id", "exclude_list_id"),
+    "action_configs": ("id", "actionType", "actionSettings", "coolDown",
+                       "maxActionResultsPerIteration"),
+    "action_target_people": ("action_id", "person_id"),
+    "collection_people_versions": ("id", "collection_id"),
+    "collection_people": ("collection_id",),
+}
 
 PUBLISH_ACCOUNT_SNAPSHOT_FIELDS = (
     ("account_id", "accountId"),
@@ -257,6 +278,7 @@ PUBLISH_ACCOUNT_SNAPSHOT_FIELDS = (
     ("lh_version", "lhVersion"),
     ("compatibility_profile", "compatibilityProfile"),
 )
+PUBLISH_IDENTITY_SNAPSHOT_FIELDS = PUBLISH_ACCOUNT_SNAPSHOT_FIELDS[:4]
 
 CDP_SECURITY_ACK = "loopback-operator-approved-v1"
 
@@ -682,15 +704,6 @@ def probe_linked_helper_runtime(profile):
             "create_campaign", "pause_campaign", "validate_campaign",
             "canonical_readback", "zero_target_readback"))
         target["error_code"] = None if target["compatible"] else "COMPATIBILITY_CAPABILITY_MISSING"
-        # A compatibility profile pins an exact build. When the running build
-        # can be measured and disagrees with the pinned one, fail closed and
-        # name both values — an unmeasurable build is reported, not blocked.
-        measured = target.get("lh_version_measured")
-        configured = str(profile.get("lh_version") or "").strip()
-        if target["compatible"] and measured and configured and measured != configured:
-            target["compatible"] = False
-            target["error_code"] = "LH_VERSION_MISMATCH"
-            target["lh_version_configured"] = configured
         target.pop("_websocket_url", None)
         return target
     finally:
@@ -740,7 +753,7 @@ def normalize_publish_account_snapshot(snapshot, compiler_version=None):
     if not isinstance(snapshot, dict):
         return None
     normalized = dict(snapshot)
-    for snake, camel in PUBLISH_ACCOUNT_SNAPSHOT_FIELDS:
+    for snake, camel in PUBLISH_IDENTITY_SNAPSHOT_FIELDS:
         has_snake = snake in snapshot
         has_camel = camel in snapshot
         if not has_snake and not has_camel:
@@ -749,6 +762,9 @@ def normalize_publish_account_snapshot(snapshot, compiler_version=None):
             return None
         normalized[snake] = snapshot[camel] if has_camel else snapshot[snake]
     normalized["compiler_version"] = compiler_version
+    for snake, camel in PUBLISH_ACCOUNT_SNAPSHOT_FIELDS[4:]:
+        if snake in snapshot or camel in snapshot:
+            normalized[snake] = snapshot.get(camel, snapshot.get(snake))
     return normalized
 
 
@@ -817,6 +833,13 @@ def probe_linked_helper(cfg):
             else:
                 result["compatible"] = True
                 result["error_code"] = None
+            evidence, fingerprint, contract_error = publish_contract_evidence(profile, runtime)
+            result["measured_lh_version"] = runtime.get("lh_version_measured")
+            result["contract_evidence"] = evidence
+            result["contract_fingerprint"] = fingerprint
+            if contract_error and result["compatible"]:
+                result["compatible"] = False
+                result["error_code"] = contract_error
     return result
 
 
@@ -850,6 +873,9 @@ def cmd_publish_probe(args):
                 "capability_snapshot": result.get("capability_snapshot", {}),
                 "compatible": bool(result.get("compatible")),
                 "error_code": result.get("error_code") or "",
+                "measured_lh_version": result.get("measured_lh_version"),
+                "contract_fingerprint": result.get("contract_fingerprint"),
+                "contract_evidence": result.get("contract_evidence", {}),
             })
         except Exception as error:
             print(f"publish probe report failed ({type(error).__name__}) — local result retained")
@@ -884,6 +910,75 @@ def _sqlite_columns(con, table):
         return {str(row[1]) for row in con.execute(f"PRAGMA table_info({table})")}
     except sqlite3.Error:
         return set()
+
+
+def publishing_schema_evidence(db_path):
+    """Return canonical, non-row publishing schema evidence and its digest.
+
+    Only allowlisted tables/columns are represented. Types and key constraints
+    are retained because they affect joins and canonical readback. No customer
+    data, absolute path, SQLite schema counter, or unrelated schema is exposed.
+    """
+    con = None
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        inventory = {}
+        missing = []
+        for table, required in sorted(PUBLISH_REQUIRED_SCHEMA.items()):
+            rows = list(con.execute(
+                f"PRAGMA table_info({_quoted_sqlite_identifier(table)})"))
+            by_name = {str(row[1]): row for row in rows}
+            columns = []
+            for name in required:
+                row = by_name.get(name)
+                if row is None:
+                    missing.append(f"{table}.{name}")
+                    continue
+                columns.append({
+                    "name": name,
+                    "type": str(row[2] or "").upper(),
+                    "not_null": bool(row[3]),
+                    "primary_key": int(row[5] or 0),
+                })
+            inventory[table] = columns
+        evidence = {"version": PUBLISH_SCHEMA_CONTRACT_VERSION,
+                    "tables": inventory, "missing": sorted(missing)}
+        canonical = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
+        return evidence, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    except (OSError, sqlite3.Error):
+        return {"version": PUBLISH_SCHEMA_CONTRACT_VERSION, "tables": {},
+                "missing": ["LH_SQLITE_SCHEMA_UNAVAILABLE"]}, None
+    finally:
+        if con is not None:
+            con.close()
+
+
+def publish_contract_evidence(profile, runtime):
+    """Build the deterministic contract measured by every publisher cycle."""
+    configured = str(profile.get("_lh2_db_path") or "").strip()
+    try:
+        db_path = os.path.expanduser(configured) if configured else discover_db_path()
+    except (OSError, RuntimeError):
+        db_path = ""
+    schema, schema_fingerprint = publishing_schema_evidence(db_path) if db_path else (
+        {"version": PUBLISH_SCHEMA_CONTRACT_VERSION, "tables": {},
+         "missing": ["LH_SQLITE_SCHEMA_UNAVAILABLE"]}, None)
+    capabilities = dict(runtime.get("capability_snapshot") or {})
+    evidence = {
+        "native_contract_version": PUBLISH_NATIVE_CONTRACT_VERSION,
+        "capabilities": {key: capabilities.get(key) for key in sorted(capabilities)},
+        "response_shapes": {
+            "create": "outcome+integer-campaign-id-v1",
+            "pause": "strict-true-v1", "validate": "strict-true-v1",
+            "readback": "campaign-actions-paused-zero-targets-exclude-links-v1",
+        },
+        "schema": schema,
+        "schema_fingerprint": schema_fingerprint,
+    }
+    if schema_fingerprint is None or schema.get("missing"):
+        return evidence, None, "PUBLISH_SCHEMA_CONTRACT_INCOMPLETE"
+    canonical = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
+    return evidence, hashlib.sha256(canonical.encode("utf-8")).hexdigest(), None
 
 
 class LinkedHelperPublisher:
@@ -1662,14 +1757,120 @@ def cmd_publish_verify(args):
                      sort_keys=True, ensure_ascii=False))
 
 
+def _publish_compatibility_payload(result):
+    return {
+        "machine_key": result.get("machine_key", ""),
+        "account_snapshot": result.get("account_snapshot", {}),
+        "capability_snapshot": result.get("capability_snapshot", {}),
+        "compatible": bool(result.get("compatible")),
+        "error_code": result.get("error_code") or "",
+        "measured_lh_version": result.get("measured_lh_version"),
+        "contract_fingerprint": result.get("contract_fingerprint"),
+        "contract_evidence": result.get("contract_evidence", {}),
+    }
+
+
+def _run_publish_canary(cfg, profile, probe, publisher):
+    """Claim and execute one server-authored canary on notebook-1 only."""
+    if str(cfg.get("instance_id") or "") != "notebook-1":
+        return False
+    answer = publish_request(cfg, "agent.publishCanaryClaim", {
+        "contract_fingerprint": probe.get("contract_fingerprint"),
+    })
+    canary = answer.get("canary") if isinstance(answer, dict) else None
+    if not canary:
+        return False
+    canary_id = canary.get("id")
+    generation = canary.get("claim_generation")
+    branch = canary.get("branch")
+    snapshot = canary.get("target_account_snapshot")
+    fingerprint = probe.get("contract_fingerprint")
+    valid = (
+        isinstance(canary_id, str) and isinstance(generation, int)
+        and isinstance(branch, dict) and isinstance(snapshot, dict)
+        and canary.get("contract_fingerprint") == fingerprint
+        and canary.get("fixture_version") == "empty-paused-v1"
+        and str(branch.get("campaign_name") or "").startswith("[Compatibility canary] ")
+        and branch.get("compiled_action_chain") == PUBLISH_CANARY_ACTIONS
+    )
+    base = {"canary_id": canary_id, "claim_generation": generation,
+            "contract_fingerprint": fingerprint}
+    if not valid:
+        publish_request(cfg, "agent.publishCanaryResult", dict(
+            base, status="failed", error_code="PUBLISH_CANARY_PAYLOAD_INVALID",
+            verification_summary={}))
+        return True
+    account = normalize_publish_account_snapshot(snapshot, canary.get("compiler_version"))
+    expected_identity = {
+        "accountId": profile.get("account_id"), "accountName": profile.get("account_name"),
+        "senderName": profile.get("sender_name"), "workspaceId": profile.get("workspace_id"),
+    }
+    if account is None or any(str(snapshot.get(key, "")) != str(value)
+                              for key, value in expected_identity.items()):
+        publish_request(cfg, "agent.publishCanaryResult", dict(
+            base, status="failed", error_code="PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH",
+            verification_summary={}))
+        return True
+    fingerprint_input = {
+        "compilerVersion": str(canary.get("compiler_version") or ""),
+        "accountId": str(account["account_id"]),
+        "actions": PUBLISH_CANARY_ACTIONS,
+    }
+    branch = dict(branch, action_fingerprint=hashlib.sha256(
+        LinkedHelperPublisher._canonical_json(fingerprint_input).encode("utf-8")
+    ).hexdigest())
+    try:
+        verification, _ = publisher.publish_branch(branch, account)
+    except (PublishExecutionError, CdpError, OSError, TimeoutError) as error:
+        code = error.code if isinstance(error, PublishExecutionError) else (
+            str(error) if isinstance(error, CdpError) else "CDP_ENDPOINT_UNREACHABLE")
+        publish_request(cfg, "agent.publishCanaryResult", dict(
+            base, status="failed", error_code=code, verification_summary={}))
+        return True
+    publish_request(cfg, "agent.publishCanaryResult", dict(
+        base, status="verified", verification_summary=verification,
+        lh_campaign_id=str(verification["campaign_id"])))
+    print("publish-once: canary verified; ordinary publishing remains server-gated")
+    return True
+
+
 def cmd_publish_once(args):
     cfg = load_config()
     set_local_tz(cfg)
     if not machine_configured(cfg):
         sys.exit("publish-once requires ingest_url and a machine credential")
-    profile, profile_error = _publish_profile(cfg)
     if not str(cfg.get("machine_key") or "").strip():
         print("publish-once: failed MACHINE_KEY_MISSING")
+        return
+    # The two-minute publisher is independent from the sync task. It must not
+    # keep running stale code for up to thirty minutes after a signed release.
+    if self_update(cfg):
+        reexec()
+    profile, profile_error = _publish_profile(cfg)
+    probe = probe_linked_helper(cfg)
+    try:
+        compatibility = publish_request(
+            cfg, "agent.publishCompatibility", _publish_compatibility_payload(probe))
+    except Exception as error:
+        sys.exit(f"publish-once compatibility report failed ({type(error).__name__})")
+    status = compatibility.get("status") if isinstance(compatibility, dict) else None
+    effective = compatibility.get("effective_compatible") if isinstance(compatibility, dict) else None
+    if not probe.get("compatible") or not probe.get("contract_fingerprint"):
+        print(f"publish-once: blocked {probe.get('error_code') or 'PUBLISH_CONTRACT_UNMEASURED'}")
+        return
+    publisher = LinkedHelperPublisher(profile) if profile else None
+    if status == "canary_pending" and compatibility.get("canary_available") is True:
+        compatible, error_code = publisher.preflight()
+        if not compatible:
+            print(f"publish-once: canary blocked {error_code}")
+            return
+        try:
+            if _run_publish_canary(cfg, profile, probe, publisher):
+                return
+        except Exception as error:
+            sys.exit(f"publish-once canary report failed ({type(error).__name__})")
+    if status != "approved" or effective is not True:
+        print(f"publish-once: blocked COMPATIBILITY_CONTRACT_{str(status or 'UNKNOWN').upper()}")
         return
     try:
         answer = publish_request(cfg, "agent.publishClaim", {})
@@ -1726,12 +1927,18 @@ def cmd_publish_once(args):
     expected_snapshot = {
         "accountId": profile.get("account_id"), "accountName": profile.get("account_name"),
         "senderName": profile.get("sender_name"), "workspaceId": profile.get("workspace_id"),
-        "lhVersion": profile.get("lh_version"), "compatibilityProfile": profile.get("compatibility_profile"),
     }
     if any(str(job_account.get(key, "")) != str(value) for key, value in expected_snapshot.items()):
         report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
                                        "status": "failed", "error_code": "PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH"})
         print("publish-once: failed PUBLISH_ACCOUNT_SNAPSHOT_MISMATCH")
+        return
+    job_contract = job.get("target_contract_fingerprint")
+    if (not isinstance(job_contract, str) or
+            job_contract != probe.get("contract_fingerprint")):
+        report("agent.publishState", {"job_id": job_id, "claim_generation": generation,
+                                       "status": "failed", "error_code": "PUBLISH_CONTRACT_SNAPSHOT_MISMATCH"})
+        print("publish-once: failed PUBLISH_CONTRACT_SNAPSHOT_MISMATCH")
         return
     account = normalize_publish_account_snapshot(job_account, job.get("compiler_version"))
     if account is None:

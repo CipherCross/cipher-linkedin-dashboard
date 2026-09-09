@@ -81,7 +81,7 @@ try {
             $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
             $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
             $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
-            Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description 'Claims one paused Linked Helper publish job every two minutes' -Force | Out-Null
+            Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description 'Updates, measures compatibility, handles notebook-1 canaries, then claims one paused Linked Helper publish job' -Force | Out-Null
             exit 0
         }
         if ($StartPublishSchedule) {

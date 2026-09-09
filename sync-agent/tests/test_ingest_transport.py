@@ -34,6 +34,7 @@ import json
 import os
 import py_compile
 import re
+import sqlite3
 import tempfile
 import sys
 import unittest
@@ -541,6 +542,51 @@ class ContractPinTest(unittest.TestCase):
 
 
 class PublishProbeTest(unittest.TestCase):
+    @staticmethod
+    def publishing_schema(path, extra=""):
+        con = sqlite3.connect(path)
+        con.executescript("""
+            CREATE TABLE campaigns (id INTEGER PRIMARY KEY, name TEXT, li_account_id INTEGER, is_paused INTEGER, is_valid INTEGER);
+            CREATE TABLE campaign_versions (id INTEGER PRIMARY KEY, campaign_id INTEGER, exclude_list_id INTEGER);
+            CREATE TABLE campaign_version_actions (id INTEGER PRIMARY KEY, version_id INTEGER, action_id INTEGER);
+            CREATE TABLE actions (id INTEGER PRIMARY KEY, campaign_id INTEGER);
+            CREATE TABLE action_versions (id INTEGER PRIMARY KEY, action_id INTEGER, config_id INTEGER, exclude_list_id INTEGER);
+            CREATE TABLE action_configs (id INTEGER PRIMARY KEY, actionType TEXT, actionSettings TEXT, coolDown INTEGER, maxActionResultsPerIteration INTEGER);
+            CREATE TABLE action_target_people (action_id INTEGER, person_id INTEGER);
+            CREATE TABLE collection_people_versions (id INTEGER PRIMARY KEY, collection_id INTEGER);
+            CREATE TABLE collection_people (collection_id INTEGER);
+        """ + extra)
+        con.close()
+
+    def test_publish_schema_fingerprint_ignores_unrelated_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = os.path.join(directory, "first.db")
+            second = os.path.join(directory, "second.db")
+            self.publishing_schema(first)
+            self.publishing_schema(second, "CREATE TABLE analytics_cache (value TEXT);")
+            evidence_a, digest_a = agent.publishing_schema_evidence(first)
+            evidence_b, digest_b = agent.publishing_schema_evidence(second)
+        self.assertEqual(digest_a, digest_b)
+        self.assertEqual(evidence_a, evidence_b)
+        self.assertEqual(evidence_a["missing"], [])
+
+    def test_publish_schema_fingerprint_fails_closed_on_required_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "drift.db")
+            self.publishing_schema(path)
+            con = sqlite3.connect(path)
+            con.execute("ALTER TABLE campaigns RENAME COLUMN is_valid TO legacy_valid")
+            con.close()
+            evidence, digest = agent.publishing_schema_evidence(path)
+            # Evidence itself stays deterministic, but it cannot become a
+            # usable overall contract while required facts are absent.
+            runtime = {"capability_snapshot": {"create_campaign": True}}
+            profile = {"_lh2_db_path": path}
+            _, contract, error = agent.publish_contract_evidence(profile, runtime)
+        self.assertIn("campaigns.is_valid", evidence["missing"])
+        self.assertIsNone(contract)
+        self.assertEqual(error, "PUBLISH_SCHEMA_CONTRACT_INCOMPLETE")
+
     def test_normalizes_gateway_snapshot_for_the_local_publisher(self):
         snapshot = {
             "accountId": "524650", "accountName": "Mykyta Shevchenko",
@@ -801,9 +847,8 @@ Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 1
             agent.resolve_cdp_endpoint({"cdp_host": "0.0.0.0", "cdp_port": 9222})
         self.assertEqual(str(context.exception), "CDP_LOOPBACK_REQUIRED")
 
-    def test_a_running_build_that_contradicts_the_pinned_one_fails_closed(self):
-        """The probe used to echo lh_version straight from config, reporting
-        2.130.29 while the process ran 2.130.17."""
+    def test_a_running_patch_build_is_measured_without_trusting_the_pin(self):
+        """Version drift is evidence, not the compatibility identity."""
         profile = {
             "cdp_host": "127.0.0.1", "cdp_port": 61121,
             "cdp_target_url_contains": "index.html",
@@ -824,10 +869,9 @@ Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 1
         with mock.patch.object(agent, "discover_cdp_target", return_value=dict(target, _websocket_url="ws://127.0.0.1:51358/x")), \
              mock.patch.object(agent, "CdpClient", return_value=client):
             result = agent.probe_linked_helper_runtime(profile)
-        self.assertFalse(result["compatible"])
-        self.assertEqual(result["error_code"], "LH_VERSION_MISMATCH")
+        self.assertTrue(result["compatible"])
+        self.assertIsNone(result["error_code"])
         self.assertEqual(result["lh_version_measured"], "2.130.17")
-        self.assertEqual(result["lh_version_configured"], "2.130.29")
 
     def test_a_matching_build_with_every_capability_is_compatible(self):
         profile = {"cdp_host": "127.0.0.1", "cdp_port": 51358,
@@ -872,8 +916,8 @@ Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 1
             "target_title": "Linked Helper", "location_host": "", "websocket_path": "/x",
             "cdp_port": 51358, "cdp_port_source": "discovered",
             "lh_version_measured": "2.130.17",
-            "capability_snapshot": {}, "compatible": False,
-            "error_code": "LH_VERSION_MISMATCH",
+            "capability_snapshot": {}, "compatible": True,
+            "error_code": None,
         }
         with mock.patch.object(agent, "probe_linked_helper_runtime", return_value=runtime):
             result = agent.probe_linked_helper({"instance_id": "notebook-1",
@@ -883,7 +927,7 @@ Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 1
         self.assertEqual(snapshot["cdp_port_configured"], 61121)
         self.assertEqual(snapshot["lh_version_measured"], "2.130.17")
         self.assertEqual(snapshot["lh_version_configured"], "2.130.29")
-        self.assertEqual(result["error_code"], "LH_VERSION_MISMATCH")
+        self.assertEqual(result["error_code"], "PUBLISH_SCHEMA_CONTRACT_INCOMPLETE")
         self.assertNotIn("websocket_url", snapshot)
 
     def test_preflight_requires_explicit_security_ack(self):
@@ -904,6 +948,100 @@ Python     54321 mykytashevchenko   10u  IPv4 0xbc7607a4eaadf109      0t0  TCP 1
             ok, code = agent.LinkedHelperPublisher(profile).preflight()
         self.assertTrue(ok)
         self.assertIsNone(code)
+
+
+class PublishCycleCompatibilityTest(unittest.TestCase):
+    def cfg(self, instance="notebook-2"):
+        return {
+            "instance_id": instance, "machine_key": instance,
+            "ingest_url": "https://dashboard.example/api/import?op=agent.ingest",
+            "ingest_token": a_token(),
+            "lh2_publish": {
+                "account_id": "524650", "li_account_id": "1",
+                "account_name": "Account", "sender_name": "Sender",
+                "workspace_id": "601896", "cdp_host": "127.0.0.1",
+                "cdp_port": 50454, "cdp_target_url_contains": "index.html",
+                "enable_cdp_adapter": True,
+                "cdp_security_ack": agent.CDP_SECURITY_ACK,
+            },
+        }
+
+    def probe(self):
+        return {"compatible": True, "machine_key": "notebook-2",
+                "account_snapshot": {}, "capability_snapshot": {},
+                "measured_lh_version": "2.130.35",
+                "contract_fingerprint": "a" * 64, "contract_evidence": {}}
+
+    def test_unknown_contract_is_reported_before_any_ordinary_claim(self):
+        operations = []
+        def request(cfg, operation, payload=None, timeout=30):
+            operations.append(operation)
+            return {"status": "unknown", "effective_compatible": False}
+        with mock.patch.object(agent, "load_config", return_value=self.cfg()), \
+             mock.patch.object(agent, "self_update", return_value=False), \
+             mock.patch.object(agent, "probe_linked_helper", return_value=self.probe()), \
+             mock.patch.object(agent, "publish_request", side_effect=request), \
+             mock.patch("builtins.print"):
+            agent.cmd_publish_once(mock.Mock())
+        self.assertEqual(operations, ["agent.publishCompatibility"])
+
+    def test_approved_contract_is_required_before_claim(self):
+        operations = []
+        def request(cfg, operation, payload=None, timeout=30):
+            operations.append(operation)
+            if operation == "agent.publishCompatibility":
+                return {"status": "approved", "effective_compatible": True}
+            return {"job": None}
+        with mock.patch.object(agent, "load_config", return_value=self.cfg()), \
+             mock.patch.object(agent, "self_update", return_value=False), \
+             mock.patch.object(agent, "probe_linked_helper", return_value=self.probe()), \
+             mock.patch.object(agent, "publish_request", side_effect=request), \
+             mock.patch("builtins.print"):
+            agent.cmd_publish_once(mock.Mock())
+        self.assertEqual(operations, ["agent.publishCompatibility", "agent.publishClaim"])
+
+    def test_publisher_self_updates_before_measuring_or_claiming(self):
+        with mock.patch.object(agent, "load_config", return_value=self.cfg()), \
+             mock.patch.object(agent, "self_update", return_value=True), \
+             mock.patch.object(agent, "reexec", side_effect=SystemExit(0)) as restarted, \
+             mock.patch.object(agent, "probe_linked_helper") as probe:
+            with self.assertRaises(SystemExit):
+                agent.cmd_publish_once(mock.Mock())
+        restarted.assert_called_once_with()
+        probe.assert_not_called()
+
+    def test_only_notebook_one_can_claim_an_unknown_contract_canary(self):
+        with mock.patch.object(agent, "publish_request") as request:
+            handled = agent._run_publish_canary(
+                self.cfg("notebook-2"), {}, self.probe(), mock.Mock())
+        self.assertFalse(handled)
+        request.assert_not_called()
+
+    def test_malformed_canary_is_failed_without_mutating_lh2(self):
+        calls = []
+        def request(cfg, operation, payload=None, timeout=30):
+            calls.append((operation, payload))
+            if operation == "agent.publishCanaryClaim":
+                return {"canary": {"id": "c-1", "claim_generation": 1,
+                                   "contract_fingerprint": "a" * 64,
+                                   "fixture_version": "empty-paused-v1",
+                                   "target_account_snapshot": {},
+                                   "branch": {"campaign_name": "Not a canary",
+                                              "compiled_action_chain": [{
+                                                  "type": "SendMessageTo1stConnections",
+                                                  "settings": {"message": "unsafe"},
+                                                  "coolDown": 0,
+                                                  "maxActionResultsPerIteration": -1,
+                                              }]}}}
+            return {}
+        publisher = mock.Mock()
+        with mock.patch.object(agent, "publish_request", side_effect=request):
+            handled = agent._run_publish_canary(
+                self.cfg("notebook-1"), {}, self.probe(), publisher)
+        self.assertTrue(handled)
+        publisher.publish_branch.assert_not_called()
+        self.assertEqual(calls[-1][0], "agent.publishCanaryResult")
+        self.assertEqual(calls[-1][1]["error_code"], "PUBLISH_CANARY_PAYLOAD_INVALID")
 
 
 class PublishExecutorTest(unittest.TestCase):
