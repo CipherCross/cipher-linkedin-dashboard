@@ -142,19 +142,28 @@ export function createAgentPublishHandler(
           })
           : null
         if (!machineKey || !account || !capabilityJson || !measuredLhVersion || !contractFingerprint || !/^[0-9a-f]{64}$/.test(contractFingerprint) || !contractEvidenceJson || !validContractEvidence(body.contract_evidence) || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot, measured_lh_version, contract_fingerprint, valid contract_evidence and compatible are required' }, 400)
-        const result = await principal.store.transaction(principal.actor, (transaction) => transaction.execute<{ status: string; effective_compatible: boolean; canary_available: boolean; replacement_job_id: string | null; alert_claimed: boolean }>({
-          operation: MACHINE_PUBLISH_COMMANDS.reportTarget,
-          params: {
-            instanceId: principal.instanceId, machineKey,
-            accountJson: JSON.stringify({
-              accountId: account.accountId, accountName: account.accountName,
-              senderName: account.senderName, workspaceId: account.workspaceId,
-              lhVersion: account.lhVersion, compatibilityProfile: account.compatibilityProfile,
-            }), capabilityJson,
-            compatible: body.compatible as boolean, errorCode: boundedString(body, 'error_code', 120) ?? '', credentialId: principal.credentialId,
-            measuredLhVersion, contractFingerprint, contractEvidenceJson,
-          },
-        }))
+        const result = await principal.store.transaction(principal.actor, async (transaction) => {
+          const reported = await transaction.execute<{ status: string; effective_compatible: boolean; canary_available: boolean; replacement_job_id: string | null; alert_claimed: boolean }>({
+            operation: MACHINE_PUBLISH_COMMANDS.reportTarget,
+            params: {
+              instanceId: principal.instanceId, machineKey,
+              accountJson: JSON.stringify({
+                accountId: account.accountId, accountName: account.accountName,
+                senderName: account.senderName, workspaceId: account.workspaceId,
+                lhVersion: account.lhVersion, compatibilityProfile: account.compatibilityProfile,
+              }), capabilityJson,
+              compatible: body.compatible as boolean, errorCode: boundedString(body, 'error_code', 120) ?? '', credentialId: principal.credentialId,
+              measuredLhVersion, contractFingerprint, contractEvidenceJson,
+            },
+          })
+          if (reported.replacement_job_id) {
+            await transaction.execute<number>({
+              operation: MACHINE_PUBLISH_COMMANDS.copyReplacementBranches,
+              params: { jobId: reported.replacement_job_id },
+            })
+          }
+          return reported
+        })
         if (result.alert_claimed) await postPublishCompatibilityAlertToSlack(
           process.env.SLACK_REPLIES_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL,
           { machine_key: machineKey, instance_id: principal.instanceId, measured_lh_version: measuredLhVersion, contract_fingerprint: contractFingerprint, transition: result.status === 'rejected' ? 'rejected' : 'unknown', error_code: boundedString(body, 'error_code', 120) },

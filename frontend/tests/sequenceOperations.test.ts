@@ -7,7 +7,7 @@ import {
   saveSequenceOperation,
   sequenceCommentsOperation,
 } from '../api/_lib/data/operations/sequences.js'
-import { claimSequencePublishCanaryOperation, reportSequencePublishTargetOperation, setSequencePublishBranchResultOperation } from '../api/_lib/data/operations/sequencePublishing.js'
+import { claimSequencePublishCanaryOperation, copySequencePublishReplacementBranchesOperation, reportSequencePublishTargetOperation, setSequencePublishBranchResultOperation } from '../api/_lib/data/operations/sequencePublishing.js'
 import type { UserActorContext } from '../api/_lib/data/contracts.js'
 
 const actor: UserActorContext = {
@@ -102,6 +102,15 @@ describe('Sequence Builder operation allowlist', () => {
     expect(report.text).toContain("j.error_code IN ('LH_VERSION_MISMATCH','PUBLISH_CONTRACT_MISMATCH')")
     expect(report.text).toContain('ON CONFLICT (replaces_job_id) DO NOTHING')
     expect(report.text).toContain("b.status = 'created'")
+    expect(report.text).not.toContain('INSERT INTO public.sequence_publish_branches')
+
+    const copied = copySequencePublishReplacementBranchesOperation.build({
+      actor,
+      params: { jobId: '22222222-2222-4222-8222-222222222222' },
+    })
+    expect(copied.text).toContain('INSERT INTO public.sequence_publish_branches')
+    expect(copied.text).toContain('JOIN public.sequence_publish_branches b ON b.job_id = j.replaces_job_id')
+    expect(copied.text).toContain('j.target_instance_id = public.machine_actor_instance()')
   })
 
   it('claims a canary only for the authenticated notebook identity', () => {

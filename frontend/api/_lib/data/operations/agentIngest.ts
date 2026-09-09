@@ -59,6 +59,7 @@ import {
   MACHINE_PUBLISH_COMMANDS,
   claimSequencePublishCanaryOperation,
   claimSequencePublishJobOperation,
+  copySequencePublishReplacementBranchesOperation,
   finishSequencePublishJobOperation,
   heartbeatSequencePublishJobOperation,
   reportSequencePublishTargetOperation,
@@ -827,6 +828,7 @@ export function buildMachineRegistry(): NeonOperationRegistry {
     recordSyncRunOperation,
   )
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.reportTarget, reportSequencePublishTargetOperation)
+  registry.registerCommand(MACHINE_PUBLISH_COMMANDS.copyReplacementBranches, copySequencePublishReplacementBranchesOperation)
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.claimCanary, claimSequencePublishCanaryOperation)
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.finishCanary, finishSequencePublishCanaryOperation)
   registry.registerCommand(MACHINE_PUBLISH_COMMANDS.claim, claimSequencePublishJobOperation)

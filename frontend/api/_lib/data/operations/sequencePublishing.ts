@@ -14,6 +14,7 @@ export const SEQUENCE_PUBLISH_COMMANDS = {
 
 export const MACHINE_PUBLISH_COMMANDS = {
   reportTarget: 'sequencePublish.reportTarget',
+  copyReplacementBranches: 'sequencePublish.copyReplacementBranches',
   claimCanary: 'sequencePublish.claimCanary',
   finishCanary: 'sequencePublish.finishCanary',
   claim: 'sequencePublish.claim',
@@ -290,11 +291,6 @@ export const reportSequencePublishTargetOperation: NeonCommandOperation<PublishP
         AND NOT EXISTS (SELECT 1 FROM public.sequence_publish_branches b WHERE b.job_id = j.id AND b.status = 'created')
       ORDER BY j.finished_at DESC NULLS LAST LIMIT 1
       ON CONFLICT (replaces_job_id) DO NOTHING RETURNING id, replaces_job_id
-    ), copied AS (
-      INSERT INTO public.sequence_publish_branches
-        (job_id, branch_id, branch_ordinal, branch_letter, campaign_name, compiled_action_chain, action_fingerprint)
-      SELECT r.id, b.branch_id, b.branch_ordinal, b.branch_letter, b.campaign_name, b.compiled_action_chain, b.action_fingerprint
-      FROM replacement r JOIN public.sequence_publish_branches b ON b.job_id = r.replaces_job_id
     )
     SELECT t.compatibility_state AS status, t.compatible AS effective_compatible,
       EXISTS (SELECT 1 FROM public.sequence_publish_canaries c WHERE c.contract_fingerprint = $8 AND c.status = 'queued') AS canary_available,
@@ -306,6 +302,27 @@ export const reportSequencePublishTargetOperation: NeonCommandOperation<PublishP
       params?.measuredLhVersion ?? ''],
   }),
   mapResult: (rows) => ({ status: String(rows[0]?.status ?? 'unknown'), effective_compatible: rows[0]?.effective_compatible === true, canary_available: rows[0]?.canary_available === true, replacement_job_id: nullableText(rows[0]?.replacement_job_id), alert_claimed: rows[0]?.alert_claimed === true }),
+}
+
+/**
+ * Copy replacement branches in a second statement inside the same transaction.
+ * PostgreSQL data-changing CTEs share one snapshot, so an RLS policy on the
+ * branch insert cannot see a replacement job inserted by a sibling CTE.
+ */
+export const copySequencePublishReplacementBranchesOperation: NeonCommandOperation<number, { jobId: string; [key: string]: string }> = {
+  build: ({ params }) => ({
+    text: `INSERT INTO public.sequence_publish_branches
+      (job_id, branch_id, branch_ordinal, branch_letter, campaign_name, compiled_action_chain, action_fingerprint)
+      SELECT j.id, b.branch_id, b.branch_ordinal, b.branch_letter, b.campaign_name,
+             b.compiled_action_chain, b.action_fingerprint
+        FROM public.sequence_publish_jobs j
+        JOIN public.sequence_publish_branches b ON b.job_id = j.replaces_job_id
+       WHERE j.id = $1::uuid
+         AND j.target_instance_id = public.machine_actor_instance()
+         AND j.replaces_job_id IS NOT NULL`,
+    values: [params?.jobId ?? ''],
+  }),
+  mapResult: (_rows, rowCount) => rowCount,
 }
 
 export interface CanaryRow { id: string; contract_fingerprint: string; claim_generation: number; fixture_version: string; compiler_version: string; target_account_snapshot: Record<string, unknown>; branch: Record<string, unknown> }
