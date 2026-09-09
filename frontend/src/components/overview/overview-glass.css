@@ -204,6 +204,23 @@
 }
 .overview-glass .sa-total small { color: var(--og-muted); font-size: var(--text-2xs); }
 
+.overview-glass .sa-loading-card { pointer-events: none; }
+.overview-glass .sa-loading-card .skeleton + .skeleton { margin-top: 9px; }
+.overview-glass .sa-loading-chart { margin-top: 16px; background: color-mix(in srgb, var(--surface-2) 72%, transparent); }
+.overview-glass .sa-loading-table { overflow: hidden; }
+.overview-glass .sa-loading-table-head,
+.overview-glass .sa-loading-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) repeat(6, minmax(74px, 1fr));
+  align-items: center;
+  gap: 18px;
+  min-width: 850px;
+  padding: 13px 14px;
+}
+.overview-glass .sa-loading-table-head { border-bottom: 1px solid var(--og-line); }
+.overview-glass .sa-loading-table-row + .sa-loading-table-row { border-top: 1px solid color-mix(in srgb, var(--og-line) 72%, transparent); }
+.overview-glass .sa-loading-account { display: flex; align-items: center; gap: 10px; }
+
 .overview-glass .sa-panel {
   margin-top: 16px;
   padding: clamp(16px, 2.2vw, 22px);

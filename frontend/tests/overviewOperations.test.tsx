@@ -280,7 +280,9 @@ describe("Overview request orchestration and real analytics UI", () => {
     resolvePath.mockResolvedValue("supabase");
     phase = "partial";
     const view = paint();
-    await screen.findByText("Loading analytics…");
+    await screen.findByRole("status", { name: "Loading system totals" });
+    expect(screen.getByRole("status", { name: "Loading performance analytics" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Loading account analytics" })).toBeTruthy();
     expect(fetchSummary).not.toHaveBeenCalled();
     phase = "full";
     view.rerender(

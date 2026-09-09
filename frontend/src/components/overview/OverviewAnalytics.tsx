@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { DateRangePicker } from "../DateRangePicker";
+import { Skeleton } from "../Skeleton";
 import type { DateRange } from "../../lib/leads";
 import { ago, num, pct, shortDate } from "../../lib/format";
 import { freshnessLevel } from "../../lib/freshness";
@@ -63,6 +64,60 @@ const chartDate = (day: string, weekly: boolean) => {
   return shortDate(day);
 };
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
+
+function SystemTotalsLoading() {
+  return (
+    <div className="sa-summary sa-loading-grid" role="status" aria-label="Loading system totals">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div className="sa-total sa-loading-card" key={index}>
+          <Skeleton width="52%" height={12} />
+          <Skeleton width="38%" height={31} />
+          <Skeleton width="64%" height={10} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PerformanceLoading() {
+  return (
+    <div className="sa-performance sa-loading-performance" role="status" aria-label="Loading performance analytics">
+      <div>
+        <div className="sa-metrics">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div className="sa-metric sa-loading-card" key={index}>
+              <Skeleton width={72} height={11} />
+              <Skeleton width={64} height={28} />
+              <Skeleton width={110} height={10} />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="sa-loading-chart" width="100%" height={280} radius={16} />
+      </div>
+      <aside className="sa-rates sa-loading-card">
+        <Skeleton width={130} height={16} />
+        <Skeleton width="100%" height={82} radius={12} />
+        <Skeleton width="100%" height={82} radius={12} />
+      </aside>
+    </div>
+  );
+}
+
+function AccountTableLoading() {
+  return (
+    <div className="sa-tablewrap sa-loading-table" role="status" aria-label="Loading account analytics">
+      <div className="sa-loading-table-head">
+        {Array.from({ length: 7 }).map((_, index) => <Skeleton key={index} width="100%" height={12} />)}
+      </div>
+      {Array.from({ length: 4 }).map((_, row) => (
+        <div className="sa-loading-table-row" key={row}>
+          <span className="sa-loading-account"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
+          {Array.from({ length: 6 }).map((__, column) => <Skeleton key={column} width={column > 3 ? 58 : 34} height={12} />)}
+        </div>
+      ))}
+    </div>
+  );
+}
 function chartRows(a: Analytics | null, r: DateRange, account: string) {
   if (!a) return [];
   const rows = new Map<
@@ -346,7 +401,7 @@ export function OverviewAnalytics({
   ];
   return (
     <>
-      <section className="sa-summary" aria-labelledby="overview-system-title">
+      <section className="sa-summary" aria-labelledby="overview-system-title" aria-busy={systemLoading}>
         <div className="sa-row">
           <div>
             <h2 id="overview-system-title">System totals</h2>
@@ -362,10 +417,12 @@ export function OverviewAnalytics({
                 onChange={onSystemRangeChange}
               />
             </label>
-            {systemLoading && <span className="sa-muted">Refreshing…</span>}
+            {systemLoading && system && <span className="sa-muted" role="status">Refreshing…</span>}
           </div>
         </div>
-        {systemError ? (
+        {systemLoading && !system ? (
+          <SystemTotalsLoading />
+        ) : systemError ? (
           <p role="alert" className="sa-muted">
             {systemError}{" "}
             <button type="button" onClick={onSystemRetry}>
@@ -391,6 +448,7 @@ export function OverviewAnalytics({
       <section
         className="sa-panel"
         aria-labelledby="overview-performance-title"
+        aria-busy={performanceLoading}
       >
         <div className="sa-row">
           <div>
@@ -419,8 +477,8 @@ export function OverviewAnalytics({
                 ))}
               </select>
             </label>
-            {performanceLoading && (
-              <span className="sa-muted">Refreshing…</span>
+            {performanceLoading && performance && (
+              <span className="sa-muted" role="status">Refreshing…</span>
             )}
             <label className="sa-muted">
               Dates
@@ -433,7 +491,9 @@ export function OverviewAnalytics({
             </label>
           </div>
         </div>
-        {performanceError ? (
+        {performanceLoading && !performance ? (
+          <PerformanceLoading />
+        ) : performanceError ? (
           <p role="alert" className="sa-muted">
             {performanceError}{" "}
             <button type="button" onClick={onPerformanceRetry}>
@@ -579,11 +639,11 @@ export function OverviewAnalytics({
             </button>
           )}
         </div>
-        {account === "all" ? (
+        {performanceLoading && !performance ? (
+          <AccountTableLoading />
+        ) : account === "all" ? (
           !performance ? (
-            <p className="sa-muted">
-              Account data unavailable until performance data loads.
-            </p>
+            <p className="sa-muted">Account data unavailable until performance data loads.</p>
           ) : (
             <>
               <div className="sa-tablewrap">

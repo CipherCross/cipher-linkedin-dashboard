@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { fetchNeonOverviewSummary, resolveReadPath } from '../lib/dashboardReads'
 import { ALL_TIME_RANGE, rangeFromParam, rangeToParam, presetRanges, rangedCampaigns } from '../lib/leads'
@@ -163,8 +162,6 @@ export function Overview() {
           <strong>Analytics could not determine its data source.</strong>
           <button onClick={() => setDiscoveryRetry(value => value + 1)}>Try again</button>
         </div>
-      ) : readPath === 'pending' || (legacy && !fallback) ? (
-        <div className="card empty-state" role="status"><Loader2 size={20} className="spin" /><span>Loading analytics…</span></div>
       ) : (
         <OverviewAnalytics
           {...props}
@@ -175,8 +172,8 @@ export function Overview() {
           onSystemRangeChange={setSystemRange}
           onRangeChange={setRange}
           onAccountChange={setAccount}
-          systemLoading={legacy ? false : systemLoading}
-          performanceLoading={legacy ? false : performanceLoading}
+          systemLoading={readPath === 'pending' || (legacy && !fallback) ? true : legacy ? false : systemLoading}
+          performanceLoading={readPath === 'pending' || (legacy && !fallback) ? true : legacy ? false : performanceLoading}
           systemError={legacy ? null : systemError}
           performanceError={legacy ? null : performanceError}
           onSystemRetry={() => setSystemRetry(value => value + 1)}
