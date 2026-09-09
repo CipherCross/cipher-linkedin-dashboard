@@ -84,8 +84,6 @@ CREATE POLICY sequence_publish_contracts_machine_insert ON public.sequence_publi
 CREATE POLICY sequence_publish_contracts_canary_update ON public.sequence_publish_contracts FOR UPDATE TO app_machine
     USING (public.machine_actor_instance() = 'notebook-1')
     WITH CHECK (public.machine_actor_instance() = 'notebook-1');
-CREATE POLICY sequence_publish_contracts_canary_update ON public.sequence_publish_contracts FOR UPDATE TO app_machine
-    USING (public.machine_actor_instance() = 'notebook-1') WITH CHECK (public.machine_actor_instance() = 'notebook-1');
 CREATE POLICY sequence_publish_contract_bindings_machine ON public.sequence_publish_contract_bindings FOR ALL TO app_machine
     USING (instance_id = public.machine_actor_instance()) WITH CHECK (instance_id = public.machine_actor_instance());
 CREATE POLICY sequence_publish_canaries_machine_read ON public.sequence_publish_canaries FOR SELECT TO app_machine
