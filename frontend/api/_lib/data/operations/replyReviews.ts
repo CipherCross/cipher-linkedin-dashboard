@@ -593,7 +593,7 @@ export const reviewHistoryOperation: NeonQueryOperation<ReplyReviewHistoryItem, 
 }
 
 const metric = (n: string, d: string, drilldown: string) => {
-  const expression = drilldown.trim().startsWith('{') ? `'${drilldown.replaceAll("'", "''")}'` : drilldown
+  const expression = drilldown.trim().startsWith('{') ? `'${drilldown.replace(/'/g, "''")}'` : drilldown
   return `jsonb_build_object('numerator', ${n}, 'denominator', ${d}, 'rate', CASE WHEN ${d} = 0 THEN NULL ELSE (${n})::numeric / (${d}) END, 'base','dialogues','bounds',jsonb_build_object('from',$1::timestamptz,'to',$2::timestamptz), 'drilldown', ${expression}::jsonb)`
 }
 
