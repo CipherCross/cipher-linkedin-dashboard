@@ -34,6 +34,7 @@ describe('sidebar information architecture', () => {
       'Overview',
       'Sequence Builder',
       'Follow-ups',
+      'Replies',
       'Pipeline',
       'Leads',
       'Chat',
@@ -60,6 +61,7 @@ describe('sidebar information architecture', () => {
     const strategy = NAVIGATION_SECTIONS.find((section) => section.id === 'strategy')
     expect(strategy?.items.map((item) => item.label)).toEqual([
       'Review',
+      'Sentiment Analysis',
       'Playbook',
       'Searches',
     ])

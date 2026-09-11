@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ClipboardCheck, Loader2, Send } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
@@ -191,6 +191,7 @@ function ReviewHeader({
         </div>
       </div>
       <div className="controls">
+        <Link className="btn sm" to="/sentiment-analysis">Sentiment Analysis</Link>
         <select value={inst} onChange={(e) => setInst(e.target.value)}>
           <option value="all">All accounts</option>
           {instances.map((i) => (

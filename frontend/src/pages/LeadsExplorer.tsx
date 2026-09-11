@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ChevronDown, ChevronRight, Download, GraduationCap, Loader2, SearchX, Sparkles, X,
 } from 'lucide-react'
@@ -277,9 +277,6 @@ export function LeadsExplorer() {
     )
   }, [data?.followUpStates, serverMode, serverPage])
 
-  // «Classify replies» — moved here from the Replies page; same endpoint and
-  // refetch behaviour so freshly-labelled replies flow into the buckets.
-  const [classifying, setClassifying] = useState(false)
   const [updatingDemographics, setUpdatingDemographics] = useState(false)
 
   const demographicsSummary = (value: unknown): string => {
@@ -289,26 +286,6 @@ export function LeadsExplorer() {
     if (d.failed) bits.push(`${d.failed} failed`)
     if (d.remaining != null) bits.push(`${d.remaining} remaining`)
     return bits.join(', ')
-  }
-
-  async function classify() {
-    setClassifying(true)
-    try {
-      const res = await authFetch('/api/classify', { method: 'POST' })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      const replies =
-        `Classified ${j.classified} repl${j.classified === 1 ? 'y' : 'ies'}` +
-        (j.remaining ? `, ${j.remaining} still queued` : ' — all caught up')
-      const demographics = demographicsSummary(j.demographics)
-      toast.success(demographics ? `${replies} · ${demographics}` : replies)
-      if (serverMode) setServerRefresh((value) => value + 1)
-      else refetch()
-    } catch (e) {
-      toast.error(`Couldn't classify: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setClassifying(false)
-    }
   }
 
   async function updateDemographics() {
@@ -677,6 +654,7 @@ export function LeadsExplorer() {
             Filters are kept in the URL, so any view here is shareable.
           </div>
         </div>
+        <Link className="btn sm" to="/replies?view=all&scope=all">Открыть Replies</Link>
       </header>
 
       <div className="card coach-digest-card">
@@ -935,12 +913,7 @@ export function LeadsExplorer() {
               Added date
             </label>
             {isAdmin && (
-              <>
-                <button className="btn sm" onClick={classify} disabled={classifying}>
-                  {classifying ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
-                  {classifying ? 'Classifying…' : 'Classify replies'}
-                </button>
-                <button
+              <button
                   className="btn sm"
                   onClick={updateDemographics}
                   disabled={updatingDemographics}
@@ -950,8 +923,7 @@ export function LeadsExplorer() {
                     ? <Loader2 size={14} className="spin" />
                     : <Sparkles size={14} />}
                   {updatingDemographics ? 'Updating…' : 'Update demographics'}
-                </button>
-              </>
+              </button>
             )}
             <button
               className="btn sm"
@@ -1011,13 +983,18 @@ export function LeadsExplorer() {
                   }
                 }}
               >
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   <LeadReplyIdentity
                     lead={l}
                     reply={reply}
                     highestIntent={reachedIntent}
                     showSnippet={replyActive}
                   />
+                  {l.replied_at && <Link
+                    className="row-link small"
+                    to={`/replies?view=all&scope=all&thread=${encodeURIComponent(`${l.instance_id}|${l.profile_url}`)}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >Open in Replies</Link>}
                 </td>
                 <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 <td className="muted small">{campaignName(l.campaign_id)}</td>

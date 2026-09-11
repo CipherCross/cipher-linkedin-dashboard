@@ -54,6 +54,7 @@ import {
   resolvePhotoPath,
   resolveReadPath,
   routeSnapshotRequest,
+  REPLY_READ_OPS,
 } from '../src/lib/dashboardReads'
 import type { ApiFetch, ReadPage } from '../src/lib/dashboardReads'
 
@@ -120,7 +121,7 @@ const WATERMARK = '2026-08-06T09:58:00.000Z'
 
 describe('the read vocabulary', () => {
   it('every allowlisted read has a caller, and every caller is allowlisted', () => {
-    const called = [...new Set(Object.values(READ_OPS))].sort()
+    const called = [...new Set([...Object.values(READ_OPS), ...Object.values(REPLY_READ_OPS)])].sort()
     const allowlisted = [...READ_OPERATION_NAMES].sort()
     expect(called).toEqual(allowlisted)
   })
@@ -560,7 +561,7 @@ describe('the dashboard load', () => {
       compareIds: 'notebook-2:7,notebook-3:8',
       key: 'campaign:notebook-1:42:compare:notebook-2:7,notebook-3:8',
     })
-    for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses']) {
+    for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses', 'replies', 'sentiment-analysis']) {
       expect(routeSnapshotRequest(`#/${route}?q=ignored`)).toEqual({ route, key: route })
     }
     for (const local of ['#/', '#/leads', '#/team', '#/playbook', '#/chat', '#/csv-import', '#/neon-activity']) {

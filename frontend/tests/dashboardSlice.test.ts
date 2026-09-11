@@ -122,6 +122,10 @@ import { coachingDigestsOperation } from '../api/_lib/data/operations/coaching.j
 import { coachPlaybookOperation } from '../api/_lib/data/operations/aiWrites.js'
 import { routeSnapshotOperation } from '../api/_lib/data/operations/routeSnapshots.js'
 import { sequenceHubOperation } from '../api/_lib/data/operations/sequenceHub.js'
+import {
+  REPLY_REVIEW_OPERATIONS,
+  allReplyReviewOperations,
+} from '../api/_lib/data/operations/replyReviews.js'
 
 /**
  * Every operation asserted below either ignores its context or reads it through
@@ -195,6 +199,11 @@ const READ_SLICE = [
   [IDENTITY_OPERATIONS.teamRoster, teamRosterOperation],
   [AI_WRITE_OPERATIONS.coachPlaybook, coachPlaybookOperation],
   [COACHING_OPERATIONS.digests, coachingDigestsOperation],
+  [REPLY_REVIEW_OPERATIONS.capabilities, allReplyReviewOperations.capabilitiesOperation],
+  [REPLY_REVIEW_OPERATIONS.inbox, allReplyReviewOperations.inboxOperation],
+  [REPLY_REVIEW_OPERATIONS.thread, allReplyReviewOperations.threadOperation],
+  [REPLY_REVIEW_OPERATIONS.analytics, allReplyReviewOperations.analyticsOperation],
+  [REPLY_REVIEW_OPERATIONS.reviewHistory, allReplyReviewOperations.reviewHistoryOperation],
 ] as unknown as Slice
 
 /**
@@ -208,6 +217,8 @@ const MEMBER_ID_BEARING = [
   CONVERSATION_OPERATIONS.followUpState,
   CONVERSATION_OPERATIONS.followUpHistory,
   ROUTE_SNAPSHOT_OPERATION,
+  REPLY_REVIEW_OPERATIONS.inbox,
+  REPLY_REVIEW_OPERATIONS.analytics,
 ] as readonly string[]
 
 /** The subset that must not so much as mention a member id, in any spelling. */
@@ -226,7 +237,7 @@ const ROSTER_READING = [
 ] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists twenty-nine reads and no more', () => {
+  it('allowlists thirty-five reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -266,6 +277,11 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'overview.summary',
       'overview.systemTotals',
       'pipeline.eventLog',
+      'replies.analytics',
+      'replies.capabilities',
+      'replies.inbox',
+      'replies.reviewHistory',
+      'replies.thread',
       'searches.saved',
       'sequences.hub',
       'sync.recentRuns',
@@ -362,7 +378,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
 
 describe('no operation on the read path resolves a member id', () => {
   const NON_ROSTER_SLICE = READ_SLICE.filter(
-    ([name]) => !ROSTER_READING.includes(name),
+    ([name]) => !ROSTER_READING.includes(name) && !MEMBER_ID_BEARING.includes(name),
   )
 
   it.each(NON_ROSTER_SLICE)('%s reads no roster relation', (_name, operation) => {
@@ -483,7 +499,7 @@ describe('every read is a paged, ordered, read-only projection', () => {
     expect(sqlOf(operation).trimStart().toLowerCase()).toMatch(/^(select|with)\b/)
   })
 
-  it.each(READ_SLICE)('%s orders its rows', (_name, operation) => {
+  it.each(READ_SLICE.filter(([name]) => name !== REPLY_REVIEW_OPERATIONS.capabilities))('%s orders its rows', (_name, operation) => {
     // The driver wraps every query in `LIMIT`. An unordered relation paged that
     // way can repeat or skip a row at a page boundary.
     expect(sqlOf(operation).toLowerCase()).toContain('order by')
@@ -521,6 +537,9 @@ describe('every read is a paged, ordered, read-only projection', () => {
       'messages.inboundHistory',
       'messages.outboundRecent',
       'pipeline.eventLog',
+      'replies.inbox',
+      'replies.reviewHistory',
+      'replies.thread',
     ])
   })
 

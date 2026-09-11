@@ -15,13 +15,16 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
 import { FollowUpPanel } from './FollowUpPanel'
 import { LeadNotesPanel } from './LeadNotesPanel'
+import { ReplyReviewPanel } from './conversation/ReplyReviewPanel'
+import { useReplyReviewActions } from '../lib/useReplyReviewActions'
+import { defaultReplyReadClient, isReplyManualReady } from '../lib/replyReview'
 import { LostReasonModal } from './LostReasonModal'
 import { Avatar, LeadAvatar } from './Avatar'
 import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
 import {
-  INTENT_META, INTENT_ORDER, ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META,
-  SENTIMENT_ORDER, SEVERITY_CLS,
+  INTENT_META, ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META,
+  SEVERITY_CLS,
   ageRange, instanceName, leadKey,
 } from '../lib/leads'
 import {
@@ -33,7 +36,8 @@ import {
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
 import { clockTime, dayHeading } from '../lib/format'
 import type { ConversationMode } from '../lib/ConversationContext'
-import type { Coaching, Gender, Lead, Message, ReplyIntent, Sentiment } from '../lib/types'
+import type { Coaching, Gender, Lead, Message } from '../lib/types'
+import type { ReplyReview } from '../lib/replyReview'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
@@ -42,10 +46,24 @@ type ThreadMsg = Pick<
   | 'id' | 'direction' | 'body' | 'sent_at' | 'sentiment' | 'reason'
   | 'classified_model' | 'source' | 'intent_level' | 'intent_reason'
   | 'intent_classified_model'
->
+> & { review?: ReplyReview | null }
+
+function repliesHref(lead: Lead, focusMessageId: number | null = null): string {
+  const params = new URLSearchParams({
+    view: 'all',
+    scope: 'all',
+    thread: `${lead.instance_id}|${lead.profile_url}`,
+    instance_id: lead.instance_id,
+    profile_url: lead.profile_url,
+  })
+  if (focusMessageId != null && Number.isSafeInteger(focusMessageId) && focusMessageId > 0) {
+    params.set('focus', String(focusMessageId))
+  }
+  return `/replies?${params.toString()}`
+}
 
 /** Slide-in panel showing one lead's full conversation, both directions, oldest
- *  first. Inbound replies can be reclassified in place. */
+ *  first. The latest inbound reply can be reviewed manually in the shared panel. */
 export function ConversationDrawer({
   lead,
   initialMode = 'thread',
@@ -66,21 +84,13 @@ export function ConversationDrawer({
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // The message + target sentiment currently being saved (for the inline spinner).
-  const [saving, setSaving] = useState<{
-    id: number
-    kind: 'sentiment' | 'intent'
-    to: Sentiment | ReplyIntent | null
-  } | null>(null)
   // The imported message currently being deleted (for the inline spinner).
   const [deleting, setDeleting] = useState<number | null>(null)
   const [editing, setEditing] = useState<{ id: number; body: string } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
   // True while a gender override is being saved (disables the select).
   const [savingGender, setSavingGender] = useState(false)
-  // Which inbound bubble has its sentiment button row revealed (badge clicked).
-  const [openSentiId, setOpenSentiId] = useState<number | null>(null)
-  const [openIntentId, setOpenIntentId] = useState<number | null>(null)
+  const [replyCapabilities, setReplyCapabilities] = useState<Awaited<ReturnType<typeof defaultReplyReadClient.capabilities>> | null>(null)
   const [coaching, setCoaching] = useState<Coaching | null>(null)
   const [coachLoading, setCoachLoading] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
@@ -94,6 +104,7 @@ export function ConversationDrawer({
   const threadRef = useRef<HTMLDivElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
+  const replyActions = useReplyReviewActions(() => { setReloadKey((value) => value + 1); refetch() })
   // Identifies the conversation a coach request was issued for, so a slow
   // response can't land on a drawer the user has since switched away from.
   const coachReqKey = useRef('')
@@ -183,7 +194,9 @@ export function ConversationDrawer({
       // deployment from the person least able to detect it.
       if ((await resolveReadPath()) === 'neon') {
         try {
-          const thread = await fetchNeonThread(lead.instance_id, lead.profile_url)
+          const thread = isReplyManualReady(replyCapabilities)
+            ? (await defaultReplyReadClient.thread({ instance_id: lead.instance_id, profile_url: lead.profile_url, limit: 100 })).messages
+            : await fetchNeonThread(lead.instance_id, lead.profile_url)
           if (cancelled) return
           setRows(thread as ThreadMsg[])
         } catch (e) {
@@ -232,7 +245,14 @@ export function ConversationDrawer({
     return () => {
       cancelled = true
     }
-  }, [lead, reloadKey])
+  }, [lead, reloadKey, replyCapabilities])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!lead) { setReplyCapabilities(null); return () => { cancelled = true } }
+    defaultReplyReadClient.capabilities().then((value) => { if (!cancelled) setReplyCapabilities(value) }).catch(() => { if (!cancelled) setReplyCapabilities(null) })
+    return () => { cancelled = true }
+  }, [lead])
 
   // On-demand coaching: ask /api/coach for this conversation. The endpoint serves
   // a cached take instantly when the thread is unchanged, else generates a fresh
@@ -304,11 +324,14 @@ export function ConversationDrawer({
   const latestInbound = rows
     ? [...rows].reverse().find((m) => m.direction === 'in' && m.body)
     : undefined
-  const statusMeta = latestInbound?.sentiment
-    ? SENTIMENT_META[latestInbound.sentiment]
+  const latestSentiment = latestInbound?.review?.sentiment ?? latestInbound?.sentiment
+  const latestReason = latestInbound?.review?.reason_ids?.join(', ') ?? latestInbound?.reason
+  const statusMeta = latestSentiment
+    ? SENTIMENT_META[latestSentiment]
     : null
-  const latestIntentMeta = latestInbound?.intent_level
-    ? INTENT_META[latestInbound.intent_level]
+  const latestIntent = latestInbound?.review?.intent_level ?? latestInbound?.intent_level
+  const latestIntentMeta = latestIntent
+    ? INTENT_META[latestIntent]
     : null
 
   // Compare the live thread to what the coaching was generated against, so we can
@@ -318,61 +341,7 @@ export function ConversationDrawer({
   const coachStale =
     !!coaching?.last_msg_marker && !!liveMarker && coaching.last_msg_marker !== liveMarker
   const actionMeta = coaching ? NEXT_ACTION_META[coaching.next_action] : null
-
-  async function reclassify(msg: ThreadMsg, sentiment: Sentiment) {
-    if (msg.sentiment === sentiment) return
-    setSaving({ id: msg.id, kind: 'sentiment', to: sentiment })
-    try {
-      const res = await authFetch('/api/reclassify', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: msg.id, sentiment }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      setRows(
-        (prev) =>
-          prev?.map((m) =>
-            m.id === msg.id ? { ...m, sentiment, classified_model: 'manual' } : m,
-          ) ?? prev,
-      )
-      setOpenSentiId(null)
-      refetch()
-    } catch (e) {
-      // A banner at the top of a long thread scrolls off-screen — toast instead.
-      toast.error(`Couldn't reclassify: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setSaving(null)
-    }
-  }
-
-  async function reclassifyIntent(msg: ThreadMsg, intent: ReplyIntent | null) {
-    if ((msg.intent_level ?? null) === intent) return
-    setSaving({ id: msg.id, kind: 'intent', to: intent })
-    try {
-      const res = await authFetch('/api/reclassify', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: msg.id, intent_level: intent }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      setRows(
-        (prev) =>
-          prev?.map((m) =>
-            m.id === msg.id
-              ? { ...m, intent_level: intent, intent_classified_model: 'manual' }
-              : m,
-          ) ?? prev,
-      )
-      setOpenIntentId(null)
-      refetch()
-    } catch (e) {
-      toast.error(`Couldn't set intent: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setSaving(null)
-    }
-  }
+  const manualReviewReady = isReplyManualReady(replyCapabilities)
 
   // Only source='manual' rows are deletable — sync rows are LH2 ground truth and
   // would be resurrected by the next agent sync anyway. The endpoint recomputes
@@ -563,7 +532,7 @@ export function ConversationDrawer({
             {statusMeta ? (
               <span
                 className={`badge senti ${statusMeta.cls}`}
-                title={latestInbound?.reason ?? 'Follows the most recent reply'}
+                title={latestReason ?? 'Follows the most recent reply'}
               >
                 {statusMeta.label}
               </span>
@@ -603,8 +572,17 @@ export function ConversationDrawer({
                 <CalendarCheck2 size={13} />
                 {activeFollowUp(followUpState)
                   ? followUpDueLabel(followUpState)
-                  : 'Schedule follow-up'}
+                : 'Schedule follow-up'}
               </button>
+            )}
+            {rows && rows.length > 0 && (
+              <Link
+                className="link-btn"
+                to={repliesHref(lead, latestInbound?.id ?? null)}
+                onClick={onClose}
+              >
+                Open in Replies
+              </Link>
             )}
           </div>
 
@@ -769,8 +747,6 @@ export function ConversationDrawer({
           )}
           {rows?.map((m, idx) => {
             const inbound = m.direction === 'in'
-            const meta = inbound && m.sentiment ? SENTIMENT_META[m.sentiment] : null
-            const intentMeta = inbound && m.intent_level ? INTENT_META[m.intent_level] : null
             const prev = idx > 0 ? rows[idx - 1] : null
             const newDay =
               !prev || new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString()
@@ -855,96 +831,27 @@ export function ConversationDrawer({
                     </>
                   )}
                 </div>
-                {inbound && (
-                  <div className={`msg-reclassify ${openSentiId === m.id ? 'open' : ''}`}>
-                    <button
-                      type="button"
-                      className={`msg-senti-badge badge senti ${meta ? meta.cls : ''}`}
-                      title={meta ? (m.reason ?? 'Click to reclassify') : 'Set sentiment'}
-                      disabled={!isAdmin}
-                      onClick={() => setOpenSentiId(openSentiId === m.id ? null : m.id)}
-                    >
-                      {meta ? (
-                        <>
-                          {meta.label}
-                          {m.classified_model === 'manual' ? ' ✓' : ''}
-                        </>
-                      ) : (
-                        'Set sentiment'
-                      )}
-                    </button>
-                    <div className="msg-senti-btns">
-                      {SENTIMENT_ORDER.map((s) => {
-                        const savingThis =
-                          saving?.id === m.id && saving.kind === 'sentiment' && saving.to === s
-                        return (
-                          <button
-                            key={s}
-                            className={`senti ${SENTIMENT_META[s].cls} ${
-                              m.sentiment === s ? 'active' : ''
-                            }`}
-                            disabled={saving?.id === m.id}
-                            onClick={() => reclassify(m, s)}
-                          >
-                            {savingThis && <Loader2 size={11} className="spin" />}
-                            {SENTIMENT_META[s].label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-                {inbound && (
-                  <div className={`msg-reclassify ${openIntentId === m.id ? 'open' : ''}`}>
-                    <button
-                      type="button"
-                      className={`msg-senti-badge badge senti ${intentMeta ? intentMeta.cls : ''}`}
-                      title={intentMeta ? (m.intent_reason ?? 'Click to change intent') : 'Set P1–P3 intent'}
-                      disabled={!isAdmin}
-                      onClick={() => setOpenIntentId(openIntentId === m.id ? null : m.id)}
-                    >
-                      {intentMeta ? (
-                        <>
-                          {intentMeta.short} · {intentMeta.label}
-                          {m.intent_classified_model === 'manual' ? ' ✓' : ''}
-                        </>
-                      ) : (
-                        'No intent'
-                      )}
-                    </button>
-                    <div className="msg-senti-btns">
-                      {INTENT_ORDER.map((level) => {
-                        const savingThis =
-                          saving?.id === m.id && saving.kind === 'intent' && saving.to === level
-                        return (
-                          <button
-                            key={level}
-                            className={`senti ${INTENT_META[level].cls} ${
-                              m.intent_level === level ? 'active' : ''
-                            }`}
-                            disabled={saving?.id === m.id}
-                            onClick={() => reclassifyIntent(m, level)}
-                          >
-                            {savingThis && <Loader2 size={11} className="spin" />}
-                            {INTENT_META[level].short} · {INTENT_META[level].label}
-                          </button>
-                        )
-                      })}
-                      <button
-                        className={`senti auto ${!m.intent_level ? 'active' : ''}`}
-                        disabled={saving?.id === m.id}
-                        onClick={() => reclassifyIntent(m, null)}
-                      >
-                        No intent
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
               </Fragment>
             )
           })}
         </div>
+
+        {manualReviewReady && latestInbound && (
+          <ReplyReviewPanel
+            message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
+            review={latestInbound.review ?? null}
+            saving={replyActions.saving}
+            error={replyActions.error}
+            onSave={(draft) => replyActions.saveReview({
+              instance_id: lead.instance_id,
+              profile_url: lead.profile_url,
+              message_id: latestInbound.id,
+              expected_review_revision: latestInbound.review?.revision ?? 0,
+              review: draft,
+            })}
+          />
+        )}
 
         <div className={`conv-coaching ${coachOpen ? 'open' : ''}`}>
           <div className="conv-coaching-head">

@@ -13,6 +13,17 @@ function leadLabel(reply: SequenceHubReplyPreview): string {
     || reply.profile_url.replace('https://www.linkedin.com/in/', '').replace(/\/$/, '')
 }
 
+function threadHref(reply: SequenceHubReplyPreview): string {
+  const params = new URLSearchParams({
+    view: 'all',
+    scope: 'all',
+    thread: `${reply.instance_id}|${reply.profile_url}`,
+    instance_id: reply.instance_id,
+    profile_url: reply.profile_url,
+  })
+  return `/replies?${params.toString()}`
+}
+
 /**
  * The newest inbound replies that still need somebody.
  *
@@ -44,8 +55,8 @@ export function NewReplies({
     <section className="card overview-panel new-replies" aria-labelledby="new-replies-title">
       <div className="overview-panel-head">
         <h2 id="new-replies-title">New replies</h2>
-        <Link className="link-btn" to="/leads?stage=replied">
-          All replies <ArrowRight size={14} />
+        <Link className="link-btn" to="/replies?view=all&scope=new">
+          Open Replies <ArrowRight size={14} />
         </Link>
       </div>
 
@@ -89,19 +100,28 @@ export function NewReplies({
             return (
               <li key={`${reply.instance_id}|${reply.profile_url}`} className="new-reply">
                 {lead ? (
-                  <button
-                    type="button"
-                    className="new-reply-open"
-                    aria-label={`Open conversation with ${name}`}
-                    onClick={() => onOpen(lead)}
-                  >
-                    {body}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="new-reply-open"
+                      aria-label={`Open conversation with ${name}`}
+                      onClick={() => onOpen(lead)}
+                    >
+                      {body}
+                    </button>
+                    <Link
+                      className="new-reply-open new-reply-open--nav"
+                      aria-label={`Open ${name} in Replies`}
+                      to={threadHref(reply)}
+                    >
+                      <span className="new-reply-nav-hint"><ArrowRight size={12} /></span>
+                    </Link>
+                  </>
                 ) : (
                   <Link
                     className="new-reply-open new-reply-open--nav"
                     aria-label={`Open ${name} in ${reply.sequence_name}`}
-                    to={`/campaign/${encodeURIComponent(reply.campaign_id)}?people=replied`}
+                    to={threadHref(reply)}
                   >
                     {body}
                     <span className="new-reply-nav-hint">

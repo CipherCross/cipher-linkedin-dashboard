@@ -130,6 +130,15 @@ export const READ_OPS = {
   coachingDigests: 'coaching.digests',
 } as const
 
+/** Dedicated manual-reply reads stay outside DataContext's bootstrap dataset. */
+export const REPLY_READ_OPS = {
+  capabilities: 'replies.capabilities',
+  inbox: 'replies.inbox',
+  thread: 'replies.thread',
+  analytics: 'replies.analytics',
+  reviewHistory: 'replies.reviewHistory',
+} as const
+
 export type RouteSnapshotRoute =
   | 'account'
   | 'campaign'
@@ -140,6 +149,8 @@ export type RouteSnapshotRoute =
   | 'searches'
   | 'icp'
   | 'hypotheses'
+  | 'replies'
+  | 'sentiment-analysis'
 
 export interface RouteSnapshotRequest {
   readonly route: RouteSnapshotRoute
@@ -202,7 +213,7 @@ export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null 
   }
   const route = path.slice(1) as RouteSnapshotRoute
   if ([
-    'pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses',
+    'pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses', 'replies', 'sentiment-analysis',
   ].includes(route)) {
     return { route, key: route }
   }

@@ -1,5 +1,5 @@
 import { lazy, type ReactNode } from 'react'
-import { HashRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DataProvider } from './lib/DataContext'
 import { AuthGate, AuthProvider, useAuth } from './lib/AuthContext'
 import { ToastProvider } from './lib/ToastContext'
@@ -25,18 +25,11 @@ const SequenceBuilder = lazy(() => import('./pages/SequenceBuilder').then((m) =>
 const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })))
 const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })))
 const Review = lazy(() => import('./pages/Review').then((m) => ({ default: m.Review })))
+const Replies = lazy(() => import('./pages/Replies').then((m) => ({ default: m.Replies })))
+const SentimentAnalysis = lazy(() => import('./pages/SentimentAnalysis').then((m) => ({ default: m.SentimentAnalysis })))
 const CsvImport = lazy(() => import('./pages/CsvImport').then((m) => ({ default: m.CsvImport })))
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const NeonActivity = lazy(() => import('./pages/NeonActivity').then((m) => ({ default: m.NeonActivity })))
-
-/** Replies folded into Leads, but old deep links carried a `sentiment` query
- *  param (positive/neutral/negative/objection/referral/auto/unclassified) — forward
- *  it as-is to /leads, defaulting to `any` when absent. */
-function RepliesRedirect() {
-  const [params] = useSearchParams()
-  const sentiment = params.get('sentiment') ?? 'any'
-  return <Navigate to={`/leads?sentiment=${encodeURIComponent(sentiment)}`} replace />
-}
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { isAdmin } = useAuth()
@@ -81,8 +74,8 @@ export default function App() {
                       <Route path={APP_ROUTE_SEGMENTS.leads} element={<LeadsExplorer />} />
                       <Route path={APP_ROUTE_SEGMENTS.pipeline} element={<Pipeline />} />
                       <Route path={APP_ROUTE_SEGMENTS.followUps} element={<FollowUps />} />
-                      {/* Replies folded into Leads — deep links land on replied leads. */}
-                      <Route path={APP_ROUTE_SEGMENTS.repliesRedirect} element={<RepliesRedirect />} />
+                      <Route path={APP_ROUTE_SEGMENTS.replies} element={<Replies />} />
+                      <Route path={APP_ROUTE_SEGMENTS.sentimentAnalysis} element={<SentimentAnalysis />} />
                       <Route path={APP_ROUTE_SEGMENTS.review} element={<Review />} />
                       <Route path={APP_ROUTE_SEGMENTS.csvImport} element={<AdminOnly><CsvImport /></AdminOnly>} />
                       <Route path={APP_ROUTE_SEGMENTS.playbook} element={<Playbook />} />

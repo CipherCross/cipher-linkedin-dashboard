@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { CalendarCheck2, ExternalLink, Search, UserRound } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { LeadAvatar } from '../components/Avatar'
 import { EmptyState } from '../components/EmptyState'
 import { useConversation } from '../lib/ConversationContext'
@@ -25,6 +25,25 @@ const GROUPS: Array<{ id: Exclude<FollowUpBucket, 'unscheduled'>; label: string 
   { id: 'today', label: 'Today' },
   { id: 'upcoming', label: 'Upcoming' },
 ]
+
+/** Open the full manual-review surface without changing the follow-up state. */
+export function followUpRepliesHref(
+  instanceId: string,
+  profileUrl: string,
+  focusMessageId: number | null = null,
+): string {
+  const params = new URLSearchParams({
+    view: 'all',
+    scope: 'all',
+    thread: `${instanceId}|${profileUrl}`,
+    instance_id: instanceId,
+    profile_url: profileUrl,
+  })
+  if (focusMessageId != null && Number.isSafeInteger(focusMessageId) && focusMessageId > 0) {
+    params.set('focus', String(focusMessageId))
+  }
+  return `/replies?${params.toString()}`
+}
 
 export function FollowUps() {
   const { data } = useData()
@@ -263,6 +282,16 @@ export function FollowUps() {
                               >
                                 LinkedIn <ExternalLink size={12} />
                               </a>
+                              <Link
+                                className="link-btn"
+                                to={followUpRepliesHref(
+                                  item.state.instance_id,
+                                  item.state.profile_url,
+                                  message?.direction === 'in' ? message.message_id : null,
+                                )}
+                              >
+                                Review in Replies
+                              </Link>
                               <button
                                 className="btn accent sm"
                                 onClick={() => openConversation(lead, { mode: 'follow_up' })}
