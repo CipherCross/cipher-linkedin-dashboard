@@ -154,15 +154,9 @@ import {
 } from './conversationWrites.js'
 import {
   AI_WRITE_OPERATIONS,
-  classifyAutoAdvanceOperation,
   classifyGenderBacklogOperation,
   classifyGenderBatchOperation,
-  classifyPendingRepliesOperation,
-  classifyReclassifyOperation,
-  classifyRemainingCountOperation,
-  classifyThreadContextOperation,
   classifyWriteGenderOperation,
-  classifyWriteLabelsOperation,
   coachActionableProfilesOperation,
   coachDigestUpsertOperation,
   coachExistingOperation,
@@ -216,6 +210,11 @@ import {
   sequencePublishJobsOperation,
   sequencePublishTargetsOperation,
 } from './sequencePublishing.js'
+import {
+  allReplyReviewOperations,
+  REPLY_REVIEW_OPERATIONS,
+} from './replyReviews.js'
+import { allReplyReviewWriteOperations, REPLY_REVIEW_WRITE_COMMANDS } from './replyReviewWrites.js'
 
 export { ACTIVITY_OPERATIONS, type DailyActivityRow } from './activity.js'
 export {
@@ -507,6 +506,20 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(MESSAGES_OPERATIONS.thread, threadOperation)
   registry.registerQuery(LEADS_OPERATIONS.notes, leadNotesOperation)
 
+  // Manual reply-review read surface and its transaction-local helper reads.
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.capabilities, allReplyReviewOperations.capabilitiesOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.inbox, allReplyReviewOperations.inboxOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.facets, allReplyReviewOperations.facetsOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.thread, allReplyReviewOperations.threadOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.analytics, allReplyReviewOperations.analyticsOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.reviewHistory, allReplyReviewOperations.reviewHistoryOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.mutation, allReplyReviewOperations.mutationOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.reviewForMessage, allReplyReviewOperations.reviewForMessageOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.workflowForThread, allReplyReviewOperations.workflowForThreadOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.messageForReview, allReplyReviewOperations.messageForReviewOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.inboundRevision, allReplyReviewOperations.inboundRevisionOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.threadExists, allReplyReviewOperations.threadExistsOperation)
+
   // S20 — the lead-photo path's authorization step. A read, like everything else
   // here: the object write it enables is performed by the storage provider, not by
   // the database, and this operation exists so the *path* comes from a row the
@@ -761,18 +774,6 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   )
 
   registry.registerQuery(
-    AI_WRITE_OPERATIONS.classifyPendingReplies,
-    classifyPendingRepliesOperation,
-  )
-  registry.registerQuery(
-    AI_WRITE_OPERATIONS.classifyThreadContext,
-    classifyThreadContextOperation,
-  )
-  registry.registerQuery(
-    AI_WRITE_OPERATIONS.classifyRemainingCount,
-    classifyRemainingCountOperation,
-  )
-  registry.registerQuery(
     AI_WRITE_OPERATIONS.classifyGenderBatch,
     classifyGenderBatchOperation,
   )
@@ -781,21 +782,12 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     classifyGenderBacklogOperation,
   )
   registry.registerCommand(
-    AI_WRITE_OPERATIONS.classifyWriteLabels,
-    classifyWriteLabelsOperation,
-  )
-  registry.registerCommand(
     AI_WRITE_OPERATIONS.classifyWriteGender,
     classifyWriteGenderOperation,
   )
-  registry.registerCommand(
-    AI_WRITE_OPERATIONS.classifyReclassify,
-    classifyReclassifyOperation,
-  )
-  registry.registerCommand(
-    AI_WRITE_OPERATIONS.classifyAutoAdvance,
-    classifyAutoAdvanceOperation,
-  )
+  // Reply sentiment/intent writes are retired. Human review writes go through
+  // the transactional service and are deliberately not generic registry
+  // commands.
 
   registry.registerQuery(AI_WRITE_OPERATIONS.briefingJobRow, briefingJobRowOperation)
   registry.registerQuery(AI_WRITE_OPERATIONS.briefingPrior, briefingPriorOperation)
@@ -856,6 +848,17 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     briefingUpsertBriefingOperation,
   )
 
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.lockThread, allReplyReviewWriteOperations.lockThreadOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.enableProjection, allReplyReviewWriteOperations.enableProjectionOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.saveReview, allReplyReviewWriteOperations.saveReviewOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.deleteReasons, allReplyReviewWriteOperations.deleteReasonsOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.insertReasons, allReplyReviewWriteOperations.insertReasonsOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.projectReview, allReplyReviewWriteOperations.projectReviewOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.setWorkflow, allReplyReviewWriteOperations.setWorkflowOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.appendEvent, allReplyReviewWriteOperations.appendEventOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.saveMutation, allReplyReviewWriteOperations.saveMutationOperation)
+  registry.registerCommand(REPLY_REVIEW_WRITE_COMMANDS.activate, allReplyReviewWriteOperations.activateOperation)
+
   // S21's admin half. The machine's own vocabulary is a separate registry on a
   // separate principal (`operations/agentIngest.ts`); what belongs here is only
   // what a signed-in admin performs: mint a credential, retire one, list them.
@@ -889,6 +892,18 @@ export const APPLICATION_QUERY_OPERATIONS = [
   CONVERSATION_OPERATIONS.followUpHistory,
   MESSAGES_OPERATIONS.thread,
   LEADS_OPERATIONS.notes,
+  REPLY_REVIEW_OPERATIONS.capabilities,
+  REPLY_REVIEW_OPERATIONS.inbox,
+  REPLY_REVIEW_OPERATIONS.facets,
+  REPLY_REVIEW_OPERATIONS.thread,
+  REPLY_REVIEW_OPERATIONS.analytics,
+  REPLY_REVIEW_OPERATIONS.reviewHistory,
+  REPLY_REVIEW_OPERATIONS.mutation,
+  REPLY_REVIEW_OPERATIONS.reviewForMessage,
+  REPLY_REVIEW_OPERATIONS.workflowForThread,
+  REPLY_REVIEW_OPERATIONS.messageForReview,
+  REPLY_REVIEW_OPERATIONS.inboundRevision,
+  REPLY_REVIEW_OPERATIONS.threadExists,
   LEADS_OPERATIONS.photoObjects,
   LIBRARY_OPERATIONS.savedSearches,
   LIBRARY_OPERATIONS.icpProfiles,
@@ -918,9 +933,6 @@ export const APPLICATION_QUERY_OPERATIONS = [
   AI_WRITE_OPERATIONS.coachIcpPersonas,
   AI_WRITE_OPERATIONS.coachActionableProfiles,
   AI_WRITE_OPERATIONS.coachIssuesByInstance,
-  AI_WRITE_OPERATIONS.classifyPendingReplies,
-  AI_WRITE_OPERATIONS.classifyThreadContext,
-  AI_WRITE_OPERATIONS.classifyRemainingCount,
   AI_WRITE_OPERATIONS.classifyGenderBatch,
   AI_WRITE_OPERATIONS.classifyGenderBacklog,
   AI_WRITE_OPERATIONS.briefingJobRow,
@@ -959,6 +971,16 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   CONVERSATION_WRITE_COMMANDS.editManualMessage,
   CONVERSATION_WRITE_COMMANDS.deleteManualMessage,
   CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
+  REPLY_REVIEW_WRITE_COMMANDS.lockThread,
+  REPLY_REVIEW_WRITE_COMMANDS.enableProjection,
+  REPLY_REVIEW_WRITE_COMMANDS.saveReview,
+  REPLY_REVIEW_WRITE_COMMANDS.deleteReasons,
+  REPLY_REVIEW_WRITE_COMMANDS.insertReasons,
+  REPLY_REVIEW_WRITE_COMMANDS.projectReview,
+  REPLY_REVIEW_WRITE_COMMANDS.setWorkflow,
+  REPLY_REVIEW_WRITE_COMMANDS.appendEvent,
+  REPLY_REVIEW_WRITE_COMMANDS.saveMutation,
+  REPLY_REVIEW_WRITE_COMMANDS.activate,
   LIBRARY_WRITE_COMMANDS.insertIcp,
   LIBRARY_WRITE_COMMANDS.updateIcp,
   LIBRARY_WRITE_COMMANDS.deleteIcp,
@@ -989,10 +1011,7 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   SEQUENCE_PUBLISH_COMMANDS.createBranches,
   AI_WRITE_OPERATIONS.coachUpsert,
   AI_WRITE_OPERATIONS.coachDigestUpsert,
-  AI_WRITE_OPERATIONS.classifyWriteLabels,
   AI_WRITE_OPERATIONS.classifyWriteGender,
-  AI_WRITE_OPERATIONS.classifyReclassify,
-  AI_WRITE_OPERATIONS.classifyAutoAdvance,
   AI_WRITE_OPERATIONS.briefingEnsureJob,
   AI_WRITE_OPERATIONS.briefingClaimJob,
   AI_WRITE_OPERATIONS.briefingFinishStage,

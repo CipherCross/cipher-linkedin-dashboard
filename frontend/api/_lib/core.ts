@@ -555,6 +555,28 @@ conversation_reply_intent — durable conversation intent (instance_id + profile
   sees the complete thread (unlike the browser's 90-day outbound display cache).
   A later lower-intent reply never erases P3.
 
+reply_review_settings — singleton lifecycle/capability row for the manual reply
+  review cutover. mode is prepared or manual; capture_started_at is the
+  UTC admission cutoff for new inbox work. activation_in_progress means reads
+  must report manual review unavailable until the bounded activation batch is
+  committed. activated_at marks the completed cutover.
+
+reply_reviews — the current human review for one inbound message (message_id PK):
+  sentiment, intent_state (unreviewed|none|level|not_applicable), optional
+  intent_level (p1|p2|p3), reason/comment, taxonomy_version, reviewed_by,
+  reviewed_at, revision, and provenance. This is the source of truth for current
+  sentiment and P1/P2/P3; messages.sentiment and messages.intent_level are
+  compatibility projections updated in the same transaction. Legacy AI rows live
+  only in legacy_reply_classifications and are not current metrics.
+
+reply_review_reasons — normalized reasons for a review, keyed by
+  (message_id, reason_id) from the fixed reply-reasons-v1 vocabulary.
+
+conversation_reply_review_state — one row per (instance_id, profile_url) with
+  the durable inbound revision used for optimistic concurrency and workflow/DNC
+  acknowledgement. reply_review_events is append-only audit history and
+  reply_review_mutations stores idempotent mutation results.
+
 pipeline_metrics — current manual-CRM stage distribution per campaign:
   campaign_id, instance_id, pipeline_stage, pipeline_substatus, leads (count in
   that stage/substatus), oldest_in_stage timestamptz (min pipeline_stage_changed_at),
@@ -562,9 +584,10 @@ pipeline_metrics — current manual-CRM stage distribution per campaign:
   non-NULL pipeline_stage (i.e. already triaged).
 
 ANALYSIS GUIDANCE
-- Reply QUALITY and INTENT are separate. messages.sentiment describes reply tone/
-  type (positive/neutral/negative/objection/referral/auto); messages.intent_level
-  measures commercial progression (P1/P2/P3). Do NOT use all sentiment='positive'
+- Reply QUALITY and INTENT are separate. reply_reviews.sentiment describes
+  current manually reviewed reply tone/type (positive/neutral/negative/objection/
+  referral/auto); reply_reviews.intent_level measures manually reviewed
+  commercial progression (P1/P2/P3). Do NOT use all sentiment='positive'
   replies as buying intent or as the booking denominator.
   - P1: polite positive; P2: substantive problem interest; P3: concrete buying intent.
   - Highest signal wins for intent (P3 > P2 > P1), independently of sentiment.

@@ -62,6 +62,8 @@ import {
   DataStoreSchemaError,
   PaginationError,
   asUtcTimestamp,
+  type ActorContext,
+  type DataStore,
   type DataStoreParams,
   type UtcRange,
 } from './_lib/data/contracts.js'
@@ -80,6 +82,14 @@ import {
   ROUTE_SNAPSHOT_ROUTES,
   SEQUENCE_HUB_OPERATION,
 } from './_lib/data/operations/index.js'
+import {
+  REPLY_SENTIMENTS,
+  REPLY_ACTIONS,
+  REPLY_REASON_IDS,
+  type ReplyCapability,
+  type ReplyFacets,
+} from './_lib/replyReview.js'
+import { REPLY_REVIEW_OPERATIONS } from './_lib/data/operations/replyReviews.js'
 import { dataStoreConfigured } from './_lib/data/neonConfig.js'
 import {
   ProviderPathError,
@@ -487,6 +497,379 @@ interface ReadOperationSpec {
   readonly tolerateMissingRelation?: boolean
 }
 
+const REPLY_VIEWS = ['all', 'unreviewed', 'needs_reply', 'deferred', 'completed'] as const
+const REPLY_SCOPES = ['new', 'historical', 'all'] as const
+const REPLY_DIRECTIONS = ['around', 'older', 'newer'] as const
+
+function readRequiredEnumValue(url: URL, name: string, allowed: readonly string[], fallback: string): string {
+  const raw = (url.searchParams.get(name) ?? '').trim()
+  const value = raw === '' ? fallback : raw
+  if (!allowed.includes(value)) throw new BadRequest(`${name} is not an allowed value`)
+  return value
+}
+
+function readReplyFlag(url: URL, name: string): boolean {
+  const raw = (url.searchParams.get(name) ?? '').trim().toLowerCase()
+  if (raw === '') return false
+  if (raw === '1' || raw === 'true') return true
+  if (raw === '0' || raw === 'false') return false
+  throw new BadRequest(`${name} must be a boolean`)
+}
+
+function readReplyCursor(url: URL): string | null {
+  const raw = (url.searchParams.get('cursor') ?? '').trim()
+  if (raw === '') return null
+  if (raw.length > 4_096 || !/^[A-Za-z0-9_-]+$/.test(raw)) {
+    throw new BadRequest('cursor must be an opaque token')
+  }
+  return raw
+}
+
+function readReplyMetricScope(url: URL): string | null {
+  const raw = (url.searchParams.get('metric_scope') ?? '').trim()
+  if (!raw) return null
+  const separator = raw.indexOf(':')
+  const kind = separator < 0 ? raw : raw.slice(0, separator)
+  const value = separator < 0 ? '' : raw.slice(separator + 1)
+  const sentimentValues = new Set<string>([
+    ...REPLY_SENTIMENTS, 'latest_unreviewed', 'only_auto', 'business_rate', 'negative_objection',
+  ])
+  const reasonValues = new Set<string>([...REPLY_REASON_IDS, 'missing_reason'])
+  const workflowValues = new Set<string>([
+    ...REPLY_ACTIONS, 'do_not_contact', 'transfers', 'needs_confirmation', 'overdue', 'follow_up_today', 'follow_up_later',
+  ])
+  const coverageValues = new Set<string>([
+    'dialogues', 'full_dialogues', 'messages', 'unreviewed_dialogues', 'unreviewed_intent',
+    'legacy_ai', 'weekly_volume', 'weekly_messages', 'latest_unreviewed', 'only_auto',
+  ])
+  const allowed = kind === 'sentiment'
+    ? sentimentValues.has(value)
+    : kind === 'reason'
+      ? reasonValues.has(value)
+      : kind === 'workflow'
+        ? workflowValues.has(value)
+        : kind === 'coverage'
+          ? coverageValues.has(value)
+          : false
+  if (!allowed || value.length > MAX_KEY_LENGTH) {
+    throw new BadRequest('metric_scope must be kind:value with an allowed kind')
+  }
+  return `${kind}:${value}`
+}
+
+function readReplyOwner(url: URL): number | null {
+  const raw = (url.searchParams.get('owner_id') ?? '').trim()
+  if (!raw || raw === 'all' || raw === 'unassigned') return null
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value <= 0) throw new BadRequest('owner_id must be a positive integer')
+  return value
+}
+
+function readReplyLimit(url: URL, fallback: number): number {
+  const raw = (url.searchParams.get('limit') ?? '').trim()
+  const value = raw === '' ? fallback : Number(raw)
+  if (!Number.isSafeInteger(value) || value < 1 || value > 100) throw new BadRequest('limit must be an integer between 1 and 100')
+  return value
+}
+
+function readReplyBounds(url: URL, required: boolean): { from: string | null; to: string | null; range: UtcRange | undefined } {
+  const from = readDay(url.searchParams.get('from'), 'from')
+  const to = readDay(url.searchParams.get('to'), 'to')
+  if (required && (from === null || to === null)) throw new BadRequest('from and to are required')
+  if (from !== null && to !== null && from > to) throw new BadRequest('from must not be after to')
+  return { from, to, range: dayRangeToUtcRange(from, to) }
+}
+
+function readReplyInbox(url: URL): DataStoreParams {
+  const bounds = readReplyBounds(url, false)
+  return {
+    scope: readRequiredEnumValue(url, 'scope', REPLY_SCOPES, 'new'),
+    view: readRequiredEnumValue(url, 'view', REPLY_VIEWS, 'unreviewed'),
+    captureStartedAt: null,
+    instanceId: readOptionalBoundedText(url, 'instance_id'),
+    campaignId: readOptionalBoundedText(url, 'campaign_id'),
+    ownerId: readReplyOwner(url),
+    sentiment: readOptionalEnum(url, 'sentiment', REPLY_SENTIMENTS),
+    reasonId: readOptionalEnum(url, 'reason_id', REPLY_REASON_IDS),
+    action: readOptionalEnum(url, 'action', REPLY_ACTIONS),
+    query: readOptionalSearch(url),
+    unacknowledged: readReplyFlag(url, 'unacknowledged'),
+    unowned: readReplyFlag(url, 'unowned'),
+    overdue: readReplyFlag(url, 'overdue'),
+    my: readReplyFlag(url, 'my'),
+    currentActorId: null,
+    from: bounds.range?.fromInclusive ?? null,
+    to: bounds.range?.toExclusive ?? null,
+    metricScope: readReplyMetricScope(url),
+    cursor: readReplyCursor(url),
+    limit: readReplyLimit(url, 50),
+  }
+}
+
+function readReplyThread(url: URL): DataStoreParams {
+  const focusRaw = (url.searchParams.get('focus_message_id') ?? url.searchParams.get('focus') ?? '').trim()
+  const focus = focusRaw === '' ? null : Number(focusRaw)
+  if (focus !== null && (!Number.isSafeInteger(focus) || focus <= 0)) throw new BadRequest('focus_message_id must be a positive integer')
+  const directionRaw = (url.searchParams.get('direction') ?? '').trim()
+  if (directionRaw && !REPLY_DIRECTIONS.includes(directionRaw as typeof REPLY_DIRECTIONS[number])) throw new BadRequest('direction is not an allowed value')
+  return {
+    instanceId: readRequiredText(url, 'instance_id'),
+    profileUrl: readRequiredText(url, 'profile_url'),
+    focusMessageId: focus,
+    direction: directionRaw || (focus === null ? null : 'around'),
+    cursor: readReplyCursor(url),
+    limit: readReplyLimit(url, 50),
+  }
+}
+
+function readReplyHistory(url: URL): DataStoreParams {
+  const thread = readReplyThread(url)
+  const messageRaw = (url.searchParams.get('message_id') ?? '').trim()
+  const messageId = messageRaw === '' ? null : Number(messageRaw)
+  if (messageId !== null && (!Number.isSafeInteger(messageId) || messageId <= 0)) throw new BadRequest('message_id must be a positive integer')
+  return { ...thread, messageId, limit: readReplyLimit(url, 50) }
+}
+
+function readReplyAnalytics(url: URL): DataStoreParams {
+  const bounds = readReplyBounds(url, true)
+  return {
+    from: bounds.range?.fromInclusive ?? null,
+    to: bounds.range?.toExclusive ?? null,
+    instanceId: readOptionalBoundedText(url, 'instance_id'),
+    campaignId: readOptionalBoundedText(url, 'campaign_id'),
+    ownerId: readReplyOwner(url),
+    metricBase: readOptionalEnum(url, 'metric_base', ['dialogues', 'messages', 'manual_dialogues', 'manual_messages']),
+    limit: 1,
+  }
+}
+
+const replyFacets = (owners: readonly { id: number; name?: string }[] = []) => ({
+  owners: owners.map((owner) => ({ id: owner.id, name: owner.name ?? String(owner.id), count: 0 })),
+  accounts: [], campaigns: [],
+  actions: REPLY_ACTIONS.map((value) => ({ value, count: 0 })),
+  sentiments: REPLY_SENTIMENTS.map((value) => ({ value, count: 0 })),
+  reasons: REPLY_REASON_IDS.map((value) => ({ value, count: 0 })),
+})
+
+async function readReplyCapability(store: DataStore, actor: ActorContext) {
+  try {
+    const page = await store.query<ReplyCapability>(actor, {
+      operation: REPLY_REVIEW_OPERATIONS.capabilities,
+      params: { probe: null },
+      page: { limit: 1 },
+    })
+    const base = page.items[0] ?? {
+      available: false, active: false, manual_ready: false, mode: null,
+      schema_version: null, capture_started_at: null, activated_at: null,
+      activation_in_progress: false, activation_cursor: 0, activation_processed: 0,
+      activation_total: 0, activation_cutoff: null, activation_batch_size: null,
+      activation_mutation_id: null, reason: 'schema_unavailable' as const,
+    }
+    const [roster, instances, campaigns, facetsPage] = await Promise.all([
+      store.query<unknown>(actor, { operation: IDENTITY_OPERATIONS.teamRoster, page: { limit: 200 } }),
+      store.query<unknown>(actor, { operation: DASHBOARD_OPERATIONS.instancesOverview, page: { limit: 200 } }),
+      store.query<unknown>(actor, { operation: DASHBOARD_OPERATIONS.campaignsPerformance, page: { limit: 1_000 } }),
+      store.query<ReplyFacets>(actor, {
+        operation: REPLY_REVIEW_OPERATIONS.facets,
+        params: {
+          scope: 'all', view: 'all', captureStartedAt: null,
+          instanceId: null, campaignId: null, ownerId: null,
+          sentiment: null, reasonId: null, action: null, query: null,
+          unacknowledged: false, unowned: false, overdue: false, my: false,
+          currentActorId: actor.actorId, from: null, to: null, metricScope: null,
+        },
+        page: { limit: 1 },
+      }),
+    ])
+    const members = roster.items.map((row) => {
+      const value = row as Record<string, unknown>
+      return { id: Number(value.id), name: String(value.name ?? value.label ?? value.id), active: value.active !== false }
+    })
+    const accountRows = instances.items.map((row) => {
+      const value = row as Record<string, unknown>
+      return { id: String(value.id), label: String(value.label ?? value.account_name ?? value.id) }
+    })
+    const campaignRows = campaigns.items.map((row) => {
+      const value = row as Record<string, unknown>
+      return { id: String(value.campaign_id), name: String(value.campaign_name ?? value.campaign_id), instance_id: String(value.instance_id ?? '') }
+    })
+    return json({
+      ...base,
+      members,
+      instances: accountRows,
+      campaigns: campaignRows,
+      facets: facetsPage.items[0] ?? replyFacets(members),
+    })
+  } catch (error) {
+    if (error instanceof DataStoreSchemaError) {
+      return json({
+        available: false,
+        active: false,
+        manual_ready: false,
+        mode: null,
+        reason: 'schema_unavailable',
+        unavailable_reason: 'Manual reply review is unavailable for this tenant.',
+        members: [],
+        instances: [],
+        campaigns: [],
+        facets: replyFacets(),
+      })
+    }
+    throw error
+  }
+}
+
+function requireReplyManualCapability(capability: ReplyCapability): void {
+  if (!capability.available || capability.mode !== 'manual' || !capability.manual_ready || capability.activation_in_progress) {
+    throw new DataStoreSchemaError('manual reply review is not active')
+  }
+}
+
+function nextReplyFocus(items: readonly unknown[], requested: number | null | undefined): number | null {
+  if (requested != null) return requested
+  const inbound = items
+    .map((item) => item as Record<string, unknown>)
+    .filter((item) => item.direction === 'in')
+  const pending = inbound.find((item) => {
+    const review = item.review && typeof item.review === 'object' ? item.review as Record<string, unknown> : null
+    return review?.complete !== true
+  })
+  const candidate = pending ?? inbound[0]
+  const id = candidate?.id
+  return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+async function replyReadResponse(
+  store: DataStore,
+  actor: ActorContext,
+  op: string,
+  params: DataStoreParams,
+): Promise<Response> {
+  if (op === REPLY_REVIEW_OPERATIONS.capabilities) return readReplyCapability(store, actor)
+  const capabilityPage = await store.query<ReplyCapability>(actor, {
+    operation: REPLY_REVIEW_OPERATIONS.capabilities,
+    params: { probe: null }, page: { limit: 1 },
+  })
+  const capability = capabilityPage.items[0]
+  if (!capability) throw new DataStoreSchemaError('manual reply review settings are unavailable')
+  requireReplyManualCapability(capability)
+
+  if (op === REPLY_REVIEW_OPERATIONS.inbox) {
+    const { cursor, limit, ...operationParams } = params as DataStoreParams & { cursor?: string | null; limit?: number }
+    const page = await store.query<unknown>(actor, {
+      operation: op, params: { ...operationParams, captureStartedAt: capability.capture_started_at, currentActorId: actor.actorId },
+      page: { limit: Number(limit ?? 50), cursor: cursor ?? null },
+    })
+    const facetsPage = await store.query<ReplyFacets>(actor, {
+      operation: REPLY_REVIEW_OPERATIONS.facets,
+      params: { ...operationParams, captureStartedAt: capability.capture_started_at, currentActorId: actor.actorId, cursor: null, limit: 1 },
+      page: { limit: 1, cursor: null },
+    })
+    const facets = facetsPage.items[0] ?? replyFacets()
+    return json({ items: page.items, next_cursor: page.nextCursor, facets, scope: operationParams.scope ?? 'new' })
+  }
+
+  if (op === REPLY_REVIEW_OPERATIONS.thread) {
+    const threadParams = params as DataStoreParams & { cursor?: string | null; limit?: number; focusMessageId?: number | null }
+    const exists = await store.query<{ exists: boolean }>(actor, { operation: REPLY_REVIEW_OPERATIONS.threadExists, params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl }, page: { limit: 1 } })
+    if (!exists.items[0]?.exists) return json({ error: 'The requested thread was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
+    if (threadParams.focusMessageId != null) {
+      const focus = await store.query(actor, { operation: REPLY_REVIEW_OPERATIONS.messageForReview, params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl, messageId: threadParams.focusMessageId }, page: { limit: 1 } })
+      if (!focus.items[0]) return json({ error: 'The requested focus message was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
+    }
+    const [workflowPage, revisionPage] = await Promise.all([
+      store.query<unknown>(actor, {
+        operation: REPLY_REVIEW_OPERATIONS.workflowForThread,
+        params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl },
+        page: { limit: 1 },
+      }),
+      store.query<{ inbound_revision: number }>(actor, {
+        operation: REPLY_REVIEW_OPERATIONS.inboundRevision,
+        params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl },
+        page: { limit: 1 },
+      }),
+    ])
+    const workflow = workflowPage.items[0] ?? null
+    const inboundRevision = Number(revisionPage.items[0]?.inbound_revision ?? 0)
+    const { cursor, limit, direction, focusMessageId, ...baseParams } = threadParams
+    const requestedLimit = Number(limit ?? 50)
+    const hasFocus = focusMessageId !== null && focusMessageId !== undefined
+    const hasCursor = cursor !== null && cursor !== undefined
+
+    // The first focused response is a bounded window around the focus.  The
+    // thread operation's directional queries are deliberately separate: one
+    // cursor must never be minted from an ASC page and then reused as the
+    // opposite direction.  Older rows arrive newest-first, so reverse them
+    // before combining with the newer side and the focus row.
+    if (hasFocus && !hasCursor && (!direction || direction === 'around')) {
+      const half = Math.max(1, Math.floor(requestedLimit / 2))
+      const [olderPage, newerPage] = await Promise.all([
+        store.query<unknown>(actor, {
+          operation: op,
+          params: { ...baseParams, focusMessageId: focusMessageId ?? null, direction: 'older' },
+          page: { limit: half, cursor: null },
+        }),
+        store.query<unknown>(actor, {
+          operation: op,
+          params: { ...baseParams, focusMessageId: focusMessageId ?? null, direction: 'newer' },
+          page: { limit: Math.max(1, requestedLimit - half), cursor: null },
+        }),
+      ])
+      const olderItems = [...olderPage.items].reverse()
+      const combined = [...olderItems, ...newerPage.items]
+      const deduped = [...new Map(combined.map((item) => [String((item as Record<string, unknown>).id), item])).values()]
+      const first = deduped[0] as Record<string, unknown> | undefined
+      const last = deduped[deduped.length - 1] as Record<string, unknown> | undefined
+      return json({
+        instance_id: threadParams.instanceId,
+        profile_url: threadParams.profileUrl,
+        messages: deduped,
+        older_cursor: olderPage.nextCursor,
+        newer_cursor: newerPage.nextCursor,
+        focus_message_id: focusMessageId,
+        next_focus_message_id: nextReplyFocus(deduped, focusMessageId),
+        workflow,
+        inbound_revision: inboundRevision,
+        has_older: olderPage.hasMore || first?.has_older === true,
+        has_newer: newerPage.hasMore || last?.has_newer === true,
+      })
+    }
+
+    const page = await store.query<unknown>(actor, {
+      operation: op,
+      params: { ...baseParams, focusMessageId: focusMessageId ?? null, direction: direction ?? 'older' },
+      page: { limit: requestedLimit, cursor: cursor ?? null },
+    })
+    const items = direction === 'older' || (!direction && !hasFocus) ? [...page.items].reverse() : page.items
+    const first = items[0] as Record<string, unknown> | undefined
+    const last = items[items.length - 1] as Record<string, unknown> | undefined
+    const older = direction === 'newer' ? null : page.nextCursor
+    const newer = direction === 'newer' ? page.nextCursor : null
+    return json({
+      instance_id: threadParams.instanceId,
+      profile_url: threadParams.profileUrl,
+      messages: items,
+      older_cursor: older,
+      newer_cursor: newer,
+      focus_message_id: focusMessageId ?? null,
+      next_focus_message_id: nextReplyFocus(items, focusMessageId),
+      workflow,
+      inbound_revision: inboundRevision,
+      has_older: direction === 'newer' ? first?.has_older === true : page.hasMore || first?.has_older === true,
+      has_newer: direction === 'older' ? last?.has_newer === true : page.hasMore || last?.has_newer === true,
+    })
+  }
+
+  if (op === REPLY_REVIEW_OPERATIONS.reviewHistory) {
+    const { cursor, limit, ...operationParams } = params as DataStoreParams & { cursor?: string | null; limit?: number }
+    const page = await store.query<unknown>(actor, { operation: op, params: operationParams, page: { limit: Number(limit ?? 50), cursor: cursor ?? null } })
+    return json({ items: page.items, next_cursor: page.nextCursor })
+  }
+
+  const page = await store.query<unknown>(actor, { operation: op, params, page: { limit: 1 } })
+  return json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
+}
+
 /**
  * Every read this endpoint offers, and the only names it will accept.
  *
@@ -637,6 +1020,27 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
   [LEADS_OPERATIONS.notes]: {
     operation: LEADS_OPERATIONS.notes,
     params: (url) => ({ leadId: readRequiredUuid(url, 'lead_id') }),
+  },
+
+  // Manual reply review is a dedicated, bounded read surface. These operations
+  // intentionally share this endpoint with the dashboard slices so the Vercel
+  // function count does not grow.
+  [REPLY_REVIEW_OPERATIONS.capabilities]: { operation: REPLY_REVIEW_OPERATIONS.capabilities },
+  [REPLY_REVIEW_OPERATIONS.inbox]: {
+    operation: REPLY_REVIEW_OPERATIONS.inbox,
+    params: readReplyInbox,
+  },
+  [REPLY_REVIEW_OPERATIONS.thread]: {
+    operation: REPLY_REVIEW_OPERATIONS.thread,
+    params: readReplyThread,
+  },
+  [REPLY_REVIEW_OPERATIONS.analytics]: {
+    operation: REPLY_REVIEW_OPERATIONS.analytics,
+    params: readReplyAnalytics,
+  },
+  [REPLY_REVIEW_OPERATIONS.reviewHistory]: {
+    operation: REPLY_REVIEW_OPERATIONS.reviewHistory,
+    params: readReplyHistory,
   },
 
   /**
@@ -1025,6 +1429,24 @@ async function handle(
   }
 
   const cursor = url.searchParams.get('cursor')
+
+  if (op.startsWith('replies.')) {
+    try {
+      return await replyReadResponse(getDataStore(), actor, op, params ?? {})
+    } catch (error) {
+      if (error instanceof PaginationError) return json({ error: error.message }, 400)
+      if (error instanceof DataStoreSchemaError) {
+        return json({ error: 'Manual reply review is unavailable for this tenant', code: 'REPLY_REVIEW_UNAVAILABLE' }, 503)
+      }
+      if (error instanceof DataStoreContractError) {
+        const unavailable = unavailableResponse(error)
+        if (unavailable) return unavailable
+        console.error(`Read ${op} failed:`, safeErrorLabel(error), safeSqlState(error) ?? 'sqlstate=none')
+        return json({ error: 'Could not load reply review data' }, 500)
+      }
+      throw error
+    }
+  }
 
   try {
     // `unknown` rather than a row type: the rows are serialized straight to JSON

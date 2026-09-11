@@ -1,19 +1,16 @@
 /**
  * The AI layer's human-actor operations: the reads and writes behind
- * `coach.ts`, the admin paths of `classify.ts`, the admin path of `briefing.ts`
- * and the chat's `save_search`.
+ * `coach.ts`, the demographics path of `classify.ts`, the admin path of
+ * `briefing.ts` and the chat's `save_search`.
  *
  * ## Which half of the AI layer these belong to
  *
  * The AI layer splits by actor. Guard reads run as `app_system` through the AI
- * store (`operations/ai.ts`). Everything here has a **human** actor — a
- * signed-in member coaching a thread, an admin running the classifier or a
- * briefing by hand — and therefore runs as `app_runtime` in the *shared*
- * store, under the same active-member policies and the same
- * `resolveRequestActor` authorization as S14's writes. The cron halves of
- * these handlers have no human to publish and are **not** these operations:
- * they stay on Supabase, declared blocked, until ledger step 007 (the system
- * write path) is applied.
+ * store (`operations/ai.ts`). Human operations run as `app_runtime` in the
+ * shared store. Reply sentiment/intent operations were retired at manual-review
+ * cutover; compatibility exports below fail closed until the integration worker
+ * removes their registry entries. Demographics remains the only classifier
+ * operation in this module.
  *
  * ## Rules, same as every module registered in `index.ts`
  *
@@ -42,7 +39,8 @@ export const AI_WRITE_OPERATIONS = {
   coachActionableProfiles: 'coach.actionableProfiles',
   coachIssuesByInstance: 'coach.issuesByInstance',
   coachDigestUpsert: 'coach.digestUpsert',
-  // classify.ts (admin POST + reclassify)
+  // classify.ts (demographics only; reply AI is retired after manual-review cutover)
+  // Deprecated compatibility names. The corresponding builders below fail closed.
   classifyPendingReplies: 'classify.pendingReplies',
   classifyThreadContext: 'classify.threadContext',
   classifyWriteLabels: 'classify.writeLabels',
@@ -363,9 +361,15 @@ export const coachDigestUpsertOperation: NeonCommandOperation<
 }
 
 // ---------------------------------------------------------------------------
-// classify.ts — the admin batch, the demographics phase, and reclassify
+// classify.ts — the demographics phase
 // ---------------------------------------------------------------------------
 
+/**
+ * Compatibility surface for the pre-cutover registry.  These names remain
+ * exported until the integration worker removes them from `index.ts` and
+ * `aiSystem.ts`; every builder fails before a connection or mutation, so an
+ * old worker cannot regain an AI reply write path during a rolling deploy.
+ */
 export interface PendingReplyRow {
   readonly id: number
   readonly instance_id: string
@@ -375,39 +379,7 @@ export interface PendingReplyRow {
   readonly sentiment: string | null
   readonly classified_model: string | null
 }
-
-export interface ClassifyParams {
-  readonly taxonomyVersion: string
-  readonly [key: string]: string
-}
-
-const PENDING_FILTER = `(m.sentiment IS NULL OR m.sentiment <> 'auto')
-      AND (m.intent_taxonomy_version IS NULL OR m.intent_taxonomy_version <> $1)
-      AND m.body IS NOT NULL`
-
-export const classifyPendingRepliesOperation: NeonQueryOperation<
-  PendingReplyRow,
-  ClassifyParams
-> = {
-  build: ({ params }): NeonStatement => ({
-    text: `SELECT m.id::text AS id, m.instance_id, m.profile_url, m.body, m.sent_at,
-                  m.sentiment, m.classified_model
-             FROM public.messages m
-            WHERE m.direction = 'in' AND ${PENDING_FILTER}
-            ORDER BY m.sent_at DESC, m.id DESC`,
-    values: [params?.taxonomyVersion ?? null],
-  }),
-  mapRow: (row): PendingReplyRow => ({
-    id: Number(row.id),
-    instance_id: text(row, 'instance_id'),
-    profile_url: text(row, 'profile_url'),
-    body: nullableText(row, 'body'),
-    sent_at: text(row, 'sent_at'),
-    sentiment: nullableText(row, 'sentiment'),
-    classified_model: nullableText(row, 'classified_model'),
-  }),
-}
-
+export interface ClassifyParams { readonly taxonomyVersion: string; readonly [key: string]: string }
 export interface ThreadContextRow {
   readonly instance_id: string
   readonly profile_url: string
@@ -415,36 +387,13 @@ export interface ThreadContextRow {
   readonly body: string | null
   readonly sent_at: string
 }
-
 export interface ThreadContextParams {
   readonly instances: string[]
   readonly profiles: string[]
   readonly [key: string]: string[]
 }
-
-export const classifyThreadContextOperation: NeonQueryOperation<
-  ThreadContextRow,
-  ThreadContextParams
-> = {
-  build: ({ params }): NeonStatement => ({
-    text: `SELECT instance_id, profile_url, direction, body, sent_at
-             FROM public.messages
-            WHERE instance_id = ANY($1::text[]) AND profile_url = ANY($2::text[])
-            ORDER BY sent_at DESC, id DESC`,
-    values: [params?.instances ?? [], params?.profiles ?? []],
-  }),
-  mapRow: (row): ThreadContextRow => ({
-    instance_id: text(row, 'instance_id'),
-    profile_url: text(row, 'profile_url'),
-    direction: text(row, 'direction'),
-    body: nullableText(row, 'body'),
-    sent_at: text(row, 'sent_at'),
-  }),
-}
-
 export interface WriteLabelsParams {
   readonly messageId: number
-  /** False when classified_model='manual': human sentiment is never overwritten. */
   readonly applySentiment: boolean
   readonly sentiment: string | null
   readonly reason: string | null
@@ -455,62 +404,36 @@ export interface WriteLabelsParams {
   readonly taxonomyVersion: string
   readonly [key: string]: string | number | boolean | null
 }
+export interface ReclassifyParams extends WriteLabelsParams { readonly hasSentiment: boolean; readonly hasIntent: boolean }
+export interface ReclassifyResult { readonly id: number | null; readonly sentiment: string | null; readonly intent_level: string | null }
 
-export const classifyWriteLabelsOperation: NeonCommandOperation<
-  { updated: number },
-  WriteLabelsParams
-> = {
-  build: ({ params }): NeonStatement => {
-    if (!params) throw new Error('classify.writeLabels requires parameters')
-    return {
-      text: `UPDATE public.messages
-                SET sentiment = CASE WHEN $2::boolean THEN $3::text ELSE sentiment END,
-                    reason = CASE WHEN $2::boolean THEN $4::text ELSE reason END,
-                    classified_at = CASE WHEN $2::boolean THEN $7::timestamptz ELSE classified_at END,
-                    classified_model = CASE WHEN $2::boolean THEN $8::text ELSE classified_model END,
-                    intent_level = $5::text,
-                    intent_reason = $6::text,
-                    intent_classified_at = $7::timestamptz,
-                    intent_classified_model = $8::text,
-                    intent_taxonomy_version = $9::text
-              WHERE id = $1::bigint`,
-      values: [
-        params.messageId,
-        params.applySentiment,
-        params.sentiment,
-        params.reason,
-        params.intentLevel,
-        params.intentReason,
-        params.now,
-        params.model,
-        params.taxonomyVersion,
-      ],
-    }
-  },
-  mapResult: (_rows, rowCount) => ({ updated: rowCount }),
+const REPLY_AI_DISABLED = (): never => {
+  throw new Error('reply AI classification is disabled; use manual reply review')
 }
 
-export const classifyRemainingCountOperation: NeonQueryOperation<
-  { remaining: number },
-  ClassifyParams
-> = {
-  build: ({ params }): NeonStatement => ({
-    text: `SELECT count(*)::int AS remaining
-             FROM public.messages m
-            WHERE m.direction = 'in' AND ${PENDING_FILTER}`,
-    values: [params?.taxonomyVersion ?? null],
-  }),
-  mapRow: (row) => ({ remaining: Number(row.remaining) }),
+export const classifyPendingRepliesOperation: NeonQueryOperation<PendingReplyRow, ClassifyParams> = {
+  build: REPLY_AI_DISABLED,
+  mapRow: REPLY_AI_DISABLED,
 }
-
-export const classifyAutoAdvanceOperation: NeonCommandOperation<{
-  advanced: number
-}> = {
-  build: (): NeonStatement => ({
-    text: `SELECT public.pipeline_auto_advance()::int AS advanced`,
-    values: [],
-  }),
-  mapResult: (rows) => ({ advanced: Number(rows[0]?.advanced ?? 0) }),
+export const classifyThreadContextOperation: NeonQueryOperation<ThreadContextRow, ThreadContextParams> = {
+  build: REPLY_AI_DISABLED,
+  mapRow: REPLY_AI_DISABLED,
+}
+export const classifyWriteLabelsOperation: NeonCommandOperation<{ updated: number }, WriteLabelsParams> = {
+  build: REPLY_AI_DISABLED,
+  mapResult: REPLY_AI_DISABLED,
+}
+export const classifyRemainingCountOperation: NeonQueryOperation<{ remaining: number }, ClassifyParams> = {
+  build: REPLY_AI_DISABLED,
+  mapRow: REPLY_AI_DISABLED,
+}
+export const classifyAutoAdvanceOperation: NeonCommandOperation<{ advanced: number }> = {
+  build: REPLY_AI_DISABLED,
+  mapResult: REPLY_AI_DISABLED,
+}
+export const classifyReclassifyOperation: NeonCommandOperation<ReclassifyResult, ReclassifyParams> = {
+  build: REPLY_AI_DISABLED,
+  mapResult: REPLY_AI_DISABLED,
 }
 
 export interface GenderBatchRow {
@@ -638,66 +561,4 @@ export const classifyGenderBacklogOperation: NeonQueryOperation<
     values: [params?.genderVersion ?? null],
   }),
   mapRow: (row) => ({ remaining: Number(row.remaining) }),
-}
-
-export interface ReclassifyParams {
-  readonly messageId: number
-  readonly hasSentiment: boolean
-  readonly sentiment: string | null
-  readonly reason: string
-  readonly hasIntent: boolean
-  readonly intentLevel: string | null
-  readonly intentReason: string
-  readonly now: string
-  readonly taxonomyVersion: string
-  readonly [key: string]: string | number | boolean | null
-}
-
-export interface ReclassifyResult {
-  readonly id: number | null
-  readonly sentiment: string | null
-  readonly intent_level: string | null
-}
-
-export const classifyReclassifyOperation: NeonCommandOperation<
-  ReclassifyResult,
-  ReclassifyParams
-> = {
-  build: ({ params }): NeonStatement => {
-    if (!params) throw new Error('classify.reclassify requires parameters')
-    return {
-      text: `UPDATE public.messages
-                SET sentiment = CASE WHEN $2::boolean THEN $3::text ELSE sentiment END,
-                    reason = CASE WHEN $2::boolean THEN $4::text ELSE reason END,
-                    classified_at = CASE WHEN $2::boolean THEN $8::timestamptz ELSE classified_at END,
-                    classified_model = CASE WHEN $2::boolean THEN 'manual' ELSE classified_model END,
-                    intent_level = CASE WHEN $5::boolean THEN $6::text ELSE intent_level END,
-                    intent_reason = CASE WHEN $5::boolean THEN $7::text ELSE intent_reason END,
-                    intent_classified_at = CASE WHEN $5::boolean THEN $8::timestamptz ELSE intent_classified_at END,
-                    intent_classified_model = CASE WHEN $5::boolean THEN 'manual' ELSE intent_classified_model END,
-                    intent_taxonomy_version = CASE WHEN $5::boolean THEN $9::text ELSE intent_taxonomy_version END
-              WHERE id = $1::bigint AND direction = 'in'
-              RETURNING id::text AS id, sentiment, intent_level`,
-      values: [
-        params.messageId,
-        params.hasSentiment,
-        params.sentiment,
-        params.reason,
-        params.hasIntent,
-        params.intentLevel,
-        params.intentReason,
-        params.now,
-        params.taxonomyVersion,
-      ],
-    }
-  },
-  mapResult: (rows): ReclassifyResult => {
-    const row = rows[0]
-    if (!row) return { id: null, sentiment: null, intent_level: null }
-    return {
-      id: Number(row.id),
-      sentiment: nullableText(row, 'sentiment'),
-      intent_level: nullableText(row, 'intent_level'),
-    }
-  },
 }

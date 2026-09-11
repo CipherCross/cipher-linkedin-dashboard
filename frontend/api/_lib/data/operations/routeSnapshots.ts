@@ -20,6 +20,8 @@ export const ROUTE_SNAPSHOT_ROUTES = [
   'searches',
   'icp',
   'hypotheses',
+  'replies',
+  'sentiment-analysis',
 ] as const
 
 export type RouteSnapshotRoute = (typeof ROUTE_SNAPSHOT_ROUTES)[number]
@@ -456,6 +458,11 @@ SELECT jsonb_build_object(
   ), ${EMPTY_ARRAY})
 ) AS payload`
 
+// Replies and sentiment own dedicated paginated reads. The route snapshot is
+// intentionally only a bounded shell marker; it must never turn navigation
+// into a full message/history download.
+const REPLIES_SHELL_SQL = `SELECT jsonb_build_object('repliesAvailable', true) AS payload`
+
 const SQL_BY_ROUTE: Readonly<Record<RouteSnapshotRoute, string>> = {
   account: ACCOUNT_SQL,
   campaign: CAMPAIGN_SQL,
@@ -466,6 +473,8 @@ const SQL_BY_ROUTE: Readonly<Record<RouteSnapshotRoute, string>> = {
   searches: SEARCHES_SQL,
   icp: ICP_SQL,
   hypotheses: HYPOTHESES_SQL,
+  replies: REPLIES_SHELL_SQL,
+  'sentiment-analysis': REPLIES_SHELL_SQL,
 }
 
 export const routeSnapshotOperation: NeonQueryOperation<

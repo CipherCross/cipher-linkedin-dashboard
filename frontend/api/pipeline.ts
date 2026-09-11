@@ -27,6 +27,16 @@ import {
   neonSetStage,
   neonWriter,
 } from './_lib/neonWrites.js'
+import {
+  neonActivateManualReplyReview,
+  neonSaveReplyReview,
+  neonSetReplyWorkflow,
+} from './_lib/neonReplyReviewWrites.js'
+import type {
+  ActivateManualReplyReviewRequest,
+  SaveReplyReviewRequest,
+  SetReplyWorkflowRequest,
+} from './_lib/replyReview.js'
 
 export const maxDuration = 10
 
@@ -944,6 +954,7 @@ async function handle(req: Request): Promise<Response> {
     'update_member',
     'set_gender',
     'set_instance_config',
+    'activate_manual_reply_review',
   ])
   if (
     typeof payload.action === 'string' &&
@@ -976,6 +987,12 @@ async function handle(req: Request): Promise<Response> {
   // argument. Keeping the sentinel local avoids constructing a legacy client
   // (and therefore avoids any Supabase-shaped deployment requirement).
   const supa = neon ? (null as unknown as ReturnType<typeof db>) : db()
+  if (payload.action === 'save_reply_review' || payload.action === 'set_reply_workflow' || payload.action === 'activate_manual_reply_review') {
+    if (!neon) return json({ error: 'Manual reply review is unavailable on the Supabase provider', code: 'REPLY_REVIEW_UNAVAILABLE' }, 503)
+    if (payload.action === 'save_reply_review') return neonSaveReplyReview(req, payload as unknown as SaveReplyReviewRequest)
+    if (payload.action === 'set_reply_workflow') return neonSetReplyWorkflow(req, payload as unknown as SetReplyWorkflowRequest)
+    return neonActivateManualReplyReview(req, payload as unknown as ActivateManualReplyReviewRequest)
+  }
   switch (payload.action) {
     case 'set_stage':
       return setStage(supa, payload, actorNameForLegacy, req)

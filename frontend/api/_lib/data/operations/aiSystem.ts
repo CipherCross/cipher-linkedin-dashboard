@@ -101,11 +101,7 @@ import {
   AI_WRITE_OPERATIONS,
   classifyGenderBacklogOperation,
   classifyGenderBatchOperation,
-  classifyPendingRepliesOperation,
-  classifyRemainingCountOperation,
-  classifyThreadContextOperation,
   classifyWriteGenderOperation,
-  classifyWriteLabelsOperation,
 } from './aiWrites.js'
 import {
   BRIEFING_CONTEXT_GUARD_SQL,
@@ -198,9 +194,6 @@ export const SYSTEM_GUARD_OPERATIONS = [
  * reports the gap rather than routing around it.
  */
 export const SYSTEM_CRON_QUERY_OPERATIONS = [
-  AI_WRITE_OPERATIONS.classifyPendingReplies,
-  AI_WRITE_OPERATIONS.classifyThreadContext,
-  AI_WRITE_OPERATIONS.classifyRemainingCount,
   AI_WRITE_OPERATIONS.classifyGenderBatch,
   AI_WRITE_OPERATIONS.classifyGenderBacklog,
   AI_WRITE_OPERATIONS.briefingJobRow,
@@ -211,7 +204,6 @@ export const SYSTEM_CRON_QUERY_OPERATIONS = [
 
 /** The cron halves' writes, under the same names, all inside the 007 grant. */
 export const SYSTEM_CRON_COMMAND_OPERATIONS = [
-  AI_WRITE_OPERATIONS.classifyWriteLabels,
   AI_WRITE_OPERATIONS.classifyWriteGender,
   AI_WRITE_OPERATIONS.briefingEnsureJob,
   AI_WRITE_OPERATIONS.briefingClaimJob,
@@ -507,28 +499,12 @@ function registerCronOperations(
 ): NeonOperationRegistry {
   // classify.ts GET — `messages` and `leads`, both in the 007 grant.
   registry.registerQuery(
-    AI_WRITE_OPERATIONS.classifyPendingReplies,
-    classifyPendingRepliesOperation,
-  )
-  registry.registerQuery(
-    AI_WRITE_OPERATIONS.classifyThreadContext,
-    classifyThreadContextOperation,
-  )
-  registry.registerQuery(
-    AI_WRITE_OPERATIONS.classifyRemainingCount,
-    classifyRemainingCountOperation,
-  )
-  registry.registerQuery(
     AI_WRITE_OPERATIONS.classifyGenderBatch,
     classifyGenderBatchOperation,
   )
   registry.registerQuery(
     AI_WRITE_OPERATIONS.classifyGenderBacklog,
     classifyGenderBacklogOperation,
-  )
-  registry.registerCommand(
-    AI_WRITE_OPERATIONS.classifyWriteLabels,
-    classifyWriteLabelsOperation,
   )
   registry.registerCommand(
     AI_WRITE_OPERATIONS.classifyWriteGender,

@@ -149,10 +149,11 @@ function seedQueries(
     {
       label: `Inbound reply sentiment ${recentLabel}`,
       sql: `select coalesce(i.account_name, i.label, m.instance_id) as account,
-                   coalesce(m.sentiment, 'unclassified') as sentiment,
+                   coalesce(rr.sentiment, 'unclassified') as sentiment,
                    count(*) as replies
             from messages m
             join instances i on i.id = m.instance_id
+            left join reply_reviews rr on rr.message_id = m.id
             where m.direction = 'in' and ${recentFilter}
             group by 1, 2
             order by 3 desc`,
@@ -160,12 +161,13 @@ function seedQueries(
     {
       label: `Commercial reply intent ${recentLabel}`,
       sql: `select coalesce(i.account_name, i.label, m.instance_id) as account,
-                   coalesce(m.intent_level, 'none') as intent_level,
+                   case when rr.intent_state = 'level' then rr.intent_level else 'none' end as intent_level,
                    count(*) as replies
             from messages m
             join instances i on i.id = m.instance_id
+            left join reply_reviews rr on rr.message_id = m.id
             where m.direction = 'in' and ${recentFilter}
-              and m.intent_taxonomy_version = 'p123-v1'
+              and rr.intent_state <> 'unreviewed'
             group by 1, 2
             order by 3 desc`,
     },
@@ -418,7 +420,9 @@ ANALYSIS SAFEGUARDS
   going cold, or being ignored from message chronology. The only exceptions are the deterministic
   following_up pipeline stage and the exact P3-ghosting rule documented in the schema.
 - Never claim the team completed an action. Describe only what the numbers now show.
-- Preserve P1/P2/P3 intent as separate from sentiment. Intent never auto-advances CRM stages.
+- Preserve P1/P2/P3 intent as separate from sentiment. Use only the manual
+  reply_reviews source for current sentiment and intent; legacy AI values are
+  historical context, not current labels. Intent never auto-advances CRM stages.
 - A daily note reports what is newly operational since the previous DAILY note. On Monday, do not
   repeat strategic findings already present in the weekly anti-duplication reference.
 - A weekly note compares with the previous WEEKLY note and uses the completed Monday-Sunday period.

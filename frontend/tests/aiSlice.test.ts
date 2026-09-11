@@ -659,9 +659,11 @@ describe('the classify and briefing crons pick their provider from the flag', ()
 
   it('runs classify’s cron on the app_system store when the flag is on', async () => {
     process.env[NEON_AI_PATH_ENV] = 'neon'
-    await expect(classifyCron(cron('/api/classify'))).rejects.toThrow(
-      /NEON_AI_DATABASE_URL/,
-    )
+    // Reply classification is retired after the manual-review cutover.  The
+    // remaining demographics-only cron is a no-op when its optional Neon
+    // credential is absent, so provider selection still succeeds without
+    // attempting a legacy reply-AI write.
+    expect((await classifyCron(cron('/api/classify'))).status).toBe(200)
   })
 
   it('checks CRON_SECRET before choosing a provider at all', async () => {
