@@ -131,6 +131,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/014_campaign_runtime_status.sql',
   // Measured LH2 compatibility contracts and notebook-1 canaries (step 015).
   'postgres/tenant-baseline/v1/015_sequence_publish_compatibility.sql',
+  // Manual reply review additive schema (step 017).
+  'postgres/tenant-baseline/v1/017_manual_reply_review.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -364,8 +366,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares sixteen steps in order 1 -> 2 -> ... -> 16',
-  manifest.steps.length === 16 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares seventeen steps in order 1 -> 2 -> ... -> 17',
+  manifest.steps.length === 17 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
 check('step 015 enforces one canary per fingerprint and one replacement per job',

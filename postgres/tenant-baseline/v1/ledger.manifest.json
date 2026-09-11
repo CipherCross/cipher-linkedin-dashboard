@@ -227,6 +227,14 @@
       "owner_role_entered_by": "artifact",
       "session": "lh2-auto-compatibility",
       "description": "Narrow app_machine INSERT policies and column grants for server-authored replacement jobs and their copied branches. Inserts remain scoped to the machine actor, require immutable replacement lineage, and add no update, start, target, archive, delete, or direct client SQL capability."
+    },
+    {
+      "step": 17,
+      "artifact": "017_manual_reply_review.sql",
+      "sha256": "3c74cc0b1f6a9f9ce115350084dc6d95bd4454b4c82166b6796cf01c42c8e744",
+      "owner_role_entered_by": "artifact",
+      "session": "manual-reply-review",
+      "description": "Additive manual reply-review schema and lifecycle: provenance-aware reviews and reasons, append-only audit and mutation replay records, conversation inbound revisions, immutable first-seen capture, legacy snapshots/settings, action/DNC workflow projection, inbound and AI-write guards, and the manual activation boundary."
     }
   ]
 }
