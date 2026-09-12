@@ -674,6 +674,7 @@ export const analyticsOperation: NeonQueryOperation<ReplyAnalyticsResponse, Repl
         SELECT date_trunc('week',sent_at)::date AS week,* FROM inbound
       ), weekly_latest AS (
         SELECT DISTINCT ON (week,instance_id,profile_url) week,instance_id,profile_url,sentiment,id
+          FROM weeks
          ORDER BY week,instance_id,profile_url,sent_at DESC,id DESC
       ), weekly_classified AS (
         SELECT wl.week, wl.instance_id, wl.profile_url,

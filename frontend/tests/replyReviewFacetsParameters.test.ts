@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { facetsOperation, inboxOperation } from '../api/_lib/data/operations/replyReviews.js'
+import { analyticsOperation, facetsOperation, inboxOperation } from '../api/_lib/data/operations/replyReviews.js'
 
 describe('manual reply-review facets parameters', () => {
   it('keeps SQL placeholders contiguous and explicitly typed', () => {
@@ -43,5 +43,21 @@ describe('manual reply-review facets parameters', () => {
     expect(statement.text).toContain('COALESCE(f.pending_review_revision, 0)')
     expect(statement.text).toContain('COALESCE(f.latest_review_revision, 0)')
     expect(statement.text).toContain('AS review_revision')
+  })
+
+  it('sources weekly_latest from weeks before ordering its distinct rows', () => {
+    const statement = analyticsOperation.build({
+      actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' },
+      params: {
+        from: '2026-09-01T00:00:00.000Z', to: '2026-10-01T00:00:00.000Z',
+        instanceId: null, campaignId: null, ownerId: null, metricBase: 'dialogues',
+      },
+      page: { limit: 1, cursor: null }, after: undefined, range: undefined,
+    })
+    const weeklyLatest = statement.text.match(/weekly_latest AS \(([\s\S]*?)\), weekly_classified AS/)
+
+    expect(weeklyLatest).not.toBeNull()
+    expect(weeklyLatest![1]).toContain('FROM weeks')
+    expect(weeklyLatest![1].indexOf('FROM weeks')).toBeLessThan(weeklyLatest![1].indexOf('ORDER BY'))
   })
 })
