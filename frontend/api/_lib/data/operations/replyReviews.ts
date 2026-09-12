@@ -437,21 +437,21 @@ export const facetsOperation: NeonQueryOperation<ReplyFacets, ReplyFacetsParams>
            AND (NOT $14::boolean OR wf.owner_id IS NULL)
            AND (NOT $15::boolean OR (wf.action='follow_up' AND wf.next_follow_up_date < (now() AT TIME ZONE 'Europe/Madrid')::date))
            AND (NOT $16::boolean OR (wf.owner_id IS NOT NULL AND wf.owner_id=(SELECT tm.id FROM public.team_members tm WHERE tm.user_id=CASE WHEN $17::text ~* '^[0-9a-f-]{36}$' THEN $17::uuid ELSE NULL::uuid END AND tm.active)))
-           AND ($21::text IS NULL OR ($21::text='full_dialogues' AND d.pending_count=0)
-             OR ($21::text='unreviewed_dialogues' AND d.pending_count>0)
-             OR ($21::text IN ('dialogues','account','campaign','messages','weekly_volume','weekly_messages') AND d.inbound_count>0)
-             OR ($21::text='unreviewed_intent' AND d.unreviewed_intent_count>0)
-             OR ($21::text='legacy_ai' AND d.legacy_ai_count>0)
-             OR ($21::text='latest_unreviewed' AND d.latest_sentiment IS NULL)
-             OR ($21::text='only_auto' AND NOT EXISTS (SELECT 1 FROM candidate cx WHERE cx.instance_id=d.instance_id AND cx.profile_url=d.profile_url AND cx.sentiment IS DISTINCT FROM 'auto'))
-             OR ($21::text IN ('business_rate','negative_objection') AND d.latest_sentiment IN ('negative','objection') AND d.latest_review_provenance IN ('human','legacy_manual') AND d.latest_sentiment_provenance IN ('human','legacy_manual'))
-             OR ($21::text='needs_confirmation' AND (coalesce(rs.inbound_revision,0)>coalesce(wf.acknowledged_inbound_revision,0) OR wf.action IS NULL))
-             OR ($21::text='overdue' AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action='follow_up' AND wf.next_follow_up_date < (now() AT TIME ZONE 'Europe/Madrid')::date)
-             OR ($21::text='follow_up_today' AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action='follow_up' AND wf.next_follow_up_date=(now() AT TIME ZONE 'Europe/Madrid')::date)
-             OR ($21::text='follow_up_later' AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action='follow_up' AND wf.next_follow_up_date>(now() AT TIME ZONE 'Europe/Madrid')::date)
-             OR ($21::text='do_not_contact' AND coalesce(wf.do_not_contact,false)=true)
-             OR ($21::text='transfers' AND EXISTS (SELECT 1 FROM public.reply_review_events te WHERE te.instance_id=d.instance_id AND te.profile_url=d.profile_url AND te.event_type='workflow' AND ($8::timestamptz IS NULL OR te.occurred_at >= $8::timestamptz) AND ($9::timestamptz IS NULL OR te.occurred_at < $9::timestamptz) AND (te.after->>'owner_id') IS DISTINCT FROM (te.before->>'owner_id')))
-             OR ($21::text IN ('needs_reply','awaiting_reply','resolved','closed_soft','closed_hard') AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action=$21::text))
+           AND ($18::text IS NULL OR ($18::text='full_dialogues' AND d.pending_count=0)
+             OR ($18::text='unreviewed_dialogues' AND d.pending_count>0)
+             OR ($18::text IN ('dialogues','account','campaign','messages','weekly_volume','weekly_messages') AND d.inbound_count>0)
+             OR ($18::text='unreviewed_intent' AND d.unreviewed_intent_count>0)
+             OR ($18::text='legacy_ai' AND d.legacy_ai_count>0)
+             OR ($18::text='latest_unreviewed' AND d.latest_sentiment IS NULL)
+             OR ($18::text='only_auto' AND NOT EXISTS (SELECT 1 FROM candidate cx WHERE cx.instance_id=d.instance_id AND cx.profile_url=d.profile_url AND cx.sentiment IS DISTINCT FROM 'auto'))
+             OR ($18::text IN ('business_rate','negative_objection') AND d.latest_sentiment IN ('negative','objection') AND d.latest_review_provenance IN ('human','legacy_manual') AND d.latest_sentiment_provenance IN ('human','legacy_manual'))
+             OR ($18::text='needs_confirmation' AND (coalesce(rs.inbound_revision,0)>coalesce(wf.acknowledged_inbound_revision,0) OR wf.action IS NULL))
+             OR ($18::text='overdue' AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action='follow_up' AND wf.next_follow_up_date < (now() AT TIME ZONE 'Europe/Madrid')::date)
+             OR ($18::text='follow_up_today' AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action='follow_up' AND wf.next_follow_up_date=(now() AT TIME ZONE 'Europe/Madrid')::date)
+             OR ($18::text='follow_up_later' AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action='follow_up' AND wf.next_follow_up_date>(now() AT TIME ZONE 'Europe/Madrid')::date)
+             OR ($18::text='do_not_contact' AND coalesce(wf.do_not_contact,false)=true)
+             OR ($18::text='transfers' AND EXISTS (SELECT 1 FROM public.reply_review_events te WHERE te.instance_id=d.instance_id AND te.profile_url=d.profile_url AND te.event_type='workflow' AND ($8::timestamptz IS NULL OR te.occurred_at >= $8::timestamptz) AND ($9::timestamptz IS NULL OR te.occurred_at < $9::timestamptz) AND (te.after->>'owner_id') IS DISTINCT FROM (te.before->>'owner_id')))
+             OR ($18::text IN ('needs_reply','awaiting_reply','resolved','closed_soft','closed_hard') AND coalesce(wf.do_not_contact,false)=false AND coalesce(rs.inbound_revision,0)<=coalesce(wf.acknowledged_inbound_revision,0) AND wf.action=$18::text))
       ), scoped_messages AS (
         SELECT c.* FROM candidate c JOIN filtered f USING(instance_id,profile_url)
       )
@@ -463,7 +463,7 @@ export const facetsOperation: NeonQueryOperation<ReplyFacets, ReplyFacetsParams>
         'sentiments',(SELECT coalesce(jsonb_agg(jsonb_build_object('value',x.latest_sentiment,'count',x.n) ORDER BY x.latest_sentiment NULLS FIRST),'[]'::jsonb) FROM (SELECT latest_sentiment,count(*) n FROM filtered GROUP BY latest_sentiment) x),
         'reasons',(SELECT coalesce(jsonb_agg(jsonb_build_object('value',x.reason_id,'count',x.n) ORDER BY x.reason_id),'[]'::jsonb) FROM (SELECT r.reason_id,count(DISTINCT c.instance_id||chr(31)||c.profile_url) n FROM scoped_messages c JOIN public.reply_review_reasons r ON r.message_id=c.id GROUP BY r.reason_id) x)
       ) AS result`,
-      values: [...f, p?.scope ?? 'all', p?.captureStartedAt ?? null, p?.view ?? 'unreviewed', p?.unacknowledged ?? false, p?.unowned ?? false, p?.overdue ?? false, p?.my ?? false, p?.currentActorId ?? null, null, null, null, metricValue || null],
+      values: [...f, p?.scope ?? 'all', p?.captureStartedAt ?? null, p?.view ?? 'unreviewed', p?.unacknowledged ?? false, p?.unowned ?? false, p?.overdue ?? false, p?.my ?? false, p?.currentActorId ?? null, metricValue || null],
     }
   },
   mapRow: mapFacets,
