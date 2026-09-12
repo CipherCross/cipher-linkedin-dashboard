@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Static, clean-room-friendly contract checks for ledger step 017.
+/* Static, clean-room-friendly contract checks for ledger steps 017-018.
  * This file does not connect to a tenant and never mutates a database. */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -8,19 +8,33 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..', '..');
 const sqlPath = resolve(root, 'postgres/tenant-baseline/v1/017_manual_reply_review.sql');
+const activationFixPath = resolve(root, 'postgres/tenant-baseline/v1/018_manual_reply_review_activation_fix.sql');
 const manifestPath = resolve(root, 'postgres/tenant-baseline/v1/ledger.manifest.json');
 const sql = readFileSync(sqlPath, 'utf8');
+const activationFixSql = readFileSync(activationFixPath, 'utf8');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const check = (needle, message = needle) => assert.match(sql, new RegExp(needle), message);
 const names = (pattern) => [...sql.matchAll(pattern)].map((match) => match[1]);
 
-assert.equal(manifest.steps.at(-1).step, 17);
-assert.equal(manifest.steps.at(-1).artifact, '017_manual_reply_review.sql');
+assert.equal(manifest.steps.at(-1).step, 18);
+assert.equal(manifest.steps.at(-1).artifact, '018_manual_reply_review_activation_fix.sql');
+const manualReviewStep = manifest.steps.find((entry) => entry.step === 17);
+assert.equal(manualReviewStep?.artifact, '017_manual_reply_review.sql');
 assert.equal(
-  manifest.steps.at(-1).sha256,
+  manualReviewStep?.sha256,
   createHash('sha256').update(readFileSync(sqlPath)).digest('hex'),
   'manifest pins the exact step 017 artifact',
 );
+const activationFixStep = manifest.steps.find((entry) => entry.step === 18);
+assert.equal(
+  activationFixStep?.sha256,
+  createHash('sha256').update(readFileSync(activationFixPath)).digest('hex'),
+  'manifest pins the exact step 018 artifact',
+);
+assert.match(activationFixSql, /CREATE OR REPLACE FUNCTION public\.activate_manual_reply_review\(/);
+assert.match(activationFixSql, /COALESCE\(m\.intent_taxonomy_version, 'reply-review-v1'\)/);
+assert.match(activationFixSql, /SET ROLE app_owner;/);
+assert.match(activationFixSql, /RESET ROLE;/);
 
 for (const table of [
   'reply_reviews', 'reply_review_reasons', 'reply_review_events',

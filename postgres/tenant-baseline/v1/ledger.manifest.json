@@ -235,6 +235,14 @@
       "owner_role_entered_by": "artifact",
       "session": "manual-reply-review",
       "description": "Additive manual reply-review schema and lifecycle: provenance-aware reviews and reasons, append-only audit and mutation replay records, conversation inbound revisions, immutable first-seen capture, legacy snapshots/settings, action/DNC workflow projection, inbound and AI-write guards, and the manual activation boundary."
+    },
+    {
+      "step": 18,
+      "artifact": "018_manual_reply_review_activation_fix.sql",
+      "sha256": "d4a1090213b5f8963c1825561fc1d7962bd9940706c7fa15d231340c1b725cad",
+      "owner_role_entered_by": "artifact",
+      "session": "manual-reply-review",
+      "description": "Additive correction to the manual activation function: legacy manual sentiment-only rows with no historical intent taxonomy receive the current reply-review-v1 taxonomy contract, while activation provenance, cutover behavior, resumability and idempotent replay remain unchanged."
     }
   ]
 }

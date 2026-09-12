@@ -133,6 +133,9 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/015_sequence_publish_compatibility.sql',
   // Manual reply review additive schema (step 017).
   'postgres/tenant-baseline/v1/017_manual_reply_review.sql',
+  // Manual reply review activation correction (step 018).
+  'postgres/tenant-baseline/v1/018_manual_reply_review_activation_fix.sql',
+  'postgres/tests/portable_manual_reply_review_activation_fix_assertions.mjs',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -366,8 +369,23 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares seventeen steps in order 1 -> 2 -> ... -> 17',
-  manifest.steps.length === 17 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares eighteen steps in order 1 -> 2 -> ... -> 18',
+  manifest.steps.length === 18 && manifest.steps.every((s, i) => s.step === i + 1));
+
+const activationFixStep = manifest.steps.find((s) => s.step === 18);
+const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
+const activationFixSql = readFileSync(activationFixPath, 'utf8');
+check('manifest declares step 018 activation correction',
+  activationFixStep?.artifact === '018_manual_reply_review_activation_fix.sql');
+check('step 018 manifest digest matches its artifact',
+  activationFixStep?.sha256 === sha256(activationFixPath),
+  `manifest ${activationFixStep?.sha256}, disk ${sha256(activationFixPath)}`);
+check('step 018 preserves the reply-review taxonomy default for legacy rows',
+  /COALESCE\(m\.intent_taxonomy_version, 'reply-review-v1'\)/i.test(activationFixSql));
+check('step 018 replaces activation without dropping its existing grant',
+  /CREATE OR REPLACE FUNCTION public\.activate_manual_reply_review\(/i.test(activationFixSql)
+  && !/DROP\s+FUNCTION/i.test(activationFixSql)
+  && /REVOKE ALL ON FUNCTION public\.activate_manual_reply_review\(uuid, integer\) FROM PUBLIC/i.test(activationFixSql));
 
 const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
 check('step 015 enforces one canary per fingerprint and one replacement per job',
