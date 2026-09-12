@@ -282,7 +282,9 @@ export const inboxOperation: NeonQueryOperation<ReplyInboxItem, ReplyInboxParams
                  count(*) FILTER (WHERE c.intent_state IS NULL OR c.intent_state='unreviewed') AS unreviewed_intent_count,
                  count(*) FILTER (WHERE c.legacy_ai) AS legacy_ai_count,
                  (array_agg(c.id ORDER BY COALESCE(c.first_seen_at,c.sent_at), c.id) FILTER (WHERE c.pending))[1] AS pending_message_id,
+                 (array_agg(c.review_revision ORDER BY COALESCE(c.first_seen_at,c.sent_at), c.id) FILTER (WHERE c.pending))[1] AS pending_review_revision,
                  (array_agg(c.id ORDER BY c.sent_at DESC, c.id DESC))[1] AS latest_inbound_id,
+                 (array_agg(c.review_revision ORDER BY c.sent_at DESC, c.id DESC))[1] AS latest_review_revision,
                  (array_agg(c.sentiment ORDER BY c.sent_at DESC, c.id DESC))[1] AS latest_sentiment,
                  (array_agg(c.review_provenance ORDER BY c.sent_at DESC, c.id DESC))[1] AS latest_review_provenance,
                  (array_agg(c.sentiment_provenance ORDER BY c.sent_at DESC, c.id DESC))[1] AS latest_sentiment_provenance,
@@ -355,7 +357,11 @@ export const inboxOperation: NeonQueryOperation<ReplyInboxItem, ReplyInboxParams
         ), identity AS (
           SELECT f.*, ld.full_name AS name, ld.company, ld.headline,
                  (f.sort_at, f.instance_id, f.profile_url) AS cursor_key,
-                 COALESCE(f.pending_message_id, f.latest_inbound_id) AS selected_message_id
+                 COALESCE(f.pending_message_id, f.latest_inbound_id) AS selected_message_id,
+                 CASE WHEN f.pending_message_id IS NOT NULL
+                      THEN COALESCE(f.pending_review_revision, 0)
+                      ELSE COALESCE(f.latest_review_revision, 0)
+                  END AS review_revision
             FROM filtered f LEFT JOIN LATERAL (
               SELECT full_name, company, headline FROM public.leads ld0
                WHERE ld0.instance_id=f.instance_id AND ld0.profile_url=f.profile_url

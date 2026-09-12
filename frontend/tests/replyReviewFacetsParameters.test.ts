@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { facetsOperation } from '../api/_lib/data/operations/replyReviews.js'
+import { facetsOperation, inboxOperation } from '../api/_lib/data/operations/replyReviews.js'
 
 describe('manual reply-review facets parameters', () => {
   it('keeps SQL placeholders contiguous and explicitly typed', () => {
@@ -23,5 +23,25 @@ describe('manual reply-review facets parameters', () => {
     expect(statement.values).toHaveLength(max)
     expect(statement.text).not.toMatch(/\$(\d+)(?!\d|::)/)
     expect(max).toBe(18)
+  })
+
+  it('projects review_revision from the message selected for the inbox row', () => {
+    const statement = inboxOperation.build({
+      actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' },
+      params: {
+        scope: 'all', captureStartedAt: null, instanceId: null, campaignId: null, ownerId: null,
+        sentiment: null, reasonId: null, action: null, query: null, view: 'all',
+        unacknowledged: false, unowned: false, overdue: false, my: false, currentActorId: null,
+        from: null, to: null, metricScope: null,
+      },
+      page: { limit: 50, cursor: null }, after: undefined, range: undefined,
+    })
+
+    expect(statement.text).toContain('pending_review_revision')
+    expect(statement.text).toContain('latest_review_revision')
+    expect(statement.text).toContain('CASE WHEN f.pending_message_id IS NOT NULL')
+    expect(statement.text).toContain('COALESCE(f.pending_review_revision, 0)')
+    expect(statement.text).toContain('COALESCE(f.latest_review_revision, 0)')
+    expect(statement.text).toContain('AS review_revision')
   })
 })
