@@ -10,11 +10,20 @@ export interface WeeklyTrendRow {
   [key: string]: unknown
 }
 
+function trendCount(value: unknown): string {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const metric = value as { numerator?: unknown; count?: unknown }
+    if (metric.numerator != null) return String(metric.numerator)
+    if (metric.count != null) return String(metric.count)
+  }
+  return String(value)
+}
+
 function trendBreakdown(row: WeeklyTrendRow): string | null {
   const value = row.sentiment ?? row.sentiments ?? row.reasons ?? row.reason_counts
   if (!value || typeof value !== 'object') return null
-  if (Array.isArray(value)) return value.slice(0, 3).map((item) => String(item)).join(' · ')
-  return Object.entries(value as Record<string, unknown>).slice(0, 3).map(([key, count]) => `${key}: ${String(count)}`).join(' · ')
+  if (Array.isArray(value)) return value.slice(0, 3).map((item) => trendCount(item)).join(' · ')
+  return Object.entries(value as Record<string, unknown>).slice(0, 3).map(([key, count]) => `${key}: ${trendCount(count)}`).join(' · ')
 }
 
 export function WeeklyTrendChart({
