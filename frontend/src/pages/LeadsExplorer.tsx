@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  ChevronDown, ChevronRight, Download, GraduationCap, Loader2, SearchX, Sparkles, X,
+  ChevronDown, ChevronRight, Columns3, Download, Filter, GraduationCap, Loader2, SearchX, Sparkles,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -15,6 +15,11 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { authFetch } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 import { EmptyState } from '../components/EmptyState'
+import {
+  AccountIdentity, ActiveFilters, Button, Dialog, FilterCount, InlineError, LinkButton,
+  PageHeader, Panel, SelectField, TableFrame, TableToolbar, Tabs, TextField, Toolbar,
+} from '../ui'
+import { COPY } from '../ui/labels'
 import { LeadMilestoneBadge, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
 import { LostReasonModal } from '../components/LostReasonModal'
 import type {
@@ -56,12 +61,14 @@ const SORT_KEYS: SortKey[] = [
 
 // The date/milestone columns. `added_at` is opt-in (deploy-pending on most
 // notebooks, so it's mostly em-dashes today) — toggled on from the table toolbar.
-const DATE_COLUMNS: Array<{ key: LeadDateSortKey; label: string; optional?: boolean }> = [
-  { key: 'added_at', label: 'Added', optional: true },
-  { key: 'invited_at', label: 'Invited' },
-  { key: 'connected_at', label: 'Accepted' },
-  { key: 'replied_at', label: 'Replied' },
-  { key: 'last_action_at', label: 'Last action' },
+const DATE_COLUMNS: Array<{
+  key: LeadDateSortKey; label: string; optional?: boolean; detail?: boolean
+}> = [
+  { key: 'added_at', label: 'Added', optional: true, detail: true },
+  { key: 'invited_at', label: 'Invited', detail: true },
+  { key: 'connected_at', label: 'Accepted', detail: true },
+  { key: 'replied_at', label: 'Replied', detail: true },
+  { key: 'last_action_at', label: 'Latest activity' },
 ]
 
 // Short chip labels for the active at-risk filter (the <select> text is verbose).
@@ -126,6 +133,11 @@ export function LeadsExplorer() {
   const sortAsc = params.get('dir') === 'asc'
   const page = Math.max(0, (Number(params.get('page')) || 1) - 1)
   const showAdded = params.get('added') === '1'
+  /* Default columns are the standard's six: Lead, Account / campaign, Milestone,
+   * Pipeline, Next follow-up, Latest activity. Headline, age and gender are real
+   * data but not what the page is scanned for, so they move behind Columns
+   * rather than being dropped. The filters and the export are unchanged. */
+  const showDetailColumns = params.get('cols') === 'all'
 
   const [serverMode, setServerMode] = useState(false)
   const [serverPage, setServerPage] = useState<LeadsSearchPage | null>(null)
@@ -309,6 +321,7 @@ export function LeadsExplorer() {
   // (re)computed on demand via POST /api/coach.
   const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
   const [digestOpen, setDigestOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [digestBusy, setDigestBusy] = useState<string | null>(null)
   const [digestErr, setDigestErr] = useState<string | null>(null)
   useEffect(() => {
@@ -487,9 +500,19 @@ export function LeadsExplorer() {
     ? (serverPage?.items ?? []).map((item) => item.lead)
     : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  const dateColumns = DATE_COLUMNS.filter((c) => !c.optional || showAdded)
-  // Lead, Headline, Campaign, Stage, Pipeline, Age, Gender + the date columns.
-  const colSpan = 8 + dateColumns.length
+  const dateColumns = DATE_COLUMNS.filter(
+    (c) => (!c.optional || showAdded) && (showDetailColumns || !c.detail),
+  )
+  // Lead, Account / campaign, Milestone, Pipeline, Next follow-up + the date
+  // columns, plus Headline / Age / Gender when the detail columns are shown.
+  const colSpan = 5 + (showDetailColumns ? 3 : 0) + dateColumns.length
+
+  /* How many of the sheet's filters are engaged. The search box and the account
+   * selector are on the page and visibly set, so they are not counted here. */
+  const sheetFilterCount = [
+    effCamp !== 'all', stage !== 'all', risk !== 'all', pipe !== 'all', who !== 'all',
+    followF !== 'all', repliedDays > 0, intent != null, genderF !== 'all', ageF !== 'all',
+  ].filter(Boolean).length
 
   // One removable chip per active filter, so the current view is legible at a glance.
   const activeFilters: Array<{ id: string; label: string; onClear: () => void }> = []
@@ -647,312 +670,233 @@ export function LeadsExplorer() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Leads</h1>
-          <div className="muted small">
-            Filters are kept in the URL, so any view here is shareable.
-          </div>
-        </div>
-        <Link className="btn sm" to="/replies?view=all&scope=all">Open Replies</Link>
-      </header>
+      <PageHeader
+        title="Leads"
+        description="Filters are kept in the URL, so any view here is shareable."
+        actions={<LinkButton variant="secondary" to="/replies?view=all&scope=all">Open Replies</LinkButton>}
+      />
 
-      <div className="card coach-digest-card">
-        <button className="coach-digest-toggle" onClick={() => setDigestOpen((o) => !o)}>
-          {digestOpen ? (
-            <ChevronDown size={15} className="coach-digest-caret" />
-          ) : (
-            <ChevronRight size={15} className="coach-digest-caret" />
-          )}
-          <GraduationCap size={16} className="coach-digest-icon" />
-          Your coaching digest
-          <span className="muted small">— recurring habits to fix for more replies</span>
-        </button>
-        {digestOpen && (
-          <div className="coach-digest-body">
-            {digestErr && <div className="banner">{digestErr}</div>}
-            {data.instances.map((instance) => {
-              const d = digests[instance.id]
-              return (
-                <div className="coach-digest-inst" key={instance.id}>
-                  <div className="coach-digest-inst-head">
-                    <span className="coach-digest-name">{instanceName(instance, instance.id)}</span>
-                    <button
-                      className="link-btn"
-                      disabled={digestBusy === instance.id}
-                      onClick={() => refreshDigest(instance.id)}
-                    >
-                      {digestBusy === instance.id ? 'Analyzing…' : d ? 'Refresh' : 'Generate'}
-                    </button>
-                    {d?.computed_at && (
-                      <span className="muted small">· {shortDate(d.computed_at)}</span>
-                    )}
-                  </div>
-                  {d?.summary && <div className="coach-digest-summary small">{d.summary}</div>}
-                  {d?.patterns?.length ? (
-                    <ul className="coach-digest-patterns small">
-                      {d.patterns.map((p, i) => (
-                        <li key={i}>
-                          <span className="badge senti obj">{p.count}×</span> {p.issue} — {p.advice}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : d ? (
-                    <div className="muted small">No recurring patterns yet.</div>
-                  ) : (
-                    <div className="muted small">
-                      Not generated yet — Generate to analyze this account's open threads.
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="filter-bar card">
-        <label className="filter-field filter-field-grow">
-          <span className="filter-label">Search</span>
-          <input
-            type="search"
-            placeholder="Name, headline, company…"
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-          />
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Account</span>
-          <select value={inst} onChange={(e) => setFilter('inst', e.target.value)}>
-            <option value="all">All accounts</option>
-            {data.instances.map((i) => (
-              <option key={i.id} value={i.id}>{instanceName(i)}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Campaign</span>
-          <select value={effCamp} onChange={(e) => setFilter('camp', e.target.value)}>
-            <option value="all">All campaigns</option>
-            {campaignOptions.map((c) => (
-              <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Stage</span>
-          <select value={stage} onChange={(e) => setFilter('stage', e.target.value)}>
-            <option value="all">All stages</option>
-            {STAGES.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Status</span>
-          <select value={risk} onChange={(e) => setFilter('risk', e.target.value)}>
-            <option value="all">Any status</option>
-            <option value="pending_2w">At risk: pending 14d+ (withdraw?)</option>
-            <option value="no_reply_2w">At risk: no reply 14d+ (follow up)</option>
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Pipeline</span>
-          <select value={pipe} onChange={(e) => setFilter('pipe', e.target.value)}>
-            <option value="all">All pipeline</option>
-            <option value="untriaged">Untriaged replies</option>
-            {PIPELINE_STAGES.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Owner</span>
-          <select value={who} onChange={(e) => setFilter('who', e.target.value)}>
-            <option value="all">Anyone</option>
-            <option value="unassigned">Unassigned</option>
-            {members.map((m) => (
-              <option key={m.id} value={String(m.id)}>{m.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Follow-up</span>
-          <select value={followF} onChange={(e) => setFilter('follow', e.target.value)}>
-            <option value="all">Any follow-up</option>
-            <option value="overdue">Overdue</option>
-            <option value="today">Today</option>
-            <option value="upcoming">Upcoming</option>
-            <option value="unscheduled">Unscheduled</option>
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Replied</span>
-          <select
-            value={repliedDays ? String(repliedDays) : 'all'}
-            onChange={(e) => setFilter('replied', e.target.value)}
-          >
-            <option value="all">Any time</option>
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Intent reached</span>
-          <select value={intent ?? 'all'} onChange={(e) => setFilter('intent', e.target.value)}>
-            <option value="all">Any intent</option>
-            {INTENT_ORDER.map((level) => (
-              <option key={level} value={level}>
-                {INTENT_META[level].short} · {INTENT_META[level].label}
-              </option>
-            ))}
-            <option value="none">No P1–P3 intent</option>
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Gender</span>
-          <select value={genderF} onChange={(e) => setFilter('gender', e.target.value)}>
-            <option value="all">Any gender</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="unknown">Unknown</option>
-            <option value="pending">Pending evaluation</option>
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Age</span>
-          <select value={ageF} onChange={(e) => setFilter('agebucket', e.target.value)}>
-            <option value="all">Any age</option>
-            {AGE_BUCKETS.map((b) => (
-              <option key={b.id} value={b.id}>{b.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {activeFilters.length > 0 && (
-        <div className="active-filters">
-          {activeFilters.map((f) => (
-            <button key={f.id} className="filter-chip" onClick={f.onClear}>
-              {f.label}
-              <X size={13} />
-            </button>
+      {/* Search and the account scope stay on the page; the other ten filters
+          live in a sheet that opens over it. Twelve inline filters plus the
+          digest and the tabs used to put the first table row at y≈480. */}
+      <Toolbar>
+        <TextField
+          className="ui-toolbar__search"
+          label="Search leads"
+          labelHidden
+          type="search"
+          placeholder="Name, headline, company…"
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+        />
+        <SelectField label="Account" labelHidden value={inst} onChange={(e) => setFilter('inst', e.target.value)}>
+          <option value="all">All accounts</option>
+          {data.instances.map((i) => (
+            <option key={i.id} value={i.id}>{instanceLabel(i.id)}</option>
           ))}
-          <button className="filter-chip-clear" onClick={clearAll}>
-            Clear all
-          </button>
-        </div>
+        </SelectField>
+        <Button
+          variant="secondary"
+          icon={<Filter size={18} aria-hidden="true" />}
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen(true)}
+        >{COPY.filters}<FilterCount count={sheetFilterCount} /></Button>
+      </Toolbar>
+
+      {filtersOpen && (
+        <Dialog
+          title={COPY.filters}
+          description="These apply on top of the search and the account selected on the page."
+          onRequestClose={() => setFiltersOpen(false)}
+          footerNote={sheetFilterCount ? `${sheetFilterCount} filter${sheetFilterCount === 1 ? '' : 's'} applied` : 'No filters applied'}
+          footer={<>
+            <Button variant="ghost" onClick={clearAll}>{COPY.clearAll}</Button>
+            <Button variant="primary" onClick={() => setFiltersOpen(false)}>Done</Button>
+          </>}
+        >
+          <div className="leads-filter-grid">
+            <SelectField label="Campaign" value={effCamp} onChange={(e) => setFilter('camp', e.target.value)}>
+              <option value="all">All campaigns</option>
+              {campaignOptions.map((c) => (
+                <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Milestone" value={stage} onChange={(e) => setFilter('stage', e.target.value)}>
+              <option value="all">All milestones</option>
+              {STAGES.map((sOption) => (
+                <option key={sOption.id} value={sOption.id}>{sOption.label}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Status" value={risk} onChange={(e) => setFilter('risk', e.target.value)}>
+              <option value="all">Any status</option>
+              <option value="pending_2w">At risk: pending 14d+ (withdraw?)</option>
+              <option value="no_reply_2w">At risk: no reply 14d+ (follow up)</option>
+            </SelectField>
+            <SelectField label="Pipeline" value={pipe} onChange={(e) => setFilter('pipe', e.target.value)}>
+              <option value="all">All pipeline</option>
+              <option value="untriaged">Untriaged replies</option>
+              {PIPELINE_STAGES.map((sOption) => (
+                <option key={sOption.id} value={sOption.id}>{sOption.label}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Owner" value={who} onChange={(e) => setFilter('who', e.target.value)}>
+              <option value="all">Anyone</option>
+              <option value="unassigned">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.id} value={String(m.id)}>{m.name}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Follow-up" value={followF} onChange={(e) => setFilter('follow', e.target.value)}>
+              <option value="all">Any follow-up</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Today</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="unscheduled">Unscheduled</option>
+            </SelectField>
+            <SelectField
+              label="Replied"
+              value={repliedDays ? String(repliedDays) : 'all'}
+              onChange={(e) => setFilter('replied', e.target.value)}
+            >
+              <option value="all">Any time</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </SelectField>
+            <SelectField label="Buying interest reached" value={intent ?? 'all'} onChange={(e) => setFilter('intent', e.target.value)}>
+              <option value="all">Any level</option>
+              {INTENT_ORDER.map((level) => (
+                <option key={level} value={level}>
+                  {INTENT_META[level].short} · {INTENT_META[level].label}
+                </option>
+              ))}
+              <option value="none">No P1–P3 interest</option>
+            </SelectField>
+            <SelectField label="Gender" value={genderF} onChange={(e) => setFilter('gender', e.target.value)}>
+              <option value="all">Any gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="unknown">Unknown</option>
+              <option value="pending">Pending evaluation</option>
+            </SelectField>
+            <SelectField label="Age" value={ageF} onChange={(e) => setFilter('agebucket', e.target.value)}>
+              <option value="all">Any age</option>
+              {AGE_BUCKETS.map((b) => (
+                <option key={b.id} value={b.id}>{b.label}</option>
+              ))}
+            </SelectField>
+          </div>
+        </Dialog>
       )}
 
-      <div
-        className="segmented sentiment-filter"
-        role="tablist"
-        aria-label="Filter leads by reply sentiment"
-      >
-        <button
-          className={`segmented-item ${!sent ? 'active' : ''}`}
-          role="tab"
-          aria-selected={!sent}
-          onClick={() => setSentiment(null)}
-        >
-          All leads
-        </button>
-        <button
-          className={`segmented-item ${sent === 'any' ? 'active' : ''}`}
-          role="tab"
-          aria-selected={sent === 'any'}
-          onClick={() => setSentiment(sent === 'any' ? null : 'any')}
-        >
-          Any reply <span className="segmented-count">{replyCounts.total}</span>
-        </button>
-        {SENTIMENT_ORDER.filter((s) => replyCounts.c[s] || sent === s).map((s) => (
-          <button
-            key={s}
-            className={`segmented-item ${sent === s ? 'active' : ''}`}
-            role="tab"
-            aria-selected={sent === s}
-            onClick={() => setSentiment(sent === s ? null : s)}
-          >
-            <span className={`seg-dot ${SENTIMENT_META[s].cls}`} />
-            {SENTIMENT_META[s].label} <span className="segmented-count">{replyCounts.c[s] ?? 0}</span>
-          </button>
-        ))}
-        {replyCounts.c['unclassified'] || sent === 'unclassified' ? (
-          <button
-            className={`segmented-item ${sent === 'unclassified' ? 'active' : ''}`}
-            role="tab"
-            aria-selected={sent === 'unclassified'}
-            onClick={() => setSentiment(sent === 'unclassified' ? null : 'unclassified')}
-          >
-            Unclassified <span className="segmented-count">{replyCounts.c['unclassified'] ?? 0}</span>
-          </button>
-        ) : null}
-      </div>
+      <ActiveFilters
+        onClearAll={clearAll}
+        filters={activeFilters.map((f) => {
+          // The existing chip strings are already "Field: value"; split them so
+          // the shared chip can style the two halves differently.
+          const split = f.label.indexOf(': ')
+          return {
+            id: f.id,
+            label: split > 0 ? f.label.slice(0, split) : 'Filter',
+            value: split > 0 ? f.label.slice(split + 2) : f.label,
+            onRemove: f.onClear,
+          }
+        })}
+      />
+
+      {/* Which replies the result set is scoped to — a section of the same
+          list, so tabs rather than a segmented mode switch. */}
+      <Tabs
+        label="Filter leads by reply sentiment"
+        value={sent ?? 'all'}
+        onChange={(value) => setSentiment(value === 'all' ? null : (value as Sentiment | 'any' | 'unclassified'))}
+        items={[
+          { id: 'all', label: 'All leads' },
+          { id: 'any', label: 'Any reply', count: replyCounts.total },
+          ...SENTIMENT_ORDER.filter((sOption) => replyCounts.c[sOption] || sent === sOption).map((sOption) => ({
+            id: sOption as string,
+            label: SENTIMENT_META[sOption].label,
+            count: replyCounts.c[sOption] ?? 0,
+          })),
+          ...(replyCounts.c['unclassified'] || sent === 'unclassified'
+            ? [{ id: 'unclassified', label: 'Unclassified', count: replyCounts.c['unclassified'] ?? 0 }]
+            : []),
+        ]}
+      />
 
       {serverError && (
-        <div className="card error-state">
-          <strong>Leads could not load.</strong>
-          <div className="muted small">{serverError}</div>
-        </div>
+        <InlineError
+          title="Leads could not load."
+          message="The list below may be incomplete or out of date."
+          detail={serverError}
+          onRetry={() => setServerRefresh((value) => value + 1)}
+        />
       )}
 
-      <div className="card">
-        <div className="table-toolbar">
-          <span className="muted small">
-            {serverLoading && <Loader2 size={13} className="spin" />}
-            {num(resultCount)} of {num(allLeadCount)} leads
-          </span>
-          <div className="table-toolbar-actions">
-            <label className="col-toggle">
-              <input
-                type="checkbox"
-                checked={showAdded}
-                onChange={(e) => setFilter('added', e.target.checked ? '1' : '')}
-              />
-              Added date
-            </label>
-            {isAdmin && (
-              <button
-                  className="btn sm"
+      <TableFrame
+        scrollLabel="Leads"
+        className="leads-table-frame"
+        toolbar={
+          <TableToolbar
+            count={<>
+              {serverLoading && <Loader2 size={14} className="spin" aria-hidden="true" />}
+              {num(resultCount)} of {num(allLeadCount)} leads
+            </>}
+            actions={<>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Columns3 size={16} aria-hidden="true" />}
+                aria-pressed={showDetailColumns}
+                onClick={() => setFilter('cols', showDetailColumns ? '' : 'all')}
+              >{showDetailColumns ? 'Fewer columns' : 'More columns'}</Button>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Sparkles size={16} aria-hidden="true" />}
                   onClick={updateDemographics}
-                  disabled={updatingDemographics}
+                  loading={updatingDemographics}
                   title="Process the next fair batch of name-based gender evaluations"
-                >
-                  {updatingDemographics
-                    ? <Loader2 size={14} className="spin" />
-                    : <Sparkles size={14} />}
-                  {updatingDemographics ? 'Updating…' : 'Update demographics'}
-              </button>
-            )}
-            <button
-              className="btn sm"
-              onClick={() => void exportCsv()}
-              disabled={resultCount === 0 || exporting}
-            >
-              {exporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-              {exporting ? 'Exporting…' : 'Export CSV'}
-            </button>
+                >Update demographics</Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Download size={16} aria-hidden="true" />}
+                onClick={() => void exportCsv()}
+                disabled={resultCount === 0}
+                loading={exporting}
+              >Export CSV</Button>
+            </>}
+          />
+        }
+        hint={pages > 1 ? (
+          <div className="pager">
+            <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => goPage(page - 1)}>← Previous</Button>
+            <span className="muted">Page {page + 1} of {pages}</span>
+            <Button variant="secondary" size="sm" disabled={page >= pages - 1} onClick={() => goPage(page + 1)}>Next →</Button>
           </div>
-        </div>
-        <div className="table-scroll tall" ref={scrollRef}>
-        <table>
+        ) : undefined}
+      >
+        <div ref={scrollRef}>
+        <table className="ui-table">
           <thead>
             <tr>
-              <th className="sortable" onClick={() => onSort('full_name')}>
+              <th scope="col" className="sortable" onClick={() => onSort('full_name')}>
                 Lead{sortInd('full_name')}
               </th>
-              <th>Headline</th>
-              <th>Campaign</th>
-              <th>Stage</th>
-              <th>Pipeline</th>
-              <th>Age</th>
-              <th>Gender</th>
-              <th className="sortable" onClick={() => onSort('next_follow_up_date')}>
+              {showDetailColumns && <th scope="col">Headline</th>}
+              <th scope="col">Account / campaign</th>
+              <th scope="col">Milestone</th>
+              <th scope="col">Pipeline</th>
+              {showDetailColumns && <th scope="col">Age</th>}
+              {showDetailColumns && <th scope="col">Gender</th>}
+              <th scope="col" className="sortable" onClick={() => onSort('next_follow_up_date')}>
                 Next follow-up{sortInd('next_follow_up_date')}
               </th>
               {dateColumns.map((c) => (
-                <th key={c.key} className="sortable" onClick={() => onSort(c.key)}>
+                <th scope="col" key={c.key} className="sortable" onClick={() => onSort(c.key)}>
                   {c.label}{sortInd(c.key)}
                 </th>
               ))}
@@ -996,8 +940,16 @@ export function LeadsExplorer() {
                     onClick={(e) => e.stopPropagation()}
                   >Open in Replies</Link>}
                 </td>
-                <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
-                <td className="muted small">{campaignName(l.campaign_id)}</td>
+                {showDetailColumns && (
+                  <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
+                )}
+                <td>
+                  <AccountIdentity
+                    name={instanceLabel(l.instance_id)}
+                    secondary={campaignName(l.campaign_id)}
+                    title={campaignName(l.campaign_id)}
+                  />
+                </td>
                 <td><LeadMilestoneBadge lead={l} /></td>
                 <td onClick={(e) => e.stopPropagation()}>
                   <select
@@ -1018,8 +970,8 @@ export function LeadsExplorer() {
                     ))}
                   </select>
                 </td>
-                <td className="muted col-age">{ageRange(l) ?? '—'}</td>
-                <td className="col-gender"><GenderCell lead={l} /></td>
+                {showDetailColumns && <td className="muted col-age">{ageRange(l) ?? '—'}</td>}
+                {showDetailColumns && <td className="col-gender"><GenderCell lead={l} /></td>}
                 <td className="col-follow-up">
                   {(() => {
                     const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
@@ -1053,7 +1005,7 @@ export function LeadsExplorer() {
                     }
                     action={
                       activeFilters.length > 0 ? (
-                        <button className="link-btn" onClick={clearAll}>Clear filters</button>
+                        <Button variant="secondary" size="sm" onClick={clearAll}>{COPY.clearFilters}</Button>
                       ) : undefined
                     }
                   />
@@ -1063,18 +1015,63 @@ export function LeadsExplorer() {
           </tbody>
         </table>
         </div>
-        {pages > 1 && (
-          <div className="pager">
-            <button className="btn" disabled={page === 0} onClick={() => goPage(page - 1)}>
-              ← Prev
-            </button>
-            <span className="muted small">page {page + 1} / {pages}</span>
-            <button className="btn" disabled={page >= pages - 1} onClick={() => goPage(page + 1)}>
-              Next →
-            </button>
+      </TableFrame>
+
+      {/* Coaching is an aid, not the work. It used to sit between the page
+          title and the filters; collapsed and below the results, it costs the
+          first row no vertical space. */}
+      <Panel className="coach-digest-card">
+        <button className="coach-digest-toggle" onClick={() => setDigestOpen((o) => !o)}>
+          {digestOpen
+            ? <ChevronDown size={18} className="coach-digest-caret" aria-hidden="true" />
+            : <ChevronRight size={18} className="coach-digest-caret" aria-hidden="true" />}
+          <GraduationCap size={18} className="coach-digest-icon" aria-hidden="true" />
+          Your coaching digest
+          <span className="muted small">— recurring habits to fix for more replies</span>
+        </button>
+        {digestOpen && (
+          <div className="coach-digest-body">
+            {digestErr && <div className="banner">{digestErr}</div>}
+            {data.instances.map((instance) => {
+              const d = digests[instance.id]
+              return (
+                <div className="coach-digest-inst" key={instance.id}>
+                  <div className="coach-digest-inst-head">
+                    <span className="coach-digest-name">{instanceLabel(instance.id)}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={digestBusy === instance.id}
+                      onClick={() => refreshDigest(instance.id)}
+                    >
+                      {d ? 'Refresh' : 'Generate'}
+                    </Button>
+                    {d?.computed_at && (
+                      <span className="muted small">· {shortDate(d.computed_at)}</span>
+                    )}
+                  </div>
+                  {d?.summary && <div className="coach-digest-summary small">{d.summary}</div>}
+                  {d?.patterns?.length ? (
+                    <ul className="coach-digest-patterns small">
+                      {d.patterns.map((pattern, i) => (
+                        <li key={i}>
+                          <span className="badge senti obj">{pattern.count}×</span> {pattern.issue} — {pattern.advice}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : d ? (
+                    <div className="muted small">No recurring patterns yet.</div>
+                  ) : (
+                    <div className="muted small">
+                      Not generated yet — Generate to analyse this account's open threads.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
-      </div>
+      </Panel>
 
       {pendingLost && (
         <LostReasonModal

@@ -38,6 +38,7 @@ import { clockTime, dayHeading } from '../lib/format'
 import type { ConversationMode } from '../lib/ConversationContext'
 import type { Coaching, Gender, Lead, Message } from '../lib/types'
 import type { ReplyReview } from '../lib/replyReview'
+import { IconButton } from '../ui'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
@@ -501,9 +502,12 @@ export function ConversationDrawer({
                 {[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
               </div>
             </div>
-            <button className="conv-close" onClick={onClose} aria-label="Close">
-              <X size={18} />
-            </button>
+            <IconButton
+              className="conv-close"
+              label="Close"
+              icon={<X size={20} aria-hidden="true" />}
+              onClick={onClose}
+            />
           </div>
 
           <div className="conv-status">
@@ -586,7 +590,12 @@ export function ConversationDrawer({
             )}
           </div>
 
-          <div className="conv-pipeline-controls">
+          {/* Everything below is lead metadata, not the conversation. It sits
+              behind one disclosure so the thread starts near the top of the
+              drawer instead of below four rows of controls. */}
+          <details className="conv-details">
+            <summary>Lead details</summary>
+            <div className="conv-pipeline-controls">
             <label className="filter-field">
               <span className="filter-label">Stage</span>
               <select
@@ -638,10 +647,10 @@ export function ConversationDrawer({
                   <option key={m.id} value={String(m.id)}>{m.name}</option>
                 ))}
               </select>
-            </label>
-          </div>
+              </label>
+            </div>
 
-          <div className="conv-demographics">
+            <div className="conv-demographics">
             <span className="conv-demo-item">
               <span className="filter-label">Age</span>
               <span className="conv-demo-val">{ageRange(live) ?? '—'}</span>
@@ -683,8 +692,9 @@ export function ConversationDrawer({
                     ? ` ·${Math.round(live.gender_confidence * 100)}%`
                     : ''}
                 </span>
-              ))}
-          </div>
+                ))}
+            </div>
+          </details>
         </header>
 
         {error && <div className="banner conv-error">{error}</div>}

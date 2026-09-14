@@ -20,6 +20,7 @@ import {
   messageSnippet,
 } from '../lib/followUps'
 import type { ConversationLatestMessage, FollowUpState, Lead } from '../lib/types'
+import { PageHeader, SelectField, TextField, Toolbar } from '../ui'
 
 // Intake lane: replies that haven't been triaged into the pipeline yet.
 const INTAKE = 'untriaged'
@@ -119,6 +120,16 @@ export function Pipeline() {
 
   const campaignName = (id: string) =>
     data.campaigns.find((c) => c.campaign_id === id)?.campaign_name ?? id
+  /* Two notebooks can carry the same display name. Where they do, the id goes
+   * in the label so a board column, a filter and a card all name the same
+   * account unambiguously. */
+  const accountLabel = (id: string) => {
+    const instance = data.instances.find((candidate) => candidate.id === id)
+    const name = instanceName(instance, id)
+    return data.instances.filter((candidate) => instanceName(candidate, candidate.id) === name).length > 1
+      ? `${name} · ${id}`
+      : name
+  }
   const campaignOptions = data.campaigns.filter((c) => inst === 'all' || c.instance_id === inst)
   const activeMembers = members.filter((m) => m.active)
 
@@ -149,59 +160,46 @@ export function Pipeline() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Pipeline</h1>
-          <div className="muted small">
-            Drag replies into the funnel and track them by hand. Filters are kept in the URL.
-          </div>
-        </div>
-        <div className="controls">
-          <div className="identity-chip" title="Audit identity comes from your login">
+      <PageHeader
+        title="Pipeline"
+        description="Drag replies into the funnel and track them by hand. Filters are kept in the URL."
+        actions={
+          <span className="identity-chip" title="Audit identity comes from your login">
             Working as <strong>{actor}</strong>
-          </div>
-        </div>
-      </header>
+          </span>
+        }
+      />
 
-      <div className="filter-bar card">
-        <label className="filter-field filter-field-grow">
-          <span className="filter-label">Search</span>
-          <input
-            type="search"
-            placeholder="Name, headline, company…"
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-          />
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Account</span>
-          <select value={inst} onChange={(e) => setFilter('inst', e.target.value)}>
-            <option value="all">All accounts</option>
-            {data.instances.map((i) => (
-              <option key={i.id} value={i.id}>{instanceName(i)}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Campaign</span>
-          <select value={effCamp} onChange={(e) => setFilter('camp', e.target.value)}>
-            <option value="all">All campaigns</option>
-            {campaignOptions.map((c) => (
-              <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-field">
-          <span className="filter-label">Assignee</span>
-          <select value={who} onChange={(e) => setFilter('who', e.target.value)}>
-            <option value="all">Anyone</option>
-            <option value="unassigned">Unassigned</option>
-            {members.map((m) => (
-              <option key={m.id} value={String(m.id)}>{m.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <Toolbar>
+        <TextField
+          className="ui-toolbar__search"
+          label="Search leads"
+          labelHidden
+          type="search"
+          placeholder="Name, headline, company…"
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+        />
+        <SelectField label="Account" labelHidden value={inst} onChange={(e) => setFilter('inst', e.target.value)}>
+          <option value="all">All accounts</option>
+          {data.instances.map((i) => (
+            <option key={i.id} value={i.id}>{accountLabel(i.id)}</option>
+          ))}
+        </SelectField>
+        <SelectField label="Campaign" labelHidden value={effCamp} onChange={(e) => setFilter('camp', e.target.value)}>
+          <option value="all">All campaigns</option>
+          {campaignOptions.map((c) => (
+            <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>
+          ))}
+        </SelectField>
+        <SelectField label="Assignee" labelHidden value={who} onChange={(e) => setFilter('who', e.target.value)}>
+          <option value="all">Anyone</option>
+          <option value="unassigned">Unassigned</option>
+          {members.map((m) => (
+            <option key={m.id} value={String(m.id)}>{m.name}</option>
+          ))}
+        </SelectField>
+      </Toolbar>
 
       <div className="pipe-board">
         {boardColumns.map((col) => {
@@ -210,6 +208,8 @@ export function Pipeline() {
             <section
               key={col.id}
               className={`pipe-col ${dragOver === col.id ? 'drag-over' : ''}`}
+              /* One status accent per COLUMN. The cards inside it no longer
+                 repeat the same hue on their own left border. */
               style={{ borderTopColor: col.color }}
               onDragOver={(e) => {
                 e.preventDefault()
@@ -239,10 +239,7 @@ export function Pipeline() {
                     columnId={col.id}
                     substatuses={col.sub}
                     campaignName={campaignName(l.campaign_id)}
-                    accountName={instanceName(
-                      data.instances.find((instance) => instance.id === l.instance_id),
-                      l.instance_id,
-                    )}
+                    accountName={accountLabel(l.instance_id)}
                     assigneeName={memberName(l.assigned_to)}
                     followUp={followUps.get(followUpKey(l.instance_id, l.profile_url))}
                     followUpOwnerName={memberName(
@@ -350,7 +347,6 @@ function PipeCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      style={{ borderLeftColor: stageColor(isIntake ? null : columnId) }}
     >
       <button
         type="button"
@@ -362,7 +358,7 @@ function PipeCard({
         }}
       >
         <span className="pipe-card-head-row">
-          <LeadAvatar lead={lead} size={28} />
+          <LeadAvatar lead={lead} size={32} />
           <span className="pipe-card-identity">
             <span className="pipe-card-name">{name}</span>
             <span className="pipe-card-sub muted small">
@@ -417,6 +413,8 @@ function PipeCard({
         onClick={stopControl}
       >
         <summary>Manage lead</summary>
+        {/* Drag-and-drop stays the fast path; this is the explicit one, and it
+            is also the only path a keyboard user has. */}
         <div className="pipe-card-controls">
           {substatuses.length > 0 && (
             <select

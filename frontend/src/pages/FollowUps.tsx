@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarCheck2, ExternalLink, Search, UserRound } from 'lucide-react'
+import { CalendarCheck2, ExternalLink, UserRound } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { LeadAvatar } from '../components/Avatar'
 import { EmptyState } from '../components/EmptyState'
@@ -18,6 +18,7 @@ import {
 import { instanceName } from '../lib/leads'
 import { shortDate } from '../lib/format'
 import { useFollowUpActions } from '../lib/useFollowUpActions'
+import { Button, PageHeader, SectionHeader, SelectField, TextField, Toolbar } from '../ui'
 import type { FollowUpBucket, FollowUpWorkItem } from '../lib/followUps'
 
 const GROUPS: Array<{ id: Exclude<FollowUpBucket, 'unscheduled'>; label: string }> = [
@@ -126,20 +127,32 @@ export function FollowUps() {
   const campaignOptions = data.campaigns.filter(
     (campaign) => inst === 'all' || campaign.instance_id === inst,
   )
+  /* Two accounts and two teammates can share a display name. Where they do,
+   * the label carries what tells them apart — the same rule the Replies owner
+   * filter already used, applied here too. */
+  const accountLabel = (id: string) => {
+    const instance = data.instances.find((candidate) => candidate.id === id)
+    const name = instanceName(instance, id)
+    return data.instances.filter((candidate) => instanceName(candidate, candidate.id) === name).length > 1
+      ? `${name} · ${id}`
+      : name
+  }
+  const ownerOptionLabel = (member: { id: number; name: string }) =>
+    members.filter((candidate) => candidate.name === member.name).length > 1
+      ? `${member.name} · #${member.id}`
+      : member.name
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Follow-ups</h1>
-          <div className="muted small">
-            One daily queue per LinkedIn conversation · Europe/Madrid business dates
-          </div>
-        </div>
-        <div className="identity-chip" title="Audit identity comes from your login">
-          Working as <strong>{actor}</strong>
-        </div>
-      </header>
+      <PageHeader
+        title="Follow-ups"
+        description="One daily queue per LinkedIn conversation. Due dates are Madrid business days."
+        actions={
+          <span className="identity-chip" title="Audit identity comes from your login">
+            Working as <strong>{actor}</strong>
+          </span>
+        }
+      />
 
       {!data.followUpsAvailable ? (
         <EmptyState
@@ -150,50 +163,41 @@ export function FollowUps() {
         />
       ) : (
         <>
-          <div className="filter-bar card follow-filter-bar">
-            <label className="filter-field filter-field-grow">
-              <span className="filter-label">Search</span>
-              <span className="follow-search">
-                <Search size={14} aria-hidden="true" />
-                <input
-                  type="search"
-                  value={query}
-                  placeholder="Name, headline, company…"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </span>
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Task owner</span>
-              <select value={owner} onChange={(event) => setFilter('owner', event.target.value)}>
-                <option value="all">All owners</option>
-                <option value="unassigned">Unassigned</option>
-                {members.map((member) => (
-                  <option key={member.id} value={String(member.id)}>{member.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Account</span>
-              <select value={inst} onChange={(event) => setFilter('inst', event.target.value)}>
-                <option value="all">All accounts</option>
-                {data.instances.map((instance) => (
-                  <option key={instance.id} value={instance.id}>{instanceName(instance)}</option>
-                ))}
-              </select>
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Campaign</span>
-              <select value={camp} onChange={(event) => setFilter('camp', event.target.value)}>
-                <option value="all">All campaigns</option>
-                {campaignOptions.map((campaign) => (
-                  <option key={campaign.campaign_id} value={campaign.campaign_id}>
-                    {campaign.campaign_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          {/* Search plus the owner scope stay on the page; account and campaign
+              are the only two left, so they stay beside them rather than
+              earning a sheet of their own. */}
+          <Toolbar className="follow-toolbar">
+            <TextField
+              className="ui-toolbar__search"
+              label="Search follow-ups"
+              labelHidden
+              type="search"
+              value={query}
+              placeholder="Name, headline, company…"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <SelectField label="Task owner" labelHidden value={owner} onChange={(event) => setFilter('owner', event.target.value)}>
+              <option value="all">All owners</option>
+              <option value="unassigned">Unassigned</option>
+              {members.map((member) => (
+                <option key={member.id} value={String(member.id)}>{ownerOptionLabel(member)}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Account" labelHidden value={inst} onChange={(event) => setFilter('inst', event.target.value)}>
+              <option value="all">All accounts</option>
+              {data.instances.map((instance) => (
+                <option key={instance.id} value={instance.id}>{accountLabel(instance.id)}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Campaign" labelHidden value={camp} onChange={(event) => setFilter('camp', event.target.value)}>
+              <option value="all">All campaigns</option>
+              {campaignOptions.map((campaign) => (
+                <option key={campaign.campaign_id} value={campaign.campaign_id}>
+                  {campaign.campaign_name}
+                </option>
+              ))}
+            </SelectField>
+          </Toolbar>
 
           {visible.length === 0 ? (
             <EmptyState
@@ -213,10 +217,10 @@ export function FollowUps() {
                 if (!rows.length) return null
                 return (
                   <section className={`follow-group ${group.id}`} key={group.id}>
-                    <div className="follow-group-head">
-                      <h2>{group.label}</h2>
-                      <span className="follow-count">{rows.length}</span>
-                    </div>
+                    <SectionHeader
+                      title={group.label}
+                      actions={<span className="follow-count">{rows.length}</span>}
+                    />
                     <div className="follow-list">
                       {rows.map((item) => {
                         const lead = item.representative
@@ -225,14 +229,14 @@ export function FollowUps() {
                           lead.full_name ??
                           lead.profile_url.replace('https://www.linkedin.com/in/', '')
                         return (
-                          <article className="card follow-item" key={item.key}>
+                          <article className="follow-item" key={item.key}>
                             <button
                               type="button"
                               className="follow-item-open"
                               onClick={() => openConversation(lead, { mode: 'follow_up' })}
                               aria-label={`Open follow-up for ${name}`}
                             >
-                              <LeadAvatar lead={lead} size={38} />
+                              <LeadAvatar lead={lead} size={40} />
                               <span className="follow-item-main">
                                 <span className="follow-item-name">{name}</span>
                                 <span className="muted small ellipsis">
@@ -251,12 +255,7 @@ export function FollowUps() {
                               <span className="muted small ellipsis" title={campaignSummary(item.leads, campaignName)}>
                                 {campaignSummary(item.leads, campaignName)}
                               </span>
-                              <span className="muted small">
-                                {instanceName(
-                                  data.instances.find((instance) => instance.id === item.state.instance_id),
-                                  item.state.instance_id,
-                                )}
-                              </span>
+                              <span className="muted small">{accountLabel(item.state.instance_id)}</span>
                             </div>
                             <div className="follow-item-message">
                               {message ? (
@@ -273,14 +272,12 @@ export function FollowUps() {
                                 <span className="muted small">No message history</span>
                               )}
                             </div>
+                            {/* One primary action per row; the two rarer links
+                                sit beside it as quiet links, not as competing
+                                buttons. */}
                             <div className="follow-item-actions">
-                              <a
-                                className="link-btn"
-                                href={lead.profile_url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                LinkedIn <ExternalLink size={12} />
+                              <a className="link-btn" href={lead.profile_url} target="_blank" rel="noreferrer">
+                                LinkedIn <ExternalLink size={14} aria-hidden="true" />
                               </a>
                               <Link
                                 className="link-btn"
@@ -292,12 +289,13 @@ export function FollowUps() {
                               >
                                 Review in Replies
                               </Link>
-                              <button
-                                className="btn accent sm"
+                              <Button
+                                variant="primary"
+                                size="sm"
                                 onClick={() => openConversation(lead, { mode: 'follow_up' })}
                               >
                                 Open follow-up
-                              </button>
+                              </Button>
                             </div>
                           </article>
                         )
