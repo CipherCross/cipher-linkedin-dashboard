@@ -464,6 +464,26 @@ selection** (one call per batch, state 2 → 1, no list surgery), and
 not needed.
 
 
+#### Pilot observation checklist (notebook-1)
+
+1. First 1.26.0 sync: `tracker:` lines in the notebook's cron log — campaign
+   created (paused, validated, 7 working-interval rows) or an error code; the
+   campaign appears in LH2's list as "Conversation tracker (dashboard)" and
+   NOT in the dashboard (excluded). Health: run status still `partial` only for
+   the pre-existing runtime-status mismatch.
+2. Second sync: `tracker: enqueued N (retry a, import b) …` with N ≤ 3; LH2
+   shows N people in the tracker's Queue and the campaign Running inside
+   09:00–18:00 Mon–Fri local; `action_target_people.state = 1` for the action.
+3. Following syncs: queue drains, campaign re-paused, and the refreshed threads
+   show new rows with real `send_at` in the conversation drawer. Slack: at most
+   the unanswered inbound replies within 14 days.
+4. `events` rows with `event_type = 'conversation_refresh'` per requested slug
+   (`raw.method` retry/import/unresolved/busy/skipped); the candidates op stops
+   offering them for 3 days.
+5. If step 1 prints `CDP_SECURITY_ACK_REQUIRED` or `CDP_ADAPTER_NOT_ENABLED`,
+   notebook-1's `lh2_publish` profile lacks the ack — set it locally; nothing
+   else changes.
+
 ### Phase 3 — UI/manual import
 - Conversation drawer shows source per message (`sync`/`manual`) and platform;
   "Import history" stays for attachments, group chats and uncovered platforms.
