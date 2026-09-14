@@ -31,6 +31,7 @@ import { DeployedSequence } from '../components/DeployedSequence'
 import { LeadsAndRepliesWorkspace } from '../components/leads-and-replies/LeadsAndRepliesWorkspace'
 import { publishStatusLabel } from '../lib/sequenceBuilder'
 import { CampaignRuntimeStatusView } from '../components/CampaignRuntimeStatus'
+import { PageHeader, SelectField, Tabs } from '../ui'
 
 const TABS = [
   { id: 'leads', label: 'Leads & replies' },
@@ -148,24 +149,24 @@ export function CampaignDetail() {
 
   return (
     <>
-      <header>
-        <div>
-          <div className="breadcrumb muted small">
-            <Link to="/">Overview</Link> / campaign
-          </div>
-          <h1>{campaign.campaign_name}</h1>
-          <div className="muted small">
-            <Link className="row-link muted" to={`/account/${encodeURIComponent(campaign.instance_id)}`}>
-              {instanceLabel}
-            </Link>
-          </div>
+      <PageHeader
+        breadcrumb={[
+          { label: 'Overview', to: '/' },
+          { label: instanceLabel, to: `/account/${encodeURIComponent(campaign.instance_id)}` },
+        ]}
+        title={campaign.campaign_name}
+        /* Runtime status and publishing provenance keep their own meanings and
+           are NOT merged into one badge — they answer different questions. */
+        context={<>
           <CampaignRuntimeStatusView campaign={campaign} />
           <DeploymentSource context={data.campaignSequenceContext} />
-        </div>
-        {tab === 'performance' && (
-          <div className="controls">
+        </>}
+        actions={tab === 'performance' ? (
+          <>
             <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
-            <select
+            <SelectField
+              label="Compare with another campaign"
+              labelHidden
               value=""
               onChange={(e) => {
                 if (e.target.value) writeCompare([...compareIds, e.target.value])
@@ -179,25 +180,17 @@ export function CampaignDetail() {
                     {c.campaign_name}
                   </option>
                 ))}
-            </select>
-          </div>
-        )}
-      </header>
+            </SelectField>
+          </>
+        ) : undefined}
+      />
 
-      <div className="segmented campaign-tabs" role="tablist" aria-label="Campaign section">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`segmented-item ${tab === item.id ? 'active' : ''}`}
-            role="tab"
-            aria-selected={tab === item.id}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Campaign section"
+        value={tab}
+        onChange={setTab}
+        items={TABS.map((item) => ({ id: item.id, label: item.label }))}
+      />
 
       {tab === 'leads' && (
         <LeadsAndRepliesWorkspace

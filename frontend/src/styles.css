@@ -185,34 +185,44 @@ select {
   gap: var(--space-6);
   margin-bottom: var(--space-8);
 }
-.kpi-grid > * { flex: 1 1 200px; min-width: 0; }
+.kpi-grid > * { flex: 1 1 220px; min-width: 0; }
 
 .kpi {
-  display: flex; flex-direction: column; gap: 5px;
+  display: flex; flex-direction: column; gap: var(--space-xs);
   background: var(--surface-1);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
-.kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+/* Sentence case at the metadata size. The old uppercase micro-caps rendered at
+ * 11px and were the smallest text on the dashboard. */
 .kpi-label {
-  display: inline-flex; align-items: center; gap: 6px;
-  color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-caps);
+  display: inline-flex; align-items: center; gap: var(--space-xs);
   min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
 }
-.kpi-label svg { flex-shrink: 0; opacity: 0.85; }
-.kpi-value { font-size: var(--text-display); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.kpi-sub { color: var(--text-secondary); font-size: var(--text-xs); }
+.kpi-label svg { flex-shrink: 0; }
+.kpi-value {
+  font-size: var(--text-kpi);
+  line-height: var(--leading-kpi);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.kpi-sub { color: var(--text-secondary); font-size: var(--text-meta); }
 
-/* Clickable KPI tile — drills into a related page. Strip the link chrome and
- * lift slightly on hover so it reads as interactive without breaking the card. */
-.kpi-link { color: inherit; text-decoration: none; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.14s ease; }
-.kpi-link:hover { transform: translateY(-1px); box-shadow: var(--shadow-overlay); }
+/* Clickable KPI tile — drills into a related page. No lift on hover: a data
+ * surface does not move under the cursor. */
+.kpi-link { color: inherit; text-decoration: none; cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out); }
+.kpi-link:hover { border-color: var(--accent); }
 
 /* range-over-range delta chip */
 .kpi-delta {
   flex-shrink: 0;
   display: inline-flex; align-items: center;
-  padding: 1px 7px; border-radius: var(--radius-pill);
-  font-size: var(--text-2xs); font-weight: 600; font-variant-numeric: tabular-nums;
+  padding: 2px var(--space-sm); border-radius: var(--radius-pill);
+  font-size: var(--text-meta); font-weight: 600; font-variant-numeric: tabular-nums;
   border: 1px solid transparent; white-space: nowrap;
 }
 .kpi-delta.up { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
@@ -225,8 +235,9 @@ select {
 .kpi-toggle { flex-shrink: 0; display: inline-flex; gap: 2px; }
 .kpi-toggle button {
   background: none; border: none; color: var(--text-muted);
-  font-size: var(--text-2xs); font-weight: 600; font-variant-numeric: tabular-nums;
-  padding: 1px 6px; border-radius: var(--radius-pill); cursor: pointer;
+  font-size: var(--text-meta); font-weight: 600; font-variant-numeric: tabular-nums;
+  min-height: var(--control-height-sm); padding: 0 var(--space-sm);
+  border-radius: var(--radius-pill); cursor: pointer;
   transition: background 0.14s ease, color 0.14s ease;
 }
 .kpi-toggle button:hover { color: var(--text); background: var(--surface-2); }
@@ -261,31 +272,25 @@ select {
   .main-grid { grid-template-columns: 1fr; }
 }
 
-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+/* Table geometry matches src/ui/Table.tsx: 14/20 content, 13px sentence-case
+ * headers, 52px single-line rows. The uppercase micro-caps header was the
+ * smallest text in the app at 11px. */
+table { width: 100%; border-collapse: collapse; font-size: var(--text-table); line-height: var(--leading-table); }
+th, td { padding: var(--space-md); text-align: left; border-bottom: 1px solid var(--border); }
+tbody tr { height: var(--row-height); }
 th {
-  color: var(--text-muted); font-weight: 600; font-size: var(--text-2xs);
-  text-transform: uppercase; letter-spacing: var(--tracking-caps);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--text-meta);
 }
 tr:last-child td { border-bottom: none; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 /* fixed-width sort-direction glyph so toggling sort never reflows the column */
 .sort-ind { display: inline-block; width: 12px; text-align: center; color: var(--text-muted); }
-.table-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; }
+.table-scroll { max-height: 420px; overflow-y: auto; overflow-x: auto; }
 .table-scroll.tall { max-height: calc(100vh - 300px); min-height: 320px; }
-/* Bottom fade so a clipped last row reads as "scroll for more", not a bug.
- * The sticky pseudo rides the scrollport's bottom edge while scrollable, then
- * comes to rest in its own 28px flow slot after the table — where a fade into
- * the card surface is invisible. Pure CSS, correct at both scroll extremes. */
-.table-scroll::after {
-  content: '';
-  display: block;
-  height: 28px;
-  position: sticky;
-  bottom: 0;
-  background: none;
-  pointer-events: none;
-}
+/* No bottom fade: a clipped last row is announced by the scrollbar and by the
+ * row count in the toolbar, not by making the row unreadable. */
 /* header stays put while the body scrolls (border-collapse drops the th border
  * on scroll, so pin the divider with an inset shadow) */
 
@@ -2114,20 +2119,11 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .sk-bubble.out { align-self: flex-end; }
 
 /* --- Manager Review ------------------------------------------------------ */
-/* Right-edge fade as a "more columns this way" affordance: a sticky pseudo
- * pins to the scrollport's right edge while there's content to scroll, then
- * slides into its own (empty) flow slot at scroll end, where fading into the
- * card surface makes it invisible. Same pattern as .table-scroll::after. */
+/* The matrix scrolls inside its own region with a visible scrollbar and a
+ * written hint beside it. The old right-edge fade hid the last column instead
+ * of announcing it. */
 .cohort-scroll { display: flex; overflow-x: auto; }
 .cohort-scroll > table { flex: 0 0 auto; }
-.cohort-scroll::after {
-  content: '';
-  flex: 0 0 28px;
-  position: sticky;
-  right: 0;
-  background: none;
-  pointer-events: none;
-}
 .cohort-table { min-width: 640px; }
 .cohort-table th, .cohort-table td { white-space: nowrap; }
 .cohort-camp-col {
@@ -2136,9 +2132,8 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
   max-width: 220px; overflow: hidden; text-overflow: ellipsis;
 }
 .cohort-subhead td {
-  color: var(--text-secondary); font-weight: 600; font-size: var(--text-xs);
+  color: var(--text-secondary); font-weight: 600; font-size: var(--text-meta);
   background: var(--surface-2);
-  text-transform: uppercase; letter-spacing: var(--tracking-caps);
 }
 .cohort-subhead td.cohort-camp-col { background: var(--surface-2); }
 .cohort-subhead-label { position: sticky; left: 10px; display: inline-block; }
@@ -4435,3 +4430,12 @@ td .pipe-stage-select.quiet:focus-visible {
  * reachable by the frame's own scrollbar. */
 .leads-table-frame .ui-table-scroll { max-height: calc(100vh - 360px); min-height: 280px; }
 .leads-table-frame .pager { padding: 0; }
+
+/* ── Weekly add-limit meter (Account) ────────────────────────────────────── */
+.cap-meter {
+  height: 10px;
+  margin: var(--space-md) 0 var(--space-sm);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.cap-meter > span { display: block; height: 100%; border-radius: inherit; transition: width .2s; }

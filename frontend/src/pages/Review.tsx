@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { ClipboardCheck, Loader2, Send } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { ClipboardCheck, Send } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import {
@@ -19,6 +19,7 @@ import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
 import { num } from '../lib/format'
+import { Button, LinkButton, PageHeader, Panel, SectionHeader, SegmentedControl, SelectField, Tabs } from '../ui'
 
 const WEEK_OPTIONS = [8, 12, 16]
 const DEFAULT_WEEKS = 12
@@ -119,19 +120,12 @@ export function Review() {
         setRange={setRange}
       />
 
-      <div className="segmented review-tabs" role="tablist" aria-label="Review section">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`segmented-item ${tab === t.id ? 'active' : ''}`}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Review section"
+        value={tab}
+        onChange={setTab}
+        items={TABS.map((t) => ({ id: t.id, label: t.label }))}
+      />
 
       {tab === 'leads-added' ? (
         <LeadsAddedTable campaigns={rangedAdded} instances={data.instances} />
@@ -182,38 +176,38 @@ function ReviewHeader({
   setRange: (r: DateRange) => void
 }) {
   return (
-    <header>
-      <div>
-        <h1>Manager Review</h1>
-        <div className="muted small">
-          Cohort-matured funnel, P1–P3 intent and template comparison for the
-          weekly review. Rates for cohorts too fresh to judge are held back.
-        </div>
-      </div>
-      <div className="controls">
-        <Link className="btn sm" to="/sentiment-analysis">Sentiment Analysis</Link>
-        <select value={inst} onChange={(e) => setInst(e.target.value)}>
+    <PageHeader
+      title="Manager review"
+      description="Cohort-matured funnel, P1–P3 buying interest and template comparison for the weekly review. Rates for cohorts too fresh to judge are held back."
+      actions={<>
+        <LinkButton variant="ghost" to="/sentiment-analysis">Sentiment analysis</LinkButton>
+        <SelectField
+          label="Account"
+          labelHidden
+          value={inst}
+          onChange={(e) => setInst(e.target.value)}
+        >
           <option value="all">All accounts</option>
           {instances.map((i) => (
             <option key={i.id} value={i.id}>{instanceName(i)}</option>
           ))}
-        </select>
+        </SelectField>
         {tab === 'leads-added' ? (
           <DateRangePicker presets={presets} value={range} onChange={setRange} />
         ) : (
           <>
-            <div className="range-group">
-              {WEEK_OPTIONS.map((w) => (
-                <button key={w} className={w === weeks ? 'active' : ''} onClick={() => setWeeks(w)}>
-                  {w}w
-                </button>
-              ))}
-            </div>
+            {/* A window length, not a section: a segmented control. */}
+            <SegmentedControl
+              label="Cohort window"
+              value={String(weeks)}
+              onChange={(value) => setWeeks(Number(value))}
+              items={WEEK_OPTIONS.map((w) => ({ id: String(w), label: `${w} weeks` }))}
+            />
             <SendToSlackButton digest={digest} />
           </>
         )}
-      </div>
-    </header>
+      </>}
+    />
   )
 }
 
@@ -225,11 +219,11 @@ function P3OutcomeSummary({
   weeks: number
 }) {
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>P3 outcomes · last {weeks} weeks</h2>
-        <span className="muted small">unique conversations · first P3 attribution</span>
-      </div>
+    <Panel>
+      <SectionHeader
+        title={`P3 outcomes · last ${weeks} weeks`}
+        description="Unique conversations · attributed to the first P3"
+      />
       <div className="tmpl-stat-grid">
         <div className="tmpl-stat-cell">
           <div className="tmpl-stat-val">{num(metrics.p3)}</div>
@@ -250,7 +244,7 @@ function P3OutcomeSummary({
           <div className="muted tmpl-stat-n">follow-up recorded · 30d silence</div>
         </div>
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -276,14 +270,16 @@ function SendToSlackButton({ digest }: { digest: DigestPayload | null }) {
   }
 
   return (
-    <button
-      className="btn-accent icon-btn"
+    <Button
+      variant="secondary"
+      icon={<Send size={18} aria-hidden="true" />}
       onClick={send}
-      disabled={busy || !digest}
+      loading={busy}
+      loadingLabel="Sending the digest to Slack"
+      disabled={!digest}
       title={digest ? 'Post this review to Slack' : 'No matured cohorts to report yet'}
     >
-      {busy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}
-      {busy ? 'Sending…' : 'Send to Slack'}
-    </button>
+      Send to Slack
+    </Button>
   )
 }

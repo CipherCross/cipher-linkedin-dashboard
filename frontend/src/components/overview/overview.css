@@ -1,0 +1,316 @@
+/* ===========================================================================
+ * Overview.
+ *
+ * This file replaced `overview-glass.css`, which wrapped the whole route in a
+ * decorative shell: three radial washes and two blurred colour blobs behind the
+ * page, translucent panels over a 14–24px backdrop blur, a white top-edge
+ * highlight on every tile, two stacked drop shadows, 18–28px radii and a
+ * lift-on-hover on the KPI tiles. None of it is here. The page is now the same
+ * white surfaces on the same page background as every other route, and the
+ * class prefix moved from the shared `sa-` namespace to `ov-` so a lazily
+ * loaded Sentiment Analysis sheet can never restyle Overview by arriving second.
+ *
+ * What stays deliberately distinct: the chart palette and tooltips, which carry
+ * data, and the separate system / performance / account scopes, which have
+ * different denominators and must not be merged into one prettier card.
+ * ======================================================================== */
+
+.overview {
+  min-width: 0;
+  /* Date popovers must be free to escape the page frame. */
+  overflow: visible;
+}
+
+.overview h1, .overview h2, .overview h3, .overview p { margin-top: 0; }
+
+.overview .ov-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-bottom: var(--space-lg);
+}
+
+.overview .ov-muted { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+.overview .ov-caption { margin: var(--space-xs) 0 var(--space-lg); color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-sample {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--text-meta);
+  font-weight: 600;
+}
+
+/* ---- Sections ------------------------------------------------------------
+ * Two visible levels only: page → section. A section is one white panel; the
+ * KPI tiles and the table rows inside it do not get a second frame each. */
+.overview > .ov-summary,
+.overview > .ov-panel {
+  margin-bottom: var(--space-xl);
+  padding: var(--space-xl);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+}
+.overview .ov-panel h2,
+.overview > .ov-summary h2 {
+  margin-bottom: 0;
+  font-size: var(--text-section);
+  line-height: var(--leading-section);
+  font-weight: 600;
+}
+
+/* The period is stated once per section, in its header — not repeated inside
+ * every tile, which is where five "All time" captions came from. */
+.overview .ov-summary > .ov-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-lg);
+  margin: 0;
+}
+.overview .ov-total {
+  min-width: 0;
+  padding: var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+.overview .ov-total span { color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-total strong {
+  display: block;
+  margin: var(--space-sm) 0 2px;
+  color: var(--text);
+  font-size: var(--text-kpi);
+  line-height: var(--leading-kpi);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.overview .ov-total small { color: var(--text-muted); font-size: var(--text-meta); }
+
+/* ---- Controls ------------------------------------------------------------ */
+.overview .ov-controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--space-md); flex-wrap: wrap; }
+.overview .ov-controls > label {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 200px;
+  color: var(--text);
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  font-weight: 600;
+}
+.overview .ov-controls > label:has(.drp) { min-width: 240px; }
+.overview .ov-controls select { width: 100%; }
+
+/* DateRangePicker inside a section: it may paint over the section below. */
+.overview .drp { position: relative; z-index: 2; width: 100%; }
+.overview .drp-trigger { width: 100%; justify-content: flex-start; }
+.overview .drp-trigger .drp-caret { margin-left: auto; }
+.overview .drp-pop { z-index: 50; width: min(390px, calc(100vw - 24px)); }
+.overview .ov-panel:has(.drp-pop:not([hidden])) { z-index: 20; }
+
+/* ---- Performance chart --------------------------------------------------- */
+.overview .ov-performance { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--space-2xl); }
+.overview .ov-metrics { display: flex; gap: var(--space-2xl); flex-wrap: wrap; margin: 0 0 var(--space-lg); }
+.overview .ov-metric { display: grid; grid-template-columns: 10px auto; gap: 2px var(--space-sm); align-items: center; }
+/* The legend dot carries a series colour that the chart also uses, so it is
+ * data, not decoration — but it gets no glow. */
+.overview .ov-dot { width: 10px; height: 10px; border-radius: 50%; }
+.overview .ov-metric strong {
+  grid-column: 2;
+  font-size: var(--text-kpi);
+  line-height: var(--leading-kpi);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.overview .ov-metric label { color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-metric span:last-child { grid-column: 2; min-width: 0; color: var(--text-muted); font-size: var(--text-meta); }
+
+.overview .ov-plot { display: block; width: 100%; height: 280px; min-height: 280px; overflow: visible; }
+.overview .ov-plot > div { min-height: 280px; }
+.overview .ov-plot text { fill: var(--text-muted); font-family: inherit; font-size: var(--text-meta); }
+.overview .ov-plot .recharts-line-curve { stroke-width: 2.5px; }
+.overview .ov-plot .recharts-cartesian-grid line { stroke: var(--chart-grid); }
+.overview .ov-plot line { stroke: var(--chart-grid); }
+.overview #ov-point { min-height: 20px; margin-top: var(--space-sm); color: var(--text-muted); font-size: var(--text-meta); }
+
+.overview .ov-rates { padding-left: var(--space-xl); border-left: 1px solid var(--border); }
+.overview .ov-rates h3 {
+  margin: 0 0 var(--space-lg);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.overview .ov-rate { margin-bottom: var(--space-xl); }
+.overview .ov-rate label, .overview .ov-rate small { color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-rate strong {
+  display: block;
+  margin: 2px 0;
+  font-size: var(--text-kpi);
+  line-height: var(--leading-kpi);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Account / campaign table -------------------------------------------- */
+.overview .ov-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.overview table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+}
+.overview th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  font-weight: 600;
+  text-align: right;
+}
+.overview th:first-child, .overview td:first-child { text-align: left; }
+.overview th[aria-sort] button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--control-height-sm);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* The arrow is a fixed-width glyph so toggling a sort never reflows a column. */
+.overview th[aria-sort] button::after { content: '↕'; opacity: .5; font-size: var(--text-meta); }
+.overview th[aria-sort='ascending'] button::after { content: '↑'; opacity: 1; color: var(--accent); }
+.overview th[aria-sort='descending'] button::after { content: '↓'; opacity: 1; color: var(--accent); }
+.overview th[aria-sort] button:hover { color: var(--accent); }
+.overview th small { display: block; margin-top: 2px; color: var(--text-muted); font-size: var(--text-meta); font-weight: 400; }
+.overview td {
+  height: var(--row-height);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.overview tbody tr:last-child td { border-bottom: 0; }
+.overview tbody tr:hover { background: var(--surface-2); }
+
+.overview .ov-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--control-height);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.overview .ov-name:hover { color: var(--accent-hover); }
+.overview .ov-name small { display: block; color: var(--text-muted); font-size: var(--text-meta); font-weight: 400; }
+.overview .ov-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+}
+.overview .ov-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* ---- Account drill-in ----------------------------------------------------- */
+.overview .ov-detail { margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--border); }
+.overview .ov-details { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-lg); margin: var(--space-lg) 0; }
+.overview .ov-details strong {
+  display: block;
+  font-size: var(--text-kpi);
+  line-height: var(--leading-kpi);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.overview .ov-details span { color: var(--text-muted); font-size: var(--text-meta); }
+
+.overview .ov-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-top: var(--space-xl);
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+}
+
+/* ---- Loading -------------------------------------------------------------
+ * Skeletons match the final layout, and a *refresh* keeps the section's
+ * heading and controls in place with a visible "Refreshing…" note instead. */
+.overview .ov-loading-card { pointer-events: none; }
+.overview .ov-loading-card .skeleton + .skeleton { margin-top: var(--space-sm); }
+.overview .ov-loading-chart { margin-top: var(--space-lg); }
+.overview .ov-loading-table { overflow: hidden; }
+.overview .ov-loading-table-head,
+.overview .ov-loading-table-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.5fr) repeat(6, minmax(80px, 1fr));
+  align-items: center;
+  gap: var(--space-lg);
+  min-width: 900px;
+  padding: var(--space-md);
+}
+.overview .ov-loading-table-head { border-bottom: 1px solid var(--border); }
+.overview .ov-loading-table-row + .ov-loading-table-row { border-top: 1px solid var(--border); }
+.overview .ov-loading-account { display: flex; align-items: center; gap: var(--space-md); }
+
+@media (max-width: 1279px) {
+  .overview .ov-summary > .ov-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overview .ov-performance { grid-template-columns: 1fr; }
+  .overview .ov-rates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xl);
+    padding: var(--space-lg) 0 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+  .overview .ov-rates h3 { width: 100%; margin: 0; }
+  .overview .ov-rate { margin: 0; }
+  .overview .ov-details { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (forced-colors: active) {
+  .overview > .ov-summary,
+  .overview > .ov-panel,
+  .overview .ov-tablewrap { background: Canvas; border: 1px solid CanvasText; }
+  .overview .ov-muted, .overview .ov-caption { color: CanvasText; }
+}

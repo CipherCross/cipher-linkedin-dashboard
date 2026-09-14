@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { fetchNeonOverviewSummary, fetchNeonOverviewSystemTotals, resolveReadPath } from '../lib/dashboardReads'
 import { ALL_TIME_RANGE, rangeFromParam, rangeToParam, presetRanges, rangedCampaigns } from '../lib/leads'
@@ -7,7 +7,8 @@ import { buildOverviewAnalytics } from '../lib/overviewAnalytics'
 import type { DateRange } from '../lib/leads'
 import type { CampaignMetrics, OverviewAnalytics as Analytics } from '../lib/types'
 import { OverviewAnalytics } from '../components/overview/OverviewAnalytics'
-import '../components/overview/overview-glass.css'
+import { InlineError, LinkButton, PageHeader } from '../ui'
+import '../components/overview/overview.css'
 
 export function Overview() {
   const { data, phase } = useData()
@@ -151,16 +152,19 @@ export function Overview() {
     : { system, performance, campaigns: mergedCampaigns, instances: data.instances }
 
   return (
-    <div className="overview-glass">
-      <header className="sa-header">
-        <div><h1>Overview</h1><p className="sa-muted">Your whole outreach system, in one place.</p></div>
-        <Link className="link-btn" to="/sequences">Open sequences</Link>
-      </header>
+    <div className="overview">
+      <PageHeader
+        title="Overview"
+        description="Your whole outreach system, in one place."
+        actions={<LinkButton variant="secondary" to="/sequences">Open sequences</LinkButton>}
+      />
       {readPath === 'error' ? (
-        <div className="card error-state" role="alert">
-          <strong>Analytics could not determine its data source.</strong>
-          <button onClick={() => setDiscoveryRetry(value => value + 1)}>Try again</button>
-        </div>
+        <InlineError
+          title="Analytics could not determine its data source."
+          message="Nothing below is out of date — nothing loaded at all."
+          onRetry={() => setDiscoveryRetry(value => value + 1)}
+          retryLabel="Try again"
+        />
       ) : (
         <OverviewAnalytics
           {...props}

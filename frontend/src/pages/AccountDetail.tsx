@@ -15,6 +15,7 @@ import { WarmupChart } from '../components/WarmupChart'
 import { Heatmap } from '../components/Heatmap'
 import { CampaignTable } from '../components/CampaignTable'
 import { Avatar } from '../components/Avatar'
+import { PageHeader, Panel, SectionHeader } from '../ui'
 
 export function AccountDetail() {
   const { id } = useParams<{ id: string }>()
@@ -87,33 +88,31 @@ export function AccountDetail() {
 
   return (
     <>
-      <header>
-        <div className="account-head">
-          <Avatar inst={inst} size={52} />
-          <div>
-            <div className="breadcrumb muted small">
-              <Link to="/">Overview</Link> / account
-            </div>
-            <h1>{instanceName(inst)}</h1>
-            <div className="muted small">
-              {inst.account_url && (
-                <>
-                  <a className="row-link muted" href={inst.account_url} target="_blank" rel="noreferrer">
-                    LinkedIn profile ↗
-                  </a>
-                  {' · '}
-                </>
-              )}
-              {inst.account_name && inst.label && `${inst.label} · `}
-              {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'} ·{' '}
-              {campaigns.length} campaigns · {num(leads.length)} leads
-            </div>
-          </div>
-        </div>
-        <div className="controls">
-          <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
-        </div>
-      </header>
+      <PageHeader
+        breadcrumb={[{ label: 'Overview', to: '/' }, { label: 'Account' }]}
+        title={
+          <span className="account-head">
+            <Avatar inst={inst} size={44} />
+            {instanceName(inst)}
+          </span>
+        }
+        context={
+          <span className="muted small">
+            {inst.account_url && (
+              <>
+                <a className="row-link muted" href={inst.account_url} target="_blank" rel="noreferrer">
+                  LinkedIn profile ↗
+                </a>
+                {' · '}
+              </>
+            )}
+            {inst.account_name && inst.label && `${inst.label} · `}
+            {inst.last_sync_at ? `Synced ${ago(inst.last_sync_at)}` : 'Never synced'} ·{' '}
+            {campaigns.length} campaigns · {num(leads.length)} leads
+          </span>
+        }
+        actions={<DateRangePicker presets={RANGES} value={range} onChange={setRange} />}
+      />
 
       <KpiCards
         totals={kpis.totals}
@@ -125,24 +124,26 @@ export function AccountDetail() {
         intentPrev={kpis.intentPrev}
       />
 
-      <div className="card">
-        <div className="account-cell" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>Added this week</h2>
-          <div className="small" style={{ fontWeight: 600 }}>
-            {num(addedThisWeek)} / {WEEKLY_ADD_LIMIT}
-          </div>
-        </div>
+      <Panel>
+        <SectionHeader
+          title="Added this week"
+          actions={<strong className="tabular">{num(addedThisWeek)} / {WEEKLY_ADD_LIMIT}</strong>}
+        />
+        {/* A meter is data, so it keeps its status hue — and it is always read
+            out in words underneath, never by colour alone. */}
         <div
-          style={{
-            height: 8, borderRadius: 4, background: `var(--${capTone}-subtle)`,
-            overflow: 'hidden', margin: '10px 0 8px',
-          }}
+          className="cap-meter"
+          role="meter"
+          aria-valuenow={addedThisWeek}
+          aria-valuemin={0}
+          aria-valuemax={WEEKLY_ADD_LIMIT}
+          aria-label="Leads added this week against the weekly limit"
+          style={{ background: `var(--${capTone}-subtle)` }}
         >
-          <div
+          <span
             style={{
               width: `${Math.min(100, addedFrac * 100)}%`,
-              height: '100%', borderRadius: 4, background: `var(--${capTone})`,
-              transition: 'width .2s',
+              background: `var(--${capTone})`,
             }}
           />
         </div>
@@ -150,7 +151,7 @@ export function AccountDetail() {
           {remaining > 0 ? `${num(remaining)} more can be added this week` : 'Weekly add limit reached'}
           {' · '}~200/week keeps the account safe.
         </div>
-      </div>
+      </Panel>
 
       <div className="stack">
         <WarmupChart leads={leads} />

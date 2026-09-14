@@ -20,6 +20,7 @@ import type {
   Instance,
   OverviewAnalytics as Analytics,
 } from "../../lib/types";
+import { Button, InlineError } from "../../ui";
 
 type Props = {
   system: Analytics | null;
@@ -67,9 +68,9 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 
 function SystemTotalsLoading() {
   return (
-    <div className="sa-summary sa-loading-grid" role="status" aria-label="Loading system totals">
+    <div className="ov-summary ov-loading-grid" role="status" aria-label="Loading system totals">
       {Array.from({ length: 5 }).map((_, index) => (
-        <div className="sa-total sa-loading-card" key={index}>
+        <div className="ov-total ov-loading-card" key={index}>
           <Skeleton width="52%" height={12} />
           <Skeleton width="38%" height={31} />
           <Skeleton width="64%" height={10} />
@@ -81,20 +82,20 @@ function SystemTotalsLoading() {
 
 function PerformanceLoading() {
   return (
-    <div className="sa-performance sa-loading-performance" role="status" aria-label="Loading performance analytics">
+    <div className="ov-performance ov-loading-performance" role="status" aria-label="Loading performance analytics">
       <div>
-        <div className="sa-metrics">
+        <div className="ov-metrics">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div className="sa-metric sa-loading-card" key={index}>
+            <div className="ov-metric ov-loading-card" key={index}>
               <Skeleton width={72} height={11} />
               <Skeleton width={64} height={28} />
               <Skeleton width={110} height={10} />
             </div>
           ))}
         </div>
-        <Skeleton className="sa-loading-chart" width="100%" height={280} radius={16} />
+        <Skeleton className="ov-loading-chart" width="100%" height={280} radius={16} />
       </div>
-      <aside className="sa-rates sa-loading-card">
+      <aside className="ov-rates ov-loading-card">
         <Skeleton width={130} height={16} />
         <Skeleton width="100%" height={82} radius={12} />
         <Skeleton width="100%" height={82} radius={12} />
@@ -105,13 +106,13 @@ function PerformanceLoading() {
 
 function AccountTableLoading() {
   return (
-    <div className="sa-tablewrap sa-loading-table" role="status" aria-label="Loading account analytics">
-      <div className="sa-loading-table-head">
+    <div className="ov-tablewrap ov-loading-table" role="status" aria-label="Loading account analytics">
+      <div className="ov-loading-table-head">
         {Array.from({ length: 7 }).map((_, index) => <Skeleton key={index} width="100%" height={12} />)}
       </div>
       {Array.from({ length: 4 }).map((_, row) => (
-        <div className="sa-loading-table-row" key={row}>
-          <span className="sa-loading-account"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
+        <div className="ov-loading-table-row" key={row}>
+          <span className="ov-loading-account"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
           {Array.from({ length: 6 }).map((__, column) => <Skeleton key={column} width={column > 3 ? 58 : 34} height={12} />)}
         </div>
       ))}
@@ -401,14 +402,14 @@ export function OverviewAnalytics({
   ];
   return (
     <>
-      <section className="sa-summary" aria-labelledby="overview-system-title" aria-busy={systemLoading}>
-        <div className="sa-row">
+      <section className="ov-summary" aria-labelledby="overview-system-title" aria-busy={systemLoading}>
+        <div className="ov-row">
           <div>
             <h2 id="overview-system-title">System totals</h2>
-            <p className="sa-muted">{systemRange.label} · All accounts</p>
+            <p className="ov-muted">{systemRange.label} · All accounts</p>
           </div>
-          <div className="sa-controls">
-            <label className="sa-muted">
+          <div className="ov-controls">
+            <label className="ov-muted">
               Dates
               <DateRangePicker
                 ariaLabel="System totals date range"
@@ -417,49 +418,49 @@ export function OverviewAnalytics({
                 onChange={onSystemRangeChange}
               />
             </label>
-            {systemLoading && system && <span className="sa-muted" role="status">Refreshing…</span>}
+            {systemLoading && system && <span className="ov-muted" role="status">Refreshing…</span>}
           </div>
         </div>
         {systemLoading && !system ? (
           <SystemTotalsLoading />
         ) : systemError ? (
-          <p role="alert" className="sa-muted">
-            {systemError}{" "}
-            <button type="button" onClick={onSystemRetry}>
-              Retry
-            </button>
-          </p>
+          <InlineError
+            title="System totals could not load."
+            detail={systemError}
+            onRetry={onSystemRetry}
+          />
         ) : (
-          <div className="sa-summary">
+          <div className="ov-summary">
             {fields.map(([label, key]) => (
-              <div className="sa-total" key={key}>
+              <div className="ov-total" key={key}>
                 <span>
                   {systemRange.from || systemRange.to
                     ? label
                     : label.replace(" added", "")}
                 </span>
+                {/* The period is stated once in the section header above; it
+                    used to be repeated under all five tiles. */}
                 <strong>{system ? num(system.totals[key]) : "—"}</strong>
-                <small>{systemRange.label}</small>
               </div>
             ))}
           </div>
         )}
       </section>
       <section
-        className="sa-panel"
+        className="ov-panel"
         aria-labelledby="overview-performance-title"
         aria-busy={performanceLoading}
       >
-        <div className="sa-row">
+        <div className="ov-row">
           <div>
             <h2 id="overview-performance-title">Performance</h2>
-            <p className="sa-muted">
+            <p className="ov-muted">
               {range.label} · UTC
               {incompleteToday ? " · Today is in progress" : ""}
             </p>
           </div>
-          <div className="sa-controls">
-            <label className="sa-muted">
+          <div className="ov-controls">
+            <label className="ov-muted">
               Account
               <select
                 aria-label="Performance account"
@@ -478,9 +479,9 @@ export function OverviewAnalytics({
               </select>
             </label>
             {performanceLoading && performance && (
-              <span className="sa-muted" role="status">Refreshing…</span>
+              <span className="ov-muted" role="status">Refreshing…</span>
             )}
-            <label className="sa-muted">
+            <label className="ov-muted">
               Dates
               <DateRangePicker
                 ariaLabel="Performance date range"
@@ -494,19 +495,18 @@ export function OverviewAnalytics({
         {performanceLoading && !performance ? (
           <PerformanceLoading />
         ) : performanceError ? (
-          <p role="alert" className="sa-muted">
-            {performanceError}{" "}
-            <button type="button" onClick={onPerformanceRetry}>
-              Retry
-            </button>
-          </p>
+          <InlineError
+            title="Performance analytics could not load."
+            detail={performanceError}
+            onRetry={onPerformanceRetry}
+          />
         ) : performance && accountDataAvailable ? (
-          <div className="sa-performance">
+          <div className="ov-performance">
             <div>
-              <div className="sa-metrics">
+              <div className="ov-metrics">
                 {(["invited", "connected", "replied"] as const).map((key) => (
-                  <div className="sa-metric" key={key}>
-                    <span className="sa-dot" style={{ color: colors[key] }} />
+                  <div className="ov-metric" key={key}>
+                    <span className="ov-dot" style={{ color: colors[key] }} />
                     <label>{labels[key]}</label>
                     <strong>{num(totals[key])}</strong>
                     <span>
@@ -518,7 +518,7 @@ export function OverviewAnalytics({
                 ))}
               </div>
               <div
-                className="sa-plot"
+                className="ov-plot"
                 role="img"
                 aria-label={`${weeklyChart ? "Weekly" : "Daily"} invited, connected and first replies for ${range.label}`}
               >
@@ -577,9 +577,9 @@ export function OverviewAnalytics({
                 </ResponsiveContainer>
               </div>
             </div>
-            <aside className="sa-rates">
+            <aside className="ov-rates">
               <h3>All-time conversion</h3>
-              <div className="sa-rate">
+              <div className="ov-rate">
                 <label>Acceptance rate</label>
                 <strong>
                   {pct(lifetime.acceptedOfInvited, lifetime.invited)}
@@ -589,7 +589,7 @@ export function OverviewAnalytics({
                   invited
                 </small>
               </div>
-              <div className="sa-rate">
+              <div className="ov-rate">
                 <label>Reply rate</label>
                 <strong>
                   {pct(lifetime.repliedOfConnected, lifetime.connected)}
@@ -602,51 +602,49 @@ export function OverviewAnalytics({
             </aside>
           </div>
         ) : (
-          <p role="status" className="sa-muted">
+          <p role="status" className="ov-muted">
             {account === "all"
               ? "Performance data unavailable. Try refreshing the performance range."
               : "This account has no performance data for the selected range. Select another account or refresh."}
             {account !== "all" && (
-              <button type="button" onClick={() => onAccountChange("all")}>
+              <>
                 {" "}
-                Back to all accounts
-              </button>
+                <Button variant="ghost" size="sm" onClick={() => onAccountChange("all")}>
+                  Back to all accounts
+                </Button>
+              </>
             )}
           </p>
         )}
       </section>
-      <section className="sa-panel" aria-labelledby="overview-account-title">
-        <div className="sa-row">
+      <section className="ov-panel" aria-labelledby="overview-account-title">
+        <div className="ov-row">
           <div>
             <h2 id="overview-account-title">
               {account === "all"
                 ? "Account analytics"
                 : `${selected?.account_name || selected?.label || account} campaigns`}
             </h2>
-            <p className="sa-muted">
+            <p className="ov-muted">
               {account === "all"
                 ? "Selected period counts · lifetime rates"
                 : "Campaigns in the selected account"}
             </p>
           </div>
           {account !== "all" && (
-            <button
-              type="button"
-              className="sa-back"
-              onClick={() => onAccountChange("all")}
-            >
+            <Button variant="secondary" size="sm" onClick={() => onAccountChange("all")}>
               ← All accounts
-            </button>
+            </Button>
           )}
         </div>
         {performanceLoading && !performance ? (
           <AccountTableLoading />
         ) : account === "all" ? (
           !performance ? (
-            <p className="sa-muted">Account data unavailable until performance data loads.</p>
+            <p className="ov-muted">Account data unavailable until performance data loads.</p>
           ) : (
             <>
-              <div className="sa-tablewrap">
+              <div className="ov-tablewrap">
                 <table>
                   <thead>
                     <tr>
@@ -771,17 +769,17 @@ export function OverviewAnalytics({
                           <tr key={i.id}>
                             <td>
                               <button
-                                className="sa-name"
+                                className="ov-name"
                                 type="button"
                                 aria-label={i.account_name || i.label || i.id}
                                 onClick={() => onAccountChange(i.id)}
                               >
-                                <span className="sa-avatar" aria-hidden="true">
+                                <span className="ov-avatar" aria-hidden="true">
                                   {i.account_avatar ? <img src={i.account_avatar} alt="" /> : initials(i.account_name || i.label || i.id)}
                                 </span>
                                 <span>
                                   {i.account_name || i.label || i.id}
-                                  {i.account_name && i.label && i.label !== i.account_name && <small className="sa-muted">{i.label}</small>}
+                                  {i.account_name && i.label && i.label !== i.account_name && <small className="ov-muted">{i.label}</small>}
                                 </span>
                               </button>
                             </td>
@@ -820,7 +818,7 @@ export function OverviewAnalytics({
                   </tbody>
                 </table>
               </div>
-              <div className="sa-bottom">
+              <div className="ov-bottom">
                 <span>
                   Lifetime account totals · rates use invited → connected and
                   connected → replies
@@ -828,21 +826,23 @@ export function OverviewAnalytics({
                 <span>
                   {accountRows.length > 20 && (
                     <>
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         disabled={accountPageIndex === 0}
                         onClick={() => setAccountPage(accountPageIndex - 1)}
                       >
                         Previous accounts
-                      </button>{" "}
+                      </Button>{" "}
                       Page {accountPageIndex + 1} of {accountPages}{" "}
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         disabled={accountPageIndex + 1 >= accountPages}
                         onClick={() => setAccountPage(accountPageIndex + 1)}
                       >
                         Next accounts
-                      </button>
+                      </Button>
                       {" · "}
                     </>
                   )}
@@ -852,20 +852,20 @@ export function OverviewAnalytics({
             </>
           )
         ) : !selected ? (
-          <p role="alert" className="sa-muted">
+          <p role="alert" className="ov-muted">
             Account not found.{" "}
-            <button type="button" onClick={() => onAccountChange("all")}>
+            <Button variant="ghost" size="sm" onClick={() => onAccountChange("all")}>
               Back to all accounts
-            </button>
+            </Button>
           </p>
         ) : (
           <>
-            <div className="sa-detail" aria-label="Lifetime account totals">
-              <div className="sa-row">
+            <div className="ov-detail" aria-label="Lifetime account totals">
+              <div className="ov-row">
                 <h3>Lifetime account totals</h3>
-                <span className="sa-muted">Selected account · all time</span>
+                <span className="ov-muted">Selected account · all time</span>
               </div>
-              <div className="sa-details">
+              <div className="ov-details">
                 {fields.map(([label, key]) => (
                   <div key={key}>
                     <strong>{num(selectedLifetime[key])}</strong>
@@ -874,7 +874,7 @@ export function OverviewAnalytics({
                 ))}
               </div>
             </div>
-            <label className="sa-muted">
+            <label className="ov-muted">
               <input
                 type="checkbox"
                 checked={showArchived}
@@ -885,7 +885,7 @@ export function OverviewAnalytics({
               />{" "}
               Show archived
             </label>
-            <div className="sa-tablewrap">
+            <div className="ov-tablewrap">
               <table>
                 <thead>
                   <tr>
@@ -1025,24 +1025,26 @@ export function OverviewAnalytics({
                 </tbody>
               </table>
             </div>
-            <div className="sa-bottom">
+            <div className="ov-bottom">
               <span>{visible.length} campaigns</span>
               <span>
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={pageIndex === 0}
                   onClick={() => setPage(page - 1)}
                 >
                   Previous
-                </button>{" "}
+                </Button>{" "}
                 Page {pageIndex + 1} of {pages}{" "}
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={pageIndex + 1 >= pages}
                   onClick={() => setPage(page + 1)}
                 >
                   Next
-                </button>
+                </Button>
               </span>
             </div>
           </>
