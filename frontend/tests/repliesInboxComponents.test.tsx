@@ -31,14 +31,16 @@ describe('Replies Inbox conversation UI', () => {
   it('coordinates the DNC review reason through the draft callback', () => {
     const onDraftChange = vi.fn()
     render(<ReplyReviewPanel message={inbound} review={null} onSave={vi.fn()} onDraftChange={onDraftChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /Добавить причину/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /Не связываться/ }))
     expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ reason_ids: ['do_not_contact'] }))
-    expect(screen.getByRole('status').textContent).toMatch(/атомарно вместе/)
+    expect(screen.getByRole('status').textContent).toMatch(/Linked Helper отдельно/)
   })
   it('includes DNC and its reason in one workflow draft', () => {
     const save = vi.fn()
     render(<ConversationActionPanel workflow={{ instance_id: 'one', profile_url: inbound.profile_url, action: null, owner_id: null, next_follow_up_date: null, do_not_contact: false, revision: 0, acknowledged_inbound_revision: 0 }} onSave={save} />)
     fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: /Добавить комментарий/ }))
     fireEvent.change(screen.getByPlaceholderText(/контакт снова разрешил/), { target: { value: 'Explicit unsubscribe' } })
     fireEvent.click(screen.getByRole('button', { name: /Сохранить действие/ }))
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ action: 'resolved', do_not_contact: true, change_reason: 'Explicit unsubscribe' }))

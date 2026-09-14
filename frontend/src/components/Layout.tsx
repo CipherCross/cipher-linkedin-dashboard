@@ -48,6 +48,10 @@ export function Layout() {
   const mobileTopbarRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLElement>(null)
   const desktopRestoreRef = useRef<HTMLButtonElement>(null)
+  const routeKeepsSnapshot = location.pathname === '/replies' || location.pathname === '/sentiment-analysis'
+  const showPageSkeleton = !data || (routeKeepsSnapshot
+    ? phase === 'empty'
+    : loading || (location.pathname !== '/' && location.pathname !== '/leads' && phase !== 'full'))
 
   // Reset scroll on every navigation. Separate from the title effect below,
   // which also depends on `data` — the periodic refetch must not yank the
@@ -207,9 +211,7 @@ export function Layout() {
         <div className="page">
           {data?.error && <ErrorBanner message={data.error} onRetry={refetch} />}
 
-          {loading || !data || (
-            location.pathname !== '/' && location.pathname !== '/leads' && phase !== 'full'
-          ) ? (
+          {showPageSkeleton ? (
             <PageSkeleton variant={skeletonVariantForPath(location.pathname)} />
           ) : (
             <ConversationProvider>

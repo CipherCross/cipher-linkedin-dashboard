@@ -14,6 +14,57 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('Replies Inbox directional pagination', () => {
+  it('keeps the loaded list and thread when only the focused message changes', async () => {
+    const thread = vi.fn().mockResolvedValue({ messages: [message(2), message(3)], older_cursor: null, newer_cursor: null, workflow: null })
+    const inbox = vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE, facets: { owners: [{ id: null, count: 1 }, { id: 1, count: 0 }] } })
+    const client: ReplyReadClient = {
+      capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      inbox, thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    }
+    const { result } = renderHook(() => useRepliesInbox(client), { wrapper })
+    await waitFor(() => expect(result.current.thread?.messages).toHaveLength(2))
+    await act(async () => result.current.setScope({ thread: { ...key, focus_message_id: 2 } }))
+    expect(result.current.thread?.messages).toHaveLength(2)
+    expect(result.current.scope.thread?.focus_message_id).toBe(2)
+    expect(thread).toHaveBeenCalledTimes(1)
+    expect(inbox).toHaveBeenCalledTimes(1)
+    expect(result.current.facets?.owners).toEqual([{ id: null, count: 1 }, { id: 1, count: 0 }])
+  })
+  it('fetches an out-of-window focus without discarding the loaded messages or list', async () => {
+    const thread = vi.fn()
+      .mockResolvedValueOnce({ messages: [message(2), message(3)], older_cursor: 'old', newer_cursor: 'new', workflow: null })
+      .mockResolvedValueOnce({ messages: [message(6), message(7), message(8)], older_cursor: 'older-focus', newer_cursor: 'newer-focus', workflow: null })
+    const inbox = vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE })
+    const client: ReplyReadClient = {
+      capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      inbox, thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    }
+    const { result } = renderHook(() => useRepliesInbox(client), { wrapper })
+    await waitFor(() => expect(result.current.thread?.messages.map(({ id }) => id)).toEqual([2, 3]))
+    await act(async () => result.current.setScope({ thread: { ...key, focus_message_id: 7 } }))
+    await waitFor(() => expect(result.current.thread?.messages.map(({ id }) => id)).toEqual([2, 3, 6, 7, 8]))
+    expect(result.current.items).toHaveLength(1)
+    expect(inbox).toHaveBeenCalledTimes(1)
+    expect(thread).toHaveBeenCalledTimes(2)
+    expect(thread).toHaveBeenNthCalledWith(2, expect.objectContaining({ focus_message_id: 7 }), expect.anything())
+  })
+  it('does not expose the previous account thread while the same profile loads elsewhere', async () => {
+    let finishSecond!: (value: RepliesThreadResponse) => void
+    const second = new Promise<RepliesThreadResponse>((resolve) => { finishSecond = resolve })
+    const thread = vi.fn().mockResolvedValueOnce({ messages: [message(2)], older_cursor: null, newer_cursor: null, workflow: null }).mockReturnValueOnce(second)
+    const client: ReplyReadClient = {
+      capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      inbox: vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE }),
+      thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    }
+    const { result } = renderHook(() => useRepliesInbox(client), { wrapper })
+    await waitFor(() => expect(result.current.thread?.messages[0]?.instance_id).toBe('one'))
+    await act(async () => result.current.setScope({ thread: { instance_id: 'two', profile_url: key.profile_url, focus_message_id: null } }))
+    expect(result.current.thread).toBeNull()
+    expect(result.current.loadingThread).toBe(true)
+    await act(async () => finishSecond({ messages: [{ ...message(4), instance_id: 'two' }], older_cursor: null, newer_cursor: null, workflow: null }))
+    await waitFor(() => expect(result.current.thread?.messages[0]?.instance_id).toBe('two'))
+  })
   it('passes direction only for directional pages and preserves cursors while merging', async () => {
     const initial: RepliesThreadResponse = { messages: [message(2), message(3)], older_cursor: 'old', newer_cursor: 'new', inbound_revision: 3, workflow: null }
     const older: RepliesThreadResponse = { messages: [message(1), message(2)], older_cursor: null }

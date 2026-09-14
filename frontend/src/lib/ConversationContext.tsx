@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { ConversationDrawer } from '../components/ConversationDrawer'
 import type { Lead } from './types'
 
-export type ConversationMode = 'thread' | 'follow_up'
+export type ConversationMode = 'thread' | 'follow_up' | 'import_history'
 
 const Ctx = createContext<{
   openConversation: (lead: Lead, options?: { mode?: ConversationMode }) => void

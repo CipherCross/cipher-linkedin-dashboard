@@ -550,7 +550,9 @@ const Ctx = createContext<{
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const activeRouteHash = `#${location.pathname}${location.search}`
+  // Replies and its report own their query-string reads. Their selections and
+  // filters must not restart the shared dashboard snapshot.
+  const activeRouteHash = `#${location.pathname}${location.pathname === '/replies' || location.pathname === '/sentiment-analysis' ? '' : location.search}`
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [phase, setPhase] = useState<'empty' | 'bootstrap' | 'full'>('empty')

@@ -95,7 +95,7 @@ export function ConversationDrawer({
   const [coachLoading, setCoachLoading] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(initialMode === 'import_history')
   const [followUpOpen, setFollowUpOpen] = useState(initialMode === 'follow_up')
   const [followUpReturnAction, setFollowUpReturnAction] = useState<
     'complete' | 'skip' | undefined
@@ -147,7 +147,7 @@ export function ConversationDrawer({
   // Switching leads (or opening one from the worklist) resets the transient
   // workflow and honors the caller's requested destination.
   useEffect(() => {
-    setImportOpen(false)
+    setImportOpen(initialMode === 'import_history')
     setFollowUpOpen(initialMode === 'follow_up')
     setFollowUpReturnAction(undefined)
     setEditing(null)

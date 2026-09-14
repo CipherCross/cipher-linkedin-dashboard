@@ -116,10 +116,12 @@ export interface RepliesInboxItem {
   acknowledged_inbound_revision: number
 }
 export interface ReplyListFacets {
-  sentiments?: Partial<Record<ReplyReviewSentiment, number>>
-  actions?: Partial<Record<ReplyWorkflowAction, number>>
-  reasons?: Partial<Record<ReplyReasonId, number>>
-  owners?: Array<{ id: number; name: string }>
+  accounts?: Array<{ id: string; count: number }>
+  campaigns?: Array<{ id: string | null; count: number }>
+  owners?: Array<{ id: number | null; count: number }>
+  actions?: Array<{ value: ReplyWorkflowAction | null; count: number }>
+  sentiments?: Array<{ value: ReplyReviewSentiment | null; count: number }>
+  reasons?: Array<{ value: ReplyReasonId | null; count: number }>
 }
 export interface RepliesInboxResponse {
   items: RepliesInboxItem[]
@@ -140,7 +142,7 @@ export function nextUnreviewedReply(
   const message = messages.slice(index + 1).find((candidate) => candidate.direction === 'in' && !candidate.review?.complete)
   if (message) return { kind: 'message', value: message }
   const itemIndex = items.findIndex((item) => item.instance_id === currentThread.instance_id && item.profile_url === currentThread.profile_url)
-  const next = items.slice(itemIndex + 1).find((item) => item.pending_count > 0)
+  const next = items.slice(itemIndex + 1).find((item) => item.pending_count > 0 && (item.instance_id !== currentThread.instance_id || item.profile_url !== currentThread.profile_url))
   return next ? { kind: 'thread', value: next } : null
 }
 export interface RepliesThreadResponse {
