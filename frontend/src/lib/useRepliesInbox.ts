@@ -202,7 +202,7 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
 
   useEffect(() => {
     let cancelled = false
-    client.capabilities().then((value) => { if (!cancelled) setCapabilities(value) }).catch(() => { if (!cancelled) setCapabilities({ available: false, reason: 'schema_unavailable', unavailable_reason: 'Не удалось определить состояние ручной разметки.' }) })
+    client.capabilities().then((value) => { if (!cancelled) setCapabilities(value) }).catch(() => { if (!cancelled) setCapabilities({ available: false, reason: 'schema_unavailable', unavailable_reason: 'Could not determine whether manual review is available.' }) })
     return () => { cancelled = true }
   }, [client])
 

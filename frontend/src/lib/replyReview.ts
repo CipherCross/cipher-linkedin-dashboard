@@ -21,35 +21,41 @@ export const REPLY_ACTIONS = [
 ] as const
 export type ReplyWorkflowAction = (typeof REPLY_ACTIONS)[number]
 
+/* Display labels. The raw enum values above are the contract and never change;
+ * only what a person reads does. English throughout — see src/ui/labels.ts. */
 export const SENTIMENT_LABELS: Record<ReplyReviewSentiment, string> = {
-  positive: 'Положительный', neutral: 'Нейтральный', negative: 'Негативный',
-  objection: 'Возражение', referral: 'Реферал', auto: 'Автоответ',
+  positive: 'Positive', neutral: 'Neutral', negative: 'Negative',
+  objection: 'Objection', referral: 'Referral', auto: 'Automated reply',
 }
 export const INTENT_STATE_LABELS: Record<ReplyIntentState, string> = {
-  unreviewed: 'Не оценён', none: 'Нет intent', level: 'Коммерческий intent',
-  not_applicable: 'Не применимо',
+  unreviewed: 'Not reviewed', none: 'No buying interest', level: 'Buying interest',
+  not_applicable: 'Not applicable',
 }
 export const INTENT_LEVEL_LABELS: Record<ReplyIntentLevel, string> = {
-  p1: 'P1 · вежливый позитив', p2: 'P2 · интерес к проблеме', p3: 'P3 · покупательский intent',
+  p1: 'P1 · Polite positive', p2: 'P2 · Problem interest', p3: 'P3 · Buying intent',
 }
 export const REASON_LABELS: Record<ReplyReasonId, string> = {
-  no_need: 'Нет потребности / неинтересно', timing: 'Не сейчас / неверный тайминг',
-  budget: 'Нет бюджета / дорого', existing_solution: 'Уже есть решение',
-  offer_fit: 'Не подходит продукт или предложение', wrong_person: 'Не тот человек / перенаправление',
-  trust_information: 'Недоверие / недостаточно информации', do_not_contact: 'Не связываться / unsubscribe',
-  other: 'Другое',
+  no_need: 'No need or not interested', timing: 'Wrong timing',
+  budget: 'No budget or too expensive', existing_solution: 'Already has a solution',
+  offer_fit: 'Product or offer does not fit', wrong_person: 'Wrong person — redirected',
+  trust_information: 'Not enough trust or information', do_not_contact: 'Do not contact / unsubscribe',
+  other: 'Other',
 }
 export const ACTION_LABELS: Record<ReplyWorkflowAction, string> = {
-  needs_reply: 'Нужен ответ', follow_up: 'Follow-up позже', awaiting_reply: 'Ждём ответа',
-  resolved: 'Завершено', closed_soft: 'Закрыт · мягкий отказ', closed_hard: 'Закрыт · окончательный отказ',
+  needs_reply: 'Needs reply', follow_up: 'Follow up later', awaiting_reply: 'Awaiting reply',
+  resolved: 'Completed', closed_soft: 'Closed · soft decline', closed_hard: 'Closed · hard decline',
 }
 
 export const REASON_HELP: Record<ReplyReasonId, string> = {
-  no_need: 'Нет задачи или интереса; не угадывайте причину отказа.', timing: 'Срок не подходит сейчас.',
-  budget: 'Денежное ограничение или цена.', existing_solution: 'Уже есть поставщик или внутреннее решение.',
-  offer_fit: 'Конкретное несоответствие продукта или предложения.', wrong_person: 'Контакт перенаправляет к другому человеку.',
-  trust_information: 'Не хватает доверия или информации.', do_not_contact: 'Явная просьба не связываться.',
-  other: 'Причина, которой нет в справочнике; добавьте комментарий.',
+  no_need: 'No problem or interest. Do not guess at a reason they did not give.',
+  timing: 'The timing does not work right now.',
+  budget: 'A money constraint or the price.',
+  existing_solution: 'They already have a supplier or an in-house solution.',
+  offer_fit: 'A specific mismatch in the product or the offer.',
+  wrong_person: 'The contact redirects to someone else.',
+  trust_information: 'Not enough trust or not enough information.',
+  do_not_contact: 'An explicit request not to be contacted.',
+  other: 'A reason that is not in this list — add a comment.',
 }
 
 export interface ReplyReviewDraft {
@@ -227,21 +233,21 @@ const VALID_REASONS = new Set<string>(REPLY_REASON_IDS)
 export function validateReview(draft: ReplyReviewDraft): Record<string, string> {
   const errors: Record<string, string> = {}
   if ((draft.sentiment === 'negative' || draft.sentiment === 'objection') && draft.reason_ids.length === 0) {
-    errors.reason_ids = 'Для negative и objection выберите хотя бы одну причину.'
+    errors.reason_ids = 'Pick at least one reason for a negative reply or an objection.'
   }
   const unique = new Set(draft.reason_ids)
   if (unique.size !== draft.reason_ids.length || [...unique].some((id) => !VALID_REASONS.has(id))) {
-    errors.reason_ids = 'Причины должны быть уникальными и входить в справочник.'
+    errors.reason_ids = 'Reasons must be unique and come from the list.'
   }
-  if (draft.reason_ids.includes('other') && !draft.comment.trim()) errors.comment = 'Для причины «Другое» нужен комментарий.'
-  if (draft.comment.length > 1000) errors.comment = 'Комментарий не может быть длиннее 1000 символов.'
+  if (draft.reason_ids.includes('other') && !draft.comment.trim()) errors.comment = 'A comment is required when the reason is “Other”.'
+  if (draft.comment.length > 1000) errors.comment = 'A comment cannot be longer than 1000 characters.'
   // Existing values are intentionally retained while an SDR changes a message
   // to auto; the panel asks for an explicit confirmation before clearing them.
   if (draft.intent_state === 'not_applicable' && draft.sentiment !== 'auto') {
-    errors.intent_state = '«Не применимо» допустимо только для auto.'
+    errors.intent_state = '“Not applicable” is only valid for an automated reply.'
   }
-  if (draft.intent_state === 'level' && !draft.intent_level) errors.intent_level = 'Выберите P1, P2 или P3.'
-  if (draft.intent_state !== 'level' && draft.intent_level) errors.intent_level = 'Уровень intent допустим только для состояния level.'
+  if (draft.intent_state === 'level' && !draft.intent_level) errors.intent_level = 'Choose P1, P2 or P3.'
+  if (draft.intent_state !== 'level' && draft.intent_level) errors.intent_level = 'A buying-interest level is only valid when the state is “Buying interest”.'
   return errors
 }
 
@@ -344,7 +350,7 @@ export const defaultReplyReadClient: ReplyReadClient = {
     const payload = await read<unknown>('replies.capabilities', {}, signal)
     if (payload && typeof payload === 'object' && 'items' in payload) {
       const items = (payload as { items?: ReplyCapabilities[] }).items
-      return items?.[0] ?? { available: false, unavailable_reason: 'Схема manual review недоступна.' }
+      return items?.[0] ?? { available: false, unavailable_reason: 'Manual review is not available on this tenant schema.' }
     }
     return payload as ReplyCapabilities
   },

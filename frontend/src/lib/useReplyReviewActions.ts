@@ -77,7 +77,7 @@ export function useReplyReviewActions(onSaved?: () => void): ReplyReviewActions 
     const errors = validateReview(request.review)
     if (Object.keys(errors).length) { setError(Object.values(errors)[0]); return null }
     if (needsAutoResetConfirmation(request.review) && !request.confirmAutoReset) {
-      setError('Подтвердите очистку несовместимых причин и intent для auto.')
+      setError('Confirm clearing the reasons and buying interest that an automated reply cannot carry.')
       return null
     }
     const payload = {

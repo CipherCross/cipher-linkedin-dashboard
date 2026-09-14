@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { UI_LOCALE } from '../../ui/datetime'
 
 export interface AnalyticsMetric {
   numerator: number
@@ -29,10 +30,10 @@ export function MetricCard({
   showRate?: boolean
 }) {
   const value = metric?.numerator ?? 0
-  const content = <><div className="sa-metric-label">{icon}{label}</div><div className="sa-metric-value">{value.toLocaleString('ru-RU')}</div>{showRate && <div className="sa-metric-rate">{metricRate(metric)} <span>· {metric?.denominator?.toLocaleString('ru-RU') ?? 0} всего</span></div>}{hint && <div className="sa-metric-hint">{hint}</div>}</>
-  if (!href || value === 0) return <div className="sa-metric-card sa-disabled-drilldown" aria-label={`${label}: ${value} из ${metric?.denominator ?? 0}`}>{content}</div>
+  const content = <><div className="sa-metric-label">{icon}{label}</div><div className="sa-metric-value">{value.toLocaleString(UI_LOCALE)}</div>{showRate && <div className="sa-metric-rate">{metricRate(metric)} <span>· {metric?.denominator?.toLocaleString(UI_LOCALE) ?? 0} total</span></div>}{hint && <div className="sa-metric-hint">{hint}</div>}</>
+  if (!href || value === 0) return <div className="sa-metric-card sa-disabled-drilldown" aria-label={`${label}: ${value} of ${metric?.denominator ?? 0}`}>{content}</div>
   return (
-    <Link className="sa-metric-card" to={href} aria-label={`${label}: ${value} из ${metric?.denominator ?? 0}`}>
+    <Link className="sa-metric-card" to={href} aria-label={`${label}: ${value} of ${metric?.denominator ?? 0}`}>
       {content}
     </Link>
   )

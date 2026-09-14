@@ -10,9 +10,9 @@ import { WorkflowBuckets } from '../src/components/reply-analysis/WorkflowBucket
 
 describe('Sentiment Analysis UI contract', () => {
   it('displays the server numerator/denominator and leaves zero denominator as an em dash', () => {
-    render(<BrowserRouter><MetricCard label="Диалоги" metric={{ numerator: 4, denominator: 10, rate: 0.4 }} href="/replies" /></BrowserRouter>)
+    render(<BrowserRouter><MetricCard label="Conversations" metric={{ numerator: 4, denominator: 10, rate: 0.4 }} href="/replies" /></BrowserRouter>)
     expect(screen.getByText('4')).toBeTruthy()
-    expect(screen.getByText(/10 всего/)).toBeTruthy()
+    expect(screen.getByText(/10 total/)).toBeTruthy()
     expect(metricRate({ numerator: 0, denominator: 0, rate: null })).toBe('—')
   })
 
@@ -59,7 +59,7 @@ describe('Sentiment Analysis UI contract', () => {
     expect(parsed.comparison[0].rate).toBeNull()
     expect(parsed.comparison[1].rate).toBe(0)
     render(<BrowserRouter><ComparisonTable rows={parsed.comparison} labelFor={(row) => row.id} linkFor={() => null} /></BrowserRouter>)
-    expect(screen.getByText('Нет оценки')).toBeTruthy()
+    expect(screen.getByText('Not reviewed')).toBeTruthy()
     expect(screen.getAllByText('0.0%').length).toBeGreaterThan(0)
   })
 
@@ -86,8 +86,8 @@ describe('Sentiment Analysis UI contract', () => {
   })
 
   it('explains that multi-select reason percentages can exceed 100%', () => {
-    render(<BrowserRouter><ReasonBars rows={{ budget: { numerator: 2, denominator: 3, rate: 2 / 3 } }} labels={{ budget: 'Нет бюджета' }} linkFor={() => '/replies'} /></BrowserRouter>)
-    expect(screen.getByText(/2 диалогов/)).toBeTruthy()
+    render(<BrowserRouter><ReasonBars rows={{ budget: { numerator: 2, denominator: 3, rate: 2 / 3 } }} labels={{ budget: 'No budget' }} linkFor={() => '/replies'} /></BrowserRouter>)
+    expect(screen.getByText(/2 conversations/)).toBeTruthy()
     // The note is rendered by the page; this component keeps one-dialog-per-reason semantics.
     expect(screen.getByRole('link').getAttribute('href')).toBe('/replies')
   })
@@ -109,14 +109,14 @@ describe('Sentiment Analysis UI contract', () => {
   })
 
   it('renders the server-provided top reason in comparison rows', () => {
-    render(<BrowserRouter><ComparisonTable rows={[{ kind: 'campaign', id: 'c1', numerator: 6, denominator: 10, rate: 0.2, coverage: 0.6, top_reasons: [{ id: 'budget', label: 'Нет бюджета', numerator: 3 }] }]} labelFor={() => 'Campaign'} linkFor={() => '/replies'} /></BrowserRouter>)
-    expect(screen.getByText(/Нет бюджета · 3/)).toBeTruthy()
+    render(<BrowserRouter><ComparisonTable rows={[{ kind: 'campaign', id: 'c1', numerator: 6, denominator: 10, rate: 0.2, coverage: 0.6, top_reasons: [{ id: 'budget', label: 'No budget', numerator: 3 }] }]} labelFor={() => 'Campaign'} linkFor={() => '/replies'} /></BrowserRouter>)
+    expect(screen.getByText(/No budget · 3/)).toBeTruthy()
   })
 
   it('renders an unrepresentable no-campaign comparison as non-clickable', () => {
-    const { container } = render(<BrowserRouter><ComparisonTable rows={[{ kind: 'campaign', id: '__none__', numerator: 2, denominator: 2, rate: null, coverage: 1 }]} labelFor={() => 'Без кампании'} linkFor={(row) => buildRepliesDrilldownHref({ from: '2026-09-01', to: '2026-09-30', account: null, campaign: null, owner: null }, row, 'campaign:__none__')} /></BrowserRouter>)
+    const { container } = render(<BrowserRouter><ComparisonTable rows={[{ kind: 'campaign', id: '__none__', numerator: 2, denominator: 2, rate: null, coverage: 1 }]} labelFor={() => 'No campaign'} linkFor={(row) => buildRepliesDrilldownHref({ from: '2026-09-01', to: '2026-09-30', account: null, campaign: null, owner: null }, row, 'campaign:__none__')} /></BrowserRouter>)
     expect(within(container).queryByRole('link')).toBeNull()
-    expect(within(container).getByText('Без кампании')).toBeTruthy()
+    expect(within(container).getByText('No campaign')).toBeTruthy()
   })
 
   it('normalizes string-valued weekly server fields without letting raw values overwrite them', () => {
@@ -132,10 +132,10 @@ describe('Sentiment Analysis UI contract', () => {
   it('keeps workflow precedence canonical and does not invent an unassigned bucket', () => {
     const { container } = render(<BrowserRouter><WorkflowBuckets rows={{ do_not_contact: { numerator: 1, denominator: 3, rate: 1 / 3 }, needs_confirmation: { numerator: 1, denominator: 3, rate: 1 / 3 }, follow_up_later: { numerator: 1, denominator: 3, rate: 1 / 3 }, transfers: { numerator: 2, denominator: 2, rate: 1 } }} linkFor={() => '/replies'} /></BrowserRouter>)
     const labels = within(container).getAllByRole('listitem').map((link) => link.textContent ?? '')
-    expect(labels[0]).toContain('Не связываться')
-    expect(labels[1]).toContain('Без подтверждённого шага')
-    expect(labels.findIndex((label) => label.includes('Follow-up позже'))).toBeGreaterThan(labels.findIndex((label) => label.includes('Без подтверждённого шага')))
-    expect(labels.some((label) => label.includes('Без действия'))).toBe(false)
-    expect(labels.filter((label) => label.includes('Передачи (события)'))).toHaveLength(1)
+    expect(labels[0]).toContain('Do not contact')
+    expect(labels[1]).toContain('No next step confirmed')
+    expect(labels.findIndex((label) => label.includes('Follow-up later'))).toBeGreaterThan(labels.findIndex((label) => label.includes('No next step confirmed')))
+    expect(labels.some((label) => label.includes('No action'))).toBe(false)
+    expect(labels.filter((label) => label.includes('Handovers (events)'))).toHaveLength(1)
   })
 })

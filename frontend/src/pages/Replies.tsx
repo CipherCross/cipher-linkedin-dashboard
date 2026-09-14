@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, Filter, Inbox, RefreshCw, Search, X } from 'lucide-react'
+import { AlertCircle, Filter, Inbox, RefreshCw, Search, X } from 'lucide-react'
 import { Link, UNSAFE_DataRouterContext, useBlocker, useLocation } from 'react-router-dom'
 import { InitialsAvatar } from '../components/Avatar'
 import { useData } from '../lib/DataContext'
@@ -13,20 +13,23 @@ import { EmptyState } from '../components/EmptyState'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { useRepliesInbox } from '../lib/useRepliesInbox'
 import { ACTION_LABELS, isReplyManualReady, REASON_LABELS, SENTIMENT_LABELS, nextUnreviewedReply, REPLY_SEARCH_DEBOUNCE_MS, type ReplyCapabilities, type ReplyInboxScope, type ReplyReadClient, type ReplyReviewDraft, type ReplyThreadMessage, type ReplyWorkflowMutation } from '../lib/replyReview'
+import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, IconButton, LinkButton, PageHeader, SelectField, Tabs } from '../ui'
+import { COPY } from '../ui/labels'
+import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
 import './replies-inbox.css'
 
 const VIEWS: ReplyInboxScope['view'][] = ['all', 'unreviewed', 'needs_reply', 'deferred', 'completed']
-const VIEW_LABELS: Record<ReplyInboxScope['view'], string> = { all: 'Все', unreviewed: 'Не разобраны', needs_reply: 'Нужен ответ', deferred: 'Отложены', completed: 'Завершены' }
+const VIEW_LABELS: Record<ReplyInboxScope['view'], string> = { all: COPY.all, unreviewed: COPY.unreviewed, needs_reply: COPY.needsReply, deferred: COPY.deferred, completed: COPY.completed }
 function formatTime(value: string | null): string { return value ? replyTime(value, true) : '—' }
 function profileName(profile: string): string { return profile.split('/').filter(Boolean).pop() || profile }
 function capabilityMessage(capabilities: ReplyCapabilities | null): string {
-  if (!capabilities) return 'Проверяем доступность ручной разметки…'
+  if (!capabilities) return 'Checking whether manual review is available…'
   if (capabilities.activation_in_progress) {
     const progress = capabilities.activation_total ? ` (${capabilities.activation_processed ?? 0}/${capabilities.activation_total})` : ''
-    return `Ручная разметка активируется${progress}. Replies Inbox станет доступен после завершения перехода.`
+    return `Manual review is being switched on${progress}. Replies opens once that finishes.`
   }
-  if (capabilities.mode === 'prepared' || capabilities.manual_ready === false || capabilities.active === false) return 'Ручная разметка подготовлена, но ещё не активирована для этого tenant.'
-  return capabilities.unavailable_reason || 'Replies Inbox недоступен для текущей схемы tenant.'
+  if (capabilities.mode === 'prepared' || capabilities.manual_ready === false || capabilities.active === false) return 'Manual review is prepared but not switched on for this workspace yet.'
+  return capabilities.unavailable_reason || 'Replies is not available for this workspace yet.'
 }
 
 type NavigationRequest = { proceed: () => void; cancel?: () => void }
@@ -212,7 +215,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   }, [])
   const handleWorkflowDirtyChange = useCallback((value: boolean) => { if (value) setWorkflowUserDirty(true) }, [])
   const hasData = inbox.loading || inbox.items.length > 0
-  const currentName = selectedItem?.name || 'Контакт LinkedIn'
+  const currentName = selectedItem?.name || UNKNOWN_PERSON_LABEL
   const selectedIsOutboundOnly = hasSelection && !!selectedMessage && selectedMessage.direction !== 'in'
   const ownerOptions = inbox.capabilities?.members?.filter((member) => member.active) ?? []
   const capabilityReady = isReplyManualReady(inbox.capabilities)
@@ -228,7 +231,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   }
   const ownerLabel = (id: number) => {
     const owner = ownerOptions.find((member) => member.id === id)
-    if (!owner) return `Участник #${id}`
+    if (!owner) return `Teammate #${id}`
     return ownerOptions.filter((member) => member.name === owner.name).length > 1 ? `${owner.name} · #${id}` : owner.name
   }
   const ownerCount = (id: number | null) => inbox.facets?.owners?.find((facet) => facet.id === id)?.count ?? 0
@@ -239,18 +242,18 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   ].filter(Boolean).length
   const scopeLabel = inbox.scope.metric_scope
     ? ({
-      business_rate: 'Отказы и возражения', negative_objection: 'Отказы и возражения',
-      dialogues: 'Диалоги с ответом', full_dialogues: 'Диалоги без неразобранных ответов',
-      unreviewed_dialogues: 'Диалоги с неразобранными ответами',
-      latest_unreviewed: 'Последний ответ не разобран', only_auto: 'Только автоответы',
-      unreviewed_intent: 'Коммерческий интерес не оценён', legacy_ai: 'Старая AI-разметка',
-      missing_reason: 'Причина не указана', needs_confirmation: 'Требуют следующего шага',
-      transfers: 'Передачи (события)',
+      business_rate: 'Declines and objections', negative_objection: 'Declines and objections',
+      dialogues: 'Conversations with a reply', full_dialogues: 'Conversations with no unreviewed replies',
+      unreviewed_dialogues: 'Conversations with unreviewed replies',
+      latest_unreviewed: 'Latest reply not reviewed', only_auto: 'Automated replies only',
+      unreviewed_intent: 'Buying interest not reviewed', legacy_ai: 'Earlier AI labelling',
+      missing_reason: 'No reason recorded', needs_confirmation: 'Needs a next step',
+      transfers: 'Handovers (events)',
     } as Record<string, string>)[inbox.scope.metric_scope.value]
       || (inbox.scope.metric_scope.kind === 'workflow' ? WORKFLOW_LABELS[inbox.scope.metric_scope.value] : null)
       || (inbox.scope.metric_scope.kind === 'sentiment' ? SENTIMENT_LABELS[inbox.scope.metric_scope.value as keyof typeof SENTIMENT_LABELS] : null)
       || (inbox.scope.metric_scope.kind === 'reason' ? REASON_LABELS[inbox.scope.metric_scope.value as keyof typeof REASON_LABELS] : null)
-      || 'Выбранный показатель'
+      || 'Selected metric'
     : null
   const analyticsBack = '/sentiment-analysis?' + new URLSearchParams(Object.entries({
     from: inbox.scope.from, to: inbox.scope.to, account: inbox.scope.account,
@@ -269,88 +272,211 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   }
   return <div className="replies-page">
     <NavigationGuard dirty={dirty} onRequest={queueNavigation} />
-    {pendingNavigation && <div className="replies-dialog-backdrop"><div className="replies-dialog" role="dialog" aria-modal="true" aria-labelledby="replies-unsaved-title">
-      <h2 id="replies-unsaved-title">Есть несохранённые изменения</h2>
-      <p>Сохраните разметку и следующий шаг перед переходом или останьтесь в диалоге.</p>
-      <div className="replies-dialog-actions">
-        <button className="secondary" type="button" onClick={() => { pendingNavigation.cancel?.(); setPendingNavigation(null) }}>Вернуться</button>
-        <button className="secondary" type="button" onClick={() => { clearDirty(); pendingNavigation.proceed(); setPendingNavigation(null) }}>Не сохранять</button>
-        <button className="primary" type="button" disabled={!workflowValid || actions.saving} onClick={() => {
+    {pendingNavigation && <Dialog
+      size="sm"
+      title={COPY.unsavedChanges}
+      description="Save the review and the next step before leaving, or stay in this conversation."
+      onRequestClose={() => { pendingNavigation.cancel?.(); setPendingNavigation(null) }}
+      closeLabel="Keep editing"
+      footer={<>
+        <Button variant="secondary" onClick={() => { pendingNavigation.cancel?.(); setPendingNavigation(null) }}>Keep editing</Button>
+        <Button variant="danger" onClick={() => { clearDirty(); pendingNavigation.proceed(); setPendingNavigation(null) }}>Discard changes</Button>
+        <Button variant="primary" disabled={!workflowValid} loading={actions.saving} onClick={() => {
           if (reviewDirty) (document.getElementById('reply-review-form') as HTMLFormElement | null)?.requestSubmit()
           else saveWorkflowOnly(false)
-        }}>Сохранить</button>
-      </div>
-    </div></div>}
-    <header className="replies-page-head">
-      <h1>Replies</h1>
-      <div className="replies-head-actions">
-        <Link className="secondary replies-head-link" to="/sentiment-analysis">Аналитика</Link>
-        <button className="secondary" type="button" onClick={() => confirmNavigation(inbox.refresh)} disabled={inbox.loading} aria-label="Обновить ответы"><RefreshCw size={16} /> <span>Обновить</span></button>
-      </div>
-    </header>
-    {inbox.capabilities && !capabilityReady && <div className="replies-unavailable" role="status"><AlertCircle size={18} /> {capabilityMessage(inbox.capabilities)}</div>}
+        }}>{COPY.save}</Button>
+      </>}
+    >
+      <p>Discarding removes only the unsaved draft for this conversation.</p>
+    </Dialog>}
+
+    <PageHeader
+      title={COPY.replies}
+      actions={<div className="replies-head-actions">
+        <LinkButton to="/sentiment-analysis" variant="ghost">Sentiment analysis</LinkButton>
+        <Button
+          variant="secondary"
+          icon={<RefreshCw size={18} aria-hidden="true" />}
+          onClick={() => confirmNavigation(inbox.refresh)}
+          loading={inbox.loading}
+          loadingLabel="Refreshing replies"
+        >{COPY.refresh}</Button>
+      </div>}
+    />
+
+    {inbox.capabilities && !capabilityReady && <div className="replies-unavailable" role="status"><AlertCircle size={18} aria-hidden="true" /> {capabilityMessage(inbox.capabilities)}</div>}
+
     <div className="replies-toolbar">
-      <div className="replies-views" role="tablist" aria-label="Очередь">
-        {VIEWS.map((view) => <button type="button" role="tab" aria-selected={inbox.scope.view === view} key={view} className={inbox.scope.view === view ? 'active' : ''} onClick={() => guardedScope({ view, cursor: null })}>{VIEW_LABELS[view]}</button>)}
-      </div>
+      <Tabs
+        className="replies-views"
+        label="Reply queue"
+        value={inbox.scope.view}
+        onChange={(view) => guardedScope({ view, cursor: null })}
+        items={VIEWS.map((view) => ({ id: view, label: VIEW_LABELS[view] }))}
+      />
       <div className="replies-toolbar-tools">
-        <label className="sr-only" htmlFor="replies-account">Аккаунт</label>
-        <select id="replies-account" value={inbox.scope.account ?? ''} onChange={(event) => guardedScope({ account: event.target.value || null, campaign: null, cursor: null })}><option value="">Все аккаунты</option>{inbox.capabilities?.instances?.map((item) => <option key={item.id} value={item.id}>{accountLabel(item.id)}</option>)}</select>
-        <button className="secondary" type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}><Filter size={15} /> Фильтры {activeFilterCount || ''}</button>
+        <SelectField
+          label="Account"
+          labelHidden
+          value={inbox.scope.account ?? ''}
+          onChange={(event) => guardedScope({ account: event.target.value || null, campaign: null, cursor: null })}
+        >
+          <option value="">All accounts</option>
+          {inbox.capabilities?.instances?.map((item) => <option key={item.id} value={item.id}>{accountLabel(item.id)}</option>)}
+        </SelectField>
+        <Button
+          variant="secondary"
+          icon={<Filter size={18} aria-hidden="true" />}
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen(true)}
+        >{COPY.filters}<FilterCount count={activeFilterCount} /></Button>
       </div>
     </div>
-    {filtersOpen && <div className="replies-filter-panel">
-      <label>Период поступления<select value={inbox.scope.scope} onChange={(event) => guardedScope({ scope: event.target.value as ReplyInboxScope['scope'], cursor: null })}><option value="new">После запуска ручного разбора</option><option value="historical">До запуска</option><option value="all">За всё время</option></select></label>
-      <label>Кампания<select value={inbox.scope.campaign ?? ''} onChange={(event) => guardedScope({ campaign: event.target.value || null, cursor: null })}><option value="">Все кампании</option>{inbox.capabilities?.campaigns?.filter((item) => !inbox.scope.account || item.instance_id === inbox.scope.account).map((item) => <option key={item.id} value={item.id}>{item.name} · {accountLabel(item.instance_id)}</option>)}</select></label>
-      <label>Ответственный<select value={inbox.scope.unowned ? 'unassigned' : inbox.scope.owner ?? ''} onChange={(event) => guardedScope({ owner: event.target.value === 'unassigned' ? null : event.target.value || null, unowned: event.target.value === 'unassigned', cursor: null })}><option value="">Все ответственные</option><option value="unassigned">Без ответственного{inbox.facets ? ` · ${ownerCount(null)}` : ''}</option>{ownerOptions.map((owner) => <option key={owner.id} value={String(owner.id)}>{ownerLabel(owner.id)}{inbox.facets ? ` · ${ownerCount(owner.id)}` : ''}</option>)}</select>{inbox.facets && <span className="replies-facet-caption">Количество в текущем наборе</span>}</label>
-      <label>Тип ответа<select value={inbox.scope.sentiment ?? ''} onChange={(event) => guardedScope({ sentiment: (event.target.value || null) as ReplyInboxScope['sentiment'], cursor: null })}><option value="">Все типы ответа</option>{Object.entries(SENTIMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label>Причина<select value={inbox.scope.reason ?? ''} onChange={(event) => guardedScope({ reason: (event.target.value || null) as ReplyInboxScope['reason'], cursor: null })}><option value="">Все причины</option>{Object.entries(REASON_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label>Следующий шаг<select value={inbox.scope.action ?? ''} onChange={(event) => guardedScope({ action: (event.target.value || null) as ReplyInboxScope['action'], cursor: null })}><option value="">Все действия</option>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      {([['my', 'Мои'], ['unacknowledged', 'Нужен шаг'], ['unowned', 'Без ответственного'], ['overdue', 'Просрочены']] as const).map(([key, label]) => <label key={key} className="replies-toggle"><input type="checkbox" checked={inbox.scope[key]} onChange={(event) => guardedScope({ [key]: event.target.checked, cursor: null })} /> {label}</label>)}
-      <button type="button" className="replies-reset" onClick={() => guardedScope({ campaign: null, owner: null, sentiment: null, reason: null, action: null, my: false, unacknowledged: false, unowned: false, overdue: false, scope: 'new', cursor: null })}>Сбросить фильтры</button>
+
+    {/* Filters open OVER the page. Nothing below them moves, so the workspace
+        keeps its full height whether they are open or closed. */}
+    {filtersOpen && <Dialog
+      title={COPY.filters}
+      description="Applies to the conversation list. The account selector stays on the page."
+      onRequestClose={() => setFiltersOpen(false)}
+      footerNote={activeFilterCount ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied` : 'No filters applied'}
+      footer={<>
+        <Button variant="ghost" onClick={() => guardedScope({ campaign: null, owner: null, sentiment: null, reason: null, action: null, my: false, unacknowledged: false, unowned: false, overdue: false, scope: 'new', cursor: null })}>{COPY.clearAll}</Button>
+        <Button variant="primary" onClick={() => setFiltersOpen(false)}>Done</Button>
+      </>}
+    >
+      <div className="replies-filter-grid">
+        <SelectField label="Arrived" value={inbox.scope.scope} onChange={(event) => guardedScope({ scope: event.target.value as ReplyInboxScope['scope'], cursor: null })}>
+          <option value="new">Since manual review started</option>
+          <option value="historical">Before manual review started</option>
+          <option value="all">All time</option>
+        </SelectField>
+        <SelectField label="Campaign" value={inbox.scope.campaign ?? ''} onChange={(event) => guardedScope({ campaign: event.target.value || null, cursor: null })}>
+          <option value="">All campaigns</option>
+          {inbox.capabilities?.campaigns?.filter((item) => !inbox.scope.account || item.instance_id === inbox.scope.account).map((item) => <option key={item.id} value={item.id}>{item.name} · {accountLabel(item.instance_id)}</option>)}
+        </SelectField>
+        <SelectField
+          label={COPY.conversationOwner}
+          help={inbox.facets ? 'Counts are for the current result set.' : undefined}
+          value={inbox.scope.unowned ? 'unassigned' : inbox.scope.owner ?? ''}
+          onChange={(event) => guardedScope({ owner: event.target.value === 'unassigned' ? null : event.target.value || null, unowned: event.target.value === 'unassigned', cursor: null })}
+        >
+          <option value="">All owners</option>
+          <option value="unassigned">Unassigned{inbox.facets ? ` · ${ownerCount(null)}` : ''}</option>
+          {ownerOptions.map((owner) => <option key={owner.id} value={String(owner.id)}>{ownerLabel(owner.id)}{inbox.facets ? ` · ${ownerCount(owner.id)}` : ''}</option>)}
+        </SelectField>
+        <SelectField label={COPY.sentiment} value={inbox.scope.sentiment ?? ''} onChange={(event) => guardedScope({ sentiment: (event.target.value || null) as ReplyInboxScope['sentiment'], cursor: null })}>
+          <option value="">All sentiments</option>
+          {Object.entries(SENTIMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </SelectField>
+        <SelectField label={COPY.reasons} value={inbox.scope.reason ?? ''} onChange={(event) => guardedScope({ reason: (event.target.value || null) as ReplyInboxScope['reason'], cursor: null })}>
+          <option value="">All reasons</option>
+          {Object.entries(REASON_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </SelectField>
+        <SelectField label={COPY.nextStep} value={inbox.scope.action ?? ''} onChange={(event) => guardedScope({ action: (event.target.value || null) as ReplyInboxScope['action'], cursor: null })}>
+          <option value="">All next steps</option>
+          {Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </SelectField>
+      </div>
+      <div className="replies-filter-toggles">
+        {([['my', 'Assigned to me'], ['unacknowledged', 'Needs a next step'], ['unowned', 'Unassigned'], ['overdue', 'Follow-up overdue']] as const).map(([key, label]) => (
+          <Checkbox key={key} label={label} checked={inbox.scope[key]} onChange={(event) => guardedScope({ [key]: event.target.checked, cursor: null })} />
+        ))}
+      </div>
+    </Dialog>}
+
+    {scopeLabel && <div className="replies-drill-banner" role="status">
+      <span>From analytics · {inbox.scope.from ?? 'start'} — {inbox.scope.to ?? 'today'} · {scopeLabel}</span>
+      <Link to={analyticsBack}>Back to the report</Link>
+      <IconButton label="Clear the analytics filter" icon={<X size={20} aria-hidden="true" />} onClick={clearMetric} />
     </div>}
-    {scopeLabel && <div className="replies-drill-banner" role="status"><span>Из аналитики · {inbox.scope.from ?? 'начало'} — {inbox.scope.to ?? 'сегодня'} · {scopeLabel}</span><Link to={analyticsBack}>Вернуться к отчёту</Link><button type="button" onClick={clearMetric} aria-label="Очистить фильтр аналитики"><X size={16} /></button></div>}
-    {inbox.stale && <div className="replies-stale" role="status">Показаны последние загруженные данные. <button type="button" onClick={inbox.refresh}>Повторить</button></div>}
-    {capabilityReady ? <div className={'replies-workspace mobile-' + mobileStep + (hasSelection ? ' has-selection' : '')}>
-      <aside className="replies-list-pane" aria-label="Список диалогов">
-        <div className="replies-pane-title"><div><h2>{inbox.scope.view === 'unreviewed' ? 'Очередь разбора' : 'Диалоги'}</h2><span className="muted small">{inbox.nextCursor ? 'Загружено ' + inbox.items.length + ', есть ещё' : inbox.items.length + ' диалогов'}</span></div></div>
-        <label className="replies-search"><Search size={15} aria-hidden="true" /><input type="search" value={search} maxLength={200} placeholder="Поиск по диалогам" aria-label="Поиск по диалогам" onChange={(event) => setSearch(event.target.value)} /><button type="button" aria-label="Очистить поиск" onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }}><X size={14} /></button></label>
-        {inbox.loading && !inbox.items.length ? <div className="replies-loading">Загружаем ответы…</div> : inbox.error && !hasData ? <div className="replies-error"><AlertCircle size={18} />{inbox.error}<button type="button" onClick={inbox.refresh}>Повторить</button></div> : !inbox.items.length ? <EmptyState icon={Inbox} title={scopeLabel ? 'В этом периоде нет подходящих диалогов' : 'Нет ответов для разбора'} hint={scopeLabel ? 'Проверьте период и условия отчёта.' : 'Попробуйте другую очередь или период поступления.'} /> : <div className="replies-list">{inbox.items.map((item) => {
-          const selected = inbox.scope.thread?.instance_id === item.instance_id && inbox.scope.thread.profile_url === item.profile_url
-          const name = item.name || 'Контакт LinkedIn'
-          return <button type="button" key={item.instance_id + '|' + item.profile_url} className={'replies-list-item' + (selected ? ' selected' : '')} onClick={() => guardedSelect(item)}>
-            <span className="replies-list-identity"><InitialsAvatar name={name} size={32} /><span className="replies-list-identity-text"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="muted small ellipsis">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
-            <span className="replies-list-snippet">{item.latest_direction === 'in' ? 'Ответ: ' : 'Отправлено: '}{item.latest_snippet || 'Нет текста'}</span>
-            <span className="replies-list-item-bottom"><span>{accountLabel(item.instance_id)}</span><span>{item.owner_id ? ownerLabel(item.owner_id) : null}{item.action ? ' · ' + ACTION_LABELS[item.action] : ''}</span>{item.pending_count > 0 && <b>{item.pending_count}</b>}</span>
-          </button>
-        })}</div>}
-        {inbox.nextCursor && <button className="replies-load-more" type="button" onClick={inbox.loadMore} disabled={inbox.loadingMore}>{inbox.loadingMore ? 'Загружаем…' : 'Загрузить ещё'}</button>}
+
+    {inbox.stale && <div className="replies-stale" role="status">
+      <span>Showing the last data that loaded.</span>
+      <Button variant="ghost" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button>
+    </div>}
+
+    {capabilityReady ? <div className={'replies-workspace' + (mobileStep === 'review' ? ' pane-review' : '') + (hasSelection ? ' has-selection' : '')}>
+      <aside className="replies-list-pane" aria-label="Conversations">
+        <div className="replies-pane-title">
+          <div>
+            <h2>{inbox.scope.view === 'unreviewed' ? 'Review queue' : 'Conversations'}</h2>
+            <span className="muted small">{inbox.nextCursor ? `${inbox.items.length} loaded · more available` : `${inbox.items.length} conversation${inbox.items.length === 1 ? '' : 's'}`}</span>
+          </div>
+        </div>
+        <label className="replies-search">
+          <Search size={18} aria-hidden="true" />
+          <input type="search" value={search} maxLength={200} placeholder="Search conversations" aria-label="Search conversations" onChange={(event) => setSearch(event.target.value)} />
+          <IconButton label="Clear the search" icon={<X size={18} aria-hidden="true" />} onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }} />
+        </label>
+        {inbox.loading && !inbox.items.length ? <div className="replies-loading" role="status" aria-busy="true">Loading replies…</div>
+          : inbox.error && !hasData ? <div className="replies-error" role="alert"><AlertCircle size={20} aria-hidden="true" />{inbox.error}<Button variant="secondary" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button></div>
+            : !inbox.items.length ? <EmptyState icon={Inbox} title={scopeLabel ? 'No conversations match this report period' : 'Nothing to review'} hint={scopeLabel ? 'Check the period and the conditions of the report.' : 'Try another queue or a wider arrival period.'} />
+              : <div className="replies-list">{inbox.items.map((item) => {
+                const selected = inbox.scope.thread?.instance_id === item.instance_id && inbox.scope.thread.profile_url === item.profile_url
+                const name = item.name || UNKNOWN_PERSON_LABEL
+                return <button type="button" key={item.instance_id + '|' + item.profile_url} className={'replies-list-item' + (selected ? ' selected' : '')} onClick={() => guardedSelect(item)}>
+                  <span className="replies-list-identity"><InitialsAvatar name={name} size={36} /><span className="replies-list-identity-text"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="muted small ellipsis">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
+                  <span className="replies-list-snippet">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
+                  <span className="replies-list-item-bottom"><span>{accountLabel(item.instance_id)}</span><span>{item.owner_id ? ownerLabel(item.owner_id) : null}{item.action ? ' · ' + ACTION_LABELS[item.action] : ''}</span>{item.pending_count > 0 && <b>{item.pending_count}</b>}</span>
+                </button>
+              })}</div>}
+        {inbox.nextCursor && <button className="replies-load-more" type="button" onClick={inbox.loadMore} disabled={inbox.loadingMore}>{inbox.loadingMore ? COPY.loading : 'Load more'}</button>}
       </aside>
+
       <main className="replies-thread-pane">
-        {hasSelection && <button className="replies-mobile-back" type="button" onClick={() => guardedSelect(null)}><ArrowLeft size={16} /> К списку</button>}
         {hasSelection ? <>
-          <div className="replies-thread-head"><div><h2>{currentName}</h2><p className="muted small">{selectedItem?.company || selectedItem?.headline || profileName(inbox.scope.thread?.profile_url ?? '')} · {accountLabel(inbox.scope.thread?.instance_id ?? '')}</p></div><div className="replies-thread-links">{newInboundAvailable && <button type="button" className="replies-new-inbound" onClick={() => { if (inbox.thread?.newer_cursor) inbox.loadNewer(); else if (latestInbound) confirmNavigation(() => { updateScope({ thread: { instance_id: latestInbound.instance_id, profile_url: latestInbound.profile_url, focus_message_id: latestInbound.id } }); setNewInboundAvailable(false) }) }}>Есть новый ответ · Показать</button>}{selectedLead && <button type="button" onClick={() => confirmNavigation(() => openConversation(selectedLead, { mode: 'import_history' }))}>Импорт истории</button>}<a href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer">LinkedIn ↗</a></div></div>
+          <div className="replies-thread-head">
+            <div>
+              <h2>{currentName}</h2>
+              <p className="muted small">{selectedItem?.company || selectedItem?.headline || profileName(inbox.scope.thread?.profile_url ?? '')} · {accountLabel(inbox.scope.thread?.instance_id ?? '')}</p>
+            </div>
+            <div className="replies-thread-links">
+              {newInboundAvailable && <Button variant="secondary" size="sm" onClick={() => { if (inbox.thread?.newer_cursor) inbox.loadNewer(); else if (latestInbound) confirmNavigation(() => { updateScope({ thread: { instance_id: latestInbound.instance_id, profile_url: latestInbound.profile_url, focus_message_id: latestInbound.id } }); setNewInboundAvailable(false) }) }}>New reply · show it</Button>}
+              {selectedLead && <Button variant="ghost" size="sm" onClick={() => confirmNavigation(() => openConversation(selectedLead, { mode: 'import_history' }))}>Import history</Button>}
+              <ExternalLinkButton variant="ghost" size="sm" href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer">LinkedIn ↗</ExternalLinkButton>
+            </div>
+          </div>
           <ConversationThread messages={inbox.thread?.messages ?? []} selectedMessageId={selectedMessage?.id ?? null} focusMessageId={inbox.scope.thread?.focus_message_id} loading={inbox.loadingThread} error={inbox.threadError} olderCursor={inbox.thread?.older_cursor} newerCursor={inbox.thread?.newer_cursor} inboundName={currentName} outboundName={accountLabel(inbox.scope.thread?.instance_id ?? '')} onSelectMessage={(message) => confirmNavigation(() => updateScope({ thread: { instance_id: message.instance_id, profile_url: message.profile_url, focus_message_id: message.id } }))} onLoadOlder={inbox.loadOlder} onLoadNewer={inbox.loadNewer} />
-          <button type="button" className="replies-mobile-next" onClick={() => setMobileStep('review')}>К разбору и следующему шагу →</button>
-        </> : <div className="replies-select-empty"><Inbox size={30} /><h2>Выберите диалог</h2><p className="muted">Переписка и следующий шаг откроются здесь.</p></div>}
+          <div className="replies-pane-switch">
+            <Button variant="ghost" block onClick={() => setMobileStep(mobileStep === 'review' ? 'thread' : 'review')}>
+              {mobileStep === 'review' ? '← Back to conversations' : `${COPY.reviewReply} and ${COPY.nextStep.toLowerCase()} →`}
+            </Button>
+          </div>
+        </> : <div className="replies-select-empty">
+          <Inbox size={32} aria-hidden="true" />
+          <h2>Select a conversation</h2>
+          <p className="muted">The thread and its next step open here.</p>
+        </div>}
       </main>
-      <aside className="replies-inspector-pane" aria-label="Разбор ответа и следующий шаг">
-        <button className="replies-review-back" type="button" onClick={() => setMobileStep('thread')}><ArrowLeft size={16} /> К переписке</button>
+
+      <aside className="replies-inspector-pane" aria-label="Review reply and next step">
         {hasSelection ? <>
           <div className="replies-inspector-scroll">
-            {selectedMessage?.direction === 'in' ? <ReplyReviewPanel message={selectedMessage} review={selectedMessage.review} saving={actions.saving} error={actions.error ?? (actions.conflict ? 'Данные изменились в другой вкладке. Ваш ввод сохранён. Обновите диалог после сверки.' : null)} history={inbox.history} historyLoading={inbox.historyLoading} historyCursor={inbox.historyCursor} onLoadHistoryMore={inbox.loadHistoryMore} onDirtyChange={setReviewDirty} onDraftChange={handleReviewDraftChange} onSave={saveReview} onSaveAndNext={saveReviewAndNext} externalActions />
-              : <div className="replies-inspector-empty">{selectedIsOutboundOnly ? <>Выбрано исходящее сообщение. {inbox.thread?.messages.some((message) => message.direction === 'in') ? <button type="button" onClick={() => { const inbound = [...(inbox.thread?.messages ?? [])].reverse().find((message) => message.direction === 'in'); if (inbound) updateScope({ thread: { instance_id: inbound.instance_id, profile_url: inbound.profile_url, focus_message_id: inbound.id } }) }}>К последнему входящему</button> : 'В загруженной части переписки входящих нет.'}</> : inbox.loadingThread ? 'Загружаем ответ…' : 'Выберите входящий ответ в переписке.'}</div>}
+            {selectedMessage?.direction === 'in' ? <ReplyReviewPanel message={selectedMessage} review={selectedMessage.review} saving={actions.saving} error={actions.error ?? (actions.conflict ? 'This conversation changed in another tab. Your input is kept — reload the conversation once you have compared them.' : null)} history={inbox.history} historyLoading={inbox.historyLoading} historyCursor={inbox.historyCursor} onLoadHistoryMore={inbox.loadHistoryMore} onDirtyChange={setReviewDirty} onDraftChange={handleReviewDraftChange} onSave={saveReview} onSaveAndNext={saveReviewAndNext} externalActions />
+              : <div className="replies-inspector-empty">{selectedIsOutboundOnly ? <>An outbound message is selected. {inbox.thread?.messages.some((message) => message.direction === 'in') ? <Button variant="ghost" size="sm" onClick={() => { const inbound = [...(inbox.thread?.messages ?? [])].reverse().find((message) => message.direction === 'in'); if (inbound) updateScope({ thread: { instance_id: inbound.instance_id, profile_url: inbound.profile_url, focus_message_id: inbound.id } }) }}>Go to the latest inbound reply</Button> : 'There are no inbound messages in the loaded part of this thread.'}</> : inbox.loadingThread ? 'Loading the reply…' : 'Select an inbound reply in the thread.'}</div>}
             <ConversationActionPanel workflow={actionWorkflow} members={inbox.capabilities?.members} inboundRevision={inbox.thread?.inbound_revision ?? selectedItem?.inbound_revision ?? 0} persistedDoNotContact={inbox.thread?.workflow?.do_not_contact ?? selectedItem?.do_not_contact ?? false} saving={actions.saving} error={actions.error} onDirtyChange={handleWorkflowDirtyChange} onDraftChange={handleWorkflowDraftChange} onSave={saveWorkflow} onValidityChange={setWorkflowValid} externalActions />
           </div>
           <div className="replies-inspector-footer">
-            <span role="status">{actions.saving ? 'Сохраняем…' : actions.error || actions.conflict ? 'Ошибка сохранения' : dirty ? 'Есть изменения' : selectedMessage?.review?.complete ? actionWorkflow?.action ? 'Сохранено' : 'Разметка сохранена · следующий шаг ещё не выбран' : 'Нет изменений'}</span>
+            <span role="status">{actions.saving ? COPY.saving : actions.error || actions.conflict ? COPY.saveFailed : dirty ? COPY.unsavedChanges : selectedMessage?.review?.complete ? actionWorkflow?.action ? COPY.saved : 'Review saved · no next step chosen yet' : COPY.noChanges}</span>
             <div>
-              {reviewDirty ? <><button className="secondary" type="submit" form="reply-review-form" disabled={actions.saving || !workflowValid}>Сохранить</button><button className="primary" type="submit" form="reply-review-form" data-next="true" disabled={actions.saving || !workflowValid}>Сохранить и следующий</button></>
-                : <><button className="secondary" type="button" disabled={!workflowDirty || actions.saving || !workflowValid} onClick={() => saveWorkflowOnly(false)}>Сохранить</button><button className="primary" type="button" disabled={!workflowDirty || actions.saving || !workflowValid} onClick={() => saveWorkflowOnly(true)}>Сохранить и следующий</button></>}
+              {reviewDirty
+                ? <>
+                  <Button variant="secondary" type="submit" form="reply-review-form" disabled={!workflowValid} loading={actions.saving}>{COPY.save}</Button>
+                  <Button variant="primary" type="submit" form="reply-review-form" data-next="true" disabled={!workflowValid} loading={actions.saving}>{COPY.saveAndNext}</Button>
+                </>
+                : <>
+                  <Button variant="secondary" disabled={!workflowDirty || !workflowValid} loading={actions.saving} onClick={() => saveWorkflowOnly(false)}>{COPY.save}</Button>
+                  <Button variant="primary" disabled={!workflowDirty || !workflowValid} loading={actions.saving} onClick={() => saveWorkflowOnly(true)}>{COPY.saveAndNext}</Button>
+                </>}
             </div>
           </div>
-        </> : <div className="replies-inspector-empty">Выберите диалог, чтобы разобрать ответ.</div>}
+        </> : <div className="replies-inspector-empty">Select a conversation to review its reply.</div>}
       </aside>
-    </div> : inbox.capabilities ? <div className="replies-inactive-empty" role="status"><Inbox size={30} /><h2>Replies Inbox временно недоступен</h2><p className="muted">{capabilityMessage(inbox.capabilities)}</p></div> : <div className="replies-loading" role="status" aria-busy="true">Открываем ответы…</div>}
+    </div> : inbox.capabilities ? <div className="replies-inactive-empty" role="status">
+      <Inbox size={32} aria-hidden="true" />
+      <h2>Replies is not available yet</h2>
+      <p className="muted">{capabilityMessage(inbox.capabilities)}</p>
+    </div> : <div className="replies-loading" role="status" aria-busy="true">Opening replies…</div>}
   </div>
 }

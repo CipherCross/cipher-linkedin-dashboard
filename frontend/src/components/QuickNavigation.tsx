@@ -8,6 +8,7 @@ import {
   filterQuickNavigationDestinations,
   type QuickNavigationDestination,
 } from '../lib/navigation'
+import { IconButton } from '../ui'
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(
@@ -128,9 +129,11 @@ export function QuickNavigation({
             <span className="quick-nav-eyebrow">Quick navigation</span>
             <h2 id={`${listId}-title`}>Go to</h2>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close quick navigation">
-            <X size={18} aria-hidden="true" />
-          </button>
+          <IconButton
+            label="Close quick navigation"
+            icon={<X size={20} aria-hidden="true" />}
+            onClick={onClose}
+          />
         </div>
 
         <div className="quick-nav-search">

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { REASON_LABELS, SENTIMENT_LABELS } from '../../lib/replyReview'
 import type { AnalyticsMetric } from './MetricCard'
+import { UI_LOCALE } from '../../ui/datetime'
 
 export interface WeeklyTrendRow {
   week: string
@@ -34,7 +35,7 @@ function weekLabel(week: string): string {
   const start = new Date(week + 'T00:00:00Z')
   const end = new Date(start)
   end.setUTCDate(end.getUTCDate() + 6)
-  const day = (date: Date) => new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(date)
+  const day = (date: Date) => new Intl.DateTimeFormat(UI_LOCALE, { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(date)
   return day(start) + ' – ' + day(end)
 }
 
@@ -62,25 +63,25 @@ export function WeeklyTrendChart({
   mode: WeeklyTrendMode
   linkFor: (row: WeeklyTrendRow) => string | null
 }) {
-  if (!rows.length) return <p className="muted">Нет входящих сообщений в выбранном периоде.</p>
+  if (!rows.length) return <p className="muted">No inbound messages in this period.</p>
   const { keys, chartRows } = weeklySeries(rows, mode)
-  const label = (key: string) => mode === 'sentiment' ? (SENTIMENT_LABELS as Record<string, string>)[key] ?? (key === 'latest_unreviewed' ? 'Не разобрано' : 'Только автоответы')
+  const label = (key: string) => mode === 'sentiment' ? (SENTIMENT_LABELS as Record<string, string>)[key] ?? (key === 'latest_unreviewed' ? 'Unreviewed' : 'Automated replies only')
     : mode === 'reasons' ? (REASON_LABELS as Record<string, string>)[key] ?? key
-      : key === 'reviewed' ? 'Разобрано' : 'Не разобрано'
+      : key === 'reviewed' ? 'Reviewed' : 'Unreviewed'
   return <div className="sa-weekly-chart">
-    <p className="muted small">{mode === 'coverage' ? 'Сообщения по неделям' : 'Диалоги по неделям'} · текущая неделя может быть неполной</p>
-    {keys.length === 0 ? <p className="muted">Причин в этом периоде пока нет.</p> : <div className="sa-weekly-plot" role="img" aria-label="Динамика по неделям">
+    <p className="muted small">{mode === 'coverage' ? 'Messages by week' : 'Conversations by week'} · the current week may still be incomplete</p>
+    {keys.length === 0 ? <p className="muted">No reasons recorded in this period yet.</p> : <div className="sa-weekly-plot" role="img" aria-label="Weekly trend">
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={chartRows} margin={{ top: 8, right: 8, bottom: 12, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="week" tick={{ fontSize: 11 }} />
           <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-          <Tooltip formatter={(value, name) => [Number(value).toLocaleString('ru-RU'), label(String(name))]} />
+          <Tooltip formatter={(value, name) => [Number(value).toLocaleString(UI_LOCALE), label(String(name))]} />
           <Legend formatter={(value) => label(String(value))} />
           {keys.map((key, index) => <Bar key={key} dataKey={key} stackId={mode === 'reasons' ? undefined : 'total'} fill={mode === 'sentiment' ? SENTIMENT_COLORS[key] : mode === 'reasons' ? REASON_COLORS[index % REASON_COLORS.length] : key === 'reviewed' ? '#38b27d' : '#d79a49'} />)}
         </BarChart>
       </ResponsiveContainer>
     </div>}
-    <div className="sa-week-links">{rows.map((row) => { const href = linkFor(row); return href ? <Link key={row.week} to={href}>{weekLabel(row.week)} · {row.messages} сообщений</Link> : <span key={row.week}>{weekLabel(row.week)}</span> })}</div>
+    <div className="sa-week-links">{rows.map((row) => { const href = linkFor(row); return href ? <Link key={row.week} to={href}>{weekLabel(row.week)} · {row.messages} messages</Link> : <span key={row.week}>{weekLabel(row.week)}</span> })}</div>
   </div>
 }

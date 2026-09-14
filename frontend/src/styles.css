@@ -24,12 +24,14 @@
   select,
   .range-group button
 ) {
-  background: var(--surface-2);
+  min-height: var(--control-height);
+  background: var(--surface-1);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
-  font-size: var(--text-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   font-family: inherit;
   transition: border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
@@ -42,12 +44,13 @@ select, .range-group button { cursor: pointer; }
 /* Shared focus ring — same accent border + soft halo on every control, so
  * keyboard and click focus read the same across the app. High specificity so
  * it wins over any per-context :focus above. */
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+/* No per-control focus style: the one 2px accent outline in styles/reset.css
+ * applies to every control in the app, so keyboard focus reads identically
+ * on a button, an input, a tab and a table row. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):hover:not(:disabled),
+textarea:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: var(--text-secondary);
 }
 
 /* strip the OS-default control and draw our own muted chevron */
@@ -55,12 +58,11 @@ select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a97b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  padding-right: var(--space-2xl);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23596579' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
+  background-position: right var(--space-md) center;
 }
-select:hover { border-color: var(--border-strong); }
 
 .range-group { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .range-group button.active { border-color: var(--accent); color: var(--accent); }
@@ -816,8 +818,8 @@ tr:last-child td { border-bottom: none; }
   z-index: 120;
   display: grid;
   place-items: start center;
-  padding: min(14vh, 120px) 18px 24px;
-  background: rgba(5, 9, 16, 0.58);
+  padding: min(14vh, 120px) var(--space-xl) var(--space-xl);
+  background: var(--overlay);
 }
 .quick-nav-dialog {
   width: min(620px, 100%);
@@ -825,8 +827,8 @@ tr:last-child td { border-bottom: none; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-dialog);
   background: var(--surface-1);
   box-shadow: var(--shadow-overlay);
 }
@@ -834,14 +836,14 @@ tr:last-child td { border-bottom: none; }
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 18px 12px;
+  gap: var(--space-lg);
+  padding: var(--space-xl) var(--space-xl) var(--space-md);
 }
-.quick-nav-head h2 { margin: 1px 0 0; font-size: var(--text-xl); }
+.quick-nav-head h2 { margin: 1px 0 0; font-size: var(--text-section); line-height: var(--leading-section); }
 .quick-nav-eyebrow {
   color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 750;
+  font-size: var(--text-meta);
+  font-weight: 600;
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
@@ -849,35 +851,35 @@ tr:last-child td { border-bottom: none; }
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 0 14px 10px;
-  padding: 0 11px;
+  margin: 0 var(--space-xl) var(--space-md);
+  padding: 0 var(--space-md);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--surface-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
   color: var(--text-muted);
 }
 .quick-nav-search:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 .quick-nav-search > svg { flex-shrink: 0; color: var(--accent); }
 .quick-nav-search input {
   width: 100%;
   min-width: 0;
-  height: 46px;
+  min-height: var(--control-height);
   padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: var(--text-md);
+  font-size: var(--text-body);
 }
 .quick-nav-search input::placeholder { color: var(--text-muted); }
 .quick-nav-results {
   min-height: 112px;
   overflow-y: auto;
-  padding: 0 8px 8px;
+  padding: 0 var(--space-md) var(--space-md);
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
@@ -886,10 +888,10 @@ tr:last-child td { border-bottom: none; }
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 52px;
-  padding: 7px 10px;
+  min-height: var(--row-height-identity);
+  padding: var(--space-sm) var(--space-md);
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
@@ -1283,61 +1285,58 @@ tr:last-child td { border-bottom: none; }
 .badge.stage-accepted { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
 .badge.stage-replied { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
 
-/* One button base; `.btn-accent`, `.accent`, `.ghost`, `.sm` are its variants.
- * Shared transition + disabled opacity so every button behaves identically. */
-.btn, .btn-accent {
+/* ---- Legacy button classes = the primitive ------------------------------
+ * `.btn`, `.btn-accent`, `.icon-only-btn` and `.icon-btn` are the call sites
+ * that have not been converted to `src/ui/Button.tsx` yet. They are not a
+ * second button system: every declaration below is the primitive's, so a
+ * call site looks identical whichever spelling it uses, and converting one is
+ * a pure refactor. New code uses the component.
+ * Focus is deliberately absent here — the single 2px outline in
+ * styles/reset.css applies, replacing the old 3px translucent halo. */
+.btn,
+.btn-accent {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out), transform 0.12s var(--ease-out);
-}
-
-.btn {
+  gap: var(--space-sm);
+  min-height: var(--control-height);
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-strong);
   background: var(--surface-1);
-  box-shadow: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
-/* calm default hover: surface + border only, no colour shift */
-.btn:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-3); }
-.btn:disabled, .btn-accent:disabled { opacity: 0.5; cursor: default; }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:disabled,
+.btn-accent:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* filled + ghost variants (available; existing pages keep the default look) */
 .btn.accent {
-  background: var(--accent); color: var(--on-accent); border-color: var(--accent);
-  /* opaque fill: drop the inherited blur (invisible + a needless repaint) */
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
-.btn.accent:hover:not(:disabled) {
-  background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent);
-}
-/* ghost stays invisible until hover — frosting it would defeat the affordance */
-.btn.ghost {
-  background: transparent; border-color: transparent;
-box-shadow: none;
-}
-.btn.ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); color: var(--text); }
-.btn.sm { padding: 4px 10px; font-size: var(--text-xs); }
+.btn.accent:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-/* Shared keyboard focus ring — same accent halo the form controls use, so
- * every interactive chrome element (button, icon button, segmented item,
- * select trigger) reads as one system. */
-.btn:focus-visible,
-.btn-accent:focus-visible,
-.icon-only-btn:focus-visible,
-.icon-btn:focus-visible,
-.segmented-item:focus-visible,
-.drp-trigger:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-subtle);
-}
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+
+.btn.danger { border-color: var(--danger-border); color: var(--danger); }
+.btn.danger:hover:not(:disabled) { background: var(--danger-subtle); }
+
+/* Dense in-row variant. Never a page's primary action. */
+.btn.sm { min-height: var(--control-height-sm); padding: 0 var(--space-md); font-size: var(--text-table); }
+
+.btn[aria-pressed='true'] { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--accent); }
 
 .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .sortable:hover { color: var(--text); }
@@ -1417,14 +1416,33 @@ box-shadow: none;
 }
 .li-link:hover { background: var(--linkedin-hover); }
 
-/* replies feed — outlined-accent variant of the shared button base above */
-.btn-accent {
-  color: var(--accent);
-  border-color: var(--accent);
-}
+/* Outlined-accent variant of the same base. */
+.btn-accent { color: var(--accent); border-color: var(--accent); }
 .btn-accent:hover:not(:disabled) { background: var(--accent-subtle); }
-.icon-btn { display: inline-flex; align-items: center; gap: 7px; }
-.icon-btn svg { flex-shrink: 0; }
+
+/* Icon-only control: 44x44 hit area around a 20px glyph. */
+.icon-btn,
+.icon-only-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-hit);
+  height: var(--icon-hit);
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.icon-btn:hover:not(:disabled),
+.icon-only-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.icon-btn:disabled,
+.icon-only-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.icon-only-btn.danger:hover:not(:disabled) { background: var(--danger-subtle); color: var(--danger); }
+.icon-btn svg, .icon-only-btn svg { flex-shrink: 0; }
 .sentiment-filter { margin-bottom: 12px; }
 .reply-body .badge.senti { margin-right: 6px; vertical-align: 1px; }
 
@@ -1634,12 +1652,22 @@ box-shadow: none;
 /* Per-instance online config editor (Health page) */
 .instance-item { display: flex; flex-direction: column; gap: 8px; }
 .instance-item + .instance-item { border-top: 1px solid var(--border); padding-top: 12px; }
+/* Inline text action inside running copy ("Show more", "Undo"). It reads at
+ * the table size rather than the old 12px, and keeps its inline flow — a
+ * control embedded in a sentence is exempt from the 44px product target. */
 .link-btn {
-  background: none; border: none; padding: 0;
-  color: var(--accent); font-size: var(--text-xs); cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  font-weight: 600;
+  cursor: pointer;
 }
-.link-btn:hover { text-decoration: underline; }
-.link-btn:disabled { opacity: 0.55; cursor: default; text-decoration: none; }
+.link-btn:hover:not(:disabled) { color: var(--accent-hover); text-decoration: underline; }
+.link-btn:disabled { opacity: 0.55; cursor: not-allowed; text-decoration: none; }
 .config-toggle { padding-left: 44px; }
 .config-pending { color: var(--muted); font-size: var(--text-xs); }
 .config-editor {
@@ -2565,21 +2593,6 @@ td .pipe-stage-select.quiet:focus-visible {
 .search-card-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .search-card-name { font-weight: 600; }
 .search-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
-.icon-only-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
-}
-.icon-only-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
-.icon-only-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
 .search-card-desc { margin: 0; color: var(--text-secondary); }
 .search-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {

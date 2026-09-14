@@ -3,20 +3,21 @@ import { History } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { blindSpotLeads, instanceName, INTENT_META, SENTIMENT_META } from '../lib/leads'
 import { useConversation } from '../lib/ConversationContext'
+import { businessDate } from '../ui/datetime'
 
-// Show only the top few candidates; the rest collapse into a "+ ще N" note so the
+// Show only the top few candidates; the rest collapse into a "+ N more" note so the
 // callout stays a nudge, not a full worklist.
 const MAX_VISIBLE = 6
 
-/** Ukrainian short date for a message timestamp (wall-clock, local). */
-const dateUk = (ts: string) =>
-  new Date(ts).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
+/** Short business date for a reply — the same Madrid clock the rest of the
+ *  reply surfaces use, so a row here and the same row in Replies agree. */
+const replyDate = (ts: string) => businessDate(ts)
 
 /** A data-completeness nudge on the Overview page: P2/P3 and other actionable
  *  replies whose thread has no manually-imported history, so what
  *  happened after the reply is invisible. Clicking a row opens the shared
- *  conversation drawer, which holds the "Import history" flow. All copy in
- *  Ukrainian, matching the team's Slack briefings. Renders nothing when there are no
+ *  conversation drawer, which holds the "Import history" flow. Renders
+ *  nothing when there are no
  *  candidates — or when `messages.source` is unavailable (pre-migration DB,
  *  where fetchMessages stripped the column and every thread looks sync-only). */
 export function ImportCalloutCard() {
@@ -44,12 +45,12 @@ export function ImportCalloutCard() {
     <div className="card import-callout">
       <h2 className="import-callout-title">
         <History size={16} className="import-callout-icon" />
-        Імпортуйте історію розмов
+        Import conversation history
       </h2>
       <p className="import-callout-lede">
-        Ці теплі відповіді ми бачимо лише з синхронізації — що сталося після відповіді,
-        залишається невидимим. Імпортуйте історію діалогу, щоб фоловапи та призначені
-        дзвінки з’явилися в дашборді.
+        These warm replies are only visible through the sync — whatever happened
+        after the reply stays invisible. Import the conversation history so that
+        follow-ups and booked calls show up in the dashboard.
       </p>
 
       <div className="import-callout-list">
@@ -84,7 +85,7 @@ export function ImportCalloutCard() {
                   </span>
                 )}
                 {intentMeta && (
-                  <span className={`badge senti ${intentMeta.cls}`} title="Найвищий рівень наміру">
+                  <span className={`badge senti ${intentMeta.cls}`} title="Highest buying-interest level">
                     {intentMeta.short} · {intentMeta.label}
                   </span>
                 )}
@@ -92,15 +93,15 @@ export function ImportCalloutCard() {
               <div className="import-callout-meta muted small">
                 {[lead.company, account].filter(Boolean).join(' · ') || '—'}
               </div>
-              <div className="import-callout-when muted small">{dateUk(reply.sent_at)}</div>
+              <div className="import-callout-when muted small">{replyDate(reply.sent_at)}</div>
             </div>
           )
         })}
       </div>
 
-      {extra > 0 && <div className="import-callout-more muted small">+ ще {extra}</div>}
+      {extra > 0 && <div className="import-callout-more muted small">+ {extra} more</div>}
       <div className="import-callout-hint muted small">
-        Натисніть, щоб відкрити діалог → Імпорт історії
+        Select a row to open the conversation → Import history
       </div>
     </div>
   )

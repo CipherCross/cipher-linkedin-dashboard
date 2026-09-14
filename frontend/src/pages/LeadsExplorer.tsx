@@ -654,7 +654,7 @@ export function LeadsExplorer() {
             Filters are kept in the URL, so any view here is shareable.
           </div>
         </div>
-        <Link className="btn sm" to="/replies?view=all&scope=all">Открыть Replies</Link>
+        <Link className="btn sm" to="/replies?view=all&scope=all">Open Replies</Link>
       </header>
 
       <div className="card coach-digest-card">

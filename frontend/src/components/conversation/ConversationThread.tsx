@@ -20,7 +20,7 @@ export interface ConversationThreadProps {
 
 export function ConversationThread({
   messages, selectedMessageId, focusMessageId, loading, error, olderCursor, newerCursor,
-  onSelectMessage, onLoadOlder, onLoadNewer, inboundName = 'Контакт LinkedIn', outboundName = 'Аккаунт LinkedIn',
+  onSelectMessage, onLoadOlder, onLoadNewer, inboundName = 'LinkedIn contact', outboundName = 'LinkedIn account',
 }: ConversationThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastFirstId = useRef<number | null>(null)
@@ -41,13 +41,13 @@ export function ConversationThread({
     lastHeight.current = box.scrollHeight
     if (focusMessageId == null) lastFocus.current = null
   }, [messages, focusMessageId])
-  if (loading && !messages.length) return <div className="replies-thread-status" aria-busy="true">Загружаем переписку…</div>
+  if (loading && !messages.length) return <div className="replies-thread-status" aria-busy="true">Loading the conversation…</div>
   if (error && !messages.length) return <div className="replies-thread-status error">{error}</div>
-  if (!messages.length) return <div className="replies-thread-status"><MessageCircle size={20} aria-hidden="true" /> Нет сообщений в этом окне.</div>
+  if (!messages.length) return <div className="replies-thread-status"><MessageCircle size={20} aria-hidden="true" /> No messages in this window.</div>
   let previousDay = ''
   return (
-    <div className="replies-thread" aria-label="Переписка" ref={scrollRef}>
-      {olderCursor && <button className="replies-thread-more" type="button" onClick={onLoadOlder} disabled={loading}><ArrowUp size={14} /> Загрузить старые сообщения</button>}
+    <div className="replies-thread" aria-label="Conversation" ref={scrollRef}>
+      {olderCursor && <button className="replies-thread-more" type="button" onClick={onLoadOlder} disabled={loading}><ArrowUp size={14} /> Load older messages</button>}
       {messages.map((message) => {
         const day = replyDateKey(message.sent_at)
         const showDay = day !== previousDay
@@ -65,23 +65,23 @@ export function ConversationThread({
               data-message-id={message.id}
               onClick={() => onSelectMessage(message)}
               aria-pressed={selected}
-              aria-label={`${inbound ? 'Входящее' : 'Исходящее'} сообщение ${replyTime(message.sent_at)} (${REPLY_TIME_ZONE_LABEL})`}
+              aria-label={`${inbound ? 'Inbound' : 'Outbound'} message ${replyTime(message.sent_at)} (${REPLY_TIME_ZONE_LABEL})`}
             >
               <span className="replies-message-meta"><span>{inbound ? inboundName : outboundName}</span><time dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(message.sent_at)}</time></span>
               <span className="replies-message-body">{message.body || '—'}</span>
               {inbound && <span className="replies-message-footer">
-                {review?.sentiment ? <span className={`replies-chip sentiment-${review.sentiment}`}>{SENTIMENT_LABELS[review.sentiment]}</span> : <span className="replies-unreviewed">Не разобрано</span>}
-                {review?.reason_ids?.length ? <span className="muted small">{review.reason_ids.length} причин</span> : null}
+                {review?.sentiment ? <span className={`replies-chip sentiment-${review.sentiment}`}>{SENTIMENT_LABELS[review.sentiment]}</span> : <span className="replies-unreviewed">Unreviewed</span>}
+                {review?.reason_ids?.length ? <span className="muted small">{review.reason_ids.length === 1 ? '1 reason' : `${review.reason_ids.length} reasons`}</span> : null}
               </span>}
             </button>
           </div>
         )
       })}
-      {newerCursor && <button className="replies-thread-more" type="button" onClick={onLoadNewer} disabled={loading}><ArrowDown size={14} /> Загрузить новые сообщения</button>}
+      {newerCursor && <button className="replies-thread-more" type="button" onClick={onLoadNewer} disabled={loading}><ArrowDown size={14} /> Load newer messages</button>}
     </div>
   )
 }
 
 export function ThreadScrollHint({ older, newer, onOlder, onNewer }: { older: boolean; newer: boolean; onOlder: () => void; onNewer: () => void }) {
-  return <div className="replies-thread-hints">{older && <button type="button" onClick={onOlder}><ChevronUp size={14} /> Старше</button>}{newer && <button type="button" onClick={onNewer}><ChevronDown size={14} /> Новее</button>}</div>
+  return <div className="replies-thread-hints">{older && <button type="button" onClick={onOlder}><ChevronUp size={14} /> Older</button>}{newer && <button type="button" onClick={onNewer}><ChevronDown size={14} /> Newer</button>}</div>
 }
