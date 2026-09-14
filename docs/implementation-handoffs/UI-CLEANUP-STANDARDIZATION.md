@@ -1,4 +1,4 @@
-# UI cleanup and standardization — phases 1–7 implemented, phase 8 open
+# UI cleanup and standardization — deployed; phase 8 partly closed
 
 Implementation of `specs/2026-09-14-ui-cleanup-standardization.md`. Frontend
 only: no product logic, no database, no external system and no deployment was
@@ -7,10 +7,10 @@ touched.
 | | |
 |---|---|
 | Base SHA | `5c298ed` (`main`, "docs(spec): Phase 2 shipped, notebook-1 pilot checklist") |
-| Branch | `main` (local) |
-| Commits | `b27cece` → `da8d46e` → `81a1659` → `156356d` → `bfb6ecb` → `743a76c` |
-| Pushed | **no** |
-| Deployed | **no** — phase 8 needs an explicit deployment authorisation |
+| Branch | `main` |
+| Commits | `b27cece` → `da8d46e` → `81a1659` → `156356d` → `bfb6ecb` → `743a76c` → `da95d6d` → `1a688ee` |
+| Pushed | **yes** — `5c298ed..1a688ee` on 2026-09-14 |
+| Deployed | **yes** — production, 2026-09-14 (see "The deploy, as performed") |
 | Data / schema / agent changes | none |
 
 ## What each commit did
@@ -93,17 +93,56 @@ still behind it. Both are covered by tests now.
   authorisation.
 - **`sync-agent/`, `postgres/` and `frontend/api/` are untouched.**
 
-## Open items (phase 8)
+## The deploy, as performed
 
-1. Deploy the verified commit.
-2. Authorised read-only production smoke of the same 20 route types at the three
-   target sizes, compared against the gallery.
-3. Run the write checks — save, conflict, dirty navigation, CSV phases, publish
-   — in an isolated environment before release.
-4. Record deployment Ready, the browser evidence and the write results
-   separately. Ready is not UI acceptance.
-5. If visual or behavioural acceptance fails, roll back the frontend release
-   only. Nothing here requires a database rollback.
+Authorised by the owner on 2026-09-14. `git push origin main` (`5c298ed..1a688ee`)
+triggered the production build through the project's git integration — no
+`vercel --prod` was needed, and no second deployment was created.
+
+| | |
+|---|---|
+| Deployment | `https://cipher-linkedin-dashboard-c162shn9g-ciphercross.vercel.app` |
+| Status | `● Ready`, built in 2m |
+| Serving | `https://app.ciphercross.dev` |
+| Previous production (rollback target) | `https://cipher-linkedin-dashboard-l5228g77q-ciphercross.vercel.app` |
+
+Roll back with `vercel rollback <previous url>`, or by promoting that deployment
+in the dashboard. **Frontend only — nothing here needs a database rollback.**
+
+The deployed stylesheet is `assets/index-CXLvJtMV.css`, byte-identical to the
+local build's, which is what proves the release carries this commit. The entry
+JS hash differs from the local one on purpose: that chunk inlines
+`import.meta.env`, and Vercel's production values differ from the local `.env`
+(and `DEV=false` drops the gallery).
+
+### Production smoke — signed out
+
+| Check | Result |
+|---|---|
+| Light before the first frame | `data-theme="light"`, `color-scheme: light`, `meta theme-color` `#f7f8fa` |
+| Page background | `rgb(247,248,250)`, `background-image: none` |
+| Decoration | **0** elements with `backdrop-filter`, **0** gradients |
+| Type / controls | body 16px, h1 28/36, Sign in button 44px, input 44px |
+| Input border | `rgb(122,134,153)` = `#7A8699` |
+| Card elevation | the single soft `0 8px 24px rgba(16,24,40,.1)` |
+| Text floor / contrast | **0** below 13px, **0** AA failures |
+| Overflow | none at 1024, 1280 or 1920 |
+| Stored `theme=dark` | normalised to `light`; the page still paints light |
+| `#/ui-gallery` | does not exist in production — the route falls through to sign-in |
+| Console | only two `401`s from `/api/identity?op=session.current`, which is correct for a signed-out visitor and predates this work. No other errors; all assets 200. |
+
+## Open items
+
+1. **Signed-in production smoke of the 20 route types** at 1280×720, 1440×900
+   and 1920×1080. This session could not sign in — it has no password — so
+   everything above the sign-in screen is still verified only by the jsdom
+   suites, the build, and the browser measurements against the gallery.
+2. **Write checks** — save, conflict, dirty navigation, CSV phases, publish — in
+   an isolated environment. Nothing in this work changed a request, a payload or
+   a mutation, and their suites pass, but the plan asks for them before release
+   is called complete.
+
+Deployment Ready is **not** UI acceptance; item 1 is what closes it.
 
 ## Deliberate deviations from the plan
 
