@@ -8,6 +8,8 @@ import { useToast } from '../lib/ToastContext'
 import { shortDate } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import { useAuth } from '../lib/AuthContext'
+import { Button, PageHeader, Panel, SegmentedControl } from '../ui'
+import { COPY } from '../ui/labels'
 
 // The single global playbook: one Markdown document that grounds the AI
 // conversation coach (/api/coach) for every account. Read on whichever path the
@@ -136,48 +138,45 @@ export function Playbook() {
 
   return (
     <>
-      <header className="playbook-head">
-        <div>
-          <h1>Playbook</h1>
-          <div className="muted small">
-            One Markdown document that grounds the AI conversation coach for every account.
-            {savedAt && ` · last saved ${shortDate(savedAt)}`}
-            {dirty && ' · unsaved changes'}
-          </div>
-        </div>
-        <div className="controls">
-          {/* the toggle only matters on narrow screens; wide shows both panes */}
-          <button className="link-btn playbook-toggle" onClick={() => setPreview((p) => !p)}>
-            {preview ? 'Edit' : 'Preview'}
-          </button>
-          <button
-            className="btn-accent icon-btn"
+      <PageHeader
+        title="Playbook"
+        description="One Markdown document that grounds the AI conversation coach for every account."
+        context={
+          <span className="muted small">
+            {savedAt ? `Last saved ${shortDate(savedAt)}` : 'Never saved'}
+            {dirty && ` · ${COPY.unsavedChanges}`}
+          </span>
+        }
+        actions={<>
+          {/* Edit and Preview are explicit modes; at a width that fits both,
+              the split below shows them side by side and this only marks
+              which pane has focus. */}
+          <SegmentedControl
+            label="Editor mode"
+            value={preview ? 'preview' : 'edit'}
+            onChange={(mode) => setPreview(mode === 'preview')}
+            items={[{ id: 'edit', label: 'Edit' }, { id: 'preview', label: 'Preview' }]}
+          />
+          <Button
+            variant="primary"
             onClick={save}
-            disabled={!isAdmin || busy || !loaded || !dirty || loadError != null}
+            loading={busy}
+            loadingLabel="Saving the playbook"
+            disabled={!isAdmin || !loaded || !dirty || loadError != null}
             title={isAdmin ? undefined : 'Admin access required'}
           >
-            {dirty && !busy && <span className="unsaved-dot" />}
-            {busy ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
-          </button>
-        </div>
-      </header>
+            {dirty ? 'Save changes' : COPY.saved}
+          </Button>
+        </>}
+      />
 
-      <div className="card playbook-editor">
+      <Panel className="playbook-editor">
         {loadError && (
-          <div
-            className="banner error"
-            role="alert"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-            }}
-          >
+          <div className="banner error" role="alert">
             <span>{loadError}</span>
-            <button className="btn sm" onClick={load} disabled={!loaded}>
-              {loaded ? 'Retry' : 'Loading…'}
-            </button>
+            <Button variant="secondary" size="sm" onClick={load} disabled={!loaded}>
+              {loaded ? COPY.retry : COPY.loading}
+            </Button>
           </div>
         )}
         {!loaded ? (
@@ -211,7 +210,7 @@ export function Playbook() {
             </div>
           </div>
         )}
-      </div>
+      </Panel>
     </>
   )
 }

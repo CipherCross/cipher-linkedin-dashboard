@@ -63,6 +63,7 @@ import {
 import { teamAdminWritesAllowed } from '../lib/rosterWrites'
 import { useToast } from '../lib/ToastContext'
 import type { TeamMember } from '../lib/types'
+import { Button, PageHeader } from '../ui'
 
 async function responseBody(response: Response): Promise<Record<string, unknown>> {
   return (await response.json().catch(() => ({}))) as Record<string, unknown>
@@ -205,20 +206,15 @@ function IdentityTeam() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Team</h1>
-          <div className="muted small">
-            Everyone can view the directory. Admins manage login access and roles.
-          </div>
-        </div>
-        {isAdmin && (
-          <button className="btn accent" type="button" onClick={() => setInviteOpen(true)}>
-            <UserPlus size={15} />
+      <PageHeader
+        title="Team"
+        description="Everyone can view the directory. Admins manage login access and roles."
+        actions={isAdmin && (
+          <Button variant="primary" icon={<UserPlus size={18} aria-hidden="true" />} onClick={() => setInviteOpen(true)}>
             Add teammate
-          </button>
+          </Button>
         )}
-      </header>
+      />
 
       <div className="team-summary card">
         <div>
@@ -517,23 +513,18 @@ function SupabaseTeam() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Team</h1>
-          <div className="muted small">
-            {canManage
-              ? 'Everyone can view the directory. Admins manage login access and roles.'
-              : 'Read-only directory: this dashboard is reading the team from the application API, ' +
-                'whose member ids are not the ones the team writer resolves. Every member here can sign in.'}
-          </div>
-        </div>
-        {isAdmin && canManage && (
-          <button className="btn accent" type="button" onClick={() => setInviteOpen(true)}>
-            <UserPlus size={15} />
+      <PageHeader
+        title="Team"
+        description={canManage
+          ? 'Everyone can view the directory. Admins manage login access and roles.'
+          : 'Read-only directory: this dashboard is reading the team from the application API, '
+            + 'whose member ids are not the ones the team writer resolves. Every member here can sign in.'}
+        actions={isAdmin && canManage && (
+          <Button variant="primary" icon={<UserPlus size={18} aria-hidden="true" />} onClick={() => setInviteOpen(true)}>
             Invite teammate
-          </button>
+          </Button>
         )}
-      </header>
+      />
 
       <div className="team-summary card">
         <div>

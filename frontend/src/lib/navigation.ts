@@ -172,10 +172,13 @@ const ITEMS: Record<string, Omit<NavigationItem, 'section'>> = {
   sequences: {
     id: 'sequences',
     to: routeTo(APP_ROUTE_SEGMENTS.sequences),
-    label: 'Sequence Builder',
+    /* One user-facing name for this route. The sidebar said "Sequence Builder"
+     * and the landing page said "Sequence Hub"; the sections inside it are
+     * still Deployments and Build. Both old names stay searchable. */
+    label: 'Sequences',
     icon: Workflow,
     skeleton: 'simple',
-    keywords: ['sequence hub', 'messages', 'copy', 'linkedin', 'ab test', 'variations', 'deployments'],
+    keywords: ['sequence hub', 'sequence builder', 'messages', 'copy', 'linkedin', 'ab test', 'variations', 'deployments'],
   },
   team: {
     id: 'team',

@@ -11,11 +11,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { ActivityChart } from '../components/ActivityChart'
 import { useAuth } from '../lib/AuthContext'
 import { presetRanges, rangeToParam, type DateRange } from '../lib/leads'
 import { fetchAllNeonActivity } from '../lib/neonActivity'
 import type { DailyActivity } from '../lib/types'
+import { Badge, Button, InlineError, PageHeader, Panel, SelectField, TextField } from '../ui'
+import { COPY } from '../ui/labels'
 
 export function NeonActivity() {
   const { user } = useAuth()
@@ -59,52 +62,50 @@ export function NeonActivity() {
 
   return (
     <div className="page">
-      <header className="page-header">
-        <h1>Daily activity — served from Neon</h1>
-        <p className="muted">
-          Read-only slice: browser → <code>/api/activity-daily</code> → Neon,
-          under row-level security. Every other page still reads Supabase.
-        </p>
-      </header>
+      <PageHeader
+        title="Daily activity"
+        breadcrumb={[{ label: 'Diagnostics' }]}
+        /* Honestly labelled as a diagnostic route, and no longer claiming that
+           "every other page still reads Supabase" — production has not read
+           Supabase since the cutover. */
+        description="A diagnostic read-only slice used to check the application read path end to end. The dashboard's own pages read the same data through their own routes."
+        context={<Badge tone="neutral">Diagnostic</Badge>}
+        actions={
+          <Button variant="secondary" icon={<RefreshCw size={18} aria-hidden="true" />} onClick={() => void load()} loading={loading} loadingLabel="Reloading">
+            {COPY.refresh}
+          </Button>
+        }
+      />
 
-      <div className="card">
+      <Panel>
         <div className="filters">
-          <label>
-            Instance{' '}
-            <input
-              value={instanceId}
-              onChange={(e) => setInstanceId(e.target.value)}
-              placeholder="instance_id"
-            />
-          </label>
-          <label>
-            Range{' '}
-            <select
-              value={rangeToParam(range)}
-              onChange={(e) => {
-                const next = presets.find(
-                  (r) => rangeToParam(r) === e.target.value,
-                )
-                if (next) setRange(next)
-              }}
-            >
-              {presets.map((r) => (
-                <option key={r.id} value={rangeToParam(r)}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" onClick={() => void load()} disabled={loading}>
-            {loading ? 'Loading…' : 'Reload'}
-          </button>
+          <TextField
+            label="Instance"
+            value={instanceId}
+            onChange={(e) => setInstanceId(e.target.value)}
+            placeholder="instance_id"
+          />
+          <SelectField
+            label="Range"
+            value={rangeToParam(range)}
+            onChange={(e) => {
+              const next = presets.find((r) => rangeToParam(r) === e.target.value)
+              if (next) setRange(next)
+            }}
+          >
+            {presets.map((r) => (
+              <option key={r.id} value={rangeToParam(r)}>{r.label}</option>
+            ))}
+          </SelectField>
         </div>
 
         {error ? (
           <>
-            <p className="error" role="alert">
-              {error}
-            </p>
+            <InlineError
+              title="This diagnostic read failed."
+              detail={error}
+              onRetry={() => void load()}
+            />
             {/* The temporary actor bridge maps an identity-provider subject to a
                 canonical Neon user id. When it has no entry, showing the
                 signed-in subject is what lets an operator configure it — it is
@@ -121,7 +122,7 @@ export function NeonActivity() {
             {elapsedMs === null ? '' : ` · ${elapsedMs} ms`}
           </p>
         )}
-      </div>
+      </Panel>
 
       <ActivityChart
         activity={activity}

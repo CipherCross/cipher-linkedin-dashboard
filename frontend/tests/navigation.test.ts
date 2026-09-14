@@ -32,7 +32,7 @@ describe('sidebar information architecture', () => {
     // became the operating object: it sits directly under the home page.
     expect(primary?.items.map((item) => item.label)).toEqual([
       'Overview',
-      'Sequence Builder',
+      'Sequences',
       'Follow-ups',
       'Replies',
       'Pipeline',
@@ -73,8 +73,8 @@ describe('sidebar information architecture', () => {
     expect(pageNameForPath('/account/notebook-1')).toBeNull()
     expect(skeletonVariantForPath('/follow-ups')).toBe('table')
     expect(skeletonVariantForPath('/playbook')).toBe('simple')
-    expect(pageNameForPath('/sequences')).toBe('Sequence Builder')
-    expect(pageNameForPath('/sequences/example-id')).toBe('Sequence Builder')
+    expect(pageNameForPath('/sequences')).toBe('Sequences')
+    expect(pageNameForPath('/sequences/example-id')).toBe('Sequences')
     expect(skeletonVariantForPath('/campaign/notebook-1%3A42')).toBe('overview')
   })
 })

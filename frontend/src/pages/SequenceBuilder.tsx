@@ -31,17 +31,17 @@ import {
   GripVertical,
   History,
   Laptop,
+  PanelRight,
   LoaderCircle,
   MessageCircle,
   MessageSquarePlus,
   MoreHorizontal,
   Plus,
   RotateCcw,
-  Search,
+  Filter,
   Send,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   Split,
   Trash2,
   UserRoundPlus,
@@ -119,6 +119,9 @@ import {
 } from '../lib/campaignRuntime'
 import { CampaignRuntimeStatusView } from '../components/CampaignRuntimeStatus'
 import { ago, num } from '../lib/format'
+import {
+  Button, Dialog, FilterCount, IconButton, PageHeader, SelectField, Tabs, TextField, Toolbar,
+} from '../ui'
 
 type EditorTab = 'build' | 'branches' | 'preview'
 type PreviewDevice = 'web' | 'mobile'
@@ -148,6 +151,7 @@ function SequenceLibrary() {
   const [items, setItems] = useState<SequenceRecord[]>([])
   const [hub, setHub] = useState<SequenceHubSnapshot | null>(null)
   const [view, setView] = useState<'deployments' | 'build'>('deployments')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hubError, setHubError] = useState<string | null>(null)
@@ -159,6 +163,11 @@ function SequenceLibrary() {
   const [sourceFilter, setSourceFilter] = useState('any')
   const [freshnessFilter, setFreshnessFilter] = useState<'any' | 'fresh' | 'stale' | 'unsupported'>('any')
   const [creating, setCreating] = useState(false)
+  /* Archive defaults to "current", so it only counts as engaged when moved. */
+  const deploymentFilterCount = [
+    notebookFilter !== 'any', runtimeFilter !== 'any', archiveFilter !== 'current',
+    sourceFilter !== 'any', freshnessFilter !== 'any',
+  ].filter(Boolean).length
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -249,45 +258,82 @@ function SequenceLibrary() {
 
   return (
     <div className="sequence-library page-stack">
-      <header className="sequence-library-hero">
-        <div>
-          <div className="eyebrow"><Sparkles size={14} /> Sequence → notebook deployments</div>
-          <h1>Sequence Hub</h1>
-          <p>See the last observed Linked Helper state on every notebook. Runtime, publishing and sync health stay separate.</p>
-        </div>
-        <button className="btn primary sequence-create-btn" onClick={create} disabled={creating}>
-          <Plus size={16} /> {creating ? 'Creating…' : 'New sequence'}
-        </button>
-      </header>
+      <PageHeader
+        title="Sequences"
+        description="The last observed Linked Helper state on every notebook. Runtime, publishing and sync health stay separate readings."
+        actions={
+          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={create} loading={creating} loadingLabel="Creating a sequence">
+            New sequence
+          </Button>
+        }
+      />
 
-      <div className="sequence-library-toolbar card">
-        <label className="sequence-search">
-          <Search size={16} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={view === 'deployments' ? 'Search sequences, campaigns or notebooks' : 'Search sequences'}
-            aria-label={view === 'deployments' ? 'Search deployments' : 'Search sequences'}
-          />
-        </label>
-        <div className="sequence-library-switch" role="tablist" aria-label="Sequence Hub section">
-          <button role="tab" aria-selected={view === 'deployments'} className={view === 'deployments' ? 'active' : ''} onClick={() => setView('deployments')}>
-            Deployments <span>{hub?.items.reduce((count, item) => count + item.deployments.length, 0) ?? 0}</span>
-          </button>
-          <button role="tab" aria-selected={view === 'build'} className={view === 'build' ? 'active' : ''} onClick={() => setView('build')}>
-            Build <span>{items.filter((item) => !item.archived).length}</span>
-          </button>
-        </div>
-      </div>
+      <Toolbar>
+        <TextField
+          className="ui-toolbar__search"
+          label={view === 'deployments' ? 'Search deployments' : 'Search sequences'}
+          labelHidden
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={view === 'deployments' ? 'Search sequences, campaigns or notebooks' : 'Search sequences'}
+        />
+        <div className="ui-toolbar__spacer" />
+        {view === 'deployments' && (
+          <Button variant="secondary" icon={<Filter size={18} aria-hidden="true" />} onClick={() => setFiltersOpen(true)}>
+            Filters<FilterCount count={deploymentFilterCount} />
+          </Button>
+        )}
+      </Toolbar>
 
-      {view === 'deployments' && (
-        <div className="deployment-filters card" aria-label="Deployment filters">
-          <label><span>Notebook</span><select aria-label="Filter deployments by notebook" value={notebookFilter} onChange={(event) => setNotebookFilter(event.target.value)}><option value="any">All notebooks</option>{notebookOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
-          <label><span>Runtime</span><select aria-label="Filter deployments by runtime status" value={runtimeFilter} onChange={(event) => setRuntimeFilter(event.target.value as typeof runtimeFilter)}><option value="any">All statuses</option>{CAMPAIGN_RUNTIME_STATUSES.map((status) => <option key={status} value={status}>{campaignRuntimeLabel(status)}</option>)}<option value="unknown">Unknown</option></select></label>
-          <label><span>Archive</span><select aria-label="Filter deployments by archive state" value={archiveFilter} onChange={(event) => setArchiveFilter(event.target.value as typeof archiveFilter)}><option value="current">Current</option><option value="all">All</option><option value="archived">Archived</option></select></label>
-          <label><span>Source</span><select aria-label="Filter deployments by status source" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="any">All sources</option>{sourceOptions.map((source) => <option key={source} value={source}>{source}</option>)}</select></label>
-          <label><span>Observation</span><select aria-label="Filter deployments by observation health" value={freshnessFilter} onChange={(event) => setFreshnessFilter(event.target.value as typeof freshnessFilter)}><option value="any">Any freshness</option><option value="fresh">Fresh</option><option value="stale">Stale</option><option value="unsupported">Unsupported / waiting</option></select></label>
-        </div>
+      <Tabs
+        label="Sequences section"
+        value={view}
+        onChange={(next) => setView(next as typeof view)}
+        items={[
+          { id: 'deployments', label: 'Deployments', count: hub?.items.reduce((count, item) => count + item.deployments.length, 0) ?? 0 },
+          { id: 'build', label: 'Build', count: items.filter((item) => !item.archived).length },
+        ]}
+      />
+
+      {view === 'deployments' && filtersOpen && (
+        <Dialog
+          title="Deployment filters"
+          onRequestClose={() => setFiltersOpen(false)}
+          footer={<Button variant="primary" onClick={() => setFiltersOpen(false)}>Done</Button>}
+        >
+          <div className="deployment-filters" aria-label="Deployment filters">
+            <SelectField label="Notebook" value={notebookFilter} onChange={(event) => setNotebookFilter(event.target.value)}>
+              <option value="any">All notebooks</option>
+              {notebookOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </SelectField>
+            <SelectField label="Runtime" value={runtimeFilter} onChange={(event) => setRuntimeFilter(event.target.value as typeof runtimeFilter)}>
+              <option value="any">All statuses</option>
+              {CAMPAIGN_RUNTIME_STATUSES.map((status) => <option key={status} value={status}>{campaignRuntimeLabel(status)}</option>)}
+              <option value="unknown">Unknown</option>
+            </SelectField>
+            <SelectField label="Archive" value={archiveFilter} onChange={(event) => setArchiveFilter(event.target.value as typeof archiveFilter)}>
+              <option value="current">Current</option>
+              <option value="all">All</option>
+              <option value="archived">Archived</option>
+            </SelectField>
+            <SelectField label="Observation" value={freshnessFilter} onChange={(event) => setFreshnessFilter(event.target.value as typeof freshnessFilter)}>
+              <option value="any">Any freshness</option>
+              <option value="fresh">Fresh</option>
+              <option value="stale">Stale</option>
+              <option value="unsupported">Unsupported / waiting</option>
+            </SelectField>
+            {/* Where a status reading came from is diagnostic, not a filter an
+                SDR reaches for; it stays available, one disclosure down. */}
+            <details className="deployment-advanced">
+              <summary>Advanced diagnostics</summary>
+              <SelectField label="Status source" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                <option value="any">All sources</option>
+                {sourceOptions.map((source) => <option key={source} value={source}>{source}</option>)}
+              </SelectField>
+            </details>
+          </div>
+        </Dialog>
       )}
 
       {loading ? (
@@ -1228,6 +1274,7 @@ function SequenceEditor({ id }: { id: string }) {
   const [selections, setSelections] = useState<Record<string, { start: number; end: number }>>({})
   const [previewBranch, setPreviewBranch] = useState<string | null>(null)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [publishJobs, setPublishJobs] = useState<SequencePublishJob[]>([])
   const lastSavedRef = useRef('')
   const draftKeyRef = useRef('')
@@ -1342,20 +1389,45 @@ function SequenceEditor({ id }: { id: string }) {
   }
 
   if (loading) return <div className="sequence-editor-loading"><div className="sequence-card sequence-card-skeleton" /></div>
-  if (error || !detail || !document) return <div className="card sequence-empty-state"><h2>Could not open sequence</h2><p>{error ?? 'Unknown sequence.'}</p><button className="btn" onClick={() => navigate('/sequences')}>Back to sequences</button></div>
+  if (error || !detail || !document) return <div className="card sequence-empty-state"><h2>Could not open sequence</h2><p>{error ?? 'Unknown sequence.'}</p><Button variant="secondary" onClick={() => navigate('/sequences')}>Back to sequences</Button></div>
 
   return (
     <div className="sequence-editor-page">
+      {/* One entry to Preview (the tab below), one primary action (Publish).
+          The topbar used to carry a second Preview button of its own. */}
       <header className="sequence-editor-topbar">
-        <button className="icon-only-btn" onClick={() => navigate('/sequences')} aria-label="Back to sequences"><ArrowLeft size={18} /></button>
+        <IconButton
+          label="Back to sequences"
+          icon={<ArrowLeft size={20} aria-hidden="true" />}
+          onClick={() => navigate('/sequences')}
+        />
         <div className="sequence-name-field">
           <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Sequence name" />
           <span>Edited by {detail.sequence.updated_by_name}</span>
         </div>
         <SaveIndicator state={saveState} />
-        <button className="btn" onClick={() => setCommentTarget({ stepId: null, variationId: null, anchor: null, label: 'Whole sequence' })}><MessageCircle size={14} /> Comment</button>
-        <button className="btn primary" onClick={() => setTab('preview')}><Eye size={14} /> Preview</button>
-        {isAdmin && <button className="btn" disabled={saveState !== 'saved'} title={saveState === 'saved' ? 'Publish this saved sequence' : 'Wait for the latest changes to save'} onClick={() => setPublishOpen(true)}><Laptop size={14} /> Publish</button>}
+        <Button
+          variant="secondary"
+          icon={<MessageCircle size={18} aria-hidden="true" />}
+          onClick={() => setCommentTarget({ stepId: null, variationId: null, anchor: null, label: 'Whole sequence' })}
+        >Comment</Button>
+        <Button
+          variant="secondary"
+          icon={<PanelRight size={18} aria-hidden="true" />}
+          aria-pressed={reviewOpen}
+          onClick={() => setReviewOpen((open) => !open)}
+        >
+          Comments &amp; history
+        </Button>
+        {isAdmin && (
+          <Button
+            variant="primary"
+            icon={<Laptop size={18} aria-hidden="true" />}
+            disabled={saveState !== 'saved'}
+            title={saveState === 'saved' ? 'Publish this saved sequence' : 'Wait for the latest changes to save'}
+            onClick={() => setPublishOpen(true)}
+          >Publish</Button>
+        )}
       </header>
 
       {conflict && (
@@ -1373,13 +1445,15 @@ function SequenceEditor({ id }: { id: string }) {
         </section>
       )}
 
-      <nav className="sequence-editor-tabs" aria-label="Sequence Builder sections">
+      <nav className="sequence-editor-tabs" aria-label="Sequence sections">
         <button className={tab === 'build' ? 'active' : ''} onClick={() => setTab('build')}><MessageCircle size={15} /> Build</button>
         <button className={tab === 'branches' ? 'active' : ''} onClick={() => setTab('branches')}><Split size={15} /> Branches <span>{document.branches.length}</span></button>
         <button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}><Eye size={15} /> Preview</button>
       </nav>
 
-      <div className="sequence-editor-body">
+      {/* The review rail is collapsed by default: it used to take a third of
+          the editor's width even with no comments on the sequence. */}
+      <div className={`sequence-editor-body${reviewOpen ? ' with-review' : ''}`}>
         <main className="sequence-editor-canvas">
           {tab === 'build' && (
             <BuildCanvas
@@ -1400,14 +1474,14 @@ function SequenceEditor({ id }: { id: string }) {
           )}
           {tab === 'preview' && <PreviewPanel document={document} branchId={previewBranch} onBranchId={setPreviewBranch} />}
         </main>
-        <CommentsPanel
+        {reviewOpen && <CommentsPanel
           document={document}
           comments={detail.comments}
           versions={detail.versions}
           onReply={async (threadId, body) => { await replySequenceComment(threadId, body); await refreshReview() }}
           onResolved={async (threadId, resolved) => { await setSequenceCommentResolved(threadId, resolved); await refreshReview() }}
           onRestore={(version) => { setName(version.name); updateDocument(version.document); toast.success(`Revision ${version.revision} loaded as a draft.`) }}
-        />
+        />}
       </div>
 
       {commentTarget && <CommentComposer target={commentTarget} busy={commentBusy} onClose={() => setCommentTarget(null)} onSubmit={(body) => void submitComment(body)} />}

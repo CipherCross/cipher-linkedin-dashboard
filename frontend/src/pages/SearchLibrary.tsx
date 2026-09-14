@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Archive, ArchiveRestore, Copy, Pencil, Plus, Search as SearchIcon, Trash2, X,
 } from 'lucide-react'
@@ -10,6 +10,8 @@ import { ChipInput } from '../components/ChipInput'
 import { EmptyState } from '../components/EmptyState'
 import { shortDate } from '../lib/format'
 import type { SavedSearch } from '../lib/types'
+import { Button, Checkbox, Dialog, IconButton, PageHeader, TextField, Toolbar, useDirtyGuard } from '../ui'
+import { COPY } from '../ui/labels'
 
 // Free-text platform with UI suggestions — deliberately not an enum ("and
 // others" was an explicit requirement).
@@ -187,43 +189,32 @@ export function SearchLibrary() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Searches</h1>
-          <div className="muted small">
-            Shared sourcing recipes for Apollo, Sales Navigator, esun and others — copy the
-            boolean query and paste it into the platform.
-          </div>
-        </div>
-        <div className="controls">
-          <button className="btn accent sm" onClick={() => setEditing('new')}>
-            <Plus size={14} /> New search
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="Searches"
+        description="Shared sourcing recipes for Apollo, Sales Navigator, esun and others — copy the boolean query and paste it into the platform."
+        actions={
+          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setEditing('new')}>
+            New search
+          </Button>
+        }
+      />
 
-      <div className="filter-bar card">
-        <label className="filter-field filter-field-grow">
-          <span className="filter-label">Search</span>
-          <input
-            type="search"
-            placeholder="Name, description, keywords…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </label>
-        <div className="filter-field">
-          <span className="filter-label">Archived</span>
-          <label className="col-toggle">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived{archivedCount ? ` (${archivedCount})` : ''}
-          </label>
-        </div>
-      </div>
+      <Toolbar>
+        <TextField
+          className="ui-toolbar__search"
+          label="Search the library"
+          labelHidden
+          type="search"
+          placeholder="Name, description, keywords…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <Checkbox
+          label={`Show archived${archivedCount ? ` (${archivedCount})` : ''}`}
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        />
+      </Toolbar>
 
       {platforms.length > 0 && (
         <div className="active-filters">
@@ -257,9 +248,7 @@ export function SearchLibrary() {
             }
             action={
               all.length === 0 ? (
-                <button className="link-btn" onClick={() => setEditing('new')}>
-                  New search
-                </button>
+                <Button variant="primary" onClick={() => setEditing('new')}>New search</Button>
               ) : undefined
             }
           />
@@ -323,19 +312,13 @@ function SearchCard({
           {s.archived && <span className="badge">Archived</span>}
         </div>
         <div className="search-card-actions">
-          <button className="icon-only-btn" title="Edit" onClick={onEdit}>
-            <Pencil size={14} />
-          </button>
-          <button
-            className="icon-only-btn"
-            title={s.archived ? 'Restore' : 'Archive'}
+          <IconButton label="Edit this search" icon={<Pencil size={20} aria-hidden="true" />} onClick={onEdit} />
+          <IconButton
+            label={s.archived ? 'Restore this search' : 'Archive this search'}
+            icon={s.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
             onClick={onArchive}
-          >
-            {s.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-          </button>
-          <button className="icon-only-btn danger" title="Delete" onClick={onDelete}>
-            <Trash2 size={14} />
-          </button>
+          />
+          <IconButton label="Delete this search" tone="danger" icon={<Trash2 size={20} aria-hidden="true" />} onClick={onDelete} />
         </div>
       </div>
 
@@ -355,9 +338,9 @@ function SearchCard({
       {s.boolean_query && (
         <div className="search-query">
           <code className="search-query-text">{s.boolean_query}</code>
-          <button className="btn sm" title="Copy boolean query" onClick={onCopy}>
-            <Copy size={13} /> Copy
-          </button>
+          <Button variant="secondary" size="sm" icon={<Copy size={16} aria-hidden="true" />} onClick={onCopy}>
+            Copy
+          </Button>
         </div>
       )}
 
@@ -393,17 +376,14 @@ function SearchEditor({
   onSaved: (row: SavedSearch) => void
 }) {
   const toast = useToast()
-  const [draft, setDraft] = useState<Draft>(() => toDraft(search, defaultAuthor))
+  const initial = useMemo(() => toDraft(search, defaultAuthor), [search, defaultAuthor])
+  const [draft, setDraft] = useState<Draft>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  /* Escape, the backdrop and Close used to drop an edited search on the floor.
+   * They all go through the shared guard now. */
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
+  const { guard, prompt } = useDirtyGuard(dirty)
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -474,21 +454,28 @@ function SearchEditor({
   }
 
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div
-        className="pipe-modal search-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={draft.id ? 'Edit search' : 'New search'}
-        onClick={(e) => e.stopPropagation()}
+    <>
+      {prompt}
+      <Dialog
+        size="lg"
+        title={draft.id ? 'Edit search' : 'New search'}
+        description="Nothing is saved until you press the button in the footer."
+        onRequestClose={() => guard(onClose)}
+        busy={saving}
+        footerNote={error ? undefined : dirty ? COPY.unsavedChanges : undefined}
+        footer={<>
+          <Button variant="secondary" onClick={() => guard(onClose)} disabled={saving}>{COPY.cancel}</Button>
+          <Button
+            variant="primary"
+            onClick={save}
+            loading={saving}
+            loadingLabel="Saving the search"
+            disabled={!draft.name.trim() || !draft.platform.trim()}
+          >
+            {draft.id ? 'Save changes' : 'Create search'}
+          </Button>
+        </>}
       >
-        <div className="pipe-modal-head">
-          <span>{draft.id ? 'Edit search' : 'New search'}</span>
-          <button className="conv-close" onClick={onClose} aria-label="Close">
-            <X size={16} />
-          </button>
-        </div>
-
         <div className="search-form">
           <div className="search-form-grid">
             <label className="filter-field">
@@ -549,14 +536,16 @@ function SearchEditor({
           <div className="filter-field">
             <span className="filter-label">
               Boolean query
-              <button
-                type="button"
-                className="btn sm search-copy-inline"
+              <Button
+                variant="secondary"
+                size="sm"
+                className="search-copy-inline"
+                icon={<Copy size={16} aria-hidden="true" />}
                 onClick={copyQuery}
                 disabled={!draft.boolean_query.trim()}
               >
-                <Copy size={13} /> Copy
-              </button>
+                Copy
+              </Button>
             </span>
             <textarea
               className="mono"
@@ -613,16 +602,14 @@ function SearchEditor({
                     />
                     List
                   </label>
-                  <button
-                    type="button"
-                    className="icon-only-btn danger"
-                    aria-label="Remove filter"
+                  <IconButton
+                    label="Remove this filter"
+                    tone="danger"
+                    icon={<X size={20} aria-hidden="true" />}
                     onClick={() =>
                       set('filterRows', draft.filterRows.filter((_, idx) => idx !== i))
                     }
-                  >
-                    <X size={13} />
-                  </button>
+                  />
                 </div>
               ))}
               <button
@@ -661,21 +648,8 @@ function SearchEditor({
           </div>
         </div>
 
-        {error && <div className="banner conv-error">{error}</div>}
-
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn accent sm"
-            onClick={save}
-            disabled={saving || !draft.name.trim() || !draft.platform.trim()}
-          >
-            {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create search'}
-          </button>
-        </div>
-      </div>
-    </div>
+        {error && <div className="banner conv-error" role="alert">{error}</div>}
+      </Dialog>
+    </>
   )
 }

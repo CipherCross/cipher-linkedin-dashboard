@@ -9,6 +9,7 @@ import { ChipInput } from '../components/ChipInput'
 import { CopyButton } from '../components/CopyButton'
 import { EmptyState } from '../components/EmptyState'
 import type { Icp, IcpIndustry, IcpPersona } from '../lib/types'
+import { Button, PageHeader, Toolbar } from '../ui'
 
 // Draft rows carry an optional `id` (present = existing DB row, save is a
 // partial-patch update; absent = new, save is a create) and `_new` purely so
@@ -178,22 +179,17 @@ export function Icp() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>ICPs</h1>
-          <div className="muted small">
-            Ideal Customer Profiles — company criteria, keywords, and buyer personas that
-            hypotheses target.
-          </div>
-        </div>
-        <div className="controls">
-          <button className="btn accent sm" onClick={() => setEditing('new')}>
-            <Plus size={14} /> New ICP
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="ICPs"
+        description="Ideal Customer Profiles — company criteria, keywords and buyer personas that hypotheses target."
+        actions={
+          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setEditing('new')}>
+            New ICP
+          </Button>
+        }
+      />
 
-      <div className="filter-bar card">
+      <Toolbar>
         <div className="filter-field">
           <span className="filter-label">Archived</span>
           <label className="col-toggle">
@@ -205,7 +201,7 @@ export function Icp() {
             Show archived{archivedCount ? ` (${archivedCount})` : ''}
           </label>
         </div>
-      </div>
+      </Toolbar>
 
       {visible.length === 0 ? (
         <div className="card">

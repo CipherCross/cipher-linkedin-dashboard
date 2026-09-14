@@ -178,17 +178,25 @@ describe('Sequence Builder autosave', () => {
   })
 })
 
-describe('Sequence Hub deployments', () => {
+/** The deployment filters live in an overlay now, so every assertion about one
+ *  opens it first. The page keeps ONE user-facing name, "Sequences" — the
+ *  sidebar used to say "Sequence Builder" and this landing page "Sequence Hub". */
+const openDeploymentFilters = () => {
+  fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+}
+
+describe('Sequences deployments', () => {
   it('starts sequence-first and hides archived or archive-unknown campaigns by default', async () => {
     renderLibrary()
-    expect(await screen.findByRole('heading', { name: 'Sequence Hub' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Sequences' })).toBeTruthy()
     const liveCampaign = (await screen.findByText('Founder A')).closest('tr') as HTMLElement
     expect(within(liveCampaign).getByText('Running')).toBeTruthy()
     expect(within(liveCampaign).getByText('Published')).toBeTruthy()
     expect(screen.queryByText('Founder B old')).toBeNull()
     expect(screen.queryByText('Founder B unknown')).toBeNull()
 
-    fireEvent.change(screen.getByLabelText('Filter deployments by archive state'), { target: { value: 'all' } })
+    openDeploymentFilters()
+    fireEvent.change(screen.getByLabelText('Archive'), { target: { value: 'all' } })
     expect(screen.getByText('Founder B old')).toBeTruthy()
     expect(screen.getByText('Founder B unknown')).toBeTruthy()
     const archivedCampaign = screen.getByText('Founder B old').closest('tr') as HTMLElement
@@ -200,9 +208,10 @@ describe('Sequence Hub deployments', () => {
   it('filters deployments by notebook and runtime without changing Builder state', async () => {
     renderLibrary()
     await screen.findByText('Founder A')
-    fireEvent.change(screen.getByLabelText('Filter deployments by archive state'), { target: { value: 'all' } })
-    fireEvent.change(screen.getByLabelText('Filter deployments by notebook'), { target: { value: 'notebook-2' } })
-    fireEvent.change(screen.getByLabelText('Filter deployments by runtime status'), { target: { value: 'completed' } })
+    openDeploymentFilters()
+    fireEvent.change(screen.getByLabelText('Archive'), { target: { value: 'all' } })
+    fireEvent.change(screen.getByLabelText('Notebook'), { target: { value: 'notebook-2' } })
+    fireEvent.change(screen.getByLabelText('Runtime'), { target: { value: 'completed' } })
     expect(screen.getByText('Founder B old')).toBeTruthy()
     expect(screen.queryByText('Founder A')).toBeNull()
     expect(screen.queryByText('Founder B unknown')).toBeNull()

@@ -43,6 +43,7 @@ import type {
   PreviewRowResult,
 } from '../lib/importApi'
 import { useToast } from '../lib/ToastContext'
+import { Button, PageHeader } from '../ui'
 
 type CompanyDecision =
   | { kind: 'create' }
@@ -500,19 +501,15 @@ export function UnifiedApolloCsvImport() {
 
   return (
     <>
-      <header className="csv-page-header">
-        <div>
-          <h1>Apollo CSV Import</h1>
-          <div className="muted small">
-            One Apollo People export creates missing Airtable Companies first, then links and imports Contacts.
-          </div>
-        </div>
-        {(document || companyPreview || contactOutcomes) && (
-          <button className="btn sm" onClick={reset} disabled={busy}>
-            <RotateCcw size={14} /> Start over
-          </button>
+      <PageHeader
+        title="Apollo CSV import"
+        description="One Apollo People export creates the missing Airtable Companies first, then links and imports the Contacts."
+        actions={(document || companyPreview || contactOutcomes) && (
+          <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden="true" />} onClick={reset} disabled={busy}>
+            Start over
+          </Button>
         )}
-      </header>
+      />
 
       <input
         ref={fileRef}

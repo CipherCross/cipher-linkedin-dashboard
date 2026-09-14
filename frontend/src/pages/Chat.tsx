@@ -9,6 +9,8 @@ import {
   Send, Sparkles, Square, X,
 } from 'lucide-react'
 import { authFetch } from '../lib/api'
+import { Button, PageHeader } from '../ui'
+import { COPY } from '../ui/labels'
 
 const SUGGESTIONS = [
   'Why did the recent spike in invites not produce the same reply count as a month ago?',
@@ -262,23 +264,19 @@ export function Chat() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Chat</h1>
-          <div className="muted small">
-            Ask Claude about your campaign data — it queries Supabase directly with
-            read-only SQL.
-          </div>
-        </div>
-        {messages.length > 0 && (
-          <div className="controls">
-            <button className="btn sm" onClick={newChat}>
-              <Plus size={15} />
-              New chat
-            </button>
-          </div>
+      {/* No provider or query language in the user-facing copy: neither is
+          something the reader can act on, and the name was wrong besides —
+          production has not read Supabase since the cutover. The SQL Claude
+          runs is still shown, per answer, in each tool block. */}
+      <PageHeader
+        title="Chat"
+        description="Ask Claude about your campaign data. It reads the dashboard's own data and shows you the query behind each answer."
+        actions={messages.length > 0 && (
+          <Button variant="secondary" icon={<Plus size={18} aria-hidden="true" />} onClick={newChat}>
+            New chat
+          </Button>
         )}
-      </header>
+      />
 
       <div className="card chat-card">
         <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -287,8 +285,8 @@ export function Chat() {
               <div className="chat-empty-icon"><Sparkles size={26} /></div>
               <div className="chat-empty-title">Ask about your campaign data</div>
               <div className="chat-empty-blurb muted">
-                Claude answers with read-only SQL against Supabase — funnels, cohorts,
-                per-account and per-step performance. Try one of these:
+                Funnels, cohorts, per-account and per-step performance. Claude only
+                reads — it never changes your data. Try one of these:
               </div>
               <div className="chat-suggestions">
                 {SUGGESTIONS.map((s) => (
@@ -307,13 +305,24 @@ export function Chat() {
             <div className="banner chat-error-banner" role="alert">
               <span>
                 {looksLikeServerError(error)
-                  ? `Chat error: ${error.message}. Check that ANTHROPIC_API_KEY and SUPABASE_SERVICE_ROLE_KEY are set on the deployment.`
+                  ? 'Chat is not available right now. This is a server-side configuration problem, not something you can fix from here — the exact reason is in the details below.'
                   : `Request failed${error.message ? `: ${error.message}` : ''}.`}
               </span>
-              <button className="btn sm" onClick={() => regenerate()} disabled={busy}>
-                <RotateCw size={13} />
-                Retry
-              </button>
+              {looksLikeServerError(error) && error.message && (
+                <details className="chat-error-detail">
+                  <summary>Details</summary>
+                  <pre>{error.message}</pre>
+                </details>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<RotateCw size={16} aria-hidden="true" />}
+                onClick={() => regenerate()}
+                disabled={busy}
+              >
+                {COPY.retry}
+              </Button>
             </div>
           )}
         </div>

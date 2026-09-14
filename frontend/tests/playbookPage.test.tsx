@@ -70,7 +70,7 @@ const editor = () => screen.getByRole('textbox') as HTMLTextAreaElement
 const saveButton = () =>
   screen
     .getAllByRole('button')
-    .find((b) => /^(Save changes|Saved|Saving…)$/.test(b.textContent ?? '')) as HTMLButtonElement
+    .find((b) => /^(Save changes|Changes saved)$/.test(b.textContent ?? '')) as HTMLButtonElement
 
 /**
  * Explicit, because Vitest here runs without `globals: true` — so RTL's automatic
@@ -92,7 +92,7 @@ describe('Playbook on the application-API read path', () => {
     resolveReadPath.mockResolvedValue('neon')
   })
 
-  it('renders the document and its "last saved" stamp, with the editor unlocked', async () => {
+  it('renders the document and its "Last saved" stamp, with the editor unlocked', async () => {
     fetchNeonPlaybook.mockResolvedValue({
       content: '# Real playbook\n\nDo not overwrite me.',
       updated_at: '2026-08-05T09:30:00.000Z',
@@ -105,7 +105,7 @@ describe('Playbook on the application-API read path', () => {
     expect(editor().disabled).toBe(false)
     // `updated_at` is the column the coaching slice widened the projection by. A
     // projection that dropped it passes every offline test *except* this one.
-    expect(document.body.textContent).toMatch(/last saved/)
+    expect(document.body.textContent).toMatch(/Last saved/)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -139,7 +139,7 @@ describe('Playbook on the application-API read path', () => {
     expect(editor().disabled).toBe(false)
     expect(screen.queryByRole('alert')).toBeNull()
     // No stamp: there is nothing saved to have a date.
-    expect(document.body.textContent).not.toMatch(/last saved/)
+    expect(document.body.textContent).not.toMatch(/Last saved/)
   })
 
   it('reads through the application API and never touches Supabase', async () => {

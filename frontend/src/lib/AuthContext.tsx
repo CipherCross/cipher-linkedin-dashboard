@@ -421,8 +421,14 @@ function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     mounted.current = true
     if (!supabase) {
       setStatus('signed_out')
+      /* Deliberately not the env-var names: whoever is looking at the
+       * sign-in screen cannot set them, and the deployment configuration is
+       * not theirs to see. The console line below is for whoever can. */
+      console.error(
+        'Sign-in is unavailable: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set on this deployment.',
+      )
       setError(
-        'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
+        'Sign-in is unavailable on this deployment. Ask an administrator to finish setting it up.',
       )
       return () => {
         mounted.current = false

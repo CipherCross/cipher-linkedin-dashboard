@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, AlertCircle, CheckCircle2, FlaskConical, Megaphone } from 'lucide-react'
+import { Activity, AlertCircle, CheckCircle2, FlaskConical, Megaphone, MoreHorizontal } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useAuth } from '../lib/AuthContext'
 import { authPost } from '../lib/api'
@@ -8,6 +8,7 @@ import { InstancePanel } from '../components/InstancePanel'
 import { EmptyState } from '../components/EmptyState'
 import { ago } from '../lib/format'
 import { listSequencePublishTargets, type SequencePublishTarget } from '../lib/sequenceBuilderApi'
+import { Button, PageHeader } from '../ui'
 
 export function Health() {
   const { data } = useData()
@@ -57,49 +58,45 @@ export function Health() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Sync health</h1>
-          <div className="muted small">
-            Per-instance freshness and the recent sync-run history (agents run
-            every 30 minutes).
-          </div>
-        </div>
-      </header>
-
-      {isAdmin && (
-        <div className="card briefing-rerun">
-          <div className="briefing-rerun-copy">
-            <Megaphone size={20} aria-hidden="true" />
-            <div>
-              <h2>Monday briefing</h2>
-              <div className="muted small">
+      {/* Diagnosis first. Regenerating the Monday briefing is a rare action,
+          so it lives in a menu rather than as the page's loudest button. */}
+      <PageHeader
+        title="Sync health"
+        description="Per-instance freshness and the recent sync-run history. Agents run every 30 minutes."
+        actions={isAdmin && (
+          <details className="health-actions-menu">
+            <summary>
+              <MoreHorizontal size={18} aria-hidden="true" />
+              Actions
+            </summary>
+            <div className="health-actions-body">
+              <h3>
+                <Megaphone size={18} aria-hidden="true" />
+                Monday briefing
+              </h3>
+              <p className="muted small">
                 Regenerate the completed-week review from current data and post it once to Slack.
-              </div>
-            </div>
-          </div>
-          <div className="briefing-rerun-action">
-            {briefingMessage && (
-              <span
-                className={`small ${
-                  briefingStatus === 'error' ? 'text-danger' : 'muted'
-                }`}
-                role={briefingStatus === 'error' ? 'alert' : 'status'}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => void rerunWeeklyBriefing()}
+                loading={briefingStatus === 'running'}
+                loadingLabel="Generating the briefing"
               >
-                {briefingMessage}
-              </span>
-            )}
-            <button
-              className="btn accent"
-              type="button"
-              disabled={briefingStatus === 'running'}
-              onClick={() => void rerunWeeklyBriefing()}
-            >
-              {briefingStatus === 'running' ? 'Generating…' : 'Regenerate and post'}
-            </button>
-          </div>
-        </div>
-      )}
+                Regenerate and post
+              </Button>
+              {briefingMessage && (
+                <span
+                  className={`small ${briefingStatus === 'error' ? 'text-danger' : 'muted'}`}
+                  role={briefingStatus === 'error' ? 'alert' : 'status'}
+                >
+                  {briefingMessage}
+                </span>
+              )}
+            </div>
+          </details>
+        )}
+      />
 
       {isAdmin && (
         <section className="card publish-compatibility-card" aria-labelledby="publish-compatibility-title">

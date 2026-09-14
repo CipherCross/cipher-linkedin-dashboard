@@ -20,6 +20,7 @@ import type { DateRange } from '../lib/leads'
 import type {
   CampaignMetrics, Hypothesis, HypothesisCampaign, Icp, Instance, Lead, SavedSearch,
 } from '../lib/types'
+import { Button, PageHeader, Toolbar } from '../ui'
 
 interface HypDraft {
   id?: number
@@ -163,21 +164,17 @@ export function Hypotheses() {
 
   return (
     <>
-      <header>
-        <div>
-          <h1>Hypotheses</h1>
-          <div className="muted small">
-            Group campaigns under an ICP to test a go-to-market hypothesis and compare results.
-          </div>
-        </div>
-        <div className="controls">
-          <button className="btn accent sm" onClick={() => setEditing('new')}>
-            <Plus size={14} /> New hypothesis
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="Hypotheses"
+        description="Group campaigns under an ICP to test a go-to-market hypothesis and compare results."
+        actions={
+          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setEditing('new')}>
+            New hypothesis
+          </Button>
+        }
+      />
 
-      <div className="filter-bar card">
+      <Toolbar>
         <div className="filter-field">
           <span className="filter-label">Archived</span>
           <label className="col-toggle">
@@ -189,7 +186,7 @@ export function Hypotheses() {
             Show archived{archivedCount ? ` (${archivedCount})` : ''}
           </label>
         </div>
-      </div>
+      </Toolbar>
 
       {visible.length === 0 ? (
         <div className="card">
