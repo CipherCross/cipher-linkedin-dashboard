@@ -67,7 +67,10 @@ import {
   AGENT_ADMIN_OPERATIONS,
   buildMachineRegistry,
 } from '../api/_lib/data/operations/index.js'
-import { upsertCampaignsOperation } from '../api/_lib/data/operations/agentIngest.js'
+import {
+  upsertCampaignsOperation,
+  upsertMessagesOperation,
+} from '../api/_lib/data/operations/agentIngest.js'
 
 const TENANT = 'acme'
 const OTHER_TENANT = 'contoso'
@@ -487,6 +490,73 @@ describe('the payload', () => {
     )
   })
 
+  it('carries the chat-store identity fields through unchanged', () => {
+    const parsed = parseIngestPayload(
+      body({
+        messages: [
+          {
+            profile_url: 'https://example.invalid/in/one',
+            direction: 'in',
+            body: 'Hello',
+            sent_at: '2026-08-03T10:00:00Z',
+            content_hash: 'abc',
+            external_id: 'urn:li:msg:9001',
+            platform: 'sales_navigator',
+            message_type: 'MEMBER_TO_MEMBER',
+          },
+        ],
+      }),
+    )
+    expect(parsed.messages[0]).toMatchObject({
+      external_id: 'urn:li:msg:9001',
+      platform: 'sales_navigator',
+      message_type: 'MEMBER_TO_MEMBER',
+    })
+  })
+
+  it('nulls the identity fields an older agent does not send', () => {
+    // The whole point of the three being optional: a notebook still on the
+    // `action_result_messages` extractor keeps ingesting.
+    const parsed = parseIngestPayload(body())
+    expect(parsed.messages[0]).toMatchObject({
+      external_id: null,
+      platform: null,
+      message_type: null,
+    })
+  })
+
+  it('refuses an unknown platform and an over-long external_id', () => {
+    expect(() =>
+      parseIngestPayload(
+        body({
+          messages: [
+            {
+              profile_url: 'https://example.invalid/in/one',
+              direction: 'in',
+              sent_at: '2026-08-03T10:00:00Z',
+              platform: 'telegram',
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/messages\[0\]\.platform/)
+
+    expect(() =>
+      parseIngestPayload(
+        body({
+          messages: [
+            {
+              profile_url: 'https://example.invalid/in/one',
+              direction: 'in',
+              sent_at: '2026-08-03T10:00:00Z',
+              external_id: 'x'.repeat(129),
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/messages\[0\]\.external_id/)
+  })
+
   it('refuses a collection that is not an array', () => {
     expect(() => parseIngestPayload(body({ leads: { nope: true } }))).toThrow(/leads/)
   })
@@ -611,6 +681,80 @@ describe('the campaign upsert contract', () => {
     for (const field of ['runtime_status', 'is_archived', 'status_source', 'status_raw', 'status_observed_at']) {
       expect(sql).toContain(`ELSE public.campaigns.${field} END`)
     }
+  })
+})
+
+describe('the message upsert contract', () => {
+  const statement = upsertMessagesOperation.build({
+    actor: { kind: 'machine', actorId: CREDENTIAL_ID, tenantId: TENANT, role: 'machine' },
+    params: { instanceId: INSTANCE, rows: '[{"external_id":"urn:li:msg:1"}]' },
+  })
+
+  it('is one statement carrying the rows as the second parameter', () => {
+    const values = statement.values ?? []
+    expect(values[0]).toBe(INSTANCE)
+    expect(values[1]).toBe('[{"external_id":"urn:li:msg:1"}]')
+    expect(values).toHaveLength(2)
+  })
+
+  it('reads the three chat-store columns out of the record list', () => {
+    expect(statement.text).toContain('external_id text')
+    expect(statement.text).toContain('platform text')
+    expect(statement.text).toContain('message_type text')
+  })
+
+  it('keeps both arbiters — the new identity key and the legacy one', () => {
+    expect(statement.text).toContain(
+      'ON CONFLICT (instance_id, external_id) WHERE external_id IS NOT NULL',
+    )
+    expect(statement.text).toContain('ON CONFLICT ON CONSTRAINT messages_identity_key')
+  })
+
+  it('adopts a legacy row rather than inserting beside it', () => {
+    expect(statement.text).toContain('UPDATE public.messages m SET')
+    expect(statement.text).toContain('external_id = p.external_id')
+    expect(statement.text).toContain('sent_at = p.sent_at')
+    expect(statement.text).toContain("interval '45 days'")
+  })
+
+  it('treats a RECALLED row as authoritative and clears the stored text', () => {
+    // Both write paths a re-scraped recall can take: adoption and the keyed upsert.
+    expect(statement.text).toContain(
+      "body = CASE WHEN p.message_type = 'RECALLED' THEN NULL",
+    )
+    expect(statement.text).toContain(
+      "body = CASE WHEN EXCLUDED.message_type = 'RECALLED' THEN NULL",
+    )
+  })
+
+  it('dedups the whole batch on the legacy identity key so no CTE can collide with a sibling', () => {
+    expect(statement.text).toContain(
+      "DISTINCT ON (profile_url, direction, sent_at, COALESCE(content_hash, ''))",
+    )
+    // Keyed rows win the tie: booleans sort false first.
+    expect(statement.text).toContain('(external_id IS NULL), ord')
+  })
+
+  it('resolves two messages nominating one legacy row by time distance, not by id order', () => {
+    expect(statement.text).toContain('ORDER BY message_id, distance, external_id')
+  })
+
+  it('never writes a column the AI layer or the notifier owns', () => {
+    for (const owned of [
+      'sentiment',
+      'intent_level',
+      'classified_at',
+      'intent_classified_at',
+      'notified_at',
+      'first_seen_at',
+    ]) {
+      expect(statement.text).not.toContain(`${owned} =`)
+    }
+  })
+
+  it('answers with the count the statement itself computed', () => {
+    expect(upsertMessagesOperation.mapResult?.([{ n: 7 }], 1)).toBe(7)
+    expect(upsertMessagesOperation.mapResult?.([], 0)).toBe(0)
   })
 })
 

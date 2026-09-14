@@ -243,6 +243,14 @@
       "owner_role_entered_by": "artifact",
       "session": "manual-reply-review",
       "description": "Additive correction to the manual activation function: legacy manual sentiment-only rows with no historical intent taxonomy receive the current reply-review-v1 taxonomy contract, while activation provenance, cutover behavior, resumability and idempotent replay remain unchanged."
+    },
+    {
+      "step": 19,
+      "artifact": "019_messages_chat_store_identity.sql",
+      "sha256": "256dff364d2692d0794dc9e58fb26b0d110685878bd2f9617ca657cbe70ba6c3",
+      "owner_role_entered_by": "artifact",
+      "session": "auto-conversation-sync",
+      "description": "Additive chat-store provenance on messages: per-instance unique LinkedIn/LH2 message external id, inbox platform and LH2 row type, so the agent's real send times and re-scrapes land on one row while sentiment, intent and notification bookkeeping written against legacy rows survive adoption. No grant, view or DELETE capability changes."
     }
   ]
 }

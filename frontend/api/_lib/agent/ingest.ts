@@ -94,6 +94,15 @@ const MAX_ID = 200
 const MAX_URL = 500
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/
 const DIRECTIONS = new Set(['in', 'out'])
+const MAX_EXTERNAL_ID = 128
+const MAX_MESSAGE_TYPE = 40
+/**
+ * The surfaces LH2's chat store can report a thread on. Closed rather than
+ * free text because the value is a fact about where the message lives, not a
+ * label — an unrecognised one means the extractor changed and we want to hear
+ * about it at the gateway rather than three weeks later in a chart.
+ */
+const MESSAGE_PLATFORMS = new Set(['linkedin', 'sales_navigator', 'recruiter'])
 const SYNC_STATUSES = new Set(['ok', 'error', 'partial', 'running'])
 const CAMPAIGN_RUNTIME_STATUSES = new Set([
   'draft', 'running', 'queued', 'sleeping', 'stopped', 'completed',
@@ -162,6 +171,14 @@ export interface MessageRow {
   readonly body: string | null
   readonly sent_at: string
   readonly content_hash: string
+  /**
+   * LH2's own stable per-message id, present only from the chat-store
+   * extractor. Absent (null) from every older agent, which is what keeps the
+   * legacy `action_result_messages` path working unchanged.
+   */
+  readonly external_id: string | null
+  readonly platform: string | null
+  readonly message_type: string | null
 }
 
 export interface EventRow {
@@ -442,6 +459,31 @@ export function parseIngestPayload(body: unknown): IngestPayload {
     if (!DIRECTIONS.has(direction)) {
       fail(`messages[${index}].direction must be 'in' or 'out'`)
     }
+    // An identity key is never silently truncated the way a headline is: a
+    // shortened `external_id` would adopt or collide against the wrong row.
+    if (
+      typeof row.external_id === 'string' &&
+      row.external_id.trim().length > MAX_EXTERNAL_ID
+    ) {
+      fail(
+        `messages[${index}].external_id must be at most ${MAX_EXTERNAL_ID} characters`,
+      )
+    }
+    const externalId = optionalString(
+      row.external_id,
+      `messages[${index}].external_id`,
+      MAX_EXTERNAL_ID,
+    )
+    const platform = optionalString(
+      row.platform,
+      `messages[${index}].platform`,
+      40,
+    )
+    if (platform !== null && !MESSAGE_PLATFORMS.has(platform)) {
+      fail(
+        `messages[${index}].platform must be one of ${[...MESSAGE_PLATFORMS].join(', ')}`,
+      )
+    }
     return {
       campaign_id: optionalString(row.campaign_id, `messages[${index}].campaign_id`, MAX_ID),
       profile_url: requiredString(
@@ -454,6 +496,13 @@ export function parseIngestPayload(body: unknown): IngestPayload {
       sent_at: requiredInstant(row.sent_at, `messages[${index}].sent_at`),
       content_hash:
         optionalString(row.content_hash, `messages[${index}].content_hash`, 128) ?? '',
+      external_id: externalId,
+      platform,
+      message_type: optionalString(
+        row.message_type,
+        `messages[${index}].message_type`,
+        MAX_MESSAGE_TYPE,
+      ),
     } satisfies MessageRow
   })
 

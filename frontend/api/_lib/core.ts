@@ -298,13 +298,21 @@ messages — actual message texts; full conversation threads, both directions
   body text, sent_at timestamptz,
   content_hash text (internal dedup hash of body; part of the identity key that
     distinguishes manually-imported rows from agent-synced ones),
-  source text ('sync'|'manual') — 'sync' rows come from the LH2 agent and their
-    sent_at is the LH2 action-RUN time, which can lag the real message by
-    hours/days; 'manual' rows were pasted by the SDR from LinkedIn ("Import
-    history" in the dashboard) and carry the real message time. Threads the SDR
-    took over by hand are complete only thanks to manual imports — see the
-    MANUAL-REPLY BLIND SPOT guidance before reading anything into a missing
-    outbound follow-up.
+  external_id text — stable per-message id from Linked Helper's chat store:
+    'li:<LinkedIn message id>' or 'lh:<local id>'; NULL on rows that predate the
+    chat-store sync, on manual imports and on CSV ingest.
+  platform text ('linkedin'|'sales_navigator'|'recruiter'|NULL) — which LinkedIn
+    inbox the chat lives in (only 'linkedin' is in use).
+  message_type text — Linked Helper's row type (DEFAULT, MEMBER_TO_MEMBER,
+    EDITED, RECALLED); diagnostic only. A RECALLED message has body NULL.
+  source text ('sync'|'manual') — 'sync' rows come from the LH2 agent. Rows WITH
+    an external_id come from LH2's chat store and carry the REAL LinkedIn send
+    time, including messages the SDR typed by hand whenever LH2 last scraped that
+    chat. Legacy 'sync' rows WITHOUT external_id carry the LH2 action-RUN time,
+    which can lag the real message by hours/days. 'manual' rows were pasted by
+    the SDR ("Import history") and carry the real message time. A thread is only
+    known up to its newest sent_at — see the MANUAL-REPLY BLIND SPOT guidance
+    before reading anything into a missing outbound follow-up.
   sentiment text — reply classification, set ONLY on inbound replies (direction='in'):
     'positive' (interested, wants to talk), 'neutral' (acknowledgement / not now),
     'negative' (not interested / unsubscribe), 'objection' (question or pushback),
@@ -607,13 +615,17 @@ ANALYSIS GUIDANCE
   A label says what the reply expressed then, not that the lead is warm today.
   Before describing any lead as currently warm/hot, apply the STALE/GHOSTED rule.
 - MANUAL-REPLY BLIND SPOT — never mistake a missing follow-up for a dropped lead.
-  The LH2 agent syncs only the scripted funnel (invite → first templated message →
-  the inbound reply); it CANNOT see outbound messages the SDR types by hand in
-  LinkedIn after a lead replies. Those human follow-ups enter the DB ONLY when
-  someone runs "Import history" (messages.source='manual'). Consequences:
+  The LH2 agent syncs what Linked Helper's chat store holds, and Linked Helper
+  scrapes a chat only while it processes that person (sending, checking for
+  replies, or a dedicated history scrape). Once a lead replies and leaves the
+  campaign the thread FREEZES at that scrape: the SDR's later hand-typed
+  follow-ups and the lead's later replies are invisible until the chat is
+  scraped again or someone runs "Import history" (messages.source='manual').
+  Consequences:
   - A thread with an inbound reply but no later outbound row is NOT evidence the
-    lead was dropped — usually it just hasn't been manually re-imported. Absence
-    of follow-up in the data ≠ absence of follow-up in reality.
+    lead was dropped — usually the chat simply has not been re-scraped or
+    re-imported since. Absence of follow-up in the data ≠ absence of follow-up
+    in reality.
     (Exception: when a RECORDED outbound exists after the last inbound, silence
     is measurable — see STALE / GHOSTED leads below.)
   - Before EVER claiming "warm/positive replies aren't being followed up" (or any
@@ -633,10 +645,11 @@ ANALYSIS GUIDANCE
       group by profile_url
     A clean split (followed-up = manual_n > 0; not-followed-up = sync-only,
     manual_n = 0) confirms the artifact.
-  - Correct recommendation is "manually import these threads so post-reply activity
-    becomes visible/measurable" — NEVER "the SDR is dropping leads" or "add an
-    automated follow-up sequence". Only after import can post-reply conversion
-    (reply → follow-up → call) be measured honestly.
+  - Correct recommendation is "refresh or manually import these threads so
+    post-reply activity becomes visible/measurable" — NEVER "the SDR is dropping
+    leads" or "add an automated follow-up sequence". Only after a refresh or
+    import can post-reply conversion (reply → follow-up → call) be measured
+    honestly.
 - STALE / GHOSTED leads — the ONE sanctioned exception to the blind-spot rule
   above, and a hard limit on the word "warm". Split silent threads by whether a
   follow-up was RECORDED after the lead's last inbound:

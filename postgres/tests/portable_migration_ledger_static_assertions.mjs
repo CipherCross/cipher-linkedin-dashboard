@@ -136,6 +136,8 @@ const S08_ARTIFACTS = [
   // Manual reply review activation correction (step 018).
   'postgres/tenant-baseline/v1/018_manual_reply_review_activation_fix.sql',
   'postgres/tests/portable_manual_reply_review_activation_fix_assertions.mjs',
+  // Chat-store message identity (step 019).
+  'postgres/tenant-baseline/v1/019_messages_chat_store_identity.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -369,8 +371,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares eighteen steps in order 1 -> 2 -> ... -> 18',
-  manifest.steps.length === 18 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares nineteen steps in order 1 -> 2 -> ... -> 19',
+  manifest.steps.length === 19 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
@@ -386,6 +388,23 @@ check('step 018 replaces activation without dropping its existing grant',
   /CREATE OR REPLACE FUNCTION public\.activate_manual_reply_review\(/i.test(activationFixSql)
   && !/DROP\s+FUNCTION/i.test(activationFixSql)
   && /REVOKE ALL ON FUNCTION public\.activate_manual_reply_review\(uuid, integer\) FROM PUBLIC/i.test(activationFixSql));
+
+const chatStoreStep = manifest.steps.find((s) => s.step === 19);
+const chatStorePath = join(BASELINE_DIR, '019_messages_chat_store_identity.sql');
+const chatStoreSql = readFileSync(chatStorePath, 'utf8');
+check('manifest declares step 019 chat-store message identity',
+  chatStoreStep?.artifact === '019_messages_chat_store_identity.sql');
+check('step 019 manifest digest matches its artifact',
+  chatStoreStep?.sha256 === sha256(chatStorePath),
+  `manifest ${chatStoreStep?.sha256}, disk ${sha256(chatStorePath)}`);
+check('step 019 keys the external id per instance and leaves legacy rows out of the index',
+  /CREATE UNIQUE INDEX messages_external_id_key[\s\S]*\(instance_id, external_id\)[\s\S]*WHERE external_id IS NOT NULL/i.test(chatStoreSql));
+check('step 019 bounds the platform vocabulary and keeps every new column nullable',
+  /platform IS NULL OR platform IN \('linkedin', 'sales_navigator', 'recruiter'\)/i.test(chatStoreSql)
+  && !/ADD COLUMN (external_id|platform|message_type) text NOT NULL/i.test(chatStoreSql));
+check('step 019 changes no grant, policy, view or DELETE capability',
+  !/\b(GRANT|REVOKE|CREATE POLICY|ALTER POLICY|CREATE OR REPLACE VIEW|CREATE VIEW|DELETE|TRUNCATE|DROP)\b/i
+    .test(stripComments('019_messages_chat_store_identity.sql', chatStoreSql)));
 
 const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
 check('step 015 enforces one canary per fingerprint and one replacement per job',

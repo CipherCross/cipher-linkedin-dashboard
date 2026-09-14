@@ -2608,5 +2608,330 @@ class SupabaseFreeCommandTest(unittest.TestCase):
         supabase.return_value.upsert.assert_called_once()
 
 
+
+# ------------------------------------------------- LH2 chat store extraction
+
+# The legacy action-log tables, created EMPTY. Present so a fallback test proves
+# the fallback ran (source "legacy action_results", zero rows) rather than proving
+# the legacy query also blew up on a database that never had its tables.
+LEGACY_MESSAGE_TABLES = """
+CREATE TABLE action_result_messages (action_result_id INTEGER, message_id INTEGER, type TEXT);
+CREATE TABLE action_results (id INTEGER PRIMARY KEY, action_version_id INTEGER, person_id INTEGER, created_at TEXT);
+CREATE TABLE action_versions (id INTEGER PRIMARY KEY, action_id INTEGER, config_id INTEGER);
+CREATE TABLE action_configs (id INTEGER PRIMARY KEY, actionType TEXT);
+"""
+
+OWN = 231          # the SDR's own person, in every chat
+ALICE, BOB = 501, 502
+
+
+def chat_db(participant_fk="chat_participant_id", message_fk="message_id",
+            chat_tables=True, own_in_every_chat=True, link_extra=""):
+    """An in-memory lh.db with the 2.130.x chat store as probed on a notebook.
+
+    The link table's FK column names are parameters, because they are exactly
+    what varies between builds and what `chat_store_profile` has to resolve."""
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.executescript(LEGACY_MESSAGE_TABLES + """
+        CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+        CREATE TABLE actions (id INTEGER PRIMARY KEY, campaign_id INTEGER);
+        CREATE TABLE action_target_people (action_id INTEGER, person_id INTEGER, created_at TEXT);
+        CREATE TABLE messages (id INTEGER PRIMARY KEY, type TEXT, subject TEXT,
+                               message_text TEXT, attachments_count INTEGER,
+                               send_at TEXT, original_message_id INTEGER, created_at TEXT);
+        CREATE TABLE message_external_ids (message_id INTEGER, external_id TEXT);
+    """)
+    con.executemany("INSERT INTO person_external_ids VALUES (?,?,?)", [
+        (OWN, "me-sdr", "public"),
+        # The human slug is inserted first and the opaque AC id second, so a
+        # query that lost the one-slug-per-person dedup shows up as the AC id.
+        (ALICE, "alice-a", "public"), (ALICE, "ACfake001", "public"),
+        (BOB, "bob-b", "public"),
+    ])
+    con.executemany("INSERT INTO actions VALUES (?,?)", [(1, 7), (2, 9), (3, 11)])
+    con.executemany("INSERT INTO action_target_people VALUES (?,?,?)", [
+        (1, ALICE, "2026-08-01T00:00:00Z"),   # older campaign 7
+        (2, ALICE, "2026-08-20T00:00:00Z"),   # latest campaign 9
+        (3, BOB, "2026-08-05T00:00:00Z"),     # campaign 11
+    ])
+    con.executemany(
+        "INSERT INTO messages (id, type, message_text, send_at, created_at) "
+        "VALUES (?,?,?,?,?)", [
+            (100, "DEFAULT", "Hi Alice", "2026-09-01T10:00:00Z", "2026-09-07T00:00:00Z"),
+            (101, "MEMBER_TO_MEMBER", "Hello back", "2026-09-02T10:00:00Z", "2026-09-07T00:00:00Z"),
+            (102, "RECALLED", "unsent text", "2026-09-03T10:00:00Z", "2026-09-07T00:00:00Z"),
+            (103, "DEFAULT", "Hi Bob", "2026-09-04T10:00:00Z", "2026-09-07T00:00:00Z"),
+        ])
+    con.execute("INSERT INTO message_external_ids VALUES (?,?)",
+                (101, "2-abc=="))
+    if not chat_tables:
+        return con
+    con.executescript(f"""
+        CREATE TABLE chats (id INTEGER PRIMARY KEY, type TEXT, platform TEXT);
+        CREATE TABLE chat_participants (id INTEGER PRIMARY KEY, chat_id INTEGER, person_id INTEGER);
+        CREATE TABLE participant_messages (id INTEGER PRIMARY KEY,
+            {participant_fk} INTEGER, {message_fk} INTEGER{link_extra});
+        CREATE TABLE chat_meta (chat_id INTEGER, unread INTEGER);
+    """)
+    con.executemany("INSERT INTO chats VALUES (?,?,?)", [
+        (1, "one-to-one", "linkedin"), (2, "one-to-one", "linkedin")])
+    second_owner = OWN if own_in_every_chat else 999
+    con.executemany("INSERT INTO chat_participants VALUES (?,?,?)", [
+        (10, 1, OWN), (11, 1, ALICE),
+        (12, 2, second_owner), (13, 2, BOB)])
+    con.executemany(
+        f"INSERT INTO participant_messages (id, {participant_fk}, {message_fk}) "
+        "VALUES (?,?,?)", [
+            (1000, 10, 100),   # own -> Alice
+            (1001, 11, 101),   # Alice -> own, has a LinkedIn id
+            (1002, 11, 102),   # Alice -> own, recalled
+            (1003, 12, 103),   # own -> Bob
+        ])
+    return con
+
+
+class ChatStoreExtractionTest(unittest.TestCase):
+    """The chat store is the real conversation source; the action log was only
+    ever a shadow of it. These tests pin the three things a wrong extraction
+    would get wrong SILENTLY: who sent a message, whose thread it is, and which
+    message it is."""
+
+    def rows_by_body(self, rows):
+        return {r["body"]: r for r in rows}
+
+    def extract(self, con, excluded=()):
+        profile = agent.chat_store_profile(con)
+        self.assertIsNotNone(profile)
+        own = agent.own_person_id(con)
+        return agent.extract_chat_messages(con, "nb", profile, own, excluded)
+
+    def test_profile_resolves_the_link_columns_by_name(self):
+        for participant_fk, message_fk in (("chat_participant_id", "message_id"),
+                                           ("participant_id", "msg_message_id")):
+            con = chat_db(participant_fk=participant_fk, message_fk=message_fk)
+            self.assertEqual(agent.chat_store_profile(con),
+                             {"participant_fk": participant_fk,
+                              "message_fk": message_fk})
+            con.close()
+
+    def test_profile_is_none_when_the_link_columns_are_ambiguous(self):
+        """Two plausible participant columns is not a guess we are entitled to
+        make: the fallback source is correct, a wrong FK is not."""
+        con = chat_db(link_extra=", reply_to_participant_id INTEGER")
+        self.assertIsNone(agent.chat_store_profile(con))
+        con.close()
+
+    def test_direction_follows_the_owning_participant(self):
+        con = chat_db()
+        rows = self.rows_by_body(self.extract(con))
+        self.assertEqual(rows["Hi Alice"]["direction"], "out")
+        self.assertEqual(rows["Hello back"]["direction"], "in")
+        self.assertEqual(rows["Hi Bob"]["direction"], "out")
+        con.close()
+
+    def test_thread_is_the_other_participants_deduped_slug(self):
+        con = chat_db()
+        rows = self.rows_by_body(self.extract(con))
+        # Never the SDR's own slug, and never the opaque AC id.
+        self.assertEqual(rows["Hi Alice"]["profile_url"],
+                         "https://www.linkedin.com/in/alice-a")
+        self.assertEqual(rows["Hello back"]["profile_url"],
+                         "https://www.linkedin.com/in/alice-a")
+        self.assertEqual(rows["Hi Bob"]["profile_url"],
+                         "https://www.linkedin.com/in/bob-b")
+        con.close()
+
+    def test_external_id_prefers_the_linkedin_id_over_the_local_one(self):
+        con = chat_db()
+        rows = self.rows_by_body(self.extract(con))
+        self.assertEqual(rows["Hello back"]["external_id"], "li:2-abc==")
+        self.assertEqual(rows["Hi Alice"]["external_id"], "lh:100")
+        con.close()
+
+    def test_recalled_message_keeps_the_row_and_drops_the_body(self):
+        con = chat_db()
+        recalled = [r for r in self.extract(con) if r["message_type"] == "RECALLED"]
+        self.assertEqual(len(recalled), 1)
+        self.assertIsNone(recalled[0]["body"])
+        self.assertEqual(recalled[0]["content_hash"], agent.content_hash(None))
+        self.assertEqual(recalled[0]["sent_at"], agent.iso("2026-09-03T10:00:00Z"))
+        con.close()
+
+    def test_real_send_time_and_platform_are_carried(self):
+        con = chat_db()
+        rows = self.rows_by_body(self.extract(con))
+        # The real LinkedIn send time, not LH2's created_at (2026-09-07).
+        self.assertTrue(rows["Hi Alice"]["sent_at"].startswith("2026-09-01T10:00"))
+        self.assertEqual(rows["Hi Alice"]["platform"], "linkedin")
+        con.close()
+
+    def test_unknown_platform_is_sent_as_null(self):
+        con = chat_db()
+        con.execute("UPDATE chats SET platform = 'whatsapp' WHERE id = 1")
+        rows = self.rows_by_body(self.extract(con))
+        self.assertIsNone(rows["Hi Alice"]["platform"])
+        self.assertEqual(rows["Hi Bob"]["platform"], "linkedin")
+        con.close()
+
+    def test_campaign_attribution_takes_the_latest_campaign(self):
+        con = chat_db()
+        rows = self.rows_by_body(self.extract(con))
+        self.assertEqual(rows["Hi Alice"]["campaign_id"], "nb:9")
+        self.assertEqual(rows["Hi Bob"]["campaign_id"], "nb:11")
+        con.close()
+
+    def test_an_excluded_campaign_is_never_assigned_but_keeps_the_message(self):
+        """Attribution is a heuristic, so an exclusion must cost the label, not
+        the conversation: the row falls back to the next-latest allowed campaign,
+        and a person with nothing left simply carries no campaign."""
+        con = chat_db()
+        rows = self.rows_by_body(self.extract(con, excluded=("9",)))
+        self.assertEqual(rows["Hi Alice"]["campaign_id"], "nb:7")
+        rows = self.rows_by_body(self.extract(con, excluded=("9", "7", "11")))
+        self.assertIsNone(rows["Hi Alice"]["campaign_id"])
+        self.assertIsNone(rows["Hi Bob"]["campaign_id"])
+        self.assertEqual(len(rows), 4)
+        con.close()
+
+    def test_own_person_is_the_participant_in_every_chat(self):
+        con = chat_db()
+        self.assertEqual(agent.own_person_id(con), OWN)
+        con.close()
+
+    def test_own_person_is_none_when_nobody_dominates(self):
+        con = chat_db(own_in_every_chat=False)
+        self.assertIsNone(agent.own_person_id(con))
+        con.close()
+
+
+class ConversationSourceTest(unittest.TestCase):
+    """Which source `extract_local` ends up on, and how loudly."""
+
+    def select(self, con, cfg=None):
+        warnings = []
+        with mock.patch("builtins.print"):
+            messages, info = agent.extract_conversations(
+                con, cfg or {}, "nb", warnings)
+        return messages, info, warnings
+
+    def test_chat_store_is_preferred_and_reported(self):
+        con = chat_db()
+        messages, info, warnings = self.select(con)
+        self.assertEqual(info["source"], "chat-store")
+        self.assertEqual(info["own_person_id"], OWN)
+        self.assertIsNone(info["fallback_reason"])
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(messages), 4)
+        con.close()
+
+    def test_missing_chat_tables_fall_back_silently(self):
+        """An older LH2 build is a fact about the build, not a defect: falling
+        back must not make the run read 'partial'."""
+        con = chat_db(chat_tables=False)
+        messages, info, warnings = self.select(con)
+        self.assertEqual(info["source"], "legacy action_results")
+        self.assertEqual(warnings, [])
+        self.assertEqual(messages, [])
+        con.close()
+
+    def test_unidentifiable_own_person_falls_back_with_a_warning(self):
+        """Here the source EXISTS and cannot be read correctly — direction would
+        be a coin flip — so the run must not report a clean 'ok'."""
+        con = chat_db(own_in_every_chat=False)
+        messages, info, warnings = self.select(con)
+        self.assertEqual(info["source"], "legacy action_results")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("own person", warnings[0])
+        self.assertIn("own person", info["fallback_reason"])
+        con.close()
+
+    def test_a_chat_store_failure_never_breaks_the_sync(self):
+        con = chat_db()
+        with mock.patch.object(agent, "extract_chat_messages",
+                               side_effect=sqlite3.OperationalError("boom")):
+            messages, info, warnings = self.select(con)
+        self.assertEqual(info["source"], "legacy action_results")
+        self.assertIn("boom", info["fallback_reason"])
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(messages, [])
+        con.close()
+
+    def test_legacy_rows_carry_the_new_keys_as_none(self):
+        """One row shape whatever the source: the payload's key set must not
+        depend on which LH2 build a notebook happens to run."""
+        con = chat_db(chat_tables=False)
+        con.executemany(
+            "INSERT INTO action_results (id, action_version_id, person_id, created_at) "
+            "VALUES (?,?,?,?)", [(1, 1, ALICE, "2026-09-01T10:00:00Z")])
+        con.execute("INSERT INTO action_versions VALUES (1, 1, 1)")
+        con.execute("INSERT INTO action_configs VALUES (1, 'MessageToPerson')")
+        con.execute("INSERT INTO action_result_messages VALUES (1, 100, 'Sent')")
+        rows = agent.extract_messages(con, "nb")
+        self.assertEqual(len(rows), 1)
+        for field in agent.CHAT_MESSAGE_FIELDS:
+            self.assertIsNone(rows[0][field])
+        con.close()
+
+
+class MessageContractPlumbingTest(unittest.TestCase):
+    def test_ingest_messages_emits_the_full_key_set(self):
+        con = chat_db()
+        profile = agent.chat_store_profile(con)
+        rows = agent.extract_chat_messages(
+            con, "nb", profile, agent.own_person_id(con))
+        con.close()
+        payload = agent._ingest_messages(rows)
+        self.assertEqual(set(payload[0]), {
+            "campaign_id", "profile_url", "direction", "body", "sent_at",
+            "content_hash", "external_id", "platform", "message_type"})
+
+    def test_dedupe_prefers_the_stable_message_id(self):
+        """Two observations of ONE LinkedIn message — the text edited, the
+        timestamp moved — share no legacy key and would both be sent."""
+        base = {"instance_id": "nb", "campaign_id": "nb:1",
+                "profile_url": "https://www.linkedin.com/in/alice-a",
+                "direction": "in", "platform": "linkedin",
+                "message_type": "DEFAULT"}
+        rows = [dict(base, body="first", sent_at="2026-09-01T10:00:00+00:00",
+                     content_hash=agent.content_hash("first"),
+                     external_id="li:2-abc=="),
+                dict(base, body="edited", sent_at="2026-09-01T10:05:00+00:00",
+                     content_hash=agent.content_hash("edited"),
+                     external_id="li:2-abc==")]
+        deduped = agent.dedupe_messages(rows)
+        self.assertEqual(len(deduped), 1)
+        self.assertEqual(deduped[0]["body"], "first")  # earliest kept
+        # A pair with no external id still collapses on the legacy key only.
+        legacy = [dict(base, body="hi", sent_at="2026-09-01T10:00:00+00:00",
+                       content_hash=agent.content_hash("hi"), external_id=None)]
+        self.assertEqual(len(agent.dedupe_messages(legacy * 2)), 1)
+
+    def test_supabase_push_strips_the_columns_it_has_no_table_for(self):
+        rows = [{"instance_id": "nb", "campaign_id": "nb:1",
+                 "profile_url": "u", "direction": "in", "body": "b",
+                 "sent_at": "2026-09-01T10:00:00+00:00",
+                 "content_hash": "h", "external_id": "li:1",
+                 "platform": "linkedin", "message_type": "DEFAULT"}]
+        stripped = agent._supabase_messages(rows)
+        self.assertEqual(set(stripped[0]), {
+            "instance_id", "campaign_id", "profile_url", "direction", "body",
+            "sent_at", "content_hash"})
+        self.assertEqual(rows[0]["external_id"], "li:1")  # input untouched
+
+    def test_parity_notices_a_changed_message_id(self):
+        """The parity check is only worth its refusal if it compares the new
+        fields too — a mutation test, not an agreement test."""
+        _, _, chunks, _, lists = planned()
+        cs, ls, ms, events, ss, demo = lists
+        if not ms:
+            self.skipTest("fixture has no messages")
+        for chunk in chunks:
+            for row in chunk["messages"]:
+                row["external_id"] = "li:tampered"
+        problems = agent.verify_ingest_parity(
+            chunks, cs, ls, ms, events, ss, demo["edu_map"], demo["job_map"])
+        self.assertTrue(any("messages" in p for p in problems), problems)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

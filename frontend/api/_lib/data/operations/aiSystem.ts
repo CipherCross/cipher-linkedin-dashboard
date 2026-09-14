@@ -238,15 +238,26 @@ export function firstGuardResult(page: Page<unknown[]>): readonly unknown[] {
  * What counts as an unannounced reply, in one place.
  *
  * Inbound, synced (a manually imported thread is history the SDR already has),
- * never announced, and carrying a body — the notifier renders snippets, so a
- * body-less row has nothing to say. The candidate read and the remaining count
- * share this text so the number the response reports cannot drift from the set
- * the next invocation will claim.
+ * never announced, carrying a body — the notifier renders snippets, so a
+ * body-less row has nothing to say — and not yet answered: once the chat store
+ * feeds the sync, a thread arrives with the SDR's own later replies in it, and a
+ * reply that already has an outbound after it in the same conversation is news
+ * to nobody. That last clause is what keeps a chat-store backfill from
+ * announcing hundreds of conversations the team finished weeks ago. The
+ * candidate read and the remaining count share this text so the number the
+ * response reports cannot drift from the set the next invocation will claim.
+ * Both statements alias the relation `m`.
  */
-const NOTIFY_CANDIDATE_FILTER = `direction = 'in'
-              AND source = 'sync'
-              AND notified_at IS NULL
-              AND body IS NOT NULL`
+const NOTIFY_CANDIDATE_FILTER = `m.direction = 'in'
+              AND m.source = 'sync'
+              AND m.notified_at IS NULL
+              AND m.body IS NOT NULL
+              AND NOT EXISTS (
+                    SELECT 1 FROM public.messages o
+                     WHERE o.instance_id = m.instance_id
+                       AND o.profile_url = m.profile_url
+                       AND o.direction = 'out'
+                       AND o.sent_at > m.sent_at)`
 
 export interface NotifyCandidateRow {
   readonly id: number
@@ -260,10 +271,10 @@ export interface NotifyCandidateRow {
  */
 export const notifyCandidatesOperation: NeonQueryOperation<NotifyCandidateRow> = {
   build: (): NeonStatement => ({
-    text: `SELECT id::text AS id
-             FROM public.messages
+    text: `SELECT m.id::text AS id
+             FROM public.messages m
             WHERE ${NOTIFY_CANDIDATE_FILTER}
-            ORDER BY sent_at, id`,
+            ORDER BY m.sent_at, m.id`,
     values: [],
   }),
   mapRow: (row): NotifyCandidateRow => ({ id: Number(row.id) }),
@@ -352,7 +363,7 @@ export const notifyRemainingOperation: NeonQueryOperation<{
 }> = {
   build: (): NeonStatement => ({
     text: `SELECT count(*)::int AS remaining
-             FROM public.messages
+             FROM public.messages m
             WHERE ${NOTIFY_CANDIDATE_FILTER}`,
     values: [],
   }),

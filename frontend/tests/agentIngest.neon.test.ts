@@ -387,6 +387,76 @@ describe.skipIf(!hasMachineCredential)(
       ).toBe(1)
     })
 
+    it('adopts the legacy row a chat-store message is the truth about', async () => {
+      // Two deliveries of one message. The first is the old
+      // `action_result_messages` shape: no `external_id`, and a `sent_at`
+      // carrying the LH2 *run* time, weeks after the real send. Between them the
+      // AI layer labels it — which is the state adoption exists to preserve.
+      const actor = machineActor(credentialId, TENANT)
+      const legacy = parseIngestPayload(batch({ idempotency_key: 's21-batch-000015' }))
+      await ingestBatch(store, actor, legacy, payloadDigest(legacy))
+
+      await fixtures.asActor(CONTRACT_ACTORS.activeAdmin.actorId, (client) =>
+        client.query(
+          "UPDATE public.messages SET sentiment = 'positive', intent_level = 'p3'," +
+            ' notified_at = now() WHERE instance_id = $1',
+          [INSTANCE],
+        ),
+      )
+
+      // The same body, now from the chat store: a stable id and the real send
+      // time, 14 days before the run time the legacy row recorded.
+      const chatStore = parseIngestPayload(
+        batch({
+          idempotency_key: 's21-batch-000016',
+          messages: [
+            {
+              campaign_id: CAMPAIGN,
+              profile_url: PROFILE_ONE,
+              direction: 'in',
+              body: 'S21 inbound',
+              sent_at: '2026-07-20T09:00:00Z',
+              content_hash: 's21hash',
+              external_id: `urn:li:msg:${RUN}-1`,
+              platform: 'linkedin',
+              message_type: 'MEMBER_TO_MEMBER',
+            },
+          ],
+        }),
+      )
+      await ingestBatch(store, actor, chatStore, payloadDigest(chatStore))
+
+      // One row, not two — and it is still the classified one.
+      expect(
+        await countRows(
+          'SELECT count(*)::int AS n FROM public.messages WHERE instance_id = $1',
+          [INSTANCE],
+        ),
+      ).toBe(1)
+
+      const adopted = await fixtures.asActor(
+        CONTRACT_ACTORS.activeAdmin.actorId,
+        async (client) => {
+          const result = await client.query(
+            'SELECT external_id, platform, message_type, source, sentiment,' +
+              ' intent_level, notified_at, sent_at' +
+              '  FROM public.messages WHERE instance_id = $1',
+            [INSTANCE],
+          )
+          return result.rows[0]
+        },
+      )
+      expect(adopted.external_id).toBe(`urn:li:msg:${RUN}-1`)
+      expect(adopted.platform).toBe('linkedin')
+      expect(adopted.message_type).toBe('MEMBER_TO_MEMBER')
+      expect(adopted.source).toBe('sync')
+      expect(new Date(adopted.sent_at).toISOString()).toBe('2026-07-20T09:00:00.000Z')
+      // The whole point: the classification and the notification survived.
+      expect(adopted.sentiment).toBe('positive')
+      expect(adopted.intent_level).toBe('p3')
+      expect(adopted.notified_at).not.toBeNull()
+    })
+
     it('answers a repeated payload from the stored batch without writing', async () => {
       const payload = parseIngestPayload(batch({ idempotency_key: 's21-batch-000020' }))
       const actor = machineActor(credentialId, TENANT)

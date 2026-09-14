@@ -548,12 +548,50 @@ export const upsertLeadsOperation: NeonCommandOperation<number, CollectionParams
 }
 
 /**
- * Messages, on the constraint by name.
+ * Messages: one statement, three write paths, and one rule that outranks all of
+ * them — a row's *classification* is never written here.
  *
- * The update list is two columns and stops there on purpose: `sentiment`,
- * `intent_level`, `classified_at`, `notified_at` and their siblings are written
- * by the AI layer and by the notifier, and a re-sync that carried them would
- * erase a classification or re-announce a reply that has already been announced.
+ * ## Why there are three paths
+ *
+ * The agent used to derive a message from `action_result_messages`, whose
+ * `sent_at` is the LH2 **action-run** time: later than the real send, sometimes
+ * by weeks, and with no id of its own. The chat-store extractor reports the real
+ * send time and a stable `external_id`. The same message therefore arrives a
+ * second time looking like a different one, and a plain upsert on
+ * `messages_identity_key` would insert it: two rows for one message, and the
+ * older of the two is the one carrying the sentiment label, the intent level and
+ * the `notified_at` stamp.
+ *
+ * So a keyed row first tries to **adopt** the legacy row it is the truth about —
+ * same instance, profile, direction and `content_hash`, `sent_at` inside the
+ * window the run-time lag lives in (a day early to allow for clock skew, 45 days
+ * late for the lag itself), closest first. Adoption is an `UPDATE` that writes
+ * the identity (`external_id`, the real `sent_at`, `platform`, `message_type`)
+ * and nothing else. **`sentiment`, `intent_level`, `classified_at`,
+ * `notified_at`, `first_seen_at` and their siblings are never in any SET list in
+ * this statement** — they are written by the AI layer and by the notifier, and
+ * carrying them here would erase a classification or re-announce a reply that
+ * has already been announced. Adopting instead of inserting is the whole point:
+ * it is how those columns survive the migration.
+ *
+ * What is not adopted is inserted on `(instance_id, external_id)`; a row with no
+ * `external_id` at all — every older agent — takes the original
+ * `messages_identity_key` path, unchanged.
+ *
+ * ## Why it is one statement, and what that forces
+ *
+ * The registry's contract is one fixed parameterised statement per operation, so
+ * the three paths are data-modifying CTEs. They share a single snapshot, which
+ * means the insert CTEs cannot discover the adoptions by re-reading
+ * `public.messages` — they would not see them. They exclude adopted rows by
+ * joining `adopted`'s own `RETURNING`.
+ *
+ * Two `DISTINCT ON` layers keep each arbiter from being hit twice in one
+ * statement (PostgreSQL aborts the whole command with "cannot affect row a
+ * second time"): the batch is deduplicated on `external_id`, and a legacy row
+ * can be claimed by at most one incoming row. Both inserts additionally carry a
+ * `NOT EXISTS` on the identity key, so a same-second same-body duplicate is
+ * skipped rather than aborting the batch.
  */
 export const upsertMessagesOperation: NeonCommandOperation<
   number,
@@ -561,19 +599,142 @@ export const upsertMessagesOperation: NeonCommandOperation<
 > = {
   build: ({ params }) => ({
     text:
-      'INSERT INTO public.messages' +
-      ' (instance_id, campaign_id, profile_url, direction, body, sent_at, content_hash, source)' +
-      ' SELECT $1, r.campaign_id, r.profile_url, r.direction, r.body, r.sent_at,' +
-      '        COALESCE(r.content_hash, \'\'), \'sync\'' +
-      '   FROM jsonb_to_recordset($2::jsonb)' +
-      '     AS r(campaign_id text, profile_url text, direction text, body text,' +
-      '          sent_at timestamptz, content_hash text)' +
-      ' ON CONFLICT ON CONSTRAINT messages_identity_key DO UPDATE SET' +
-      '   campaign_id = COALESCE(EXCLUDED.campaign_id, public.messages.campaign_id),' +
-      '   body = COALESCE(EXCLUDED.body, public.messages.body)',
+      'WITH raw AS (' +
+      '  SELECT r.*, row_number() OVER () AS ord' +
+      '    FROM jsonb_to_recordset($2::jsonb)' +
+      '      AS r(campaign_id text, profile_url text, direction text, body text,' +
+      '           sent_at timestamptz, content_hash text, external_id text,' +
+      '           platform text, message_type text)' +
+      '), by_external AS (' +
+      // The parentheses are load-bearing: without them the ORDER BY binds to the
+      // UNION rather than to the DISTINCT ON branch, and the dedup picks an
+      // arbitrary row of each external_id instead of the first one sent.
+      '  (SELECT DISTINCT ON (external_id) * FROM raw WHERE external_id IS NOT NULL' +
+      '    ORDER BY external_id, ord)' +
+      '  UNION ALL' +
+      '  (SELECT * FROM raw WHERE external_id IS NULL)' +
+      '), incoming AS (' +
+      // Second dedup, on the legacy identity key across the WHOLE batch. The
+      // data-modifying CTEs below all see one snapshot and can only arbitrate on
+      // one index each, so two incoming rows that land on the same
+      // (profile, direction, sent_at, hash) — whether both keyed, keyed and
+      // legacy, or an adopted row's new identity and a sibling insert — would
+      // raise a plain unique violation and abort the batch. Keyed rows win the
+      // tie; among equals the first one sent does.
+      '  SELECT DISTINCT ON (profile_url, direction, sent_at, COALESCE(content_hash, \'\'))' +
+      '         * FROM by_external' +
+      '   ORDER BY profile_url, direction, sent_at, COALESCE(content_hash, \'\'),' +
+      '            (external_id IS NULL), ord' +
+      '), keyed AS (' +
+      '  SELECT * FROM incoming WHERE external_id IS NOT NULL' +
+      '), candidates AS (' +
+      '  SELECT DISTINCT ON (k.external_id)' +
+      '         k.external_id, k.campaign_id, k.profile_url, k.direction, k.body,' +
+      '         k.sent_at, k.content_hash, k.platform, k.message_type, m.id AS message_id,' +
+      '         abs(extract(epoch FROM (m.sent_at - k.sent_at))) AS distance' +
+      '    FROM keyed k' +
+      '    JOIN public.messages m' +
+      '      ON m.instance_id = $1' +
+      '     AND m.external_id IS NULL' +
+      '     AND m.profile_url = k.profile_url' +
+      '     AND m.direction = k.direction' +
+      // A legacy sync row hashes the same LH2 text, so the hash matches exactly.
+      // A MANUAL row was pasted out of the LinkedIn UI and differs in whitespace
+      // and case, so it is matched the way /api/import-conversation dedups it:
+      // trimmed, whitespace-collapsed, lower-cased (conversationImport.ts
+      // normalizeForDedup). Bounded to source='manual' and non-empty bodies so
+      // the normalised compare never runs over the sync bulk.
+      '     AND (m.content_hash = COALESCE(k.content_hash, \'\')' +
+      '          OR (m.source = \'manual\' AND COALESCE(k.body, \'\') <> \'\'' +
+      '              AND lower(regexp_replace(btrim(replace(COALESCE(m.body, \'\'), E\'\\r\', \'\')), \'\\s+\', \' \', \'g\'))' +
+      '                = lower(regexp_replace(btrim(replace(k.body, E\'\\r\', \'\')), \'\\s+\', \' \', \'g\'))))' +
+      '     AND m.sent_at BETWEEN k.sent_at - interval \'1 day\'' +
+      '                       AND k.sent_at + interval \'45 days\'' +
+      '   WHERE NOT EXISTS (' +
+      '           SELECT 1 FROM public.messages x' +
+      '            WHERE x.instance_id = $1 AND x.external_id = k.external_id)' +
+      '     AND NOT EXISTS (' +
+      '           SELECT 1 FROM public.messages y' +
+      '            WHERE y.instance_id = $1 AND y.profile_url = k.profile_url' +
+      '              AND y.direction = k.direction AND y.sent_at = k.sent_at' +
+      '              AND y.content_hash = COALESCE(k.content_hash, \'\'))' +
+      '   ORDER BY k.external_id, distance, m.id' +
+      '), pairs AS (' +
+      // The reverse collision: two incoming messages nominating one legacy row.
+      // The closer one in time adopts it; the other inserts as a new row.
+      '  SELECT DISTINCT ON (message_id) * FROM candidates' +
+      '   ORDER BY message_id, distance, external_id' +
+      '), adopted AS (' +
+      '  UPDATE public.messages m SET' +
+      '    external_id = p.external_id,' +
+      '    sent_at = p.sent_at,' +
+      // A RECALLED row carries body NULL on purpose (the sender withdrew the
+      // text); that NULL is authoritative, not "no information", so it clears the
+      // stored text instead of falling through the COALESCE.
+      '    content_hash = CASE WHEN p.message_type = \'RECALLED\' OR p.body IS NOT NULL' +
+      '                        THEN COALESCE(p.content_hash, m.content_hash)' +
+      '                        ELSE m.content_hash END,' +
+      '    platform = p.platform,' +
+      '    message_type = p.message_type,' +
+      '    source = \'sync\',' +
+      '    campaign_id = COALESCE(p.campaign_id, m.campaign_id),' +
+      '    body = CASE WHEN p.message_type = \'RECALLED\' THEN NULL' +
+      '                ELSE COALESCE(p.body, m.body) END' +
+      '  FROM pairs p' +
+      '   WHERE m.id = p.message_id AND m.instance_id = $1' +
+      '  RETURNING p.external_id AS external_id' +
+      '), inserted_keyed AS (' +
+      '  INSERT INTO public.messages' +
+      '   (instance_id, campaign_id, profile_url, direction, body, sent_at,' +
+      '    content_hash, source, external_id, platform, message_type)' +
+      '  SELECT $1, k.campaign_id, k.profile_url, k.direction, k.body, k.sent_at,' +
+      '         COALESCE(k.content_hash, \'\'), \'sync\', k.external_id,' +
+      '         k.platform, k.message_type' +
+      '    FROM keyed k' +
+      '   WHERE NOT EXISTS (' +
+      '           SELECT 1 FROM adopted a WHERE a.external_id = k.external_id)' +
+      '     AND NOT EXISTS (' +
+      '           SELECT 1 FROM public.messages y' +
+      '            WHERE y.instance_id = $1 AND y.profile_url = k.profile_url' +
+      '              AND y.direction = k.direction AND y.sent_at = k.sent_at' +
+      '              AND y.content_hash = COALESCE(k.content_hash, \'\')' +
+      '              AND y.external_id IS DISTINCT FROM k.external_id)' +
+      '  ON CONFLICT (instance_id, external_id) WHERE external_id IS NOT NULL' +
+      '  DO UPDATE SET' +
+      '    body = CASE WHEN EXCLUDED.message_type = \'RECALLED\' THEN NULL' +
+      '                ELSE COALESCE(EXCLUDED.body, public.messages.body) END,' +
+      '    content_hash = CASE WHEN EXCLUDED.message_type = \'RECALLED\'' +
+      '                          OR EXCLUDED.body IS NOT NULL' +
+      '                        THEN EXCLUDED.content_hash' +
+      '                        ELSE public.messages.content_hash END,' +
+      '    message_type = COALESCE(EXCLUDED.message_type, public.messages.message_type),' +
+      '    platform = COALESCE(EXCLUDED.platform, public.messages.platform),' +
+      '    campaign_id = COALESCE(EXCLUDED.campaign_id, public.messages.campaign_id)' +
+      '  RETURNING 1 AS n' +
+      '), inserted_plain AS (' +
+      '  INSERT INTO public.messages' +
+      '   (instance_id, campaign_id, profile_url, direction, body, sent_at,' +
+      '    content_hash, source)' +
+      '  SELECT $1, r.campaign_id, r.profile_url, r.direction, r.body, r.sent_at,' +
+      '         COALESCE(r.content_hash, \'\'), \'sync\'' +
+      '    FROM incoming r' +
+      '   WHERE r.external_id IS NULL' +
+      '  ON CONFLICT ON CONSTRAINT messages_identity_key DO UPDATE SET' +
+      '    campaign_id = COALESCE(EXCLUDED.campaign_id, public.messages.campaign_id),' +
+      '    body = COALESCE(EXCLUDED.body, public.messages.body)' +
+      '  RETURNING 1 AS n' +
+      ')' +
+      ' SELECT ((SELECT count(*) FROM adopted)' +
+      '       + (SELECT count(*) FROM inserted_keyed)' +
+      '       + (SELECT count(*) FROM inserted_plain))::int AS n',
     values: [params?.instanceId ?? '', params?.rows ?? '[]'],
   }),
-  mapResult: (_rows, rowCount) => rowCount,
+  /**
+   * The statement is a `SELECT` (its writes are CTEs), so `rowCount` is 1 — the
+   * count row itself. The number this operation answers with is the same thing
+   * every other upsert here answers with: rows affected.
+   */
+  mapResult: (rows) => Number(rows[0]?.n ?? 0),
 }
 
 /**

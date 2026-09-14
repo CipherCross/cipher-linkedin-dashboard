@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.24.1"
+AGENT_VERSION = "1.25.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -2563,13 +2563,33 @@ def _ingest_leads(leads, edu_map, job_map):
     return out
 
 
+# The three chat-store fields the gateway's MessageRow gained alongside the
+# original five. They are always emitted (as None for a legacy/mapping row), so
+# the payload's key set never depends on which source produced the extraction.
+# The legacy Supabase table has no such columns — see `_supabase_messages`.
+CHAT_MESSAGE_FIELDS = ("external_id", "platform", "message_type")
+
+
 def _ingest_messages(messages):
     return [{"campaign_id": m.get("campaign_id"),
              "profile_url": m["profile_url"],
              "direction": m["direction"],
              "body": m.get("body"),
              "sent_at": m["sent_at"],
-             "content_hash": m.get("content_hash") or ""} for m in messages]
+             "content_hash": m.get("content_hash") or "",
+             "external_id": m.get("external_id"),
+             "platform": m.get("platform"),
+             "message_type": m.get("message_type")} for m in messages]
+
+
+def _supabase_messages(messages):
+    """The same rows without the chat-store fields, for the legacy Supabase push.
+
+    PostgREST rejects the WHOLE batch with a 400 when a payload names a column
+    the table does not have, and the Supabase `messages` table predates these
+    three. The machine gateway takes them; Supabase must not see them."""
+    return [{k: v for k, v in m.items() if k not in CHAT_MESSAGE_FIELDS}
+            for m in messages]
 
 
 def _ingest_events(events):
@@ -2800,8 +2820,12 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
     for name, source, key_of in (
         ("campaign_steps", steps, lambda r: (r["campaign_id"], r["step_index"])),
         ("leads", leads, lambda r: (r["campaign_id"], r["profile_url"])),
-        ("messages", messages, lambda r: (r["profile_url"], r["direction"],
-                                          r["sent_at"], r["content_hash"])),
+        # Keyed on the stable message id when there is one (two genuinely
+        # distinct chat messages can share profile+direction+time+body), else on
+        # the legacy tuple.
+        ("messages", messages, lambda r: (r.get("external_id") or
+                                          (r["profile_url"], r["direction"],
+                                           r["sent_at"], r["content_hash"]))),
         ("events", events, lambda r: (r["campaign_id"], r["profile_url"],
                                       r["event_type"])),
     ):
@@ -2817,7 +2841,8 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
                 continue
             fields = (_PARITY_LEAD_FIELDS if name == "leads"
                       else _PARITY_STEP_FIELDS if name == "campaign_steps"
-                      else ("body",) if name == "messages"
+                      else ("body", "external_id", "message_type")
+                      if name == "messages"
                       else ("occurred_at",))
             for field in fields:
                 if got.get(field) != row.get(field):
@@ -3905,6 +3930,235 @@ SELECT profile_url, campaign_id, body, sent_at, direction FROM (
 """
 
 
+# ------------------------ LH2 chat store (real conversation source) ----------
+# MESSAGES_SQL above derives a thread from the ACTION log: its `sent_at` is when
+# LH2's action ran, not when the message was sent, and anything LH2 scraped
+# outside a campaign action is invisible to it. LH2 2.130.x keeps the real chat
+# store: chats -> chat_participants -> participant_messages -> messages
+# (+ message_external_ids), with `messages.send_at` = the true LinkedIn send
+# time and a stable LinkedIn message id. That is the preferred source; the
+# action-log query stays as the fallback for builds without these tables.
+#
+# The store is read through a RESOLVED PROFILE rather than hard-coded column
+# names: `participant_messages` is a pure link table whose two FK column names
+# vary by build (the column naming the participant, and the one naming the
+# message). `chat_store_profile` resolves them from PRAGMA table_info and
+# returns None when anything is missing or ambiguous — a build we cannot read
+# exactly must fall back to the legacy query, never guess.
+CHAT_STORE_TABLES = ("chats", "chat_participants", "participant_messages",
+                     "messages", "message_external_ids")
+CHAT_STORE_REQUIRED_COLUMNS = {
+    "chats": ("id", "type", "platform"),
+    "chat_participants": ("id", "chat_id", "person_id"),
+    "messages": ("id", "type", "message_text", "send_at"),
+    "message_external_ids": ("message_id", "external_id"),
+}
+CHAT_ONE_TO_ONE = "one-to-one"
+
+# chats.platform -> the gateway's enumerated platform. Anything else is sent as
+# NULL: an unknown value must not be smuggled into a constrained column.
+CHAT_PLATFORMS = {
+    "linkedin": "linkedin",
+    "sales_navigator": "sales_navigator",
+    "salesnavigator": "sales_navigator",
+    "sales navigator": "sales_navigator",
+    "recruiter": "recruiter",
+    "linkedin_recruiter": "recruiter",
+}
+
+# The SDR's own person: the chat_participants.person_id that appears in the most
+# one-to-one chats. Two rows are enough to check "strictly more than the
+# runner-up"; the total is counted separately for the >= 90% coverage rule.
+OWN_PERSON_SQL = f"""
+SELECT cp.person_id AS person_id, COUNT(DISTINCT cp.chat_id) AS chats
+FROM chat_participants cp
+JOIN chats c ON c.id = cp.chat_id
+WHERE c.type = '{CHAT_ONE_TO_ONE}'
+GROUP BY cp.person_id
+ORDER BY chats DESC, cp.person_id ASC
+LIMIT 2
+"""
+
+ONE_TO_ONE_CHATS_SQL = f"""
+SELECT COUNT(*) FROM chats WHERE type = '{CHAT_ONE_TO_ONE}'
+"""
+
+# One row per participant_messages row of a one-to-one chat. `{participant_fk}`
+# and `{message_fk}` are the profile-resolved link columns (quoted); the `?`
+# parameter is the own person id, used to pick the OTHER participant — the human
+# the thread is with, whose slug becomes profile_url through the same
+# one-slug-per-person dedup every other query uses. The LinkedIn message id is a
+# scalar subquery rather than a join: a message with two external ids must not
+# double the row.
+CHAT_MESSAGES_SQL = """
+SELECT base.message_id     AS message_id,
+       base.message_type   AS message_type,
+       base.message_text   AS message_text,
+       base.send_at        AS send_at,
+       base.platform       AS platform,
+       base.sender_person_id AS sender_person_id,
+       base.other_person_id  AS other_person_id,
+       pei.external_id     AS slug,
+       (SELECT mei.external_id FROM message_external_ids mei
+         WHERE mei.message_id = base.message_id
+         ORDER BY mei.rowid LIMIT 1) AS li_external_id
+FROM (
+  SELECT m.id           AS message_id,
+         m.type         AS message_type,
+         m.message_text AS message_text,
+         m.send_at      AS send_at,
+         c.platform     AS platform,
+         cp.person_id   AS sender_person_id,
+         (SELECT o.person_id FROM chat_participants o
+           WHERE o.chat_id = cp.chat_id AND o.person_id <> ?
+           ORDER BY o.id LIMIT 1) AS other_person_id
+  FROM participant_messages pm
+  JOIN chat_participants cp ON cp.id = pm.{participant_fk}
+  JOIN messages m           ON m.id = pm.{message_fk}
+  JOIN chats c              ON c.id = cp.chat_id
+  WHERE c.type = '""" + CHAT_ONE_TO_ONE + """'
+) base
+JOIN """ + PEI_ONE_SLUG_SQL + """ pei ON pei.person_id = base.other_person_id
+"""
+
+# Campaign attribution for a chat row is a HEURISTIC: the chat store knows
+# nothing about campaigns, so a thread is attributed to the most recent campaign
+# the person was queued into. Excluded campaigns are skipped while walking a
+# person's history newest-first, so an excluded campaign is never ASSIGNED — the
+# message itself is kept with whatever older campaign (or None) remains, because
+# dropping a real conversation over a heuristic attribution would lose data that
+# `apply_campaign_excludes` was never meant to remove.
+CHAT_CAMPAIGN_SQL = """
+SELECT atp.person_id AS person_id, a.campaign_id AS campaign_id
+FROM action_target_people atp
+JOIN actions a ON a.id = atp.action_id
+WHERE a.campaign_id IS NOT NULL
+ORDER BY {order}
+"""
+
+
+def chat_store_profile(con):
+    """Resolve the chat store's table/column names, or None when unreadable.
+
+    Returns {"participant_fk": ..., "message_fk": ...} — the two link columns of
+    `participant_messages`, found by name (the one naming a participant, the one
+    naming a message). Ambiguity (zero or several candidates) is unreadable, not
+    a guess. Never raises: the caller's fallback is the legacy query."""
+    try:
+        columns = {table: _sqlite_columns(con, table) for table in CHAT_STORE_TABLES}
+        if any(not columns[table] for table in CHAT_STORE_TABLES):
+            return None
+        for table, required in CHAT_STORE_REQUIRED_COLUMNS.items():
+            if not set(required) <= columns[table]:
+                return None
+        link = columns["participant_messages"]
+        participant = sorted(c for c in link if "participant" in c.lower())
+        message = sorted(c for c in link
+                         if "message" in c.lower() and c not in participant)
+        if len(participant) != 1 or len(message) != 1:
+            return None
+        return {"participant_fk": participant[0], "message_fk": message[0]}
+    except Exception:
+        return None
+
+
+def own_person_id(con):
+    """The SDR's own person_id, or None when it is not unambiguous.
+
+    Direction is decided by "was the sender me", so a wrong own-person id would
+    invert every message in the feed. It is accepted only when one person is in
+    at least 90% of the one-to-one chats AND strictly ahead of the runner-up;
+    anything else falls back to the legacy extraction, which reads direction
+    from the action log instead. Never raises."""
+    try:
+        total = con.execute(ONE_TO_ONE_CHATS_SQL).fetchone()[0] or 0
+        if not total:
+            return None
+        rows = list(con.execute(OWN_PERSON_SQL))
+        if not rows:
+            return None
+        top = rows[0]
+        if len(rows) > 1 and rows[1]["chats"] >= top["chats"]:
+            return None
+        if top["chats"] < 0.9 * total:
+            return None
+        return top["person_id"]
+    except Exception:
+        return None
+
+
+def _chat_platform(value):
+    """chats.platform -> linkedin | sales_navigator | recruiter, else None."""
+    if value in (None, ""):
+        return None
+    key = str(value).strip().lower().replace("-", "_")
+    return CHAT_PLATFORMS.get(key)
+
+
+def _chat_campaign_map(con, excluded):
+    """person_id -> the latest NON-excluded LH2 campaign id the person was queued
+    into. Fails safe to {} (chat rows then carry no campaign) — attribution is a
+    convenience, and losing it must not lose the conversation."""
+    columns = _sqlite_columns(con, "action_target_people")
+    if not {"person_id", "action_id"} <= columns:
+        return {}
+    order = ("atp.created_at DESC, atp.rowid DESC" if "created_at" in columns
+             else "atp.rowid DESC")
+    out = {}
+    try:
+        for row in con.execute(CHAT_CAMPAIGN_SQL.format(order=order)):
+            person_id = row["person_id"]
+            if person_id is None or person_id in out:
+                continue
+            if str(row["campaign_id"]) in excluded:
+                continue  # newest-first: keep walking back to an allowed one
+            out[person_id] = row["campaign_id"]
+    except sqlite3.Error:
+        return {}
+    return out
+
+
+def extract_chat_messages(con, instance_id, profile, own_id,
+                          excluded_lh_campaign_ids=()):
+    """Full conversations from the LH2 chat store, in the messages row shape.
+
+    One row per participant_messages row of a one-to-one chat: the real LinkedIn
+    send time, the real message id, and a body that is NULL for a RECALLED
+    message (LH2 keeps the row, the text is gone). Rows with no resolvable slug
+    or no timestamp are skipped — they have no thread to belong to."""
+    excluded = {str(x) for x in (excluded_lh_campaign_ids or ())}
+    campaign_of = _chat_campaign_map(con, excluded)
+    sql = CHAT_MESSAGES_SQL.format(
+        participant_fk=_quoted_sqlite_identifier(profile["participant_fk"]),
+        message_fk=_quoted_sqlite_identifier(profile["message_fk"]))
+    out = []
+    for row in con.execute(sql, (own_id,)):
+        slug = row["slug"]
+        sent_at = iso(row["send_at"])
+        if not slug or not sent_at:
+            continue
+        message_type = row["message_type"]
+        message_type = str(message_type)[:40] if message_type else None
+        body = row["message_text"]
+        body = None if message_type == "RECALLED" else (
+            str(body)[:2000] if body else None)
+        li_id = row["li_external_id"]
+        lh_cid = campaign_of.get(row["other_person_id"])
+        out.append({
+            "instance_id": instance_id,
+            "campaign_id": f"{instance_id}:{lh_cid}" if lh_cid is not None else None,
+            "profile_url": LINKEDIN_IN_PREFIX + str(slug),
+            "direction": "out" if row["sender_person_id"] == own_id else "in",
+            "body": body,
+            "sent_at": sent_at,
+            "content_hash": content_hash(body),
+            "external_id": (f"li:{li_id}" if li_id
+                            else f"lh:{row['message_id']}"),
+            "platform": _chat_platform(row["platform"]),
+            "message_type": message_type,
+        })
+    return out
+
 # ------------------------ demographics signals + avatar source ---------------
 # All three below reuse the SAME one-slug-per-person dedup as leads, so their
 # results key on the SAME slug-format profile_url (years) / slug (avatars) — and
@@ -4110,6 +4364,13 @@ def extract_messages(con, instance_id):
             "body": body,
             "sent_at": sent_at,
             "content_hash": content_hash(body),
+            # The chat-store fields the action log cannot know: a legacy row has
+            # no LinkedIn message id, no platform and no message type. They are
+            # present-and-None rather than absent so every messages row in this
+            # agent has ONE shape, whichever source produced it.
+            "external_id": None,
+            "platform": None,
+            "message_type": None,
         })
     return out
 
@@ -4260,6 +4521,57 @@ def apply_campaign_excludes(cfg, campaigns, leads, messages, steps):
     return kept
 
 
+def extract_conversations(con, cfg, instance_id, warnings=None):
+    """Produce the conversation feed from the best source this notebook offers.
+
+    Preference order is chat store -> legacy action log, and every step down is
+    LOUD in its own way: an LH2 build without the chat tables is a fact about the
+    build (a one-line note, not a warning — the sync is complete), while a
+    readable chat store whose own person cannot be identified is a real defect in
+    an available source and is recorded with note_warning so the run reads
+    'partial'. No path here raises: the conversation source must never be what
+    breaks a scheduled sync.
+
+    Returns (messages, info), where info describes the choice for the dry run."""
+    info = {"source": "legacy action_results", "own_person_id": None,
+            "fallback_reason": None}
+    try:
+        profile = chat_store_profile(con)
+        if profile is None:
+            info["fallback_reason"] = ("this LH2 build has no readable chat store "
+                                       "(missing table or ambiguous link columns)")
+            print("conversations: no readable chat store — using the legacy "
+                  "action-log query")
+        else:
+            own_id = own_person_id(con)
+            if own_id is None:
+                reason = ("own person not identifiable from chat_participants "
+                          "(no single participant in >=90% of one-to-one chats)")
+                info["fallback_reason"] = reason
+                note_warning(warnings, "messages", RuntimeError(reason))
+                print(f"conversations: {reason} — using the legacy action-log query")
+            else:
+                excluded = cfg.get("exclude_campaigns") or []
+                if not isinstance(excluded, (list, tuple)):
+                    excluded = [excluded]
+                messages = extract_chat_messages(con, instance_id, profile,
+                                                 own_id, excluded)
+                info.update({"source": "chat-store", "own_person_id": own_id})
+                return messages, info
+    except Exception as e:  # a chat-store defect falls back, never fails
+        note_warning(warnings, "messages", e)
+        info["fallback_reason"] = f"{type(e).__name__}: {e}"
+        print(f"conversations: chat-store extraction failed ({e}) — using the "
+              "legacy action-log query")
+    try:
+        return extract_messages(con, instance_id), info
+    except Exception as e:  # schema mismatch must never break a sync
+        note_warning(warnings, "messages", e)
+        print(f"message extraction skipped ({e}) — Replies feed will be empty")
+        info["source"] = "none"
+        return [], info
+
+
 def extract_local(cfg, warnings=None):
     """Read campaigns + leads (+ owner identity) from the local LH2 DB.
 
@@ -4336,6 +4648,11 @@ def extract_local(cfg, warnings=None):
                 "updated_at": now,
             })
     messages = []
+    # How the conversation feed was produced — printed by the dry run so a
+    # notebook silently on the legacy source (or on a heuristic own-person id) is
+    # visible before the first real sync, not after a wrong-looking feed.
+    conversations = {"source": "none", "own_person_id": None,
+                     "fallback_reason": "sync_messages is off"}
     mmap = mapping.get("messages", {})
     if mmap.get("table") or mmap.get("query"):
         # Per-notebook override for a non-standard schema.
@@ -4355,13 +4672,17 @@ def extract_local(cfg, warnings=None):
                 "body": body,
                 "sent_at": sent_at,
                 "content_hash": content_hash(body),
+                # A per-notebook mapping describes a non-standard schema; it has
+                # no chat-store fields to give. Same shape, empty values.
+                "external_id": None,
+                "platform": None,
+                "message_type": None,
             })
+        conversations = {"source": "mapping", "own_person_id": None,
+                         "fallback_reason": None}
     elif cfg.get("sync_messages", True):
-        try:
-            messages = extract_messages(con, instance_id)
-        except Exception as e:  # schema mismatch must never break a sync
-            note_warning(warnings, "messages", e)
-            print(f"message extraction skipped ({e}) — Replies feed will be empty")
+        messages, conversations = extract_conversations(
+            con, cfg, instance_id, warnings)
 
     steps = []
     if cfg.get("sync_steps", True):
@@ -4407,7 +4728,8 @@ def extract_local(cfg, warnings=None):
 
     owner = extract_owner(cfg, con, warnings)
     con.close()
-    demo = {"edu_map": edu_map, "job_map": job_map, "avatar_map": avatar_map}
+    demo = {"edu_map": edu_map, "job_map": job_map, "avatar_map": avatar_map,
+            "conversations": conversations}
     return campaigns, leads, messages, steps, owner, demo
 
 
@@ -4466,6 +4788,34 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
           "(merged into leads; a NULL year is never sent).")
     print(f"photos: {avatar_n}/{len(leads)} leads have a local avatar URL "
           "(nothing downloaded in a dry run; enable with sync_photos).")
+
+    conv = demo.get("conversations") or {}
+    print("\nconversations:")
+    print(f"  source: {conv.get('source') or 'unknown'}"
+          + (f" (own person id {conv['own_person_id']})"
+             if conv.get("own_person_id") is not None else ""))
+    if conv.get("fallback_reason"):
+        print(f"  chat store NOT used: {conv['fallback_reason']}")
+    inbound = sum(1 for m in messages if m.get("direction") == "in")
+    linkedin_ids = sum(1 for m in messages
+                       if str(m.get("external_id") or "").startswith("li:"))
+    local_ids = sum(1 for m in messages
+                    if str(m.get("external_id") or "").startswith("lh:"))
+    threads = len({m["profile_url"] for m in messages})
+    unattributed = sum(1 for m in messages if not m.get("campaign_id"))
+    print(f"  rows: {len(messages)} total, {inbound} inbound, "
+          f"{len(messages) - inbound} outbound")
+    print(f"  ids: {linkedin_ids} with a LinkedIn message id, "
+          f"{local_ids} with a local LH2 id")
+    print(f"  {threads} distinct threads, {unattributed} rows with no campaign")
+    # Redacted samples: enough to eyeball direction/time/type, never enough to
+    # paste a real conversation into a terminal log.
+    for m in messages[:3]:
+        slug = slug_from_profile_url(m["profile_url"]) or m["profile_url"]
+        body = (m.get("body") or "")[:40]
+        print(f"    <{slug}> {m.get('direction')} {m.get('sent_at')} "
+              f"[{m.get('message_type') or '-'}/{m.get('platform') or '-'}] "
+              f"{body!r}")
 
     print(f"\n{len(campaigns)} campaigns, {len(leads)} leads, "
           f"{len(messages)} messages, {len(steps)} steps. "
@@ -4568,7 +4918,7 @@ def cmd_sync(args):
         sent_messages = dedupe_messages(messages)
         total += sb.upsert("events", sent_events,
                            on_conflict="instance_id,campaign_id,profile_url,event_type")
-        total += sb.upsert("messages", sent_messages,
+        total += sb.upsert("messages", _supabase_messages(sent_messages),
                            on_conflict="instance_id,profile_url,direction,sent_at,content_hash")
         total += sb.upsert("campaign_steps", steps,
                            on_conflict="campaign_id,step_index")
@@ -4680,8 +5030,14 @@ def dedupe_messages(messages):
     the whole messages push — so we guarantee uniqueness before sending."""
     seen = {}
     for m in sorted(messages, key=lambda x: x["sent_at"]):
-        k = (m["instance_id"], m["profile_url"], m["direction"],
-             m["sent_at"], m["content_hash"])
+        # A chat-store row carries a stable per-message id, which is a STRONGER
+        # identity than the timestamp+body key: the same LinkedIn message seen
+        # twice (an edit, a re-scrape) collides on it even when the body or the
+        # timestamp moved. Rows without one keep the legacy key.
+        external_id = m.get("external_id")
+        k = ((m["instance_id"], external_id) if external_id else
+             (m["instance_id"], m["profile_url"], m["direction"],
+              m["sent_at"], m["content_hash"]))
         seen.setdefault(k, m)
     return list(seen.values())
 
