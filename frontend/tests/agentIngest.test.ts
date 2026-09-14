@@ -714,7 +714,7 @@ describe('the message upsert contract', () => {
     expect(statement.text).toContain('UPDATE public.messages m SET')
     expect(statement.text).toContain('external_id = p.external_id')
     expect(statement.text).toContain('sent_at = p.sent_at')
-    expect(statement.text).toContain("interval '45 days'")
+    expect(statement.text).toContain("interval '180 days'")
   })
 
   it('treats a RECALLED row as authoritative and clears the stored text', () => {

@@ -73,6 +73,11 @@ export const MACHINE_OPERATIONS = {
   batchByKey: 'agent.batchByKey',
   /** This notebook's own remote-config blob. See `instanceConfigOperation`. */
   instanceConfig: 'agent.instanceConfig',
+  /**
+   * Which conversations this notebook should re-scrape next. See
+   * `refreshCandidatesOperation`.
+   */
+  refreshCandidates: 'agent.refreshCandidates',
 } as const
 
 export const MACHINE_COMMANDS = {
@@ -236,6 +241,107 @@ export const instanceConfigOperation: NeonQueryOperation<
         ? (row.config as Record<string, unknown>)
         : {},
     config_updated_at: text(row.config_updated_at),
+  }),
+}
+
+export interface RefreshCandidateRow {
+  readonly instance_id: string
+  readonly refresh_after_days: number
+  readonly profile_url: string | null
+  readonly priority: 'p3' | 'p2' | 'p1' | 'none'
+  readonly last_inbound_at: string | null
+  readonly last_message_at: string | null
+  readonly last_requested_at: string | null
+}
+
+/**
+ * The conversation-refresh worklist: which threads of *this* notebook are stale
+ * enough to be worth re-scraping, best reply intent first.
+ *
+ * **The server decides, not the agent.** Reply intent (`p3` > `p2` > `p1`) is a
+ * classification that exists only in this database — the notebook has never seen
+ * it — so the ordering cannot be computed on the notebook side at all. The agent
+ * asks, enqueues what it is told, and reports back through the `events`
+ * collection as `conversation_refresh`, which this same statement then reads to
+ * avoid asking for the same thread twice in a refresh window.
+ *
+ * **No instance parameter, deliberately** — the same reasoning as
+ * `instanceConfigOperation`. Step 009 scopes every `app_machine` statement on
+ * `messages`, `events` and `instances` to `public.machine_actor_instance()`, so
+ * naming the instance here would replace a check the database re-derives per
+ * statement with one this process could get wrong. `policy` therefore selects
+ * the notebook's own `instances` row with no predicate, and the handler asserts
+ * the returned `instance_id` against the credential's.
+ *
+ * **Why `policy` is the driving side of the last join.** A notebook with no
+ * stale thread still needs an answer — its `refresh_after_days` and a proof that
+ * the credential still resolves. Driving from `policy` makes "nothing to do" one
+ * row with a NULL `profile_url` (the handler drops it) and keeps zero rows
+ * meaning exactly one thing: the credential was revoked or expired since the
+ * handler resolved it.
+ *
+ * **No `LIMIT` of its own.** The driver appends `LIMIT`/`OFFSET` around every
+ * query operation; a second one here would fight it.
+ */
+export const refreshCandidatesOperation: NeonQueryOperation<
+  RefreshCandidateRow,
+  Record<string, never>
+> = {
+  build: () => ({
+    text:
+      'WITH policy AS (' +
+      '  SELECT i.id AS instance_id,' +
+      "         LEAST(60, GREATEST(1, CASE WHEN i.config->>'tracker_refresh_after_days' ~ '^[0-9]+$'" +
+      "                                    THEN (i.config->>'tracker_refresh_after_days')::int" +
+      '                                    ELSE 3 END)) AS refresh_after_days' +
+      '    FROM public.instances i' +
+      '), threads AS (' +
+      '  SELECT m.instance_id, m.profile_url,' +
+      "         max(m.sent_at) FILTER (WHERE m.direction = 'in') AS last_inbound_at," +
+      '         max(m.sent_at) AS last_message_at,' +
+      "         max(CASE m.intent_level WHEN 'p3' THEN 3 WHEN 'p2' THEN 2 WHEN 'p1' THEN 1 ELSE 0 END)" +
+      "           FILTER (WHERE m.direction = 'in') AS intent_rank" +
+      '    FROM public.messages m' +
+      '   GROUP BY m.instance_id, m.profile_url' +
+      "  HAVING count(*) FILTER (WHERE m.direction = 'in') > 0" +
+      '), candidates AS (' +
+      '  SELECT t.instance_id, t.profile_url, t.intent_rank, t.last_inbound_at, t.last_message_at,' +
+      "         (e.raw->>'last_requested_at')::timestamptz AS last_requested_at" +
+      '    FROM threads t' +
+      '    CROSS JOIN policy p' +
+      '    LEFT JOIN public.events e' +
+      '      ON e.instance_id = t.instance_id' +
+      '     AND e.profile_url = t.profile_url' +
+      '     AND e.campaign_id IS NULL' +
+      "     AND e.event_type = 'conversation_refresh'" +
+      '   WHERE t.last_message_at <= now() - make_interval(days => p.refresh_after_days)' +
+      "     AND ((e.raw->>'last_requested_at')::timestamptz IS NULL" +
+      "          OR (e.raw->>'last_requested_at')::timestamptz" +
+      '             <= now() - make_interval(days => p.refresh_after_days))' +
+      ')' +
+      ' SELECT p.instance_id, p.refresh_after_days, c.profile_url,' +
+      "        CASE c.intent_rank WHEN 3 THEN 'p3' WHEN 2 THEN 'p2' WHEN 1 THEN 'p1'" +
+      "             ELSE 'none' END AS priority," +
+      '        c.last_inbound_at, c.last_message_at, c.last_requested_at' +
+      '   FROM policy p' +
+      '   LEFT JOIN candidates c ON c.instance_id = p.instance_id' +
+      '  ORDER BY c.intent_rank DESC NULLS LAST,' +
+      '           c.last_inbound_at DESC NULLS LAST,' +
+      '           (c.last_requested_at IS NOT NULL),' +
+      '           c.profile_url',
+    values: [],
+  }),
+  mapRow: (row: NeonRow): RefreshCandidateRow => ({
+    instance_id: String(row.instance_id),
+    refresh_after_days: Number(row.refresh_after_days ?? 3),
+    profile_url: text(row.profile_url),
+    priority:
+      row.priority === 'p3' || row.priority === 'p2' || row.priority === 'p1'
+        ? row.priority
+        : 'none',
+    last_inbound_at: text(row.last_inbound_at),
+    last_message_at: text(row.last_message_at),
+    last_requested_at: text(row.last_requested_at),
   }),
 }
 
@@ -563,9 +669,10 @@ export const upsertLeadsOperation: NeonCommandOperation<number, CollectionParams
  * the `notified_at` stamp.
  *
  * So a keyed row first tries to **adopt** the legacy row it is the truth about —
- * same instance, profile, direction and `content_hash`, `sent_at` inside the
- * window the run-time lag lives in (a day early to allow for clock skew, 45 days
- * late for the lag itself), closest first. Adoption is an `UPDATE` that writes
+ * same instance, profile, direction and `content_hash` (or, for a manual row,
+ * the same whitespace/case-normalized body), `sent_at` within ±180 days — legacy
+ * outbound rows carry the action_result creation time, which can precede the
+ * real send by months while the person waits in the queue — closest first. Adoption is an `UPDATE` that writes
  * the identity (`external_id`, the real `sent_at`, `platform`, `message_type`)
  * and nothing else. **`sentiment`, `intent_level`, `classified_at`,
  * `notified_at`, `first_seen_at` and their siblings are never in any SET list in
@@ -648,8 +755,14 @@ export const upsertMessagesOperation: NeonCommandOperation<
       '          OR (m.source = \'manual\' AND COALESCE(k.body, \'\') <> \'\'' +
       '              AND lower(regexp_replace(btrim(replace(COALESCE(m.body, \'\'), E\'\\r\', \'\')), \'\\s+\', \' \', \'g\'))' +
       '                = lower(regexp_replace(btrim(replace(k.body, E\'\\r\', \'\')), \'\\s+\', \' \', \'g\'))))' +
-      '     AND m.sent_at BETWEEN k.sent_at - interval \'1 day\'' +
-      '                       AND k.sent_at + interval \'45 days\'' +
+      // Legacy sync rows carry LH2 ACTION times, not send times: an inbound
+      // reply was recorded when CheckForReplies ran (days after), an outbound
+      // template when the action_result row was created (which can be months
+      // BEFORE the send, while the person waited in the queue). notebook-1's
+      // first chat-store sync measured −162 d … +7 d. The window is therefore
+      // wide and symmetric; closest-in-time still wins the tie.
+      '     AND m.sent_at BETWEEN k.sent_at - interval \'180 days\'' +
+      '                       AND k.sent_at + interval \'180 days\'' +
       '   WHERE NOT EXISTS (' +
       '           SELECT 1 FROM public.messages x' +
       '            WHERE x.instance_id = $1 AND x.external_id = k.external_id)' +
@@ -951,6 +1064,10 @@ export function buildMachineRegistry(): NeonOperationRegistry {
   registry.registerQuery(
     MACHINE_OPERATIONS.instanceConfig,
     instanceConfigOperation,
+  )
+  registry.registerQuery(
+    MACHINE_OPERATIONS.refreshCandidates,
+    refreshCandidatesOperation,
   )
 
   registry.registerCommand(MACHINE_COMMANDS.recordBatch, recordBatchOperation)
