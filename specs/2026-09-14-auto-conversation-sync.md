@@ -1,8 +1,12 @@
 # Automatic full-conversation sync from LinkedIn
 
-Status: **Phase 1 BUILT on branch `conversation-sync-phase1` (2026-09-14,
-uncommitted at time of writing; see "Phase 1 rollout checklist"). Phase 2 is
-designed, waits on probe #4 and on Phase 1 being live.** Nothing is implemented. Probe ran on notebook-1 on 2026-09-14; fleet is Windows 10/11, all on
+Status: **Phase 1 SHIPPED server-side 2026-09-14** — `main` at 7ce659e, ledger
+step 019 applied and verified on the production Neon project (19/19), Vercel
+production deployed 13:32 CEST, upsert exercised against production inside a
+rolled-back transaction (adopt legacy, adopt manual by normalized body, in-batch
+dedup, idempotent replay, recall). **Agent 1.25.0 is not yet published**: it
+waits for the notebook-1 dry-run below. Phase 2 has all four probes and is
+ready to implement, piloted on notebook-1. Nothing is implemented. Probe ran on notebook-1 on 2026-09-14; fleet is Windows 10/11, all on
 the latest LH2 build (2.130.36), LinkedIn Premium + Sales Navigator, LH2 PRO.
 
 ## Problem
@@ -249,14 +253,15 @@ Built and green locally (offline vitest 1210/1210, transport tests 187/187,
   dry-run "conversations" block, `_supabase_messages` strip, dedupe/parity on
   `external_id`.
 
-Left, in order — **the gateway statement names the 019 columns unconditionally,
-so every ingest 500s between deploying the gateway and applying 019**:
+Done 2026-09-14: committed and fast-forwarded to `main` (7ce659e, pushed);
+step 019 applied with the ledger runner through `/opt/homebrew/opt/libpq/bin/psql`
+(no Docker needed); Vercel production deployed. Tenants other than the owner's
+production project do not use the platform (owner statement), so 019 is applied
+only there; the S11 fixture project is still at step 10, so `test:neon` cannot
+run against it until 11–19 are applied.
 
-1. Commit + push the branch (owner's call).
-2. Apply step 019 to every live tenant with the ledger runner (`apply` as
-   `app_migration`; no `psql`/Docker on this machine today — `brew install
-   libpq` or the Docker wrapper from the platform-ops recipe).
-3. Deploy the gateway from the branch (or after merge).
+Left, in order:
+
 4. Dry-run the new agent on notebook-1 (prompt below) and compare the
    "conversations" block with the probe: 5,028 rows, 512 inbound unreferenced,
    own person 231. Only then `deploy.sh` 1.25.0 (bump `installer/release.json`
@@ -274,8 +279,10 @@ Dry-run a NEW agent build without installing it. Do not touch the installed
 (`--dry-run` extracts and prints; it makes no network writes).
 
 1. In the `sync-agent` folder create `dryrun/` and download the candidate into
-   it: `<AGENT_PY_URL>` → `dryrun/agent.py`. Verify its SHA-256 equals
-   `<AGENT_PY_SHA256>`; stop if it does not.
+   it: `https://raw.githubusercontent.com/CipherCross/cipher-linkedin-dashboard/7ce659e/sync-agent/agent.py`
+   → `dryrun/agent.py`. Verify its SHA-256 equals
+   `a39593098b86bc9e202fae2ddec65f423ebfba54bfd3387b61631758e03f7c48`
+   (259,305 bytes); stop if it does not.
 2. Copy the installed `config.yaml` next to it (read-only use; do not edit).
 3. Run `..\.venv\Scripts\python.exe agent.py sync --dry-run` from `dryrun/`
    and capture the full output to `dryrun/dry-run.txt`.
@@ -424,36 +431,38 @@ Two facts that change the design:
 
 (Probe #3 ran 2026-09-14; its results are the Signatures table above.)
 
-#### Probe #4 — design step 0, read-only (paste into notebook-1's Claude Code)
+#### Probe #4 results (2026-09-14) — the envelope shapes Phase 2 code uses
 
-═══════════════════════════════════════════════════════════════════════════════
+- Every people saga builds its argument with `Ps(payload)`:
+  `{ request: { liAccount, action, actionCollectionType, campaign,
+  campaignCollectionType, …text filters… }, type: 'people', filter, exclude?,
+  sort }`. The `filter` key is overloaded: the selection `['pick', [personIds]]`
+  spreads to `filter: [ids]`; `['exclude', [ids]]` to `exclude: [ids]`; no
+  selection = "everyone matching request". `ActionSubListType`: Target 0,
+  Queued 1, Processed 2, Successful 3, Failed 4, Excluded 5, Skipped 6,
+  Replied 7, Messaged 8, PendingReview 9.
+- `people.actions.retryPeople(actionId, { request: { liAccount, action:
+  undefined, actionCollectionType: 2 /* Processed */ }, type: 'people',
+  filter: [personIds] })` re-queues specific processed people of one action.
+- `actions.removeFromList(envelope)` with `request.action = <id>` and
+  `actionCollectionType` set removes people from an action list (any sub-list);
+  `campaigns.removeFromCampaignList(envelope, returnExcludedBackToQueue)` accepts
+  list types exclude/target/queue/processing/failed.
+- `working_week_day`: **0 = Sunday** (JS `Date.getDay()`); the wizard's default
+  schedule is 7 × `{day_and_night: 1, 0..1439}`.
+- Archived campaign 4 ("Messages and profiles for analysis") already holds a
+  `ScrapeMessagingHistory` action (id 75, config 350, `{}` settings, cooldown 60 s,
+  10 per iteration, `override_platform = linkedin`) with 235 processed people —
+  proof the action runs on this account. The tracker is still created fresh;
+  campaign 4 stays archived and excluded.
+- `action_target_people.state` uses the sub-list numbering: 1 Queued,
+  2 Processed; the −1 rows are a sentinel not in the enum (removed/invalidated).
 
-READ-ONLY, fourth round, same rules: work only on the temp copy of `app.asar`
-you extracted last time (re-extract it if the folder is gone), open `lh.db`
-only `mode=ro`, call no LH2 method. Report as `conversation-probe-4.md` in
-`sync-agent` and print it in full.
+Decision for the enqueue primitive: **`retryPeople` with a `['pick', ids]`
+selection** (one call per batch, state 2 → 1, no list surgery), and
+`importPeopleFromUrls` only for people never in the tracker. `removeFromList` is
+not needed.
 
-1. In the renderer bundle (`app.*.js`), find the two helper functions the sagas
-   call as `(0,L.Ps)(payload)` and `(0,L.NA)(selection)` (the minified names may
-   differ — locate them from the "Retry action people or organizations" saga
-   and follow the import). Print each helper's full source and the shape of the
-   object it returns, with an example built from a payload that selects a fixed
-   list of person ids for one action (which keys carry the ids? `selectedIds`?
-   `ids`? `filter.person.ids`? how is "all selected" expressed?).
-2. Call sites and argument shapes of `campaigns.removeFromCampaignList` and
-   `actions.removeFromList` (`callWrite` dispatcher cases plus the saga that
-   builds their payload). Which list types does the campaign-level remove
-   accept (queue / processed / replied / …)?
-3. Which weekday index `working_intervals.working_week_day` uses: pick a
-   campaign whose LH2 UI shows Mon–Fri hours (ask the operator which one) and
-   print its rows; state whether 0 is Sunday or Monday.
-4. `action_configs` for the archived campaign 4's `ScrapeMessagingHistory`
-   action: `actionSettings`, `coolDown`, `maxActionResultsPerIteration`, and the
-   `working_intervals` rows of that action, as the wizard wrote them.
-5. Row counts today of `action_target_people` grouped by `state` for campaign 4,
-   so the pilot has a before-picture.
-
-═══════════════════════════════════════════════════════════════════════════════
 
 ### Phase 3 — UI/manual import
 - Conversation drawer shows source per message (`sync`/`manual`) and platform;
