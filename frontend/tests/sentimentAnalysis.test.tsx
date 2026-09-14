@@ -30,6 +30,26 @@ describe('Sentiment Analysis UI contract', () => {
     expect(query.get('from')).toBe('2026-09-01')
   })
 
+  it('keeps the combined negative and objection drill-down as a typed union', () => {
+    const href = buildRepliesDrilldownHref({ from: '2026-09-01', to: '2026-09-30', account: null, campaign: null, owner: null }, { numerator: 2, denominator: 5, rate: 0.4, drilldown: { kind: 'sentiment', value: 'business_rate' } }, 'business_rate')
+    expect(href).not.toBeNull()
+    const query = new URLSearchParams(href!.split('?')[1])
+    expect(query.get('metric_scope')).toBe('sentiment:business_rate')
+    expect(query.get('sentiment')).toBeNull()
+  })
+
+  it('preserves a zero denominator as missing assessment in comparison rows', () => {
+    const parsed = parseAnalytics({ comparison: [
+      { kind: 'account', id: 'a', volume: 10, coverage: { numerator: 0, denominator: 10, rate: 0 }, neg_objection: { numerator: 0, denominator: 0, rate: null } },
+      { kind: 'account', id: 'b', volume: 10, coverage: { numerator: 5, denominator: 10, rate: 0.5 }, neg_objection: { numerator: 0, denominator: 5, rate: 0 } },
+    ] })
+    expect(parsed.comparison[0].rate).toBeNull()
+    expect(parsed.comparison[1].rate).toBe(0)
+    render(<BrowserRouter><ComparisonTable rows={parsed.comparison} labelFor={(row) => row.id} linkFor={() => null} /></BrowserRouter>)
+    expect(screen.getByText('Нет оценки')).toBeTruthy()
+    expect(screen.getAllByText('0.0%').length).toBeGreaterThan(0)
+  })
+
   it('uses only supported metric scopes for comparison and latest/only-auto links', () => {
     const comparison = buildRepliesDrilldownHref({ from: '2026-09-01', to: '2026-09-30', account: null, campaign: null, owner: null }, { numerator: 4, denominator: 8, rate: 0.5, drilldown: { kind: 'coverage', value: 'account' } }, 'account:notebook-1')
     expect(comparison).not.toBeNull()

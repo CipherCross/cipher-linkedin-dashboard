@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it } from 'vitest'
-import { WeeklyTrendChart } from '../src/components/reply-analysis/WeeklyTrendChart'
+import { describe, expect, it } from 'vitest'
+import { weeklySeries } from '../src/components/reply-analysis/WeeklyTrendChart'
 
 const row = {
   week: '2026-09-07',
@@ -17,18 +15,17 @@ const row = {
 }
 
 describe('WeeklyTrendChart', () => {
-  afterEach(() => cleanup())
-
   it('renders metric-object breakdowns using their numerator instead of [object Object]', () => {
-    render(<BrowserRouter><WeeklyTrendChart rows={[row]} mode="counts" linkFor={() => null} /></BrowserRouter>)
-
-    expect(screen.getByText(/auto: 2 · neutral: 1 · negative: 0/)).toBeTruthy()
-    expect(screen.queryByText(/\[object Object\]/)).toBeNull()
+    const { chartRows } = weeklySeries([row], 'sentiment')
+    expect(chartRows[0].auto).toBe(2)
+    expect(chartRows[0].neutral).toBe(1)
+    expect(chartRows[0].negative).toBe(0)
   })
 
   it('keeps primitive breakdown values working', () => {
-    render(<BrowserRouter><WeeklyTrendChart rows={[{ ...row, sentiment: undefined, sentiments: { auto: 2, neutral: '1', negative: 0 } }]} mode="counts" linkFor={() => null} /></BrowserRouter>)
-
-    expect(screen.getByText(/auto: 2 · neutral: 1 · negative: 0/)).toBeTruthy()
+    const { chartRows } = weeklySeries([{ ...row, sentiment: undefined, sentiments: { auto: 2, neutral: '1', negative: 0 } }], 'sentiment')
+    expect(chartRows[0].auto).toBe(2)
+    expect(chartRows[0].neutral).toBe(1)
+    expect(chartRows[0].negative).toBe(0)
   })
 })

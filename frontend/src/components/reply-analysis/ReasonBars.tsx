@@ -5,12 +5,14 @@ export function ReasonBars({
   rows,
   labels,
   linkFor,
+  showZero = false,
 }: {
   rows: Readonly<Record<string, AnalyticsMetric>>
   labels: Record<string, string>
   linkFor: (metric: AnalyticsMetric, key: string) => string | null
+  showZero?: boolean
 }) {
-  const entries = Object.entries(rows).sort(([, a], [, b]) => b.numerator - a.numerator)
+  const entries = Object.entries(rows).filter(([, value]) => showZero || value.numerator > 0).sort(([, a], [, b]) => b.numerator - a.numerator)
   const max = Math.max(1, ...entries.map(([, metric]) => metric.numerator))
   return (
     <div className="sa-reason-list" role="list" aria-label="Причины отказа и возражений">

@@ -230,6 +230,8 @@ describe('manual reply-review Neon operations', () => {
     expect(statement.text).toContain('weekly_classified')
     expect(statement.text).toContain('weekly_manual_negative')
     expect(statement.text).toContain('comparison_reasons')
+    expect(statement.text).toContain('campaign_latest')
+    expect(statement.text).toContain('c.manual_eligible')
     expect(statement.text).toContain('JOIN workflow_cohort wc')
     expect(statement.text).toContain('weekly_rows')
     expect(statement.text).toContain('legacy_ai')

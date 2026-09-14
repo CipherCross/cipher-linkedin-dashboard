@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertCircle, BarChart3, Clock3, Filter, RefreshCw, TrendingUp } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { authFetch } from '../lib/api'
 import { useData } from '../lib/DataContext'
 import { instanceName } from '../lib/leads'
@@ -10,7 +10,7 @@ import { ComparisonTable, type ComparisonRow } from '../components/reply-analysi
 import { MetricCard, type AnalyticsMetric } from '../components/reply-analysis/MetricCard'
 import { ReasonBars } from '../components/reply-analysis/ReasonBars'
 import { DistributionChart } from '../components/reply-analysis/SentimentDistributionChart'
-import { WeeklyTrendChart, type WeeklyTrendRow } from '../components/reply-analysis/WeeklyTrendChart'
+import { WeeklyTrendChart, type WeeklyTrendMode, type WeeklyTrendRow } from '../components/reply-analysis/WeeklyTrendChart'
 import { WorkflowBuckets } from '../components/reply-analysis/WorkflowBuckets'
 import './sentiment-analysis.css'
 
@@ -87,6 +87,7 @@ export function buildRepliesDrilldownHref(filters: SentimentAnalyticsFilters, me
   // using the analytics response's sentiment label would also add an invalid
   // `rr.sentiment = latest_unreviewed` predicate before that branch runs.
   const kind = rawKind === 'sentiment' && (value === 'latest_unreviewed' || value === 'only_auto') ? 'coverage' : rawKind
+  if (!['coverage', 'sentiment', 'reason', 'workflow', 'account', 'campaign'].includes(kind)) return null
   // Replies is a conversation list, so only server-declared scopes that its
   // inbox SQL can represent exactly may be links. Message-level coverage and
   // weekly-message metrics remain visibly non-clickable; the server exposes
@@ -95,7 +96,9 @@ export function buildRepliesDrilldownHref(filters: SentimentAnalyticsFilters, me
   if (kind === 'account') params.set('account', value)
   if (kind === 'campaign') params.set('campaign', value === '__none__' ? '' : value)
   if (!(kind === 'coverage' && (value === 'dialogues' || value === 'weekly_volume'))) params.set('metric_scope', `${kind}:${value}`)
-  if (kind === 'sentiment' && value !== 'latest_unreviewed' && value !== 'only_auto') params.set('sentiment', value)
+  // The combined business rate is a typed union predicate in the inbox SQL,
+  // not a member of the sentiment enum.
+  if (kind === 'sentiment' && value !== 'latest_unreviewed' && value !== 'only_auto' && value !== 'business_rate' && value !== 'negative_objection') params.set('sentiment', value)
   if (kind === 'reason') params.set('reason', value)
   if (kind === 'workflow' && value !== 'transfers') {
     if (value === 'needs_confirmation') params.set('unacknowledged', '1')
@@ -122,7 +125,7 @@ export function parseAnalytics(value: unknown): SentimentAnalyticsResponse {
     reasons: Object.fromEntries(Object.entries(record(row.reasons)).map(([k, v]) => [k, metric(v)])),
     weekly_trend: trends.map((v) => { const t = record(v); const coverageMetric = t.coverage && typeof t.coverage === 'object' ? metric(t.coverage) : undefined; const volumeMetric = t.volume && typeof t.volume === 'object' ? metric(t.volume) : undefined; return { ...t, week: String(t.week ?? ''), messages: number(t.messages), reviewed: number(t.reviewed ?? coverageMetric?.numerator), coverage: coverageMetric ? coverageMetric.rate : t.coverage == null ? null : Number(t.coverage), metric: t.metric ? metric(t.metric) : volumeMetric } }),
     workflow: Object.fromEntries(Object.entries(record(row.workflow)).map(([k, v]) => [k, metric(v)])),
-    comparison: (Array.isArray(row.comparison) ? row.comparison : []).map((v) => { const c = record(v); const coverageMetric = c.coverage && typeof c.coverage === 'object' ? metric(c.coverage) : undefined; const negativeMetric = c.neg_objection && typeof c.neg_objection === 'object' ? metric(c.neg_objection) : undefined; const topReasons = (Array.isArray(c.top_reasons) ? c.top_reasons : c.top_reason ? [c.top_reason] : []).map((reason) => { const r = record(reason); const id = String(r.id ?? r.reason_id ?? ''); return { id, label: r.label == null ? (REASON_LABELS as Record<string, string>)[id] ?? null : String(r.label), numerator: number(r.numerator ?? r.count) } }) as ComparisonTopReason[]; return { kind: c.kind === 'campaign' ? 'campaign' : 'account', id: String(c.id ?? ''), name: c.name == null ? null : String(c.name), numerator: number(c.volume ?? c.numerator), denominator: number(c.volume ?? c.denominator), rate: negativeMetric?.rate ?? (c.negative_objection_rate == null ? null : Number(c.negative_objection_rate)), coverage: coverageMetric?.rate ?? (c.coverage == null ? null : Number(c.coverage)), top_reasons: topReasons, drilldown: c.drilldown as AnalyticsMetric['drilldown'] } }),
+    comparison: (Array.isArray(row.comparison) ? row.comparison : []).map((v) => { const c = record(v); const coverageMetric = c.coverage && typeof c.coverage === 'object' ? metric(c.coverage) : undefined; const negativeMetric = c.neg_objection && typeof c.neg_objection === 'object' ? metric(c.neg_objection) : undefined; const topReasons = (Array.isArray(c.top_reasons) ? c.top_reasons : c.top_reason ? [c.top_reason] : []).map((reason) => { const r = record(reason); const id = String(r.id ?? r.reason_id ?? ''); return { id, label: r.label == null ? (REASON_LABELS as Record<string, string>)[id] ?? null : String(r.label), numerator: number(r.numerator ?? r.count) } }) as ComparisonTopReason[]; return { kind: c.kind === 'campaign' ? 'campaign' : 'account', id: String(c.id ?? ''), name: c.name == null ? null : String(c.name), numerator: number(c.volume ?? c.numerator), denominator: number(c.volume ?? c.denominator), rate: negativeMetric ? negativeMetric.rate : (c.negative_objection_rate == null ? null : Number(c.negative_objection_rate)), negative: negativeMetric, coverage: coverageMetric?.rate ?? (c.coverage == null ? null : Number(c.coverage)), top_reasons: topReasons, drilldown: c.drilldown as AnalyticsMetric['drilldown'] } }),
     dataset_at: typeof row.dataset_at === 'string' ? row.dataset_at : new Date(0).toISOString(),
   }
 }
@@ -146,7 +149,7 @@ function Section({ title, subtitle, icon, children }: { title: string; subtitle?
   return <section className="card sa-section"><div className="sa-section-head"><div><h2>{icon}{title}</h2>{subtitle && <p className="muted small">{subtitle}</p>}</div></div>{children}</section>
 }
 
-export function SentimentAnalysis() {
+export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof readAnalytics } = {}) {
   const { data } = useData()
   const [params, setParams] = useSearchParams()
   const defaults = useMemo(() => defaultAnalyticsBounds(), [])
@@ -155,40 +158,87 @@ export function SentimentAnalysis() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stale, setStale] = useState(false)
-  const [trendMode, setTrendMode] = useState<'counts' | 'rates'>('counts')
+  const [trendMode, setTrendMode] = useState<WeeklyTrendMode>('sentiment')
+  const [comparisonKind, setComparisonKind] = useState<'account' | 'campaign'>('account')
+  const [moreFilters, setMoreFilters] = useState(false)
+  const [showAllReasons, setShowAllReasons] = useState(false)
+  const [resultKey, setResultKey] = useState('')
   const [refresh, setRefresh] = useState(0)
   const filterKey = JSON.stringify(filters)
 
   useEffect(() => {
     const controller = new AbortController(); let cancelled = false
     setLoading(true); setError(null)
-    readAnalytics(filters, controller.signal).then((value) => { if (!cancelled) { setResult(value); setStale(false); setLoading(false) } }).catch((reason: unknown) => { if (cancelled || (reason instanceof DOMException && reason.name === 'AbortError')) return; if (!cancelled) { setError(reason instanceof Error ? reason.message : 'Неизвестная ошибка'); setStale(result !== null); setLoading(false) } })
+    reader(filters, controller.signal).then((value) => { if (!cancelled) { setResult(value); setResultKey(filterKey); setStale(false); setLoading(false) } }).catch((reason: unknown) => { if (cancelled || (reason instanceof DOMException && reason.name === 'AbortError')) return; if (!cancelled) { setError(reason instanceof Error ? reason.message : 'Неизвестная ошибка'); setStale(result !== null && resultKey === filterKey); setLoading(false) } })
     return () => { cancelled = true; controller.abort() }
     // `result` is intentionally a stale fallback, not a request dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, refresh])
+  }, [filterKey, refresh, reader])
 
   const setFilter = (key: keyof SentimentAnalyticsFilters, value: string) => { const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key); setParams(next, { replace: true }) }
+  const setBounds = (from: string, to: string) => { const next = new URLSearchParams(params); next.set('from', from); next.set('to', to); setParams(next, { replace: true }) }
   const drill = (m: AnalyticsMetric, key: string) => buildRepliesDrilldownHref(filters, m, key)
   const campaignRows = data?.campaigns ?? []
   const owners = data?.teamMembers.filter((member) => member.active) ?? []
   const accountLabel = (id: string) => instanceName(data?.instances.find((item) => item.id === id), id)
-  const comparison = result?.comparison ?? []
+  const visibleResult = resultKey === filterKey ? result : null
+  const comparison = visibleResult?.comparison ?? []
   const labelForComparison = (row: ComparisonRow) => row.name || (row.kind === 'account' ? accountLabel(row.id) : row.id === '__none__' ? 'Без кампании' : campaignRows.find((c) => c.campaign_id === row.id)?.campaign_name ?? row.id)
 
+  const today = new Date()
+  const seven = addUtcDays(defaults.to, -6)
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)).toISOString().slice(0, 10)
+  const activePreset = filters.to === defaults.to && filters.from === seven ? '7'
+    : filters.to === defaults.to && filters.from === defaults.from ? '30'
+    : filters.to === defaults.to && filters.from === monthStart ? 'month' : 'custom'
+  const dialogues = visibleResult?.coverage.dialogues
+  const reviewed = visibleResult?.coverage.messages
+  const pending = visibleResult?.coverage.unreviewed_dialogues
+  const needsStep = visibleResult?.workflow.needs_confirmation
+  const hasDialogues = (dialogues?.numerator ?? 0) > 0
+  const hasReviews = (reviewed?.numerator ?? 0) > 0
+  const businessRate = visibleResult?.sentiment.business_rate
+  const reasonsPresent = Object.values(visibleResult?.reasons ?? {}).some((value) => value.numerator > 0)
+  const duplicateAccountNames = (data?.instances ?? []).reduce((map, item) => {
+    const name = instanceName(item)
+    map.set(name, (map.get(name) ?? 0) + 1)
+    return map
+  }, new Map<string, number>())
+  const displayAccount = (id: string) => {
+    const item = data?.instances.find((candidate) => candidate.id === id)
+    const name = instanceName(item, id)
+    return duplicateAccountNames.get(name)! > 1 ? name + ' · ' + (item?.label || id) : name
+  }
+  const reasonRows = visibleResult?.reasons ?? {}
+  const pendingHref = pending ? drill(pending, 'unreviewed_dialogues') : null
   return <div className="sa-page">
-    <header className="sa-header"><div><div className="eyebrow">REPLIES / REPORTING</div><h1>Sentiment Analysis</h1><p className="muted">Ручная разметка входящих ответов, причины и текущее состояние работы.</p></div><button className="btn ghost" onClick={() => setRefresh((value) => value + 1)} disabled={loading} aria-label="Обновить аналитику"><RefreshCw size={15} aria-hidden="true" /> Обновить</button></header>
-    <div className="card sa-filters" aria-label="Базовые фильтры аналитики"><div className="sa-filter-title"><Filter size={15} aria-hidden="true" /> Период ответа · UTC</div><label>С <input type="date" value={dateInputValue(filters.from)} onChange={(event) => setFilter('from', event.target.value)} /></label><label>По <input type="date" value={dateInputValue(filters.to)} onChange={(event) => setFilter('to', event.target.value)} /></label><label>Аккаунт<select value={filters.account ?? ''} onChange={(event) => setFilter('account', event.target.value)}><option value="">Все аккаунты</option>{(data?.instances ?? []).map((item) => <option value={item.id} key={item.id}>{instanceName(item)}</option>)}</select></label><label>Кампания<select value={filters.campaign ?? ''} onChange={(event) => setFilter('campaign', event.target.value)}><option value="">Все кампании</option>{campaignRows.map((campaign) => <option value={campaign.campaign_id ?? ''} key={campaign.campaign_id}>{campaign.campaign_name}</option>)}</select></label><label>Ответственный за диалог<select value={filters.owner ?? ''} onChange={(event) => setFilter('owner', event.target.value)}><option value="">Все ответственные</option>{owners.map((owner) => <option value={owner.id} key={owner.id}>{owner.name}</option>)}</select></label></div>
-    {loading && !result && <div className="card sa-state" role="status"><span className="sa-spinner" aria-hidden="true" /> Загружаем агрегаты сервера…</div>}
-    {error && <div className="banner warn sa-alert" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{error}{stale && ' Показываем последние успешно загруженные данные.'}</span><button className="btn ghost" onClick={() => setRefresh((value) => value + 1)}>Повторить</button></div>}
-    {!loading && !error && result && (result.coverage.dialogues?.denominator ?? result.coverage.inbound_dialogues?.denominator ?? 0) === 0 && <div className="card sa-state"><BarChart3 size={22} aria-hidden="true" /><strong>Нет входящих ответов в выбранном периоде</strong><span className="muted">Измените период или фильтры, чтобы увидеть аналитику.</span></div>}
-    {result && (result.coverage.dialogues?.denominator ?? result.coverage.inbound_dialogues?.denominator ?? 0) > 0 && <>
-      <div className="sa-meta muted small">Срез данных: {new Date(result.dataset_at).toLocaleString('ru-RU')} {stale && <span className="sa-stale">· данные могут быть устаревшими</span>}</div>
-      <div className="sa-section-grid"><Section title="Покрытие ручной разметкой" subtitle="Знаменатели переданы сервером; legacy AI не считается ручным решением." icon={<BarChart3 size={17} aria-hidden="true" />}><div className="sa-metric-grid">{[['dialogues', 'Диалоги с inbound'], ['full_dialogues', 'Полностью разобраны'], ['unreviewed_dialogues', 'Есть неразобранные'], ['messages', 'Разобранные сообщения'], ['legacy_ai', 'Legacy AI'], ['unreviewed_intent', 'Intent не оценён'], ['business_rate', 'Negative / objection']].map(([key, label]) => { const current = result.coverage[key] ?? result.sentiment[key]; return current ? <MetricCard key={key} label={label} metric={current} href={drill(current, key)} /> : null })}</div></Section>
-        <Section title="Sentiment" subtitle="Последний inbound в периоде; неразобранные и только auto показаны отдельно."><DistributionChart rows={Object.fromEntries(SENTIMENT_KEYS.map((key) => [key, result.sentiment[key] ?? { numerator: 0, denominator: result.sentiment.positive?.denominator ?? 0, rate: null }]))} labels={SENTIMENT_DISPLAY} linkFor={drill} /><div className="sa-formula muted small">Business rate negative / objection считается только по последней ручной non-auto разметке: {result.sentiment.business_rate ? `${result.sentiment.business_rate.numerator} / ${result.sentiment.business_rate.denominator} · ${result.sentiment.business_rate.rate == null ? '—' : `${(result.sentiment.business_rate.rate * 100).toFixed(1)}%`}` : 'серверный metric недоступен в этом срезе'}. При нулевом знаменателе отображается «—».</div></Section></div>
-      <div className="sa-section-grid"><Section title="Причины отказа и возражений" subtitle="N диалогов · X%. Каждый диалог считается один раз по причине."><ReasonBars rows={result.reasons} labels={REASON_DISPLAY} linkFor={drill} /><p className="sa-multi-note muted small">Причины multi-select равноправны: доли могут в сумме превышать 100%. Фильтр причины ищет хотя бы одно сообщение за период.</p></Section><Section title="Дальнейшая работа" subtitle="Текущее состояние выбранной когорты, а не состояние на историческую дату." icon={<Clock3 size={17} aria-hidden="true" />}><WorkflowBuckets rows={result.workflow} linkFor={drill} /></Section></div>
-      <Section title="Динамика по неделям" subtitle="Неделя начинается в понедельник UTC; один диалог может встречаться в нескольких неделях." icon={<TrendingUp size={17} aria-hidden="true" />}><div className="sa-toggle" role="group" aria-label="Режим динамики"><button className={trendMode === 'counts' ? 'active' : ''} onClick={() => setTrendMode('counts')}>Абсолютные числа</button><button className={trendMode === 'rates' ? 'active' : ''} onClick={() => setTrendMode('rates')}>Доли и покрытие</button></div><WeeklyTrendChart rows={result.weekly_trend} mode={trendMode} linkFor={(row) => buildRepliesDrilldownHref({ ...filters, from: row.week, to: addUtcDays(row.week, 6) }, row.metric ?? { numerator: row.messages, denominator: row.messages, rate: row.coverage }, 'week')} /></Section>
-      <Section title="Сравнение аккаунтов и кампаний" subtitle="Объём ответивших и покрытие; это не рейтинг SDR по негативу."><ComparisonTable rows={comparison} labelFor={labelForComparison} linkFor={(row) => buildRepliesDrilldownHref(filters, row, `${row.kind}:${row.id}`)} /></Section>
+    <header className="sa-header"><div><h1>Sentiment Analysis</h1><p className="muted">Ручная разметка ответов, причины и текущая работа с диалогами.</p></div><button className="btn ghost" onClick={() => setRefresh((value) => value + 1)} disabled={loading} aria-label="Обновить аналитику"><RefreshCw size={15} aria-hidden="true" /> Обновить</button></header>
+    <div className="card sa-filters" aria-label="Фильтры аналитики">
+      <div className="sa-presets" role="group" aria-label="Период ответа">{[['7', '7 дней'], ['30', '30 дней'], ['month', 'Этот месяц'], ['custom', 'Свой период']].map(([key, label]) => <button key={key} type="button" className={activePreset === key ? 'active' : ''} onClick={() => { if (key === '7') setBounds(seven, defaults.to); if (key === '30') setBounds(defaults.from, defaults.to); if (key === 'month') setBounds(monthStart, defaults.to); if (key === 'custom') setMoreFilters(true) }}>{label}</button>)}</div>
+      <label>Аккаунт<select value={filters.account ?? ''} onChange={(event) => { const next = new URLSearchParams(params); if (event.target.value) next.set('account', event.target.value); else next.delete('account'); next.delete('campaign'); setParams(next, { replace: true }) }}><option value="">Все аккаунты</option>{(data?.instances ?? []).map((item) => <option value={item.id} key={item.id}>{displayAccount(item.id)}</option>)}</select></label>
+      <button className="btn ghost sa-more-button" type="button" aria-expanded={moreFilters} onClick={() => setMoreFilters((value) => !value)}><Filter size={15} /> Ещё фильтры</button>
+      {moreFilters && <div className="sa-more-filters"><label>С · UTC<input type="date" value={dateInputValue(filters.from)} onChange={(event) => setFilter('from', event.target.value)} /></label><label>По · UTC<input type="date" value={dateInputValue(filters.to)} onChange={(event) => setFilter('to', event.target.value)} /></label><label>Кампания<select value={filters.campaign ?? ''} onChange={(event) => setFilter('campaign', event.target.value)}><option value="">Все кампании</option>{campaignRows.filter((campaign) => !filters.account || campaign.instance_id === filters.account).map((campaign) => <option value={campaign.campaign_id ?? ''} key={campaign.campaign_id}>{campaign.campaign_name} · {displayAccount(campaign.instance_id)}</option>)}</select></label><label>Ответственный<select value={filters.owner ?? ''} onChange={(event) => setFilter('owner', event.target.value)}><option value="">Все ответственные</option>{owners.map((owner) => <option value={owner.id} key={owner.id}>{owner.name}{owners.filter((item) => item.name === owner.name).length > 1 && owner.email ? ' · ' + owner.email : ''}</option>)}</select></label></div>}
+    </div>
+    {loading && !visibleResult && <div className="card sa-state" role="status"><span className="sa-spinner" aria-hidden="true" /> Загружаем аналитику…</div>}
+    {error && <div className="banner warn sa-alert" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{error}{stale && ' Показываем последние данные для этого периода.'}</span><button className="btn ghost" onClick={() => setRefresh((value) => value + 1)}>Повторить</button></div>}
+    {visibleResult && !loading && <>
+      <div className="sa-meta muted small">Разобрано {reviewed?.numerator ?? 0} из {reviewed?.denominator ?? 0} ответов · срез {new Date(visibleResult.dataset_at).toLocaleString('ru-RU')}{stale && ' · данные могут быть устаревшими'}</div>
+      <div className="sa-kpi-grid">
+        <MetricCard label="Диалоги с ответом" metric={dialogues} href={dialogues ? drill(dialogues, 'dialogues') : null} hint="диалогов за период" showRate={false} />
+        <MetricCard label="Разобрано ответов" metric={reviewed} href={null} hint="сообщений, вручную" />
+        <MetricCard label="Требуют разбора" metric={pending} href={pendingHref} hint="диалогов с неразобранным ответом" />
+        <MetricCard label="Требуют следующего шага" metric={needsStep} href={needsStep ? drill(needsStep, 'needs_confirmation') : null} hint="диалогов" />
+      </div>
+      <details className="sa-coverage-note"><summary>Что входит в оценку</summary><p>Разметка выполняется вручную. Старая AI-разметка требует ручной проверки и не считается разобранным ответом. Коммерческий интерес оценивается отдельно.</p><p>Аналитический период считается по UTC, напоминания по времени Мадрида.</p></details>
+      {!hasDialogues ? <div className="card sa-state"><BarChart3 size={22} aria-hidden="true" /><strong>Нет входящих ответов в выбранном периоде</strong><span className="muted">Измените период или фильтры.</span></div>
+        : !hasReviews ? <div className="card sa-state"><BarChart3 size={22} aria-hidden="true" /><strong>Ответы ещё не размечены</strong><span className="muted">Разберите ответы, чтобы увидеть причины и распределение.</span>{pendingHref && <Link className="primary sa-cta" to={pendingHref}>Перейти к разбору</Link>}</div>
+          : <>
+            <div className="sa-section-grid"><Section title="Типы ответов" subtitle="Последний входящий ответ каждого диалога в выбранном периоде."><DistributionChart rows={Object.fromEntries(SENTIMENT_KEYS.map((key) => [key, visibleResult.sentiment[key] ?? { numerator: 0, denominator: visibleResult.sentiment.positive?.denominator ?? 0, rate: null }]))} labels={SENTIMENT_DISPLAY} linkFor={drill} /><div className="sa-formula muted small">Отказы и возражения среди вручную разобранных содержательных ответов: {businessRate ? businessRate.numerator + ' / ' + businessRate.denominator + ' · ' + (businessRate.rate == null ? 'Пока нет оценки' : (businessRate.rate * 100).toFixed(1) + '%') : 'Пока нет оценки'}{businessRate && businessRate.numerator > 0 && drill(businessRate, 'business_rate') && <Link to={drill(businessRate, 'business_rate')!}> Показать диалоги</Link>}</div></Section>
+              <Section title="Причины отказов и возражений" subtitle="Причины, встречавшиеся в разобранных ответах за период.">{reasonsPresent ? <><ReasonBars rows={reasonRows} labels={REASON_DISPLAY} linkFor={drill} /><button type="button" className="sa-all-reasons" onClick={() => setShowAllReasons((value) => !value)}>{showAllReasons ? 'Скрыть справочник' : 'Все причины'}</button>{showAllReasons && <ReasonBars rows={reasonRows} labels={REASON_DISPLAY} linkFor={drill} showZero />}<p className="sa-multi-note muted small">У одного диалога может быть несколько причин, поэтому сумма долей может превышать 100%.</p></> : <p className="muted">В разобранных ответах нет отказов или возражений.</p>}</Section></div>
+            <Section title="Динамика по неделям" subtitle="Неделя начинается в понедельник UTC; один диалог может встречаться в нескольких неделях." icon={<TrendingUp size={17} aria-hidden="true" />}><div className="sa-toggle" role="group" aria-label="Режим динамики">{([['sentiment', 'Типы ответов'], ['reasons', 'Причины'], ['coverage', 'Покрытие']] as const).map(([key, label]) => <button type="button" key={key} className={trendMode === key ? 'active' : ''} onClick={() => setTrendMode(key)}>{label}</button>)}</div><WeeklyTrendChart rows={visibleResult.weekly_trend} mode={trendMode} linkFor={(row) => row.metric ? buildRepliesDrilldownHref({ ...filters, from: row.week, to: addUtcDays(row.week, 6) }, row.metric, 'week') : null} /></Section>
+            <Section title="Сравнение" subtitle="Объём ответивших и покрытие; доля отказов среди оценённых диалогов."><div className="sa-toggle" role="group" aria-label="Разрез сравнения"><button type="button" className={comparisonKind === 'account' ? 'active' : ''} onClick={() => setComparisonKind('account')}>Аккаунты</button><button type="button" className={comparisonKind === 'campaign' ? 'active' : ''} onClick={() => setComparisonKind('campaign')}>Кампании</button></div><ComparisonTable rows={comparison.filter((row) => row.kind === comparisonKind).sort((a, b) => b.denominator - a.denominator)} labelFor={(row) => row.kind === 'account' ? displayAccount(row.id) : labelForComparison(row)} linkFor={(row) => buildRepliesDrilldownHref(filters, row, row.kind + ':' + row.id)} /></Section>
+          </>}
+      <Section title="Дальнейшая работа" subtitle="Текущее состояние диалогов выбранной когорты, а не состояние на историческую дату." icon={<Clock3 size={17} aria-hidden="true" />}><WorkflowBuckets rows={visibleResult.workflow} linkFor={drill} showZero={false} /></Section>
     </>}
   </div>
 }

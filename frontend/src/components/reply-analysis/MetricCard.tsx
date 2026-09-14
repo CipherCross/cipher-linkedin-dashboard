@@ -19,16 +19,18 @@ export function MetricCard({
   href,
   hint,
   icon,
+  showRate = true,
 }: {
   label: string
   metric?: AnalyticsMetric
   href: string | null
   hint?: ReactNode
   icon?: ReactNode
+  showRate?: boolean
 }) {
   const value = metric?.numerator ?? 0
-  const content = <><div className="sa-metric-label">{icon}{label}</div><div className="sa-metric-value">{value.toLocaleString('ru-RU')}</div><div className="sa-metric-rate">{metricRate(metric)} <span>· {metric?.denominator?.toLocaleString('ru-RU') ?? 0} всего</span></div>{hint && <div className="sa-metric-hint">{hint}</div>}</>
-  if (!href) return <div className="sa-metric-card sa-disabled-drilldown" aria-label={`${label}: ${value} из ${metric?.denominator ?? 0}`}>{content}</div>
+  const content = <><div className="sa-metric-label">{icon}{label}</div><div className="sa-metric-value">{value.toLocaleString('ru-RU')}</div>{showRate && <div className="sa-metric-rate">{metricRate(metric)} <span>· {metric?.denominator?.toLocaleString('ru-RU') ?? 0} всего</span></div>}{hint && <div className="sa-metric-hint">{hint}</div>}</>
+  if (!href || value === 0) return <div className="sa-metric-card sa-disabled-drilldown" aria-label={`${label}: ${value} из ${metric?.denominator ?? 0}`}>{content}</div>
   return (
     <Link className="sa-metric-card" to={href} aria-label={`${label}: ${value} из ${metric?.denominator ?? 0}`}>
       {content}

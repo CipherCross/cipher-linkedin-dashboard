@@ -703,6 +703,11 @@ export const analyticsOperation: NeonQueryOperation<ReplyAnalyticsResponse, Repl
                bool_and(complete) AS complete,
                bool_or(manual_non_auto AND sentiment IN ('negative','objection')) AS neg_objection
           FROM inbound GROUP BY coalesce(campaign_id,'__none__'),instance_id,profile_url
+      ), campaign_latest AS (
+        SELECT DISTINCT ON (coalesce(campaign_id,'__none__'),instance_id,profile_url)
+               coalesce(campaign_id,'__none__') AS campaign_id, instance_id, profile_url, manual_non_auto, sentiment
+          FROM inbound
+         ORDER BY coalesce(campaign_id,'__none__'),instance_id,profile_url,sent_at DESC,id DESC
       ), comparison_reasons AS (
         SELECT 'account'::text AS kind, i.instance_id AS id, r.reason_id,
                count(DISTINCT i.instance_id||chr(31)||i.profile_url)::int AS n
@@ -718,12 +723,14 @@ export const analyticsOperation: NeonQueryOperation<ReplyAnalyticsResponse, Repl
       ), comparison AS (
         SELECT 'account'::text AS kind, d.instance_id AS id, count(*)::int AS volume,
                count(*) FILTER (WHERE d.complete_message_count=d.message_count)::int AS covered,
-               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM eligible_latest l WHERE l.instance_id=d.instance_id AND l.profile_url=d.profile_url AND l.manual_non_auto AND l.sentiment IN ('negative','objection')))::int AS neg_objection
+               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM eligible_latest l WHERE l.instance_id=d.instance_id AND l.profile_url=d.profile_url AND l.sentiment IN ('negative','objection')))::int AS neg_objection,
+               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM eligible_latest l WHERE l.instance_id=d.instance_id AND l.profile_url=d.profile_url))::int AS manual_eligible
           FROM dialogs d GROUP BY d.instance_id
         UNION ALL
         SELECT 'campaign',c.campaign_id,count(*)::int,
                count(*) FILTER (WHERE c.complete)::int,
-               count(*) FILTER (WHERE c.neg_objection)::int
+               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM campaign_latest l WHERE l.campaign_id=c.campaign_id AND l.instance_id=c.instance_id AND l.profile_url=c.profile_url AND l.manual_non_auto AND l.sentiment IN ('negative','objection')))::int,
+               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM campaign_latest l WHERE l.campaign_id=c.campaign_id AND l.instance_id=c.instance_id AND l.profile_url=c.profile_url AND l.manual_non_auto))::int
           FROM campaign_dialogues c GROUP BY c.campaign_id
       ), sentiment_labels AS (
         SELECT unnest(ARRAY['positive','neutral','negative','objection','referral','auto','latest_unreviewed','only_auto']) AS bucket
@@ -754,7 +761,7 @@ export const analyticsOperation: NeonQueryOperation<ReplyAnalyticsResponse, Repl
           'sentiment',(SELECT jsonb_object_agg(sl.bucket, ${metric('(SELECT count(*) FROM weekly_classified wc WHERE wc.week=w.week AND wc.bucket=sl.bucket)','(SELECT count(*) FROM weekly_classified wc WHERE wc.week=w.week)',"jsonb_build_object('kind','sentiment','value',sl.bucket)")}) FROM sentiment_labels sl),
           'reasons',(SELECT jsonb_object_agg(wrl.reason_id, CASE WHEN wrl.reason_id='missing_reason' THEN ${metric("(SELECT count(DISTINCT mi.instance_id||chr(31)||mi.profile_url) FROM weeks mi WHERE mi.week=w.week AND mi.manual_non_auto AND mi.sentiment IN ('negative','objection') AND NOT EXISTS (SELECT 1 FROM public.reply_review_reasons mr WHERE mr.message_id=mi.id))",'(SELECT coalesce(n,0) FROM weekly_manual_negative wm WHERE wm.week=w.week)',"jsonb_build_object('kind','reason','value',wrl.reason_id)")} ELSE ${metric('(SELECT coalesce(n,0) FROM weekly_reasons wr WHERE wr.week=w.week AND wr.reason_id=wrl.reason_id)','(SELECT coalesce(n,0) FROM weekly_manual_negative wm WHERE wm.week=w.week)',"jsonb_build_object('kind','reason','value',wrl.reason_id)")} END) FROM (SELECT unnest(ARRAY['no_need','timing','budget','existing_solution','offer_fit','wrong_person','trust_information','do_not_contact','other','missing_reason']) AS reason_id) wrl)) ORDER BY w.week) FROM weekly_rows w), '[]'::jsonb),
         'workflow', (SELECT jsonb_object_agg(wl.bucket, ${metric('(SELECT count(*) FROM workflow_bucketed wb WHERE wb.bucket=wl.bucket)','(SELECT count(*) FROM workflow_cohort)',"jsonb_build_object('kind','workflow','value',wl.bucket)")}) FROM workflow_labels wl) || jsonb_build_object('transfers', jsonb_build_object('numerator',(SELECT n FROM transfers),'denominator',(SELECT count(*) FROM workflow_cohort),'rate',CASE WHEN (SELECT count(*) FROM workflow_cohort)=0 THEN NULL ELSE ((SELECT n FROM transfers))::numeric/(SELECT count(*) FROM workflow_cohort) END,'drilldown',jsonb_build_object('kind','workflow','value','transfers'))),
-        'comparison', coalesce((SELECT jsonb_agg(jsonb_build_object('kind',c.kind,'id',c.id,'volume',c.volume,'coverage',${metric('c.covered','c.volume',"jsonb_build_object('kind','coverage','value',c.kind)")},'neg_objection',${metric('c.neg_objection','c.volume',"jsonb_build_object('kind','sentiment','value','negative_objection')")},'top_reasons',(SELECT coalesce(jsonb_agg(jsonb_build_object('reason_id',cr.reason_id,'numerator',cr.n) ORDER BY cr.n DESC,cr.reason_id),'[]'::jsonb) FROM comparison_reasons cr WHERE cr.kind=c.kind AND cr.id=c.id AND (SELECT count(*) FROM comparison_reasons cr2 WHERE cr2.kind=cr.kind AND cr2.id=cr.id AND (cr2.n > cr.n OR (cr2.n=cr.n AND cr2.reason_id <= cr.reason_id))) <= 5)) ORDER BY c.kind,c.id) FROM comparison c),'[]'::jsonb),
+        'comparison', coalesce((SELECT jsonb_agg(jsonb_build_object('kind',c.kind,'id',c.id,'volume',c.volume,'coverage',${metric('c.covered','c.volume',"jsonb_build_object('kind','coverage','value',c.kind)")},'neg_objection',${metric('c.neg_objection','c.manual_eligible',"jsonb_build_object('kind','sentiment','value','negative_objection')")},'top_reasons',(SELECT coalesce(jsonb_agg(jsonb_build_object('reason_id',cr.reason_id,'numerator',cr.n) ORDER BY cr.n DESC,cr.reason_id),'[]'::jsonb) FROM comparison_reasons cr WHERE cr.kind=c.kind AND cr.id=c.id AND (SELECT count(*) FROM comparison_reasons cr2 WHERE cr2.kind=cr.kind AND cr2.id=cr.id AND (cr2.n > cr.n OR (cr2.n=cr.n AND cr2.reason_id <= cr.reason_id))) <= 5)) ORDER BY c.kind,c.id) FROM comparison c),'[]'::jsonb),
         'dataset_at',clock_timestamp()
       ) AS result`,
       values: [params?.from ?? '', params?.to ?? '', ...filter.values],
