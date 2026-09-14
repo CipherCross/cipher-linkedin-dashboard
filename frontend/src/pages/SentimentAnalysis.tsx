@@ -100,11 +100,8 @@ export function buildRepliesDrilldownHref(filters: SentimentAnalyticsFilters, me
   // not a member of the sentiment enum.
   if (kind === 'sentiment' && value !== 'latest_unreviewed' && value !== 'only_auto' && value !== 'business_rate' && value !== 'negative_objection') params.set('sentiment', value)
   if (kind === 'reason') params.set('reason', value)
-  if (kind === 'workflow' && value !== 'transfers') {
-    if (value === 'needs_confirmation') params.set('unacknowledged', '1')
-    else if (value !== 'overdue' && value !== 'follow_up_today') params.set('action', value)
-    if (value === 'overdue') params.set('overdue', '1')
-  }
+  // The workflow metric scope already expresses the exact SQL bucket. Extra
+  // inbox filters intersect it and can silently drop matching dialogues.
   return `/replies?${params.toString()}`
 }
 

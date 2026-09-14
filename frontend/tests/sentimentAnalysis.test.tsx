@@ -38,6 +38,19 @@ describe('Sentiment Analysis UI contract', () => {
     expect(query.get('sentiment')).toBeNull()
   })
 
+  it('uses the workflow metric predicate without intersecting it with unrelated inbox filters', () => {
+    const filters = { from: '2026-09-01', to: '2026-09-30', account: null, campaign: null, owner: null }
+    for (const value of ['needs_confirmation', 'follow_up_later', 'overdue']) {
+      const href = buildRepliesDrilldownHref(filters, { numerator: 51, denominator: 67, rate: 51 / 67, drilldown: { kind: 'workflow', value } }, value)
+      expect(href).not.toBeNull()
+      const query = new URLSearchParams(href!.split('?')[1])
+      expect(query.get('metric_scope')).toBe(`workflow:${value}`)
+      expect(query.has('unacknowledged')).toBe(false)
+      expect(query.has('action')).toBe(false)
+      expect(query.has('overdue')).toBe(false)
+    }
+  })
+
   it('preserves a zero denominator as missing assessment in comparison rows', () => {
     const parsed = parseAnalytics({ comparison: [
       { kind: 'account', id: 'a', volume: 10, coverage: { numerator: 0, denominator: 10, rate: 0 }, neg_objection: { numerator: 0, denominator: 0, rate: null } },

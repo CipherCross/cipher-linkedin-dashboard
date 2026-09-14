@@ -8,6 +8,7 @@ import { replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { ConversationActionPanel } from '../components/conversation/ConversationActionPanel'
 import { ConversationThread } from '../components/conversation/ConversationThread'
 import { ReplyReviewPanel } from '../components/conversation/ReplyReviewPanel'
+import { WORKFLOW_LABELS } from '../components/reply-analysis/WorkflowBuckets'
 import { EmptyState } from '../components/EmptyState'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { useRepliesInbox } from '../lib/useRepliesInbox'
@@ -237,7 +238,16 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     inbox.scope.unowned, inbox.scope.overdue,
   ].filter(Boolean).length
   const scopeLabel = inbox.scope.metric_scope
-    ? ({ business_rate: 'Отказы и возражения', negative_objection: 'Отказы и возражения', unreviewed_dialogues: 'Диалоги с неразобранными ответами' } as Record<string, string>)[inbox.scope.metric_scope.value]
+    ? ({
+      business_rate: 'Отказы и возражения', negative_objection: 'Отказы и возражения',
+      dialogues: 'Диалоги с ответом', full_dialogues: 'Диалоги без неразобранных ответов',
+      unreviewed_dialogues: 'Диалоги с неразобранными ответами',
+      latest_unreviewed: 'Последний ответ не разобран', only_auto: 'Только автоответы',
+      unreviewed_intent: 'Коммерческий интерес не оценён', legacy_ai: 'Старая AI-разметка',
+      missing_reason: 'Причина не указана', needs_confirmation: 'Требуют следующего шага',
+      transfers: 'Передачи (события)',
+    } as Record<string, string>)[inbox.scope.metric_scope.value]
+      || (inbox.scope.metric_scope.kind === 'workflow' ? WORKFLOW_LABELS[inbox.scope.metric_scope.value] : null)
       || (inbox.scope.metric_scope.kind === 'sentiment' ? SENTIMENT_LABELS[inbox.scope.metric_scope.value as keyof typeof SENTIMENT_LABELS] : null)
       || (inbox.scope.metric_scope.kind === 'reason' ? REASON_LABELS[inbox.scope.metric_scope.value as keyof typeof REASON_LABELS] : null)
       || 'Выбранный показатель'
