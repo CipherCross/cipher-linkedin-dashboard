@@ -68,6 +68,8 @@ import {
   buildMachineRegistry,
 } from '../api/_lib/data/operations/index.js'
 import {
+  MACHINE_OPERATIONS as MACHINE_OPS,
+  refreshCandidatesOperation,
   upsertCampaignsOperation,
   upsertMessagesOperation,
 } from '../api/_lib/data/operations/agentIngest.js'
@@ -755,6 +757,70 @@ describe('the message upsert contract', () => {
   it('answers with the count the statement itself computed', () => {
     expect(upsertMessagesOperation.mapResult?.([{ n: 7 }], 1)).toBe(7)
     expect(upsertMessagesOperation.mapResult?.([], 0)).toBe(0)
+  })
+})
+
+describe('the conversation-refresh worklist statement', () => {
+  const statement = refreshCandidatesOperation.build({
+    actor: { kind: 'machine', actorId: CREDENTIAL_ID, tenantId: TENANT, role: 'machine' },
+    params: undefined,
+    page: { limit: 25, cursor: null },
+    after: undefined,
+    range: undefined,
+  })
+
+  it('is registered under the machine op name the handler asks for', () => {
+    expect(MACHINE_OPS.refreshCandidates).toBe('agent.refreshCandidates')
+    expect(
+      buildMachineRegistry().lookupQuery(MACHINE_OPS.refreshCandidates),
+    ).toBe(refreshCandidatesOperation)
+  })
+
+  it('takes no parameters, so no caller can name another notebook', () => {
+    expect(statement.values ?? []).toHaveLength(0)
+    expect(statement.text).not.toContain('$1')
+  })
+
+  it('orders by reply intent p3 > p2 > p1 > none, then recency, then never-requested', () => {
+    expect(statement.text).toContain(
+      "max(CASE m.intent_level WHEN 'p3' THEN 3 WHEN 'p2' THEN 2 WHEN 'p1' THEN 1 ELSE 0 END)",
+    )
+    expect(statement.text).toContain(
+      "CASE c.intent_rank WHEN 3 THEN 'p3' WHEN 2 THEN 'p2' WHEN 1 THEN 'p1'",
+    )
+    const order = statement.text.slice(statement.text.lastIndexOf('ORDER BY'))
+    expect(order).toContain('c.intent_rank DESC')
+    expect(order.indexOf('c.last_inbound_at DESC')).toBeGreaterThan(
+      order.indexOf('c.intent_rank DESC'),
+    )
+    expect(order.indexOf('(c.last_requested_at IS NOT NULL)')).toBeGreaterThan(
+      order.indexOf('c.last_inbound_at DESC'),
+    )
+  })
+
+  it('reads the refresh window off this notebook\'s own config, clamped', () => {
+    expect(statement.text).toContain("i.config->>'tracker_refresh_after_days'")
+    expect(statement.text).toContain('LEAST(60, GREATEST(1,')
+    expect(statement.text).toContain('FROM public.instances i')
+    // No `WHERE id = …`: step 009 scopes it, the same as `instanceConfig`.
+    expect(statement.text).not.toContain('i.id =')
+  })
+
+  it('joins the agent\'s own conversation_refresh receipts and excludes fresh ones', () => {
+    expect(statement.text).toContain("e.event_type = 'conversation_refresh'")
+    expect(statement.text).toContain('e.campaign_id IS NULL')
+    expect(statement.text).toContain("(e.raw->>'last_requested_at')::timestamptz")
+    expect(
+      statement.text.match(/make_interval\(days => p\.refresh_after_days\)/g),
+    ).toHaveLength(2)
+  })
+
+  it('only considers threads with an inbound message', () => {
+    expect(statement.text).toContain("HAVING count(*) FILTER (WHERE m.direction = 'in') > 0")
+  })
+
+  it('writes no LIMIT of its own, because the driver appends one', () => {
+    expect(statement.text).not.toContain('LIMIT')
   })
 })
 

@@ -53,7 +53,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.25.0"
+AGENT_VERSION = "1.26.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -981,6 +981,24 @@ def publish_contract_evidence(profile, runtime):
     return evidence, hashlib.sha256(canonical.encode("utf-8")).hexdigest(), None
 
 
+# ---------------------------------------------------------------- conversation tracker
+# Shape constants for the per-notebook "Conversation tracker" campaign. They are
+# facts about LH2 (probe #2/#3/#4, 2026-09-14), not settings: the action type,
+# its wizard-generated cooldown/iteration cap, LH2's own 100-URL import limit and
+# the two `action_target_people.state` values the refresh reasons about.
+TRACKER_ACTION_TYPE = "ScrapeMessagingHistory"
+TRACKER_ACTION_COOLDOWN = 60000
+TRACKER_ACTION_MAX_RESULTS = 10
+TRACKER_ACTION_PLATFORM = "linkedin"
+TRACKER_IMPORT_URL_CAP = 100
+TRACKER_STATE_QUEUED = 1
+TRACKER_STATE_PROCESSED = 2
+# Not in LH2's sub-list enum: a removed/invalidated row. Probe #2 saw it beside
+# the enum values, and it is re-queueable exactly like a Processed one.
+TRACKER_STATE_INVALIDATED = -1
+TRACKER_RETRY_STATES = (TRACKER_STATE_PROCESSED, TRACKER_STATE_INVALIDATED)
+
+
 class LinkedHelperPublisher:
     """Create, pause and verify empty campaigns through the LH2 UI service.
 
@@ -1234,7 +1252,122 @@ class LinkedHelperPublisher:
                 paused: paused === true,
               }};
             }})()"""
+        # ---- conversation tracker (Phase 2) -------------------------------
+        # Five mutators the tracker needs and the publisher never did. They are
+        # kept here, behind the same `enable_cdp_adapter` + `cdp_security_ack`
+        # gate and the same loopback rules, because one place that knows how to
+        # talk to LH2 is easier to audit than two. None of them can reach a
+        # campaign the caller did not name, and none of them writes message
+        # bodies, targets an arbitrary list, or starts the runner on anything
+        # but the campaign id it is handed.
+        if method == "unpause":
+            return f"""(async () => {{
+              const src = window.mainWindowService.mainWindow.source.campaigns;
+              const args = {value};
+              await src.setCampaignPaused(Number(args.id), false, Number(args.liAccountId));
+              return true;
+            }})()"""
+        if method == "is_paused":
+            return f"""(async () => {{
+              const src = window.mainWindowService.mainWindow.source.campaigns;
+              const args = {value};
+              const paused = await src.isCampaignPaused(Number(args.id), Number(args.liAccountId));
+              return paused === true;
+            }})()"""
+        if method == "save_working_hours":
+            return f"""(async () => {{
+              const svc = window.mainWindowService.mainWindow.source;
+              const args = {value};
+              await svc.workingHours.saveWorkingHours(
+                args.schedule,
+                {{type: 'action', campaignId: Number(args.campaignId), actionId: Number(args.actionId)}},
+                Number(args.liAccountId));
+              return true;
+            }})()"""
+        if method == "retry_people":
+            # Re-queues people the tracker action has already processed:
+            # actionCollectionType 2 is the Processed sub-list, and the
+            # `filter` array is probe #4's `['pick', ids]` selection spread.
+            return f"""(async () => {{
+              const svc = window.mainWindowService.mainWindow.source;
+              const args = {value};
+              await svc.people.actions.retryPeople(Number(args.actionId), {{
+                request: {{
+                  liAccount: Number(args.liAccountId),
+                  action: undefined,
+                  actionCollectionType: 2,
+                }},
+                type: 'people',
+                filter: args.personIds.map(Number),
+              }});
+              return true;
+            }})()"""
+        if method == "import_people":
+            # First-time add by LinkedIn URL. LH2 answers
+            # [imported[], {total: {addToTarget: {...}}}]; only the four counts
+            # are returned to the agent, never the imported people.
+            return f"""(async () => {{
+              const svc = window.mainWindowService.mainWindow.source;
+              const args = {value};
+              const result = await svc.people.actions.importPeopleFromUrls(
+                Number(args.actionId), 0, String(args.urls), true, Number(args.liAccountId));
+              const stats = Array.isArray(result) ? result[1] : result;
+              const total = stats?.total?.addToTarget ?? {{}};
+              const count = (v) => {{
+                const n = Number(v);
+                return Number.isFinite(n) ? n : 0;
+              }};
+              return {{
+                successful: count(total.successful),
+                alreadyProcessed: count(total.alreadyProcessed),
+                alreadyInQueue: count(total.alreadyInQueue),
+                inExcludeList: count(total.inExcludeList),
+              }};
+            }})()"""
         raise ValueError(f"unknown LH2 expression {method}")
+
+    # ---- conversation tracker call wrappers --------------------------------
+
+    def unpause_campaign(self, campaign_id, account_id):
+        value = self._evaluate("unpause", {"id": campaign_id, "liAccountId": account_id})
+        if value is not True:
+            raise PublishExecutionError("LH_UNPAUSE_RESULT_INVALID")
+
+    def is_campaign_paused(self, campaign_id, account_id):
+        value = self._evaluate("is_paused", {"id": campaign_id, "liAccountId": account_id})
+        if not isinstance(value, bool):
+            raise PublishExecutionError("LH_PAUSE_STATE_INVALID")
+        return value
+
+    def save_working_hours(self, campaign_id, action_id, schedule, account_id):
+        value = self._evaluate("save_working_hours", {
+            "campaignId": campaign_id, "actionId": action_id,
+            "schedule": schedule, "liAccountId": account_id})
+        if value is not True:
+            raise PublishExecutionError("LH_WORKING_HOURS_RESULT_INVALID")
+
+    def retry_people(self, action_id, person_ids, account_id):
+        value = self._evaluate("retry_people", {
+            "actionId": action_id, "personIds": list(person_ids),
+            "liAccountId": account_id})
+        if value is not True:
+            raise PublishExecutionError("LH_RETRY_RESULT_INVALID")
+
+    def import_people(self, action_id, urls, account_id):
+        if len(urls) > TRACKER_IMPORT_URL_CAP:
+            raise PublishExecutionError("LH_IMPORT_BATCH_TOO_LARGE")
+        value = self._evaluate("import_people", {
+            "actionId": action_id, "urls": "\n".join(urls),
+            "liAccountId": account_id})
+        if not isinstance(value, dict):
+            raise PublishExecutionError("LH_IMPORT_RESULT_INVALID")
+        counts = {}
+        for key in ("successful", "alreadyProcessed", "alreadyInQueue", "inExcludeList"):
+            raw = value.get(key)
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                raise PublishExecutionError("LH_IMPORT_RESULT_INVALID")
+            counts[key] = int(raw)
+        return counts
 
     def _evaluate(self, method, payload=None):
         client = self._connect()
@@ -2021,6 +2154,832 @@ def cmd_publish_once(args):
     print(f"publish-once: verified {len(branches)} branch(es)")
 
 
+# ======================================================================
+#                  the LH2 "Conversation tracker" campaign
+# ======================================================================
+#
+# LH2 stops recording a thread once the SDR answers it by hand, and nothing in
+# the chat store refreshes on its own. The tracker is how a notebook asks LH2 to
+# re-scrape a conversation: one paused campaign per notebook holding a single
+# `ScrapeMessagingHistory` action, fed with the leads the dashboard says have
+# gone stale. LH2 does the LinkedIn work; the chat-store extraction shipped in
+# 1.25.0 reads the result back on the next sync.
+#
+# Three properties are worth stating because everything below is shaped by them:
+#
+#   * **It is invisible to the dashboard.** The tracker's campaign id is appended
+#     to `exclude_campaigns` for the run, so its campaign, leads, steps and
+#     chat attributions are dropped before anything is projected or pushed. A
+#     tracker that showed up in the funnel would corrupt every rate on the page.
+#   * **It never fails a sync.** Every step — CDP, SQLite, HTTP — is wrapped. A
+#     failure is a printed note plus a `sync_runs` warning, and the run goes on
+#     without a tracker. This is a convenience layer on top of a sync that has
+#     to keep working when LH2's renderer moves under it.
+#   * **It only ever creates one campaign.** Resolution is state file -> lh.db by
+#     id -> lh.db by exact name and account. Two campaigns with the tracker's
+#     name is a refusal, never a third create.
+
+TRACKER_STATE_FILENAME = "tracker_state.json"
+TRACKER_DEFAULT_NAME = "Conversation tracker (dashboard)"
+# LH2 weekday indices, 0 = Sunday (probe #4 read `working_week_day` as
+# JS `Date.getDay()`), so [1..5] is Mon-Fri.
+TRACKER_DEFAULT_HOURS = {"days": [1, 2, 3, 4, 5], "start": "09:00", "end": "18:00"}
+TRACKER_DEFAULT_REFRESH_AFTER_DAYS = 3
+TRACKER_DEFAULT_MAX_PER_DAY = 10
+# A hard ceiling on the remote-overridable daily cap. The scraper charges page
+# loads rather than invite/message credits, but it still costs LH2 wall-clock
+# time on the account, so a Health-page typo must not be able to spend the day.
+TRACKER_MAX_PER_DAY_CAP = 50
+TRACKER_REFRESH_EVENT = "conversation_refresh"
+TRACKER_CANDIDATES_OP = "agent.refreshCandidates"
+TRACKER_PRIORITIES = ("p3", "p2", "p1", "none")
+TRACKER_MAX_PENDING_EVENTS = 500
+TRACKER_REQUESTED_ON_DAYS = 14
+
+
+class TrackerError(RuntimeError):
+    """A tracker step that failed in a way the surrounding sync must survive."""
+
+
+def tracker_state_path():
+    """The tracker's local-only state, beside `agent.py` and never in config.yaml.
+
+    It holds LH2 ids and per-lead request counters — machine-local bookkeeping
+    that a Health-page editor has no business writing and that must survive a
+    self-update. `config.yaml` is the wrong file for it twice over: remote config
+    is merged over it, and the agent rewrites nothing there today.
+    """
+    return os.path.join(HERE, TRACKER_STATE_FILENAME)
+
+
+def load_tracker_state(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            state = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
+def save_tracker_state(path, state):
+    """Write the state atomically; a torn file would look like a missing tracker
+    and send the next run looking for a campaign it would then not create."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, sort_keys=True, indent=2)
+    os.replace(tmp, path)
+
+
+def _tracker_int(value, default, minimum=0, maximum=None):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    if n < minimum:
+        return default
+    return min(n, maximum) if maximum is not None else n
+
+
+def _tracker_clock(value, default):
+    m = re.match(r"^\s*(\d{1,2}):(\d{2})\s*$", str(value or ""))
+    if not m:
+        return list(default)
+    hour, minute = int(m.group(1)), int(m.group(2))
+    if hour > 23 or minute > 59:
+        return list(default)
+    return [hour, minute]
+
+
+def tracker_settings(cfg):
+    """Normalize the five tracker config keys.
+
+    Every one of them is remote-overridable, which means every one of them can
+    arrive from a web form as the wrong type. A malformed value falls back to the
+    default rather than failing a sync — the same rule `apply_remote_config`
+    already applies to a malformed `mapping`.
+    """
+    raw_hours = cfg.get("tracker_hours")
+    hours = raw_hours if isinstance(raw_hours, dict) else TRACKER_DEFAULT_HOURS
+    days = hours.get("days", TRACKER_DEFAULT_HOURS["days"])
+    if not isinstance(days, (list, tuple)):
+        days = TRACKER_DEFAULT_HOURS["days"]
+    days = sorted({d for d in days
+                   if isinstance(d, int) and not isinstance(d, bool) and 0 <= d <= 6})
+    if not days:
+        days = list(TRACKER_DEFAULT_HOURS["days"])
+    start = _tracker_clock(hours.get("start"), _tracker_clock(TRACKER_DEFAULT_HOURS["start"], [9, 0]))
+    end = _tracker_clock(hours.get("end"), _tracker_clock(TRACKER_DEFAULT_HOURS["end"], [18, 0]))
+    if start >= end:
+        start, end = [9, 0], [18, 0]
+    name = cfg.get("tracker_campaign_name")
+    name = name.strip() if isinstance(name, str) and name.strip() else TRACKER_DEFAULT_NAME
+    return {
+        "enabled": cfg.get("tracker_enabled") is True,
+        "refresh_after_days": _tracker_int(cfg.get("tracker_refresh_after_days"),
+                                           TRACKER_DEFAULT_REFRESH_AFTER_DAYS, minimum=1),
+        "max_per_day": _tracker_int(cfg.get("tracker_max_per_day"),
+                                    TRACKER_DEFAULT_MAX_PER_DAY, minimum=0,
+                                    maximum=TRACKER_MAX_PER_DAY_CAP),
+        "hours": {"days": days, "start": start, "end": end},
+        "name": name[:160],
+    }
+
+
+def tracker_schedule(hours):
+    """LH2's `saveWorkingHours` schedule: one key per weekday, 0 = Sunday.
+
+    `false` means "not this day"; a list of `{start:[h,m], end:[h,m]}` windows
+    means "these hours". Writing the hours into LH2 is what lets the agent own no
+    clock logic at all: LH2 enforces the SDR's window itself, so a sync that runs
+    at 03:00 enqueues work that will not touch LinkedIn until morning.
+    """
+    window = [{"start": list(hours["start"]), "end": list(hours["end"])}]
+    return {str(day): (window if day in hours["days"] else False) for day in range(7)}
+
+
+class ConversationTracker:
+    """Own the tracker campaign for one notebook, for one run.
+
+    Two entry points, called from `cmd_sync` around the push:
+    `ensure()` before extraction (so the campaign exists and can be excluded),
+    `refresh()` after a successful push (so a failed push never enqueues work).
+    Because the refresh runs after the push, the events it produces belong to the
+    NEXT batch — they are persisted in the state file and drained by the next
+    run's `pending_events()`.
+    """
+
+    def __init__(self, cfg, instance_id, mode, warnings=None, state_path=None,
+                 quiet=False):
+        self.cfg = cfg
+        self.instance_id = instance_id
+        self.mode = mode
+        self.warnings = warnings
+        self.quiet = quiet
+        self.settings = tracker_settings(cfg)
+        self.state_path = state_path or tracker_state_path()
+        self.state = load_tracker_state(self.state_path)
+        self.campaign_id = self._state_int("campaign_id")
+        self.action_id = self._state_int("action_id")
+        self.action_version_id = self._state_int("action_version_id")
+        self.li_account_id = self._state_int("li_account_id")
+        self.profile = None
+        self.ready = False
+        self.lines = []
+        self._pub = None
+
+    # ---- plumbing ------------------------------------------------------
+
+    def _state_int(self, key):
+        value = self.state.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None
+        return value
+
+    def _note(self, text):
+        line = f"tracker: {text}"
+        self.lines.append(line)
+        if not self.quiet:
+            print(line)
+
+    def _warn(self, text):
+        self._note(text)
+        note_warning(self.warnings, "tracker", TrackerError(text))
+
+    def print_report(self):
+        """Print everything collected while quiet (the dry run's tracker block)."""
+        print("\nconversation tracker")
+        if not self.settings["enabled"]:
+            print("  tracker_enabled is false — nothing would happen")
+            return
+        for line in self.lines:
+            print(f"  {line}")
+
+    @property
+    def available(self):
+        """The tracker needs the machine gateway: it reads candidates from it and
+        reports every enqueue back through it. A Supabase-only notebook has
+        neither half, so the feature simply does not exist there."""
+        return self.mode != "off" and machine_configured(self.cfg)
+
+    def _resolve_profile(self):
+        profile, error = _publish_profile(self.cfg)
+        if profile is None:
+            raise TrackerError(f"TRACKER_PROFILE_UNAVAILABLE {error}")
+        self.profile = profile
+        self.li_account_id = int(profile["li_account_id"])
+        return profile
+
+    def _publisher(self):
+        """The one CDP adapter, behind the publisher's own preflight gate."""
+        if self._pub is None:
+            profile = self.profile or self._resolve_profile()
+            publisher = LinkedHelperPublisher(profile)
+            ok, error = publisher.preflight()
+            if not ok:
+                raise TrackerError(f"TRACKER_CDP_UNAVAILABLE {error}")
+            self._pub = publisher
+        return self._pub
+
+    def _connect_db(self):
+        configured = str(self.cfg.get("lh2_db_path") or "").strip()
+        try:
+            path = os.path.expanduser(configured) if configured else discover_db_path()
+        except (OSError, RuntimeError) as error:
+            raise TrackerError(f"TRACKER_DB_UNAVAILABLE {error}")
+        if not os.path.isfile(path):
+            raise TrackerError("TRACKER_DB_UNAVAILABLE")
+        try:
+            con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        except sqlite3.Error as error:
+            raise TrackerError(f"TRACKER_DB_UNAVAILABLE {error}")
+        con.row_factory = sqlite3.Row
+        return con
+
+    # ---- step 1: resolve or create ------------------------------------
+
+    def ensure(self, dry_run=False):
+        """Resolve the tracker campaign, creating it once if it does not exist.
+
+        Never raises: a failure leaves `ready` false and the run continues
+        without a tracker. A campaign id already resolved is deliberately KEPT
+        on failure, because excluding it from the dashboard matters even when
+        the rest of the verification did not pass.
+        """
+        if not self.settings["enabled"]:
+            return
+        if not self.available:
+            self._note("tracker_enabled is set, but this notebook holds no "
+                       "machine ingest credential — skipped")
+            return
+        try:
+            self._ensure(dry_run)
+        except TrackerError as error:
+            self._warn(str(error))
+        except Exception as error:  # noqa: BLE001 — a tracker must never fail a sync
+            self._warn(f"TRACKER_ENSURE_FAILED {type(error).__name__}: {error}")
+
+    def _ensure(self, dry_run):
+        self._resolve_profile()
+        name = self.settings["name"]
+        con = self._connect_db()
+        try:
+            campaign_id, how = self._lookup_campaign(con, name)
+        finally:
+            con.close()
+        if campaign_id is None:
+            if dry_run:
+                self._note(f"would create campaign {name!r} for LH account "
+                           f"{self.li_account_id}")
+                return
+            campaign_id = self._create_campaign(name)
+            how = "created"
+        self.campaign_id = campaign_id
+        con = self._connect_db()
+        try:
+            action = self._read_action(con, campaign_id, name)
+        finally:
+            con.close()
+        if how == "created":
+            self._publisher().save_working_hours(
+                campaign_id, action["action_id"],
+                tracker_schedule(self.settings["hours"]), self.li_account_id)
+        con = self._connect_db()
+        try:
+            intervals = self._working_interval_count(con, action)
+        finally:
+            con.close()
+        if intervals is None:
+            self._note("working_intervals is not readable on this LH2 build — "
+                       "hours are unverified (LH2 still enforces what it stored)")
+        elif intervals != 7:
+            raise TrackerError(
+                f"TRACKER_WORKING_HOURS_MISMATCH {intervals} row(s), expected 7")
+        self.action_id = action["action_id"]
+        self.action_version_id = action["action_version_id"]
+        self.ready = True
+        self._note(f"campaign {campaign_id} ({how}), action {self.action_id}, "
+                   f"action version {self.action_version_id}, "
+                   f"working intervals {intervals}")
+        if not dry_run:
+            self._persist(created=(how == "created"))
+
+    def _lookup_campaign(self, con, name):
+        """state file -> lh.db by id -> lh.db by exact name + account.
+
+        The name lookup is what makes a lost state file recoverable rather than a
+        reason to create a second tracker. Two matches is a refusal: the agent
+        cannot tell which one the notebook has been feeding.
+        """
+        if self.campaign_id is not None:
+            row = con.execute(
+                "SELECT id, name, li_account_id FROM campaigns WHERE id = ?",
+                (self.campaign_id,)).fetchone()
+            if (row is not None and str(row["name"] or "") == name
+                    and row["li_account_id"] == self.li_account_id):
+                return int(row["id"]), "state"
+            self._note(f"stored campaign {self.campaign_id} no longer matches "
+                       f"{name!r} on account {self.li_account_id} — re-resolving by name")
+        rows = con.execute(
+            "SELECT id FROM campaigns WHERE name = ? AND li_account_id = ? ORDER BY id",
+            (name, self.li_account_id)).fetchall()
+        if len(rows) > 1:
+            raise TrackerError(
+                f"TRACKER_DUPLICATE_CAMPAIGN_NAME {len(rows)} campaigns named {name!r}")
+        if rows:
+            return int(rows[0]["id"]), "recovered"
+        return None, None
+
+    def _create_campaign(self, name):
+        """Create -> validate -> pause. Exactly the publisher's own sequence, with
+        the one scraper action and `excludeList: []` at BOTH levels (an omitted
+        key leaves the placeholder NULL and LH2 cannot open the campaign)."""
+        publisher = self._publisher()
+        campaign_id = publisher.create_campaign({
+            "name": name,
+            "liAccount": self.li_account_id,
+            "excludeList": [],
+            "actions": [{
+                "name": TRACKER_ACTION_TYPE,
+                "description": "",
+                "target": [],
+                "excludeList": [],
+                "config": {
+                    "actionType": TRACKER_ACTION_TYPE,
+                    "actionSettings": {},
+                    "coolDown": TRACKER_ACTION_COOLDOWN,
+                    "maxActionResultsPerIteration": TRACKER_ACTION_MAX_RESULTS,
+                    "overridePlatform": TRACKER_ACTION_PLATFORM,
+                },
+            }],
+        })
+        publisher.validate_campaign(campaign_id)
+        publisher.pause_campaign(campaign_id, self.li_account_id)
+        return campaign_id
+
+    def _read_action(self, con, campaign_id, name):
+        """Canonical readback from lh.db in `mode=ro`, the way publishing verifies.
+
+        `is_valid = 1`, the right name and account, exactly one action, and that
+        action's current config is the scraper. Anything else and this notebook
+        is looking at a campaign it did not build.
+        """
+        columns = _sqlite_columns(con, "campaigns")
+        if "is_valid" not in columns:
+            raise TrackerError("TRACKER_CAMPAIGN_VALIDITY_UNKNOWN")
+        row = con.execute(
+            "SELECT id, name, li_account_id, is_valid FROM campaigns WHERE id = ?",
+            (campaign_id,)).fetchone()
+        if row is None:
+            raise TrackerError(f"TRACKER_CAMPAIGN_MISSING {campaign_id}")
+        if str(row["name"] or "") != name or row["li_account_id"] != self.li_account_id:
+            raise TrackerError(f"TRACKER_CAMPAIGN_IDENTITY_MISMATCH {campaign_id}")
+        if row["is_valid"] != 1:
+            raise TrackerError(f"TRACKER_CAMPAIGN_NOT_VALID is_valid={row['is_valid']!r}")
+        actions = con.execute("""
+            WITH latest_version AS (
+              SELECT MAX(id) AS id FROM campaign_versions WHERE campaign_id = ?
+            )
+            SELECT a.id AS action_id,
+                   (SELECT av.id FROM action_versions av
+                     WHERE av.action_id = a.id ORDER BY av.id DESC LIMIT 1) AS action_version_id,
+                   (SELECT ac.actionType FROM action_versions av
+                      JOIN action_configs ac ON ac.id = av.config_id
+                     WHERE av.action_id = a.id ORDER BY av.id DESC LIMIT 1) AS action_type
+            FROM campaign_version_actions cva
+            JOIN actions a ON a.id = cva.action_id
+            JOIN latest_version lv ON lv.id = cva.version_id
+            ORDER BY cva.id
+        """, (campaign_id,)).fetchall()
+        if len(actions) != 1:
+            raise TrackerError(f"TRACKER_ACTION_COUNT {len(actions)}, expected 1")
+        action = actions[0]
+        if str(action["action_type"] or "") != TRACKER_ACTION_TYPE:
+            raise TrackerError(f"TRACKER_ACTION_TYPE {action['action_type']!r}")
+        if action["action_version_id"] is None:
+            raise TrackerError("TRACKER_ACTION_VERSION_MISSING")
+        return {"action_id": int(action["action_id"]),
+                "action_version_id": int(action["action_version_id"])}
+
+    @staticmethod
+    def _working_interval_count(con, action):
+        """Count the action's `working_intervals` rows, or None on an LH2 build
+        whose linkage column this agent does not recognise. Unknown is reported
+        as unknown: guessing a column would silently verify nothing."""
+        columns = _sqlite_columns(con, "working_intervals")
+        for column, value in (("action_id", action["action_id"]),
+                              ("action_version_id", action["action_version_id"])):
+            if column in columns:
+                row = con.execute(
+                    f"SELECT COUNT(*) AS count FROM working_intervals WHERE {column} = ?",
+                    (value,)).fetchone()
+                return int(row["count"] or 0)
+        return None
+
+    def _persist(self, created=False):
+        self.state["campaign_id"] = self.campaign_id
+        self.state["action_id"] = self.action_id
+        self.state["action_version_id"] = self.action_version_id
+        self.state["li_account_id"] = self.li_account_id
+        if created or not self.state.get("created_at"):
+            self.state.setdefault(
+                "created_at", dt.datetime.now(dt.timezone.utc).isoformat())
+        for key, empty in (("requests", {}), ("requested_on", {}),
+                           ("pending_events", [])):
+            if not isinstance(self.state.get(key), type(empty)):
+                self.state[key] = empty
+        save_tracker_state(self.state_path, self.state)
+
+    # ---- step 2: keep it out of the dashboard --------------------------
+
+    def apply_exclude(self):
+        """Append the tracker's LH2 campaign id to `exclude_campaigns` for this
+        run. Runs whatever the outcome of `ensure()` and whatever
+        `tracker_enabled` says: a campaign that exists must never reach the
+        funnel, and a notebook whose tracker was turned off still has one."""
+        if self.campaign_id is None:
+            return
+        raw = self.cfg.get("exclude_campaigns") or []
+        if not isinstance(raw, (list, tuple)):
+            raw = [raw]
+        ids = list(raw)
+        if str(self.campaign_id) not in {str(x) for x in ids}:
+            ids.append(self.campaign_id)
+            self._note(f"campaign {self.campaign_id} excluded from this run")
+        self.cfg["exclude_campaigns"] = ids
+
+    # ---- step 3: refresh ------------------------------------------------
+
+    def refresh(self, dry_run=False):
+        """Ask LH2 to re-scrape the conversations the dashboard says are stale."""
+        if not self.settings["enabled"] or not self.available:
+            return
+        if not dry_run and not self.ready:
+            return
+        try:
+            self._refresh(dry_run)
+        except TrackerError as error:
+            self._warn(str(error))
+        except Exception as error:  # noqa: BLE001 — a tracker must never fail a sync
+            self._warn(f"TRACKER_REFRESH_FAILED {type(error).__name__}: {error}")
+
+    def _refresh(self, dry_run):
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        counts = {}
+        if self.action_id is not None:
+            con = self._connect_db()
+            try:
+                counts = self._queue_counts(con, self.action_id)
+            finally:
+                con.close()
+        queued = counts.get(TRACKER_STATE_QUEUED, 0)
+        used = self._requested_today(today)
+        cap = self.settings["max_per_day"]
+        remaining = max(0, cap - used)
+        self._note(f"queue {self._queue_text(counts)}, budget {used}/{cap} used today")
+        if queued > 0:
+            # LH2 is still working through the last batch. Adding to a queue it
+            # is draining would make the daily cap meaningless, and the campaign
+            # must be running for it to drain at all.
+            self._note(f"{queued} still queued — LH2 is working; no enqueue this run")
+            if not dry_run:
+                self._set_paused(False)
+            return
+        if not dry_run:
+            self._set_paused(True)
+        if remaining <= 0:
+            self._note("today's budget is spent — no candidates requested")
+            return
+        candidates = self._fetch_candidates(remaining)
+        if not candidates:
+            return
+        con = self._connect_db()
+        try:
+            resolved = self._resolve_people(con, candidates)
+            person_ids = list(resolved.values())
+            existing = (self._existing_targets(con, self.action_id, person_ids)
+                        if self.action_id is not None else {})
+            # Someone LH2 is already about to act on for ANOTHER campaign must
+            # not also be scraped by the tracker: two actions racing for the
+            # same person is how an account earns a restriction, and the outreach
+            # campaign is the one whose timing matters.
+            busy = self._busy_elsewhere(con, self.action_id, person_ids)
+        finally:
+            con.close()
+        retry, imports, deferred = [], [], []
+        for row in candidates:
+            person_id = resolved.get(row["slug"])
+            if person_id is None:
+                row["method"] = "unresolved"
+                deferred.append(row)
+                self._note(f"unresolved slug {row['slug']!r} — not in this LH2 account")
+                continue
+            row["person_id"] = person_id
+            if person_id in busy:
+                row["method"] = "busy"
+                deferred.append(row)
+                self._note(f"{row['slug']} is queued in another campaign — skipped")
+                continue
+            state = existing.get(person_id)
+            if state is None:
+                row["method"] = "import"
+                imports.append(row)
+            elif state in TRACKER_RETRY_STATES:
+                row["method"] = "retry"
+                retry.append(row)
+            else:
+                row["method"] = "skipped"
+                deferred.append(row)
+                self._note(f"{row['slug']} is in the tracker with state "
+                           f"{state} — skipped")
+        imports = imports[:TRACKER_IMPORT_URL_CAP]
+        if dry_run:
+            self._note(f"would enqueue {len(retry) + len(imports)} "
+                       f"(retry {len(retry)}, import {len(imports)}) of "
+                       f"{len(candidates)} candidate(s)")
+            for row in (retry + imports + deferred)[:20]:
+                self._note(f"  {row['priority']} {row['slug']} -> {row['method']}")
+            return
+        if not retry and not imports:
+            # Nothing to enqueue. The deferred rows are still REPORTED, so the
+            # server's `last_requested_at` gate stops a permanently unresolvable
+            # slug from occupying a candidate slot on every run forever — and
+            # the campaign stays paused, because there is nothing to run.
+            self._record_requests(today, [], deferred)
+            self._note(f"nothing to enqueue from {len(candidates)} candidate(s) "
+                       f"({self._deferred_text(deferred)}) — campaign stays paused")
+            return
+        # Stop the batch at the first LH2 error: either call raising aborts the
+        # whole refresh, leaving the campaign paused and the state untouched.
+        requested = []
+        if retry:
+            self._publisher().retry_people(
+                self.action_id, [row["person_id"] for row in retry], self.li_account_id)
+            requested.extend(retry)
+        if imports:
+            stats = self._publisher().import_people(
+                self.action_id, [row["profile_url"] for row in imports],
+                self.li_account_id)
+            if stats["successful"] != len(imports):
+                self._note("import reported "
+                           + ", ".join(f"{k}={v}" for k, v in sorted(stats.items())))
+            requested.extend(imports)
+        con = self._connect_db()
+        try:
+            after = self._queue_counts(con, self.action_id)
+        finally:
+            con.close()
+        queued_now = after.get(TRACKER_STATE_QUEUED, 0)
+        self._record_requests(today, requested, deferred)
+        if queued_now != len(requested):
+            self._warn(f"TRACKER_ENQUEUE_MISMATCH {queued_now} queued after "
+                       f"requesting {len(requested)} — leaving the campaign paused")
+            return
+        # Un-paused only for a verified, NON-EMPTY enqueue. `requested` is known
+        # non-empty here (the early return above covers the other case), which
+        # matters: `0 == 0` would otherwise pass this check and set an empty
+        # campaign running for no reason.
+        self._set_paused(False)
+        self._note(f"enqueued {len(requested)} (retry {len(retry)}, "
+                   f"import {len(imports)}), queue {queued_now}, paused=false"
+                   + (f", deferred {self._deferred_text(deferred)}" if deferred else ""))
+
+    # ---- refresh helpers ------------------------------------------------
+
+    @staticmethod
+    def _queue_counts(con, action_id):
+        rows = con.execute(
+            "SELECT state, COUNT(*) AS count FROM action_target_people "
+            "WHERE action_id = ? GROUP BY state", (action_id,)).fetchall()
+        return {int(row["state"]): int(row["count"]) for row in rows
+                if row["state"] is not None}
+
+    @staticmethod
+    def _queue_text(counts):
+        if not counts:
+            return "empty"
+        return " ".join(f"state{state}={count}" for state, count in sorted(counts.items()))
+
+    def _requested_today(self, today):
+        day_map = self.state.get("requested_on")
+        if not isinstance(day_map, dict):
+            return 0
+        value = day_map.get(today)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+    def _set_paused(self, paused):
+        publisher = self._publisher()
+        if publisher.is_campaign_paused(self.campaign_id, self.li_account_id) == paused:
+            return False
+        if paused:
+            publisher.pause_campaign(self.campaign_id, self.li_account_id)
+        else:
+            publisher.unpause_campaign(self.campaign_id, self.li_account_id)
+        return True
+
+    def _fetch_candidates(self, limit):
+        """GET the dashboard's stale-conversation list. Any failure skips the
+        refresh for this run with a note — never a warning and never an
+        exception: the dashboard being briefly unreachable is not a defect in
+        this notebook's sync."""
+        url = machine_api_url(self.cfg, TRACKER_CANDIDATES_OP)
+        if not url:
+            self._note("no ingest_url — cannot read refresh candidates")
+            return []
+        try:
+            answer = requests.get(url, headers=machine_api_headers(self.cfg),
+                                  params={"limit": int(limit)}, timeout=30)
+            if answer.status_code != 200:
+                self._note(f"refresh candidates: HTTP {answer.status_code} — "
+                           "skipped this run")
+                return []
+            body = answer.json()
+        except (requests.RequestException, ValueError) as error:
+            self._note(f"refresh candidates: {type(error).__name__} — skipped this run")
+            return []
+        if not isinstance(body, dict) or not isinstance(body.get("candidates"), list):
+            self._note("refresh candidates: unexpected response shape — skipped this run")
+            return []
+        if body.get("instance_id") not in (None, self.instance_id):
+            self._note("refresh candidates: answer names another instance — skipped")
+            return []
+        server_days = body.get("refresh_after_days")
+        if isinstance(server_days, int) and not isinstance(server_days, bool):
+            self._note(f"server refresh_after_days={server_days}")
+        rows = []
+        for item in body["candidates"]:
+            if not isinstance(item, dict):
+                continue
+            profile_url = item.get("profile_url")
+            if not isinstance(profile_url, str) or not profile_url.strip():
+                continue
+            slug = slug_from_profile_url(profile_url)
+            if not slug:
+                continue
+            priority = item.get("priority")
+            rows.append({
+                "profile_url": profile_url.strip(),
+                "slug": slug,
+                "priority": priority if priority in TRACKER_PRIORITIES else "none",
+            })
+            if len(rows) >= limit:
+                break
+        if not rows:
+            self._note("no refresh candidates")
+        return rows
+
+    @staticmethod
+    def _resolve_people(con, rows):
+        """Slug -> LH2 person id through `person_external_ids`.
+
+        LH2 keeps roughly two 'public' rows per person (the human-readable slug
+        and LinkedIn's opaque `AC…` id), so either spelling can be the one the
+        dashboard stored. Matching `external_id` against the recovered slug
+        therefore resolves both without the agent having to know which it has.
+        """
+        slugs = sorted({row["slug"] for row in rows})
+        found = {}
+        for start in range(0, len(slugs), 200):
+            chunk = slugs[start:start + 200]
+            placeholders = ",".join("?" * len(chunk))
+            for row in con.execute(
+                    f"SELECT person_id, external_id FROM person_external_ids "
+                    f"WHERE external_id IN ({placeholders})", chunk):
+                if row["person_id"] is None:
+                    continue
+                found.setdefault(str(row["external_id"]), int(row["person_id"]))
+        return found
+
+    @staticmethod
+    def _existing_targets(con, action_id, person_ids):
+        found = {}
+        ids = sorted(set(person_ids))
+        for start in range(0, len(ids), 200):
+            chunk = ids[start:start + 200]
+            placeholders = ",".join("?" * len(chunk))
+            for row in con.execute(
+                    f"SELECT person_id, state FROM action_target_people "
+                    f"WHERE action_id = ? AND person_id IN ({placeholders})",
+                    [action_id] + chunk):
+                found[int(row["person_id"])] = row["state"]
+        return found
+
+    @staticmethod
+    def _busy_elsewhere(con, action_id, person_ids):
+        """People waiting in SOME OTHER action's queue, by person id.
+
+        `action_target_people.state = 1` is "queued"; a person queued for an
+        invite or a message is mid-sequence, and slotting a scrape in beside it
+        adds LinkedIn traffic the outreach campaign did not ask for.
+        """
+        busy = set()
+        ids = sorted(set(person_ids))
+        for start in range(0, len(ids), 200):
+            chunk = ids[start:start + 200]
+            placeholders = ",".join("?" * len(chunk))
+            for row in con.execute(
+                    f"SELECT DISTINCT person_id FROM action_target_people "
+                    f"WHERE state = ? AND action_id IS NOT ? "
+                    f"AND person_id IN ({placeholders})",
+                    [TRACKER_STATE_QUEUED, action_id] + chunk):
+                busy.add(int(row["person_id"]))
+        return busy
+
+    @staticmethod
+    def _deferred_text(deferred):
+        counts = {}
+        for row in deferred:
+            counts[row["method"]] = counts.get(row["method"], 0) + 1
+        return ", ".join(f"{method} {count}"
+                         for method, count in sorted(counts.items())) or "none"
+
+    def _record_requests(self, today, enqueued, deferred=()):
+        """Persist what was asked for, and queue one event per lead for the NEXT
+        batch. The refresh runs after this run's push, so there is no batch left
+        to put them in — the state file is what carries them across.
+
+        `deferred` rows — unresolved slugs, people busy in another campaign, and
+        people sitting in a tracker sub-list this agent does not re-queue — are
+        recorded too, with their own `raw.method`. They were looked at and could
+        not be acted on, and reporting that is what moves the server's
+        `last_requested_at` gate past them for `refresh_after_days` instead of
+        letting one dead slug occupy a candidate slot on every run forever. They
+        do NOT count against the daily budget."""
+        if not isinstance(self.state.get("requests"), dict):
+            self.state["requests"] = {}
+        if not isinstance(self.state.get("requested_on"), dict):
+            self.state["requested_on"] = {}
+        if not isinstance(self.state.get("pending_events"), list):
+            self.state["pending_events"] = []
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        for row in list(enqueued) + list(deferred):
+            entry = self.state["requests"].get(row["slug"])
+            previous = entry.get("count") if isinstance(entry, dict) else 0
+            count = (previous if isinstance(previous, int) and not isinstance(previous, bool)
+                     else 0) + 1
+            self.state["requests"][row["slug"]] = {"last_requested_at": now,
+                                                   "count": count}
+            self.state["pending_events"].append({
+                "profile_url": row["profile_url"],
+                "occurred_at": now,
+                "raw": {"last_requested_at": now, "count": count,
+                        "method": row["method"]},
+            })
+        self.state["pending_events"] = \
+            self.state["pending_events"][-TRACKER_MAX_PENDING_EVENTS:]
+        # Only a real enqueue costs budget. A slug this notebook cannot act on
+        # consumed no LH2 capacity, and charging the day for it would let a
+        # handful of dead slugs starve the leads that can actually be refreshed.
+        self.state["requested_on"][today] = \
+            self._requested_today(today) + len(enqueued)
+        for day in sorted(self.state["requested_on"])[:-TRACKER_REQUESTED_ON_DAYS]:
+            self.state["requested_on"].pop(day, None)
+        self._persist()
+
+    # ---- the events the refresh owes the dashboard ----------------------
+
+    def pending_events(self):
+        """Refresh events left over from earlier runs, in the agent's event shape."""
+        rows = self.state.get("pending_events")
+        if not isinstance(rows, list):
+            return []
+        events = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            profile_url = row.get("profile_url")
+            occurred_at = row.get("occurred_at")
+            if not isinstance(profile_url, str) or not isinstance(occurred_at, str):
+                continue
+            events.append({
+                "instance_id": self.instance_id,
+                "campaign_id": None,
+                "profile_url": profile_url,
+                "event_type": TRACKER_REFRESH_EVENT,
+                "occurred_at": occurred_at,
+                "raw": row.get("raw") if isinstance(row.get("raw"), dict) else None,
+            })
+        return events
+
+    def mark_pending_delivered(self, events):
+        """Drop exactly the rows that were drained, keyed on their own identity —
+        NOT on the deduped batch, because `dedupe_events` can legitimately
+        collapse two refreshes of the same lead into one row and the older one
+        would otherwise stay in the file forever."""
+        if not events:
+            return
+        delivered = {(e["profile_url"], e["occurred_at"]) for e in events}
+        rows = self.state.get("pending_events")
+        if not isinstance(rows, list):
+            return
+        self.state["pending_events"] = [
+            row for row in rows
+            if not (isinstance(row, dict)
+                    and (row.get("profile_url"), row.get("occurred_at")) in delivered)]
+        self._persist()
+
+
 def canonical_release_manifest(manifest):
     """The exact five-line Ed25519 message defined by releaseArtifacts.ts."""
     return "\n".join((
@@ -2206,6 +3165,13 @@ REMOTE_CONFIG_KEYS = {
     "lh2_db_path", "mapping", "local_timezone",
     "notify_url", "exclude_campaigns",
     "ingest_url", "ingest_mode", "lh2_status",
+    # Conversation tracker (Phase 2). All five are safe to edit from the Health
+    # page: none of them is a credential and none of them can point the agent at
+    # a different dashboard. `tracker_refresh_after_days` is the server's knob —
+    # the agent only echoes it in the dry run — but it lives here so one edit
+    # keeps both halves saying the same number.
+    "tracker_enabled", "tracker_refresh_after_days", "tracker_max_per_day",
+    "tracker_hours", "tracker_campaign_name",
 }
 
 # Keys a remote blob may NEVER set, whatever the allowlist above says. Two kinds
@@ -2593,10 +3559,14 @@ def _supabase_messages(messages):
 
 
 def _ingest_events(events):
+    # `raw` is the tracker's channel: a `conversation_refresh` row reports when
+    # and how a conversation was re-queued. The gateway takes `row.raw ?? null`,
+    # so a milestone event's absent payload lands as NULL.
     return [{"campaign_id": e.get("campaign_id"),
              "profile_url": e.get("profile_url"),
              "event_type": e["event_type"],
-             "occurred_at": e["occurred_at"]} for e in events]
+             "occurred_at": e["occurred_at"],
+             "raw": e.get("raw")} for e in events]
 
 
 def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
@@ -4839,17 +5809,28 @@ def cmd_sync(args):
 
     if args.dry_run:
         warnings = []
+        # Quiet, so the tracker's whole block prints as one section at the end
+        # rather than interleaved with the extraction counts. A dry run makes no
+        # CDP call and writes no state; reading the candidate list is a GET and
+        # is allowed, because previewing the split without it says nothing.
+        tracker = ConversationTracker(cfg, instance_id, mode, warnings, quiet=True)
+        tracker.ensure(dry_run=True)
+        tracker.apply_exclude()
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
         print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo)
         # The second transport previews off the SAME lists, deduped exactly as the
         # real push dedupes them, so the batch keys printed here are the keys a
-        # real sync would present today.
+        # real sync would present today. The tracker's leftover refresh events are
+        # part of that batch — they were produced after the last run's push.
         sent_messages = dedupe_messages(messages)
-        sent_events = dedupe_events(derive_events(instance_id, leads))
+        sent_events = dedupe_events(
+            derive_events(instance_id, leads) + tracker.pending_events())
         preview_ingest_transport(
             cfg, mode, campaigns, leads, sent_messages, sent_events, steps,
             demo, "partial" if warnings else "ok",
             "; ".join(warnings)[:500], owner)
+        tracker.refresh(dry_run=True)
+        tracker.print_report()
         if warnings:
             print("\nWARNING: a real sync would report status 'partial' — "
                   "these sections failed and returned empty:")
@@ -4857,8 +5838,17 @@ def cmd_sync(args):
                 print(f"  - {w}")
         return
 
+    # The tracker resolves (or creates, once) BEFORE extraction, so its campaign
+    # is excluded from the very lists this run pushes. `warnings` is threaded in
+    # for the same reason every other fail-safe section is: a tracker that could
+    # not be reached must make the run 'partial', not falsely green.
+    warnings = []
+    tracker = ConversationTracker(cfg, instance_id, mode, warnings)
+    tracker.ensure()
+    tracker.apply_exclude()
+
     if mode == "only":
-        return sync_machine_only(cfg, instance_id, mode)
+        return sync_machine_only(cfg, instance_id, mode, tracker, warnings)
 
     sb = Supabase(cfg)
     sb.upsert("instances", [{
@@ -4876,7 +5866,6 @@ def cmd_sync(args):
     run = sb.insert("sync_runs", {"instance_id": instance_id}, retriable=False)
 
     total = 0
-    warnings = []
     try:
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
         total += sb.upsert("campaigns", _legacy_supabase_campaigns(campaigns),
@@ -4914,7 +5903,11 @@ def cmd_sync(args):
         # is two places for the tie-breaking rule to be, which is one more than a
         # rule can be maintained in — and it would make the parity check compare a
         # list against itself computed twice instead of against what was sent.
-        sent_events = dedupe_events(derive_events(instance_id, leads))
+        # The tracker's refresh runs AFTER this push, so the events it produces
+        # belong to the NEXT batch. They wait in the state file and are drained
+        # here — this is the only place they can enter a batch at all.
+        pending = tracker.pending_events()
+        sent_events = dedupe_events(derive_events(instance_id, leads) + pending)
         sent_messages = dedupe_messages(messages)
         total += sb.upsert("events", sent_events,
                            on_conflict="instance_id,campaign_id,profile_url,event_type")
@@ -4922,6 +5915,8 @@ def cmd_sync(args):
                            on_conflict="instance_id,profile_url,direction,sent_at,content_hash")
         total += sb.upsert("campaign_steps", steps,
                            on_conflict="campaign_id,step_index")
+        # Cleared only once the authoritative store has them.
+        tracker.mark_pending_delivered(pending)
 
         # A successful push with swallowed per-section failures is 'partial', not 'ok'.
         status = "partial" if warnings else "ok"
@@ -4953,6 +5948,10 @@ def cmd_sync(args):
               + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
         # After the run is recorded: both swallow everything internally, so they can
         # never trip the outer except and flip a green run to status='error'.
+        # After the push and before the reply ping: the tracker enqueues work for
+        # LH2 only once this run's own data is safely delivered, and it swallows
+        # everything internally, so it can never flip a green run to 'error'.
+        tracker.refresh()
         notify_new_replies(cfg)
         # Photo mirroring runs after the leads push, opt-in per notebook. Off by
         # default so the first backfill is a deliberate rollout, not an ambush.
@@ -4965,7 +5964,7 @@ def cmd_sync(args):
         sys.exit(f"sync failed: {e}")
 
 
-def sync_machine_only(cfg, instance_id, mode):
+def sync_machine_only(cfg, instance_id, mode, tracker=None, warnings=None):
     """One sync whose ONLY destination is the machine ingest gateway.
 
     Called instead of the Supabase half of `cmd_sync`, never alongside it. No
@@ -4995,10 +5994,14 @@ def sync_machine_only(cfg, instance_id, mode):
     anywhere, so the run must exit non-zero — otherwise cron reports success for
     a notebook that has been silently delivering nothing, which is precisely the
     shape this whole path exists to avoid."""
-    warnings = []
+    if warnings is None:
+        warnings = []
+    if tracker is None:
+        tracker = ConversationTracker(cfg, instance_id, mode, warnings)
     try:
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
-        sent_events = dedupe_events(derive_events(instance_id, leads))
+        pending = tracker.pending_events()
+        sent_events = dedupe_events(derive_events(instance_id, leads) + pending)
         sent_messages = dedupe_messages(messages)
     except Exception as e:
         # Nothing was sent, so there is no run to mark failed — only to report.
@@ -5012,12 +6015,14 @@ def sync_machine_only(cfg, instance_id, mode):
         status, "; ".join(warnings)[:500], owner)
     if not ok:
         sys.exit(f"sync failed: {note}")
+    tracker.mark_pending_delivered(pending)
 
     print(f"sync {status}: {rows} rows delivered to the ingest gateway for "
           f"instance {instance_id}"
           + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
-    # Swallows everything internally, exactly as on the Supabase path, so it
-    # cannot turn a delivered run into a failed one.
+    # Both swallow everything internally, exactly as on the Supabase path, so
+    # neither can turn a delivered run into a failed one.
+    tracker.refresh()
     notify_new_replies(cfg)
     if cfg.get("sync_photos"):
         sync_photos(cfg, None, demo["avatar_map"], mode)
@@ -5077,6 +6082,11 @@ def derive_events(instance_id, leads):
                     "profile_url": lead["profile_url"],
                     "event_type": etype,
                     "occurred_at": lead[field],
+                    # A milestone event has no payload, but the key must be
+                    # present: PostgREST refuses a bulk insert whose objects do
+                    # not all carry the same keys, and the tracker's refresh
+                    # events (which DO carry one) travel in the same batch.
+                    "raw": None,
                 })
     return events
 

@@ -35,6 +35,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { hashAgentSecret, generateAgentSecret } from '../api/_lib/agent/credentials.js'
 import {
+  AGENT_REFRESH_CANDIDATES_OP,
+  createAgentRefreshCandidatesHandler,
+} from '../api/_lib/agent/machineOps.js'
+import {
   createAgentIngestHandler,
   ingestBatch,
   parseIngestPayload,
@@ -727,6 +731,77 @@ describe.skipIf(!hasMachineCredential)(
       expect(answered.ok).toBe(true)
       expect(answered.instance_id).toBe(INSTANCE)
       expect(answered.rows_written).toBeGreaterThan(0)
+    })
+
+    // -----------------------------------------------------------------------
+    // The conversation-refresh worklist.
+    // -----------------------------------------------------------------------
+
+    it('offers only the stale thread, and reads the refresh receipt back', async () => {
+      const daysAgo = (days: number) =>
+        new Date(Date.now() - days * 86_400_000).toISOString()
+      const actor = machineActor(credentialId, TENANT)
+      // Two threads, both long dark. The second one the agent already asked
+      // about today — through this very `events` collection, which is the
+      // contract the Python side writes to.
+      const payload = parseIngestPayload(
+        batch({
+          idempotency_key: `s21-batch-refresh-${RUN}`,
+          messages: [
+            {
+              campaign_id: CAMPAIGN,
+              profile_url: PROFILE_ONE,
+              direction: 'in',
+              body: 'stale inbound',
+              sent_at: daysAgo(30),
+              content_hash: `s21refresh-${RUN}-1`,
+            },
+            {
+              campaign_id: CAMPAIGN,
+              profile_url: PROFILE_TWO,
+              direction: 'in',
+              body: 'already refreshed',
+              sent_at: daysAgo(30),
+              content_hash: `s21refresh-${RUN}-2`,
+            },
+          ],
+          events: [
+            {
+              campaign_id: null,
+              profile_url: PROFILE_TWO,
+              event_type: 'conversation_refresh',
+              occurred_at: daysAgo(10),
+              raw: { last_requested_at: daysAgo(0), count: 2, method: 'retry' },
+            },
+          ],
+        }),
+      )
+      await ingestBatch(store, actor, payload, payloadDigest(payload))
+      await fixtures.asActor(CONTRACT_ACTORS.activeAdmin.actorId, (client) =>
+        client.query(
+          "UPDATE public.messages SET intent_level = 'p3'" +
+            ' WHERE instance_id = $1 AND profile_url = $2',
+          [INSTANCE, PROFILE_ONE],
+        ),
+      )
+
+      const response = await createAgentRefreshCandidatesHandler({
+        store,
+        tenantId: TENANT,
+      })(
+        new Request(
+          `https://dashboard.invalid/api/import?op=${AGENT_REFRESH_CANDIDATES_OP}&limit=10`,
+          { headers: { authorization: `Bearer lha.${credentialId}.${secret}` } },
+        ),
+      )
+      expect(response.status).toBe(200)
+      const answered = await response.json()
+      expect(answered.instance_id).toBe(INSTANCE)
+      expect(answered.refresh_after_days).toBe(3)
+      expect(answered.candidates).toHaveLength(1)
+      expect(answered.candidates[0].profile_url).toBe(PROFILE_ONE)
+      expect(answered.candidates[0].priority).toBe('p3')
+      expect(answered.candidates[0].last_requested_at).toBeNull()
     })
 
     it('refuses a batch whose instance is not the credential’s, through the handler', async () => {

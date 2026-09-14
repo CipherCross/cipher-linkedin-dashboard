@@ -292,6 +292,10 @@ events — action log (drives daily-activity charts)
   and can shift later if the underlying milestone is corrected (e.g. a backfilled
   reply time) — don't expect duplicate rows for the same event_type on a lead,
   and don't treat occurred_at as immutable history.
+  event_type 'conversation_refresh' is NOT a funnel event: it is the sync agent's
+  record that it asked LH2 to re-scrape one conversation (campaign_id NULL,
+  profile_url set, raw = {last_requested_at, count, method}) and it must never be
+  counted as outreach activity or charted as a funnel series.
 
 messages — actual message texts; full conversation threads, both directions
   id bigint PK, instance_id, campaign_id, profile_url, direction text ('in'|'out'),
@@ -549,6 +553,8 @@ campaign_metrics — per-campaign funnel rollup:
 
 daily_activity — events bucketed per day:
   day date, instance_id, event_type, cnt
+  Unfiltered over events, so it also carries non-funnel types such as
+  'conversation_refresh'; filter to the funnel types when charting activity.
 
 campaign_reply_sentiment — inbound reply sentiment counts per campaign:
   campaign_id, sentiment, cnt (only classified inbound replies)

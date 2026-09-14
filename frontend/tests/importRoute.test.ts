@@ -26,6 +26,7 @@ import { GET, POST } from '../api/import.js'
 import {
   AGENT_CONFIG_OP,
   AGENT_PHOTO_UPLOAD_OP,
+  AGENT_REFRESH_CANDIDATES_OP,
   AGENT_RELEASE_OP,
 } from '../api/_lib/agent/machineOps.js'
 import { AGENT_INGEST_OP } from '../api/_lib/agent/ingest.js'
@@ -86,6 +87,8 @@ describe('/api/import route method dispatch', () => {
     { op: AGENT_INGEST_OP, verb: 'GET', reaches: false },
     { op: AGENT_PHOTO_UPLOAD_OP, verb: 'POST', reaches: true },
     { op: AGENT_PHOTO_UPLOAD_OP, verb: 'GET', reaches: false },
+    { op: AGENT_REFRESH_CANDIDATES_OP, verb: 'GET', reaches: true },
+    { op: AGENT_REFRESH_CANDIDATES_OP, verb: 'POST', reaches: false },
   ]
 
   for (const { op, verb, reaches } of cases) {

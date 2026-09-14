@@ -305,8 +305,11 @@ export const refreshCandidatesOperation: NeonQueryOperation<
       '   GROUP BY m.instance_id, m.profile_url' +
       "  HAVING count(*) FILTER (WHERE m.direction = 'in') > 0" +
       '), candidates AS (' +
+      // `events.raw` is unvalidated on ingest, so the timestamp is cast only
+      // when it looks like one; a malformed value reads as "never requested"
+      // rather than turning every candidate read for the notebook into a 500.
       '  SELECT t.instance_id, t.profile_url, t.intent_rank, t.last_inbound_at, t.last_message_at,' +
-      "         (e.raw->>'last_requested_at')::timestamptz AS last_requested_at" +
+      '         r.last_requested_at' +
       '    FROM threads t' +
       '    CROSS JOIN policy p' +
       '    LEFT JOIN public.events e' +
@@ -314,10 +317,13 @@ export const refreshCandidatesOperation: NeonQueryOperation<
       '     AND e.profile_url = t.profile_url' +
       '     AND e.campaign_id IS NULL' +
       "     AND e.event_type = 'conversation_refresh'" +
+      '    CROSS JOIN LATERAL (' +
+      "      SELECT CASE WHEN e.raw->>'last_requested_at' ~ '^\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}'" +
+      "                  THEN (e.raw->>'last_requested_at')::timestamptz END AS last_requested_at" +
+      '    ) r' +
       '   WHERE t.last_message_at <= now() - make_interval(days => p.refresh_after_days)' +
-      "     AND ((e.raw->>'last_requested_at')::timestamptz IS NULL" +
-      "          OR (e.raw->>'last_requested_at')::timestamptz" +
-      '             <= now() - make_interval(days => p.refresh_after_days))' +
+      '     AND (r.last_requested_at IS NULL' +
+      '          OR r.last_requested_at <= now() - make_interval(days => p.refresh_after_days))' +
       ')' +
       ' SELECT p.instance_id, p.refresh_after_days, c.profile_url,' +
       "        CASE c.intent_rank WHEN 3 THEN 'p3' WHEN 2 THEN 'p2' WHEN 1 THEN 'p1'" +
@@ -1046,7 +1052,7 @@ export const credentialDirectoryOperation: NeonQueryOperation<
 // ---------------------------------------------------------------------------
 
 /**
- * The machine store's whole vocabulary. Eleven commands, two queries and one
+ * The machine store's whole vocabulary. Eleven commands, three queries and one
  * actorless resolver — and deliberately nothing else: no read of another
  * notebook, no read of the dashboard's own tables, no AI guard. A notebook that
  * wanted to know what the dashboard thinks of its leads would have to ask

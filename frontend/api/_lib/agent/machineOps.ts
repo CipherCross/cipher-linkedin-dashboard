@@ -16,6 +16,7 @@ import {
   MACHINE_COMMANDS,
   MACHINE_OPERATIONS,
   type InstanceConfigRow,
+  type RefreshCandidateRow,
 } from '../data/operations/agentIngest.js'
 import {
   MACHINE_PUBLISH_COMMANDS,
@@ -37,6 +38,7 @@ import { postPublishCompatibilityAlertToSlack } from '../slack.js'
 export const AGENT_CONFIG_OP = 'agent.config'
 export const AGENT_PHOTO_UPLOAD_OP = 'agent.photoUpload'
 export const AGENT_RELEASE_OP = 'agent.release'
+export const AGENT_REFRESH_CANDIDATES_OP = 'agent.refreshCandidates'
 export const AGENT_PUBLISH_PROBE_OP = 'agent.publishCompatibility'
 export const AGENT_PUBLISH_CLAIM_OP = 'agent.publishClaim'
 export const AGENT_PUBLISH_HEARTBEAT_OP = 'agent.publishHeartbeat'
@@ -287,6 +289,82 @@ export function createAgentConfigHandler(
     } catch (error) {
       console.error('agent config read failed', safeErrorLabel(error))
       return json({ error: 'the remote config could not be read' }, 500)
+    }
+  }
+}
+
+export const REFRESH_CANDIDATES_DEFAULT_LIMIT = 25
+export const REFRESH_CANDIDATES_MAX_LIMIT = 100
+
+/**
+ * GET the conversations this notebook should re-scrape next.
+ *
+ * The same shape as `agent.config`: GET only, no instance id from the caller,
+ * and a row set whose scope is the credential's own instance because step 009
+ * says so rather than because this handler asked. The only caller input is
+ * `limit`, which is a page size and nothing else — it cannot widen the scope,
+ * only shorten the answer.
+ */
+export function createAgentRefreshCandidatesHandler(
+  deps: MachineApiDeps,
+): (request: Request) => Promise<Response> {
+  return async (request) => {
+    if (request.method.toUpperCase() !== 'GET') {
+      return methodNotAllowed(request.method)
+    }
+    const authenticated = await auth(request, deps, 'agent-refresh-candidates')
+    if (authenticated.response) return authenticated.response
+    const { principal } = authenticated
+
+    const raw = new URL(request.url).searchParams.get('limit')
+    let limit = REFRESH_CANDIDATES_DEFAULT_LIMIT
+    if (raw !== null && raw.trim() !== '') {
+      const value = raw.trim()
+      // A decimal point, a sign, an exponent or whitespace is a caller that
+      // means something this endpoint does not do — answer, do not round.
+      if (!/^[0-9]+$/.test(value)) {
+        return json({ error: 'limit must be an integer between 1 and 100' }, 400)
+      }
+      limit = Number(value)
+      if (limit < 1 || limit > REFRESH_CANDIDATES_MAX_LIMIT) {
+        return json({ error: 'limit must be an integer between 1 and 100' }, 400)
+      }
+    }
+
+    try {
+      const page = await principal.store.query<RefreshCandidateRow>(
+        principal.actor,
+        {
+          operation: MACHINE_OPERATIONS.refreshCandidates,
+          page: { limit },
+        },
+      )
+      // Zero rows means the credential stopped resolving between the auth
+      // statement and this one; "nothing to refresh" is one row with a NULL
+      // profile_url, not an empty page. Treat the two differently — see
+      // `refreshCandidatesOperation`.
+      if (
+        page.items.length === 0 ||
+        page.items.some((row) => row.instance_id !== principal.instanceId)
+      ) {
+        return machineUnauthorized('agent-refresh-candidates')
+      }
+      return json({
+        instance_id: principal.instanceId,
+        refresh_after_days: page.items[0].refresh_after_days,
+        candidates: page.items
+          .filter((row) => row.profile_url !== null)
+          .map((row) => ({
+            profile_url: row.profile_url,
+            priority: row.priority,
+            last_inbound_at: row.last_inbound_at,
+            last_message_at: row.last_message_at,
+            last_requested_at: row.last_requested_at,
+          })),
+      })
+    } catch (error) {
+      console.error('agent refresh candidates read failed', safeErrorLabel(error))
+      return json({ error: 'the refresh candidates could not be read' }, 500)
     }
   }
 }

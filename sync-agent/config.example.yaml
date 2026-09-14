@@ -136,6 +136,37 @@ sync_photos: false
 #   enable_cdp_adapter: false
 #   cdp_security_ack: ""
 
+# ---------------------------------------------------------------------------
+# Conversation tracker (Phase 2) — automatic re-scraping of stale chats.
+#
+# LH2 stops recording a thread once the SDR answers it by hand. With this on,
+# the agent creates ONE paused campaign on this notebook ("Conversation tracker
+# (dashboard)") holding a single ScrapeMessagingHistory action, and after each
+# successful sync it asks the dashboard which conversations have gone stale and
+# queues them for LH2 to re-scrape. The results arrive through the ordinary
+# chat-store extraction on the next sync.
+#
+# Requirements: the `lh2_publish` profile above, with `enable_cdp_adapter: true`
+# and a valid `cdp_security_ack`, and a machine ingest credential
+# (`ingest_url` + `ingest_token`). Without either, the tracker prints a note and
+# does nothing. The tracker campaign is added to `exclude_campaigns`
+# automatically, so it never appears on the dashboard or in the funnel.
+#
+# Local-only state (LH2 ids, per-lead request counters and the refresh events
+# still owed to the dashboard) lives in `tracker_state.json` beside agent.py —
+# never in this file. Delete it only if the campaign itself is gone; the agent
+# recovers it by looking the campaign up by name.
+#
+# All five keys are also settable remotely from the Health page.
+# tracker_enabled: false             # nothing happens unless this is true
+# tracker_refresh_after_days: 3      # the server's staleness threshold (echoed here)
+# tracker_max_per_day: 10            # leads re-queued per UTC day; hard cap 50
+# tracker_campaign_name: "Conversation tracker (dashboard)"
+# tracker_hours:                     # LH2 weekday indices, 0 = Sunday
+#   days: [1, 2, 3, 4, 5]            # Mon-Fri
+#   start: "09:00"
+#   end: "18:00"
+
 # LH2 campaign ids this notebook must NEVER sync (test campaigns, etc.).
 # Archiving in LH2 is not enough — archived campaigns stay in lh.db and would
 # be re-created in Supabase on the next sync. Also settable remotely from the

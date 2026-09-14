@@ -20,8 +20,14 @@ export function ActivityChart({
   from?: string | null
   to?: string | null
 }) {
+  // `daily_activity` buckets EVERY event type, including non-funnel ones the
+  // agent writes for its own bookkeeping (`conversation_refresh`). Only the
+  // three series above are charted, so only they are folded in — an allowlist,
+  // so a new bookkeeping event type is invisible here the day it is written.
+  const charted = new Set(SERIES.map((s) => s.key))
   const byDay = new Map<string, Record<string, number | string>>()
   for (const row of activity) {
+    if (!charted.has(row.event_type)) continue
     const entry = byDay.get(row.day) ?? { day: row.day }
     entry[row.event_type] = ((entry[row.event_type] as number) ?? 0) + row.cnt
     byDay.set(row.day, entry)

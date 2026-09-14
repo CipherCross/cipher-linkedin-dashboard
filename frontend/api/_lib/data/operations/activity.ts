@@ -21,6 +21,27 @@ export const ACTIVITY_OPERATIONS = {
   dailySeries: 'activity.dailySeries',
 } as const
 
+/**
+ * The event types that are funnel activity, and the only ones this slice
+ * returns.
+ *
+ * `public.daily_activity` groups `public.events` by `event_type` with no filter
+ * of its own, so every event type the agent ever writes reaches the browser's
+ * charts by default. That is an allowlist rather than a denylist deliberately:
+ * a new non-funnel event type (the first is `conversation_refresh` — the sync
+ * agent's record that it asked LH2 to re-scrape one conversation) must be
+ * invisible here the day it is written, not the day somebody notices a stray
+ * series. A new *funnel* type is the rarer change and is a line added here.
+ *
+ * These four are `derive_events` in `sync-agent/agent.py`, exactly.
+ */
+export const FUNNEL_EVENT_TYPES = [
+  'invite_sent',
+  'invite_accepted',
+  'message_sent',
+  'reply_received',
+] as const
+
 /** One row of the `daily_activity` view, as the browser consumes it. */
 export interface DailyActivityRow {
   /** UTC calendar day, `YYYY-MM-DD`. */
@@ -74,7 +95,8 @@ const DAILY_SERIES_SQL = `SELECT to_char(da.day, 'YYYY-MM-DD') AS day,
           da.event_type,
           da.cnt::bigint AS cnt
      FROM public.daily_activity da
-    WHERE ($1::text IS NULL OR da.instance_id = $1)
+    WHERE da.event_type = ANY ($4::text[])
+      AND ($1::text IS NULL OR da.instance_id = $1)
       AND ($2::timestamptz IS NULL
            OR da.day >= ($2::timestamptz AT TIME ZONE 'UTC')::date)
       AND ($3::timestamptz IS NULL
@@ -94,6 +116,7 @@ export const dailySeriesOperation: NeonQueryOperation<
       params?.instanceId ?? null,
       range?.fromInclusive ?? null,
       range?.toExclusive ?? null,
+      FUNNEL_EVENT_TYPES,
     ],
   }),
   mapRow: (row: NeonRow): DailyActivityRow => ({

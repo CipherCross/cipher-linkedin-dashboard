@@ -28,6 +28,7 @@ import argparse
 import base64
 import contextlib
 import copy
+import datetime as dt
 import hashlib
 import io
 import json
@@ -2932,6 +2933,813 @@ class MessageContractPlumbingTest(unittest.TestCase):
         problems = agent.verify_ingest_parity(
             chunks, cs, ls, ms, events, ss, demo["edu_map"], demo["job_map"])
         self.assertTrue(any("messages" in p for p in problems), problems)
+
+
+# ------------------------------------------- the LH2 conversation tracker
+
+TRACKER_SCHEMA = """
+CREATE TABLE campaigns (id INTEGER PRIMARY KEY, name TEXT, li_account_id INTEGER,
+                        is_paused INTEGER, is_valid INTEGER);
+CREATE TABLE campaign_versions (id INTEGER PRIMARY KEY, campaign_id INTEGER,
+                               exclude_list_id INTEGER);
+CREATE TABLE campaign_version_actions (id INTEGER PRIMARY KEY, version_id INTEGER,
+                                      action_id INTEGER);
+CREATE TABLE actions (id INTEGER PRIMARY KEY, campaign_id INTEGER);
+CREATE TABLE action_versions (id INTEGER PRIMARY KEY, action_id INTEGER,
+                             config_id INTEGER, exclude_list_id INTEGER);
+CREATE TABLE action_configs (id INTEGER PRIMARY KEY, actionType TEXT,
+                            actionSettings TEXT, coolDown INTEGER,
+                            maxActionResultsPerIteration INTEGER);
+CREATE TABLE action_target_people (action_id INTEGER, person_id INTEGER, state INTEGER);
+CREATE TABLE working_intervals (id INTEGER PRIMARY KEY, action_id INTEGER,
+                               working_week_day INTEGER, day_and_night INTEGER,
+                               started_at INTEGER, ended_at INTEGER);
+CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+"""
+
+TRACKER_NAME = agent.TRACKER_DEFAULT_NAME
+TRACKER_CAMPAIGN_ID = 77
+TRACKER_ACTION_ID = 501
+TRACKER_VERSION_ID = 901
+
+
+def tracker_db(path, campaign=True, name=TRACKER_NAME, li_account_id=1,
+               is_valid=1, action_type=agent.TRACKER_ACTION_TYPE, intervals=7,
+               targets=(), people=(), campaign_id=TRACKER_CAMPAIGN_ID,
+               extra_campaigns=()):
+    """A minimal lh.db holding exactly the tables the tracker reads."""
+    if os.path.exists(path):
+        os.remove(path)
+    con = sqlite3.connect(path)
+    con.executescript(TRACKER_SCHEMA)
+    if campaign:
+        con.execute("INSERT INTO campaigns VALUES (?,?,?,?,?)",
+                    (campaign_id, name, li_account_id, 1, is_valid))
+        con.execute("INSERT INTO campaign_versions VALUES (?,?,?)",
+                    (11, campaign_id, 5))
+        con.execute("INSERT INTO actions VALUES (?,?)",
+                    (TRACKER_ACTION_ID, campaign_id))
+        con.execute("INSERT INTO campaign_version_actions VALUES (?,?,?)",
+                    (21, 11, TRACKER_ACTION_ID))
+        con.execute("INSERT INTO action_configs VALUES (?,?,?,?,?)",
+                    (350, action_type, "{}", 60000, 10))
+        con.execute("INSERT INTO action_versions VALUES (?,?,?,?)",
+                    (TRACKER_VERSION_ID, TRACKER_ACTION_ID, 350, 6))
+        for day in range(intervals):
+            con.execute("INSERT INTO working_intervals VALUES (?,?,?,?,?,?)",
+                        (day + 1, TRACKER_ACTION_ID, day, 0, 540, 1080))
+    for extra_id, extra_name in extra_campaigns:
+        con.execute("INSERT INTO campaigns VALUES (?,?,?,?,?)",
+                    (extra_id, extra_name, li_account_id, 1, 1))
+    for person_id, state in targets:
+        con.execute("INSERT INTO action_target_people VALUES (?,?,?)",
+                    (TRACKER_ACTION_ID, person_id, state))
+    for person_id, external_id in people:
+        con.execute("INSERT INTO person_external_ids VALUES (?,?,?)",
+                    (person_id, external_id, "public"))
+    con.commit()
+    con.close()
+    return path
+
+
+class FakeLh2:
+    """The CDP layer, recorded.
+
+    `_evaluate` is what is replaced, not the publisher, so every call still goes
+    through the real `_call_expression` (proving the JS builds and that the
+    payload is JSON-encodable) and the real result validation on the way back.
+    """
+
+    def __init__(self, campaign_id=TRACKER_CAMPAIGN_ID, paused=True,
+                 import_successful=None, db_path=None, enqueue_writes=True):
+        self.calls = []
+        self.campaign_id = campaign_id
+        self.paused = paused
+        self.import_successful = import_successful
+        # When it knows the database, the fake QUEUES what it was asked to
+        # queue, so the tracker's own verification query reads a real result
+        # instead of a number the test handed it.
+        self.db_path = db_path
+        self.enqueue_writes = enqueue_writes
+
+    def _queue(self, person_ids):
+        if not self.db_path or not self.enqueue_writes:
+            return
+        con = sqlite3.connect(self.db_path)
+        for person_id in person_ids:
+            if con.execute("SELECT 1 FROM action_target_people "
+                           "WHERE action_id = ? AND person_id = ?",
+                           (TRACKER_ACTION_ID, person_id)).fetchone():
+                con.execute("UPDATE action_target_people SET state = 1 "
+                            "WHERE action_id = ? AND person_id = ?",
+                            (TRACKER_ACTION_ID, person_id))
+            else:
+                con.execute("INSERT INTO action_target_people VALUES (?,?,1)",
+                            (TRACKER_ACTION_ID, person_id))
+        con.commit()
+        con.close()
+
+    def _person_ids_for(self, urls):
+        con = sqlite3.connect(self.db_path)
+        slugs = [agent.slug_from_profile_url(u) for u in urls]
+        rows = con.execute(
+            "SELECT person_id FROM person_external_ids WHERE external_id IN "
+            f"({','.join('?' * len(slugs))})", slugs).fetchall()
+        con.close()
+        return [row[0] for row in rows]
+
+    @property
+    def methods(self):
+        return [method for method, _ in self.calls]
+
+    def __call__(self, publisher, method, payload=None):
+        # Build the expression the real call would send; a malformed payload or
+        # an unknown method fails here exactly as it would on a notebook.
+        agent.LinkedHelperPublisher._call_expression(method, payload)
+        self.calls.append((method, payload))
+        if method == "create":
+            return {"outcome": "result", "campaignId": self.campaign_id}
+        if method in ("validate", "save_working_hours"):
+            return True
+        if method == "retry_people":
+            self._queue(payload["personIds"])
+            return True
+        if method == "pause":
+            self.paused = True
+            return True
+        if method == "unpause":
+            self.paused = False
+            return True
+        if method == "is_paused":
+            return self.paused
+        if method == "import_people":
+            urls = [u for u in payload["urls"].split("\n") if u]
+            if self.db_path:
+                self._queue(self._person_ids_for(urls))
+            successful = (len(urls) if self.import_successful is None
+                          else self.import_successful)
+            return {"successful": successful, "alreadyProcessed": 0,
+                    "alreadyInQueue": 0, "inExcludeList": 0}
+        raise AssertionError(f"unexpected LH2 call {method}")
+
+
+def candidate(slug, priority="p3"):
+    return {"profile_url": f"https://www.linkedin.com/in/{slug}",
+            "priority": priority, "last_inbound_at": "2026-09-01T00:00:00+00:00",
+            "last_message_at": "2026-09-01T00:00:00+00:00",
+            "last_requested_at": None}
+
+
+class TrackerTestCase(unittest.TestCase):
+    """Shared fixture: a temp lh.db, a temp state file and a recorded CDP layer."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.db_path = os.path.join(self.tmp.name, "lh.db")
+        self.state_path = os.path.join(self.tmp.name, "tracker_state.json")
+        self.lh2 = FakeLh2(db_path=self.db_path)
+        patch = mock.patch.object(agent.LinkedHelperPublisher, "_evaluate",
+                                  autospec=True, side_effect=self.lh2)
+        patch.start()
+        self.addCleanup(patch.stop)
+        preflight = mock.patch.object(agent.LinkedHelperPublisher, "preflight",
+                                      autospec=True,
+                                      side_effect=lambda self: (True, None))
+        preflight.start()
+        self.addCleanup(preflight.stop)
+        printer = mock.patch("builtins.print")
+        printer.start()
+        self.addCleanup(printer.stop)
+
+    def cfg(self, **extra):
+        return dict({
+            "instance_id": "nb",
+            "ingest_url": "https://dash.example/api/import?op=agent.ingest",
+            "ingest_token": a_token(),
+            "lh2_db_path": self.db_path,
+            "tracker_enabled": True,
+            "lh2_publish": {
+                "li_account_id": "1", "account_id": "5", "account_name": "A",
+                "sender_name": "B", "workspace_id": "7",
+                "cdp_host": "127.0.0.1", "cdp_port": 50454,
+                "enable_cdp_adapter": True,
+                "cdp_security_ack": agent.CDP_SECURITY_ACK,
+            },
+        }, **extra)
+
+    def tracker(self, cfg=None, warnings=None, mode="only", state=None, **extra):
+        if state is not None:
+            with open(self.state_path, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+        return agent.ConversationTracker(
+            cfg if cfg is not None else self.cfg(**extra), "nb", mode,
+            warnings if warnings is not None else [],
+            state_path=self.state_path)
+
+    def state(self):
+        return agent.load_tracker_state(self.state_path)
+
+    def get(self, *candidates, status=200, body=None, boom=None):
+        """Patch the candidates GET with a recorded stand-in."""
+        answer = Answer(status, body if body is not None else {
+            "instance_id": "nb", "refresh_after_days": 3,
+            "candidates": list(candidates)})
+
+        def fake(url, **kwargs):
+            fake.calls.append((url, kwargs))
+            if boom is not None:
+                raise boom
+            return answer
+
+        fake.calls = []
+        return mock.patch.object(agent.requests, "get", side_effect=fake), fake
+
+
+class TrackerSettingsTest(unittest.TestCase):
+    """The five config keys, including what a Health-page typo does to them."""
+
+    def test_defaults(self):
+        s = agent.tracker_settings({})
+        self.assertEqual(s["enabled"], False)
+        self.assertEqual(s["refresh_after_days"], 3)
+        self.assertEqual(s["max_per_day"], 10)
+        self.assertEqual(s["name"], agent.TRACKER_DEFAULT_NAME)
+        self.assertEqual(s["hours"], {"days": [1, 2, 3, 4, 5],
+                                      "start": [9, 0], "end": [18, 0]})
+
+    def test_the_daily_cap_is_hard(self):
+        self.assertEqual(agent.tracker_settings({"tracker_max_per_day": 5000})
+                         ["max_per_day"], agent.TRACKER_MAX_PER_DAY_CAP)
+
+    def test_malformed_values_fall_back_rather_than_failing(self):
+        s = agent.tracker_settings({"tracker_max_per_day": "lots",
+                                    "tracker_hours": "09:00-18:00",
+                                    "tracker_campaign_name": "   ",
+                                    "tracker_enabled": "yes"})
+        self.assertEqual(s["max_per_day"], 10)
+        self.assertEqual(s["hours"]["days"], [1, 2, 3, 4, 5])
+        self.assertEqual(s["name"], agent.TRACKER_DEFAULT_NAME)
+        # Only a real boolean enables it: a truthy string from a form does not.
+        self.assertFalse(s["enabled"])
+
+    def test_the_schedule_is_keyed_by_lh2_weekday_with_sunday_zero(self):
+        schedule = agent.tracker_schedule(
+            agent.tracker_settings({})["hours"])
+        self.assertEqual(schedule["0"], False)   # Sunday
+        self.assertEqual(schedule["6"], False)   # Saturday
+        self.assertEqual(schedule["1"], [{"start": [9, 0], "end": [18, 0]}])
+
+    def test_the_five_keys_are_remote_overridable(self):
+        for key in ("tracker_enabled", "tracker_refresh_after_days",
+                    "tracker_max_per_day", "tracker_hours",
+                    "tracker_campaign_name"):
+            self.assertIn(key, agent.REMOTE_CONFIG_KEYS)
+            self.assertNotIn(key, agent.LOCAL_ONLY_CONFIG_KEYS)
+
+
+class TrackerEnsureTest(TrackerTestCase):
+    """Resolving, recovering and creating the one tracker campaign."""
+
+    def test_disabled_does_nothing_and_touches_no_cdp(self):
+        tracker_db(self.db_path)
+        tracker = self.tracker(tracker_enabled=False)
+        tracker.ensure()
+        tracker.refresh()
+        self.assertEqual(self.lh2.calls, [])
+        self.assertFalse(os.path.exists(self.state_path))
+
+    def test_a_notebook_with_no_machine_credential_never_runs_it(self):
+        tracker_db(self.db_path)
+        cfg = self.cfg(supabase_url="https://sb.example",
+                       supabase_service_key="k")
+        cfg.pop("ingest_url")
+        cfg.pop("ingest_token")
+        warnings = []
+        tracker = self.tracker(cfg=cfg, warnings=warnings, mode="off")
+        tracker.ensure()
+        tracker.refresh()
+        self.assertEqual(self.lh2.calls, [])
+        self.assertFalse(tracker.ready)
+
+    def test_it_recovers_the_campaign_by_name_without_a_state_file(self):
+        tracker_db(self.db_path)
+        tracker = self.tracker()
+        tracker.ensure()
+        self.assertTrue(tracker.ready)
+        self.assertEqual(tracker.campaign_id, TRACKER_CAMPAIGN_ID)
+        self.assertEqual(tracker.action_id, TRACKER_ACTION_ID)
+        self.assertEqual(tracker.action_version_id, TRACKER_VERSION_ID)
+        # Recovery is a READ: nothing was created and nothing was re-scheduled.
+        self.assertEqual(self.lh2.calls, [])
+        self.assertEqual(self.state()["campaign_id"], TRACKER_CAMPAIGN_ID)
+
+    def test_two_campaigns_with_the_name_are_refused_not_resolved(self):
+        tracker_db(self.db_path, extra_campaigns=[(78, TRACKER_NAME)])
+        warnings = []
+        tracker = self.tracker(warnings=warnings)
+        tracker.ensure()
+        self.assertFalse(tracker.ready)
+        self.assertEqual(self.lh2.calls, [])
+        self.assertTrue(any("TRACKER_DUPLICATE_CAMPAIGN_NAME" in w
+                            for w in warnings), warnings)
+
+    def test_the_create_path_is_create_validate_pause_then_working_hours(self):
+        tracker_db(self.db_path, campaign=False)
+
+        def create_then_exist(publisher, method, payload=None):
+            if method == "create":
+                # LH2 has written the campaign by the time create returns.
+                tracker_db(self.db_path + ".new")
+                os.replace(self.db_path + ".new", self.db_path)
+            return FakeLh2.__call__(self.lh2, publisher, method, payload)
+
+        with mock.patch.object(agent.LinkedHelperPublisher, "_evaluate",
+                               create_then_exist):
+            tracker = self.tracker()
+            tracker.ensure()
+        self.assertTrue(tracker.ready)
+        self.assertEqual(self.lh2.methods,
+                         ["create", "validate", "pause", "save_working_hours"])
+        payload = dict(self.lh2.calls)["create"]
+        self.assertEqual(payload["excludeList"], [])
+        action = payload["actions"][0]
+        self.assertEqual(action["target"], [])
+        self.assertEqual(action["excludeList"], [])
+        self.assertEqual(action["config"], {
+            "actionType": "ScrapeMessagingHistory", "actionSettings": {},
+            "coolDown": 60000, "maxActionResultsPerIteration": 10,
+            "overridePlatform": "linkedin"})
+        hours = dict(self.lh2.calls)["save_working_hours"]
+        self.assertEqual(hours["campaignId"], TRACKER_CAMPAIGN_ID)
+        self.assertEqual(hours["actionId"], TRACKER_ACTION_ID)
+        self.assertEqual(hours["schedule"]["1"], [{"start": [9, 0], "end": [18, 0]}])
+        self.assertEqual(self.state()["action_id"], TRACKER_ACTION_ID)
+        self.assertIn("created_at", self.state())
+
+    def test_an_unvalidated_campaign_is_refused(self):
+        tracker_db(self.db_path, is_valid=None)
+        warnings = []
+        tracker = self.tracker(warnings=warnings)
+        tracker.ensure()
+        self.assertFalse(tracker.ready)
+        self.assertTrue(any("TRACKER_CAMPAIGN_NOT_VALID" in w for w in warnings))
+
+    def test_a_campaign_whose_action_is_not_the_scraper_is_refused(self):
+        tracker_db(self.db_path, action_type="InvitePerson")
+        warnings = []
+        tracker = self.tracker(warnings=warnings)
+        tracker.ensure()
+        self.assertFalse(tracker.ready)
+        self.assertTrue(any("TRACKER_ACTION_TYPE" in w for w in warnings))
+
+    def test_missing_working_intervals_are_refused(self):
+        tracker_db(self.db_path, intervals=3)
+        warnings = []
+        tracker = self.tracker(warnings=warnings)
+        tracker.ensure()
+        self.assertFalse(tracker.ready)
+        self.assertTrue(any("TRACKER_WORKING_HOURS_MISMATCH" in w for w in warnings))
+
+    def test_a_tracker_failure_is_a_warning_and_never_an_exception(self):
+        # No database at all: every step below it must still be survivable.
+        warnings = []
+        tracker = self.tracker(warnings=warnings, lh2_db_path=
+                               os.path.join(self.tmp.name, "missing.db"))
+        tracker.ensure()
+        tracker.refresh()
+        self.assertFalse(tracker.ready)
+        self.assertTrue(any("tracker" in w for w in warnings), warnings)
+
+
+class TrackerExcludeTest(TrackerTestCase):
+    """The tracker never reaches the dashboard."""
+
+    def test_the_resolved_campaign_is_excluded_for_the_run(self):
+        tracker_db(self.db_path)
+        cfg = self.cfg(exclude_campaigns=[4])
+        tracker = self.tracker(cfg=cfg)
+        tracker.ensure()
+        tracker.apply_exclude()
+        self.assertEqual(cfg["exclude_campaigns"], [4, TRACKER_CAMPAIGN_ID])
+        campaigns = [{"id": "nb:4"}, {"id": f"nb:{TRACKER_CAMPAIGN_ID}"},
+                     {"id": "nb:9"}]
+        kept, _, _, _ = agent.apply_campaign_excludes(
+            cfg, campaigns, [{"campaign_id": f"nb:{TRACKER_CAMPAIGN_ID}"}], [], [])
+        self.assertEqual([c["id"] for c in kept], ["nb:9"])
+
+    def test_a_known_campaign_is_excluded_even_when_the_tracker_is_off(self):
+        cfg = self.cfg(tracker_enabled=False)
+        tracker = self.tracker(cfg=cfg, state={"campaign_id": TRACKER_CAMPAIGN_ID})
+        tracker.ensure()
+        tracker.apply_exclude()
+        self.assertEqual(cfg["exclude_campaigns"], [TRACKER_CAMPAIGN_ID])
+
+    def test_it_is_not_added_twice(self):
+        tracker_db(self.db_path)
+        cfg = self.cfg(exclude_campaigns=[TRACKER_CAMPAIGN_ID])
+        tracker = self.tracker(cfg=cfg)
+        tracker.ensure()
+        tracker.apply_exclude()
+        self.assertEqual(cfg["exclude_campaigns"], [TRACKER_CAMPAIGN_ID])
+
+
+class TrackerRefreshTest(TrackerTestCase):
+    """The enqueue cycle: queue -> budget -> candidates -> retry/import -> verify."""
+
+    def ready_tracker(self, targets=(), people=(), **extra):
+        tracker_db(self.db_path, targets=targets, people=people)
+        tracker = self.tracker(**extra)
+        tracker.ensure()
+        self.assertTrue(tracker.ready)
+        self.lh2.calls.clear()
+        return tracker
+
+    def test_a_non_empty_queue_only_unpauses(self):
+        tracker = self.ready_tracker(targets=[(1, 1), (2, 1), (3, 2)])
+        patch, fake = self.get(candidate("alice"))
+        with patch:
+            tracker.refresh()
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(self.lh2.methods, ["is_paused", "unpause"])
+        self.assertFalse(self.lh2.paused)
+
+    def test_an_exhausted_budget_never_asks_for_candidates(self):
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        tracker = self.ready_tracker(state={"requested_on": {today: 10}})
+        patch, fake = self.get(candidate("alice"))
+        with patch:
+            tracker.refresh()
+        self.assertEqual(fake.calls, [])
+        # The campaign is parked paused; nothing else happened.
+        self.assertEqual(self.lh2.methods, ["is_paused"])
+
+    def test_the_limit_asked_for_is_the_budget_left(self):
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        tracker = self.ready_tracker(state={"requested_on": {today: 7}})
+        patch, fake = self.get()
+        with patch:
+            tracker.refresh()
+        url, kwargs = fake.calls[0]
+        self.assertIn("op=agent.refreshCandidates", url)
+        self.assertEqual(kwargs["params"], {"limit": 3})
+        self.assertEqual(kwargs["headers"],
+                         agent.machine_api_headers(tracker.cfg))
+
+    def test_retry_and_import_are_partitioned_by_the_action_queue(self):
+        tracker = self.ready_tracker(
+            targets=[(11, 2), (12, -1)],
+            people=[(11, "processed-one"), (12, "invalidated-one"),
+                    (13, "never-seen")])
+        patch, fake = self.get(candidate("processed-one"),
+                               candidate("invalidated-one", "p2"),
+                               candidate("never-seen", "p1"))
+        with patch:
+            tracker.refresh()
+        calls = dict(self.lh2.calls)
+        self.assertIn("retry_people", self.lh2.methods)
+        self.assertIn("import_people", self.lh2.methods)
+        self.assertEqual(sorted(calls["retry_people"]["personIds"]), [11, 12])
+        self.assertEqual(calls["retry_people"]["actionId"], TRACKER_ACTION_ID)
+        self.assertEqual(calls["import_people"]["urls"],
+                         "https://www.linkedin.com/in/never-seen")
+        # Verified, so the campaign is released to run.
+        self.assertEqual(self.lh2.methods[-1], "unpause")
+        self.assertFalse(self.lh2.paused)
+
+    def test_an_ac_slug_resolves_and_an_unknown_one_is_skipped(self):
+        tracker = self.ready_tracker(
+            targets=[(11, 2), (12, 2)],
+            people=[(11, "ACoAAB1234"), (12, "human-slug")])
+        patch, fake = self.get(candidate("ACoAAB1234"), candidate("human-slug"),
+                               candidate("nobody-here"))
+        with patch:
+            tracker.refresh()
+        calls = dict(self.lh2.calls)
+        self.assertEqual(sorted(calls["retry_people"]["personIds"]), [11, 12])
+        self.assertNotIn("import_people", self.lh2.methods)
+        # The unresolved slug was dropped, not imported blind — but it is still
+        # REPORTED, so the server stops offering it as a candidate every run.
+        events = self.state()["pending_events"]
+        self.assertEqual(sorted(e["raw"]["method"] for e in events),
+                         ["retry", "retry", "unresolved"])
+        self.assertEqual(
+            [e["profile_url"] for e in events if e["raw"]["method"] == "unresolved"],
+            ["https://www.linkedin.com/in/nobody-here"])
+        # Only the two real enqueues cost budget.
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        self.assertEqual(self.state()["requested_on"][today], 2)
+
+    def test_an_enqueue_that_does_not_show_up_warns_and_stays_paused(self):
+        warnings = []
+        tracker = self.ready_tracker(targets=[(11, 2)],
+                                     people=[(11, "processed-one")],
+                                     warnings=warnings)
+        self.lh2.enqueue_writes = False   # LH2 answers yes and queues nothing
+        patch, fake = self.get(candidate("processed-one"))
+        with patch:
+            tracker.refresh()
+        self.assertTrue(any("TRACKER_ENQUEUE_MISMATCH" in w for w in warnings),
+                        warnings)
+        self.assertNotIn("unpause", self.lh2.methods)
+        self.assertTrue(self.lh2.paused)
+
+    def test_a_candidates_failure_is_a_note_not_an_exception(self):
+        for kwargs in ({"status": 503},
+                       {"body": {"nope": True}},
+                       {"boom": agent.requests.RequestException("down")}):
+            with self.subTest(**kwargs):
+                warnings = []
+                tracker = self.ready_tracker(warnings=warnings)
+                patch, fake = self.get(candidate("alice"), **kwargs)
+                with patch:
+                    tracker.refresh()
+                self.assertEqual(warnings, [])
+                self.assertNotIn("retry_people", self.lh2.methods)
+                self.assertNotIn("import_people", self.lh2.methods)
+
+    def test_the_requests_ledger_counts_per_lead(self):
+        tracker = self.ready_tracker(targets=[(11, 2)],
+                                     people=[(11, "processed-one")],
+                                     state={"requests": {"processed-one":
+                                                         {"last_requested_at":
+                                                          "2026-09-01T00:00:00+00:00",
+                                                          "count": 2}}})
+        patch, fake = self.get(candidate("processed-one"))
+        with patch:
+            tracker.refresh()
+        state = self.state()
+        self.assertEqual(state["requests"]["processed-one"]["count"], 3)
+        self.assertEqual(state["pending_events"][0]["raw"]["count"], 3)
+        self.assertEqual(state["pending_events"][0]["raw"]["method"], "retry")
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        self.assertEqual(state["requested_on"][today], 1)
+
+
+    def test_someone_queued_in_another_campaign_is_left_alone(self):
+        """LH2 is already about to act on this person for an outreach campaign;
+        the tracker must not race it, and must not import them either."""
+        tracker = self.ready_tracker(
+            targets=[(11, 2), (12, 2)],
+            people=[(11, "busy-elsewhere"), (12, "free-one"),
+                    (13, "never-seen-busy")])
+        con = sqlite3.connect(self.db_path)
+        con.execute("INSERT INTO action_target_people VALUES (999, 11, 1)")
+        # Also busy, and not in the tracker at all: the guard must beat the
+        # import branch as well as the retry branch.
+        con.execute("INSERT INTO action_target_people VALUES (999, 13, 1)")
+        con.commit()
+        con.close()
+        patch, fake = self.get(candidate("busy-elsewhere"), candidate("free-one"),
+                               candidate("never-seen-busy"))
+        with patch:
+            tracker.refresh()
+        calls = dict(self.lh2.calls)
+        self.assertEqual(calls["retry_people"]["personIds"], [12])
+        self.assertNotIn("import_people", self.lh2.methods)
+        events = {e["profile_url"].rsplit("/", 1)[-1]: e["raw"]["method"]
+                  for e in self.state()["pending_events"]}
+        self.assertEqual(events["busy-elsewhere"], "busy")
+        self.assertEqual(events["never-seen-busy"], "busy")
+        self.assertEqual(events["free-one"], "retry")
+        self.assertIn("queued in another campaign", "\n".join(tracker.lines))
+
+    def test_a_batch_with_nothing_enqueueable_leaves_the_campaign_paused(self):
+        """The bug this guards: `queued_now(0) == len(requested)(0)` passes the
+        verification, so an all-unresolved batch used to set an empty campaign
+        running."""
+        tracker = self.ready_tracker()
+        patch, fake = self.get(candidate("ghost-one"), candidate("ghost-two"))
+        with patch:
+            tracker.refresh()
+        self.assertEqual(self.lh2.methods, ["is_paused"])   # the initial pause check
+        self.assertNotIn("unpause", self.lh2.methods)
+        self.assertTrue(self.lh2.paused)
+        self.assertIn("campaign stays paused", "\n".join(tracker.lines))
+
+    def test_an_unenqueueable_candidate_is_reported_but_costs_no_budget(self):
+        tracker = self.ready_tracker()
+        patch, fake = self.get(candidate("ghost-one"))
+        with patch:
+            tracker.refresh()
+        state = self.state()
+        self.assertEqual([e["raw"]["method"] for e in state["pending_events"]],
+                         ["unresolved"])
+        self.assertEqual(state["requests"]["ghost-one"]["count"], 1)
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        self.assertEqual(state["requested_on"].get(today, 0), 0)
+        # The next run therefore still has its whole budget to spend.
+        self.assertEqual(tracker._requested_today(today), 0)
+
+    def test_a_tracker_sub_list_state_it_will_not_requeue_is_reported_too(self):
+        tracker = self.ready_tracker(targets=[(11, 7)],
+                                     people=[(11, "already-replied")])
+        patch, fake = self.get(candidate("already-replied"))
+        with patch:
+            tracker.refresh()
+        self.assertEqual([e["raw"]["method"]
+                          for e in self.state()["pending_events"]], ["skipped"])
+        self.assertNotIn("retry_people", self.lh2.methods)
+
+
+class TrackerEventTest(TrackerTestCase):
+    """The refresh runs after the push, so its events ride the NEXT batch."""
+
+    def pending(self, *slugs):
+        now = "2026-09-13T08:00:00+00:00"
+        return {"pending_events": [
+            {"profile_url": f"https://www.linkedin.com/in/{slug}",
+             "occurred_at": now,
+             "raw": {"last_requested_at": now, "count": 1, "method": "retry"}}
+            for slug in slugs]}
+
+    def test_pending_events_are_drained_in_the_agents_event_shape(self):
+        tracker = self.tracker(state=self.pending("alice", "bob"))
+        events = tracker.pending_events()
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["event_type"], "conversation_refresh")
+        self.assertIsNone(events[0]["campaign_id"])
+        self.assertEqual(events[0]["instance_id"], "nb")
+        self.assertEqual(events[0]["raw"]["method"], "retry")
+
+    def test_they_reach_the_gateway_with_raw_and_parity_still_passes(self):
+        tracker = self.tracker(state=self.pending("alice"))
+        cfg, _, _, _, _ = planned()
+        cs, ls, ms, ss, demo = extraction(leads=3, messages=2)
+        sent_messages = agent.dedupe_messages(ms)
+        sent_events = agent.dedupe_events(
+            agent.derive_events("nb", ls) + tracker.pending_events())
+        payload = agent.build_ingest_payload(cfg, cs, ls, sent_messages,
+                                             sent_events, ss, demo, "ok", "")
+        chunks, problems = agent.plan_ingest(cfg, payload, cs, ls, sent_messages,
+                                             sent_events, ss, demo, day="20260807")
+        self.assertEqual(problems, [])
+        rows = [row for chunk in chunks for row in chunk["events"]]
+        refresh = [r for r in rows if r["event_type"] == "conversation_refresh"]
+        self.assertEqual(len(refresh), 1)
+        self.assertEqual(refresh[0]["raw"],
+                         {"last_requested_at": "2026-09-13T08:00:00+00:00",
+                          "count": 1, "method": "retry"})
+        self.assertIsNone(refresh[0]["campaign_id"])
+        # Milestone events keep the key so PostgREST sees a uniform batch.
+        self.assertTrue(all("raw" in r for r in rows))
+
+    def test_delivered_events_are_cleared_and_nothing_else_is(self):
+        tracker = self.tracker(state=self.pending("alice", "bob"))
+        drained = tracker.pending_events()
+        tracker.state["pending_events"].append(
+            {"profile_url": "https://www.linkedin.com/in/carol",
+             "occurred_at": "2026-09-14T08:00:00+00:00", "raw": {}})
+        tracker.mark_pending_delivered(drained)
+        left = self.state()["pending_events"]
+        self.assertEqual([r["profile_url"] for r in left],
+                         ["https://www.linkedin.com/in/carol"])
+
+    def test_a_deduped_pair_is_still_fully_cleared(self):
+        """`dedupe_events` collapses two refreshes of one lead into one row.
+        Clearing on the DRAINED list rather than the sent one is what stops the
+        older row living in the state file forever."""
+        tracker = self.tracker(state={"pending_events": [
+            {"profile_url": "https://www.linkedin.com/in/alice",
+             "occurred_at": "2026-09-12T08:00:00+00:00", "raw": {"count": 1}},
+            {"profile_url": "https://www.linkedin.com/in/alice",
+             "occurred_at": "2026-09-13T08:00:00+00:00", "raw": {"count": 2}}]})
+        drained = tracker.pending_events()
+        self.assertEqual(len(agent.dedupe_events(drained)), 1)
+        tracker.mark_pending_delivered(drained)
+        self.assertEqual(self.state()["pending_events"], [])
+
+
+class TrackerDryRunTest(TrackerTestCase):
+    """A dry run reads, reports, and touches nothing."""
+
+    def test_it_makes_no_cdp_call_and_no_state_change(self):
+        tracker_db(self.db_path, targets=[(11, 2)], people=[(11, "processed-one")])
+        tracker = self.tracker()
+        patch, fake = self.get(candidate("processed-one"), candidate("nobody"))
+        with patch:
+            tracker.ensure(dry_run=True)
+            tracker.apply_exclude()
+            tracker.refresh(dry_run=True)
+        self.assertEqual(self.lh2.calls, [])
+        self.assertFalse(os.path.exists(self.state_path))
+        # Reading the candidate list IS allowed — the split is the point.
+        self.assertEqual(len(fake.calls), 1)
+        report = "\n".join(tracker.lines)
+        self.assertIn("would enqueue 1 (retry 1, import 0)", report)
+        self.assertIn("unresolved slug 'nobody'", report)
+
+    def test_it_says_it_would_create_a_missing_campaign(self):
+        tracker_db(self.db_path, campaign=False)
+        tracker = self.tracker()
+        patch, fake = self.get()
+        with patch:
+            tracker.ensure(dry_run=True)
+        self.assertEqual(self.lh2.calls, [])
+        self.assertFalse(tracker.ready)
+        self.assertIn("would create", "\n".join(tracker.lines))
+
+    def test_cmd_sync_dry_run_reaches_no_cdp_and_writes_no_state(self):
+        tracker_db(self.db_path)
+        cfg = self.cfg()
+        cs, ls, ms, ss, demo = extraction(leads=2, messages=1)
+        patch, fake = self.get()
+        with patch, \
+                mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update") as updated, \
+                mock.patch.object(agent, "tracker_state_path",
+                                  return_value=self.state_path), \
+                mock.patch.object(agent, "extract_local",
+                                  return_value=(cs, ls, ms, ss, {}, demo)), \
+                mock.patch.object(agent, "Supabase") as sb, \
+                mock.patch.object(agent.requests, "post") as posted:
+            agent.cmd_sync(mock.Mock(dry_run=True))
+        sb.assert_not_called()
+        posted.assert_not_called()
+        updated.assert_not_called()
+        self.assertEqual(self.lh2.calls, [])
+        self.assertFalse(os.path.exists(self.state_path))
+        # The tracker campaign was excluded before extraction was projected.
+        self.assertIn(TRACKER_CAMPAIGN_ID, cfg["exclude_campaigns"])
+
+
+class TrackerSyncWiringTest(TrackerTestCase):
+    """Where the two entry points sit inside a real run."""
+
+    def test_the_refresh_runs_after_the_gateway_push(self):
+        tracker_db(self.db_path, targets=[(11, 2)], people=[(11, "processed-one")])
+        cfg = self.cfg(ingest_mode="only")
+        cs, ls, ms, ss, demo = extraction(leads=2, messages=1)
+        order = []
+
+        def post(*a, **k):
+            order.append("push")
+            return Answer()
+
+        def evaluate(publisher, method, payload=None):
+            order.append(f"lh2:{method}")
+            return FakeLh2.__call__(self.lh2, publisher, method, payload)
+
+        patch, fake = self.get(candidate("processed-one"))
+        with patch, \
+                mock.patch.object(agent.LinkedHelperPublisher, "_evaluate",
+                                  evaluate), \
+                mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update", return_value=False), \
+                mock.patch.object(agent, "tracker_state_path",
+                                  return_value=self.state_path), \
+                mock.patch.object(agent, "extract_local",
+                                  return_value=(cs, ls, ms, ss, {}, demo)), \
+                mock.patch.object(agent, "notify_new_replies"), \
+                mock.patch.object(agent.requests, "post", side_effect=post):
+            agent.cmd_sync(mock.Mock(dry_run=False))
+        self.assertIn("push", order)
+        self.assertLess(order.index("push"), order.index("lh2:retry_people"))
+        self.assertIn(TRACKER_CAMPAIGN_ID, cfg["exclude_campaigns"])
+        self.assertEqual(len(self.state()["pending_events"]), 1)
+
+    def test_last_runs_events_go_out_with_this_runs_batch(self):
+        tracker_db(self.db_path)
+        cfg = self.cfg(ingest_mode="only")
+        cs, ls, ms, ss, demo = extraction(leads=2, messages=1)
+        now = "2026-09-13T08:00:00+00:00"
+        state = {"campaign_id": TRACKER_CAMPAIGN_ID, "action_id": TRACKER_ACTION_ID,
+                 "action_version_id": TRACKER_VERSION_ID, "li_account_id": 1,
+                 "pending_events": [{
+                     "profile_url": "https://www.linkedin.com/in/alice",
+                     "occurred_at": now,
+                     "raw": {"last_requested_at": now, "count": 1,
+                             "method": "import"}}]}
+        with open(self.state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        sent = []
+
+        def post(url, **kwargs):
+            sent.append(json.loads(kwargs["data"]) if "data" in kwargs
+                        else kwargs["json"])
+            return Answer()
+
+        patch, fake = self.get()
+        with patch, \
+                mock.patch.object(agent, "load_config", return_value=cfg), \
+                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
+                mock.patch.object(agent, "self_update", return_value=False), \
+                mock.patch.object(agent, "tracker_state_path",
+                                  return_value=self.state_path), \
+                mock.patch.object(agent, "extract_local",
+                                  return_value=(cs, ls, ms, ss, {}, demo)), \
+                mock.patch.object(agent, "notify_new_replies"), \
+                mock.patch.object(agent.requests, "post", side_effect=post):
+            agent.cmd_sync(mock.Mock(dry_run=False))
+        rows = [row for batch in sent for row in batch["events"]]
+        refresh = [r for r in rows if r["event_type"] == "conversation_refresh"]
+        self.assertEqual(len(refresh), 1)
+        self.assertEqual(refresh[0]["raw"]["method"], "import")
+        # Delivered, so it is gone from the file rather than sent forever.
+        self.assertEqual(self.state()["pending_events"], [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

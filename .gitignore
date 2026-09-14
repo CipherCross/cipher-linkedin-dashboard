@@ -15,3 +15,6 @@ ops/logs/
 ops/backups/
 ops/*.lh2backup
 .env*
+
+# per-notebook conversation-tracker state (agent-written, never committed)
+sync-agent/tracker_state.json

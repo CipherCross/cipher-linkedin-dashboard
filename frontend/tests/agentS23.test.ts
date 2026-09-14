@@ -7,8 +7,10 @@ import {
   AGENT_CONFIG_OP,
   AGENT_PHOTO_UPLOAD_OP,
   AGENT_PUBLISH_BRANCH_OP,
+  AGENT_REFRESH_CANDIDATES_OP,
   AGENT_RELEASE_OP,
   createAgentConfigHandler,
+  createAgentRefreshCandidatesHandler,
   createAgentPhotoUploadHandler,
   createAgentPublishHandler,
   createAgentReleaseHandler,
@@ -87,6 +89,129 @@ describe('S23 authenticated config', () => {
       instance_id: INSTANCE,
       config: { ingest_mode: 'shadow' },
       config_updated_at: null,
+    })
+  })
+})
+
+describe('the conversation-refresh worklist endpoint', () => {
+  const policyRow = {
+    instance_id: INSTANCE,
+    refresh_after_days: 3,
+    profile_url: null,
+    priority: 'none',
+    last_inbound_at: null,
+    last_message_at: null,
+    last_requested_at: null,
+  }
+
+  function candidateStore(rows: unknown[], seen: { limit?: number } = {}) {
+    const store = machineStore()
+    store.registerQuery(MACHINE_OPERATIONS.refreshCandidates, ({ params, page }) => {
+      expect(params).toBeUndefined()
+      seen.limit = page.limit
+      return rows
+    })
+    return store
+  }
+
+  const call = (store: FakeDataStore, query = '') =>
+    createAgentRefreshCandidatesHandler({ store, tenantId: TENANT })(
+      request(`${AGENT_REFRESH_CANDIDATES_OP}${query}`),
+    )
+
+  it('is GET only', async () => {
+    const store = candidateStore([policyRow])
+    const response = await createAgentRefreshCandidatesHandler({ store, tenantId: TENANT })(
+      request(AGENT_REFRESH_CANDIDATES_OP, { method: 'POST' }),
+    )
+    expect(response.status).toBe(405)
+    expect(await response.json()).toEqual({ error: 'POST is not allowed' })
+  })
+
+  it('refuses a credential that does not resolve', async () => {
+    const store = candidateStore([policyRow])
+    store.revokeMachineActor(CREDENTIAL_ID, hashAgentSecret(SECRET), TENANT)
+    const response = await call(store)
+    expect(response.status).toBe(401)
+  })
+
+  it('refuses a page whose rows are not this credential\'s notebook', async () => {
+    const store = candidateStore([{ ...policyRow, instance_id: OTHER_INSTANCE }])
+    expect((await call(store)).status).toBe(401)
+    // Zero rows means the credential stopped resolving, not "nothing to do".
+    expect((await call(candidateStore([]))).status).toBe(401)
+  })
+
+  it('defaults the page size to 25 and refuses anything but 1..100', async () => {
+    const seen: { limit?: number } = {}
+    expect((await call(candidateStore([policyRow], seen))).status).toBe(200)
+    expect(seen.limit).toBe(25)
+
+    const bounded: { limit?: number } = {}
+    expect((await call(candidateStore([policyRow], bounded), '&limit=100')).status).toBe(200)
+    expect(bounded.limit).toBe(100)
+
+    for (const bad of ['0', '101', '2.5', '-1', 'ten', '1e2', ' 5 x']) {
+      const response = await call(candidateStore([policyRow]), `&limit=${encodeURIComponent(bad)}`)
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        error: 'limit must be an integer between 1 and 100',
+      })
+    }
+  })
+
+  it('answers the policy row alone as an empty worklist', async () => {
+    const response = await call(candidateStore([{ ...policyRow, refresh_after_days: 7 }]))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      instance_id: INSTANCE,
+      refresh_after_days: 7,
+      candidates: [],
+    })
+  })
+
+  it('returns the notebook, the window and the candidate rows in order', async () => {
+    const rows = [
+      {
+        instance_id: INSTANCE,
+        refresh_after_days: 3,
+        profile_url: PROFILE,
+        priority: 'p3',
+        last_inbound_at: '2026-09-01T10:00:00.000Z',
+        last_message_at: '2026-09-01T10:00:00.000Z',
+        last_requested_at: null,
+      },
+      {
+        instance_id: INSTANCE,
+        refresh_after_days: 3,
+        profile_url: 'https://www.linkedin.com/in/bob',
+        priority: 'none',
+        last_inbound_at: '2026-08-20T09:00:00.000Z',
+        last_message_at: '2026-08-21T09:00:00.000Z',
+        last_requested_at: '2026-08-25T09:00:00.000Z',
+      },
+    ]
+    const response = await call(candidateStore(rows), '&limit=2')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      instance_id: INSTANCE,
+      refresh_after_days: 3,
+      candidates: [
+        {
+          profile_url: PROFILE,
+          priority: 'p3',
+          last_inbound_at: '2026-09-01T10:00:00.000Z',
+          last_message_at: '2026-09-01T10:00:00.000Z',
+          last_requested_at: null,
+        },
+        {
+          profile_url: 'https://www.linkedin.com/in/bob',
+          priority: 'none',
+          last_inbound_at: '2026-08-20T09:00:00.000Z',
+          last_message_at: '2026-08-21T09:00:00.000Z',
+          last_requested_at: '2026-08-25T09:00:00.000Z',
+        },
+      ],
     })
   })
 })
