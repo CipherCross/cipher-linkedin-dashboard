@@ -41,7 +41,7 @@ function Swatch({ token, note }: { token: string; note: string }) {
 }
 
 export function Gallery() {
-  const [tab, setTab] = useState<'states' | 'composition'>('states')
+  const [tab, setTab] = useState<'states' | 'composition' | 'list-chrome'>('states')
   const [period, setPeriod] = useState<'7d' | '28d' | 'all'>('28d')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [choice, setChoice] = useState<'positive' | 'neutral' | 'negative'>('neutral')
@@ -65,6 +65,7 @@ export function Gallery() {
           items={[
             { id: 'states', label: 'Primitives' },
             { id: 'composition', label: 'Compositions' },
+            { id: 'list-chrome', label: 'List chrome' },
           ]}
         />
 
@@ -238,6 +239,55 @@ export function Gallery() {
               )}
             </Panel>
           </div>
+        ) : tab === 'list-chrome' ? (
+          /* The exact top-of-page stack a default list route renders — page
+           * header, toolbar, tabs, table frame — with no live data, because
+           * data does not move the first row. The standard requires the first
+           * result to start no lower than y=340 at 1280×720, and this is what
+           * that is measured on. */
+          <>
+            <PageHeader
+              title="Leads"
+              description="Filters are kept in the URL, so any view here is shareable."
+              actions={<LinkButton to="/" variant="secondary">Open Replies</LinkButton>}
+            />
+            <Toolbar>
+              <TextField className="ui-toolbar__search" label="Search leads" labelHidden type="search" placeholder="Name, headline, company…" />
+              <SelectField label="Account" labelHidden defaultValue="all"><option value="all">All accounts</option></SelectField>
+              <Button variant="secondary" icon={<Filter size={18} />}>Filters</Button>
+            </Toolbar>
+            <Tabs
+              label="Filter leads by reply sentiment"
+              value="all"
+              onChange={() => {}}
+              items={[{ id: 'all', label: 'All leads' }, { id: 'any', label: 'Any reply', count: 146 }]}
+            />
+            <TableFrame
+              scrollLabel="Leads"
+              toolbar={<TableToolbar count="4 of 1,284 leads" actions={<Button size="sm" variant="ghost" icon={<Download size={16} />}>Export</Button>} />}
+            >
+              <Table caption="Leads">
+                <thead>
+                  <tr>
+                    <th scope="col">Lead</th>
+                    <th scope="col">Account / campaign</th>
+                    <th scope="col">Milestone</th>
+                    <th scope="col">Latest activity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {PEOPLE.map((person, index) => (
+                    <tr key={index} className="ui-table__row--identity" data-first-result={index === 0 ? 'true' : undefined}>
+                      <td><AccountIdentity avatar={<InitialsBadge name={person.name} />} name={person.name ?? 'LinkedIn contact'} /></td>
+                      <td>{person.account}</td>
+                      <td><Badge tone="accent">Replied</Badge></td>
+                      <td>{businessTimeLabelled('2026-09-14T11:20:00Z')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableFrame>
+          </>
         ) : (
           <div className="ui-gallery">
             <Panel>

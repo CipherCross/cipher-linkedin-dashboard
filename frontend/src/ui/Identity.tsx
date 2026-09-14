@@ -25,7 +25,12 @@ export function disambiguate(
 }
 
 export function initialsOf(name: string | null | undefined): string {
-  const source = (name ?? '').replace(/https?:\/\/\S*?\//, '').trim()
+  const raw = (name ?? '').trim()
+  // A profile URL is not a name: take its slug, not the "in" path segment a
+  // naive prefix strip leaves behind.
+  const source = /^https?:\/\//.test(raw)
+    ? raw.replace(/\/+$/, '').split('/').pop() ?? ''
+    : raw
   if (!source) return '?'
   return (
     source

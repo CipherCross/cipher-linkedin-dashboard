@@ -165,6 +165,13 @@ Deliberate fetch asymmetry: **inbound** messages fetched in full (paginated past
 1000-row cap, since sentiment/intent and durable P3 counts sit beside all-time totals);
 outbound windowed to 90 days.
 
+**UI: read `docs/ui-standard.md` before touching anything visual.** One light
+theme (no dark mode, no toggle), PC-only, English-only. Tokens live in
+`src/styles/`, shared primitives in `src/ui/` — use `Button`, `PageHeader`,
+`Field`, `Tabs`, `Dialog`, `TableFrame` rather than a new class. `src/styles.css`
+is the legacy sheet and only shrinks. `#/ui-gallery` in `vite dev` shows every
+primitive in every state.
+
 ### Visual verification
 For frontend and UI work, Codex may automatically open and visibly display the local app
 in the in-app browser for visual QA without asking first. This permission covers local

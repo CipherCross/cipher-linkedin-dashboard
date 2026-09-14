@@ -41,11 +41,14 @@ function useOverlayBehaviour(
     if (openOverlays === 1) document.body.style.overflow = 'hidden'
     if (root && openOverlays === 1) root.setAttribute('inert', '')
 
+    /* Focus synchronously. An earlier version deferred this to
+     * requestAnimationFrame, which does not run in a background tab — so the
+     * dialog could open with focus still on the page behind it. */
     const focusTarget =
       initialFocusRef?.current ??
       panelRef.current?.querySelector<HTMLElement>(FOCUSABLE) ??
       panelRef.current
-    requestAnimationFrame(() => focusTarget?.focus())
+    focusTarget?.focus()
 
     return () => {
       openOverlays -= 1
