@@ -3,9 +3,6 @@ import type { RefObject } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Command,
-  RotateCw,
-  Sun,
-  Moon,
   Menu,
   ChevronRight,
   PanelLeftClose,
@@ -14,7 +11,6 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
-import { useTheme } from '../lib/ThemeContext'
 import { ConversationProvider } from '../lib/ConversationContext'
 import type { DashboardData, Instance } from '../lib/types'
 import { instanceName } from '../lib/leads'
@@ -33,6 +29,8 @@ import { Logo } from './Logo'
 import { PageSkeleton } from './Skeleton'
 import { ErrorBoundary } from './ErrorBoundary'
 import { QuickNavigation } from './QuickNavigation'
+import { Button, IconButton } from '../ui'
+import { InlineError } from '../ui/States'
 
 export function Layout() {
   const { data, loading, phase, refetch } = useData()
@@ -111,37 +109,6 @@ export function Layout() {
 
   return (
     <div className={`app${sidebarHidden ? ' nav-hidden' : ''}`}>
-      {/* Tier-2 "liquid glass" displacement filter. Referenced from styles.css
-          via `backdrop-filter: url(#liquid-glass)` — a Chromium-only path gated
-          behind @supports, so Safari/Firefox never reach it. Rendered once,
-          zero-size, aria-hidden. Static (no animation): a low-frequency single
-          octave of turbulence displaced by a small scale gives a subtle
-          refractive edge appropriate for a data dashboard. */}
-      <svg
-        aria-hidden="true"
-        focusable="false"
-        width="0"
-        height="0"
-        style={{ position: 'absolute', width: 0, height: 0 }}
-      >
-        <filter id="liquid-glass" x="-10%" y="-10%" width="120%" height="120%">
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.008"
-            numOctaves="1"
-            seed="7"
-            result="noise"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="noise"
-            scale="8"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </svg>
-
       <a className="skip-link" href="#main-content">Skip to content</a>
 
       {/* Mobile-only bar: hamburger toggles the off-canvas sidebar; the rail
@@ -162,7 +129,6 @@ export function Layout() {
           <span className="brand-name">Outreach Deck</span>
         </Link>
         <div className="appbar-actions">
-          <ThemeToggle />
           {data && <SyncChip instances={data.instances} />}
         </div>
       </div>
@@ -191,21 +157,21 @@ export function Layout() {
         }}
       />
 
-      <button
+      <Button
         ref={desktopRestoreRef}
-        type="button"
+        variant="secondary"
+        size="sm"
         className="desktop-nav-restore"
+        icon={<PanelLeftOpen size={18} aria-hidden="true" />}
         onClick={() => {
           setSidebarHidden(false)
           requestAnimationFrame(() => {
             document.querySelector<HTMLElement>('.quick-nav-trigger')?.focus()
           })
         }}
-        aria-label="Show navigation"
       >
-        <PanelLeftOpen size={18} aria-hidden="true" />
-        <span>Show navigation</span>
-      </button>
+        Show navigation
+      </Button>
 
       <main className="content" id="main-content" ref={contentRef} tabIndex={-1}>
         <div className="page">
@@ -430,17 +396,12 @@ function Sidebar({
               <strong>{member?.name}</strong>
               <span>{member?.role}</span>
             </span>
-            <button
-              className="icon-btn"
-              type="button"
-              title="Sign out"
-              aria-label="Sign out"
+            <IconButton
+              label="Sign out"
+              icon={<LogOut size={20} aria-hidden="true" />}
               onClick={() => void signOut()}
-            >
-              <LogOut size={16} />
-            </button>
+            />
           </div>
-          <ThemeToggle />
           {data && <SyncChip instances={data.instances} />}
         </div>
       </div>
@@ -458,6 +419,9 @@ function Sidebar({
  * raised could be trusted about its own cause. The message already carries the
  * operation that failed and the reason the server gave; the banner's job is to
  * say that the load failed and offer the retry, not to guess at a database.
+ *
+ * The server's own wording stays available under Details rather than in the
+ * headline: a real failure must never be smoothed away, only explained first.
  */
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   const [busy, setBusy] = useState(false)
@@ -472,13 +436,13 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry: ()
     }
   }
   return (
-    <div className="banner" role="alert">
-      <span>Couldn’t load the dashboard: {message}</span>
-      <button className="btn sm" onClick={retry} disabled={busy}>
-        <RotateCw size={13} />
-        {busy ? 'Retrying…' : 'Retry'}
-      </button>
-    </div>
+    <InlineError
+      title="Could not load the dashboard."
+      message="The data on this page may be missing or out of date."
+      detail={message}
+      onRetry={retry}
+      busy={busy}
+    />
   )
 }
 
@@ -506,29 +470,6 @@ function worstFreshness(
   if (hasNever) return { level: 'stale', label: 'Sync stale' }
   const level = freshnessLevel(worstTs)
   return { level, label: `Synced ${ago(worstTs)}` }
-}
-
-/** Header light/dark switch. Seeds from OS preference on first visit, then
- *  persists the user's manual choice (see lib/ThemeContext). Shows the icon of
- *  the theme it will switch TO. */
-function ThemeToggle() {
-  const { theme, toggle } = useTheme()
-  const next = theme === 'dark' ? 'light' : 'dark'
-  return (
-    <button
-      type="button"
-      className="theme-toggle"
-      onClick={toggle}
-      title={`Switch to ${next} theme`}
-      aria-label={`Switch to ${next} theme`}
-    >
-      {theme === 'dark' ? (
-        <Sun size={16} aria-hidden="true" />
-      ) : (
-        <Moon size={16} aria-hidden="true" />
-      )}
-    </button>
-  )
 }
 
 function SyncChip({ instances }: { instances: Instance[] }) {

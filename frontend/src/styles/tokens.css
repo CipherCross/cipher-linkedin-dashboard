@@ -1,0 +1,202 @@
+/* ===========================================================================
+ * Design tokens — the single source of colour, type, space, radius, elevation
+ * and focus for the whole dashboard.
+ *
+ * ONE light theme. There is no dark block and no `[data-theme]` selector: the
+ * product is a PC-only, light-only dashboard (see docs/ui-standard.md). Token
+ * NAMES are kept stable across the 2026-09 UI standardisation so that every
+ * pre-existing `var(--…)` in styles.css re-themes without being touched; new
+ * work should prefer the semantic names in the "standard" groups below.
+ *
+ * Contrast (WCAG 2.2 1.4.3 / 1.4.11), computed on the surfaces they are used on:
+ *   --text            #182230 on #FFFFFF  15.85:1
+ *   --text-secondary  #475467 on #FFFFFF   7.56:1
+ *   --text-muted      #596579 on #FFFFFF   5.90:1   on #F2F4F7  5.35:1
+ *   --accent          #2563EB on #FFFFFF   5.17:1
+ *   --success         #067647 on #FFFFFF   4.99:1
+ *   --warning         #92400E on #FFFFFF   7.19:1
+ *   --danger          #B42318 on #FFFFFF   6.42:1
+ *   --border-strong   #7A8699 on #FFFFFF   3.69:1  (meaningful control border)
+ * ======================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Surfaces --------------------------------------------------------- */
+  --bg: #f7f8fa;              /* page background, uniform — no gradient wash */
+  --surface-1: #ffffff;       /* cards, panels, dialogs: 100% opaque */
+  --surface-2: #f2f4f7;       /* subtle surface: grouping, disabled, selected */
+  --surface-3: #e9edf3;       /* hover on a subtle surface */
+  --surface-sunken: #f2f4f7;  /* recessed panels */
+  --code-bg: #f2f4f7;         /* pre / code / tool blocks */
+
+  /* Decorative separator vs. meaningful input border — the difference is
+   * deliberate: 1.4.11 requires 3:1 for a border that carries meaning. */
+  --border: #d0d5dd;
+  --border-strong: #7a8699;
+
+  /* ---- Text ------------------------------------------------------------- */
+  --text: #182230;
+  --text-secondary: #475467;
+  --text-muted: #596579;
+
+  /* ---- Accent ----------------------------------------------------------- */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: #eff4ff;
+  --accent-border: #b5ccfb;
+  --on-accent: #ffffff;
+
+  /* ---- Status. Colour is never the only carrier: every status surface also
+   * ships an icon or a word (see StatusText / Badge in src/ui). ------------ */
+  --success: #067647;
+  --success-subtle: #e9f6ef;
+  --success-border: #a9d9c1;
+  --warning: #92400e;
+  --warning-subtle: #fdf3e7;
+  --warning-border: #e8c9a0;
+  --danger: #b42318;
+  --danger-subtle: #fdecea;
+  --danger-border: #efb4ae;
+  --info: #175cd3;
+  --info-subtle: #eff4ff;
+  --info-border: #b5ccfb;
+  --purple: #6941c6;
+  --purple-subtle: #f4f0fe;
+  --purple-border: #cdbdf5;
+
+  /* ---- Chat / message bubbles ------------------------------------------- */
+  --bubble-out: #2563eb;
+  --bubble-out-fg: #ffffff;
+
+  /* ---- Brand ------------------------------------------------------------ */
+  --linkedin: #0a66c2;
+  --linkedin-hover: #0b5ba8;
+  --linkedin-fg: #ffffff;
+
+  /* ---- Elevation -------------------------------------------------------- */
+  /* Cards carry NO shadow — they are separated by border + spacing. Exactly
+   * one soft shadow exists, and only popup / dialog / drawer may use it.
+   * --shadow-sm is `none` on purpose so legacy card rules flatten themselves. */
+  --shadow-sm: none;
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.10);
+  --shadow-lg: 0 8px 24px rgba(16, 24, 40, 0.10);
+  --shadow-overlay: 0 8px 24px rgba(16, 24, 40, 0.10);
+
+  /* ---- Overlay scrim ---------------------------------------------------- */
+  --overlay: rgba(16, 24, 40, 0.45);
+
+  /* ---- Retired decorative effects ---------------------------------------
+   * The glass layer (translucent tints, backdrop blur, rim highlights, SVG
+   * refraction) is gone. These aliases stay only so that any rule not yet
+   * migrated resolves to a flat, opaque surface instead of breaking. */
+  --glass-tint: var(--surface-1);
+  --glass-tint-strong: var(--surface-1);
+  --glass-blur: 0px;
+  --glass-saturate: 100%;
+  --glass-rim: 0 0 0 0 transparent;
+
+  /* ---- Charts ----------------------------------------------------------- */
+  --chart-grid: #e4e7ec;
+  --chart-bar-cursor: rgba(16, 24, 40, 0.05);
+  /* Categorical hues past the status ramp, each ≥3:1 as a fill on white. */
+  --chart-cat-teal: #0e7490;
+  --chart-cat-pink: #be3f8a;
+  --chart-cat-lime: #4d7c0f;
+  --chart-cat-amber: #b45309;
+  --chart-cat-yellow: #866118;
+
+  /* ---- Radius ----------------------------------------------------------- */
+  /* 8 controls · 12 cards · 16 dialogs. Pill is for badges/chips only. */
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --radius-pill: 999px;
+  /* legacy names, re-pointed onto the three-step scale */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ---- Space scale: 4, 8, 12, 16, 24, 32, 48, 64 ------------------------ */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
+  /* legacy --space-1…8 folded onto the scale above (the old ramp had 6/10/14/18
+   * steps that no longer exist) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 16px;
+  --space-8: 24px;
+
+  /* ---- Type scale -------------------------------------------------------
+   * body/controls 16/24 · table 14/20 · metadata 13/18 (floor)
+   * page title 28/36 · section 20/28 · subsection 16/24 · KPI 32/40 */
+  --text-meta: 13px;
+  --text-table: 14px;
+  --text-body: 16px;
+  --text-subsection: 16px;
+  --text-section: 20px;
+  --text-page: 28px;
+  --text-kpi: 32px;
+
+  --leading-meta: 18px;
+  --leading-table: 20px;
+  --leading-body: 24px;
+  --leading-section: 28px;
+  --leading-page: 36px;
+  --leading-kpi: 40px;
+
+  /* legacy names. Nothing may resolve below 13px any more. */
+  --text-2xs: 13px;
+  --text-xs: 13px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-display: 28px;
+
+  --tracking-caps: 0.06em;
+
+  /* ---- Controls / rows --------------------------------------------------- */
+  --control-height: 44px;
+  --control-height-sm: 36px;   /* dense in-row controls; never a primary action */
+  --icon-hit: 44px;
+  --icon-glyph: 20px;
+  --row-height: 52px;          /* single-line table row */
+  --row-height-identity: 68px; /* identity + secondary line */
+
+  /* ---- Layout ------------------------------------------------------------ */
+  --sidebar-w: 232px;
+  --nav-row-height: 44px;
+  --page-gutter: 32px;
+  --page-max: 1600px;
+
+  /* ---- Focus ------------------------------------------------------------- */
+  --focus-ring: var(--accent);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 0.14s;
+
+  /* ---- Fonts ------------------------------------------------------------- */
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ---- Legacy aliases ---------------------------------------------------- */
+  --panel: var(--surface-1);
+  --muted: var(--text-muted);
+}

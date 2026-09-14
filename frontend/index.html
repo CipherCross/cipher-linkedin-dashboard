@@ -6,31 +6,23 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b1120" />
+    <meta name="theme-color" content="#f7f8fa" />
     <meta
       name="description"
       content="Team dashboard for LinkedIn outreach campaigns run through Linked Helper 2."
     />
     <title>Outreach Deck</title>
-    <!-- Resolve + paint the theme BEFORE the app bundle loads so there's no
-         flash of the wrong theme: stored choice wins, else OS preference,
-         else dark. Mirrored by src/lib/ThemeContext.tsx. -->
+    <!-- One light theme, painted before the bundle loads. A `theme` value left
+         in localStorage by the retired dark mode is normalised away on first
+         run; nothing else in storage is touched. -->
     <script>
       (function () {
+        document.documentElement.setAttribute('data-theme', 'light')
+        document.documentElement.style.colorScheme = 'light'
         try {
-          var t = localStorage.getItem('theme')
-          if (t !== 'light' && t !== 'dark') {
-            t =
-              window.matchMedia &&
-              window.matchMedia('(prefers-color-scheme: light)').matches
-                ? 'light'
-                : 'dark'
-          }
-          document.documentElement.setAttribute('data-theme', t)
-          var m = document.querySelector('meta[name="theme-color"]')
-          if (m) m.setAttribute('content', t === 'light' ? '#f4f6fb' : '#0b1120')
+          if (localStorage.getItem('theme') !== null) localStorage.setItem('theme', 'light')
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark')
+          /* private mode / blocked storage: the attribute above is what matters */
         }
       })()
     </script>

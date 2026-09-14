@@ -1,0 +1,67 @@
+/* ===========================================================================
+ * Page frame + the one heading scale.
+ *
+ * Deliberately NOT here: any rule on a bare `header`, `aside`, `button`,
+ * `table` or `section`. The retired global `header { … }` rule reached every
+ * nested semantic header in the app (sequence steps, drawer heads, comment
+ * threads) and was the reason page titles measured 20px on one route and 32px
+ * on another. Page headers are a component now — see src/ui/PageHeader.tsx.
+ * ======================================================================== */
+
+.page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--space-xl) var(--page-gutter) var(--space-3xl);
+}
+
+/* At 1280 the 32px gutter costs more than it buys: one 24px step everywhere so
+ * the content edge still lines up between routes. */
+@media (max-width: 1439px) {
+  .page { padding-left: var(--space-xl); padding-right: var(--space-xl); }
+}
+
+.center { display: flex; justify-content: center; padding-top: 30vh; }
+
+/* ---- Heading roles -------------------------------------------------------
+ * page (28/36) → section (20/28) → subsection (16/24). Exactly three. A route
+ * that wants a fourth level uses weight and colour, not a new size. */
+h1 {
+  margin: 0;
+  font-size: var(--text-page);
+  line-height: var(--leading-page);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+h2 {
+  margin: 0 0 var(--space-md);
+  font-size: var(--text-section);
+  line-height: var(--leading-section);
+  font-weight: 600;
+  color: var(--text);
+}
+h3, h4, h5, h6 {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-subsection);
+  line-height: var(--leading-body);
+  font-weight: 600;
+  color: var(--text);
+}
+
+p { margin: 0 0 var(--space-md); }
+p:last-child { margin-bottom: 0; }
+
+.muted { color: var(--text-muted); }
+/* `.small` is metadata, and metadata bottoms out at 13px. */
+.small { font-size: var(--text-meta); line-height: var(--leading-meta); }
+
+.controls {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
