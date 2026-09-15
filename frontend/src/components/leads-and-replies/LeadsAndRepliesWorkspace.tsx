@@ -12,7 +12,7 @@ import {
 import {
   activeFollowUp, followUpDueLabel, followUpKey, followUpStateMap,
 } from '../../lib/followUps'
-import { shortDate } from '../../lib/format'
+import { replyDate, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
 import { EmptyState } from '../EmptyState'
 import { LeadMilestoneBadge, LeadReplyIdentity } from './LeadReplyIdentity'
 
@@ -193,7 +193,11 @@ export function LeadsAndRepliesWorkspace({
                 >
                   <td><LeadReplyIdentity lead={lead} reply={reply} highestIntent={highestIntent} /></td>
                   <td><LeadMilestoneBadge lead={lead} /></td>
-                  <td className="muted small">{reply ? shortDate(reply.sent_at) : 'No reply yet'}</td>
+                  <td className="muted small">
+                    {reply
+                      ? <time dateTime={reply.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(reply.sent_at)}</time>
+                      : 'No reply yet'}
+                  </td>
                   <td>{highestIntent ? <IntentBadge intent={highestIntent} /> : <span className="muted">—</span>}</td>
                   <td>
                     {activeFollowUp(followUp)

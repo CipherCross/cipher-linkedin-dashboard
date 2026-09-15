@@ -15,8 +15,8 @@ import {
   latestConversationMessageMap,
   messageSnippet,
 } from '../lib/followUps'
-import { instanceName } from '../lib/leads'
-import { shortDate } from '../lib/format'
+import { accountLabeller } from '../lib/leads'
+import { replyDate, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { useFollowUpActions } from '../lib/useFollowUpActions'
 import { Button, PageHeader, SectionHeader, SelectField, TextField, Toolbar } from '../ui'
 import type { FollowUpBucket, FollowUpWorkItem } from '../lib/followUps'
@@ -128,15 +128,9 @@ export function FollowUps() {
     (campaign) => inst === 'all' || campaign.instance_id === inst,
   )
   /* Two accounts and two teammates can share a display name. Where they do,
-   * the label carries what tells them apart — the same rule the Replies owner
-   * filter already used, applied here too. */
-  const accountLabel = (id: string) => {
-    const instance = data.instances.find((candidate) => candidate.id === id)
-    const name = instanceName(instance, id)
-    return data.instances.filter((candidate) => instanceName(candidate, candidate.id) === name).length > 1
-      ? `${name} · ${id}`
-      : name
-  }
+   * the label carries what tells them apart — one shared formatter for the
+   * accounts, so this page and the dropdowns elsewhere agree. */
+  const accountLabel = accountLabeller(data.instances)
   const ownerOptionLabel = (member: { id: number; name: string }) =>
     members.filter((candidate) => candidate.name === member.name).length > 1
       ? `${member.name} · #${member.id}`
@@ -266,7 +260,7 @@ export function FollowUps() {
                                   <span className="ellipsis" title={message.body}>
                                     {messageSnippet(message.body)}
                                   </span>
-                                  <span className="muted small">{shortDate(message.sent_at)}</span>
+                                  <time className="muted small" dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(message.sent_at)}</time>
                                 </>
                               ) : (
                                 <span className="muted small">No message history</span>
@@ -289,9 +283,11 @@ export function FollowUps() {
                               >
                                 Review in Replies
                               </Link>
+                              {/* The row's one primary action keeps the full
+                                  control height; the dense variant is for the
+                                  quiet links beside it, not for this. */}
                               <Button
                                 variant="primary"
-                                size="sm"
                                 onClick={() => openConversation(lead, { mode: 'follow_up' })}
                               >
                                 Open follow-up

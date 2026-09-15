@@ -13,6 +13,7 @@ import {
 import { DateRangePicker } from "../DateRangePicker";
 import { Skeleton } from "../Skeleton";
 import type { DateRange } from "../../lib/leads";
+import { accountLabeller } from "../../lib/leads";
 import { ago, num, pct, shortDate } from "../../lib/format";
 import { freshnessLevel } from "../../lib/freshness";
 import type {
@@ -256,6 +257,9 @@ export function OverviewAnalytics({
     key: "name" | "invited" | "connected" | "replied" | "acceptance" | "reply";
     direction: "asc" | "desc";
   }>({ key: "invited", direction: "desc" });
+  /* Two notebooks can share a LinkedIn display name, so every account label on
+     this page comes from the one shared formatter. */
+  const accountLabel = useMemo(() => accountLabeller(instances), [instances]);
   const selected = instances.find((item) => item.id === account);
   const selectedAccount = performance?.accounts.find(
     (item) => item.instance_id === account,
@@ -472,9 +476,7 @@ export function OverviewAnalytics({
               >
                 <option value="all">All accounts</option>
                 {instances.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.account_name || i.label || i.id}
-                  </option>
+                  <option key={i.id} value={i.id}>{accountLabel(i.id)}</option>
                 ))}
               </select>
             </label>
@@ -623,7 +625,7 @@ export function OverviewAnalytics({
             <h2 id="overview-account-title">
               {account === "all"
                 ? "Account analytics"
-                : `${selected?.account_name || selected?.label || account} campaigns`}
+                : `${accountLabel(account)} campaigns`}
             </h2>
             <p className="ov-muted">
               {account === "all"
@@ -771,7 +773,7 @@ export function OverviewAnalytics({
                               <button
                                 className="ov-name"
                                 type="button"
-                                aria-label={i.account_name || i.label || i.id}
+                                aria-label={accountLabel(i.id)}
                                 onClick={() => onAccountChange(i.id)}
                               >
                                 <span className="ov-avatar" aria-hidden="true">

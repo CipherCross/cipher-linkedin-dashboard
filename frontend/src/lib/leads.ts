@@ -13,6 +13,34 @@ export function instanceName(inst: Instance | undefined, fallback = ''): string 
   return inst?.account_name || inst?.label || inst?.id || fallback
 }
 
+/**
+ * One account formatter for every select, chip and table cell.
+ *
+ * Two notebooks can carry the same LinkedIn display name — the team really
+ * does run two "Mykyta Shevchenko" accounts — and a bare name then names two
+ * different things in the same dropdown. Where the names collide the label
+ * falls back to the notebook's own `label`, and to its id when even that is
+ * missing; where they don't, the plain name is shown. Pages used to each roll
+ * their own version of this, so the same option read differently on Overview,
+ * on Leads and on Manager review.
+ */
+export function accountLabeller(
+  instances: Instance[] | undefined,
+): (id: string) => string {
+  const list = instances ?? []
+  const counts = new Map<string, number>()
+  for (const instance of list) {
+    const name = instanceName(instance, instance.id)
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+  return (id: string) => {
+    const instance = list.find((candidate) => candidate.id === id)
+    const name = instanceName(instance, id)
+    if ((counts.get(name) ?? 0) <= 1) return name
+    return `${name} · ${instance?.label || id}`
+  }
+}
+
 /** Stable key for one lead's conversation thread. profile_url is near-unique,
  *  but scoping by instance too keeps the same person reached from two accounts
  *  separate. */

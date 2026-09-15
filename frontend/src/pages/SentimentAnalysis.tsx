@@ -4,7 +4,7 @@ import { BarChart3, Clock3, Filter, RefreshCw, TrendingUp } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { authFetch } from '../lib/api'
 import { useData } from '../lib/DataContext'
-import { instanceName } from '../lib/leads'
+import { accountLabeller } from '../lib/leads'
 import { REASON_LABELS, SENTIMENT_LABELS, type ReplyReviewSentiment } from '../lib/replyReview'
 import { ComparisonTable, type ComparisonRow } from '../components/reply-analysis/ComparisonTable'
 import { MetricCard, type AnalyticsMetric } from '../components/reply-analysis/MetricCard'
@@ -188,7 +188,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
   const drill = (m: AnalyticsMetric, key: string) => buildRepliesDrilldownHref(filters, m, key)
   const campaignRows = data?.campaigns ?? []
   const owners = data?.teamMembers.filter((member) => member.active) ?? []
-  const accountLabel = (id: string) => instanceName(data?.instances.find((item) => item.id === id), id)
+  const accountLabel = accountLabeller(data?.instances)
   const visibleResult = resultKey === filterKey ? result : null
   const comparison = visibleResult?.comparison ?? []
   const labelForComparison = (row: ComparisonRow) => row.name || (row.kind === 'account' ? accountLabel(row.id) : row.id === '__none__' ? 'No campaign' : campaignRows.find((c) => c.campaign_id === row.id)?.campaign_name ?? row.id)
@@ -207,16 +207,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
   const hasReviews = (reviewed?.numerator ?? 0) > 0
   const businessRate = visibleResult?.sentiment.business_rate
   const reasonsPresent = Object.values(visibleResult?.reasons ?? {}).some((value) => value.numerator > 0)
-  const duplicateAccountNames = (data?.instances ?? []).reduce((map, item) => {
-    const name = instanceName(item)
-    map.set(name, (map.get(name) ?? 0) + 1)
-    return map
-  }, new Map<string, number>())
-  const displayAccount = (id: string) => {
-    const item = data?.instances.find((candidate) => candidate.id === id)
-    const name = instanceName(item, id)
-    return duplicateAccountNames.get(name)! > 1 ? name + ' · ' + (item?.label || id) : name
-  }
+  const displayAccount = accountLabel
   const reasonRows = visibleResult?.reasons ?? {}
   const pendingHref = pending ? drill(pending, 'unreviewed_dialogues') : null
   return <div className="sa-page">

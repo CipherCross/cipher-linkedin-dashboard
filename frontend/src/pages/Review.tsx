@@ -4,7 +4,7 @@ import { ClipboardCheck, Send } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import {
-  instanceName, lastWeeks, latestRepliesByLead, presetRanges, rangeFromParam,
+  accountLabeller, lastWeeks, latestRepliesByLead, presetRanges, rangeFromParam,
   rangeToParam, rangedCampaigns, replyIntentMetrics,
 } from '../lib/leads'
 import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
@@ -19,7 +19,7 @@ import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
 import { num } from '../lib/format'
-import { Button, LinkButton, PageHeader, Panel, SectionHeader, SegmentedControl, SelectField, Tabs } from '../ui'
+import { Button, LinkButton, PageHeader, SectionHeader, SegmentedControl, SelectField, Tabs } from '../ui'
 
 const WEEK_OPTIONS = [8, 12, 16]
 const DEFAULT_WEEKS = 12
@@ -95,7 +95,8 @@ export function Review() {
     [data, leads, campaigns, range],
   )
 
-  const scope = inst === 'all' ? 'All accounts' : instanceName(data?.instances.find((i) => i.id === inst), inst)
+  const accountLabel = accountLabeller(data?.instances)
+  const scope = inst === 'all' ? 'All accounts' : accountLabel(inst)
   const digest = useMemo(
     () => (data ? buildDigest(cohortData, data.instances, scope) : null),
     [data, cohortData, scope],
@@ -175,6 +176,7 @@ function ReviewHeader({
   presets: DateRange[]
   setRange: (r: DateRange) => void
 }) {
+  const accountLabel = accountLabeller(instances)
   return (
     <PageHeader
       title="Manager review"
@@ -189,7 +191,7 @@ function ReviewHeader({
         >
           <option value="all">All accounts</option>
           {instances.map((i) => (
-            <option key={i.id} value={i.id}>{instanceName(i)}</option>
+            <option key={i.id} value={i.id}>{accountLabel(i.id)}</option>
           ))}
         </SelectField>
         {tab === 'leads-added' ? (
@@ -218,33 +220,41 @@ function P3OutcomeSummary({
   metrics: ReplyIntentMetrics
   weeks: number
 }) {
+  /* The same KPI role as Overview and Team: a section heading over plain KPI
+     tiles. These three used to be a smaller, differently-shaped stat grid
+     nested inside a panel, so the manager's headline numbers read as a lesser
+     kind of metric than the ones on every other page. */
+  const cells = [
+    {
+      key: 'p3', label: 'Reached P3', value: num(metrics.p3),
+      sub: 'conversations that reached buying intent',
+    },
+    {
+      key: 'booked', label: 'P3 → booked',
+      value: metrics.matureP3BookingRate == null ? '—' : `${metrics.matureP3BookingRate.toFixed(1)}%`,
+      sub: `${num(metrics.matureP3Booked)} / ${num(metrics.matureP3)} P3 aged 14d+`,
+    },
+    {
+      key: 'ghosted', label: 'P3 ghosted', value: num(metrics.p3Ghosted),
+      sub: 'follow-up recorded · 30d silence',
+    },
+  ]
   return (
-    <Panel>
+    <section>
       <SectionHeader
         title={`P3 outcomes · last ${weeks} weeks`}
         description="Unique conversations · attributed to the first P3"
       />
-      <div className="tmpl-stat-grid">
-        <div className="tmpl-stat-cell">
-          <div className="tmpl-stat-val">{num(metrics.p3)}</div>
-          <div className="muted small">Reached P3</div>
-        </div>
-        <div className="tmpl-stat-cell">
-          <div className="tmpl-stat-val">
-            {metrics.matureP3BookingRate == null ? '—' : `${metrics.matureP3BookingRate.toFixed(1)}%`}
+      <div className="kpi-grid">
+        {cells.map((cell) => (
+          <div className="card kpi" key={cell.key}>
+            <div className="kpi-top"><span className="kpi-label">{cell.label}</span></div>
+            <div className="kpi-value">{cell.value}</div>
+            <div className="kpi-sub">{cell.sub}</div>
           </div>
-          <div className="muted small">P3 → booked</div>
-          <div className="muted tmpl-stat-n">
-            {num(metrics.matureP3Booked)} / {num(metrics.matureP3)} P3 aged 14d+
-          </div>
-        </div>
-        <div className="tmpl-stat-cell">
-          <div className="tmpl-stat-val">{num(metrics.p3Ghosted)}</div>
-          <div className="muted small">P3 ghosted</div>
-          <div className="muted tmpl-stat-n">follow-up recorded · 30d silence</div>
-        </div>
+        ))}
       </div>
-    </Panel>
+    </section>
   )
 }
 

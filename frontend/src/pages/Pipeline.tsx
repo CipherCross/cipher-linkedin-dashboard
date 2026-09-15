@@ -5,11 +5,12 @@ import { useConversation } from '../lib/ConversationContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { InitialsAvatar, LeadAvatar } from '../components/Avatar'
 import { LostReasonModal } from '../components/LostReasonModal'
-import { instanceName } from '../lib/leads'
+import { accountLabeller } from '../lib/leads'
 import {
   PIPELINE_STAGES, daysInStage, stageColor, substatusLabel,
 } from '../lib/pipeline'
-import { num, shortDate } from '../lib/format'
+import { num } from '../lib/format'
+import { replyDate, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import {
   activeFollowUp,
   followUpBucket,
@@ -123,13 +124,7 @@ export function Pipeline() {
   /* Two notebooks can carry the same display name. Where they do, the id goes
    * in the label so a board column, a filter and a card all name the same
    * account unambiguously. */
-  const accountLabel = (id: string) => {
-    const instance = data.instances.find((candidate) => candidate.id === id)
-    const name = instanceName(instance, id)
-    return data.instances.filter((candidate) => instanceName(candidate, candidate.id) === name).length > 1
-      ? `${name} · ${id}`
-      : name
-  }
+  const accountLabel = accountLabeller(data.instances)
   const campaignOptions = data.campaigns.filter((c) => inst === 'all' || c.instance_id === inst)
   const activeMembers = members.filter((m) => m.active)
 
@@ -380,7 +375,7 @@ function PipeCard({
               {latestMessage.direction === 'in' ? 'Them' : 'Us'}
             </span>
             <span className="ellipsis">{messageSnippet(latestMessage.body, 74)}</span>
-            <span className="pipe-msg-date">{shortDate(latestMessage.sent_at)}</span>
+            <time className="pipe-msg-date" dateTime={latestMessage.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(latestMessage.sent_at)}</time>
           </span>
         )}
         <span
