@@ -92,12 +92,38 @@ function NavigationGuard({ dirty, onRequest }: { dirty: boolean; onRequest: (req
   return dataRouter ? <DataRouterNavigationGuard dirty={dirty} onRequest={onRequest} /> : <LegacyNavigationGuard dirty={dirty} onRequest={onRequest} />
 }
 
+/* The filters the sheet owns and commits together. The view tabs, the account
+ * selector and the search box are on the page itself and stay immediate. */
+const FILTER_DRAFT_KEYS = [
+  'scope', 'campaign', 'owner', 'unowned', 'sentiment', 'reason', 'action',
+  'my', 'unacknowledged', 'overdue',
+] as const
+type RepliesFilterDraft = Pick<ReplyInboxScope, typeof FILTER_DRAFT_KEYS[number]>
+
+function pickFilterDraft(scope: ReplyInboxScope): RepliesFilterDraft {
+  return {
+    scope: scope.scope, campaign: scope.campaign, owner: scope.owner,
+    unowned: scope.unowned, sentiment: scope.sentiment, reason: scope.reason,
+    action: scope.action, my: scope.my, unacknowledged: scope.unacknowledged,
+    overdue: scope.overdue,
+  }
+}
+
+const EMPTY_FILTER_DRAFT: RepliesFilterDraft = {
+  scope: 'new', campaign: null, owner: null, unowned: false, sentiment: null,
+  reason: null, action: null, my: false, unacknowledged: false, overdue: false,
+}
+
 export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const { data } = useData()
   const { openConversation } = useConversation()
   const inbox = useRepliesInbox(client)
   const [search, setSearch] = useState(inbox.scope.query)
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  /* The filter sheet edits a draft and commits it on Apply. Every field used
+   * to call guardedScope on change, so Escape dismissed a dialog whose changes
+   * had already refetched the list and rewritten the URL. `null` = closed. */
+  const [filterDraft, setFilterDraft] = useState<RepliesFilterDraft | null>(null)
+  const filtersOpen = filterDraft !== null
   const [workflowValid, setWorkflowValid] = useState(true)
   const [pendingNavigation, setPendingNavigation] = useState<NavigationRequest | null>(null)
   const [mobileStep, setMobileStep] = useState<'list' | 'thread' | 'review'>('list')
@@ -235,11 +261,27 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     return ownerOptions.filter((member) => member.name === owner.name).length > 1 ? `${owner.name} · #${id}` : owner.name
   }
   const ownerCount = (id: number | null) => inbox.facets?.owners?.find((facet) => facet.id === id)?.count ?? 0
+  const openFilters = () => setFilterDraft(pickFilterDraft(inbox.scope))
+  const patchDraft = (patch: Partial<RepliesFilterDraft>) =>
+    setFilterDraft((current) => (current ? { ...current, ...patch } : current))
+  const applyFilters = () => {
+    const draft = filterDraft
+    setFilterDraft(null)
+    if (draft) guardedScope({ ...draft, cursor: null })
+  }
   const activeFilterCount = [
     inbox.scope.campaign, inbox.scope.owner, inbox.scope.sentiment, inbox.scope.reason,
     inbox.scope.action, inbox.scope.scope !== 'new', inbox.scope.my, inbox.scope.unacknowledged,
     inbox.scope.unowned, inbox.scope.overdue,
   ].filter(Boolean).length
+  /* While the sheet is open its footer counts the draft, not the applied URL. */
+  const draftFilterCount = filterDraft
+    ? [
+      filterDraft.campaign, filterDraft.owner, filterDraft.sentiment, filterDraft.reason,
+      filterDraft.action, filterDraft.scope !== 'new', filterDraft.my,
+      filterDraft.unacknowledged, filterDraft.unowned, filterDraft.overdue,
+    ].filter(Boolean).length
+    : 0
   const scopeLabel = inbox.scope.metric_scope
     ? ({
       business_rate: 'Declines and objections', negative_objection: 'Declines and objections',
@@ -328,59 +370,60 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
           variant="secondary"
           icon={<Filter size={18} aria-hidden="true" />}
           aria-expanded={filtersOpen}
-          onClick={() => setFiltersOpen(true)}
+          onClick={openFilters}
         >{COPY.filters}<FilterCount count={activeFilterCount} /></Button>
       </div>
     </div>
 
     {/* Filters open OVER the page. Nothing below them moves, so the workspace
         keeps its full height whether they are open or closed. */}
-    {filtersOpen && <Dialog
+    {filterDraft && <Dialog
       title={COPY.filters}
-      description="Applies to the conversation list. The account selector stays on the page."
-      onRequestClose={() => setFiltersOpen(false)}
-      footerNote={activeFilterCount ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied` : 'No filters applied'}
+      description="Applies to the conversation list when you apply them. The account selector stays on the page."
+      onRequestClose={() => setFilterDraft(null)}
+      footerNote={draftFilterCount ? `${draftFilterCount} filter${draftFilterCount === 1 ? '' : 's'} selected` : 'No filters selected'}
       footer={<>
-        <Button variant="ghost" onClick={() => guardedScope({ campaign: null, owner: null, sentiment: null, reason: null, action: null, my: false, unacknowledged: false, unowned: false, overdue: false, scope: 'new', cursor: null })}>{COPY.clearAll}</Button>
-        <Button variant="primary" onClick={() => setFiltersOpen(false)}>Done</Button>
+        <Button variant="ghost" onClick={() => setFilterDraft(EMPTY_FILTER_DRAFT)}>{COPY.clearAll}</Button>
+        <Button variant="secondary" onClick={() => setFilterDraft(null)}>{COPY.cancel}</Button>
+        <Button variant="primary" onClick={applyFilters}>{COPY.apply}</Button>
       </>}
     >
       <div className="replies-filter-grid">
-        <SelectField label="Arrived" value={inbox.scope.scope} onChange={(event) => guardedScope({ scope: event.target.value as ReplyInboxScope['scope'], cursor: null })}>
+        <SelectField label="Arrived" value={filterDraft.scope} onChange={(event) => patchDraft({ scope: event.target.value as ReplyInboxScope['scope'] })}>
           <option value="new">Since manual review started</option>
           <option value="historical">Before manual review started</option>
           <option value="all">All time</option>
         </SelectField>
-        <SelectField label="Campaign" value={inbox.scope.campaign ?? ''} onChange={(event) => guardedScope({ campaign: event.target.value || null, cursor: null })}>
+        <SelectField label="Campaign" value={filterDraft.campaign ?? ''} onChange={(event) => patchDraft({ campaign: event.target.value || null })}>
           <option value="">All campaigns</option>
           {inbox.capabilities?.campaigns?.filter((item) => !inbox.scope.account || item.instance_id === inbox.scope.account).map((item) => <option key={item.id} value={item.id}>{item.name} · {accountLabel(item.instance_id)}</option>)}
         </SelectField>
         <SelectField
           label={COPY.conversationOwner}
           help={inbox.facets ? 'Counts are for the current result set.' : undefined}
-          value={inbox.scope.unowned ? 'unassigned' : inbox.scope.owner ?? ''}
-          onChange={(event) => guardedScope({ owner: event.target.value === 'unassigned' ? null : event.target.value || null, unowned: event.target.value === 'unassigned', cursor: null })}
+          value={filterDraft.unowned ? 'unassigned' : filterDraft.owner ?? ''}
+          onChange={(event) => patchDraft({ owner: event.target.value === 'unassigned' ? null : event.target.value || null, unowned: event.target.value === 'unassigned' })}
         >
           <option value="">All owners</option>
           <option value="unassigned">Unassigned{inbox.facets ? ` · ${ownerCount(null)}` : ''}</option>
           {ownerOptions.map((owner) => <option key={owner.id} value={String(owner.id)}>{ownerLabel(owner.id)}{inbox.facets ? ` · ${ownerCount(owner.id)}` : ''}</option>)}
         </SelectField>
-        <SelectField label={COPY.sentiment} value={inbox.scope.sentiment ?? ''} onChange={(event) => guardedScope({ sentiment: (event.target.value || null) as ReplyInboxScope['sentiment'], cursor: null })}>
+        <SelectField label={COPY.sentiment} value={filterDraft.sentiment ?? ''} onChange={(event) => patchDraft({ sentiment: (event.target.value || null) as ReplyInboxScope['sentiment'] })}>
           <option value="">All sentiments</option>
           {Object.entries(SENTIMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </SelectField>
-        <SelectField label={COPY.reasons} value={inbox.scope.reason ?? ''} onChange={(event) => guardedScope({ reason: (event.target.value || null) as ReplyInboxScope['reason'], cursor: null })}>
+        <SelectField label={COPY.reasons} value={filterDraft.reason ?? ''} onChange={(event) => patchDraft({ reason: (event.target.value || null) as ReplyInboxScope['reason'] })}>
           <option value="">All reasons</option>
           {Object.entries(REASON_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </SelectField>
-        <SelectField label={COPY.nextStep} value={inbox.scope.action ?? ''} onChange={(event) => guardedScope({ action: (event.target.value || null) as ReplyInboxScope['action'], cursor: null })}>
+        <SelectField label={COPY.nextStep} value={filterDraft.action ?? ''} onChange={(event) => patchDraft({ action: (event.target.value || null) as ReplyInboxScope['action'] })}>
           <option value="">All next steps</option>
           {Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </SelectField>
       </div>
       <div className="replies-filter-toggles">
         {([['my', 'Assigned to me'], ['unacknowledged', 'Needs a next step'], ['unowned', 'Unassigned'], ['overdue', 'Follow-up overdue']] as const).map(([key, label]) => (
-          <Checkbox key={key} label={label} checked={inbox.scope[key]} onChange={(event) => guardedScope({ [key]: event.target.checked, cursor: null })} />
+          <Checkbox key={key} label={label} checked={filterDraft[key]} onChange={(event) => patchDraft({ [key]: event.target.checked })} />
         ))}
       </div>
     </Dialog>}

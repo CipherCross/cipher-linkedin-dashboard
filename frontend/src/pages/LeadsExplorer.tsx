@@ -28,7 +28,7 @@ import type {
 import {
   AGE_BUCKETS, GENDER_SHORT, INTENT_META, INTENT_ORDER, RISK_LABEL, SENTIMENT_META,
   SENTIMENT_ORDER, STAGES, ageBucketOf, ageRange, downloadCsv, highestIntentByLead,
-  instanceName, latestRepliesByLead, leadKey, riskOf, stageOf, toCsv,
+  accountLabeller, latestRepliesByLead, leadKey, riskOf, stageOf, toCsv,
 } from '../lib/leads'
 import type { AgeBucket, RiskFlag, Stage } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
@@ -82,6 +82,14 @@ const RISK_CHIP: Record<RiskFlag, string> = {
 type SentFilter = Sentiment | 'unclassified' | 'any'
 const isSentFilter = (v: string | null): v is SentFilter =>
   v === 'any' || v === 'unclassified' || SENTIMENT_ORDER.includes(v as Sentiment)
+
+/* The filters that live inside the sheet and are committed together. The
+ * search box and the account selector sit on the page itself and stay
+ * immediate — they are visibly set and have their own controls. */
+const SHEET_FILTER_KEYS = [
+  'camp', 'stage', 'risk', 'pipe', 'who', 'follow', 'replied', 'intent',
+  'gender', 'agebucket',
+] as const
 
 // The "replied within" window options (days). '' / absent = any time.
 const REPLIED_DAYS = new Set(['7', '30', '90'])
@@ -253,6 +261,31 @@ export function LeadsExplorer() {
     setParams(new URLSearchParams(), { replace: true })
   }
 
+  const openFilters = () => {
+    setFilterDraft(Object.fromEntries(
+      SHEET_FILTER_KEYS.map((key) => [key, params.get(key) ?? 'all']),
+    ))
+  }
+  const setDraftFilter = (key: string, value: string) => {
+    setFilterDraft((current) => ({ ...(current ?? {}), [key]: value }))
+  }
+  const clearDraftFilters = () => {
+    setFilterDraft(Object.fromEntries(SHEET_FILTER_KEYS.map((key) => [key, 'all'])))
+  }
+  const applyFilters = () => {
+    const draft = filterDraft
+    setFilterDraft(null)
+    if (!draft) return
+    const next = new URLSearchParams(params)
+    for (const key of SHEET_FILTER_KEYS) {
+      const value = draft[key] ?? 'all'
+      if (value === 'all' || value === '') next.delete(key)
+      else next.set(key, value)
+    }
+    next.delete('page') // one scope change, one reset to the first page
+    setParams(next, { replace: true })
+  }
+
   const setSentiment = (f: SentFilter | null) => {
     const next = new URLSearchParams(params)
     if (f) next.set('sentiment', f)
@@ -321,7 +354,12 @@ export function LeadsExplorer() {
   // (re)computed on demand via POST /api/coach.
   const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
   const [digestOpen, setDigestOpen] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  /* The filter sheet edits a draft and commits it on Apply. Writing each
+   * `onChange` straight to the URL meant Escape "closed" a dialog that had
+   * already changed the result behind it, and there was nothing to cancel back
+   * to. `null` means the sheet is closed. */
+  const [filterDraft, setFilterDraft] = useState<Record<string, string> | null>(null)
+  const filtersOpen = filterDraft !== null
   const [digestBusy, setDigestBusy] = useState<string | null>(null)
   const [digestErr, setDigestErr] = useState<string | null>(null)
   useEffect(() => {
@@ -487,8 +525,7 @@ export function LeadsExplorer() {
 
   const campaignName = (id: string) =>
     data.campaigns.find((c) => c.campaign_id === id)?.campaign_name ?? id
-  const instanceLabel = (id: string) =>
-    instanceName(data.instances.find((i) => i.id === id), id)
+  const instanceLabel = accountLabeller(data.instances)
 
   const campaignOptions = data.campaigns.filter(
     (c) => inst === 'all' || c.instance_id === inst,
@@ -513,6 +550,10 @@ export function LeadsExplorer() {
     effCamp !== 'all', stage !== 'all', risk !== 'all', pipe !== 'all', who !== 'all',
     followF !== 'all', repliedDays > 0, intent != null, genderF !== 'all', ageF !== 'all',
   ].filter(Boolean).length
+  /* What the sheet's footer counts while it is open: the draft, not the URL. */
+  const draftFilterCount = filterDraft
+    ? SHEET_FILTER_KEYS.filter((key) => (filterDraft[key] ?? 'all') !== 'all').length
+    : 0
 
   // One removable chip per active filter, so the current view is legible at a glance.
   const activeFilters: Array<{ id: string; label: string; onClear: () => void }> = []
@@ -699,54 +740,55 @@ export function LeadsExplorer() {
           variant="secondary"
           icon={<Filter size={18} aria-hidden="true" />}
           aria-expanded={filtersOpen}
-          onClick={() => setFiltersOpen(true)}
+          onClick={openFilters}
         >{COPY.filters}<FilterCount count={sheetFilterCount} /></Button>
       </Toolbar>
 
-      {filtersOpen && (
+      {filterDraft && (
         <Dialog
           title={COPY.filters}
-          description="These apply on top of the search and the account selected on the page."
-          onRequestClose={() => setFiltersOpen(false)}
-          footerNote={sheetFilterCount ? `${sheetFilterCount} filter${sheetFilterCount === 1 ? '' : 's'} applied` : 'No filters applied'}
+          description="These apply on top of the search and the account selected on the page. Nothing changes until you apply."
+          onRequestClose={() => setFilterDraft(null)}
+          footerNote={draftFilterCount ? `${draftFilterCount} filter${draftFilterCount === 1 ? '' : 's'} selected` : 'No filters selected'}
           footer={<>
-            <Button variant="ghost" onClick={clearAll}>{COPY.clearAll}</Button>
-            <Button variant="primary" onClick={() => setFiltersOpen(false)}>Done</Button>
+            <Button variant="ghost" onClick={clearDraftFilters}>{COPY.clearAll}</Button>
+            <Button variant="secondary" onClick={() => setFilterDraft(null)}>{COPY.cancel}</Button>
+            <Button variant="primary" onClick={applyFilters}>{COPY.apply}</Button>
           </>}
         >
           <div className="leads-filter-grid">
-            <SelectField label="Campaign" value={effCamp} onChange={(e) => setFilter('camp', e.target.value)}>
+            <SelectField label="Campaign" value={filterDraft.camp} onChange={(e) => setDraftFilter('camp', e.target.value)}>
               <option value="all">All campaigns</option>
               {campaignOptions.map((c) => (
                 <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>
               ))}
             </SelectField>
-            <SelectField label="Milestone" value={stage} onChange={(e) => setFilter('stage', e.target.value)}>
+            <SelectField label="Milestone" value={filterDraft.stage} onChange={(e) => setDraftFilter('stage', e.target.value)}>
               <option value="all">All milestones</option>
               {STAGES.map((sOption) => (
                 <option key={sOption.id} value={sOption.id}>{sOption.label}</option>
               ))}
             </SelectField>
-            <SelectField label="Status" value={risk} onChange={(e) => setFilter('risk', e.target.value)}>
+            <SelectField label="Status" value={filterDraft.risk} onChange={(e) => setDraftFilter('risk', e.target.value)}>
               <option value="all">Any status</option>
               <option value="pending_2w">At risk: pending 14d+ (withdraw?)</option>
               <option value="no_reply_2w">At risk: no reply 14d+ (follow up)</option>
             </SelectField>
-            <SelectField label="Pipeline" value={pipe} onChange={(e) => setFilter('pipe', e.target.value)}>
+            <SelectField label="Pipeline" value={filterDraft.pipe} onChange={(e) => setDraftFilter('pipe', e.target.value)}>
               <option value="all">All pipeline</option>
               <option value="untriaged">Untriaged replies</option>
               {PIPELINE_STAGES.map((sOption) => (
                 <option key={sOption.id} value={sOption.id}>{sOption.label}</option>
               ))}
             </SelectField>
-            <SelectField label="Owner" value={who} onChange={(e) => setFilter('who', e.target.value)}>
+            <SelectField label="Owner" value={filterDraft.who} onChange={(e) => setDraftFilter('who', e.target.value)}>
               <option value="all">Anyone</option>
               <option value="unassigned">Unassigned</option>
               {members.map((m) => (
                 <option key={m.id} value={String(m.id)}>{m.name}</option>
               ))}
             </SelectField>
-            <SelectField label="Follow-up" value={followF} onChange={(e) => setFilter('follow', e.target.value)}>
+            <SelectField label="Follow-up" value={filterDraft.follow} onChange={(e) => setDraftFilter('follow', e.target.value)}>
               <option value="all">Any follow-up</option>
               <option value="overdue">Overdue</option>
               <option value="today">Today</option>
@@ -755,15 +797,15 @@ export function LeadsExplorer() {
             </SelectField>
             <SelectField
               label="Replied"
-              value={repliedDays ? String(repliedDays) : 'all'}
-              onChange={(e) => setFilter('replied', e.target.value)}
+              value={filterDraft.replied}
+              onChange={(e) => setDraftFilter('replied', e.target.value)}
             >
               <option value="all">Any time</option>
               <option value="7">Last 7 days</option>
               <option value="30">Last 30 days</option>
               <option value="90">Last 90 days</option>
             </SelectField>
-            <SelectField label="Buying interest reached" value={intent ?? 'all'} onChange={(e) => setFilter('intent', e.target.value)}>
+            <SelectField label="Buying interest reached" value={filterDraft.intent} onChange={(e) => setDraftFilter('intent', e.target.value)}>
               <option value="all">Any level</option>
               {INTENT_ORDER.map((level) => (
                 <option key={level} value={level}>
@@ -772,14 +814,14 @@ export function LeadsExplorer() {
               ))}
               <option value="none">No P1–P3 interest</option>
             </SelectField>
-            <SelectField label="Gender" value={genderF} onChange={(e) => setFilter('gender', e.target.value)}>
+            <SelectField label="Gender" value={filterDraft.gender} onChange={(e) => setDraftFilter('gender', e.target.value)}>
               <option value="all">Any gender</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="unknown">Unknown</option>
               <option value="pending">Pending evaluation</option>
             </SelectField>
-            <SelectField label="Age" value={ageF} onChange={(e) => setFilter('agebucket', e.target.value)}>
+            <SelectField label="Age" value={filterDraft.agebucket} onChange={(e) => setDraftFilter('agebucket', e.target.value)}>
               <option value="all">Any age</option>
               {AGE_BUCKETS.map((b) => (
                 <option key={b.id} value={b.id}>{b.label}</option>
