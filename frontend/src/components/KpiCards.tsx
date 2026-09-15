@@ -150,7 +150,11 @@ export function KpiCards({
   )
 }
 
-/** Grouped intent card — combines all 5 intent metrics in a single wider tile. */
+/** Grouped intent card — all five intent metrics in one tile, each value
+ *  directly under its own label. The earlier version was a five-row list with
+ *  the numbers pinned to the card's right edge; on a wide card that put a
+ *  value and its label a third of a screen apart, and the card itself grew
+ *  taller than every KPI beside it. */
 function IntentGroup({ intent, intentPrev }: { intent: ReplyIntentMetrics; intentPrev?: ReplyIntentMetrics }) {
   const rows: { key: string; label: string; value: number; sub: string; cur: number; prev?: number }[] = [
     {
@@ -183,18 +187,20 @@ function IntentGroup({ intent, intentPrev }: { intent: ReplyIntentMetrics; inten
       <div className="kpi-top">
         <span className="kpi-label"><Sparkles size={14} strokeWidth={2} /> Reply intent</span>
       </div>
-      {rows.map((r, i) => (
-        <div className={`kpi-intent-row${i < rows.length - 1 ? '' : ' last'}`} key={r.key}>
-          <span className="kpi-intent-row-label">{r.label}</span>
-          <span className="kpi-intent-row-right">
-            <span className="kpi-intent-row-value">{num(r.value)}</span>
-            {r.cur !== undefined && r.prev !== undefined && (
-              <Delta cur={r.cur} prev={r.prev} maturing />
-            )}
-          </span>
-          <span className="kpi-intent-row-sub">{r.sub}</span>
-        </div>
-      ))}
+      <div className="kpi-intent-metrics">
+        {rows.map((r) => (
+          <div className="kpi-intent-metric" key={r.key}>
+            <span className="kpi-intent-metric-label">{r.label}</span>
+            <span className="kpi-intent-metric-value">
+              {num(r.value)}
+              {r.cur !== undefined && r.prev !== undefined && (
+                <Delta cur={r.cur} prev={r.prev} maturing />
+              )}
+            </span>
+            <span className="kpi-intent-metric-sub">{r.sub}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

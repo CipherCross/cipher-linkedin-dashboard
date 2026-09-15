@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
+import { DateRangePicker } from '../components/DateRangePicker'
+import { presetRanges } from '../lib/leads'
+import '../pages/replies-inbox.css'
 import {
   ArrowRight, Check, CircleAlert, Clock, Download, Filter, Plus, RefreshCw, Trash2,
 } from 'lucide-react'
@@ -23,6 +26,9 @@ import {
  * unknown contact, zero coverage, and a partial sentiment dataset.
  */
 
+/* Fixed date so the gallery renders identically on every run. */
+const GALLERY_PRESETS = presetRanges(new Date('2026-09-15T00:00:00.000Z'))
+
 const PEOPLE = [
   { name: 'Mykyta Shevchenko', account: 'notebook-1', campaign: 'Q3 · Founders (DACH)' },
   { name: 'Mykyta Shevchenko', account: 'notebook-3', campaign: 'Q3 · Founders (DACH)' },
@@ -45,6 +51,8 @@ export function Gallery() {
   const [period, setPeriod] = useState<'7d' | '28d' | 'all'>('28d')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [choice, setChoice] = useState<'positive' | 'neutral' | 'negative'>('neutral')
+  const [range, setRange] = useState(GALLERY_PRESETS[1] ?? GALLERY_PRESETS[0])
+  const [reviewPane, setReviewPane] = useState(false)
   const [loading, setLoading] = useState(false)
 
   return (
@@ -348,14 +356,31 @@ export function Gallery() {
               </TableFrame>
             </Panel>
 
+            {/* These four use the screens' OWN classes, not lookalike inline
+                styles. A mock built from `style={{…}}` renders correctly while
+                the real stylesheet is broken — that is how a clipped primary
+                action and an unreachable review pane both passed a gallery
+                pass. If a composition here needs its page's CSS, import it. */}
             <Panel>
               <SectionHeader title="Analytics row" description="One period statement for the block, not one per card." />
-              <p className="muted small">Last 28 days · UTC day boundaries · recent cohorts still maturing</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-lg)' }}>
+              <div className="toolbar" style={{ marginBottom: 'var(--space-md)' }}>
+                <DateRangePicker
+                  ariaLabel="Gallery date range"
+                  presets={GALLERY_PRESETS}
+                  value={range}
+                  onChange={setRange}
+                />
+                <SelectField label="Account" labelHidden value="all" onChange={() => {}}>
+                  <option value="all">All accounts</option>
+                </SelectField>
+                <span className="muted small">Both controls are 44px — the date trigger is not a smaller species.</span>
+              </div>
+              <div className="kpi-grid">
                 {[['Invites sent', '1,284'], ['Connected', '512'], ['Replied', '146'], ['P3 · Buying intent', '0']].map(([label, value]) => (
-                  <div key={label} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', padding: 'var(--space-lg)' }}>
-                    <div className="muted small">{label}</div>
-                    <div className="tabular" style={{ font: '600 var(--text-kpi)/var(--leading-kpi) var(--font-sans)' }}>{value}</div>
+                  <div className="card kpi" key={label}>
+                    <div className="kpi-top"><span className="kpi-label">{label}</span></div>
+                    <div className="kpi-value">{value}</div>
+                    <div className="kpi-sub">UTC day boundaries · recent cohorts still maturing</div>
                   </div>
                 ))}
               </div>
@@ -365,23 +390,73 @@ export function Gallery() {
             </Panel>
 
             <Panel>
-              <SectionHeader title="Three-pane workspace" description="list 320 · thread ≥560 · review 360 at ≥1240px of content width." />
-              <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(560px, 1fr) 360px', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'hidden', minHeight: 260 }}>
-                <div style={{ borderRight: '1px solid var(--border)', padding: 'var(--space-lg)' }}>
-                  <div className="muted small">Conversations</div>
-                </div>
-                <div style={{ borderRight: '1px solid var(--border)', padding: 'var(--space-lg)' }}>
-                  <div className="muted small">Thread</div>
-                </div>
-                <div style={{ padding: 'var(--space-lg)' }}>
-                  <div className="muted small">Review reply</div>
+              <SectionHeader
+                title="Three-pane workspace"
+                description="The real Replies classes. Below 1240px of container width it becomes two panes plus the switch that reaches the third."
+              />
+              <div className="replies-page" style={{ height: 320 }}>
+                <div className={`replies-workspace${reviewPane ? ' pane-review' : ''}`}>
+                  <aside className="replies-list-pane"><div className="replies-pane-title"><div><h2>Conversations</h2></div></div></aside>
+                  <main className="replies-thread-pane">
+                    <div className="replies-thread-head"><div><h2>Thread</h2></div></div>
+                    <div style={{ flex: 1 }} />
+                    <div className="replies-pane-switch">
+                      <Button variant="ghost" block onClick={() => setReviewPane(!reviewPane)}>
+                        {reviewPane ? '← Back to conversations' : 'Review reply and next step →'}
+                      </Button>
+                    </div>
+                  </main>
+                  <aside className="replies-inspector-pane"><div className="replies-pane-title"><div><h2>Review reply</h2></div></div></aside>
                 </div>
               </div>
             </Panel>
 
             <Panel>
-              <SectionHeader title="Editor column" description="Text column ≥560px; comments collapse into a summoned panel." />
-              <TextareaField label="Message" rows={10} defaultValue={'Hi {{first_name}},\n\n…'} />
+              <SectionHeader
+                title="Work queue row"
+                description="Four zones on one line while they fit, then the message and the actions drop to a second row. The primary action is never clipped and never dense."
+              />
+              <div className="follow-list">
+                {PEOPLE.slice(0, 2).map((person, index) => (
+                  <article className="follow-item" key={index}>
+                    <button className="follow-item-open" type="button">
+                      <span className="follow-item-main">
+                        <span className="follow-item-name">{person.name ?? 'Unknown contact'}</span>
+                        <span className="muted small ellipsis">{person.campaign}</span>
+                      </span>
+                    </button>
+                    <div className="follow-item-context">
+                      <span className="follow-due overdue">Overdue by {index + 3} days</span>
+                      <span className="muted small ellipsis">{person.account}</span>
+                    </div>
+                    <div className="follow-item-message">
+                      <span className="follow-direction in">Them</span>
+                      <span className="ellipsis">Thanks — could you send the detail across?</span>
+                      <span className="muted small">{analyticsDate('2026-09-13T01:54:00Z')}</span>
+                    </div>
+                    <div className="follow-item-actions">
+                      <a className="link-btn" href="#top">LinkedIn</a>
+                      <a className="link-btn" href="#top">Review in Replies</a>
+                      <Button variant="primary">Open follow-up</Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel>
+              <SectionHeader
+                title="Editor column"
+                description="One variation gets the whole writing column; Add variation is an action underneath, not an empty tile of the same size."
+              />
+              <div className="sequence-variation-grid">
+                <div className="card" style={{ padding: 'var(--space-lg)' }}>
+                  <TextareaField label="Message" rows={8} defaultValue={'Hi {{first_name}},\n\n…'} />
+                </div>
+              </div>
+              <div className="sequence-variation-actions">
+                <button className="sequence-add-variation" type="button"><Plus size={18} /><span>Add variation</span></button>
+              </div>
             </Panel>
           </div>
         )}

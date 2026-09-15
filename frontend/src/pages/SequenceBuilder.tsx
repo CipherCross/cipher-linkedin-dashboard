@@ -120,7 +120,8 @@ import {
 import { CampaignRuntimeStatusView } from '../components/CampaignRuntimeStatus'
 import { ago, num } from '../lib/format'
 import {
-  Button, Dialog, FilterCount, IconButton, PageHeader, SelectField, Tabs, TextField, Toolbar,
+  Button, Dialog, FilterCount, IconButton, PageHeader, SelectField, Table, TableFrame,
+  Tabs, TextField, Toolbar,
 } from '../ui'
 
 type EditorTab = 'build' | 'branches' | 'preview'
@@ -346,31 +347,44 @@ function SequenceLibrary() {
         ) : deployments.length === 0 ? (
           <div className="card sequence-empty-state"><h2>No deployments match these filters</h2><p>Use All archive states to include campaigns whose archive membership is still unknown.</p></div>
         ) : (
-          <div className="deployment-groups">
-            {deployments.map(({ item, deployments: rows }) => (
-              <section className="card deployment-group" key={item.id} aria-labelledby={`deployment-${item.id}`}>
-                <div className="deployment-group-head">
-                  <div><div className="eyebrow">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</div><h2 id={`deployment-${item.id}`}>{item.name}</h2></div>
-                  {item.sequence_document_id && <Link className="link-btn" to={`/sequences/${encodeURIComponent(item.sequence_document_id)}`}>Open builder <ChevronRight size={14} /></Link>}
-                </div>
-                <div className="deployment-table-scroll">
-                  <table className="deployment-table"><thead><tr><th>Campaign / notebook</th><th>Linked Helper runtime</th><th>Publish</th><th className="num">Leads</th><th className="num">Replies</th><th>Sync</th></tr></thead><tbody>
-                    {rows.map((deployment) => (
-                      <tr key={deployment.key}>
-                        <td><div>{deployment.campaign_id
-                          ? <Link className="row-link" to={`/campaign/${encodeURIComponent(deployment.campaign_id)}`}>{deployment.campaign_name}</Link>
-                          : <span>{deployment.campaign_name}</span>}</div><span className="muted small">{deployment.account_name ?? deployment.instance_id} · {deployment.instance_id}</span></td>
-                        <td><CampaignRuntimeStatusView campaign={deployment} compact /></td>
-                        <td>{deployment.publish_status ? <><span className={`badge publish-${deployment.publish_status}`}>{publishStatusLabel(deployment.publish_status)}</span>{deployment.awaiting_sync && <div className="muted small">Awaiting campaign sync</div>}</> : <span className="muted small">External campaign</span>}</td>
-                        <td className="num">{num(deployment.leads)}</td><td className="num">{num(deployment.replies)}</td>
-                        <td className="muted small">{deployment.last_sync_at ? ago(deployment.last_sync_at) : 'Never synced'}</td>
-                      </tr>
-                    ))}
-                  </tbody></table>
-                </div>
-              </section>
-            ))}
-          </div>
+          /* One table, one header row, a banner row per sequence. Every group
+             used to be its own card repeating the same six column headers, so
+             a 1280px window showed about two of sixty-six deployments. */
+          <TableFrame className="deployment-frame" scrollLabel="Deployments">
+            <Table className="deployment-table" caption="Deployments by sequence">
+              <thead><tr>
+                <th>Campaign / notebook</th><th>Linked Helper runtime</th><th>Publish</th>
+                <th className="num">Leads</th><th className="num">Replies</th><th>Sync</th>
+              </tr></thead>
+              {deployments.map(({ item, deployments: rows }) => (
+                <tbody key={item.id}>
+                  <tr className="deployment-group-row">
+                    <th colSpan={6} scope="colgroup">
+                      <div className="deployment-group-head">
+                        <div>
+                          <span className="eyebrow">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</span>
+                          <span className="deployment-group-name" id={`deployment-${item.id}`}>{item.name}</span>
+                          <span className="muted small">{rows.length} campaign{rows.length === 1 ? '' : 's'}</span>
+                        </div>
+                        {item.sequence_document_id && <Link className="link-btn" to={`/sequences/${encodeURIComponent(item.sequence_document_id)}`}>Open builder <ChevronRight size={14} /></Link>}
+                      </div>
+                    </th>
+                  </tr>
+                  {rows.map((deployment) => (
+                    <tr key={deployment.key}>
+                      <td><div>{deployment.campaign_id
+                        ? <Link className="row-link" to={`/campaign/${encodeURIComponent(deployment.campaign_id)}`}>{deployment.campaign_name}</Link>
+                        : <span>{deployment.campaign_name}</span>}</div><span className="muted small">{deployment.account_name ?? deployment.instance_id} · {deployment.instance_id}</span></td>
+                      <td><CampaignRuntimeStatusView campaign={deployment} compact /></td>
+                      <td>{deployment.publish_status ? <><span className={`badge publish-${deployment.publish_status}`}>{publishStatusLabel(deployment.publish_status)}</span>{deployment.awaiting_sync && <div className="muted small">Awaiting campaign sync</div>}</> : <span className="muted small">External campaign</span>}</td>
+                      <td className="num">{num(deployment.leads)}</td><td className="num">{num(deployment.replies)}</td>
+                      <td className="muted small">{deployment.last_sync_at ? ago(deployment.last_sync_at) : 'Never synced'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+            </Table>
+          </TableFrame>
         )
       ) : error ? (
         <div className="card sequence-empty-state">
@@ -754,6 +768,11 @@ function BuildCanvas({
                           )}
                         </SortableVariationShell>
                       ))}
+                    </div>
+                    {/* Add variation is an action under the editors, not a
+                        grid cell: as a cell it claimed half the row and left
+                        a single variation editing in ~460px. */}
+                    <div className="sequence-variation-actions">
                       <button className="sequence-add-variation" onClick={() => onDocument(addVariation(document, step.id))}>
                         <Plus size={18} /><span>Add variation</span>
                       </button>
