@@ -1,0 +1,165 @@
+{
+  "captured_date": "2026-09-15",
+  "host": "app.ciphercross.dev",
+  "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+  "function_region": "iad1",
+  "browser_network": {
+    "throttling": "No throttling",
+    "disable_cache": false,
+    "viewport_note": "Existing DevTools device emulation was active; these are request timings, not desktop rendering or CWV benchmarks.",
+    "requests": [
+      {
+        "operation": "session.current",
+        "duration_ms": 712.68
+      },
+      {
+        "operation": "team.roster",
+        "duration_ms": 1120
+      },
+      {
+        "operation": "config.readPath",
+        "duration_ms": 201
+      },
+      {
+        "operation": "dashboard.bootstrap",
+        "duration_ms": 2500
+      },
+      {
+        "operation": "dashboard.routeSnapshot (replies)",
+        "duration_ms": 1150
+      },
+      {
+        "operation": "replies.capabilities",
+        "duration_ms": 3660
+      },
+      {
+        "operation": "replies.inbox (unreviewed, new, 50)",
+        "duration_ms": 2570,
+        "waiting_for_server_ms": 2470,
+        "content_download_ms": 99.41,
+        "transferred_kb": 11,
+        "decoded_kb": 43.3
+      }
+    ],
+    "initial_session_to_inbox_complete_ms_approx": 9830,
+    "initial_session_to_inbox_note": "Difference between Network Timing session start 9.74s and inbox end 19.57s on the same preserved recording. Not navigation-to-paint or LCP."
+  },
+  "server_telemetry": [
+    {
+      "timestamp": "2026-09-15T12:59:24.656Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "dashboard.bootstrap",
+      "rows": 1,
+      "bytes": 16886,
+      "actor_ms": 1683.8,
+      "query_ms": 466.5,
+      "total_ms": 2150.5
+    },
+    {
+      "timestamp": "2026-09-15T12:59:27.193Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "overview.summary",
+      "rows": 1,
+      "bytes": 30523,
+      "actor_ms": 568.3,
+      "query_ms": 786.3,
+      "total_ms": 1355.1
+    },
+    {
+      "timestamp": "2026-09-15T12:59:27.193Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "overview.systemTotals",
+      "rows": 1,
+      "bytes": 182,
+      "actor_ms": 1688.5,
+      "query_ms": 397.3,
+      "total_ms": 2086
+    },
+    {
+      "timestamp": "2026-09-15T12:59:34.234Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "dashboard.routeSnapshot",
+      "rows": 1,
+      "bytes": 71,
+      "actor_ms": 559.8,
+      "query_ms": 370.5,
+      "total_ms": 930.8
+    },
+    {
+      "timestamp": "2026-09-15T13:01:42.185Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "overview.systemTotals",
+      "rows": 1,
+      "bytes": 182,
+      "actor_ms": 1693.4,
+      "query_ms": 399.5,
+      "total_ms": 2093
+    },
+    {
+      "timestamp": "2026-09-15T13:01:42.185Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "overview.summary",
+      "rows": 1,
+      "bytes": 56093,
+      "actor_ms": 1701.5,
+      "query_ms": 857.8,
+      "total_ms": 2560.3
+    },
+    {
+      "timestamp": "2026-09-15T13:01:44.465Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "overview.systemTotals",
+      "rows": 1,
+      "bytes": 182,
+      "actor_ms": 1131.4,
+      "query_ms": 430.8,
+      "total_ms": 1562.3
+    },
+    {
+      "timestamp": "2026-09-15T13:01:44.929Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "overview.summary",
+      "rows": 1,
+      "bytes": 56093,
+      "actor_ms": 564,
+      "query_ms": 927.2,
+      "total_ms": 1492
+    },
+    {
+      "timestamp": "2026-09-15T13:02:51.337Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "dashboard.routeSnapshot",
+      "rows": 1,
+      "bytes": 540445,
+      "actor_ms": 1126.7,
+      "query_ms": 926.6,
+      "total_ms": 2058
+    },
+    {
+      "timestamp": "2026-09-15T13:04:15.937Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "dashboard.bootstrap",
+      "rows": 1,
+      "bytes": 16886,
+      "actor_ms": 1722.1,
+      "query_ms": 467.6,
+      "total_ms": 2190
+    },
+    {
+      "timestamp": "2026-09-15T13:04:18.437Z",
+      "deployment_id": "dpl_6xnMHJHVo7ciRTBSmdAeHcLfh9Aj",
+      "operation": "dashboard.routeSnapshot",
+      "rows": 1,
+      "bytes": 71,
+      "actor_ms": 561.7,
+      "query_ms": 372.3,
+      "total_ms": 934.4
+    }
+  ],
+  "limits": [
+    "query_ms includes DataStore connection acquisition, transaction setup, SQL and commit; not PostgreSQL execution time.",
+    "Replies handlers bypass dashboard_read and Server-Timing instrumentation.",
+    "No direct production EXPLAIN ANALYZE or live Neon region/CPU/pool/compute settings verified.",
+    "Thread observations demonstrated a loading state but did not establish a reliable full request duration."
+  ]
+}
