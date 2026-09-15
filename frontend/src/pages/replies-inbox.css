@@ -80,7 +80,21 @@
 
 /* Below the three-pane threshold the workspace shows two panes and the user
  * switches explicitly; the selected thread, the drafts and the scroll
- * positions are React state on the page, so nothing is lost either way. */
+ * positions are React state on the page, so nothing is lost either way.
+ *
+ * The switch's base `display: none` has to sit BEFORE the container query:
+ * both rules are one class selector, so whichever comes last wins, and a
+ * base rule written after the query silently re-hid the only control that
+ * reaches the review pane — leaving Review/Next step/Save unreachable at
+ * every container width below 1240px. */
+.replies-pane-switch {
+  display: none;
+  flex: 0 0 auto;
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
 @container (max-width: 1239px) {
   .replies-workspace { grid-template-columns: 320px minmax(560px, 1fr); }
   .replies-workspace.pane-review { grid-template-columns: minmax(560px, 1fr) 360px; }
@@ -88,9 +102,8 @@
   .replies-workspace:not(.pane-review) .replies-inspector-pane { display: none; }
   .replies-thread-pane { border-right: 0; }
   .replies-workspace.pane-review .replies-thread-pane { border-right: 1px solid var(--border); }
-  .replies-pane-switch { display: inline-flex; }
+  .replies-pane-switch { display: flex; }
 }
-.replies-pane-switch { display: none; }
 
 .replies-pane-title, .replies-thread-head {
   display: flex;
