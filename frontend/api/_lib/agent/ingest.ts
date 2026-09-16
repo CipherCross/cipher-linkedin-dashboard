@@ -158,11 +158,13 @@ export function ingestFailureDiagnostic(error: unknown): {
   readonly error_name: string
   readonly contract_code: string
   readonly sqlstate: string
+  readonly constraint: string
 } {
   let stage = 'unknown'
   let errorName = 'unknown'
   let contractCode = 'unknown'
   let sqlstate = 'unknown'
+  let constraint = 'unknown'
   let current: unknown = error
   const seen = new Set<unknown>()
 
@@ -172,6 +174,7 @@ export function ingestFailureDiagnostic(error: unknown): {
     const candidate = current as {
       readonly name?: unknown
       readonly code?: unknown
+      readonly constraint?: unknown
       readonly stage?: unknown
       readonly cause?: unknown
     }
@@ -185,6 +188,9 @@ export function ingestFailureDiagnostic(error: unknown): {
       if (/^[0-9A-Z]{5}$/.test(candidate.code)) sqlstate = candidate.code
       else if (contractCode === 'unknown') contractCode = candidate.code
     }
+    if (constraint === 'unknown' && typeof candidate.constraint === 'string') {
+      constraint = candidate.constraint
+    }
     current = candidate.cause
   }
 
@@ -193,6 +199,7 @@ export function ingestFailureDiagnostic(error: unknown): {
     error_name: errorName,
     contract_code: contractCode,
     sqlstate,
+    constraint,
   }
 }
 

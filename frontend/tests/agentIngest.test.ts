@@ -1150,7 +1150,7 @@ describe('the handler: atomicity', () => {
     const { handler } = harness()
     const driver = Object.assign(
       new Error('secret lead text and database hostname must not reach logs'),
-      { code: '21000' },
+      { code: '21000', constraint: 'messages_identity_key' },
     )
     failing.set(MACHINE_COMMANDS.upsertMessages, () => {
       throw driver
@@ -1165,6 +1165,7 @@ describe('the handler: atomicity', () => {
           credential_id: CREDENTIAL_ID,
           stage: MACHINE_COMMANDS.upsertMessages,
           sqlstate: '21000',
+          constraint: 'messages_identity_key',
         }),
       )
       expect(JSON.stringify(logged.mock.calls)).not.toContain('secret lead text')
@@ -1177,7 +1178,10 @@ describe('the handler: atomicity', () => {
 
 describe('safe ingest failure diagnostics', () => {
   it('walks a bounded cause chain without returning error messages', () => {
-    const driver = Object.assign(new Error('private driver detail'), { code: '23514' })
+    const driver = Object.assign(new Error('private driver detail'), {
+      code: '23514',
+      constraint: 'messages_external_id_length',
+    })
     const operation = Object.assign(new Error('safe operation label'), {
       name: 'IngestStageError',
       stage: MACHINE_COMMANDS.upsertMessages,
@@ -1194,6 +1198,7 @@ describe('safe ingest failure diagnostics', () => {
       error_name: 'DataStoreTransactionError',
       contract_code: 'TRANSACTION_INVALID',
       sqlstate: '23514',
+      constraint: 'messages_external_id_length',
     })
   })
 })
