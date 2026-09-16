@@ -138,6 +138,9 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_manual_reply_review_activation_fix_assertions.mjs',
   // Chat-store message identity (step 019).
   'postgres/tenant-baseline/v1/019_messages_chat_store_identity.sql',
+  // Machine-safe reply-review invalidation during message identity adoption (step 020).
+  'postgres/tenant-baseline/v1/020_reply_review_machine_invalidation.sql',
+  'postgres/tests/portable_reply_review_machine_invalidation_assertions.mjs',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -371,8 +374,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares nineteen steps in order 1 -> 2 -> ... -> 19',
-  manifest.steps.length === 19 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty steps in order 1 -> 2 -> ... -> 20',
+  manifest.steps.length === 20 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
@@ -405,6 +408,22 @@ check('step 019 bounds the platform vocabulary and keeps every new column nullab
 check('step 019 changes no grant, policy, view or DELETE capability',
   !/\b(GRANT|REVOKE|CREATE POLICY|ALTER POLICY|CREATE OR REPLACE VIEW|CREATE VIEW|DELETE|TRUNCATE|DROP)\b/i
     .test(stripComments('019_messages_chat_store_identity.sql', chatStoreSql)));
+
+const machineInvalidationStep = manifest.steps.find((s) => s.step === 20);
+const machineInvalidationPath = join(BASELINE_DIR, '020_reply_review_machine_invalidation.sql');
+const machineInvalidationSql = readFileSync(machineInvalidationPath, 'utf8');
+check('manifest declares step 020 machine-safe reply-review invalidation',
+  machineInvalidationStep?.artifact === '020_reply_review_machine_invalidation.sql');
+check('step 020 manifest digest matches its artifact',
+  machineInvalidationStep?.sha256 === sha256(machineInvalidationPath),
+  `manifest ${machineInvalidationStep?.sha256}, disk ${sha256(machineInvalidationPath)}`);
+check('step 020 distinguishes human, machine and system invalidation',
+  /is_active_team_member\(\)/i.test(machineInvalidationSql)
+  && /event_provenance := 'machine'/i.test(machineInvalidationSql)
+  && /event_provenance := 'system'/i.test(machineInvalidationSql));
+check('step 020 preserves existing review provenance for non-human invalidation',
+  /ELSE r\.reviewed_by END/i.test(machineInvalidationSql)
+  && /ELSE r\.provenance END/i.test(machineInvalidationSql));
 
 const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
 check('step 015 enforces one canary per fingerprint and one replacement per job',

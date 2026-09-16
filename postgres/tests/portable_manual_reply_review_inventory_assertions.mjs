@@ -16,8 +16,6 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const check = (needle, message = needle) => assert.match(sql, new RegExp(needle), message);
 const names = (pattern) => [...sql.matchAll(pattern)].map((match) => match[1]);
 
-assert.equal(manifest.steps.at(-1).step, 18);
-assert.equal(manifest.steps.at(-1).artifact, '018_manual_reply_review_activation_fix.sql');
 const manualReviewStep = manifest.steps.find((entry) => entry.step === 17);
 assert.equal(manualReviewStep?.artifact, '017_manual_reply_review.sql');
 assert.equal(

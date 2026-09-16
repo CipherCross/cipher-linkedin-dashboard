@@ -251,6 +251,14 @@
       "owner_role_entered_by": "artifact",
       "session": "auto-conversation-sync",
       "description": "Additive chat-store provenance on messages: per-instance unique LinkedIn/LH2 message external id, inbox platform and LH2 row type, so the agent's real send times and re-scrapes land on one row while sentiment, intent and notification bookkeeping written against legacy rows survive adoption. No grant, view or DELETE capability changes."
+    },
+    {
+      "step": 20,
+      "artifact": "020_reply_review_machine_invalidation.sql",
+      "sha256": "e30fdf5ad9cf03a1144d2d55f54bf2a806a95cb06dc4cefd77b09f29a7aa4a53",
+      "owner_role_entered_by": "artifact",
+      "session": "agent-ingest-repair",
+      "description": "Additive correction for chat-store identity adoption after manual reply-review activation: message semantic invalidation distinguishes active humans, machine credentials and system actors; machine/system invalidation preserves the existing review-row actor provenance while its append-only event records the actual actor kind, so legacy manual reviews cannot violate their actor constraint."
     }
   ]
 }
