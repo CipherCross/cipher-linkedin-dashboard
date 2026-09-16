@@ -22,7 +22,7 @@
  * tell a rollback from a no-op.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataStoreConstraintError } from '../api/_lib/data/contracts.js'
 import { FakeDataStore } from '../api/_lib/data/fake.js'
@@ -38,6 +38,7 @@ import {
   MAX_TOTAL_ROWS,
   canonicalJson,
   createAgentIngestHandler,
+  ingestFailureDiagnostic,
   parseIngestPayload,
   payloadDigest,
 } from '../api/_lib/agent/ingest.js'
@@ -1143,6 +1144,57 @@ describe('the handler: atomicity', () => {
     expect(response.status).toBe(500)
     const answered = await response.json()
     expect(answered).toEqual({ error: 'the batch could not be ingested' })
+  })
+
+  it('logs only the failed operation and SQLSTATE, never driver text or payload', async () => {
+    const { handler } = harness()
+    const driver = Object.assign(
+      new Error('secret lead text and database hostname must not reach logs'),
+      { code: '21000' },
+    )
+    failing.set(MACHINE_COMMANDS.upsertMessages, () => {
+      throw driver
+    })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const response = await handler(request(body()))
+      expect(response.status).toBe(500)
+      expect(logged).toHaveBeenCalledWith(
+        'agent ingest failed',
+        expect.objectContaining({
+          credential_id: CREDENTIAL_ID,
+          stage: MACHINE_COMMANDS.upsertMessages,
+          sqlstate: '21000',
+        }),
+      )
+      expect(JSON.stringify(logged.mock.calls)).not.toContain('secret lead text')
+      expect(JSON.stringify(logged.mock.calls)).not.toContain('database hostname')
+    } finally {
+      logged.mockRestore()
+    }
+  })
+})
+
+describe('safe ingest failure diagnostics', () => {
+  it('walks a bounded cause chain without returning error messages', () => {
+    const driver = Object.assign(new Error('private driver detail'), { code: '23514' })
+    const operation = Object.assign(new Error('safe operation label'), {
+      name: 'IngestStageError',
+      stage: MACHINE_COMMANDS.upsertMessages,
+      cause: driver,
+    })
+    const wrapped = Object.assign(new Error('wrapped'), {
+      name: 'DataStoreTransactionError',
+      code: 'TRANSACTION_INVALID',
+      cause: operation,
+    })
+
+    expect(ingestFailureDiagnostic(wrapped)).toEqual({
+      stage: MACHINE_COMMANDS.upsertMessages,
+      error_name: 'DataStoreTransactionError',
+      contract_code: 'TRANSACTION_INVALID',
+      sqlstate: '23514',
+    })
   })
 })
 

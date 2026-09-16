@@ -118,6 +118,84 @@ export class IngestRequestError extends Error {
   }
 }
 
+/**
+ * Name the exact allowlisted ingest operation that failed without copying any
+ * driver text, bound values or payload rows into the error surface. The data
+ * store preserves the original driver failure as `cause`; this wrapper adds the
+ * one piece the driver cannot know: which step of the multi-operation batch was
+ * in flight.
+ */
+class IngestStageError extends Error {
+  readonly stage: string
+
+  constructor(stage: string, cause: unknown) {
+    super(`${stage} failed`)
+    this.name = 'IngestStageError'
+    this.stage = stage
+    Object.defineProperty(this, 'cause', {
+      value: cause,
+      configurable: true,
+      writable: true,
+      enumerable: false,
+    })
+  }
+}
+
+async function atIngestStage<TResult>(
+  stage: string,
+  work: () => Promise<TResult>,
+): Promise<TResult> {
+  try {
+    return await work()
+  } catch (error) {
+    throw new IngestStageError(stage, error)
+  }
+}
+
+/** Safe, bounded diagnostics for server logs. Never includes Error.message. */
+export function ingestFailureDiagnostic(error: unknown): {
+  readonly stage: string
+  readonly error_name: string
+  readonly contract_code: string
+  readonly sqlstate: string
+} {
+  let stage = 'unknown'
+  let errorName = 'unknown'
+  let contractCode = 'unknown'
+  let sqlstate = 'unknown'
+  let current: unknown = error
+  const seen = new Set<unknown>()
+
+  for (let depth = 0; current && depth < 8 && !seen.has(current); depth += 1) {
+    seen.add(current)
+    if (typeof current !== 'object') break
+    const candidate = current as {
+      readonly name?: unknown
+      readonly code?: unknown
+      readonly stage?: unknown
+      readonly cause?: unknown
+    }
+    if (stage === 'unknown' && typeof candidate.stage === 'string') {
+      stage = candidate.stage
+    }
+    if (errorName === 'unknown' && typeof candidate.name === 'string') {
+      errorName = candidate.name
+    }
+    if (typeof candidate.code === 'string') {
+      if (/^[0-9A-Z]{5}$/.test(candidate.code)) sqlstate = candidate.code
+      else if (contractCode === 'unknown') contractCode = candidate.code
+    }
+    current = candidate.cause
+  }
+
+  return {
+    stage,
+    error_name: errorName,
+    contract_code: contractCode,
+    sqlstate,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The payload.
 // ---------------------------------------------------------------------------
@@ -624,13 +702,16 @@ export async function ingestBatch(
   digest: string,
 ): Promise<IngestResult> {
   return store.transaction(actor, async (transaction: DataStoreTransaction) => {
-    const existing = await transaction.query<IngestBatchRow>({
-      operation: MACHINE_OPERATIONS.batchByKey,
-      params: {
-        credentialId: actor.actorId,
-        idempotencyKey: payload.idempotencyKey,
-      },
-    })
+    const existing = await atIngestStage(
+      MACHINE_OPERATIONS.batchByKey,
+      () => transaction.query<IngestBatchRow>({
+        operation: MACHINE_OPERATIONS.batchByKey,
+        params: {
+          credentialId: actor.actorId,
+          idempotencyKey: payload.idempotencyKey,
+        },
+      }),
+    )
 
     const previous = existing.items[0]
     if (previous) {
@@ -648,57 +729,75 @@ export async function ingestBatch(
       }
     }
 
-    const instances = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.upsertInstance,
-      params: {
-        instanceId: payload.instanceId,
-        label: payload.instanceLabel,
-        agentVersion: payload.agentVersion,
-        accountName: payload.accountName,
-        accountUrl: payload.accountUrl,
-        accountAvatar: payload.accountAvatar,
-      },
-    })
+    const instances = await atIngestStage(
+      MACHINE_COMMANDS.upsertInstance,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.upsertInstance,
+        params: {
+          instanceId: payload.instanceId,
+          label: payload.instanceLabel,
+          agentVersion: payload.agentVersion,
+          accountName: payload.accountName,
+          accountUrl: payload.accountUrl,
+          accountAvatar: payload.accountAvatar,
+        },
+      }),
+    )
 
-    const campaigns = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.upsertCampaigns,
-      params: {
-        instanceId: payload.instanceId,
-        rows: collectionRows(payload.campaigns),
-      },
-    })
+    const campaigns = await atIngestStage(
+      MACHINE_COMMANDS.upsertCampaigns,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.upsertCampaigns,
+        params: {
+          instanceId: payload.instanceId,
+          rows: collectionRows(payload.campaigns),
+        },
+      }),
+    )
 
-    const campaignSteps = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.upsertCampaignSteps,
-      params: {
-        instanceId: payload.instanceId,
-        rows: collectionRows(payload.campaignSteps),
-      },
-    })
+    const campaignSteps = await atIngestStage(
+      MACHINE_COMMANDS.upsertCampaignSteps,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.upsertCampaignSteps,
+        params: {
+          instanceId: payload.instanceId,
+          rows: collectionRows(payload.campaignSteps),
+        },
+      }),
+    )
 
-    const leads = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.upsertLeads,
-      params: {
-        instanceId: payload.instanceId,
-        rows: collectionRows(payload.leads),
-      },
-    })
+    const leads = await atIngestStage(
+      MACHINE_COMMANDS.upsertLeads,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.upsertLeads,
+        params: {
+          instanceId: payload.instanceId,
+          rows: collectionRows(payload.leads),
+        },
+      }),
+    )
 
-    const messages = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.upsertMessages,
-      params: {
-        instanceId: payload.instanceId,
-        rows: collectionRows(payload.messages),
-      },
-    })
+    const messages = await atIngestStage(
+      MACHINE_COMMANDS.upsertMessages,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.upsertMessages,
+        params: {
+          instanceId: payload.instanceId,
+          rows: collectionRows(payload.messages),
+        },
+      }),
+    )
 
-    const events = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.upsertEvents,
-      params: {
-        instanceId: payload.instanceId,
-        rows: collectionRows(payload.events),
-      },
-    })
+    const events = await atIngestStage(
+      MACHINE_COMMANDS.upsertEvents,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.upsertEvents,
+        params: {
+          instanceId: payload.instanceId,
+          rows: collectionRows(payload.events),
+        },
+      }),
+    )
 
     const rowCounts: IngestRowCounts = {
       instances,
@@ -712,34 +811,43 @@ export async function ingestBatch(
     const rowsWritten =
       instances + campaigns + campaignSteps + leads + messages + events
 
-    const syncRuns = await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.recordSyncRun,
-      params: {
-        instanceId: payload.instanceId,
-        status: payload.syncStatus,
-        rowsUpserted: rowsWritten,
-        error: payload.syncError,
-      },
-    })
+    const syncRuns = await atIngestStage(
+      MACHINE_COMMANDS.recordSyncRun,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.recordSyncRun,
+        params: {
+          instanceId: payload.instanceId,
+          status: payload.syncStatus,
+          rowsUpserted: rowsWritten,
+          error: payload.syncError,
+        },
+      }),
+    )
 
-    await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.stampCredentialUse,
-      params: { credentialId: actor.actorId },
-    })
+    await atIngestStage(
+      MACHINE_COMMANDS.stampCredentialUse,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.stampCredentialUse,
+        params: { credentialId: actor.actorId },
+      }),
+    )
 
     const finalCounts: IngestRowCounts = { ...rowCounts, sync_runs: syncRuns }
 
-    await transaction.execute<number>({
-      operation: MACHINE_COMMANDS.recordBatch,
-      params: {
-        credentialId: actor.actorId,
-        instanceId: payload.instanceId,
-        idempotencyKey: payload.idempotencyKey,
-        payloadDigest: digest,
-        rowCounts: JSON.stringify(finalCounts),
-        rowsWritten,
-      },
-    })
+    await atIngestStage(
+      MACHINE_COMMANDS.recordBatch,
+      () => transaction.execute<number>({
+        operation: MACHINE_COMMANDS.recordBatch,
+        params: {
+          credentialId: actor.actorId,
+          instanceId: payload.instanceId,
+          idempotencyKey: payload.idempotencyKey,
+          payloadDigest: digest,
+          rowCounts: JSON.stringify(finalCounts),
+          rowsWritten,
+        },
+      }),
+    )
 
     return {
       replayed: false,
@@ -854,9 +962,11 @@ export function createAgentIngestHandler(
       const conflict = ingestConflict(error)
       if (conflict) return json({ error: conflict.message }, conflict.status)
       console.error(
-        'agent ingest failed for credential',
-        principal.credentialId,
-        error instanceof Error ? error.name : 'unknown error',
+        'agent ingest failed',
+        {
+          credential_id: principal.credentialId,
+          ...ingestFailureDiagnostic(error),
+        },
       )
       return json({ error: 'the batch could not be ingested' }, 500)
     }
