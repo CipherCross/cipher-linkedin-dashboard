@@ -201,6 +201,7 @@ const READ_SLICE = [
   [COACHING_OPERATIONS.digests, coachingDigestsOperation],
   [REPLY_REVIEW_OPERATIONS.capabilities, allReplyReviewOperations.capabilitiesOperation],
   [REPLY_REVIEW_OPERATIONS.inbox, allReplyReviewOperations.inboxOperation],
+  [REPLY_REVIEW_OPERATIONS.facets, allReplyReviewOperations.facetsOperation],
   [REPLY_REVIEW_OPERATIONS.thread, allReplyReviewOperations.threadOperation],
   [REPLY_REVIEW_OPERATIONS.analytics, allReplyReviewOperations.analyticsOperation],
   [REPLY_REVIEW_OPERATIONS.reviewHistory, allReplyReviewOperations.reviewHistoryOperation],
@@ -218,6 +219,11 @@ const MEMBER_ID_BEARING = [
   CONVERSATION_OPERATIONS.followUpHistory,
   ROUTE_SNAPSHOT_OPERATION,
   REPLY_REVIEW_OPERATIONS.inbox,
+  // The queue's own filter counts, split out of `replies.inbox` so the list no
+  // longer waits for them. It is the same predicate over the same messages —
+  // owner is one of the filters and one of the counts — so it carries a member
+  // id for exactly the reason the queue does.
+  REPLY_REVIEW_OPERATIONS.facets,
   REPLY_REVIEW_OPERATIONS.analytics,
 ] as readonly string[]
 
@@ -237,7 +243,7 @@ const ROSTER_READING = [
 ] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists thirty-five reads and no more', () => {
+  it('allowlists thirty-six reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -279,6 +285,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'pipeline.eventLog',
       'replies.analytics',
       'replies.capabilities',
+      'replies.facets',
       'replies.inbox',
       'replies.reviewHistory',
       'replies.thread',

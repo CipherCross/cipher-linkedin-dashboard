@@ -22,6 +22,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { recordDataStoreStage } from './telemetry.js'
 import { createHash } from 'node:crypto'
 
 import pgDefault from 'pg'
@@ -412,6 +413,57 @@ const ROLE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/
 
 interface TransactionScope {
   readonly depth: number
+}
+
+/**
+ * Marks the four stages one database call passes through, so a slow read can be
+ * attributed rather than guessed at. See `telemetry.ts` for why this exists and
+ * what it is allowed to record.
+ *
+ * Every stage is measured even when nothing is collecting, which costs four
+ * `performance.now()` calls per query — immaterial beside a round trip to a
+ * remote region, and it keeps the driver free of a "are we measuring?" branch
+ * that could itself be wrong.
+ *
+ * A clock that is reported without reaching a later stage attributes that
+ * stage zero time, which is the truth: the call failed before it got there.
+ */
+class StageClock {
+  private readonly startedAt = performance.now()
+  private acquiredAt: number | null = null
+  private preparedAt: number | null = null
+  private executedAt: number | null = null
+
+  /** A pooled connection is in hand. */
+  acquired(): void {
+    this.acquiredAt = performance.now()
+  }
+
+  /** `BEGIN` and the preamble have returned; the transaction is armed. */
+  prepared(): void {
+    this.preparedAt = performance.now()
+  }
+
+  /** The operation's own work has returned; only `COMMIT` is left. */
+  executed(): void {
+    this.executedAt = performance.now()
+  }
+
+  report(operation: string, outcome: 'ok' | 'error'): void {
+    const ended = performance.now()
+    const acquired = this.acquiredAt ?? ended
+    const prepared = this.preparedAt ?? acquired
+    const executed = this.executedAt ?? prepared
+    recordDataStoreStage({
+      operation,
+      acquire_ms: acquired - this.startedAt,
+      preamble_ms: prepared - acquired,
+      execute_ms: executed - prepared,
+      commit_ms: ended - executed,
+      total_ms: ended - this.startedAt,
+      outcome,
+    })
+  }
 }
 
 const transactionScope = new AsyncLocalStorage<TransactionScope>()
@@ -899,7 +951,7 @@ export class NeonDataStore implements DataStore {
     return this.runTransaction(
       validatedActor,
       (transaction) => transaction.query<TRow, TParams>(request),
-      { readOnly: true },
+      { readOnly: true, label: request.operation },
     )
   }
 
@@ -1005,12 +1057,15 @@ export class NeonDataStore implements DataStore {
 
     await this.ensureRuntimePrincipal()
 
+    const stages = new StageClock()
     let client: PoolClient
     try {
       client = await this.pool.connect()
     } catch (error) {
+      stages.report(operation, 'error')
       throw toConnectionError(error, 'Acquiring a database connection')
     }
+    stages.acquired()
 
     let opened = false
     let poisoned: unknown = null
@@ -1018,13 +1073,16 @@ export class NeonDataStore implements DataStore {
       await client.query('BEGIN READ ONLY')
       opened = true
       await client.query(this.preambleSql(), this.preambleValues(''))
+      stages.prepared()
 
       const statement = definition.build(params as unknown as DataStoreParams)
 
       const result = await client.query<NeonRow>(statement.text, [
         ...(statement.values ?? []),
       ])
+      stages.executed()
       await client.query('COMMIT')
+      stages.report(operation, 'ok')
 
       // More than one row would mean a uniqueness the baseline declares was
       // violated — (provider, provider_subject) for the human resolver, the
@@ -1042,6 +1100,7 @@ export class NeonDataStore implements DataStore {
           poisoned = rollbackError
         }
       }
+      stages.report(operation, 'error')
       throw toContractError(error, failureLabel)
     } finally {
       client.release(poisoned ? (poisoned as Error) : undefined)
@@ -1056,13 +1115,16 @@ export class NeonDataStore implements DataStore {
     if (typeof work !== 'function') {
       throw new DataStoreTransactionError('Transaction work must be a function')
     }
-    return this.runTransaction(validatedActor, work, { readOnly: false })
+    return this.runTransaction(validatedActor, work, {
+      readOnly: false,
+      label: 'transaction',
+    })
   }
 
   private async runTransaction<TResult>(
     actor: ActorContext,
     work: (transaction: DataStoreTransaction) => Promise<TResult>,
-    options: { readOnly: boolean },
+    options: { readOnly: boolean; label?: string },
   ): Promise<TResult> {
     if (this.closed) {
       throw new DataStoreTransactionError('Data store is closed')
@@ -1073,12 +1135,18 @@ export class NeonDataStore implements DataStore {
 
     await this.ensureRuntimePrincipal()
 
+    const label = options.label ?? 'transaction'
+    const stages = new StageClock()
     let client: PoolClient
     try {
       client = await this.pool.connect()
     } catch (error) {
+      // Recorded before the throw: a pool that never handed out a connection is
+      // exactly the case the acquisition stage exists to make visible.
+      stages.report(label, 'error')
       throw toConnectionError(error, 'Acquiring a database connection')
     }
+    stages.acquired()
 
     const transaction = new NeonTransaction(this, actor, client)
     let opened = false
@@ -1111,12 +1179,15 @@ export class NeonDataStore implements DataStore {
       //   so it cannot outlive the transaction that set it, on a pooled or a
       //   direct connection alike.
       await client.query(this.preambleSql(), this.preambleValues(actor.actorId))
+      stages.prepared()
 
       const result = await transactionScope.run({ depth: 1 }, () =>
         work(transaction),
       )
+      stages.executed()
 
       await client.query('COMMIT')
+      stages.report(label, 'ok')
       return result
     } catch (error) {
       if (opened) {
@@ -1127,6 +1198,7 @@ export class NeonDataStore implements DataStore {
           poisoned = rollbackError
         }
       }
+      stages.report(label, 'error')
       throw toContractError(error, 'Transaction failed and was rolled back')
     } finally {
       transaction.close()

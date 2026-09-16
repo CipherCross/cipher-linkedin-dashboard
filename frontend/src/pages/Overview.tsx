@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { fetchNeonOverviewSummary, fetchNeonOverviewSystemTotals, resolveReadPath } from '../lib/dashboardReads'
@@ -12,11 +12,24 @@ import '../components/overview/overview.css'
 
 export function Overview() {
   const { data, phase } = useData()
+  // The bootstrap is complete enough to ask an analytics question. A boolean,
+  // not the object: the object's identity changes on every background refresh.
+  const ready = data !== null
   const [params, setParams] = useSearchParams()
   const [today, setToday] = useState(() => new Date().toISOString().slice(0, 10))
-  const [system, setSystem] = useState<Analytics | null>(null)
-  const [performance, setPerformance] = useState<Analytics | null>(null)
-  const [performanceCampaigns, setPerformanceCampaigns] = useState<CampaignMetrics[]>([])
+  /**
+   * Each answer is held together with the range it answers for.
+   *
+   * The page used to clear these to `null` at the start of every fetch, so a
+   * background refresh — or any unrelated change to the `data` object — replaced
+   * a complete Overview with skeletons for as long as the read took. Keeping the
+   * range beside the value means the opposite of clearing: a refresh of the same
+   * range leaves the numbers on screen, and a *changed* range stops rendering
+   * the old ones without anybody having to remember to clear them, because they
+   * no longer answer the question being asked.
+   */
+  const [system, setSystem] = useState<{ key: string; value: Analytics } | null>(null)
+  const [performance, setPerformance] = useState<{ key: string; value: Analytics; campaigns: CampaignMetrics[] } | null>(null)
   const [systemLoading, setSystemLoading] = useState(true)
   const [performanceLoading, setPerformanceLoading] = useState(true)
   const [systemError, setSystemError] = useState<string | null>(null)
@@ -52,9 +65,23 @@ export function Overview() {
   const setSystemRange = (next: DateRange) => updateParam('systemRange', rangeToParam(next))
   const setAccount = (next: string) => updateParam('account', next === 'all' ? null : next)
 
+  const systemKey = `${systemRange.from}:${systemRange.to}:${systemRetry}`
+  const performanceKey = `${range.from}:${range.to}:${performanceRetry}`
+  const systemInFlight = useRef<string | null>(null)
+  const performanceInFlight = useRef<string | null>(null)
+
+  /**
+   * Which provider answers, resolved once.
+   *
+   * `data` used to be a dependency, and that was the whole of the Overview
+   * defect: `DataContext` replaces the object on every load and every five
+   * minute refresh, so this effect reset the path to `pending` — which is
+   * rendered as a loading skeleton — and re-ran both analytics reads, for a
+   * lookup that is memoized for the session and cannot change while the tab is
+   * open. Discovery depends on the deployment, not on the data.
+   */
   useEffect(() => {
     let cancelled = false
-    setReadPath('pending')
     resolveReadPath()
       .then(path => {
         if (!cancelled) setReadPath(path === 'neon' ? 'neon' : 'legacy')
@@ -63,59 +90,77 @@ export function Overview() {
         if (!cancelled) setReadPath('error')
       })
     return () => { cancelled = true }
-  }, [data, discoveryRetry])
+  }, [discoveryRetry])
 
+  // Ready, path, range, retry — and nothing else. `data` is deliberately absent:
+  // this read is a function of the range and the signed-in tenant, and the
+  // dashboard's own dataset changing is not a reason to ask again.
   useEffect(() => {
-    if (!data || readPath !== 'neon') return
+    if (!ready || readPath !== 'neon') return
+    if (systemInFlight.current === systemKey) return
+    systemInFlight.current = systemKey
     let cancelled = false
     setSystemLoading(true)
     setSystemError(null)
-    setSystem(null)
     fetchNeonOverviewSystemTotals(systemRange)
       .then(totals => {
         if (cancelled) return
-        setSystem({ totals, previous: null, lifetime: totals, accounts: [], activity: [] })
+        setSystem({ key: systemKey, value: { totals, previous: null, lifetime: totals, accounts: [], activity: [] } })
         globalThis.performance.mark('dashboard_overview_system_available')
       })
       .catch(error => {
         if (!cancelled) setSystemError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => {
-        if (!cancelled) setSystemLoading(false)
+        if (cancelled) return
+        systemInFlight.current = null
+        setSystemLoading(false)
       })
+    // The marker is *not* cleared here. A cleanup that released it would make
+    // the guard above unreachable — the only way back into this effect with the
+    // same key is a re-run, and a re-run is always preceded by its cleanup.
     return () => { cancelled = true }
-  }, [data, readPath, systemRange.from, systemRange.to, systemRetry])
+    // `systemRange` is read for its value; `systemKey` is what decides a refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, readPath, systemKey])
 
   useEffect(() => {
-    if (!data || readPath !== 'neon') return
+    if (!ready || readPath !== 'neon') return
+    if (performanceInFlight.current === performanceKey) return
+    performanceInFlight.current = performanceKey
     let cancelled = false
     setPerformanceLoading(true)
     setPerformanceError(null)
-    setPerformance(null)
-    setPerformanceCampaigns([])
     fetchNeonOverviewSummary(range)
       .then(summary => {
         if (cancelled) return
         if (!summary.analytics) throw new Error('Performance analytics are unavailable')
-        setPerformance(summary.analytics)
-        setPerformanceCampaigns(summary.campaigns ?? [])
+        setPerformance({ key: performanceKey, value: summary.analytics, campaigns: summary.campaigns ?? [] })
         globalThis.performance.mark('dashboard_overview_performance_available')
       })
       .catch(error => {
         if (!cancelled) setPerformanceError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => {
-        if (!cancelled) setPerformanceLoading(false)
+        if (cancelled) return
+        performanceInFlight.current = null
+        setPerformanceLoading(false)
       })
     return () => { cancelled = true }
-  }, [data, readPath, range.from, range.to, performanceRetry])
+    // `range` is read for its value; `performanceKey` is what decides a refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, readPath, performanceKey])
 
+  // Only an answer for the range on screen counts as useful.
+  const currentSystem = system?.key === systemKey ? system.value : null
+  const currentPerformance = performance?.key === performanceKey ? performance.value : null
+  const performanceCampaigns = performance?.key === performanceKey ? performance.campaigns : []
   useEffect(() => {
-    if (readPath === 'neon' && system && performance) {
+    if (readPath === 'neon' && currentSystem && currentPerformance) {
       globalThis.performance.mark('dashboard_overview_useful')
       requestAnimationFrame(() => globalThis.performance.mark('dashboard_overview_interactive'))
     }
-  }, [readPath, system, performance])
+  }, [readPath, currentSystem, currentPerformance])
 
   const fallback = useMemo(() => {
     if (!legacy || phase !== 'full' || !data) return null
@@ -149,7 +194,7 @@ export function Overview() {
 
   const props = legacy && fallback
     ? { system: fallback.systemAnalytics, performance: fallback.performanceAnalytics, campaigns: fallback.campaigns, instances: data.instances }
-    : { system, performance, campaigns: mergedCampaigns, instances: data.instances }
+    : { system: currentSystem, performance: currentPerformance, campaigns: mergedCampaigns, instances: data.instances }
 
   return (
     <div className="overview">

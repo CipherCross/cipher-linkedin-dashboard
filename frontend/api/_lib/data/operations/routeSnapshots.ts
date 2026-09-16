@@ -458,9 +458,16 @@ SELECT jsonb_build_object(
   ), ${EMPTY_ARRAY})
 ) AS payload`
 
-// Replies and sentiment own dedicated paginated reads. The route snapshot is
-// intentionally only a bounded shell marker; it must never turn navigation
-// into a full message/history download.
+// Replies and sentiment own dedicated paginated reads, so their snapshot was
+// only ever a bounded shell marker — it must never turn navigation into a full
+// message/history download.
+//
+// **Nothing requests it any more.** `routeSnapshotRequest` stopped naming these
+// two routes: the payload is a constant no caller read back, and producing it
+// still cost an authenticated read, one of the runtime pool's two connections
+// and a round trip on every navigation to either page. The route survives here
+// only so a tab loaded before that deploy keeps getting an answer instead of a
+// 400; it can be deleted, with its two `SQL_BY_ROUTE` entries, one deploy later.
 const REPLIES_SHELL_SQL = `SELECT jsonb_build_object('repliesAvailable', true) AS payload`
 
 const SQL_BY_ROUTE: Readonly<Record<RouteSnapshotRoute, string>> = {

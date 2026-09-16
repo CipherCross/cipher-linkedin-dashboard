@@ -13,9 +13,11 @@ import {
 import { activateOperation, deleteReasonsOperation, insertReasonsOperation, lockThreadOperation, projectReviewOperation, saveReviewOperation, setWorkflowOperation } from '../api/_lib/data/operations/replyReviewWrites.js'
 
 describe('manual reply-review Neon operations', () => {
-  it('exports the five named read operations', () => {
-    expect(Object.values(REPLY_REVIEW_OPERATIONS).slice(0, 5)).toEqual([
-      'replies.capabilities', 'replies.inbox', 'replies.facets', 'replies.thread', 'replies.analytics',
+  it('exports the six named read operations', () => {
+    // `replies.references` joined them when the capability probe stopped reading
+    // `campaign_metrics` for three columns of a campaign dropdown.
+    expect(Object.values(REPLY_REVIEW_OPERATIONS).slice(0, 6)).toEqual([
+      'replies.capabilities', 'replies.inbox', 'replies.facets', 'replies.references', 'replies.thread', 'replies.analytics',
     ])
   })
 

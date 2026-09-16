@@ -132,9 +132,19 @@ export interface ReplyListFacets {
 export interface RepliesInboxResponse {
   items: RepliesInboxItem[]
   next_cursor: string | null
-  facets?: ReplyListFacets
   scope: ReplyInboxScope
   dataset_at?: string
+}
+/**
+ * The filter counts for a scope, read separately from the queue it describes.
+ *
+ * They used to arrive with the queue, which meant the list waited for a second
+ * full pass over the same messages before anything could be shown — and paid it
+ * again for every page of a cursor walk, where the counts cannot have moved.
+ */
+export interface RepliesFacetsResponse {
+  facets: ReplyListFacets
+  scope: ReplyInboxScope
 }
 /** Save+next ordering: finish the current bounded thread before moving to the
  * next dialog whose server-computed pending_count still needs work. */
@@ -182,7 +192,6 @@ export interface ReplyCapabilities {
   instances?: Array<{ id: string; label: string }>
   campaigns?: Array<{ id: string; name: string; instance_id: string }>
   unavailable_reason?: string
-  facets?: ReplyListFacets
 }
 
 export function isReplyManualReady(capabilities: ReplyCapabilities | null | undefined): boolean {
@@ -323,6 +332,7 @@ function parseFocus(value: string | null): number | null {
 export interface ReplyReadClient {
   capabilities(signal?: AbortSignal): Promise<ReplyCapabilities>
   inbox(scope: ReplyInboxScope, signal?: AbortSignal): Promise<RepliesInboxResponse>
+  facets(scope: ReplyInboxScope, signal?: AbortSignal): Promise<RepliesFacetsResponse>
   thread(request: { instance_id: string; profile_url: string; focus_message_id?: number | null; cursor?: string | null; direction?: 'older' | 'newer'; limit?: number }, signal?: AbortSignal): Promise<RepliesThreadResponse>
   history(request: { instance_id: string; profile_url: string; message_id?: number | null; cursor?: string | null; limit?: number }, signal?: AbortSignal): Promise<{ items: ReplyReviewHistoryEntry[]; next_cursor: string | null }>
 }
@@ -345,6 +355,34 @@ async function read<T>(op: string, params: Record<string, string | number | null
   return readJson<T>(await authFetch(`/api/activity-daily?${query.toString()}`, { signal }))
 }
 
+/**
+ * One scope, serialized once. The queue and its counts describe the same
+ * selection, so they must not be able to disagree about what it is — a filter
+ * spelled differently in two places is a count that silently belongs to another
+ * list. `cursor` and `limit` are the queue's alone: they page the list and have
+ * no meaning for a total.
+ */
+function replyScopeParams(scope: ReplyInboxScope): Record<string, string | number | null | undefined> {
+  return {
+    view: scope.view,
+    scope: scope.scope,
+    instance_id: scope.account,
+    campaign_id: scope.campaign,
+    owner_id: scope.owner && scope.owner !== 'unassigned' ? scope.owner : null,
+    my: scope.my ? 1 : null,
+    unacknowledged: scope.unacknowledged ? 1 : null,
+    unowned: scope.unowned ? 1 : null,
+    overdue: scope.overdue ? 1 : null,
+    action: scope.action === 'unassigned' ? null : scope.action,
+    sentiment: scope.sentiment,
+    reason_id: scope.reason,
+    query: scope.query,
+    from: scope.from,
+    to: scope.to,
+    metric_scope: scope.metric_scope ? `${scope.metric_scope.kind}:${scope.metric_scope.value}` : null,
+  }
+}
+
 export const defaultReplyReadClient: ReplyReadClient = {
   async capabilities(signal) {
     const payload = await read<unknown>('replies.capabilities', {}, signal)
@@ -355,8 +393,12 @@ export const defaultReplyReadClient: ReplyReadClient = {
     return payload as ReplyCapabilities
   },
   async inbox(scope, signal) {
-    const payload = await read<Partial<RepliesInboxResponse> & { nextCursor?: string | null }>('replies.inbox', { view: scope.view, scope: scope.scope, instance_id: scope.account, campaign_id: scope.campaign, owner_id: scope.owner && scope.owner !== 'unassigned' ? scope.owner : null, my: scope.my ? 1 : null, unacknowledged: scope.unacknowledged ? 1 : null, unowned: scope.unowned ? 1 : null, overdue: scope.overdue ? 1 : null, action: scope.action === 'unassigned' ? null : scope.action, sentiment: scope.sentiment, reason_id: scope.reason, query: scope.query, cursor: scope.cursor, limit: scope.limit, from: scope.from, to: scope.to, metric_scope: scope.metric_scope ? `${scope.metric_scope.kind}:${scope.metric_scope.value}` : null }, signal)
+    const payload = await read<Partial<RepliesInboxResponse> & { nextCursor?: string | null }>('replies.inbox', { ...replyScopeParams(scope), cursor: scope.cursor, limit: scope.limit }, signal)
     return { ...payload, items: payload.items ?? [], next_cursor: payload.next_cursor ?? payload.nextCursor ?? null, scope: payload.scope ?? scope }
+  },
+  async facets(scope, signal) {
+    const payload = await read<Partial<RepliesFacetsResponse>>('replies.facets', replyScopeParams(scope), signal)
+    return { facets: payload.facets ?? {}, scope: payload.scope ?? scope }
   },
   async thread(request, signal) {
     const payload = await read<Partial<RepliesThreadResponse> & { items?: ReplyThreadMessage[]; nextCursor?: string | null }>('replies.thread', { instance_id: request.instance_id, profile_url: request.profile_url, focus_message_id: request.focus_message_id, cursor: request.cursor, direction: request.direction, limit: request.limit ?? 50 }, signal)

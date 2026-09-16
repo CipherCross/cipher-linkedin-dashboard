@@ -20,12 +20,14 @@ import {
   type ReplyFacets,
   type ReplySentiment,
   type ReplyThreadMessage,
+  type ReplyReferences,
 } from '../../replyReview.js'
 
 export const REPLY_REVIEW_OPERATIONS = {
   capabilities: 'replies.capabilities',
   inbox: 'replies.inbox',
   facets: 'replies.facets',
+  references: 'replies.references',
   thread: 'replies.thread',
   analytics: 'replies.analytics',
   reviewHistory: 'replies.reviewHistory',
@@ -35,6 +37,7 @@ export const REPLY_REVIEW_OPERATIONS = {
   messageForReview: 'replies.messageForReview',
   inboundRevision: 'replies.inboundRevision',
   threadExists: 'replies.threadExists',
+  threadContext: 'replies.threadContext',
 } as const
 
 type ReplyParams = { readonly [key: string]: string | number | boolean | null | readonly (string | number | boolean | null)[] }
@@ -821,9 +824,152 @@ export const inboundRevisionOperation: NeonQueryOperation<{ instance_id: string;
   mapRow: (row) => ({ instance_id: String(row.instance_id), profile_url: String(row.profile_url), inbound_revision: Number(row.inbound_revision ?? 0) }),
 }
 
+/**
+ * The account and campaign dropdowns behind the Replies filters, and nothing
+ * else.
+ *
+ * It replaces a `campaigns.performance` read that the capability response made
+ * on every page load. That read is `campaign_metrics` — a `GROUP BY` over the
+ * whole `leads` table — and three of its eighteen columns were kept: the id,
+ * the name and the account. The funnel numbers it computed were discarded
+ * unread while the queue waited behind them.
+ *
+ * The campaign set is identical: `campaign_metrics` is `campaigns LEFT JOIN
+ * leads GROUP BY c.id` with no filter, so every campaign appears in both, and
+ * the order is the one the dropdown already had.
+ *
+ * Both lists come back from one statement as two jsonb arrays rather than as
+ * two reads. Each `DataStore` call is its own transaction — `BEGIN`, preamble,
+ * statement, `COMMIT` — so against a remote region the round trips cost more
+ * than these two trivial scans do, and the runtime pool only holds two
+ * connections for them to compete over.
+ */
+const REPLY_REFERENCES_SQL = `SELECT
+  coalesce((SELECT jsonb_agg(jsonb_build_object(
+              'id', i.id,
+              'label', coalesce(nullif(i.label, ''), nullif(i.account_name, ''), i.id))
+            ORDER BY i.id)
+      FROM public.instances i), '[]'::jsonb) AS accounts,
+  coalesce((SELECT jsonb_agg(jsonb_build_object(
+              'id', c.id,
+              'name', c.name,
+              'instance_id', c.instance_id)
+            ORDER BY c.name, c.id)
+      FROM public.campaigns c), '[]'::jsonb) AS campaigns`
+
+export const referencesOperation: NeonQueryOperation<ReplyReferences, ReplyCapabilitiesParams> = {
+  build: (): NeonStatement => ({ text: REPLY_REFERENCES_SQL, values: [] }),
+  mapRow: (row: NeonRow): ReplyReferences => ({
+    accounts: array(row.accounts).map((value) => {
+      const account = object(value)
+      return { id: String(account.id), label: String(account.label ?? account.id) }
+    }),
+    campaigns: array(row.campaigns).map((value) => {
+      const campaign = object(value)
+      return {
+        id: String(campaign.id),
+        name: String(campaign.name ?? campaign.id),
+        instance_id: String(campaign.instance_id ?? ''),
+      }
+    }),
+  }),
+}
+
+/**
+ * Everything the reply thread read needs to know before it fetches messages, in
+ * one statement.
+ *
+ * Opening a two-message conversation used to cost seven `DataStore` calls, and
+ * four of them were this: does the thread exist, does the focused message
+ * belong to it, what is the workflow, what is the current inbound revision.
+ * Each was its own transaction — `BEGIN`, preamble, statement, `COMMIT` — and
+ * the first two ran in sequence, so a trivial dialog paid five sequential round
+ * trips to the database before a single message was read.
+ *
+ * The checks themselves are unchanged and none is skipped: existence, focus
+ * membership and the two 404s are all still decided from this row, before any
+ * message is fetched. The four write-path operations stay exactly as they were
+ * — inside a write transaction they are already one round trip, so merging them
+ * there would buy nothing and would widen a statement that takes a lock.
+ *
+ * The key row is synthesised in `FROM` so the outer join always yields exactly
+ * one row: a thread with no follow-up state answers "no workflow" rather than
+ * no row at all, which is the distinction the caller has to make.
+ *
+ * `updated_at` is selected raw rather than formatted, so it reaches `mapRow` as
+ * the same value `workflowForThread` delivers. Routing it through `jsonb` would
+ * have turned a driver-parsed `Date` into an ISO string and silently changed
+ * the field the client renders.
+ */
+const THREAD_CONTEXT_SQL = `SELECT
+    EXISTS (SELECT 1 FROM public.messages m
+             WHERE m.instance_id = k.instance_id AND m.profile_url = k.profile_url) AS thread_exists,
+    ($3::bigint IS NULL OR EXISTS (SELECT 1 FROM public.messages f
+             WHERE f.id = $3::bigint AND f.instance_id = k.instance_id AND f.profile_url = k.profile_url)) AS focus_exists,
+    coalesce(rs.inbound_revision, 0) AS inbound_revision,
+    (s.instance_id IS NOT NULL) AS workflow_present,
+    s.instance_id AS wf_instance_id,
+    s.profile_url AS wf_profile_url,
+    s.action AS wf_action,
+    s.owner_id AS wf_owner_id,
+    to_char(s.next_follow_up_date, 'YYYY-MM-DD') AS wf_next_follow_up_date,
+    s.do_not_contact AS wf_do_not_contact,
+    s.acknowledged_inbound_revision AS wf_acknowledged_inbound_revision,
+    s.revision AS wf_revision,
+    s.supporting_message_id AS wf_supporting_message_id,
+    s.updated_at AS wf_updated_at,
+    s.updated_by AS wf_updated_by
+   FROM (SELECT $1::text AS instance_id, $2::text AS profile_url) k
+   LEFT JOIN public.conversation_follow_up_state s
+          ON s.instance_id = k.instance_id AND s.profile_url = k.profile_url
+   LEFT JOIN public.conversation_reply_review_state rs
+          ON rs.instance_id = k.instance_id AND rs.profile_url = k.profile_url`
+
+export interface ReplyThreadContext {
+  readonly thread_exists: boolean
+  /** True when no focus was requested, so the caller tests one flag either way. */
+  readonly focus_exists: boolean
+  readonly inbound_revision: number
+  readonly workflow: Record<string, unknown> | null
+}
+
+export const threadContextOperation: NeonQueryOperation<ReplyThreadContext, ReplyHistoryParams> = {
+  build: ({ params }): NeonStatement => ({
+    text: THREAD_CONTEXT_SQL,
+    values: [params?.instanceId ?? '', params?.profileUrl ?? '', params?.messageId ?? null],
+  }),
+  mapRow: (row: NeonRow): ReplyThreadContext => {
+    const inboundRevision = Number(row.inbound_revision ?? 0)
+    return {
+      thread_exists: row.thread_exists === true,
+      focus_exists: row.focus_exists === true,
+      inbound_revision: inboundRevision,
+      // The same object `workflowForThread` produces, field for field: the page
+      // renders it and the write path compares revisions against it.
+      workflow: row.workflow_present === true
+        ? {
+            instance_id: String(row.wf_instance_id),
+            profile_url: String(row.wf_profile_url),
+            action: nullableText(row.wf_action),
+            owner_id: nullableNumber(row.wf_owner_id),
+            next_follow_up_date: nullableText(row.wf_next_follow_up_date),
+            do_not_contact: row.wf_do_not_contact === true,
+            acknowledged_inbound_revision: Number(row.wf_acknowledged_inbound_revision ?? 0),
+            inbound_revision: inboundRevision,
+            revision: Number(row.wf_revision ?? 0),
+            supporting_message_id: nullableNumber(row.wf_supporting_message_id),
+            updated_at: String(row.wf_updated_at),
+            updated_by: nullableText(row.wf_updated_by),
+          }
+        : null,
+    }
+  },
+}
+
 export const allReplyReviewOperations = {
-  capabilitiesOperation, inboxOperation, facetsOperation, threadOperation, analyticsOperation, reviewHistoryOperation, mutationOperation,
+  capabilitiesOperation, inboxOperation, facetsOperation, referencesOperation, threadOperation, analyticsOperation, reviewHistoryOperation, mutationOperation,
   reviewForMessageOperation, workflowForThreadOperation, messageForReviewOperation, inboundRevisionOperation, threadExistsOperation,
+  threadContextOperation,
 }
 
 // Keep these references in this module so a changed enum cannot silently leave
