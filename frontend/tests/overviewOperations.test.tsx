@@ -155,6 +155,89 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("Overview asks again only when the answer would differ", () => {
+  /**
+   * `DataContext` replaces its `data` object on every load and on the five
+   * minute refresh, keeping the slices inside it reference-stable. Overview used
+   * to depend on that object in three places — discovery and both analytics
+   * reads — so each refresh reset the read path to `pending`, re-issued two
+   * server reads and blanked two complete sections while they ran.
+   */
+  const refreshDataObject = () => {
+    data = { ...data };
+  };
+
+  it("does not re-read analytics when the dashboard's data object is replaced", async () => {
+    const { rerender } = paint();
+    await screen.findByRole("heading", { name: "Performance" });
+    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(1));
+    expect(fetchSystemTotals).toHaveBeenCalledTimes(1);
+    expect(resolvePath).toHaveBeenCalledTimes(1);
+
+    refreshDataObject();
+    rerender(
+      <MemoryRouter>
+        <Overview />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Performance" })).toBeTruthy(),
+    );
+    expect(fetchSummary).toHaveBeenCalledTimes(1);
+    expect(fetchSystemTotals).toHaveBeenCalledTimes(1);
+    expect(resolvePath).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the rendered sections through a data refresh instead of blanking them", async () => {
+    const { rerender } = paint();
+    await screen.findByRole("heading", { name: "System totals" });
+    await waitFor(() =>
+      expect(screen.queryByRole("status", { name: "Loading system totals" })).toBeNull(),
+    );
+
+    refreshDataObject();
+    rerender(
+      <MemoryRouter>
+        <Overview />
+      </MemoryRouter>,
+    );
+
+    // The section headings survived even the old behaviour — they are outside
+    // the part that was cleared. What was replaced by skeletons for the length
+    // of a re-read is the content, and these are the elements it was replaced
+    // with.
+    expect(screen.queryByRole("status", { name: "Loading system totals" })).toBeNull();
+    expect(screen.queryByRole("status", { name: "Loading performance analytics" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "System totals" })).toBeTruthy();
+  });
+
+  it("does re-read when the range changes, and does not answer it with the old range", async () => {
+    const pending = deferred<OverviewSummary>();
+    paint();
+    await screen.findByRole("heading", { name: "Performance" });
+    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(1));
+
+    fetchSummary.mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole("button", { name: "Performance date range" }));
+    fireEvent.click(screen.getByRole("button", { name: "Past 30 days" }));
+
+    await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(2));
+    expect(fetchSummary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ from: "2026-08-08", to: "2026-09-06" }),
+    );
+    // Keeping a value across a *refresh* must not turn into showing it across a
+    // *range change*: the answer on screen is held with the range it answers
+    // for, so while the new range is in flight the old numbers are not rendered
+    // underneath the new label.
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Loading performance analytics" })).toBeTruthy(),
+    );
+    pending.resolve(summary());
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Loading performance analytics" })).toBeNull());
+  });
+});
+
 describe("Overview request orchestration and real analytics UI", () => {
   it("uses compact system totals and the richer performance request independently", async () => {
     paint();

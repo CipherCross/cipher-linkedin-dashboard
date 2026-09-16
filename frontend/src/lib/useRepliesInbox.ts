@@ -41,6 +41,10 @@ export interface RepliesInboxState {
   history: ReplyReviewHistoryEntry[]
   historyLoading: boolean
   historyCursor: string | null
+  /** True once the audit for the selected reply has actually been asked for. */
+  historyRequested: boolean
+  /** Called when the change-history panel is opened. */
+  requestHistory: () => void
   loadHistoryMore: () => void
   stale: boolean
   setScope: (patch: Partial<ReplyInboxScope>, options?: { replace?: boolean }) => void
@@ -54,6 +58,31 @@ export interface RepliesInboxState {
 
 function messageFromScope(scope: ReplyInboxScope): string {
   return JSON.stringify({ ...scope, thread: null })
+}
+
+/**
+ * How many conversation windows one Replies page keeps in memory.
+ *
+ * Reviewing a queue means walking a list and stepping back into threads already
+ * read, and each of those steps used to be a full server round trip: the hook
+ * held exactly one loaded thread, so returning to the previous conversation
+ * re-fetched it. Twenty is a working set, not a store — it is bounded, it is
+ * evicted oldest-first, and it lives in a ref inside the hook.
+ */
+const THREAD_WINDOW_CACHE_LIMIT = 20
+
+/**
+ * Whether a remembered window can answer for this focus.
+ *
+ * With a focus, the window must contain it — otherwise the focus effect would
+ * immediately issue the very request the cache exists to avoid. Without one,
+ * the request means "the newest messages", so only a window that already
+ * reaches the newest end will do; a window loaded around some older message
+ * would answer a different question.
+ */
+function windowAnswers(window: RepliesThreadResponse, focusMessageId: number | null): boolean {
+  if (focusMessageId == null) return (window.newer_cursor ?? null) === null
+  return window.messages.some((message) => message.id === focusMessageId)
 }
 
 export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient): RepliesInboxState {
@@ -74,14 +103,38 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
   const [history, setHistory] = useState<ReplyReviewHistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
+  // Which reply's audit has been asked for, by thread and message. The audit is
+  // a collapsed panel that is usually never opened, and loading it on selection
+  // put a third request beside every conversation open for a list nobody looked
+  // at. `null` means nothing has been requested for the current selection.
+  const [historyFor, setHistoryFor] = useState<string | null>(null)
   const [stale, setStale] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
   const listAbort = useRef<AbortController | null>(null)
+  const facetsAbort = useRef<AbortController | null>(null)
   const moreAbort = useRef<AbortController | null>(null)
   const threadAbort = useRef<AbortController | null>(null)
   const historyAbort = useRef<AbortController | null>(null)
+  /**
+   * Conversation windows this page has already been shown, by thread and focus.
+   *
+   * It holds no authority and grants no permission: a write still goes to the
+   * server, which re-checks the actor, the tenant and the revision, and a hit
+   * here only spares a re-read of messages this same page already received.
+   *
+   * There is no cross-user hazard to key against because there is no
+   * cross-user lifetime: `AuthGate` renders the application only while a
+   * session is `ready`, so a sign-out unmounts this hook and takes the ref with
+   * it. It is emptied on every refresh as well, which is the path a save, a
+   * workflow change and the arrival of new inbound replies all take.
+   */
+  const threadWindows = useRef(new Map<string, RepliesThreadResponse>())
   const requestedFocus = useRef<string | null>(null)
   const listScopeKey = messageFromScope({ ...scope, thread: null })
+  // The counts describe the whole selection, so paging through it does not
+  // change them. Dropping the cursor from their key is what stops page two of a
+  // queue re-running a full count that cannot have moved.
+  const facetScopeKey = messageFromScope({ ...scope, thread: null, cursor: null })
   const activeListScope = useRef(listScopeKey)
   activeListScope.current = listScopeKey
   const threadKey = scope.thread ? `${scope.thread.instance_id}|${scope.thread.profile_url}` : null
@@ -108,16 +161,15 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
     setStale(false)
     if (!capabilities) return () => { cancelled = true; controller.abort() }
     if (!isReplyManualReady(capabilities)) {
-      setItems([]); setFacets(null); setNextCursor(null); setLoading(false)
+      setItems([]); setNextCursor(null); setLoading(false)
       return () => { cancelled = true; controller.abort() }
     }
-    if (lastLoadedScope.current !== listScopeKey) { setItems([]); setFacets(null) }
+    if (lastLoadedScope.current !== listScopeKey) setItems([])
     lastLoadedScope.current = listScopeKey
     client.inbox(scope, controller.signal)
       .then((response) => {
         if (cancelled) return
         setItems(response.items ?? [])
-        setFacets(response.facets ?? null)
         setNextCursor(response.next_cursor ?? null)
         setLoading(false)
       })
@@ -132,6 +184,26 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [capabilities, client, listScopeKey, refreshToken])
 
+  // Alongside the queue, never in front of it. The counts are decoration on a
+  // list that is useful without them, so a slow or failed count leaves the
+  // queue on screen and simply leaves the numbers off — `null` is rendered as
+  // no number at all, which is the truth, where zero would be a lie.
+  useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    facetsAbort.current?.abort()
+    facetsAbort.current = controller
+    if (!capabilities) return () => { cancelled = true; controller.abort() }
+    if (!isReplyManualReady(capabilities)) { setFacets(null); return () => { cancelled = true; controller.abort() } }
+    setFacets(null)
+    client.facets(scope, controller.signal)
+      .then((response) => { if (!cancelled) setFacets(response.facets ?? null) })
+      .catch(() => { if (!cancelled) setFacets(null) })
+    return () => { cancelled = true; controller.abort() }
+    // `scope` is read for its current value; `facetScopeKey` is what decides a refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capabilities, client, facetScopeKey, refreshToken])
+
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
@@ -140,6 +212,16 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
     setThreadError(null)
     const selected = scope.thread
     if (!selected || !capabilities || !isReplyManualReady(capabilities)) { setLoadingThread(false); return () => { cancelled = true; controller.abort() } }
+    // A window this page has already been shown, for this thread and this
+    // focus. Stepping back to the previous conversation is the common move in a
+    // review pass, and it was a full round trip every time.
+    const remembered = threadKey ? threadWindows.current.get(threadKey) : undefined
+    if (remembered && windowAnswers(remembered, selected.focus_message_id ?? null)) {
+      setLoadedThreadKey(threadKey)
+      setThread(remembered)
+      setLoadingThread(false)
+      return () => { cancelled = true; controller.abort() }
+    }
     setLoadingThread(true)
     client.thread({ ...selected, limit: 50 }, controller.signal)
       .then((response) => { if (!cancelled) { setLoadedThreadKey(threadKey); setThread(response); setLoadingThread(false) } })
@@ -185,20 +267,40 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
     }
   }, [capabilities, client, focusMessageId, loadingThread, scope.thread, thread, threadKey])
 
+  // Remember the window once it has settled, wherever it settled from — the
+  // first load, an out-of-window focus fetch, or an older/newer page merge — so
+  // returning to a thread restores the range that was actually read, not just
+  // the fifty messages the first request returned. One entry per thread, and
+  // the newest range wins: a merge only ever widens it.
+  useEffect(() => {
+    if (!loadedThreadKey || !threadState) return
+    const cache = threadWindows.current
+    cache.delete(loadedThreadKey)
+    cache.set(loadedThreadKey, threadState)
+    while (cache.size > THREAD_WINDOW_CACHE_LIMIT) {
+      const oldest = cache.keys().next()
+      if (oldest.done) break
+      cache.delete(oldest.value)
+    }
+  }, [loadedThreadKey, threadState])
+
   const selectedMessageId = scope.thread?.focus_message_id ?? (scope.thread ? items.find((item) => item.instance_id === scope.thread?.instance_id && item.profile_url === scope.thread?.profile_url)?.selected_message_id ?? null : null)
+  const historyKey = threadKey && selectedMessageId != null ? `${threadKey}|${selectedMessageId}` : null
+  const historyRequested = historyKey !== null && historyFor === historyKey
+  const requestHistory = useCallback(() => { if (historyKey) setHistoryFor(historyKey) }, [historyKey])
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
     historyAbort.current?.abort()
     historyAbort.current = controller
     setHistory([]); setHistoryCursor(null)
-    if (!scope.thread || selectedMessageId == null || !capabilities || !isReplyManualReady(capabilities)) { setHistoryLoading(false); return () => { cancelled = true; controller.abort() } }
+    if (!historyRequested || !scope.thread || selectedMessageId == null || !capabilities || !isReplyManualReady(capabilities)) { setHistoryLoading(false); return () => { cancelled = true; controller.abort() } }
     setHistoryLoading(true)
     client.history({ instance_id: scope.thread.instance_id, profile_url: scope.thread.profile_url, message_id: selectedMessageId, limit: 50 }, controller.signal)
       .then((response) => { if (!cancelled) { setHistory(response.items ?? []); setHistoryCursor(response.next_cursor ?? null); setHistoryLoading(false) } })
       .catch((reason: unknown) => { if (!cancelled && !(reason instanceof DOMException && reason.name === 'AbortError')) setHistoryLoading(false) })
     return () => { cancelled = true; controller.abort() }
-  }, [capabilities, client, refreshToken, threadKey, selectedMessageId])
+  }, [capabilities, client, historyRequested, refreshToken, threadKey, selectedMessageId])
 
   useEffect(() => {
     let cancelled = false
@@ -271,7 +373,16 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
       .finally(() => setLoadingThread(false))
   }, [capabilities, client, loadingThread, scope.thread, thread])
 
-  const refresh = useCallback(() => setRefreshToken((value) => value + 1), [])
+  // A refresh is the one signal that every remembered window may be out of
+  // date: it follows a save, a workflow change and the five-minute reload that
+  // brings in new inbound replies. The cache is emptied here, synchronously,
+  // rather than in an effect on `refreshToken` — an effect would run *after*
+  // the thread effect the same token schedules, which would serve the stale
+  // window it was meant to discard.
+  const refresh = useCallback(() => {
+    threadWindows.current.clear()
+    setRefreshToken((value) => value + 1)
+  }, [])
   const loadHistoryMore = useCallback(() => {
     if (!historyCursor || historyLoading || !scope.thread || selectedMessageId == null || !isReplyManualReady(capabilities)) return
     setHistoryLoading(true)
@@ -280,5 +391,5 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
       .catch(() => { /* keep the already loaded audit visible */ })
       .finally(() => setHistoryLoading(false))
   }, [capabilities, client, historyCursor, historyLoading, scope.thread, selectedMessageId])
-  return { scope, items, facets, nextCursor, thread, capabilities, loading, loadingThread: loadingThread || focusLoading, loadingMore, error, threadError, history, historyLoading, historyCursor, loadHistoryMore, stale, setScope, selectThread, loadMore, nextPendingPage, loadOlder, loadNewer, refresh }
+  return { scope, items, facets, nextCursor, thread, capabilities, loading, loadingThread: loadingThread || focusLoading, loadingMore, error, threadError, history, historyLoading, historyCursor, historyRequested, requestHistory, loadHistoryMore, stale, setScope, selectThread, loadMore, nextPendingPage, loadOlder, loadNewer, refresh }
 }

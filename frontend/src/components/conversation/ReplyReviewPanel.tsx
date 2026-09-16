@@ -20,13 +20,17 @@ export interface ReplyReviewPanelProps {
   history?: ReplyReviewHistoryEntry[]
   historyLoading?: boolean
   historyCursor?: string | null
+  /** True once the audit has been asked for, so an empty list means empty. */
+  historyRequested?: boolean
+  /** Called the first time the panel is opened; the audit loads then, not before. */
+  onOpenHistory?: () => void
   onLoadHistoryMore?: () => void
   onDirtyChange?: (dirty: boolean) => void
   onDraftChange?: (draft: ReplyReviewDraft) => void
   externalActions?: boolean
 }
 
-export function ReplyReviewPanel({ message, review, saving, error, onSave, onSaveAndNext, history = [], historyLoading, historyCursor, onLoadHistoryMore, onDirtyChange, onDraftChange, externalActions = false }: ReplyReviewPanelProps) {
+export function ReplyReviewPanel({ message, review, saving, error, onSave, onSaveAndNext, history = [], historyLoading, historyCursor, historyRequested, onOpenHistory, onLoadHistoryMore, onDirtyChange, onDraftChange, externalActions = false }: ReplyReviewPanelProps) {
   const [draft, setDraft] = useState<ReplyReviewDraft>(() => draftFromReview(review))
   const [confirmAuto, setConfirmAuto] = useState(false)
   const [showReasons, setShowReasons] = useState(false)
@@ -74,7 +78,12 @@ export function ReplyReviewPanel({ message, review, saving, error, onSave, onSav
       {error && <div className="replies-inline-error" role="alert">{error}</div>}
       {!externalActions && <><button className="btn accent replies-save" type="submit" disabled={saving}>{saving ? COPY.saving : <><Save size={16} /> {COPY.save}</>}</button>{onSaveAndNext && <button className="btn replies-save" type="submit" data-next="true" disabled={saving}><Save size={16} /> {COPY.saveAndNext}</button>}</>}
       {review?.reviewed_at && <div className="replies-review-meta"><Check size={14} /> Review saved · {replyTime(review.reviewed_at, true)}</div>}
-      {(history.length > 0 || historyLoading) && <details className="replies-history"><summary>Change history {historyLoading ? '…' : `(${history.length})`}</summary>{history.map((entry) => <div className="replies-history-entry" key={String(entry.event_id)}><strong>{entry.actor ?? 'Unknown author'}</strong><time title={REPLY_TIME_ZONE_LABEL}>{replyTime(entry.occurred_at, true)}</time><span>{entry.provenance === 'legacy_manual' ? 'Earlier manual review' : 'Manual edit'}</span></div>)}{historyCursor && <button type="button" className="replies-collapse" onClick={onLoadHistoryMore}>Load more</button>}</details>}
+      {/* The panel is always offered and the audit is fetched when it is opened.
+          It used to load with every conversation, for a list that stays
+          collapsed in the ordinary review pass. The count appears once the
+          answer is in — before that the summary carries no number rather than a
+          zero it has not checked. */}
+      <details className="replies-history" onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) onOpenHistory?.() }}><summary>Change history{historyLoading ? ' …' : historyRequested ? ` (${history.length})` : ''}</summary>{history.map((entry) => <div className="replies-history-entry" key={String(entry.event_id)}><strong>{entry.actor ?? 'Unknown author'}</strong><time title={REPLY_TIME_ZONE_LABEL}>{replyTime(entry.occurred_at, true)}</time><span>{entry.provenance === 'legacy_manual' ? 'Earlier manual review' : 'Manual edit'}</span></div>)}{historyRequested && !historyLoading && history.length === 0 && <div className="replies-history-entry">No manual edits yet.</div>}{historyCursor && <button type="button" className="replies-collapse" onClick={onLoadHistoryMore}>Load more</button>}</details>
     </form>
   )
 }

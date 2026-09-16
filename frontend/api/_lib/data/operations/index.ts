@@ -510,6 +510,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.capabilities, allReplyReviewOperations.capabilitiesOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.inbox, allReplyReviewOperations.inboxOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.facets, allReplyReviewOperations.facetsOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.references, allReplyReviewOperations.referencesOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.thread, allReplyReviewOperations.threadOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.analytics, allReplyReviewOperations.analyticsOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.reviewHistory, allReplyReviewOperations.reviewHistoryOperation)
@@ -519,6 +520,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.messageForReview, allReplyReviewOperations.messageForReviewOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.inboundRevision, allReplyReviewOperations.inboundRevisionOperation)
   registry.registerQuery(REPLY_REVIEW_OPERATIONS.threadExists, allReplyReviewOperations.threadExistsOperation)
+  registry.registerQuery(REPLY_REVIEW_OPERATIONS.threadContext, allReplyReviewOperations.threadContextOperation)
 
   // S20 — the lead-photo path's authorization step. A read, like everything else
   // here: the object write it enables is performed by the storage provider, not by
@@ -895,6 +897,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   REPLY_REVIEW_OPERATIONS.capabilities,
   REPLY_REVIEW_OPERATIONS.inbox,
   REPLY_REVIEW_OPERATIONS.facets,
+  REPLY_REVIEW_OPERATIONS.references,
   REPLY_REVIEW_OPERATIONS.thread,
   REPLY_REVIEW_OPERATIONS.analytics,
   REPLY_REVIEW_OPERATIONS.reviewHistory,
@@ -904,6 +907,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   REPLY_REVIEW_OPERATIONS.messageForReview,
   REPLY_REVIEW_OPERATIONS.inboundRevision,
   REPLY_REVIEW_OPERATIONS.threadExists,
+  REPLY_REVIEW_OPERATIONS.threadContext,
   LEADS_OPERATIONS.photoObjects,
   LIBRARY_OPERATIONS.savedSearches,
   LIBRARY_OPERATIONS.icpProfiles,

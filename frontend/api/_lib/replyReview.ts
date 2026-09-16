@@ -221,8 +221,25 @@ export interface ReplyInboxItem {
 export interface ReplyInboxResponse {
   readonly items: readonly ReplyInboxItem[]
   readonly next_cursor: string | null
+  readonly scope: ReplyInboxScope
+}
+
+/** `replies.facets` — the same scope's filter counts, answered separately. */
+export interface ReplyFacetsResponse {
   readonly facets: ReplyFacets
   readonly scope: ReplyInboxScope
+}
+
+/**
+ * The account and campaign dropdowns, as `replies.capabilities` returns them.
+ *
+ * Reference lists, not measurements: ids, names and the account a campaign
+ * belongs to. Nothing here is derived from `leads`, which is the whole point of
+ * the read that produces it.
+ */
+export interface ReplyReferences {
+  readonly accounts: ReadonlyArray<{ readonly id: string; readonly label: string }>
+  readonly campaigns: ReadonlyArray<{ readonly id: string; readonly name: string; readonly instance_id: string }>
 }
 
 export interface ReplyFacets {

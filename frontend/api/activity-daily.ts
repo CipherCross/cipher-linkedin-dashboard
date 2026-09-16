@@ -88,14 +88,21 @@ import {
   REPLY_REASON_IDS,
   type ReplyCapability,
   type ReplyFacets,
+  type ReplyReferences,
 } from './_lib/replyReview.js'
-import { REPLY_REVIEW_OPERATIONS } from './_lib/data/operations/replyReviews.js'
+import { REPLY_REVIEW_OPERATIONS, type ReplyThreadContext } from './_lib/data/operations/replyReviews.js'
 import { dataStoreConfigured } from './_lib/data/neonConfig.js'
 import {
   ProviderPathError,
   resolveProviderPath,
 } from './_lib/data/providerPath.js'
 import { getDataStore } from './_lib/data/store.js'
+import {
+  collectDataStoreStages,
+  summarizeDataStoreStages,
+  totalDataStoreStages,
+  type DataStoreStageTiming,
+} from './_lib/data/telemetry.js'
 import { resolveRequestActor } from './_lib/identity/session.js'
 import {
   resolveApplicationActor,
@@ -118,11 +125,36 @@ import { getObjectStorageProvider } from './_lib/storage/runtime.js'
 
 export const maxDuration = 10
 
-const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), {
+/**
+ * Every response this endpoint sends, and the one place its size is measured.
+ *
+ * `x-response-bytes` and `x-result-rows` are set here rather than at each call
+ * site so the reply reads — which return from nine different places — report the
+ * same two facts the dashboard reads already did. The row count is read off the
+ * body's own array: `items` for every list response, `messages` for a thread.
+ * A response that carries neither is one row, which is what a singleton read is.
+ */
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => {
+  const text = JSON.stringify(body)
+  const rows = body && typeof body === 'object'
+    ? (() => {
+        const value = body as { items?: unknown; messages?: unknown }
+        if (Array.isArray(value.items)) return value.items.length
+        if (Array.isArray(value.messages)) return value.messages.length
+        return 1
+      })()
+    : 1
+  return new Response(text, {
     status,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers },
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+      'x-response-bytes': String(new TextEncoder().encode(text).byteLength),
+      'x-result-rows': String(rows),
+      ...headers,
+    },
   })
+}
 
 /** Inclusive UTC calendar day, exactly as `frontend/src/lib/leads.ts` spells it. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -665,40 +697,29 @@ async function readReplyCapability(store: DataStore, actor: ActorContext) {
       activation_total: 0, activation_cutoff: null, activation_batch_size: null,
       activation_mutation_id: null, reason: 'schema_unavailable' as const,
     }
-    const [roster, instances, campaigns, facetsPage] = await Promise.all([
+    // Two reads, not four. The capability probe used to fan out to the roster,
+    // `instances.overview`, `campaigns.performance` and a full unfiltered facet
+    // count, and the queue could not start until all of them came back.
+    //
+    // - `campaigns.performance` is `campaign_metrics`, a `GROUP BY` over every
+    //   lead, and three of its columns were kept. `replies.references` reads the
+    //   two reference tables instead, in one statement with `instances`.
+    // - The facet counts are gone from here outright: no part of the Replies UI
+    //   read them, and the queue's own filter counts arrive with the queue.
+    const [roster, references] = await Promise.all([
       store.query<unknown>(actor, { operation: IDENTITY_OPERATIONS.teamRoster, page: { limit: 200 } }),
-      store.query<unknown>(actor, { operation: DASHBOARD_OPERATIONS.instancesOverview, page: { limit: 200 } }),
-      store.query<unknown>(actor, { operation: DASHBOARD_OPERATIONS.campaignsPerformance, page: { limit: 1_000 } }),
-      store.query<ReplyFacets>(actor, {
-        operation: REPLY_REVIEW_OPERATIONS.facets,
-        params: {
-          scope: 'all', view: 'all', captureStartedAt: null,
-          instanceId: null, campaignId: null, ownerId: null,
-          sentiment: null, reasonId: null, action: null, query: null,
-          unacknowledged: false, unowned: false, overdue: false, my: false,
-          currentActorId: actor.actorId, from: null, to: null, metricScope: null,
-        },
-        page: { limit: 1 },
-      }),
+      store.query<ReplyReferences>(actor, { operation: REPLY_REVIEW_OPERATIONS.references, page: { limit: 1 } }),
     ])
     const members = roster.items.map((row) => {
       const value = row as Record<string, unknown>
       return { id: Number(value.id), name: String(value.name ?? value.label ?? value.id), active: value.active !== false }
     })
-    const accountRows = instances.items.map((row) => {
-      const value = row as Record<string, unknown>
-      return { id: String(value.id), label: String(value.label ?? value.account_name ?? value.id) }
-    })
-    const campaignRows = campaigns.items.map((row) => {
-      const value = row as Record<string, unknown>
-      return { id: String(value.campaign_id), name: String(value.campaign_name ?? value.campaign_id), instance_id: String(value.instance_id ?? '') }
-    })
+    const reference = references.items[0] ?? { accounts: [], campaigns: [] }
     return json({
       ...base,
       members,
-      instances: accountRows,
-      campaigns: campaignRows,
-      facets: facetsPage.items[0] ?? replyFacets(members),
+      instances: reference.accounts,
+      campaigns: reference.campaigns,
     })
   } catch (error) {
     if (error instanceof DataStoreSchemaError) {
@@ -712,7 +733,6 @@ async function readReplyCapability(store: DataStore, actor: ActorContext) {
         members: [],
         instances: [],
         campaigns: [],
-        facets: replyFacets(),
       })
     }
     throw error
@@ -754,43 +774,58 @@ async function replyReadResponse(
   if (!capability) throw new DataStoreSchemaError('manual reply review settings are unavailable')
   requireReplyManualCapability(capability)
 
+  // The queue, on its own. It used to await a second full count of the same
+  // filter before answering — including on page two of a cursor walk, where the
+  // counts cannot have changed — so the list was never shown earlier than the
+  // slower of the two. The counts are now `replies.facets`, requested beside
+  // this read rather than in front of it.
   if (op === REPLY_REVIEW_OPERATIONS.inbox) {
     const { cursor, limit, ...operationParams } = params as DataStoreParams & { cursor?: string | null; limit?: number }
     const page = await store.query<unknown>(actor, {
       operation: op, params: { ...operationParams, captureStartedAt: capability.capture_started_at, currentActorId: actor.actorId },
       page: { limit: Number(limit ?? 50), cursor: cursor ?? null },
     })
+    return json({ items: page.items, next_cursor: page.nextCursor, scope: operationParams.scope ?? 'new' })
+  }
+
+  // The filter counts for the same scope. A failure here is a response of its
+  // own, so it leaves the queue that is already on screen alone: the client
+  // renders an unknown count as unknown, never as zero.
+  if (op === REPLY_REVIEW_OPERATIONS.facets) {
+    const { cursor, limit, ...operationParams } = params as DataStoreParams & { cursor?: string | null; limit?: number }
     const facetsPage = await store.query<ReplyFacets>(actor, {
-      operation: REPLY_REVIEW_OPERATIONS.facets,
+      operation: op,
       params: { ...operationParams, captureStartedAt: capability.capture_started_at, currentActorId: actor.actorId, cursor: null, limit: 1 },
       page: { limit: 1, cursor: null },
     })
-    const facets = facetsPage.items[0] ?? replyFacets()
-    return json({ items: page.items, next_cursor: page.nextCursor, facets, scope: operationParams.scope ?? 'new' })
+    return json({ facets: facetsPage.items[0] ?? replyFacets(), scope: operationParams.scope ?? 'new' })
   }
 
   if (op === REPLY_REVIEW_OPERATIONS.thread) {
     const threadParams = params as DataStoreParams & { cursor?: string | null; limit?: number; focusMessageId?: number | null }
-    const exists = await store.query<{ exists: boolean }>(actor, { operation: REPLY_REVIEW_OPERATIONS.threadExists, params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl }, page: { limit: 1 } })
-    if (!exists.items[0]?.exists) return json({ error: 'The requested thread was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
-    if (threadParams.focusMessageId != null) {
-      const focus = await store.query(actor, { operation: REPLY_REVIEW_OPERATIONS.messageForReview, params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl, messageId: threadParams.focusMessageId }, page: { limit: 1 } })
-      if (!focus.items[0]) return json({ error: 'The requested focus message was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
+    // Existence, focus membership, workflow and inbound revision in one read.
+    // These were four, the first two of them sequential, so opening a
+    // two-message conversation paid five round trips before it fetched a
+    // message. Every check still happens, still before any message is read, and
+    // still decides the same two 404s.
+    const contextPage = await store.query<ReplyThreadContext>(actor, {
+      operation: REPLY_REVIEW_OPERATIONS.threadContext,
+      params: {
+        instanceId: threadParams.instanceId,
+        profileUrl: threadParams.profileUrl,
+        messageId: threadParams.focusMessageId ?? null,
+      },
+      page: { limit: 1 },
+    })
+    const context = contextPage.items[0]
+    if (!context?.thread_exists) return json({ error: 'The requested thread was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
+    // `focus_exists` is true when no focus was requested, so the thread's own
+    // 404 above and this one stay independent decisions.
+    if (threadParams.focusMessageId != null && !context.focus_exists) {
+      return json({ error: 'The requested focus message was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
     }
-    const [workflowPage, revisionPage] = await Promise.all([
-      store.query<unknown>(actor, {
-        operation: REPLY_REVIEW_OPERATIONS.workflowForThread,
-        params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl },
-        page: { limit: 1 },
-      }),
-      store.query<{ inbound_revision: number }>(actor, {
-        operation: REPLY_REVIEW_OPERATIONS.inboundRevision,
-        params: { instanceId: threadParams.instanceId, profileUrl: threadParams.profileUrl },
-        page: { limit: 1 },
-      }),
-    ])
-    const workflow = workflowPage.items[0] ?? null
-    const inboundRevision = Number(revisionPage.items[0]?.inbound_revision ?? 0)
+    const workflow = context.workflow
+    const inboundRevision = context.inbound_revision
     const { cursor, limit, direction, focusMessageId, ...baseParams } = threadParams
     const requestedLimit = Number(limit ?? 50)
     const hasFocus = focusMessageId !== null && focusMessageId !== undefined
@@ -1028,6 +1063,12 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
   [REPLY_REVIEW_OPERATIONS.capabilities]: { operation: REPLY_REVIEW_OPERATIONS.capabilities },
   [REPLY_REVIEW_OPERATIONS.inbox]: {
     operation: REPLY_REVIEW_OPERATIONS.inbox,
+    params: readReplyInbox,
+  },
+  // The same scope the queue takes, so one filter change produces two reads of
+  // one shape rather than a second endpoint with a second parameter reader.
+  [REPLY_REVIEW_OPERATIONS.facets]: {
+    operation: REPLY_REVIEW_OPERATIONS.facets,
     params: readReplyInbox,
   },
   [REPLY_REVIEW_OPERATIONS.thread]: {
@@ -1305,9 +1346,93 @@ export interface ActivityDailyDeps {
   readonly legacyProviderName?: string
 }
 
-async function handle(
+/**
+ * Open a stage-collection scope for the whole request, then answer it.
+ *
+ * The scope has to wrap everything, not just the read: actor resolution is a
+ * database call of its own, and the diagnosis measured it at up to 1.7 s — more
+ * than the read it precedes. A collector that started after authentication
+ * would have hidden the larger half.
+ */
+function handle(req: Request, deps: ActivityDailyDeps = {}): Promise<Response> {
+  return collectDataStoreStages((stages) => handleRequest(req, deps, stages))
+}
+
+/**
+ * Emit one `dashboard_read` line for a finished response and return it with the
+ * timing headers attached.
+ *
+ * One implementation for both branches of the dispatcher. The stage list is the
+ * per-call breakdown the driver recorded — operation names and durations only —
+ * and it is what turns "this read took 2.5 s" into "it made five calls and
+ * three of them waited on the pool". `Server-Timing` carries the same totals so
+ * the numbers are readable in Chrome without shell access to the logs.
+ *
+ * The response is rebuilt rather than mutated: `unavailableResponse` and the
+ * refusal paths hand back responses this function did not construct, and
+ * streaming the existing body into a new `Response` cannot fail on a header
+ * guard the way `headers.set` can.
+ */
+function logRead(
+  response: Response,
+  context: {
+    readonly requestId: string
+    readonly operation: string
+    readonly actorMs: number
+    readonly requestStartedAt: number
+    readonly stages: readonly DataStoreStageTiming[]
+    readonly limit?: number
+    readonly extra?: Record<string, unknown>
+  },
+): Response {
+  const totals = totalDataStoreStages(context.stages)
+  const totalMs = performance.now() - context.requestStartedAt
+  const bytes = Number(response.headers.get('x-response-bytes') ?? 0)
+  const rows = Number(response.headers.get('x-result-rows') ?? 0)
+  console.info('dashboard_read', JSON.stringify({
+    request_id: context.requestId,
+    operation: context.operation,
+    status: response.status,
+    rows,
+    bytes,
+    actor_ms: Math.round(context.actorMs * 10) / 10,
+    query_ms: totals.total_ms,
+    total_ms: Math.round(totalMs * 10) / 10,
+    db_calls: totals.calls,
+    db_acquire_ms: totals.acquire_ms,
+    db_preamble_ms: totals.preamble_ms,
+    db_execute_ms: totals.execute_ms,
+    db_commit_ms: totals.commit_ms,
+    db_stages: summarizeDataStoreStages(context.stages),
+    ...(context.limit === undefined ? {} : { limit: context.limit }),
+    ...context.extra,
+  }))
+  const headers = new Headers(response.headers)
+  headers.set(
+    'server-timing',
+    [
+      `actor;dur=${context.actorMs.toFixed(1)}`,
+      `db;dur=${totals.total_ms.toFixed(1)}`,
+      `db_acquire;dur=${totals.acquire_ms.toFixed(1)}`,
+      `db_preamble;dur=${totals.preamble_ms.toFixed(1)}`,
+      `db_execute;dur=${totals.execute_ms.toFixed(1)}`,
+      `db_commit;dur=${totals.commit_ms.toFixed(1)}`,
+      `total;dur=${totalMs.toFixed(1)}`,
+    ].join(', '),
+  )
+  headers.set('x-request-id', context.requestId)
+  headers.set('x-db-calls', String(totals.calls))
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+async function handleRequest(
   req: Request,
-  deps: ActivityDailyDeps = {},
+  deps: ActivityDailyDeps,
+  stages: DataStoreStageTiming[],
 ): Promise<Response> {
   const requestStartedAt = performance.now()
   const requestId = globalThis.crypto?.randomUUID?.() ??
@@ -1431,18 +1556,24 @@ async function handle(
   const cursor = url.searchParams.get('cursor')
 
   if (op.startsWith('replies.')) {
+    // The reply reads used to return here without a `dashboard_read` line and
+    // without `Server-Timing`, which is why the diagnosis could say Replies was
+    // slow but not where. Every exit below goes through `observed`, so a refused
+    // or failed read is as legible as a successful one.
+    const observed = (response: Response) =>
+      logRead(response, { requestId, operation: op, actorMs, requestStartedAt, stages, limit })
     try {
-      return await replyReadResponse(getDataStore(), actor, op, params ?? {})
+      return observed(await replyReadResponse(getDataStore(), actor, op, params ?? {}))
     } catch (error) {
-      if (error instanceof PaginationError) return json({ error: error.message }, 400)
+      if (error instanceof PaginationError) return observed(json({ error: error.message }, 400))
       if (error instanceof DataStoreSchemaError) {
-        return json({ error: 'Manual reply review is unavailable for this tenant', code: 'REPLY_REVIEW_UNAVAILABLE' }, 503)
+        return observed(json({ error: 'Manual reply review is unavailable for this tenant', code: 'REPLY_REVIEW_UNAVAILABLE' }, 503))
       }
       if (error instanceof DataStoreContractError) {
         const unavailable = unavailableResponse(error)
-        if (unavailable) return unavailable
+        if (unavailable) return observed(unavailable)
         console.error(`Read ${op} failed:`, safeErrorLabel(error), safeSqlState(error) ?? 'sqlstate=none')
-        return json({ error: 'Could not load reply review data' }, 500)
+        return observed(json({ error: 'Could not load reply review data' }, 500))
       }
       throw error
     }
@@ -1453,14 +1584,12 @@ async function handle(
     // and each operation owns its own shape, so naming one of them here would be
     // a claim the dispatcher cannot keep. The operation's `mapRow` is where the
     // shape is enforced.
-    const queryStartedAt = performance.now()
     const page = await getDataStore().query<unknown>(actor, {
       operation: spec.operation,
       params,
       range,
       page: { limit, cursor },
     })
-    const queryMs = performance.now() - queryStartedAt
 
     const body = {
       items: page.items,
@@ -1470,25 +1599,14 @@ async function handle(
     // The legacy response keeps its own key. Two names for one array is worth
     // less than S12's page continuing to work untouched.
     const responseBody = legacy ? { activity: page.items, ...body } : body
-    const responseBytes = new TextEncoder().encode(JSON.stringify(responseBody)).byteLength
-    const totalMs = performance.now() - requestStartedAt
-    console.info('dashboard_read', JSON.stringify({
-      request_id: requestId,
+    return logRead(json(responseBody, 200), {
+      requestId,
       operation: spec.operation,
-      status: 200,
-      rows: page.items.length,
-      bytes: responseBytes,
-      actor_ms: Math.round(actorMs * 10) / 10,
-      query_ms: Math.round(queryMs * 10) / 10,
-      total_ms: Math.round(totalMs * 10) / 10,
-      has_more: page.hasMore,
+      actorMs,
+      requestStartedAt,
+      stages,
       limit,
-    }))
-    return json(responseBody, 200, {
-      'server-timing': `actor;dur=${actorMs.toFixed(1)}, db;dur=${queryMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`,
-      'x-request-id': requestId,
-      'x-result-rows': String(page.items.length),
-      'x-response-bytes': String(responseBytes),
+      extra: { has_more: page.hasMore },
     })
   } catch (error) {
     // A cursor from another scope is the caller's mistake, not a server fault.

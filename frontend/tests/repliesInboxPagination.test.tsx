@@ -16,10 +16,13 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe('Replies Inbox directional pagination', () => {
   it('keeps the loaded list and thread when only the focused message changes', async () => {
     const thread = vi.fn().mockResolvedValue({ messages: [message(2), message(3)], older_cursor: null, newer_cursor: null, workflow: null })
-    const inbox = vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE, facets: { owners: [{ id: null, count: 1 }, { id: 1, count: 0 }] } })
+    const inbox = vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE })
+    // The counts are their own read now, so this is also where a queue that had
+    // gone back to waiting for them would show up as a failure.
+    const facets = vi.fn().mockResolvedValue({ facets: { owners: [{ id: null, count: 1 }, { id: 1, count: 0 }] }, scope: DEFAULT_REPLY_SCOPE })
     const client: ReplyReadClient = {
       capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
-      inbox, thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+      facets, inbox, thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
     }
     const { result } = renderHook(() => useRepliesInbox(client), { wrapper })
     await waitFor(() => expect(result.current.thread?.messages).toHaveLength(2))
@@ -28,7 +31,10 @@ describe('Replies Inbox directional pagination', () => {
     expect(result.current.scope.thread?.focus_message_id).toBe(2)
     expect(thread).toHaveBeenCalledTimes(1)
     expect(inbox).toHaveBeenCalledTimes(1)
-    expect(result.current.facets?.owners).toEqual([{ id: null, count: 1 }, { id: 1, count: 0 }])
+    await waitFor(() => expect(result.current.facets?.owners).toEqual([{ id: null, count: 1 }, { id: 1, count: 0 }]))
+    // Selecting a message inside the open thread changes neither the queue nor
+    // the selection the counts describe, so neither is read a second time.
+    expect(facets).toHaveBeenCalledTimes(1)
   })
   it('fetches an out-of-window focus without discarding the loaded messages or list', async () => {
     const thread = vi.fn()
@@ -37,6 +43,7 @@ describe('Replies Inbox directional pagination', () => {
     const inbox = vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE })
     const client: ReplyReadClient = {
       capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      facets: vi.fn().mockResolvedValue({ facets: {}, scope: DEFAULT_REPLY_SCOPE }),
       inbox, thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
     }
     const { result } = renderHook(() => useRepliesInbox(client), { wrapper })
@@ -54,6 +61,7 @@ describe('Replies Inbox directional pagination', () => {
     const thread = vi.fn().mockResolvedValueOnce({ messages: [message(2)], older_cursor: null, newer_cursor: null, workflow: null }).mockReturnValueOnce(second)
     const client: ReplyReadClient = {
       capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      facets: vi.fn().mockResolvedValue({ facets: {}, scope: DEFAULT_REPLY_SCOPE }),
       inbox: vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE }),
       thread, history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
     }
@@ -72,6 +80,7 @@ describe('Replies Inbox directional pagination', () => {
     const thread = vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(older).mockResolvedValueOnce(newer)
     const client: ReplyReadClient = {
       capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      facets: vi.fn().mockResolvedValue({ facets: {}, scope: DEFAULT_REPLY_SCOPE }),
       inbox: vi.fn().mockResolvedValue({ items: [item], next_cursor: null, scope: DEFAULT_REPLY_SCOPE }),
       thread,
       history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),

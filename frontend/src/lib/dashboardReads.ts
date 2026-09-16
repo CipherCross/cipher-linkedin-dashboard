@@ -134,6 +134,7 @@ export const READ_OPS = {
 export const REPLY_READ_OPS = {
   capabilities: 'replies.capabilities',
   inbox: 'replies.inbox',
+  facets: 'replies.facets',
   thread: 'replies.thread',
   analytics: 'replies.analytics',
   reviewHistory: 'replies.reviewHistory',
@@ -149,8 +150,6 @@ export type RouteSnapshotRoute =
   | 'searches'
   | 'icp'
   | 'hypotheses'
-  | 'replies'
-  | 'sentiment-analysis'
 
 export interface RouteSnapshotRequest {
   readonly route: RouteSnapshotRoute
@@ -213,10 +212,17 @@ export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null 
   }
   const route = path.slice(1) as RouteSnapshotRoute
   if ([
-    'pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses', 'replies', 'sentiment-analysis',
+    'pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses',
   ].includes(route)) {
     return { route, key: route }
   }
+  // Replies and Sentiment are deliberately absent, and this is the whole of the
+  // change: they are page-local, like Leads and Team. Their snapshot was
+  // `SELECT jsonb_build_object('repliesAvailable', true)` — an authenticated
+  // read, a pooled connection and a round trip for a constant that nothing ever
+  // read back. Returning `null` here leaves `DataContext` committing the
+  // bootstrap exactly as it does for every other local route, so the state and
+  // the page-availability contract are unchanged; what is gone is the request.
   return null
 }
 

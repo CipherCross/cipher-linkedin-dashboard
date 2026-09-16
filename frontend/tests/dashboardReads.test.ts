@@ -561,10 +561,13 @@ describe('the dashboard load', () => {
       compareIds: 'notebook-2:7,notebook-3:8',
       key: 'campaign:notebook-1:42:compare:notebook-2:7,notebook-3:8',
     })
-    for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses', 'replies', 'sentiment-analysis']) {
+    for (const route of ['pipeline', 'follow-ups', 'review', 'health', 'searches', 'icp', 'hypotheses']) {
       expect(routeSnapshotRequest(`#/${route}?q=ignored`)).toEqual({ route, key: route })
     }
-    for (const local of ['#/', '#/leads', '#/team', '#/playbook', '#/chat', '#/csv-import', '#/neon-activity']) {
+    // Replies and Sentiment joined the local routes. Their snapshot returned a
+    // hardcoded `true` that nothing read, and it cost an authenticated read and
+    // one of two pooled connections on every navigation to either page.
+    for (const local of ['#/replies', '#/sentiment-analysis', '#/', '#/leads', '#/team', '#/playbook', '#/chat', '#/csv-import', '#/neon-activity']) {
       expect(routeSnapshotRequest(local)).toBeNull()
     }
   })

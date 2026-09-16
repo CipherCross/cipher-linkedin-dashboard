@@ -22,6 +22,8 @@ const rows = {
 }
 
 const queried: Array<{ operation: string; params?: Record<string, unknown> }> = []
+/** Overrides the merged context row for the refusal cases. */
+let threadContext: Record<string, unknown> | null = null
 const store = {
   security: {},
   resolveActor: vi.fn(async () => ({ actorId: actor.actorId, role: actor.role })),
@@ -30,10 +32,13 @@ const store = {
   query: vi.fn(async (_caller: unknown, request: { operation: string; params?: Record<string, unknown>; page?: { limit?: number; cursor?: string | null } }) => {
     queried.push({ operation: request.operation, params: request.params })
     if (request.operation === REPLY_REVIEW_OPERATIONS.capabilities) return { items: [rows.capabilities], nextCursor: null, hasMore: false }
-    if (request.operation === REPLY_REVIEW_OPERATIONS.threadExists) return { items: [{ exists: true }], nextCursor: null, hasMore: false }
-    if (request.operation === REPLY_REVIEW_OPERATIONS.messageForReview) return { items: [{ id: 2, direction: 'in', sent_at: '2026-09-11T02:00:00.000Z' }], nextCursor: null, hasMore: false }
-    if (request.operation === REPLY_REVIEW_OPERATIONS.workflowForThread) return { items: [rows.workflow], nextCursor: null, hasMore: false }
-    if (request.operation === REPLY_REVIEW_OPERATIONS.inboundRevision) return { items: [{ inbound_revision: 4 }], nextCursor: null, hasMore: false }
+    // One read where there were four. Existence, focus membership, workflow and
+    // inbound revision all come from `replies.threadContext` now; the four
+    // single-purpose operations remain, used by the write path inside its own
+    // transaction where they cost no extra round trip.
+    if (request.operation === REPLY_REVIEW_OPERATIONS.threadContext) {
+      return { items: [threadContext ?? { thread_exists: true, focus_exists: true, inbound_revision: 4, workflow: rows.workflow }], nextCursor: null, hasMore: false }
+    }
     if (request.operation === REPLY_REVIEW_OPERATIONS.thread) {
       if (request.params?.direction === 'older') return { items: [{ id: 2, direction: 'in' }, { id: 1, direction: 'in' }], nextCursor: 'older-next', hasMore: true }
       return { items: [{ id: 2, direction: 'in' }, { id: 3, direction: 'in' }], nextCursor: 'newer-next', hasMore: true }
@@ -84,6 +89,39 @@ describe('manual reply review routes', () => {
     expect(body.inbound_revision).toBe(4)
     expect(body.workflow).toEqual(rows.workflow)
     expect(queried.filter(({ operation }) => operation === REPLY_REVIEW_OPERATIONS.thread).map(({ params }) => params?.direction)).toEqual(['older', 'newer'])
+    // Four reads for a focused open, not seven: the capability probe, the
+    // merged context, and the two directional message pages.
+    expect(queried.map(({ operation }) => operation)).toEqual([
+      REPLY_REVIEW_OPERATIONS.capabilities,
+      REPLY_REVIEW_OPERATIONS.threadContext,
+      REPLY_REVIEW_OPERATIONS.thread,
+      REPLY_REVIEW_OPERATIONS.thread,
+    ])
+    // The focus is passed to the context read, which is what makes its
+    // membership check a check and not a formality.
+    expect(queried.find(({ operation }) => operation === REPLY_REVIEW_OPERATIONS.threadContext)?.params).toMatchObject({ messageId: 2 })
+  })
+
+  // Merging four reads into one is only safe if the refusals it used to make
+  // sequentially still happen, and still happen before any message is fetched.
+  it('still answers 404 for an unknown thread, and reads no messages for it', async () => {
+    queried.length = 0
+    threadContext = { thread_exists: false, focus_exists: true, inbound_revision: 0, workflow: null }
+    const response = await GET(request({ instance_id: thread.instanceId, profile_url: thread.profileUrl }))
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({ code: 'REPLY_REVIEW_NOT_FOUND' })
+    expect(queried.some(({ operation }) => operation === REPLY_REVIEW_OPERATIONS.thread)).toBe(false)
+    threadContext = null
+  })
+
+  it('still answers 404 for a focus message that belongs to another thread', async () => {
+    queried.length = 0
+    threadContext = { thread_exists: true, focus_exists: false, inbound_revision: 4, workflow: null }
+    const response = await GET(request({ instance_id: thread.instanceId, profile_url: thread.profileUrl, focus: '99' }))
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({ error: 'The requested focus message was not found' })
+    expect(queried.some(({ operation }) => operation === REPLY_REVIEW_OPERATIONS.thread)).toBe(false)
+    threadContext = null
   })
 
   it('rejects unknown metric drilldowns instead of silently widening the inbox', async () => {
