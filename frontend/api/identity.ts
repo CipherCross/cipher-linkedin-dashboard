@@ -354,6 +354,8 @@ async function forwardToCandidate(
     return response
   } catch (error) {
     console.error('identity: candidate route failed:', safeErrorLabel(error))
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
     // The subsystem, never the reason in words. "Authentication is unavailable"
     // is true of a dead database and of a refused email alike, and telling those
     // apart from outside took a deployment cycle it should not have.

@@ -86,7 +86,7 @@ export class DataStoreTransactionError extends DataStoreContractError {
  * repair — are *distinguishable at the driver* and were indistinguishable
  * everywhere after it.
  *
- * The `code` is therefore the diagnosis, and there are exactly three:
+ * The `code` is therefore the diagnosis:
  *
  * - `DATASTORE_CONNECT_FAILED` — no connection could be obtained. A pool that
  *   exhausted its ceiling and timed out waiting, a refused socket, DNS. This is
@@ -99,12 +99,14 @@ export class DataStoreTransactionError extends DataStoreContractError {
  *   failed under an in-flight statement (SQLSTATE class 08, or an
  *   administrator/crash shutdown). This is what a serverless instance that was
  *   frozen long enough for its pooled socket to be closed looks like.
+ * - `DATASTORE_QUOTA_EXCEEDED` — the provider suspended the database because
+ *   its usage allowance was exhausted; an administrator must restore capacity.
  *
  * **It carries no driver text**, for the reason stated above `DataStoreSchemaError`:
  * a connection-level message embeds the database hostname. The code is the whole
  * of what a log or a response may learn.
  *
- * Callers should treat all three as *availability*, not authorization. An
+ * Callers should treat these as *availability*, not authorization. An
  * endpoint that answers `Could not verify team access` to one of these is
  * reporting a membership decision that was never taken.
  */
@@ -112,6 +114,7 @@ export type DataStoreUnavailableCode =
   | 'DATASTORE_CONNECT_FAILED'
   | 'DATASTORE_CREDENTIAL_REJECTED'
   | 'DATASTORE_CONNECTION_LOST'
+  | 'DATASTORE_QUOTA_EXCEEDED'
 
 export class DataStoreUnavailableError extends DataStoreContractError {
   declare readonly code: DataStoreUnavailableCode

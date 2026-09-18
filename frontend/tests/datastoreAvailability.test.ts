@@ -32,6 +32,14 @@ function pgError(code: string, message = 'driver text'): Error & { code: string 
 }
 
 describe('classifying a failure as unavailability', () => {
+  it('distinguishes Neon quota exhaustion from other resource failures', () => {
+    const error = pgError('53000', 'Your account or project has exceeded the quota. Upgrade your plan to increase limits.')
+    for (const phase of ['connect', 'statement'] as const) {
+      expect(unavailableCodeFor(error, phase)).toBe('DATASTORE_QUOTA_EXCEEDED')
+    }
+    expect(unavailableCodeFor(pgError('53000', 'out of resources'), 'statement')).toBeNull()
+    expect(unavailableCodeFor(pgError('53300'), 'statement')).toBe('DATASTORE_CONNECT_FAILED')
+  })
   it('names a refused login, in either phase, as the credential', () => {
     // 28P01 is the shape N-UITOP's password-less roles produced, and it is the
     // one cause that no retry clears — so it must not share a code with the two
@@ -126,6 +134,16 @@ describe('the driver raises it end to end', () => {
 })
 
 describe('the response an endpoint gives for it', () => {
+  it('requires administrator action for a quota rather than suggesting a quick retry', async () => {
+    const response = unavailableResponse(new DataStoreUnavailableError('DATASTORE_QUOTA_EXCEEDED', 'private driver details'))!
+    expect(response.status).toBe(503)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const body = await response.text()
+    expect(body).toContain('usage limit')
+    expect(body).toContain('administrator')
+    expect(body).not.toContain('retry in a moment')
+    expect(body).not.toContain('private driver details')
+  })
   it('offers a retry for the two transient causes, and names the code', async () => {
     for (const code of [
       'DATASTORE_CONNECT_FAILED',

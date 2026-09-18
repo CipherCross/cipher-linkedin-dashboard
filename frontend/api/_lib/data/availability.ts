@@ -14,7 +14,7 @@
  * So this module owns the second half. `authorizationResponse` keeps answering
  * for decisions that were genuinely taken; this answers for the case where none
  * was, and it **names the code in the message**. The code is safe to publish —
- * it is one of three fixed tokens, carries no driver text, no hostname and no
+ * it is a fixed token, carries no driver text, no hostname and no
  * credential — and it is the difference between an alert a person can act on and
  * one they can only screenshot.
  *
@@ -34,6 +34,12 @@ interface Answer {
 }
 
 const ANSWERS: Readonly<Record<DataStoreUnavailableCode, Answer>> = {
+  DATASTORE_QUOTA_EXCEEDED: {
+    status: 503,
+    text:
+      'The dashboard database has reached its usage limit. ' +
+      'An administrator needs to restore database capacity before sign-in and sync can resume',
+  },
   DATASTORE_CONNECT_FAILED: {
     status: 503,
     text:
@@ -67,6 +73,6 @@ export function unavailableResponse(error: unknown): Response | null {
   const answer = ANSWERS[error.code]
   return new Response(
     JSON.stringify({ error: `${answer.text} (${error.code})` }),
-    { status: answer.status, headers: { 'content-type': 'application/json' } },
+    { status: answer.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } },
   )
 }

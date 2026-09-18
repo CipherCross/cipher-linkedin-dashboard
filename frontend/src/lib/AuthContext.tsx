@@ -44,6 +44,7 @@ import {
 } from 'react'
 import type { EmailOtpType, Session } from '@supabase/supabase-js'
 import { Logo } from '../components/Logo'
+import { useVisibleInterval } from './useVisibleInterval'
 import { deploymentAuthPath, type AuthPath } from './authPath'
 import {
   currentSession as fetchCurrentSession,
@@ -145,20 +146,7 @@ function clearCallbackParams() {
  * neither a Supabase JWT nor a session cookie notices that on its own.
  */
 function useSessionHeartbeat(status: AuthStatus, revalidate: () => Promise<void>) {
-  useEffect(() => {
-    if (status !== 'ready') return
-    const interval = window.setInterval(() => {
-      void revalidate()
-    }, 60_000)
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void revalidate()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      window.clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [revalidate, status])
+  useVisibleInterval(revalidate, status === 'ready' ? 60_000 : null)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -665,9 +653,8 @@ function AuthScreen() {
           <div className="auth-state">
             <h1>Sign-in is unavailable</h1>
             <p>
-              The service that verifies your session could not be reached, so we
-              can’t tell whether you are signed in. Nothing has changed about
-              your access — try again in a moment.
+              We couldn’t check your session. See the details below, then try
+              again once the service is available.
             </p>
             {auth.error && <div className="auth-error" role="alert">{auth.error}</div>}
             <button className="btn" type="button" onClick={() => void auth.revalidate()}>

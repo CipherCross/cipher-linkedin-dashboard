@@ -33,6 +33,8 @@ import { admin } from 'better-auth/plugins/admin'
 import { randomUUID } from 'node:crypto'
 import pgDefault from 'pg'
 import type { Pool as PgPool } from 'pg'
+import { DataStoreContractError, DataStoreUnavailableError } from '../data/contracts.js'
+import { unavailableCodeFor } from '../data/postgresAvailability.js'
 
 import {
   IDENTITY_PROVIDER_NAME,
@@ -195,6 +197,7 @@ export class BetterAuthIdentityProvider implements IdentityProvider {
     this.pool = new Pool({
       connectionString: options.config.connectionString,
       max: MAX_CONNECTIONS,
+      connectionTimeoutMillis: 5_000,
       // Deliberately no `options: '-c search_path=...'`. The role-level
       // search_path the control-plane bootstrap set is what resolves the
       // candidate's unqualified table names, and a startup `options` parameter
@@ -219,10 +222,11 @@ export class BetterAuthIdentityProvider implements IdentityProvider {
     let session: Awaited<ReturnType<CandidateAuth['api']['getSession']>>
     try {
       session = await this.auth.api.getSession({ headers })
-    } catch {
-      // An unreadable or tampered cookie is indistinguishable from no cookie.
-      // The caller must not be able to tell which, so both are null.
-      return null
+    } catch (error) {
+      // Better Auth returns null for absent/invalid cookies. A failed database
+      // read must not masquerade as sign-out, including on a warm instance.
+      if ((error as { statusCode?: unknown } | null)?.statusCode === 401) return null
+      throw this.availabilityError(error, 'connect')
     }
     if (!session?.user?.id) return null
     return { user: { subject: session.user.id, email: session.user.email } }
@@ -333,7 +337,9 @@ export class BetterAuthIdentityProvider implements IdentityProvider {
       )
     }
 
-    const client = await this.pool.connect()
+    const client = await this.pool.connect().catch((error: unknown) => {
+      throw this.availabilityError(error, 'connect')
+    })
     try {
       const { rows } = await client.query<{
         principal: string
@@ -369,8 +375,16 @@ export class BetterAuthIdentityProvider implements IdentityProvider {
         )
       }
       this.principalChecked = true
+    } catch (error) {
+      throw this.availabilityError(error, 'statement')
     } finally {
       client.release()
     }
+  }
+
+  private availabilityError(error: unknown, phase: 'connect' | 'statement'): unknown {
+    if (error instanceof DataStoreContractError || error instanceof IdentityProviderError) return error
+    const code = unavailableCodeFor(error, phase)
+    return code ? new DataStoreUnavailableError(code, 'Checking the identity store') : error
   }
 }

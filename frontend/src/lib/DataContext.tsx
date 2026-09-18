@@ -1,3 +1,4 @@
+import { useVisibleInterval } from './useVisibleInterval'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
@@ -987,13 +988,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void load('full')
-    const timer = setInterval(() => {
-      void load('delta')
-    }, 5 * 60_000)
-    return () => {
-      clearInterval(timer)
-    }
   }, [load])
+
+  const refreshVisibleData = useCallback(() => { void load('delta') }, [load])
+  useVisibleInterval(refreshVisibleData, 5 * 60_000)
 
   return (
     <Ctx.Provider
