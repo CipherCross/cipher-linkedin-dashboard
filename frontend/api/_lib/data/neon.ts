@@ -1141,6 +1141,9 @@ export class NeonDataStore implements DataStore {
       try {
         client = await this.pool.connect()
       } catch (error) {
+        // A provider outage must not poison this warm instance permanently.
+        // Retry the principal check on the next request after capacity returns.
+        this.verification = null
         throw toConnectionError(error, 'Acquiring a database connection')
       }
       try {
