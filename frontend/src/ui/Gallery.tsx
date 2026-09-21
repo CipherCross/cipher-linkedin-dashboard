@@ -377,7 +377,7 @@ export function Gallery() {
                 pass. If a composition here needs its page's CSS, import it. */}
             <Panel>
               <SectionHeader title="Analytics row" description="One period statement for the block, not one per card." />
-              <div className="toolbar" style={{ marginBottom: 'var(--space-md)' }}>
+              <div  style={{ marginBottom: 'var(--space-md)' }}>
                 <DateRangePicker
                   ariaLabel="Gallery date range"
                   presets={GALLERY_PRESETS}

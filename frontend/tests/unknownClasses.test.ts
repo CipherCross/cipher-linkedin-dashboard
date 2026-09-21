@@ -47,14 +47,10 @@ const DYNAMIC_PREFIXES = [
  * the commit message, because the normal cause of a new entry is a typo.
  */
 const PRE_EXISTING_DEAD = new Set([
-  'access-denied', 'active-sequences', 'chart-card', 'chat-msg-copy',
-  'conv-demo-gender', 'csv-company-overlay', 'data-table', 'deployed-sequence',
-  'has-selection', 'leads-replies-workspace', 'modal-actions',
-  'navlink-label', 'new-replies', 'outgoing', 'ov-campaign-table',
-  'ov-loading-performance', 'overview-panel-foot-sep', 'overview-summary-scope',
-  'page-stack', 'replies-save', 'sa-more-button', 'sa-weekly-chart',
-  'sequence-branch-workspace', 'sequence-preview-workspace', 'status-done',
-  'sync-chip-label', 'tmpl-stat', 'toolbar', 'with-action',
+  // `deployed-sequence` is the last one: campaignWorkspace.test.tsx uses it to
+  // assert the chain is ABSENT, so it has no element to hang a data attribute
+  // on. It goes when that assertion is rewritten.
+  'deployed-sequence',
 ])
 
 function walkFiles(dir: string, out: string[] = []): string[] {

@@ -33,7 +33,7 @@ export function LeadAdditionsChart({
   const data = axis.map((date) => ({ date, added: buckets.get(date) ?? 0 }))
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <h2>{daily ? 'Leads added per day' : 'Leads added per week'}</h2>
       {data.length === 0 ? (
         <ChartEmpty label="No leads with a known add date in this range" />

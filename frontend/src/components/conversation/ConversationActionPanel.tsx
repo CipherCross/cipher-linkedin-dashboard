@@ -53,6 +53,6 @@ export function ConversationActionPanel({ workflow, members = [], inboundRevisio
     {(removingDnc || reason) && <label className="replies-fieldset"><span className="replies-label">Change comment {removingDnc && <span className="muted small">required when removing Do not contact</span>}</span><input value={reason} onChange={(event) => { const next = event.target.value; setReason(next); updateDraft({ change_reason: next.trim() || null }) }} placeholder="For example: the contact agreed to be contacted again…" /></label>}
     {!removingDnc && !reason && <button type="button" className="replies-collapse" onClick={() => setReason(' ')}>Add a comment</button>}
     {error && <div className="replies-inline-error" role="alert">{error}</div>}
-    {!externalActions && <button className="btn replies-save" type="button" onClick={submit} disabled={saving || invalid}>{saving ? COPY.saving : <><Check size={16} /> Save next step</>}</button>}
+    {!externalActions && <button className="btn" type="button" onClick={submit} disabled={saving || invalid}>{saving ? COPY.saving : <><Check size={16} /> Save next step</>}</button>}
   </section>
 }

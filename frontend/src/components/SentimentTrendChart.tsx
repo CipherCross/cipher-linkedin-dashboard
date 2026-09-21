@@ -72,7 +72,7 @@ export function SentimentTrendChart({
   const hasData = chartData.some((d) => d.total > 0)
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <div className="card-head">
         <h2>Reply classification trend</h2>
         <div className="segmented" role="tablist" aria-label="Classification dimension">

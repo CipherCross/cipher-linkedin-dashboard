@@ -258,7 +258,7 @@ function SequenceLibrary() {
   }
 
   return (
-    <div className="sequence-library page-stack">
+    <div className="sequence-library">
       <PageHeader
         title="Sequences"
         description="The last observed Linked Helper state on every notebook. Runtime, publishing and sync health stay separate readings."
@@ -550,7 +550,7 @@ function CommentComposer({
           <p className="muted">{target.label}</p>
           {target.anchor && <blockquote>“{target.anchor.quote}”</blockquote>}
           <textarea autoFocus rows={4} value={body} onChange={(event) => setBody(event.target.value)} placeholder="What should change, or what do you want the team to consider?" />
-          <div className="modal-actions">
+          <div >
             <button className="btn" onClick={onClose}>Cancel</button>
             <button className="btn primary" disabled={busy || !body.trim()} onClick={() => onSubmit(body.trim())}>{busy ? 'Adding…' : 'Add comment'}</button>
           </div>
@@ -801,7 +801,7 @@ function BranchBuilder({
   onPreview: (branchId: string) => void
 }) {
   return (
-    <div className="sequence-branch-workspace">
+    <div >
       <header className="sequence-section-intro">
         <div>
           <div className="eyebrow"><Split size={14} /> Sequence versions</div>
@@ -876,7 +876,7 @@ function PreviewPanel({
   }))
 
   return (
-    <div className="sequence-preview-workspace">
+    <div >
       <header className="sequence-section-intro">
         <div>
           <div className="eyebrow"><Eye size={14} /> Recipient view</div>
@@ -940,7 +940,7 @@ function PreviewPanel({
                 )
               }
               return (
-                <div key={step.id} className="linkedin-message-row outgoing">
+                <div key={step.id} className="linkedin-message-row">
                   <span className="linkedin-message-label">Message {index}</span>
                   <div className="linkedin-message-bubble">{text || <em>Empty message</em>}</div>
                   <small>10:{String(index * 3 + 8).padStart(2, '0')} AM</small>
@@ -1213,7 +1213,7 @@ export function PublishWizard({
           </section>}
 
           {step === 2 && <section className="sequence-publish-section" aria-labelledby="publish-setup-title">
-            <div className="sequence-publish-section-head with-action">
+            <div className="sequence-publish-section-head">
               <div><span>Step 2 of 3</span><h3 id="publish-setup-title">Choose branches and timing</h3><p>Each selected branch becomes a separate paused campaign.</p></div>
               <button className="link-btn" onClick={() => setBranchIds(allBranchesSelected ? [] : document.branches.map((branch) => branch.id))}>{allBranchesSelected ? 'Clear all' : 'Select all'}</button>
             </div>

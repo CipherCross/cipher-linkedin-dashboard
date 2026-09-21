@@ -469,7 +469,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
   return (
     <div className="stack">
       <div className="two-col">
-        <div className="card chart-card">
+        <div className="card">
           <h2>Age distribution</h2>
           {demo.ages.length === 0 ? (
             <ChartEmpty height={240} label="No age data yet" />
@@ -497,7 +497,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
           </div>
         </div>
 
-        <div className="card chart-card">
+        <div className="card">
           <h2>Gender split</h2>
           {genderTotal === 0 ? (
             <ChartEmpty height={240} label="No gender data yet" />

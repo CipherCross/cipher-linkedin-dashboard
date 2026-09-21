@@ -89,7 +89,7 @@ function SystemTotalsLoading() {
 
 function PerformanceLoading() {
   return (
-    <div className="ov-performance ov-loading-performance" role="status" aria-label="Loading performance analytics">
+    <div className="ov-performance" role="status" aria-label="Loading performance analytics">
       <div>
         <div className="ov-metrics">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -345,7 +345,7 @@ function CampaignComparison({
             <p>{showHidden ? 'No removed campaigns match this scope.' : 'All campaigns are removed from comparison.'}</p>
           </div>
         ) : (
-          <Table className="ov-campaign-table" caption="Campaign comparison">
+          <Table  caption="Campaign comparison">
             <thead>
               <tr>
                 <th className="ov-select-cell"><input type="checkbox" aria-label="Select all campaigns on this page" checked={allPageSelected} onChange={togglePage} /></th>

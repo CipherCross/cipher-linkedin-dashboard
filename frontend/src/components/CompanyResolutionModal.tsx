@@ -62,7 +62,7 @@ export function CompanyResolutionModal({
   }, [query, suggestions])
 
   return (
-    <div className="pipe-modal-overlay csv-company-overlay" onClick={onClose}>
+    <div className="pipe-modal-overlay" onClick={onClose}>
       <div
         className="pipe-modal w-[min(720px,100%)] max-h-[min(760px,calc(100vh-40px))]"
         role="dialog"

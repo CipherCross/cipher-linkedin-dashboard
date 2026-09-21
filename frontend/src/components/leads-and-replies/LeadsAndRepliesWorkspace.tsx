@@ -128,7 +128,7 @@ export function LeadsAndRepliesWorkspace({
   }
 
   return (
-    <section className="leads-replies-workspace">
+    <section >
       <div className="leads-replies-toolbar">
         <div className="segmented leads-replies-filters" role="tablist" aria-label="Filter campaign leads">
           {FILTERS.map((item) => (

@@ -39,7 +39,7 @@ function AdminOnly({ children }: { children: ReactNode }) {
   const { isAdmin } = useAuth()
   if (isAdmin) return <>{children}</>
   return (
-    <div className="card access-denied">
+    <div className="card">
       <h1>Admin access required</h1>
       <p className="muted">Your account can view dashboard data but cannot run imports.</p>
     </div>

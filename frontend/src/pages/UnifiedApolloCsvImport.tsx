@@ -706,13 +706,13 @@ export function UnifiedApolloCsvImport() {
                 </div>
               </div>
               <div className="csv-summary-chips">
-                <span className="badge status-done">{contactCounts.ready ?? 0} ready</span>
+                <span className="badge">{contactCounts.ready ?? 0} ready</span>
                 <span className="badge">{contactCounts.duplicate ?? 0} existing</span>
                 <span className="badge status-error">{contactCounts.invalid ?? 0} blocked</span>
               </div>
             </div>
             <div className="table-scroll csv-table-scroll">
-              <table className="data-table csv-preview-table">
+              <table className="csv-preview-table">
                 <thead><tr><th>Row</th><th>Contact</th><th>Company</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {contacts.map((contact) => {

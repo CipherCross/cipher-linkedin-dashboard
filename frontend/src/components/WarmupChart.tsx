@@ -21,7 +21,7 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
 
   if (peak === 0) {
     return (
-      <div className="card chart-card">
+      <div className="card">
         <h2>Invite volume per week (warm-up / limit tracker)</h2>
         <ChartEmpty height={240} label="No invites in the last 12 weeks" />
       </div>
@@ -29,7 +29,7 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
   }
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <h2>Invite volume per week (warm-up / limit tracker)</h2>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>

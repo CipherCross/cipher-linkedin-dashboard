@@ -33,7 +33,7 @@ export function ActiveSequences({
   const shown = ranked.slice(0, VISIBLE)
 
   return (
-    <section className="card overview-panel active-sequences" aria-labelledby="active-sequences-title">
+    <section className="card overview-panel" aria-labelledby="active-sequences-title">
       <div className="overview-panel-head">
         <h2 id="active-sequences-title">Active sequences</h2>
         <div className="flex items-center gap-app-sm flex-wrap">
@@ -119,7 +119,7 @@ export function ActiveSequences({
             </Link>
           )}
           {ranked.length > shown.length && drafts.length > 0 && (
-            <span className="overview-panel-foot-sep"> &middot; </span>
+            <span > &middot; </span>
           )}
           {drafts.length > 0 && (
             <Link className="row-link" to={sequenceHref(drafts[0])}>

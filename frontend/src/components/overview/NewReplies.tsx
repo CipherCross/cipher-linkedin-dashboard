@@ -52,7 +52,7 @@ export function NewReplies({
   const shown = replies.slice(0, VISIBLE)
 
   return (
-    <section className="card overview-panel new-replies" aria-labelledby="new-replies-title">
+    <section className="card overview-panel" aria-labelledby="new-replies-title">
       <div className="overview-panel-head">
         <h2 id="new-replies-title">New replies</h2>
         <Link className="link-btn" to="/replies?view=all&scope=new">

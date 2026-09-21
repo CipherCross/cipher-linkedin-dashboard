@@ -26,7 +26,7 @@ export function LagHistogram({
 
   if (lags.length === 0) {
     return (
-      <div className="card chart-card">
+      <div className="card">
         <h2>{title}</h2>
         <ChartEmpty height={240} label="No timing data yet" />
       </div>
@@ -34,7 +34,7 @@ export function LagHistogram({
   }
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <h2>{title}</h2>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={counts} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>

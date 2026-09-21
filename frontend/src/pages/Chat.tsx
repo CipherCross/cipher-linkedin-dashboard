@@ -175,7 +175,7 @@ function Message({ m }: { m: UIMessage }) {
         })}
         {m.role === 'assistant' && assistantText && (
           <div className="chat-msg-actions">
-            <CopyButton text={assistantText} label className="chat-msg-copy" />
+            <CopyButton text={assistantText} label  />
           </div>
         )}
       </div>

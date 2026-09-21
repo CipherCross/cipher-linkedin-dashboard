@@ -54,7 +54,7 @@ export function ActivityChart({
   }
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <h2>{title}</h2>
       {data.length === 0 ? (
         <ChartEmpty height={240} label="No activity in this range" />

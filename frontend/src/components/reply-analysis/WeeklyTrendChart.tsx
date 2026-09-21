@@ -68,7 +68,7 @@ export function WeeklyTrendChart({
   const label = (key: string) => mode === 'sentiment' ? (SENTIMENT_LABELS as Record<string, string>)[key] ?? (key === 'latest_unreviewed' ? 'Unreviewed' : 'Automated replies only')
     : mode === 'reasons' ? (REASON_LABELS as Record<string, string>)[key] ?? key
       : key === 'reviewed' ? 'Reviewed' : 'Unreviewed'
-  return <div className="sa-weekly-chart">
+  return <div >
     <p className="muted small">{mode === 'coverage' ? 'Messages by week' : 'Conversations by week'} · the current week may still be incomplete</p>
     {keys.length === 0 ? <p className="muted">No reasons recorded in this period yet.</p> : <div className="sa-weekly-plot" role="img" aria-label="Weekly trend">
       <ResponsiveContainer width="100%" height={260}>

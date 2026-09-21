@@ -312,7 +312,7 @@ function Sidebar({
               className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
             >
               <Icon size={17} className="navlink-icon" aria-hidden="true" />
-              <span className="navlink-label">{label}</span>
+              <span >{label}</span>
             </NavLink>
           ))}
         </div>
@@ -482,7 +482,7 @@ function SyncChip({ instances }: { instances: Instance[] }) {
       aria-label={`${label} — open Sync health`}
     >
       <span className="sync-dot" aria-hidden="true" />
-      <span className="sync-chip-label">{label}</span>
+      <span >{label}</span>
     </Link>
   )
 }

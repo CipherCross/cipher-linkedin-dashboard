@@ -42,7 +42,7 @@ export function GlobalSummary({
 
   return (
     <section className="card flex flex-col gap-app-sm mb-app-lg" aria-label="Portfolio summary">
-      <div className="overview-summary-scope muted small">
+      <div className="muted small">
         {rangeLabel} · {accounts} {accounts === 1 ? 'account' : 'accounts'}
       </div>
       <dl className="flex flex-wrap gap-[14px] m-0 [&_dt]:text-[length:var(--text-2xs)] [&_dt]:uppercase [&_dt]:tracking-[.04em] [&_dt]:text-app-text-muted [&_dd]:m-0 [&_dd]:text-[length:var(--text-lg)] [&_dd]:font-[650] [&_dd]:tabular-nums">

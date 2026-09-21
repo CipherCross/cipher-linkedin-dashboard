@@ -47,7 +47,7 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
   const showLabels = points.length <= 3
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <div className="flex items-center justify-between [&_h2]:mb-0">
         <h2>Quality vs volume</h2>
         <div className="range-group">

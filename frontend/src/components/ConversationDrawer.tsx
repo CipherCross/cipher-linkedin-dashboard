@@ -655,7 +655,7 @@ export function ConversationDrawer({
               <span className="filter-label">Age</span>
               <span className="conv-demo-val">{ageRange(live) ?? '—'}</span>
             </span>
-            <label className="filter-field conv-demo-gender">
+            <label className="filter-field">
               <span className="filter-label">Gender</span>
               <select
                 value={live.gender ?? ''}

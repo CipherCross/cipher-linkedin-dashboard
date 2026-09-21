@@ -37,7 +37,7 @@ export function CohortChart({ leads, weeks = 16 }: { leads: Lead[]; weeks?: numb
     })
 
   return (
-    <div className="card chart-card">
+    <div className="card">
       <h2>Weekly invite cohorts</h2>
       {data.length === 0 ? (
         <ChartEmpty label="No invites sent yet" />

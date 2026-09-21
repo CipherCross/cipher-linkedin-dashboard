@@ -141,7 +141,7 @@ function TemplateColumn({
 
   return (
     <div className="stack">
-      <div className="card tmpl-stat">
+      <div className="card">
         <h2>{campaign.campaign_name}</h2>
         <div className="muted small">{account}</div>
         <div className="grid grid-cols-3 gap-2.5 mt-app-md mb-1 mx-0">

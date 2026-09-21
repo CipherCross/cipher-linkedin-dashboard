@@ -232,7 +232,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
         <option value="">All accounts</option>
         {(data?.instances ?? []).map((item) => <option value={item.id} key={item.id}>{displayAccount(item.id)}</option>)}
       </SelectField>
-      <Button variant="ghost" className="sa-more-button" icon={<Filter size={18} aria-hidden="true" />} aria-expanded={moreFilters} onClick={() => setMoreFilters(true)}>More filters</Button>
+      <Button variant="ghost"  icon={<Filter size={18} aria-hidden="true" />} aria-expanded={moreFilters} onClick={() => setMoreFilters(true)}>More filters</Button>
     </Panel>
 
     {moreFilters && <Dialog

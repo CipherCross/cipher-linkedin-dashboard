@@ -438,7 +438,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
       <Button variant="ghost" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button>
     </div>}
 
-    {capabilityReady ? <div className={'replies-workspace' + (mobileStep === 'review' ? ' pane-review' : '') + (hasSelection ? ' has-selection' : '')}>
+    {capabilityReady ? <div className={'replies-workspace' + (mobileStep === 'review' ? ' pane-review' : '') + (hasSelection ? ' ' : '')}>
       <aside className="replies-list-pane" aria-label="Conversations">
         <div className="replies-pane-title">
           <div>
