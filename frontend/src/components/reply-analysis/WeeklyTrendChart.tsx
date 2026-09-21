@@ -70,7 +70,7 @@ export function WeeklyTrendChart({
       : key === 'reviewed' ? 'Reviewed' : 'Unreviewed'
   return <div >
     <p className="muted small">{mode === 'coverage' ? 'Messages by week' : 'Conversations by week'} · the current week may still be incomplete</p>
-    {keys.length === 0 ? <p className="muted">No reasons recorded in this period yet.</p> : <div className="sa-weekly-plot" role="img" aria-label="Weekly trend">
+    {keys.length === 0 ? <p className="muted">No reasons recorded in this period yet.</p> : <div className="min-h-[260px] min-w-0 w-full" role="img" aria-label="Weekly trend">
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={chartRows} margin={{ top: 8, right: 8, bottom: 12, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -82,6 +82,6 @@ export function WeeklyTrendChart({
         </BarChart>
       </ResponsiveContainer>
     </div>}
-    <div className="sa-week-links">{rows.map((row) => { const href = linkFor(row); return href ? <Link key={row.week} to={href}>{weekLabel(row.week)} · {row.messages} messages</Link> : <span key={row.week}>{weekLabel(row.week)}</span> })}</div>
+    <div className="flex flex-wrap gap-app-sm mt-app-md [&_a]:px-app-sm [&_a]:py-app-xs [&_a]:rounded-control [&_a]:bg-app-surface-2 [&_a]:text-app-text-secondary [&_a]:text-app-meta [&_a]:no-underline [&_span]:px-app-sm [&_span]:py-app-xs [&_span]:rounded-control [&_span]:bg-app-surface-2 [&_span]:text-app-text-secondary [&_span]:text-app-meta">{rows.map((row) => { const href = linkFor(row); return href ? <Link key={row.week} to={href}>{weekLabel(row.week)} · {row.messages} messages</Link> : <span key={row.week}>{weekLabel(row.week)}</span> })}</div>
   </div>
 }
