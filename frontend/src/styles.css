@@ -4398,8 +4398,6 @@ td .pipe-stage-select.quiet:focus-visible {
 .deployment-advanced .ui-field { margin-top: var(--space-md); max-width: 320px; }
 
 /* ── Neon diagnostics page ─────────────────────────────────────────────── */
-.filters { display: flex; align-items: flex-end; gap: var(--space-lg); flex-wrap: wrap; margin-bottom: var(--space-lg); }
-.filters .ui-field { min-width: 220px; }
 
 /* ── Health: rare actions behind a menu, diagnosis first ────────────────── */
 .health-actions-menu { position: relative; }
