@@ -974,10 +974,29 @@ correctness is only observable in a rendered browser at the three acceptance
 viewports, which is what `docs/ui-standard.md` already requires of geometry and
 what `vercel.json:38` currently prevents.
 
-**The honest sequencing**: fix the preview redirect, convert these four with
-the app open, and keep `css-parity.mjs` as the declaration-level gate it is
-proven to be. Converting them from compiled output would produce changes whose
-defects are undetectable by every check that exists here.
+**Correction — these do not need a browser.** Placement is visible in the built
+CSS: find the emitted `@media`/`@container` block and check the declaration is
+inside it. What failed earlier was trying to build a *general* normaliser for
+Tailwind's rewrites (`max-[560px]:` becomes `not all and (min-width:560px)`,
+`grid-cols-1` becomes `repeat(1,minmax(0,1fr))`). Per-rule inspection needs no
+normaliser, and there are only a handful of such rules per sheet:
+
+| sheet | placement-sensitive rules to inspect |
+| --- | --- |
+| `replies-inbox.css` | 2 — and its container-query block is 6/7 variant carriers, so it stays as CSS anyway |
+| `overview.css` | ~10 |
+| `layout.css` | ~25 |
+| `sequence-builder.css` | ~60 |
+
+**The real constraint is care, not capability.** `replies-inbox.css` alone is
+108 rules across five files. The two regressions in this migration —
+`.msg-bubble` and `.msg-meta` losing their base rules — happened while
+trimming a sheet quickly, and were invisible to every guard. These four are
+larger and denser than that one.
+
+So: convert them one sheet per session, with `css-parity.mjs` gating the
+deletion and a direct read of each emitted media block. Not "with a browser
+open" — with room to be careful.
 
 ### Before continuing
 
