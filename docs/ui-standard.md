@@ -18,14 +18,70 @@ Three facts frame everything below:
 
 | Path | What it holds |
 | --- | --- |
+| `frontend/src/index.css` | **The only CSS entry.** Declares the cascade layers and imports every stylesheet. Nothing else is imported from a component. |
 | `frontend/src/styles/tokens.css` | Every colour, size, radius, space and duration. Nothing else may define one. |
 | `frontend/src/styles/reset.css` | Document base, scrollbars, the one focus ring, `.skip-link`, `.sr-only`. |
 | `frontend/src/styles/base.css` | `.page`, the three heading roles, `.muted` / `.small` / `.controls`. |
-| `frontend/src/ui/` | Shared React primitives and their `ui.css`. |
-| `frontend/src/styles.css` | **Legacy.** Route and component rules not yet migrated. It only shrinks. |
-| route-local `.css` | Layout for one route. Colours, type and geometry come from tokens. |
+| `frontend/src/ui/` | Shared React primitives and their `ui.css`, which is also the app's shared component CSS. |
+| `frontend/src/components/ui/` | shadcn components. Owned by `shadcn add`; edit deliberately, because the CLI rewrites them. |
+| route-local `.css` | One sheet per route, beside its component, imported from `index.css`. |
 
-Load order is fixed in `main.tsx`: tokens → reset → base → `ui.css` → legacy.
+`frontend/src/styles.css` is **gone**. It was 4578 lines; its routes took their
+own sheets and its shared remainder went into `ui.css`.
+
+## Cascade layers
+
+Load order is expressed as **layers**, not import order:
+
+```
+@layer theme, base, foundation, app, utilities;
+```
+
+| Layer | Contents |
+| --- | --- |
+| `theme` | Tailwind's design tokens |
+| `base` | Tailwind preflight |
+| `foundation` | `tokens.css`, `reset.css`, `base.css` — outranks preflight |
+| `app` | `ui/ui.css` **first**, then every route sheet |
+| `utilities` | Tailwind utilities — win over everything above |
+
+Two rules, both enforced by `tests/cssCascade.test.ts`, both learned the hard
+way during the migration:
+
+1. **Nothing may be unlayered.** Unlayered CSS outranks *every* layer
+   regardless of specificity. Three route sheets were once imported straight
+   from their components, which is how Vite injects them unlayered — every
+   Tailwind utility on those routes silently lost.
+2. **All app CSS shares one layer, `ui.css` first.** A layer beats specificity
+   outright, so splitting `ui.css` and the route sheets across two layers
+   inverts the cascade between them: every route rule defeats every primitive
+   rule however specific. Measured when this was briefly wrong — it dropped the
+   danger border off an invalid input, the grey fill off a disabled one, and
+   collapsed a textarea from 120px to 66px.
+
+## Tailwind and the token bridge
+
+Tailwind v4 on Base UI. Utilities carry layout, spacing and colour; CSS carries
+selector work that utilities express badly — sticky table columns, `color-mix()`
+hovers, `:not(:last-child)::after` connectors.
+
+`index.css` exposes `tokens.css` to Tailwind through `@theme inline`, so product
+code writes `bg-app-accent` and `rounded-control` rather than
+`bg-[var(--accent)]`. Every bridged entry **references** its token:
+`.bg-app-accent{background-color:var(--accent)}`. Values are never copied, so
+`tokens.css` stays the only definition site.
+
+The `app-` prefix is deliberate. shadcn's components reference `bg-accent` and
+`text-muted-foreground`, and those names are mapped to *its* palette — which is
+in turn repointed at our tokens, so anything `shadcn add` writes inherits the
+app's colours with no restyling. Where the two systems disagree on meaning, ours
+keeps the plain name and shadcn's takes `sh-`: its `--accent` is a subtle hover
+surface, ours is the brand blue; its `--muted` is a surface, ours is muted
+*text*.
+
+Preflight is kept rather than split out: the shadcn CLI detects Tailwind by the
+literal `@import "tailwindcss"`, and the split form breaks `init` and every
+`add`.
 
 ## Tokens
 
@@ -83,9 +139,39 @@ a domain adapter maps values to labels and variants.
 | `AccountIdentity` + `disambiguate` | Name alone when unique, `name · account` when not. An unknown contact is `LinkedIn contact` plus an identifier — never a name invented from a slug. |
 | `TableFrame` / `TableToolbar` / `Table` | Frame, toolbar, local scroll, sticky head. Sorting, paging and filtering stay with the screen. |
 | `Toolbar` / `ActiveFilters` | Search plus one or two primary selectors on the page; everything else in a sheet. |
-| `Dialog` / `Drawer` | Role and name, synchronous initial focus, focus trap, inert background, Escape, scroll lock, returned focus. A persistent pane is not a modal and must not use these. |
+| `Dialog` | Role and name, initial focus, focus trap, background hidden from assistive technology, Escape, scroll lock, returned focus. A persistent pane is not a modal and must not use it. |
 | `useDirtyGuard` | A clean form closes at once; a dirty one asks `Keep editing` / `Discard changes` — for Escape, Close, the backdrop and navigation alike. |
-| `UpdatingNote` / `RefreshingRegion` / `InlineError` | Initial load, refresh, empty, and failure are four different things. |
+| `UpdatingNote` / `InlineError` | Initial load, refresh, empty, and failure are four different things. |
+
+`Button`, `IconButton` and `Dialog` are Base UI underneath. `LinkButton` and
+`ExternalLinkButton` deliberately are **not**: Base UI's `useButton` applies
+`role="button"` to any non-native element, which would relabel every in-app
+navigation as a button for assistive technology.
+
+`Drawer` and `RefreshingRegion` were removed — both were exported, documented
+and used nowhere.
+
+Base UI queues a dialog's initial focus through `requestAnimationFrame`, so one
+opened while the tab is hidden receives focus late; it still lands when the tab
+is shown, and a hidden tab cannot be typed into meanwhile.
+
+## The widget tier
+
+`src/components/ui/`, written by `shadcn add` and themed through the token
+bridge — nothing here is restyled by hand. Demonstrated on `#/ui-gallery` →
+**Widgets**.
+
+| Component | Use |
+| --- | --- |
+| `Popover` / `Tooltip` / `DropdownMenu` | Anchored, collision-aware, dismissed on Escape and outside press. Never hand-roll an outside-click listener again. |
+| `Command` | Type-ahead over a list. Backs Quick Navigation. |
+| `Combobox` | A select with search. |
+| `Calendar` | `react-day-picker`. Backs `DateRangePicker`. |
+| `Sonner` | Toasts, behind `useToast`. An error stays until dismissed; everything else fades after 5s. |
+
+Adding one: `npx shadcn@latest add <name>`. It will re-add a `.dark` block and
+`next-themes`; the guards fail the build on the first and the second is not
+wanted. One light theme, still.
 
 ## Layout
 
@@ -108,18 +194,53 @@ itself is unchanged. See `src/ui/datetime.ts`.
 
 ## The gallery
 
-`vite dev` → `#/ui-gallery`. Every primitive in every state, plus four
-compositions. It reads no API and writes nothing, and `import.meta.env.DEV`
-drops it from production builds, so no production route exists.
+`vite dev` → `#/ui-gallery`. Four tabs: **Primitives** (every primitive in
+every state), **Compositions** (four stand-ins for the hardest real screens),
+**List chrome**, and **Widgets** (the shadcn tier, which is how its theming is
+verified). It reads no API and writes nothing.
+
+`import.meta.env.DEV` gates the route, so it never renders in production —
+though it is still built as a lazy chunk, which is why bundle measurements
+must exclude it. Counting it overstates the app's JavaScript by ~80 KB
+gzipped that no user downloads.
+
+Geometry and contrast are measured here, in a browser. Two things the migration
+proved jsdom cannot see: a cascade-layer defect, and anything Base UI schedules
+through `requestAnimationFrame` — which includes dialog focus and the scroll
+lock.
 
 ## Checks
 
 ```bash
 npm run build        # tsc -b && vite build — the only typecheck for src/
-npm run test         # includes tests/uiPrimitives.test.tsx
+npm run test         # includes the two guards below
 npm run typecheck:api
 ```
 
 `tests/uiPrimitives.test.tsx` pins behaviour, not appearance — jsdom applies no
 stylesheet, so a CSS assertion there would pass while the page looked wrong.
 Geometry and contrast are measured in a browser against the gallery.
+
+Two guards exist because `tsc -b` is the only automated check over `src/` and
+there is no linter:
+
+- **`tests/cssCascade.test.ts`** — layer order, no unlayered sheet anywhere in
+  `src/`, no component-level `import './x.css'`, no token capture by shadcn, no
+  dark block, no translucent focus halo, and `styles.css` still gone. Every
+  assertion is mutation-tested: each defect is re-introduced and caught by its
+  own assertion.
+- **`tests/unknownClasses.test.ts`** — walks the TypeScript AST for literal
+  `className` tokens and diffs them against the built CSS, so a mistyped
+  utility fails the build. A regex version was 80% false positives. Its
+  allowlist of pre-existing dead class names is a **ratchet**: it may only
+  shrink.
+
+Two habits the migration earned:
+
+- A grep that comes back empty against generated CSS is more often the pattern
+  than the output. The minifier reorders `animation` shorthand, rewrites
+  `flex: 2 1 420px` to `flex: 2 420px`, and escapes bracket selectors. Parse
+  rule blocks instead.
+- Tests here have twice used a styling class as a selector handle
+  (`.avatar.fallback`, `.deployed-step-label`), so deleting the rule broke the
+  test rather than the app. Prefer a `data-*` handle over restoring the class.
