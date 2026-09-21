@@ -777,6 +777,76 @@ Phase 1b (Overlay) -> 1c (Tabs, Field's Select/Checkbox/RadioGroup, where Base
 UI adds real keyboard behaviour) -> Phase 2 (the missing widget tier) -> Phase 3
 (routes) -> Phase 4 (delete styles.css, rewrite the standard).
 
+## Route-sheet conversion — state at 2026-09-21
+
+`styles.css` is gone. Eighteen of twenty-four route sheets are converted to
+utilities and deleted; each remaining sheet holds only what has no utility
+form. Everything through `SentimentAnalysis` is on `main` and deployed.
+`CampaignDetail` and `ConversationDrawer` are on
+`feat/shadcn-route-sheets-final`, pushed and unmerged.
+
+### Six shapes that do not convert
+
+These are why no sheet reaches zero lines, and they are not laziness:
+
+1. **Variant carriers.** `.gender-cell.manual`, `.msg.out`, `.pipe-col.drag-over`.
+   A modifier resolves by specificity, which utilities do not have.
+2. **Modifier styling a descendant.** `.funnel-row--pipeline .funnel-track`.
+   The variant and the declaration live on different elements.
+3. **Grouped selectors.** `.sa-bar-row, .sa-reason-row, .sa-trend-row`. The
+   point of the construct is one block serving several elements; the sharing
+   moves to a constants module instead.
+4. **`@keyframes`.** No utility form. Tailwind references them by name.
+5. **Non-ASCII `content`.** Tailwind will not take a raw glyph in an arbitrary
+   value, so a `::before` disclosure triangle stays CSS.
+6. **BEM `__` in an arbitrary variant.** `_` is Tailwind's space placeholder, so
+   a double underscore cannot round-trip.
+
+### The trap that actually bites
+
+Deleting a **base** rule while keeping its variants. The class stays present in
+the stylesheet, so `tests/unknownClasses.test.ts` stays green while the element
+renders unstyled. It happened twice in `ConversationDrawer` — `.msg-bubble` and
+`.msg-meta` both lost their padding — and was found only by diffing generated
+CSS against the rules removed.
+
+A guard for this was written and removed: page-namespaced conventions
+(`.overview .ov-avatar`) and descendant-only rules (`.cmp-avg td`) are
+structurally identical to the defect, so it needed an allowlist longer than its
+findings. **`scripts/css-declares.mjs` is the check that works** — run it with
+the declarations from every rule being deleted.
+
+### The six remaining, measured
+
+Density of that trap, not line count, is what predicts trouble:
+
+| sheet | rules | duplicate selectors | variant carriers | base+context traps |
+| --- | --- | --- | --- | --- |
+| `overview.css` | 105 | 0 | 1 | **1** |
+| `replies-inbox.css` | 100 | 0 | 7 | 11 |
+| `chat.css` | 52 | 2 | 3 | 8 |
+| `apollo-csv-import.css` | 42 | 5 | 3 | 6 |
+| `layout.css` | 70 | 8 | 2 | 14 |
+| `sequence-builder.css` | 289 | **30** | 4 | **54** |
+
+`overview.css` is the cleanest and should go first — and converting it retires
+the reason its `.overview` namespace exists, which its own header explains was
+to stop a lazily-loaded sheet restyling it by arriving second. Every sheet is
+layered in fixed order now, so that hazard is gone.
+
+`sequence-builder.css` is in its own category: 30 selectors declared more than
+once (later wins — `Pipeline` had four and one contradicted its own comment)
+and 54 instances of the base+context trap. `ConversationDrawer` had eleven and
+produced two regressions. Convert it with a rendered Sequence Builder open, not
+from the stylesheet.
+
+### Before continuing
+
+`vercel.json:38` redirects every `cipher-linkedin-dashboard.*.vercel.app` host
+to `app.ciphercross.dev`, so preview deployments cannot be opened — the reason
+everything so far went straight to production. Narrowing that pattern to the
+production alias is one line and is what makes the remaining four verifiable.
+
 ## Risks & how to verify
 
 | Risk | Verification |
