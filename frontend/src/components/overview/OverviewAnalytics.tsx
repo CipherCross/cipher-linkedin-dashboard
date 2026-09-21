@@ -91,7 +91,7 @@ function PerformanceLoading() {
   return (
     <div className="ov-performance" role="status" aria-label="Loading performance analytics">
       <div>
-        <div className="ov-metrics">
+        <div className="flex gap-app-2xl flex-wrap mt-0 mx-0 mb-app-lg">
           {Array.from({ length: 3 }).map((_, index) => (
             <div className="ov-metric ov-loading-card" key={index}>
               <Skeleton width={72} height={11} />
@@ -101,7 +101,7 @@ function PerformanceLoading() {
             </div>
           ))}
         </div>
-        <Skeleton className="ov-loading-chart" width="100%" height={280} radius={16} />
+        <Skeleton className="mt-app-lg" width="100%" height={280} radius={16} />
       </div>
       <aside className="ov-rates ov-loading-card">
         <Skeleton width={130} height={16} />
@@ -114,13 +114,13 @@ function PerformanceLoading() {
 
 function AccountTableLoading() {
   return (
-    <div className="ov-tablewrap ov-loading-table" role="status" aria-label="Loading account analytics">
+    <div className="ov-tablewrap overflow-hidden" role="status" aria-label="Loading account analytics">
       <div className="ov-loading-table-head">
         {Array.from({ length: 7 }).map((_, index) => <Skeleton key={index} width="100%" height={12} />)}
       </div>
       {Array.from({ length: 4 }).map((_, row) => (
         <div className="ov-loading-table-row" key={row}>
-          <span className="ov-loading-account"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
+          <span className="flex items-center gap-app-md"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
           {Array.from({ length: 6 }).map((__, column) => <Skeleton key={column} width={column > 3 ? 58 : 34} height={12} />)}
         </div>
       ))}
@@ -339,9 +339,9 @@ function CampaignComparison({
         )}
       >
         {apiEmpty ? (
-          <p className="ov-table-empty">No campaigns are available for this scope.</p>
+          <p className="min-h-[120px] flex items-center justify-center flex-col gap-app-md m-0 p-app-xl text-app-text-muted text-center">No campaigns are available for this scope.</p>
         ) : clientEmpty ? (
-          <div className="ov-table-empty">
+          <div className="min-h-[120px] flex items-center justify-center flex-col gap-app-md m-0 p-app-xl text-app-text-muted text-center">
             <p>{showHidden ? 'No removed campaigns match this scope.' : 'All campaigns are removed from comparison.'}</p>
           </div>
         ) : (
@@ -380,7 +380,7 @@ function CampaignComparison({
                     <td>
                       <AccountCell instance={instance} fallback={accountLabel(campaign.instance_id)} />
                     </td>
-                    <td className="ov-campaign-name" title={campaign.campaign_name}>{campaign.campaign_name}</td>
+                    <td className="max-w-[260px] overflow-hidden text-ellipsis" title={campaign.campaign_name}>{campaign.campaign_name}</td>
                     <td className="ui-table__num">{num(campaign.invites_sent)}</td>
                     <td className="ui-table__num">{rate(campaign.lifetime_acceptance_rate)}</td>
                     <td className="ui-table__num">{rate(campaign.lifetime_reply_rate)}</td>
@@ -394,7 +394,7 @@ function CampaignComparison({
           </Table>
         )}
       </TableFrame>
-      <div className="ov-bottom ov-campaign-footer">
+      <div className="flex justify-between gap-app-md flex-wrap mt-app-xl text-app-text-muted text-app-meta mt-app-md">
         <span>{displayed.length} campaigns</span>
         <span>
           <Button variant="secondary" size="sm" disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>Previous campaigns</Button>{' '}
@@ -487,7 +487,7 @@ export function OverviewAnalytics({
   return (
     <>
       <section className="ov-summary" aria-labelledby="overview-system-title" aria-busy={systemLoading}>
-        <div className="ov-row">
+        <div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg">
           <div><h2 id="overview-system-title">System totals</h2><p className="ov-muted">{systemSubtitle}</p></div>
           <div className="ov-controls">
             <label className="ov-muted">Dates<DateRangePicker ariaLabel="System totals date range" presets={presets} value={systemRange} onChange={onSystemRangeChange} /></label>
@@ -512,7 +512,7 @@ export function OverviewAnalytics({
       </section>
 
       <section className="ov-panel" aria-labelledby="overview-performance-title" aria-busy={performanceLoading}>
-        <div className="ov-row">
+        <div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg">
           <div><h2 id="overview-performance-title">Performance</h2><p className="ov-muted">{range.label} · UTC{incompleteToday ? ' · Today is in progress' : ''}</p></div>
           <div className="ov-controls">
             <label className="ov-muted">Account<select aria-label="Performance account" value={account} onChange={(event) => onAccountChange(event.target.value)}><option value="all">All accounts</option>{instances.map((instance) => <option key={instance.id} value={instance.id}>{accountLabel(instance.id)}</option>)}</select></label>
@@ -525,7 +525,7 @@ export function OverviewAnalytics({
         ) : performance && accountDataAvailable ? (
           <div className="ov-performance">
             <div>
-              <div className="ov-metrics">
+              <div className="flex gap-app-2xl flex-wrap mt-0 mx-0 mb-app-lg">
                 {(['invited', 'connected', 'replied'] as const).map((key) => (
                   <div className="ov-metric" key={key}>
                     <span className="ov-dot" style={{ color: chartColors[key] }} aria-hidden="true" />
@@ -558,7 +558,7 @@ export function OverviewAnalytics({
       </section>
 
       <section className="ov-panel" aria-labelledby="overview-account-title" aria-busy={accountCampaignsLoading}>
-        <div className="ov-row">
+        <div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg">
           <div><h2 id="overview-account-title">{account === 'all' ? 'Account analytics' : `${accountLabel(account)} campaigns`}</h2><p className="ov-muted">{account === 'all' ? `${accountRange.label} counts and rates${accountRange.from || accountRange.to ? ' · UTC' : ''}${incompleteAccountToday ? ' · Today is in progress' : ''}` : `Campaigns · ${accountRange.label} counts and rates${accountRange.from || accountRange.to ? ' · UTC' : ''}${incompleteAccountToday ? ' · Today is in progress' : ''}`}</p></div>
           <div className="ov-controls">{accountCampaignsLoading && accountCampaigns && <span className="ov-muted" role="status">Refreshing…</span>}<label className="ov-muted">Dates<DateRangePicker ariaLabel="Account analytics date range" presets={accountPresets} value={accountRange} onChange={onAccountRangeChange} /></label>{account !== 'all' && <Button variant="secondary" size="sm" onClick={() => onAccountChange('all')}>← All accounts</Button>}</div>
         </div>
@@ -575,14 +575,14 @@ export function OverviewAnalytics({
                       const row = accountCampaigns.accounts.find((item) => item.instance_id === instance.id)
                       const totals = row?.totals ?? zeroTotals()
                       const syncOverdue = !instance.last_sync_at || Date.now() - new Date(instance.last_sync_at).getTime() > 3 * 3_600_000
-                      return <tr key={instance.id}><td><button className="ov-name" type="button" aria-label={accountName(instance, accountLabel(instance.id))} onClick={() => onAccountChange(instance.id)}><AccountCell instance={instance} fallback={accountLabel(instance.id)} /></button></td><td className="ui-table__num">{num(totals.invited)}</td><td className="ui-table__num">{num(totals.connected)}</td><td className="ui-table__num">{num(totals.replied)}</td><td className="ui-table__num">{pct(totals.acceptedOfInvited, totals.invited)}</td><td className="ui-table__num">{pct(totals.repliedOfConnected, totals.connected)}</td><td>{instance.last_sync_at ? <span className={syncOverdue ? 'ov-sync-overdue' : undefined} title={new Date(instance.last_sync_at).toLocaleString()}>{syncAgeLabel(instance.last_sync_at)}{syncOverdue && ' · Not OK'}</span> : <span className="ov-sync-overdue" title="No successful sync recorded">Unknown · Not OK</span>}</td></tr>
+                      return <tr key={instance.id}><td><button className="ov-name" type="button" aria-label={accountName(instance, accountLabel(instance.id))} onClick={() => onAccountChange(instance.id)}><AccountCell instance={instance} fallback={accountLabel(instance.id)} /></button></td><td className="ui-table__num">{num(totals.invited)}</td><td className="ui-table__num">{num(totals.connected)}</td><td className="ui-table__num">{num(totals.replied)}</td><td className="ui-table__num">{pct(totals.acceptedOfInvited, totals.invited)}</td><td className="ui-table__num">{pct(totals.repliedOfConnected, totals.connected)}</td><td>{instance.last_sync_at ? <span className={syncOverdue ? 'text-app-danger font-semibold' : undefined} title={new Date(instance.last_sync_at).toLocaleString()}>{syncAgeLabel(instance.last_sync_at)}{syncOverdue && ' · Not OK'}</span> : <span className="text-app-danger font-semibold" title="No successful sync recorded">Unknown · Not OK</span>}</td></tr>
                     })}</tbody>
                   </Table>
                 </TableFrame>
-                <div className="ov-bottom"><span>{accountRange.label} account counts and rates · rates use invited → connected and connected → replies</span><span>{accountRows.length > 20 && <><Button variant="secondary" size="sm" disabled={accountPageIndex === 0} onClick={() => setAccountPage(accountPageIndex - 1)}>Previous accounts</Button>{' '}Page {accountPageIndex + 1} of {accountPages}{' '}<Button variant="secondary" size="sm" disabled={accountPageIndex + 1 >= accountPages} onClick={() => setAccountPage(accountPageIndex + 1)}>Next accounts</Button>{' · '}</>}Freshness is shown from each account’s last sync</span></div>
+                <div className="flex justify-between gap-app-md flex-wrap mt-app-xl text-app-text-muted text-app-meta"><span>{accountRange.label} account counts and rates · rates use invited → connected and connected → replies</span><span>{accountRows.length > 20 && <><Button variant="secondary" size="sm" disabled={accountPageIndex === 0} onClick={() => setAccountPage(accountPageIndex - 1)}>Previous accounts</Button>{' '}Page {accountPageIndex + 1} of {accountPages}{' '}<Button variant="secondary" size="sm" disabled={accountPageIndex + 1 >= accountPages} onClick={() => setAccountPage(accountPageIndex + 1)}>Next accounts</Button>{' · '}</>}Freshness is shown from each account’s last sync</span></div>
               </>
             ) : selected ? (
-              <div className="ov-detail" aria-label={`${accountRange.label} account totals`}><div className="ov-row"><h3>{accountRange.label} account totals</h3><span className="ov-muted">Selected account{accountRange.from || accountRange.to ? ' · UTC' : ''}</span></div><div className="ov-details">{[['Leads', 'leads'], ['Invited', 'invited'], ['Connected', 'connected'], ['Messaged', 'messaged'], ['Replied', 'replied']].map(([label, key]) => <div key={key}><strong>{num((selectedAccount?.totals ?? zeroTotals())[key as keyof ReturnType<typeof zeroTotals>] as number)}</strong><span>{label}</span></div>)}</div></div>
+              <div className="mt-app-xl pt-app-lg border-t border-app-border" aria-label={`${accountRange.label} account totals`}><div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg"><h3>{accountRange.label} account totals</h3><span className="ov-muted">Selected account{accountRange.from || accountRange.to ? ' · UTC' : ''}</span></div><div className="ov-details">{[['Leads', 'leads'], ['Invited', 'invited'], ['Connected', 'connected'], ['Messaged', 'messaged'], ['Replied', 'replied']].map(([label, key]) => <div key={key}><strong>{num((selectedAccount?.totals ?? zeroTotals())[key as keyof ReturnType<typeof zeroTotals>] as number)}</strong><span>{label}</span></div>)}</div></div>
             ) : <p role="alert" className="ov-muted">Account not found. <Button variant="ghost" size="sm" onClick={() => onAccountChange('all')}>Back to all accounts</Button></p>}
             <CampaignComparison campaigns={accountCampaigns.campaigns} account={account} accountLabel={accountLabel} instances={instances} />
           </>
