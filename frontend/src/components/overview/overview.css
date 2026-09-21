@@ -130,7 +130,10 @@
   font-variant-numeric: tabular-nums;
 }
 .overview .ov-metric label { color: var(--text-muted); font-size: var(--text-meta); }
-.overview .ov-metric span:last-child { grid-column: 2; min-width: 0; color: var(--text-muted); font-size: var(--text-meta); }
+/* The comparison line is the last child only on Invited; Connected and First
+ * replies add a conversion <small> after it. Place every non-dot span in the
+ * text column so the line never falls into the 10px legend column. */
+.overview .ov-metric > span:not(.ov-dot) { grid-column: 2; min-width: 0; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
 .overview .ov-metric small { grid-column: 2; min-width: 0; color: var(--text); font-size: var(--text-meta); line-height: var(--leading-meta); }
 .overview .ov-metric small b { font-weight: 500; }
 
@@ -352,6 +355,13 @@
  * heading and controls in place with a visible "Refreshing…" note instead. */
 .overview .ov-loading-card { pointer-events: none; }
 .overview .ov-loading-card .skeleton + .skeleton { margin-top: var(--space-sm); }
+/* The System totals skeleton must reserve the same box as the filled cell —
+ * the label's 24px line box, the 32/40 count with its margins, and the
+ * explanatory line — or the rates shift the page down when they arrive. */
+.overview .ov-summary-grid.ov-loading-grid .ov-loading-card {
+  min-height: calc(24px + var(--space-sm) + var(--leading-kpi) + 2px + var(--leading-meta));
+}
+.overview .ov-summary-grid.ov-loading-grid .ov-loading-card .skeleton:nth-child(3) { margin-top: 2px; }
 .overview .ov-loading-chart { margin-top: var(--space-lg); }
 .overview .ov-loading-table { overflow: hidden; }
 .overview .ov-loading-table-head,
