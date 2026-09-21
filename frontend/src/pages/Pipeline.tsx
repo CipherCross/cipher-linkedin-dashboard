@@ -221,12 +221,12 @@ export function Pipeline() {
                 if (id) handleDrop(id, col.id)
               }}
             >
-              <div className="pipe-col-head">
-                <span className="pipe-dot" style={{ background: col.color }} aria-hidden="true" />
-                <span className="pipe-col-label">{col.label}</span>
-                <span className="pipe-count">{num(cards.length)}</span>
+              <div className="flex items-center gap-app-sm min-h-control px-app-lg py-app-md border-b border-app-border sticky top-0 bg-app-surface">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: col.color }} aria-hidden="true" />
+                <span className="flex-1 text-app-body font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{col.label}</span>
+                <span className="px-app-sm py-0.5 rounded-pill bg-app-surface-2 text-app-text-secondary text-app-meta font-semibold tabular-nums">{num(cards.length)}</span>
               </div>
-              <div className="pipe-col-body">
+              <div className="flex flex-col gap-app-md p-app-md overflow-y-auto">
                 {cards.map((l) => (
                   <PipeCard
                     key={l.id}
@@ -261,7 +261,7 @@ export function Pipeline() {
                     draggingRef={draggingId}
                   />
                 ))}
-                {cards.length === 0 && <div className="pipe-empty muted small">—</div>}
+                {cards.length === 0 && <div className="text-center py-app-md px-0 muted small">—</div>}
               </div>
             </section>
           )
@@ -338,25 +338,25 @@ function PipeCard({
 
   return (
     <article
-      className="pipe-card"
+      className="flex flex-col gap-[7px] p-2.5 border border-app-border rounded-control bg-app-surface cursor-grab active:cursor-grabbing hover:border-app-border-strong [&_.substatus-chip]:mt-0"
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
       <button
         type="button"
-        className="pipe-card-open"
+        className="flex flex-col gap-1.5 min-w-0 w-full border-0 p-0 bg-none text-app-text cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)] focus-visible:outline-offset-[3px] focus-visible:rounded-sm"
         draggable={false}
         onClick={() => {
           if (draggingRef.current) return
           onOpen()
         }}
       >
-        <span className="pipe-card-head-row">
+        <span className="flex items-center gap-app-sm [&_.pipe-card-name]:min-w-0">
           <LeadAvatar lead={lead} size={32} />
-          <span className="pipe-card-identity">
-            <span className="pipe-card-name">{name}</span>
-            <span className="pipe-card-sub muted small">
+          <span className="min-w-0 flex flex-col gap-px">
+            <span className="pipe-card-name text-app-table font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
+            <span className="overflow-hidden text-ellipsis whitespace-nowrap muted small">
               {[lead.company, lead.headline].filter(Boolean).join(' · ') || '—'}
             </span>
           </span>
@@ -370,38 +370,38 @@ function PipeCard({
           </span>
         )}
         {latestMessage && (
-          <span className="pipe-card-message">
+          <span className="flex items-center gap-1.5 min-w-0 text-[length:var(--text-xs)] text-app-text-secondary">
             <span className={`pipe-msg-dir ${latestMessage.direction}`}>
               {latestMessage.direction === 'in' ? 'Them' : 'Us'}
             </span>
             <span className="ellipsis">{messageSnippet(latestMessage.body, 74)}</span>
-            <time className="pipe-msg-date" dateTime={latestMessage.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(latestMessage.sent_at)}</time>
+            <time className="flex-[0_0_auto] text-app-text-muted" dateTime={latestMessage.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(latestMessage.sent_at)}</time>
           </span>
         )}
         <span
-          className="pipe-card-camp muted small ellipsis"
+          className="block max-w-full muted small ellipsis"
           title={`${campaignName} · ${accountName}`}
         >
           {campaignName} · {accountName}
         </span>
       </button>
 
-      <div className="pipe-card-foot">
+      <div className="flex items-center gap-app-sm mt-app-xs text-app-meta min-h-5">
         {assigneeName && (
-          <span className="assignee-chip" title={`Lead owner: ${assigneeName}`}>
+          <span className="inline-flex items-center" title={`Lead owner: ${assigneeName}`}>
             <InitialsAvatar name={assigneeName} size={20} />
           </span>
         )}
         <span className="muted small ellipsis">{substatusLabel(lead.pipeline_substatus ?? '') || ''}</span>
         {days != null && (
-          <span className="pipe-days muted small" title="Days in this stage">
+          <span className="ml-auto muted small" title="Days in this stage">
             {days}d
           </span>
         )}
       </div>
 
       <details
-        className="pipe-card-manage"
+        className="border-t border-app-border pt-[5px] [&_summary]:min-h-control-sm [&_summary]:flex [&_summary]:items-center [&_summary]:text-app-text-muted [&_summary]:text-[length:var(--text-2xs)] [&_summary]:font-semibold [&_summary]:cursor-pointer [&_summary]:[list-style-position:inside] [&[open]_summary]:text-app-text-secondary [&[open]_summary]:mb-1.5"
         draggable={false}
         onMouseDown={stopControl}
         onDragStart={stopControl}
