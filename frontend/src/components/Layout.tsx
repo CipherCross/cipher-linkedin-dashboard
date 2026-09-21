@@ -113,7 +113,7 @@ export function Layout() {
 
       {/* Mobile-only bar: hamburger toggles the off-canvas sidebar; the rail
           itself is display:none here and only appears ≥900px. */}
-      <div className="mobile-topbar" ref={mobileTopbarRef}>
+      <div className="mobile-topbar hidden [@media(max-width:900px)]:flex" ref={mobileTopbarRef}>
         <button
           ref={mobileToggleRef}
           type="button"
@@ -128,14 +128,14 @@ export function Layout() {
           <Logo size={24} className="brand-mark" />
           <span className="brand-name">Outreach Deck</span>
         </Link>
-        <div className="appbar-actions">
+        <div className="appbar-actions ml-auto flex items-center gap-1.5 shrink-0">
           {data && <SyncChip instances={data.instances} />}
         </div>
       </div>
 
       {/* Backdrop behind the open mobile drawer; tap to dismiss. */}
       <div
-        className={`nav-backdrop${navOpen ? ' show' : ''}`}
+        className={`nav-backdrop hidden${navOpen ? ' show [@media(max-width:900px)]:block' : ''}`}
         onClick={() => setNavOpen(false)}
         aria-hidden="true"
       />
@@ -173,7 +173,7 @@ export function Layout() {
         Show navigation
       </Button>
 
-      <main className="content" id="main-content" ref={contentRef} tabIndex={-1}>
+      <main className="content flex-1 min-w-0" id="main-content" ref={contentRef} tabIndex={-1}>
         <div className="page">
           {data?.error && <ErrorBanner message={data.error} onRetry={refetch} />}
 
@@ -311,7 +311,11 @@ function Sidebar({
               end={end}
               className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
             >
-              <Icon size={17} className="navlink-icon" aria-hidden="true" />
+              <Icon
+                size={17}
+                className="navlink-icon shrink-0 text-[color-mix(in_srgb,currentColor_82%,transparent)] [.active_&]:text-app-accent"
+                aria-hidden="true"
+              />
               <span >{label}</span>
             </NavLink>
           ))}
@@ -388,8 +392,11 @@ function Sidebar({
         </nav>
 
         <div className="side-footer">
-          <div className="side-user">
-            <span className="side-user-avatar" aria-hidden="true">
+          <div className="side-user w-full min-w-0 flex items-center gap-2 pb-2">
+            <span
+              className="size-[30px] flex-[0_0_30px] grid place-items-center border border-app-accent-border rounded-full bg-app-accent-subtle text-app-accent text-[length:var(--text-xs)] font-[750]"
+              aria-hidden="true"
+            >
               {member?.name.slice(0, 1).toUpperCase()}
             </span>
             <span className="side-user-copy">
@@ -481,7 +488,7 @@ function SyncChip({ instances }: { instances: Instance[] }) {
       title="Data freshness — open Sync health"
       aria-label={`${label} — open Sync health`}
     >
-      <span className="sync-dot" aria-hidden="true" />
+      <span className="sync-dot size-[8px] rounded-full shrink-0" aria-hidden="true" />
       <span >{label}</span>
     </Link>
   )

@@ -2,7 +2,6 @@
 /* --sidebar-w is the rail width; the Pipeline full-bleed math reads it to stay
  * aligned to the content area (it drops to 0 in the mobile drawer breakpoint). */
 .app { display: flex; align-items: flex-start; }
-.content { flex: 1; min-width: 0; }
 .sidebar {
   position: sticky;
   top: 0;
@@ -101,10 +100,6 @@
 }
 .nav-section-links { display: flex; flex-direction: column; gap: 2px; }
 .nav-section-links.collapsed { display: none; }
-.navlink-icon {
-  flex-shrink: 0;
-  color: color-mix(in srgb, currentColor 82%, transparent);
-}
 .side-footer {
   display: flex;
   align-items: center;
@@ -115,8 +110,6 @@
 }
 /* Mobile bar + drawer chrome — only rendered/visible below 900px (see media
  * query at the end of this section). Hidden by default on desktop. */
-.mobile-topbar { display: none; }
-.nav-backdrop { display: none; }
 .nav-toggle {
   display: inline-flex;
   align-items: center;
@@ -153,15 +146,7 @@
   transition: border-color 0.14s ease, color 0.14s ease;
 }
 .sync-chip:hover { border-color: var(--border-strong); color: var(--text); }
-.sync-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 /* right-hand appbar cluster (theme toggle + sync chip), pushed to the edge */
-.appbar-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
 /* Short desktop windows tighten the rhythm *between* rows only. The rows
  * themselves keep --nav-row-height: a 1280x720 window is a supported PC size,
  * not a reason to render 34px nav rows against a 44px standard. When the nav
@@ -316,27 +301,6 @@
 .desktop-nav-restore { display: none !important; }
 }
 .side-footer { flex-wrap: wrap; }
-.side-user {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
-}
-.side-user-avatar {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--accent-border);
-  border-radius: 50%;
-  background: var(--accent-subtle);
-  color: var(--accent);
-  font-size: var(--text-xs);
-  font-weight: 750;
-}
 .side-user-copy {
   min-width: 0;
   flex: 1;
