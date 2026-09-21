@@ -69,16 +69,16 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
           <button
             type="button"
             aria-label={ariaLabel}
-            className="drp-trigger"
+            className="inline-flex items-center gap-app-sm min-h-control bg-[var(--panel)] text-app-text border border-app-border rounded-control px-app-md text-app-body cursor-pointer transition-[border-color] hover:border-app-accent"
           >
-            <CalendarIcon className="drp-cal-icon" size={14} aria-hidden />
+            <CalendarIcon className="text-app-text-muted" size={14} aria-hidden />
             {rangeButtonLabel(value)}
-            <ChevronDown className="drp-caret" size={14} aria-hidden />
+            <ChevronDown className="text-app-text-muted ml-0.5" size={14} aria-hidden />
           </button>
         }
       />
       <PopoverContent aria-label={`${ariaLabel} calendar`} className="w-auto max-w-[min(520px,calc(100vw-32px))] flex flex-row items-start gap-app-md p-app-md">
-        <ul className="drp-presets shrink-0">
+        <ul className="shrink-0 list-none m-0 p-app-sm border-r border-app-border flex flex-col gap-0.5 min-w-[132px] [&_button]:w-full [&_button]:text-left [&_button]:bg-none [&_button]:border-none [&_button]:text-app-text [&_button]:px-app-md [&_button]:py-app-sm [&_button]:rounded-sm [&_button]:text-[length:var(--text-sm)] [&_button]:cursor-pointer [&_button]:whitespace-nowrap [&_button]:transition-[background,color] [&_button:hover]:bg-app-surface-3">
           {presets.map((p) => (
             <li key={p.id}>
               <button

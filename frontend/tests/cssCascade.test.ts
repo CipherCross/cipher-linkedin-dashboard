@@ -59,11 +59,19 @@ describe('CSS entry', () => {
     // it is. Measured when this was briefly wrong: it dropped the danger
     // border off an invalid input, the grey fill off a disabled one, and
     // collapsed a textarea from 120px to 66px.
+    // Deliberately NOT a count. An earlier version asserted there were more
+    // than twenty app sheets, which the route-by-route conversion is meant to
+    // drive toward zero — the guard failed on progress. What matters is the
+    // invariant: every app stylesheet is in `app`, and ui.css leads.
     const imports = [...entry.matchAll(/@import\s+'\.\/([^']+)'\s+layer\((\w+)\)/g)]
     const app = imports.filter(([, , layer]) => layer === 'app')
-    expect(app.length).toBeGreaterThan(20)
+    expect(app.length, 'ui.css at least must be in the app layer').toBeGreaterThan(0)
     for (const [, file, layer] of app) expect(layer, file).toBe('app')
     expect(app[0][1], 'ui.css must come first in the app layer').toBe('ui/ui.css')
+
+    // And no app sheet may sit in any other layer.
+    const strays = imports.filter(([, f, l]) => l !== 'app' && !f.startsWith('styles/'))
+    expect(strays.map(([, f, l]) => `${f} -> ${l}`)).toEqual([])
   })
 
   it('has no dark-mode block', () => {

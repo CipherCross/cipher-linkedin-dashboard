@@ -211,12 +211,12 @@ export function ImportHistoryPanel({
   // Which of the three stages the panel is on, for the numbered step header.
   const step = result ? 3 : blocks ? 2 : 1
   const stepsHeader = (
-    <ol className="import-steps">
+    <ol className="flex items-center gap-app-sm list-none mt-0 mx-0 mb-1 p-0 [&_li]:inline-flex [&_li]:items-center [&_li]:gap-1.5 [&_li]:text-[length:var(--text-xs)] [&_li]:font-semibold [&_li]:text-app-text-muted [&_li:not(:last-child)]:after:content-[''] [&_li:not(:last-child)]:after:w-4 [&_li:not(:last-child)]:after:h-px [&_li:not(:last-child)]:after:bg-app-border [&_li:not(:last-child)]:after:ml-0.5">
       {['Paste', 'Review', 'Import'].map((label, i) => {
         const n = i + 1
         return (
           <li key={label} className={n === step ? 'active' : n < step ? 'done' : ''}>
-            <span className="import-step-n">{n}</span>
+            <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-app-surface-2 border border-app-border text-app-text-muted text-[length:var(--text-2xs)]">{n}</span>
             {label}
           </li>
         )
@@ -226,7 +226,7 @@ export function ImportHistoryPanel({
 
   if (result) {
     return (
-      <div className="import-panel">
+      <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5 [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:bg-app-bg [&_textarea]:text-app-text [&_textarea]:border [&_textarea]:border-app-border [&_textarea]:rounded-md [&_textarea]:px-2.5 [&_textarea]:py-app-sm [&_textarea]:text-[length:var(--text-sm)] [&_textarea]:leading-[1.45] [&_textarea]:font-[inherit]">
         {stepsHeader}
         <div>
           Imported <strong>{result.inserted}</strong> new message{result.inserted === 1 ? '' : 's'}
@@ -242,7 +242,7 @@ export function ImportHistoryPanel({
         {result.milestone_error && (
           <div className="banner conv-error">Messages saved, but milestone update failed: {result.milestone_error}</div>
         )}
-        <div className="import-foot">
+        <div className="flex items-center gap-app-md flex-wrap">
           <button className="btn-accent" onClick={onClose}>Done</button>
         </div>
       </div>
@@ -250,7 +250,7 @@ export function ImportHistoryPanel({
   }
 
   return (
-    <div className="import-panel">
+    <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5 [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:bg-app-bg [&_textarea]:text-app-text [&_textarea]:border [&_textarea]:border-app-border [&_textarea]:rounded-md [&_textarea]:px-2.5 [&_textarea]:py-app-sm [&_textarea]:text-[length:var(--text-sm)] [&_textarea]:leading-[1.45] [&_textarea]:font-[inherit]">
       {stepsHeader}
       {!blocks && (
         <>
@@ -259,14 +259,14 @@ export function ImportHistoryPanel({
             paste it below. Messages already in the dashboard are detected and skipped.
           </div>
           <textarea
-            className="import-paste"
+            className="min-h-[220px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={'Anastasia Prokopenko   4:15 PM\nHello Igor,\n…'}
             autoFocus
           />
           {error && <div className="banner conv-error">{error}</div>}
-          <div className="import-foot">
+          <div className="flex items-center gap-app-md flex-wrap">
             <button className="btn-accent" onClick={parse} disabled={!text.trim()}>
               Preview
             </button>
@@ -281,7 +281,7 @@ export function ImportHistoryPanel({
             <div className="banner warn" key={i}>{w}</div>
           ))}
           {senders.length > 1 && (
-            <div className="import-us small">
+            <div className="flex items-center gap-app-md flex-wrap [&_label]:cursor-pointer small">
               <span className="muted">Sent by us:</span>
               {senders.map((s) => (
                 <label key={s}>
@@ -297,8 +297,8 @@ export function ImportHistoryPanel({
             </div>
           )}
           {blocks.map((b) => (
-            <div className={`import-block ${b.include ? '' : 'excluded'}`} key={b.key}>
-              <div className="import-block-head">
+            <div className={`border border-app-border rounded-md px-2.5 py-app-sm bg-app-bg flex flex-col gap-1.5 [&_input[type=datetime-local]]:self-start [&_input[type=datetime-local]]:px-2.5 [&_input[type=datetime-local]]:py-[5px] [&_input[type=datetime-local]]:text-[length:var(--text-xs)] ${b.include ? '' : 'opacity-50'}`} key={b.key}>
+              <div className="flex items-center gap-app-sm text-[length:var(--text-xs)]">
                 <input
                   type="checkbox"
                   checked={b.include}
@@ -306,7 +306,7 @@ export function ImportHistoryPanel({
                   title={isDup(b) ? 'Already saved — check to import anyway' : 'Include in import'}
                 />
                 <button
-                  className={`import-dir ${b.direction}`}
+                  className={`bg-none border border-app-border rounded-sm px-app-sm py-px text-[length:var(--text-2xs)] cursor-pointer whitespace-nowrap ${b.direction}`}
                   onClick={() => patch(b.key, { direction: b.direction === 'out' ? 'in' : 'out' })}
                   title="Flip who sent this message"
                 >
@@ -338,7 +338,7 @@ export function ImportHistoryPanel({
             </div>
           ))}
           {error && <div className="banner conv-error">{error}</div>}
-          <div className="import-foot">
+          <div className="flex items-center gap-app-md flex-wrap">
             <button className="btn-accent" onClick={save} disabled={saving || included.length === 0}>
               {saving ? 'Saving…' : `Save ${included.length} message${included.length === 1 ? '' : 's'}`}
             </button>

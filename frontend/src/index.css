@@ -55,7 +55,6 @@
 @import './pages/chat.css' layer(app);
 @import './components/layout.css' layer(app);
 @import './pages/apollo-csv-import.css' layer(app);
-@import './components/date-range-picker.css' layer(app);
 @import './pages/playbook.css' layer(app);
 @import './components/import-history.css' layer(app);
 @import './components/funnel.css' layer(app);
