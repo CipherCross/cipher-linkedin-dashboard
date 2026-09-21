@@ -5,11 +5,7 @@ import App from './App'
 // Foundation first, then the shared primitives, then the legacy sheet: the
 // later files may only refine what the earlier ones establish, never redefine
 // the palette or the type scale.
-import './styles/tokens.css'
-import './styles/reset.css'
-import './styles/base.css'
-import './ui/ui.css'
-import './styles.css'
+import './index.css'
 
 /** A tab can keep the previous deployment's entry bundle open while Vercel
  * replaces its hashed lazy-route chunks. Vite emits this event when navigation

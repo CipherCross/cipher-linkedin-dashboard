@@ -542,6 +542,15 @@
   font-size: var(--text-meta);
   color: var(--text-muted);
 }
+/* The spinner carried a class with no rule, so it never actually turned. Found
+ * by tests/unknownClasses.test.ts. `prefers-reduced-motion` stops the spin but
+ * keeps the glyph, because it is the only non-text signal in this control. */
+.ui-updating__spinner { animation: ui-spin 0.9s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ui-updating__spinner { animation: none; }
+}
+
 .ui-stale { opacity: 0.6; transition: opacity var(--dur-fast) var(--ease-out); }
 
 .ui-inline-error {
