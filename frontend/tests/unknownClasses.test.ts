@@ -44,7 +44,7 @@ const NO_RULE_BY_DESIGN = new Set(['group', 'peer', 'toaster', 'cn-toast'])
 
 const DYNAMIC_PREFIXES = [
   'compatibility-', 'deployed-step-', 'observation-', 'publish-', 'runtime-',
-  'sentiment-', 'source-', 'stage-', 'status-', 'ui-status--',
+  'source-', 'stage-', 'status-', 'ui-status--',
 ]
 
 /**

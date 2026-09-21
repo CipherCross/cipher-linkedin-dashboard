@@ -33,7 +33,6 @@
 .replies-toolbar-tools select { max-width: 260px; min-width: 180px; }
 
 /* Filter overlay body */
-.replies-facet-caption { color: var(--text-muted); font-size: var(--text-meta); }
 
 .replies-drill-banner, .replies-stale, .replies-unavailable {
   display: flex;
@@ -194,18 +193,7 @@
   color: var(--text-muted); font-size: var(--text-meta);
 }
 
-.replies-chip {
-  padding: 2px var(--space-sm);
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-meta);
-  font-weight: 600;
-}
-.sentiment-positive { background: var(--success-subtle); border-color: var(--success-border); color: var(--success); }
-.sentiment-negative { background: var(--danger-subtle); border-color: var(--danger-border); color: var(--danger); }
-.sentiment-objection { background: var(--warning-subtle); border-color: var(--warning-border); color: var(--warning); }
 .sentiment-neutral, .sentiment-auto { background: var(--surface-2); border-color: var(--border); color: var(--text-secondary); }
-.sentiment-referral { background: var(--purple-subtle); border-color: var(--purple-border); color: var(--purple); }
 
 .replies-thread-hints { display: flex; gap: var(--space-sm); justify-content: center; }
 .replies-thread-hints button {
