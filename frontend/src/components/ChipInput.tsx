@@ -23,7 +23,7 @@ export function ChipInput({
     setText('')
   }
   return (
-    <div className="chip-input">
+    <div className="flex flex-wrap items-center gap-[6px] p-[6px] rounded-sm border border-app-border bg-app-surface [&_input]:flex-1 [&_input]:min-w-[120px] [&_input]:border-none [&_input]:bg-none [&_input]:px-1 [&_input]:py-0.5 [&_input]:text-app-text [&_input:focus]:outline-none">
       {values.map((v) => (
         <span className={`chip ${variant}`} key={v}>
           {variant === 'exclude' ? '−' : ''}

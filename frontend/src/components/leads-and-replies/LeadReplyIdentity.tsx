@@ -24,9 +24,9 @@ export function LeadReplyIdentity({
   const sentiment = reply?.sentiment ? SENTIMENT_META[reply.sentiment] : null
   const intent = highestIntent ? INTENT_META[highestIntent] : null
   return (
-    <div className="lead-cell">
+    <div className="flex items-start gap-[9px]">
       <LeadAvatar lead={lead} size={30} />
-      <div className="lead-cell-main">
+      <div className="min-w-0">
         <a
           className="row-link"
           href={lead.profile_url}

@@ -18,7 +18,8 @@ export function InitialsAvatar({ name, size = 32 }: { name: string; size?: numbe
       .toUpperCase() || '?'
   return (
     <span
-      className="avatar fallback lead"
+      data-avatar="fallback"
+      className="rounded-full object-cover shrink-0 inline-flex items-center justify-center bg-app-surface-2 border border-app-border text-app-text-secondary font-semibold tracking-[0.02em]"
       style={{ width: size, height: size, fontSize: size * 0.36 }}
       aria-hidden="true"
     >
@@ -69,7 +70,7 @@ export function LeadAvatar({
   if (!url || failed) return <InitialsAvatar name={name} size={size} />
   return (
     <img
-      className="avatar"
+      className="rounded-full object-cover shrink-0 bg-app-surface-2"
       src={url}
       width={size}
       height={size}
@@ -96,7 +97,8 @@ export function Avatar({ inst, size = 32 }: { inst: Instance; size?: number }) {
       .toUpperCase()
     return (
       <span
-        className="avatar fallback"
+        data-avatar="fallback"
+        className="rounded-full object-cover shrink-0 inline-flex items-center justify-center bg-app-border-strong text-app-text font-bold tracking-[0.02em]"
         style={{ width: size, height: size, fontSize: size * 0.38 }}
       >
         {initials}
@@ -105,7 +107,7 @@ export function Avatar({ inst, size = 32 }: { inst: Instance; size?: number }) {
   }
   return (
     <img
-      className="avatar"
+      className="rounded-full object-cover shrink-0 bg-app-surface-2"
       src={inst.account_avatar}
       width={size}
       height={size}

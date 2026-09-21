@@ -1267,32 +1267,7 @@ tr:last-child td { border-bottom: none; }
   align-items: center;
   gap: var(--space-6);
   padding-top: 12px;
-}
-
-/* avatars + account identity */
-.avatar {
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: var(--surface-2);
-}
-.avatar.fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--border-strong);
-  color: var(--text);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-/* per-lead initials avatar (reply rows) — quieter than the account fallback */
-.avatar.fallback.lead {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-.account-cell { display: flex; align-items: center; gap: 8px; }
+}.account-cell { display: flex; align-items: center; gap: 8px; }
 .account-head { display: flex; align-items: center; gap: var(--space-6); }
 .li-link {
   display: inline-block;
@@ -1529,10 +1504,7 @@ tr:last-child td { border-bottom: none; }
 .account-cap-track { flex: 1; height: 6px; border-radius: 3px; overflow: hidden; }
 .account-cap-fill { height: 100%; border-radius: 3px; transition: width 0.2s ease; }
 .account-cap-value { font-weight: 600; font-variant-numeric: tabular-nums; }
-.account-card-spark { display: flex; align-items: flex-end; gap: 10px; }
-.sparkline { flex: 1; min-width: 0; }
-.sparkline-empty { flex: 1; padding: 8px 0; }
-.account-card-spark .small { white-space: nowrap; }
+.account-card-spark { display: flex; align-items: flex-end; gap: 10px; }.account-card-spark .small { white-space: nowrap; }
 .account-card-section { text-transform: uppercase; letter-spacing: var(--tracking-caps); font-size: var(--text-2xs); }
 .account-card-campaigns { display: flex; flex-direction: column; gap: 6px; }
 .account-campaign-link {
@@ -2442,13 +2414,7 @@ td .pipe-stage-select.quiet:focus-visible {
   font-weight: 600;
 }
 .pipe-modal textarea { resize: vertical; }
-.pipe-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-
-/* --- Lead demographics + avatars ----------------------------------------- */
-/* LeadsExplorer lead cell: avatar beside the name/company/reply stack. */
-.lead-cell { display: flex; align-items: flex-start; gap: 9px; }
-.lead-cell-main { min-width: 0; }
-.col-age { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pipe-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }.col-age { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .col-gender { white-space: nowrap; }
 .gender-cell { font-variant-numeric: tabular-nums; }
 .gender-cell.manual { color: var(--success); font-weight: 600; }
@@ -2587,27 +2553,7 @@ td .pipe-stage-select.quiet:focus-visible {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--text-sm);
 }
-.search-copy-inline { margin-left: 8px; }
-.chip-input {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-1);
-}
-.chip-input input {
-  flex: 1;
-  min-width: 120px;
-  border: none;
-  background: none;
-  padding: 2px 4px;
-  color: var(--text);
-}
-.chip-input input:focus { outline: none; }
-.kv-editor { display: flex; flex-direction: column; gap: 6px; }
+.search-copy-inline { margin-left: 8px; }.kv-editor { display: flex; flex-direction: column; gap: 6px; }
 .kv-row { display: flex; gap: 6px; align-items: center; }
 .kv-key { flex: 0 0 40%; min-width: 0; }
 .kv-value { flex: 1; min-width: 0; }
@@ -4252,20 +4198,7 @@ td .pipe-stage-select.quiet:focus-visible {
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 .new-reply-open--nav { position: relative; }
-.new-reply-open--nav:hover .new-reply-nav-hint { opacity: 1; }
-
-.overview-summary-strip {
-  display: flex; flex-direction: column; gap: 8px;
-  margin-bottom: var(--space-6);
-}
-.overview-summary-cells { display: flex; gap: 22px; margin: 0; flex-wrap: wrap; }
-.overview-summary-cells dt {
-  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .04em;
-  color: var(--text-muted);
-}
-.overview-summary-cells dd { margin: 0; font-size: var(--text-lg); font-weight: 650; font-variant-numeric: tabular-nums; }
-
-.overview-section { margin-top: var(--space-6); }
+.new-reply-open--nav:hover .new-reply-nav-hint { opacity: 1; }.overview-section { margin-top: var(--space-6); }
 .overview-section-title {
   margin: 0 0 var(--space-6); font-size: var(--text-sm); text-transform: uppercase;
   letter-spacing: .06em; color: var(--text-muted);
@@ -4333,9 +4266,7 @@ td .pipe-stage-select.quiet:focus-visible {
 }
 @media (max-width: 700px) {
   .active-sequence-detail { flex-direction: column; }
-  .active-sequence-state { align-items: flex-start; text-align: left; }
-  .overview-summary-cells { gap: 14px; }
-}
+  .active-sequence-state { align-items: flex-start; text-align: left; }}
 
 @media print {
   body { background: white !important; color: black !important; }

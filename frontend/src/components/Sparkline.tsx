@@ -24,7 +24,7 @@ export function Sparkline({
     byDay.set(a.day, (byDay.get(a.day) ?? 0) + a.cnt)
   }
   if (byDay.size === 0) {
-    return <div className="sparkline-empty muted small">no activity in range</div>
+    return <div className="flex-1 py-app-sm muted small">no activity in range</div>
   }
 
   const days = [...byDay.keys()].sort()
@@ -45,7 +45,7 @@ export function Sparkline({
 
   return (
     <svg
-      className="sparkline"
+      className="flex-1 min-w-0"
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}

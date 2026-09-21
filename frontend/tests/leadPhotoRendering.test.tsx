@@ -82,6 +82,9 @@ const sourceOn = (
     async () => path,
   )
 
+/* The fallback is found by `data-avatar`, not by a class. Classes on these
+ * elements are Tailwind utilities now and change whenever the styling does;
+ * the data attribute is the stable handle for "this rendered as initials". */
 describe('LeadAvatar on the API photo path', () => {
   // Explicit, because this project does not enable RTL's automatic cleanup: the
   // first version of this file leaked one test's `<img>` into the next and the
@@ -118,7 +121,7 @@ describe('LeadAvatar on the API photo path', () => {
       expect(screen.queryByRole('img')).toBeNull()
     })
     // `Lead lead-1` → "LL", the same fallback a lead with no photo gets.
-    expect(document.querySelector('.avatar.fallback')?.textContent).toBe('LL')
+    expect(document.querySelector("[data-avatar='fallback']")?.textContent).toBe('LL')
   })
 
   it('falls back to initials for a lead the response omitted', async () => {
@@ -128,7 +131,7 @@ describe('LeadAvatar on the API photo path', () => {
     render(<LeadAvatar lead={lead('lead-1')} photos={photos} />)
 
     await waitFor(() => {
-      expect(document.querySelector('.avatar.fallback')).not.toBeNull()
+      expect(document.querySelector("[data-avatar='fallback']")).not.toBeNull()
     })
   })
 
@@ -139,7 +142,7 @@ describe('LeadAvatar on the API photo path', () => {
     render(<LeadAvatar lead={lead('lead-1')} photos={photos} />)
 
     await waitFor(() => {
-      expect(document.querySelector('.avatar.fallback')).not.toBeNull()
+      expect(document.querySelector("[data-avatar='fallback']")).not.toBeNull()
     })
     // The Supabase loader was constructed with a null client, so it answers null —
     // what matters is that the API was never called on that path.
@@ -158,7 +161,7 @@ describe('LeadAvatar on the API photo path', () => {
     render(<LeadAvatar lead={lead('lead-1')} photos={photos} />)
 
     await waitFor(() => {
-      expect(document.querySelector('.avatar.fallback')).not.toBeNull()
+      expect(document.querySelector("[data-avatar='fallback']")).not.toBeNull()
     })
     expect(supabaseLoader.get).not.toHaveBeenCalled()
     expect(calls).toEqual([])
