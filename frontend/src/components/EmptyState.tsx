@@ -19,12 +19,12 @@ export function EmptyState({
 }) {
   return (
     <div className={`empty-state ${className}`.trim()}>
-      <span className="empty-state-icon">
+      <span className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-app-surface-2 text-app-text-muted mb-0.5">
         <Icon size={22} aria-hidden="true" />
       </span>
-      <div className="empty-state-title">{title}</div>
-      {hint && <div className="empty-state-hint muted small">{hint}</div>}
-      {action && <div className="empty-state-action">{action}</div>}
+      <div className="text-[length:var(--text-base)] font-semibold text-app-text">{title}</div>
+      {hint && <div className="max-w-[340px] leading-[1.5] muted small">{hint}</div>}
+      {action && <div className="mt-1.5">{action}</div>}
     </div>
   )
 }

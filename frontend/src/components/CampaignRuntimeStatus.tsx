@@ -43,8 +43,8 @@ export function CampaignRuntimeStatusView({
   ].filter(Boolean).join(', ')
 
   return (
-    <div className={`campaign-runtime ${compact ? 'compact' : ''}`} aria-label={aria}>
-      <div className="campaign-runtime-badges">
+    <div className={`flex flex-col items-start gap-app-xs min-w-0 ${compact ? 'compact' : ''}`} aria-label={aria}>
+      <div className="flex flex-wrap items-center gap-[5px]">
         <span className={`badge runtime-${runtime ?? 'unknown'}`}>{label}</span>
         {showArchive && campaign.is_archived === true && (
           <span className="badge archive-yes">Archived</span>
@@ -54,7 +54,7 @@ export function CampaignRuntimeStatusView({
         )}
         {healthLabel && <span className={`badge observation-${health}`}>{healthLabel}</span>}
       </div>
-      <span className="muted small campaign-runtime-observed" title={campaign.status_source ?? undefined}>
+      <span className="muted small whitespace-normal" title={campaign.status_source ?? undefined}>
         {observed}
       </span>
     </div>

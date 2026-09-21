@@ -84,7 +84,7 @@ export function LeadsVelocityChart({
     <div className="card kpi" title={title}>
       <div className="kpi-top">
         <span className="kpi-label"><TrendingUp size={14} strokeWidth={2} /> Leads velocity</span>
-        <span className="kpi-toggle" title="Rolling window (complete Mon–Sun weeks; the current week shows on the trend line but isn't averaged)">
+        <span className="shrink-0 inline-flex gap-0.5 [&_button]:bg-none [&_button]:border-none [&_button]:text-app-text-muted [&_button]:text-app-meta [&_button]:font-semibold [&_button]:tabular-nums [&_button]:min-h-control-sm [&_button]:px-app-sm [&_button]:rounded-pill [&_button]:cursor-pointer [&_button]:transition-[background,color] [&_button:hover]:text-app-text [&_button:hover]:bg-app-surface-2" title="Rolling window (complete Mon–Sun weeks; the current week shows on the trend line but isn't averaged)">
           {WINDOWS.map((w) => (
             <button
               key={w}
