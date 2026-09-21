@@ -111,14 +111,14 @@ const paint = () =>
 
 /** The panel is collapsed by default, so every assertion about it needs this. */
 const expand = async () => {
-  const toggle = document.querySelector('.coach-digest-toggle') as HTMLButtonElement
+  const toggle = document.querySelector('[data-digest="toggle"]') as HTMLButtonElement
   expect(toggle).not.toBeNull()
   await act(async () => {
     toggle.click()
   })
 }
 
-const panelBanner = () => document.querySelector('.coach-digest-body .banner')
+const panelBanner = () => document.querySelector('[data-digest="body"] .banner')
 
 afterEach(cleanup)
 
@@ -140,7 +140,7 @@ describe('the coaching digest panel on the application-API read path', () => {
     // Rendered lazily, fetched eagerly. Recorded because the browser run measured
     // the same thing (expanding costs zero requests) and it is easy to assume the
     // opposite from the word "collapsible".
-    expect(document.querySelector('.coach-digest-body')).toBeNull()
+    expect(document.querySelector('[data-digest="body"]')).toBeNull()
     await waitFor(() => expect(fetchNeonCoachingDigests).toHaveBeenCalledTimes(1))
   })
 
@@ -152,11 +152,11 @@ describe('the coaching digest panel on the application-API read path', () => {
 
     // One block per *instance*, not per digest — the panel indexes
     // `digests[instance.id]`, which is why the read is walked rather than capped.
-    expect(document.querySelectorAll('.coach-digest-inst')).toHaveLength(2)
+    expect(document.querySelectorAll('[data-digest="instance"]')).toHaveLength(2)
     expect(screen.getByText(/Answer the question before pitching/)).toBeDefined()
     // `patterns` is `jsonb`; a JSON *string* would make `.map` throw rather than
     // render, so the row count is what proves it crossed as an array.
-    expect(document.querySelectorAll('.coach-digest-patterns li')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-digest="patterns"] li')).toHaveLength(1)
     // The notebook with no digest says so, rather than looking broken.
     expect(screen.getByText(/Not generated yet/)).toBeDefined()
     expect(panelBanner()).toBeNull()

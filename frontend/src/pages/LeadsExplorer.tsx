@@ -756,7 +756,7 @@ export function LeadsExplorer() {
             <Button variant="primary" onClick={applyFilters}>{COPY.apply}</Button>
           </>}
         >
-          <div className="leads-filter-grid">
+          <div className="grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
             <SelectField label="Campaign" value={filterDraft.camp} onChange={(e) => setDraftFilter('camp', e.target.value)}>
               <option value="all">All campaigns</option>
               {campaignOptions.map((c) => (
@@ -914,7 +914,7 @@ export function LeadsExplorer() {
           />
         }
         hint={pages > 1 ? (
-          <div className="pager">
+          <div className="flex justify-center items-center gap-app-lg pt-app-md">
             <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => goPage(page - 1)}>← Previous</Button>
             <span className="muted">Page {page + 1} of {pages}</span>
             <Button variant="secondary" size="sm" disabled={page >= pages - 1} onClick={() => goPage(page + 1)}>Next →</Button>
@@ -1062,24 +1062,24 @@ export function LeadsExplorer() {
       {/* Coaching is an aid, not the work. It used to sit between the page
           title and the filters; collapsed and below the results, it costs the
           first row no vertical space. */}
-      <Panel className="coach-digest-card">
-        <button className="coach-digest-toggle" onClick={() => setDigestOpen((o) => !o)}>
+      <Panel className="mb-app-xl">
+        <button data-digest="toggle" className="flex items-center gap-app-sm w-full bg-none border-none text-app-text text-[length:var(--text-base)] font-semibold cursor-pointer p-0 text-left" onClick={() => setDigestOpen((o) => !o)}>
           {digestOpen
             ? <ChevronDown size={18} className="coach-digest-caret" aria-hidden="true" />
             : <ChevronRight size={18} className="coach-digest-caret" aria-hidden="true" />}
-          <GraduationCap size={18} className="coach-digest-icon" aria-hidden="true" />
+          <GraduationCap size={18} className="text-app-accent shrink-0" aria-hidden="true" />
           Your coaching digest
           <span className="muted small">— recurring habits to fix for more replies</span>
         </button>
         {digestOpen && (
-          <div className="coach-digest-body">
+          <div data-digest="body" className="mt-app-md flex flex-col gap-app-lg">
             {digestErr && <div className="banner">{digestErr}</div>}
             {data.instances.map((instance) => {
               const d = digests[instance.id]
               return (
-                <div className="coach-digest-inst" key={instance.id}>
-                  <div className="coach-digest-inst-head">
-                    <span className="coach-digest-name">{instanceLabel(instance.id)}</span>
+                <div data-digest="instance" className="border-t border-app-border pt-app-md first:border-t-0 first:pt-0" key={instance.id}>
+                  <div className="flex items-center gap-app-sm">
+                    <span className="font-semibold">{instanceLabel(instance.id)}</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1092,9 +1092,9 @@ export function LeadsExplorer() {
                       <span className="muted small">· {shortDate(d.computed_at)}</span>
                     )}
                   </div>
-                  {d?.summary && <div className="coach-digest-summary small">{d.summary}</div>}
+                  {d?.summary && <div className="mt-1.5 leading-[1.5] small">{d.summary}</div>}
                   {d?.patterns?.length ? (
-                    <ul className="coach-digest-patterns small">
+                    <ul data-digest="patterns" className="mt-app-sm mx-0 mb-0 pl-0 list-none flex flex-col gap-1.5 leading-[1.45] small">
                       {d.patterns.map((pattern, i) => (
                         <li key={i}>
                           <span className="badge senti obj">{pattern.count}×</span> {pattern.issue} — {pattern.advice}

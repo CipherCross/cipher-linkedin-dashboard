@@ -74,17 +74,17 @@ export const AccountCard = memo(function AccountCard({
   const capTone = addedFrac >= 1 ? 'danger' : addedFrac >= 0.7 ? 'warning' : 'success'
 
   return (
-    <div className="card account-card">
-      <div className="account-card-head">
+    <div className="card flex flex-col gap-app-lg">
+      <div className="flex gap-2.5 items-center">
         <Link
-          className="account-card-identity row-link"
+          className="group flex gap-app-md items-center flex-1 min-w-0 no-underline row-link"
           to={`/account/${encodeURIComponent(inst.id)}`}
         >
           <Avatar inst={inst} size={38} />
           <div style={{ minWidth: 0 }}>
-            <div className="account-cell">
+            <div className="flex items-center gap-app-sm">
               <span className={`dot inline ${fresh ? 'ok' : 'stale'}`} />
-              <span className="account-card-name">{instanceName(inst)}</span>
+              <span className="text-[length:var(--text-lg)] font-semibold text-app-text transition-colors group-hover:text-app-accent">{instanceName(inst)}</span>
             </div>
             <div className="muted small">
               {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
@@ -98,7 +98,7 @@ export const AccountCard = memo(function AccountCard({
         )}
       </div>
 
-      <div className="account-card-stats">
+      <div className="grid grid-cols-5 gap-app-sm py-2.5 border-y border-app-border">
         <Stat value={num(stats.leads)} label="leads" />
         <Stat value={num(stats.invites)} label="invites" />
         <Stat value={stats.acceptPct} label="accept" />
@@ -107,38 +107,38 @@ export const AccountCard = memo(function AccountCard({
       </div>
 
       <div
-        className="account-card-cap"
+        className="flex items-center gap-2.5 -mt-1"
         title={`${weekAdded} of ${WEEKLY_ADD_LIMIT} weekly add limit used this week (Mon–Sun)`}
       >
         <span className="muted small">weekly cap</span>
-        <div className="account-cap-track" style={{ background: `var(--${capTone}-subtle)` }}>
+        <div className="flex-1 h-1.5 rounded-[3px] overflow-hidden" style={{ background: `var(--${capTone}-subtle)` }}>
           <div
-            className="account-cap-fill"
+            className="h-full rounded-[3px] transition-[width]"
             style={{
               width: `${Math.min(100, addedFrac * 100)}%`,
               background: `var(--${capTone})`,
             }}
           />
         </div>
-        <span className="small account-cap-value">
+        <span className="small font-semibold tabular-nums">
           {num(weekAdded)}/{WEEKLY_ADD_LIMIT}
         </span>
       </div>
 
-      <div className="account-card-spark">
+      <div className="flex items-end gap-2.5">
         <Sparkline activity={activity} from={range.from} to={range.to} />
         <span className="muted small">invites · {range.label.toLowerCase()}</span>
       </div>
 
-      <div className="account-card-campaigns">
-        <div className="account-card-section muted small">Campaigns</div>
+      <div className="flex flex-col gap-1.5">
+        <div className="uppercase tracking-[var(--tracking-caps)] text-[length:var(--text-2xs)] muted small">Campaigns</div>
         {campaigns.map((c) => (
           <Link
             key={c.campaign_id}
-            className="account-campaign-link"
+            className="flex flex-col gap-0.5 px-2.5 py-app-sm border border-app-border rounded-md no-underline text-app-text bg-app-bg transition-[border-color] hover:border-app-accent"
             to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
           >
-            <span className="account-campaign-name">▸ {c.campaign_name}</span>
+            <span className="text-app-accent font-semibold">▸ {c.campaign_name}</span>
             <span className="muted small">
               {num(c.total_leads)} leads
               {(c.leads_added ?? 0) > 0 && ` · +${num(c.leads_added!)} added`}
@@ -155,8 +155,8 @@ export const AccountCard = memo(function AccountCard({
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="account-stat">
-      <div className="account-stat-value">{value}</div>
+    <div className="grid grid-rows-[1fr_auto] text-center">
+      <div className="text-[length:var(--text-lg)] font-semibold tabular-nums self-end">{value}</div>
       <div className="muted small">{label}</div>
     </div>
   )

@@ -187,7 +187,7 @@ export function Playbook() {
           </div>
         ) : (
           <div className={`playbook-panes ${preview ? 'show-preview' : 'show-edit'}`}>
-            <div className="playbook-pane playbook-edit-pane">
+            <div className="playbook-pane playbook-edit-pane flex min-w-0 [&>*]:w-full">
               <textarea
                 value={content}
                 spellCheck={false}
@@ -199,8 +199,8 @@ export function Playbook() {
                 }}
               />
             </div>
-            <div className="playbook-pane playbook-preview-pane">
-              <div className="playbook-preview chat-md">
+            <div className="playbook-pane playbook-preview-pane flex min-w-0 [&>*]:w-full">
+              <div className="playbook-preview chat-md max-w-[72ch] min-h-[520px] max-h-[72vh] p-app-lg border border-app-border rounded-control bg-app-surface overflow-y-auto">
                 {content.trim() ? (
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                 ) : (

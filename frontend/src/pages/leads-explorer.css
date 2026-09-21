@@ -1,37 +1,9 @@
 .col-date { white-space: nowrap; }
-.pager {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-6);
-  padding-top: 12px;
-}
-/* Per-account self-correction digest — collapsible card on the Replies page */
-.coach-digest-card { margin-bottom: var(--space-8); }
-.coach-digest-toggle {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  background: none; border: none; color: var(--text);
-  font-size: var(--text-base); font-weight: 600; cursor: pointer; padding: 0; text-align: left;
-}
 .coach-digest-caret { color: var(--muted); width: 12px; }
 svg.coach-digest-caret { width: auto; flex-shrink: 0; }
-.coach-digest-icon { color: var(--accent); flex-shrink: 0; }
-.coach-digest-body { margin-top: 12px; display: flex; flex-direction: column; gap: var(--space-6); }
-.coach-digest-inst { border-top: 1px solid var(--border); padding-top: 12px; }
-.coach-digest-inst:first-child { border-top: none; padding-top: 0; }
-.coach-digest-inst-head { display: flex; align-items: center; gap: 8px; }
-.coach-digest-name { font-weight: 600; }
-.coach-digest-summary { margin-top: 6px; line-height: 1.5; }
-.coach-digest-patterns { margin: 8px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
 .col-age { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .col-gender { white-space: nowrap; }
 .gender-cell { font-variant-numeric: tabular-nums; }
-.gender-cell.manual { color: var(--success); font-weight: 600; }
 .col-follow-up { white-space: nowrap; }
-/* ── Leads explorer: sheet layout + a table frame that owns its own scroll ── */
-.leads-filter-grid {
-  display: grid;
-  gap: var(--space-lg);
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
+.gender-cell.manual { color: var(--success); font-weight: 600; }
 .leads-table-frame .pager { padding: 0; }
