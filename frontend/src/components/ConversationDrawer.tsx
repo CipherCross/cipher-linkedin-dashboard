@@ -475,13 +475,13 @@ export function ConversationDrawer({
         aria-label={`Conversation with ${name}`}
         tabIndex={-1}
       >
-        <header className="conv-head">
-          <div className="conv-head-top">
+        <header className="flex flex-col gap-app-md p-app-lg border-b border-app-border">
+          <div className="flex items-center gap-app-md">
             <LeadAvatar lead={lead} size={40} />
-            <div className="conv-head-id">
-              <div className="conv-head-name-row">
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <div className="flex items-center gap-app-sm">
                 <a
-                  className="row-link conv-name"
+                  className="row-link text-app-section font-semibold"
                   href={lead.profile_url}
                   target="_blank"
                   rel="noreferrer"
@@ -510,7 +510,7 @@ export function ConversationDrawer({
             />
           </div>
 
-          <div className="conv-status">
+          <div className="flex items-center gap-app-sm flex-wrap">
             <Link
               className="row-link muted small"
               to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
@@ -520,7 +520,7 @@ export function ConversationDrawer({
             </Link>
             {outreachAccount ? (
               <a
-                className="conv-account muted small"
+                className="inline-flex items-center gap-1.5 text-app-text-muted no-underline [&[href]:hover]:text-app-text muted small"
                 href={outreachAccount.account_url ?? undefined}
                 target={outreachAccount.account_url ? '_blank' : undefined}
                 rel={outreachAccount.account_url ? 'noreferrer' : undefined}
@@ -556,7 +556,7 @@ export function ConversationDrawer({
                 read as clutter. */}
             {!importOpen && !followUpOpen && !(rows && rows.length === 0) && (
               <button
-                className="link-btn conv-import-btn"
+                className="link-btn ml-auto"
                 onClick={() => setImportOpen(true)}
                 disabled={!rows}
                 title="Paste a conversation copied from LinkedIn"
@@ -566,7 +566,7 @@ export function ConversationDrawer({
             )}
             {data?.followUpsAvailable && (
               <button
-                className={`conv-follow-btn ${activeFollowUp(followUpState) ? 'active' : ''}`}
+                className={`inline-flex items-center gap-[5px] border border-app-border rounded-pill px-[9px] py-[3px] bg-app-surface-2 text-app-text-secondary text-[length:var(--text-xs)] cursor-pointer ${activeFollowUp(followUpState) ? 'active' : ''}`}
                 onClick={() => {
                   setImportOpen(false)
                   setFollowUpReturnAction(undefined)
@@ -593,9 +593,9 @@ export function ConversationDrawer({
           {/* Everything below is lead metadata, not the conversation. It sits
               behind one disclosure so the thread starts near the top of the
               drawer instead of below four rows of controls. */}
-          <details className="conv-details">
+          <details className="[&>summary]:flex [&>summary]:items-center [&>summary]:min-h-control-sm [&>summary]:text-app-accent [&>summary]:text-app-table [&>summary]:font-semibold [&>summary]:cursor-pointer">
             <summary>Lead details</summary>
-            <div className="conv-pipeline-controls">
+            <div className="flex gap-app-md flex-wrap mt-app-md [&_select]:w-full">
             <label className="filter-field">
               <span className="filter-label">Stage</span>
               <select
@@ -650,10 +650,10 @@ export function ConversationDrawer({
               </label>
             </div>
 
-            <div className="conv-demographics">
-            <span className="conv-demo-item">
+            <div className="flex items-end flex-wrap gap-app-md mt-2.5">
+            <span className="flex flex-col gap-app-xs">
               <span className="filter-label">Age</span>
-              <span className="conv-demo-val">{ageRange(live) ?? '—'}</span>
+              <span className="tabular-nums font-semibold">{ageRange(live) ?? '—'}</span>
             </span>
             <label className="filter-field">
               <span className="filter-label">Gender</span>
@@ -735,9 +735,9 @@ export function ConversationDrawer({
 
         {!importOpen && !followUpOpen && (
         <>
-        <div className="conv-thread" ref={threadRef}>
+        <div className="flex-1 overflow-y-auto p-app-lg flex flex-col gap-app-lg [overscroll-behavior:contain]" ref={threadRef}>
           {loading && (
-            <div className="conv-thread-skeleton" aria-hidden="true">
+            <div className="flex flex-col gap-app-lg" aria-hidden="true">
               <Skeleton className="sk-bubble in" width="68%" height={44} radius="10px 10px 10px 2px" />
               <Skeleton className="sk-bubble out" width="54%" height={32} radius="10px 10px 2px 10px" />
               <Skeleton className="sk-bubble in" width="60%" height={38} radius="10px 10px 10px 2px" />
@@ -763,13 +763,13 @@ export function ConversationDrawer({
             return (
               <Fragment key={m.id}>
               {newDay && (
-                <div className="msg-day-sep"><span>{dayHeading(m.sent_at)}</span></div>
+                <div className="flex items-center gap-2.5 my-1 mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border [&_span]:text-[length:var(--text-2xs)] [&_span]:font-semibold [&_span]:uppercase [&_span]:tracking-[var(--tracking-caps)] [&_span]:whitespace-nowrap"><span>{dayHeading(m.sent_at)}</span></div>
               )}
               <div className={`msg ${inbound ? 'in' : 'out'}`}>
-                <div className="msg-bubble">
+                <div className="msg-bubble px-app-md py-app-sm text-[length:var(--text-sm)] leading-[1.5] whitespace-pre-wrap [overflow-wrap:anywhere]">
                   {editing?.id === m.id ? (
                     <textarea
-                      className="msg-edit-textarea"
+                      className="block w-[min(340px,65vw)] min-h-[72px] resize-y text-inherit bg-transparent border border-current rounded-sm px-app-sm py-[7px] font-[inherit]"
                       value={editing.body}
                       maxLength={5000}
                       autoFocus
@@ -783,12 +783,12 @@ export function ConversationDrawer({
                     m.body || <span className="muted">(empty)</span>
                   )}
                 </div>
-                <div className="msg-meta">
-                  <span className="msg-time muted small">{clockTime(m.sent_at)}</span>
+                <div className="msg-meta flex items-center gap-1.5">
+                  <span className="text-[length:var(--text-2xs)] muted small">{clockTime(m.sent_at)}</span>
                   {m.source === 'manual' && (
                     <>
                       <span
-                        className="msg-imported"
+                        className="text-[length:var(--text-2xs)] font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-[5px] cursor-help"
                         title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
                       >
                         imported
@@ -797,7 +797,7 @@ export function ConversationDrawer({
                         <>
                           <button
                             type="button"
-                            className="msg-edit"
+                            className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-text"
                             title="Save message"
                             disabled={savingEdit || !editing.body.trim()}
                             onClick={() => void editMessage(m)}
@@ -806,7 +806,7 @@ export function ConversationDrawer({
                           </button>
                           <button
                             type="button"
-                            className="msg-edit"
+                            className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-text"
                             title="Cancel editing"
                             disabled={savingEdit}
                             onClick={() => setEditing(null)}
@@ -817,7 +817,7 @@ export function ConversationDrawer({
                       ) : (
                         <button
                           type="button"
-                          className="msg-edit"
+                          className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-text"
                           title="Edit imported message"
                           disabled={deleting !== null || savingEdit || editing !== null}
                           onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
@@ -827,7 +827,7 @@ export function ConversationDrawer({
                       )}
                       <button
                         type="button"
-                        className="msg-delete"
+                        className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-danger"
                         title="Delete imported message"
                         disabled={deleting !== null || savingEdit || editing !== null}
                         onClick={() => deleteMessage(m)}
@@ -903,21 +903,21 @@ export function ConversationDrawer({
 
           {coaching && (
             <>
-              {coaching.cached && <div className="muted small coach-cached">Cached take</div>}
+              {coaching.cached && <div className="muted small mb-app-sm">Cached take</div>}
 
-              {coaching.summary && <div className="coach-summary small">{coaching.summary}</div>}
+              {coaching.summary && <div className="leading-[1.5] mb-2.5 small">{coaching.summary}</div>}
 
               {coaching.issues.length > 0 && (
-                <div className="coach-section">
-                  <div className="coach-label muted small">What hurt your reply odds</div>
-                  <div className="coach-issues">
+                <div className="mt-2.5">
+                  <div className="uppercase tracking-[var(--tracking-caps)] mb-[5px] muted small">What hurt your reply odds</div>
+                  <div className="flex flex-col gap-app-sm">
                     {coaching.issues.map((iss, i) => (
-                      <div className="coach-issue" key={i}>
+                      <div className="flex flex-col gap-[3px] pl-[9px] border-l-2 border-app-border" key={i}>
                         <span className={`badge senti ${SEVERITY_CLS[iss.severity]}`}>
                           {ISSUE_KIND_LABEL[iss.kind]}
                         </span>
-                        <div className="coach-issue-body small">
-                          {iss.quote && <div className="coach-quote muted">“{iss.quote}”</div>}
+                        <div className="leading-[1.45] small">
+                          {iss.quote && <div className="italic mb-0.5 [overflow-wrap:anywhere] muted">“{iss.quote}”</div>}
                           <div>{iss.fix}</div>
                         </div>
                       </div>
@@ -927,9 +927,9 @@ export function ConversationDrawer({
               )}
 
               {coaching.tips.length > 0 && (
-                <div className="coach-section">
-                  <div className="coach-label muted small">How to respond now</div>
-                  <ul className="coach-tips small">
+                <div className="mt-2.5">
+                  <div className="uppercase tracking-[var(--tracking-caps)] mb-[5px] muted small">How to respond now</div>
+                  <ul className="m-0 pl-[18px] flex flex-col gap-app-xs leading-[1.45] small">
                     {coaching.tips.map((t, i) => (
                       <li key={i}>{t}</li>
                     ))}
@@ -938,7 +938,7 @@ export function ConversationDrawer({
               )}
 
               {coachStale && (
-                <div className="muted small coach-stale">
+                <div className="muted small mt-2.5 italic">
                   New messages since this was generated — Regenerate for an updated take.
                 </div>
               )}

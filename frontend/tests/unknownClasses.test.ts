@@ -7,6 +7,15 @@
  * class the pre-Tailwind stylesheet approach did not have, and this guard is
  * the only thing standing in for it.
  *
+ * It cannot catch everything. Deleting a BASE rule while keeping its variants
+ * leaves the class present in the stylesheet, so this guard stays green while
+ * the element loses its padding — that happened twice in the Tailwind
+ * migration, to `.msg-bubble` and `.msg-meta`. Both were found by diffing the
+ * generated CSS against the rules removed (scripts/css-declares.mjs), not
+ * here. A guard for it was written and then removed: page-namespaced
+ * conventions like `.overview .ov-avatar` are structurally identical to the
+ * defect, so it needed an allowlist longer than its own findings.
+ *
  * It walks the TypeScript AST rather than using a regex. A regex over
  * `className={...}` scrapes JS expression fragments (`===`, `col.id`,
  * `SEVERITY_CLS[iss.severity]`) and was measured at ~80% false positives.
@@ -31,6 +40,7 @@ const DIST = join(__dirname, '../dist/assets')
  *    bundled separately from ours.
  */
 const NO_RULE_BY_DESIGN = new Set(['group', 'peer', 'toaster', 'cn-toast'])
+
 
 const DYNAMIC_PREFIXES = [
   'compatibility-', 'deployed-step-', 'observation-', 'publish-', 'runtime-',
