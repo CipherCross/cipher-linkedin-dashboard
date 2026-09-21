@@ -951,11 +951,23 @@ carry a property that reading could not see. That is the pattern, not bad luck:
 | `replies-inbox.css` | 68% convertible — "ordinary" | `container-type: inline-size` + `@container (max-width: 1239px)`, plus `@media (max-height: 720px)` |
 | `sequence-builder.css` | 50% convertible | 30 stacked selectors, 54 base-rule traps |
 
-Three of the four now hinge on **placement** — which media or container query a
-declaration lands in — and placement is exactly what
-`scripts/css-parity.mjs` cannot check (see above). The repo's own earlier
-lesson says the same thing from the other direction: jsdom cannot observe a
-cascade or container-query defect at all.
+**All four hinge on placement**, measured rather than assumed — which media or
+container query each declaration lands in:
+
+| sheet | placement dependency |
+| --- | --- |
+| `layout.css` | 12 stacked selectors across 4 breakpoint families |
+| `sequence-builder.css` | **35 of its 40** stacked selectors span a media query, over 4 breakpoints |
+| `overview.css` | 7 of 8 span `max-width: 1279px` or `forced-colors: active` |
+| `replies-inbox.css` | `@container (max-width: 1239px)` plus `@media (max-height: 720px)` |
+
+Two of those cannot be verified here by any means: `forced-colors: active` is
+Windows High Contrast, and a container query is invisible to jsdom by the
+repo's own earlier finding.
+
+Placement is exactly what `scripts/css-parity.mjs` cannot check (see above).
+The twenty sheets already converted were not like this — most had no media
+query at all, and the few that did had one, below the PC-only target range.
 
 So the remaining work is not "four more of the same". It is four files whose
 correctness is only observable in a rendered browser at the three acceptance
