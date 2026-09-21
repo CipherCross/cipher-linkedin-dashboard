@@ -913,10 +913,31 @@ it landed in. Put `padding-block: 10px 8px` behind `max-[900px]:` instead of
 `max-h-[820px]:` and parity reports success while the sidebar renders wrong at
 1280x720 — on every route simultaneously.
 
-Extending the tool to compare media context per declaration is possible and is
-the prerequisite for converting this file without a browser. Until then, this
-one is done with the app open at 1280x720, 1440x900 and 1920x1080, which is
-what docs/ui-standard.md already requires for geometry.
+**Extending the tool to compare media context was attempted and abandoned.**
+The approach — key each declaration by its normalised media condition — is
+sound, and two obstacles compound past what a short fix handles:
+
+1. Tailwind emits `max-[560px]:` as `not all and (min-width:560px)`. Those are
+   the same authored intent but differ by a pixel in the spec, so any
+   normalisation has to decide whether to adjust the bound. Adjusting it made
+   *every* media declaration fail to match, which silently disabled the whole
+   check while it still reported a total.
+2. The declaration text changes too. `grid-cols-1` emits
+   `grid-template-columns: repeat(1, minmax(0, 1fr))` where the original sheet
+   said `1fr`. So a media-aware check cannot compare declarations literally —
+   it has to normalise values as well as conditions, and every value rewrite
+   Tailwind performs becomes a case to handle.
+
+The second point is the real cost: the check needs a value-equivalence table,
+not just a condition parser. That is worth building, but it is its own task
+rather than a prerequisite bolted onto this one.
+
+Until it exists, `layout.css` and the two `max-height: 720px` rules in
+`replies-inbox.css` are done with the app open at 1280x720, 1440x900 and
+1920x1080 — which is what docs/ui-standard.md already requires for geometry.
+`scripts/css-parity.mjs` remains correct at the declaration level and has
+caught two real errors (`.msg-bubble`'s padding, `.csv-map-row`'s column
+proportions); it just cannot speak to placement.
 
 ### Before continuing
 
