@@ -1,0 +1,22 @@
+.table-toolbar-actions { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+/* --- Manager Review ------------------------------------------------------ */
+/* The matrix scrolls inside its own region with a visible scrollbar and a
+ * written hint beside it. The old right-edge fade hid the last column instead
+ * of announcing it. */
+.cohort-scroll { display: flex; overflow-x: auto; }
+.cohort-scroll > table { flex: 0 0 auto; }
+.cohort-table { min-width: 640px; }
+.cohort-table th, .cohort-table td { white-space: nowrap; }
+.cohort-camp-col {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface-1);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+}
+.cohort-subhead td {
+  color: var(--text-secondary); font-weight: 600; font-size: var(--text-meta);
+  background: var(--surface-2);
+}
+.cohort-subhead td.cohort-camp-col { background: var(--surface-2); }
+.cohort-subhead-label { position: sticky; left: 10px; display: inline-block; }
+.cohort-d { margin-left: 6px; padding: 0 5px; }
+.cohort-foot { margin-top: 12px; }

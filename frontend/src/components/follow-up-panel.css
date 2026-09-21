@@ -1,0 +1,51 @@
+.follow-panel { flex: 1; overflow-y: auto; padding: 14px 16px 24px; }
+.follow-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.follow-panel-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
+.follow-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.follow-current-date { font-size: var(--text-md); font-weight: 700; }
+.follow-current-owner { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-sm); }
+.follow-actions-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.follow-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.follow-form-title { font-weight: 700; }
+.follow-form textarea { resize: vertical; }
+.follow-import-nudge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+}
+.follow-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.follow-history { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.follow-history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.follow-history-head > span { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
+.follow-timeline { display: flex; flex-direction: column; gap: 0; }
+.follow-event { position: relative; display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding-bottom: 14px; }
+.follow-event::before { content: ''; position: absolute; left: 5px; top: 11px; bottom: 0; width: 1px; background: var(--border); }
+.follow-event:last-child::before { display: none; }
+.follow-event-dot { width: 11px; height: 11px; margin-top: 3px; border-radius: 50%; background: var(--text-muted); z-index: 1; }
+.follow-event-title { font-size: var(--text-sm); font-weight: 650; }
+.follow-event-reason { margin: 3px 0; white-space: pre-wrap; }
+@media (max-width: 700px) {
+.follow-import-nudge { align-items: flex-start; flex-direction: column; }
+}

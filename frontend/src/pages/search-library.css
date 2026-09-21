@@ -1,0 +1,46 @@
+/* active-filter chip row + clear-all */
+.active-filters { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-lg); }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: var(--space-xs);
+  height: 32px;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-meta);
+  cursor: pointer;
+}
+.filter-chip svg { color: var(--text-muted); }
+.filter-chip:hover { border-color: var(--accent); }
+/* --- Search Library ------------------------------------------------------ */
+.search-group { margin-bottom: var(--space-8); }
+.search-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.search-query {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.search-query-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.search-filters { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.search-filter-row { display: flex; gap: 8px; }
+.search-filter-row dt { min-width: 90px; flex-shrink: 0; }
+.search-filter-row dd { margin: 0; word-break: break-word; }
+.search-card-notes { margin: 0; }
+.search-card-foot { border-top: 1px solid var(--border); padding-top: 8px; margin-top: auto; }
+.search-copy-inline { margin-left: 8px; }
+.kv-row { display: flex; gap: 6px; align-items: center; }
+.kv-key { flex: 0 0 40%; min-width: 0; }
+.kv-value { flex: 1; min-width: 0; }

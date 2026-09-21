@@ -1,0 +1,64 @@
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+@media (max-width: 860px) {
+.main-grid { grid-template-columns: 1fr; }
+.health-grid > :last-child { order: -1; }
+}
+.health-runs table { min-width: 520px; }
+/* expandable error cell */
+.error-cell { max-width: 280px; }
+.error-cell-btn {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--danger); font: inherit; font-size: var(--text-xs); line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.error-cell-btn:hover { color: var(--text); }
+.publish-compatibility-card { margin-bottom: 18px; }
+.publish-compatibility-heading { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.publish-compatibility-heading > div { display: flex; align-items: flex-start; gap: 10px; }
+.publish-compatibility-heading svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+.publish-compatibility-heading h2 { margin: 0; }
+.publish-compatibility-heading p { margin: 3px 0 0; }
+.publish-compatibility-card code { font-size: var(--text-meta); }
+/* ── Neon diagnostics page ─────────────────────────────────────────────── */
+
+/* ── Health: rare actions behind a menu, diagnosis first ────────────────── */
+.health-actions-menu { position: relative; }
+.health-actions-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--control-height);
+  padding: 0 var(--space-lg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--text-body);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.health-actions-menu > summary::-webkit-details-marker { display: none; }
+.health-actions-body {
+  position: absolute;
+  right: 0;
+  z-index: 30;
+  width: min(360px, calc(100vw - 48px));
+  margin-top: var(--space-sm);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-overlay);
+}
+.health-actions-body h3 { display: flex; align-items: center; gap: var(--space-sm); margin: 0; }

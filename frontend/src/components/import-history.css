@@ -1,0 +1,55 @@
+/* --- Manual conversation import (ConversationDrawer "Import history") ----- */
+.import-panel {
+  flex: 1; overflow-y: auto;
+  padding: 12px 16px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* numbered Paste → Review → Import step header */
+.import-steps {
+  display: flex; align-items: center; gap: 8px;
+  list-style: none; margin: 0 0 4px; padding: 0;
+}
+.import-steps li {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-xs); font-weight: 600; color: var(--text-muted);
+}
+.import-steps li:not(:last-child)::after {
+  content: ''; width: 16px; height: 1px; background: var(--border); margin-left: 2px;
+}
+.import-step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text-muted); font-size: var(--text-2xs);
+}
+.import-panel textarea {
+  width: 100%; resize: vertical;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 8px 10px; font-size: var(--text-sm); line-height: 1.45;
+  font-family: inherit;
+}
+.import-panel textarea.import-paste { min-height: 220px; }
+.import-us { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.import-us label { cursor: pointer; }
+.import-block {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 8px 10px; background: var(--bg);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.import-block.excluded { opacity: 0.5; }
+.import-block-head { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); }
+.import-block input[type='datetime-local'] {
+  align-self: flex-start;
+  padding: 5px 10px; font-size: var(--text-xs);
+}
+.import-dir {
+  background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 1px 8px; font-size: var(--text-2xs); cursor: pointer; white-space: nowrap;
+}
+.import-flag {
+  font-size: var(--text-2xs); padding: 1px 7px; border-radius: var(--radius-sm); white-space: nowrap;
+  border: 1px solid var(--warning-border); background: var(--warning-subtle); color: var(--warning);
+}
+.import-flag.dup { border-color: var(--border); background: var(--surface-2); color: var(--muted); }
+.import-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
