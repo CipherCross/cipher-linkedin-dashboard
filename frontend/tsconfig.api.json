@@ -21,6 +21,12 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
+    // Mirrors tsconfig.json. The `tests/**` half imports components from
+    // `src`, and shadcn components import each other through `@/components/ui`,
+    // so without this the check fails to RESOLVE rather than failing an
+    // assertion — which is how it stayed broken for twenty commits.
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] },
     "types": ["node", "vite/client"]
   },
   "include": ["api", "tests"]

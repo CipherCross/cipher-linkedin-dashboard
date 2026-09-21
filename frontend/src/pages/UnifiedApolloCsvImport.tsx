@@ -520,7 +520,7 @@ export function UnifiedApolloCsvImport() {
         onChange={(event) => void chooseFile(event.target.files?.[0])}
       />
 
-      <ol className="csv-import-steps" aria-label="Import progress">
+      <ol className="list-none mt-0 mx-0 mb-app-xl p-0 grid grid-cols-5 max-[700px]:grid-cols-2 gap-app-sm [&_li]:relative [&_li]:flex [&_li]:items-center [&_li]:gap-app-sm [&_li]:px-app-md [&_li]:py-[9px] [&_li]:border [&_li]:border-app-border [&_li]:rounded-md [&_li]:text-app-text-muted [&_li]:text-[length:var(--text-xs)] [&_li]:font-semibold [&_li]:bg-app-surface [&_li>span]:w-[23px] [&_li>span]:h-[23px] [&_li>span]:inline-flex [&_li>span]:items-center [&_li>span]:justify-center [&_li>span]:flex-[0_0_auto] [&_li>span]:rounded-full [&_li>span]:border [&_li>span]:border-app-border-strong [&_li>span]:tabular-nums" aria-label="Import progress">
         {['Set up', 'Review file', 'Companies', 'Contacts', 'Results'].map((label, index) => {
           const number = index + 1
           return (
@@ -533,7 +533,7 @@ export function UnifiedApolloCsvImport() {
       </ol>
 
       {error && (
-        <div className="csv-error-banner" role="alert">
+        <div className="mb-app-lg [&>span]:flex-1" role="alert">
           <XCircle size={17} />
           <span>{error}</span>
           <button className="link-btn" onClick={() => setError(null)}>Dismiss</button>
@@ -551,7 +551,7 @@ export function UnifiedApolloCsvImport() {
             </div>
           </div>
           {metadataBusy ? (
-            <div className="muted small csv-loading-line">
+            <div className="muted small inline-flex items-center gap-[7px] pt-2.5">
               <RefreshCw size={14} className="spin" /> Loading Airtable choices…
             </div>
           ) : metadataError ? (
@@ -560,7 +560,7 @@ export function UnifiedApolloCsvImport() {
               <button className="btn sm" onClick={() => void loadMetadata()}>Retry</button>
             </div>
           ) : (
-            <label className="csv-field">
+            <label className="flex flex-col gap-[5px] max-w-[360px] mt-app-md text-[length:var(--text-xs)] text-app-text-secondary [&_strong]:text-app-danger">
               <span>Added by <strong aria-hidden="true">*</strong></span>
               <select value={addedBy} onChange={(event) => setAddedBy(event.target.value)}>
                 <option value="">Select your name…</option>
@@ -604,21 +604,21 @@ export function UnifiedApolloCsvImport() {
             </button>
           </div>
           {document.warnings.map((warning) => (
-            <div className="csv-warning-line" key={warning}><AlertTriangle size={14} /> {warning}</div>
+            <div className="border-app-warning-border bg-app-warning-subtle text-app-warning mb-app-sm" key={warning}><AlertTriangle size={14} /> {warning}</div>
           ))}
-          <div className="csv-mapping-grid">
+          <div className="flex flex-col border border-app-border rounded-md overflow-hidden my-[14px] mx-0">
             {TARGET_FIELDS.map((target) => (
               <div className="csv-map-row" key={target}>
                 <span>{TARGET_LABELS[target]}</span>
                 <span aria-hidden="true">←</span>
-                <span className="csv-map-value">{document.mapping[target] || 'Not mapped'}</span>
+                <span className="text-app-text font-semibold">{document.mapping[target] || 'Not mapped'}</span>
               </div>
             ))}
             <div className="csv-map-row">
-              <span>Company grouping</span><span aria-hidden="true">←</span><span className="csv-map-value">Apollo Account Id</span>
+              <span>Company grouping</span><span aria-hidden="true">←</span><span className="text-app-text font-semibold">Apollo Account Id</span>
             </div>
           </div>
-          <div className="csv-import-footer">
+          <div className="sticky bottom-[14px] z-[8] flex items-center justify-between gap-[14px] px-[14px] py-app-md mt-2.5 border border-app-border-strong rounded-md bg-app-surface shadow-[var(--shadow-overlay)] max-[700px]:items-start max-[700px]:flex-col">
             <div><strong>{companies.length}</strong> Companies will be processed before <strong>{contacts.length}</strong> Contacts.</div>
             <button className="btn accent" onClick={() => void startCompanyPreview()} disabled={busy}>
               {busy ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
@@ -640,7 +640,7 @@ export function UnifiedApolloCsvImport() {
               </div>
               <span className="badge status-running">{unresolvedCompanies.length} unresolved</span>
             </div>
-            <div className="csv-company-action-list">
+            <div className="flex flex-col">
               {companies.map((company) => {
                 const preview = companyPreviewByRow.get(company.rowNumber)
                 const decision = companyDecisions[company.accountId]
@@ -648,7 +648,7 @@ export function UnifiedApolloCsvImport() {
                 return (
                   <div className="csv-company-action-row" key={company.accountId}>
                     {needsDecision ? <AlertTriangle size={18} /> : <Building2 size={18} />}
-                    <div className="csv-company-action-main">
+                    <div className="min-w-0 flex flex-col gap-0.5">
                       <strong>{company.companyName}</strong>
                       <span className="muted small">
                         {company.sourceRowNumbers.length} Contact{company.sourceRowNumbers.length === 1 ? '' : 's'} · {COMPANY_STATUS[preview?.status ?? 'failed']}
@@ -659,7 +659,7 @@ export function UnifiedApolloCsvImport() {
                       {decision?.kind === 'skip' && <span className="csv-resolution skipped">Skip this group</span>}
                     </div>
                     {needsDecision && (
-                      <div className="csv-row-actions">
+                      <div className="flex items-center gap-[5px] whitespace-nowrap">
                         {preview?.canCreate && (
                           <button
                             className="btn accent sm"
@@ -678,7 +678,7 @@ export function UnifiedApolloCsvImport() {
               })}
             </div>
           </section>
-          <div className="csv-import-footer">
+          <div className="sticky bottom-[14px] z-[8] flex items-center justify-between gap-[14px] px-[14px] py-app-md mt-2.5 border border-app-border-strong rounded-md bg-app-surface shadow-[var(--shadow-overlay)] max-[700px]:items-start max-[700px]:flex-col">
             <div>
               <strong>{companyCounts.ready ?? 0}</strong> new · <strong>{companyCounts.duplicate ?? 0}</strong> existing
               {unresolvedCompanies.length > 0 && <span className="muted"> · resolve {unresolvedCompanies.length} first</span>}
@@ -705,14 +705,14 @@ export function UnifiedApolloCsvImport() {
                   Every ready Contact already carries the exact Airtable Company ID resolved above.
                 </div>
               </div>
-              <div className="csv-summary-chips">
+              <div className="flex items-center justify-end gap-1.5 flex-wrap">
                 <span className="badge">{contactCounts.ready ?? 0} ready</span>
                 <span className="badge">{contactCounts.duplicate ?? 0} existing</span>
                 <span className="badge status-error">{contactCounts.invalid ?? 0} blocked</span>
               </div>
             </div>
-            <div className="table-scroll csv-table-scroll">
-              <table className="csv-preview-table">
+            <div className="table-scroll max-h-[560px]">
+              <table className="min-w-[1040px] [&_td]:align-top">
                 <thead><tr><th>Row</th><th>Contact</th><th>Company</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {contacts.map((contact) => {
@@ -750,7 +750,7 @@ export function UnifiedApolloCsvImport() {
               </table>
             </div>
           </section>
-          <div className="csv-import-footer">
+          <div className="sticky bottom-[14px] z-[8] flex items-center justify-between gap-[14px] px-[14px] py-app-md mt-2.5 border border-app-border-strong rounded-md bg-app-surface shadow-[var(--shadow-overlay)] max-[700px]:items-start max-[700px]:flex-col">
             <div><strong>{(contactCounts.ready ?? 0) - skippedContacts.size}</strong> Contacts ready to create.</div>
             <button className="btn accent" disabled={busy} onClick={() => void commitContactStage()}>
               {busy ? <RefreshCw size={16} className="spin" /> : <Users size={16} />}
@@ -769,16 +769,16 @@ export function UnifiedApolloCsvImport() {
                 Companies: {companyCounts.created ?? 0} created, {companyCounts.updated ?? 0} updated, {companyCounts.duplicate ?? 0} existing · Contacts: {contactCounts.created ?? 0} created, {contactCounts.duplicate ?? 0} existing
               </div>
             </div>
-            <CheckCircle2 size={28} className="csv-result-icon" />
+            <CheckCircle2 size={28} className="text-app-success flex-[0_0_auto]" />
           </div>
           {(failedCompanies || failedContacts) && (
-            <div className="csv-warning-line">
+            <div className="border-app-warning-border bg-app-warning-subtle text-app-warning mb-app-sm">
               <AlertTriangle size={14} /> Some rows were not imported. Refreshing adopts records that may already have been created.
             </div>
           )}
-          <div className="csv-import-footer">
+          <div className="sticky bottom-[14px] z-[8] flex items-center justify-between gap-[14px] px-[14px] py-app-md mt-2.5 border border-app-border-strong rounded-md bg-app-surface shadow-[var(--shadow-overlay)] max-[700px]:items-start max-[700px]:flex-col">
             <div>{failedCompanies ? 'Retry starts again from fresh Company state.' : failedContacts ? 'Retry rechecks Contacts before writing.' : 'All importable rows were processed.'}</div>
-            <div className="csv-header-actions">
+            <div className="flex items-center gap-app-sm flex-wrap max-[700px]:w-full">
               <button
                 className="btn"
                 onClick={() => downloadUnifiedImportResults(document.fileName, contacts, companies, companyOutcomes, contactOutcomes)}

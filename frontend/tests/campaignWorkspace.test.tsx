@@ -346,7 +346,7 @@ describe('where a campaign came from', () => {
     paint()
 
     expect(screen.getByLabelText(/Linked Helper runtime Sleeping, Not archived/)).toBeTruthy()
-    const source = document.querySelector('.campaign-source') as HTMLElement
+    const source = document.querySelector('[data-campaign="source"]') as HTMLElement
     expect(source.textContent).toContain('Published')
     expect(source.textContent).not.toContain('Sleeping')
   })
@@ -354,7 +354,7 @@ describe('where a campaign came from', () => {
   it('names the sequence, revision, branch and publish state of a Builder deployment', () => {
     paint()
 
-    const source = document.querySelector('.campaign-source') as HTMLElement
+    const source = document.querySelector('[data-campaign="source"]') as HTMLElement
     expect(source.textContent).toContain('Sequence Builder')
     expect(within(source).getByText('Founder outreach')).toBeTruthy()
     expect(source.textContent).toContain('revision 7')
@@ -367,7 +367,7 @@ describe('where a campaign came from', () => {
     currentData = dashboardData(null)
     paint()
 
-    const source = document.querySelector('.campaign-source') as HTMLElement
+    const source = document.querySelector('[data-campaign="source"]') as HTMLElement
     expect(source.textContent).toContain('Created in Linked Helper')
     expect(source.textContent).not.toContain('Sequence Builder')
     expect(source.querySelector('a')).toBeNull()

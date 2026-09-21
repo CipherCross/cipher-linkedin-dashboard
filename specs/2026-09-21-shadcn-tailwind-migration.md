@@ -777,6 +777,215 @@ Phase 1b (Overlay) -> 1c (Tabs, Field's Select/Checkbox/RadioGroup, where Base
 UI adds real keyboard behaviour) -> Phase 2 (the missing widget tier) -> Phase 3
 (routes) -> Phase 4 (delete styles.css, rewrite the standard).
 
+## Route-sheet conversion — state at 2026-09-21
+
+`styles.css` is gone. Eighteen of twenty-four route sheets are converted to
+utilities and deleted; each remaining sheet holds only what has no utility
+form. Everything through `SentimentAnalysis` is on `main` and deployed.
+`CampaignDetail` and `ConversationDrawer` are on
+`feat/shadcn-route-sheets-final`, pushed and unmerged.
+
+### Six shapes that do not convert
+
+These are why no sheet reaches zero lines, and they are not laziness:
+
+1. **Variant carriers.** `.gender-cell.manual`, `.msg.out`, `.pipe-col.drag-over`.
+   A modifier resolves by specificity, which utilities do not have.
+2. **Modifier styling a descendant.** `.funnel-row--pipeline .funnel-track`.
+   The variant and the declaration live on different elements.
+3. **Grouped selectors.** `.sa-bar-row, .sa-reason-row, .sa-trend-row`. The
+   point of the construct is one block serving several elements; the sharing
+   moves to a constants module instead.
+4. **`@keyframes`.** No utility form. Tailwind references them by name.
+5. **Non-ASCII `content`.** Tailwind will not take a raw glyph in an arbitrary
+   value, so a `::before` disclosure triangle stays CSS.
+6. **BEM `__` in an arbitrary variant.** `_` is Tailwind's space placeholder, so
+   a double underscore cannot round-trip.
+
+### The trap that actually bites
+
+Deleting a **base** rule while keeping its variants. The class stays present in
+the stylesheet, so `tests/unknownClasses.test.ts` stays green while the element
+renders unstyled. It happened twice in `ConversationDrawer` — `.msg-bubble` and
+`.msg-meta` both lost their padding — and was found only by diffing generated
+CSS against the rules removed.
+
+A guard for this was written and removed: page-namespaced conventions
+(`.overview .ov-avatar`) and descendant-only rules (`.cmp-avg td`) are
+structurally identical to the defect, so it needed an allowlist longer than its
+findings. **`scripts/css-declares.mjs` is the check that works** — run it with
+the declarations from every rule being deleted.
+
+### The six remaining, measured
+
+Density of that trap, not line count, is what predicts trouble:
+
+| sheet | rules | duplicate selectors | variant carriers | base+context traps |
+| --- | --- | --- | --- | --- |
+| `overview.css` | 105 | 0 | 1 | **1** |
+| `replies-inbox.css` | 100 | 0 | 7 | 11 |
+| `chat.css` | 52 | 2 | 3 | 8 |
+| `apollo-csv-import.css` | 42 | 5 | 3 | 6 |
+| `layout.css` | 70 | 8 | 2 | 14 |
+| `sequence-builder.css` | 289 | **30** | 4 | **54** |
+
+**That ranking is wrong, and measuring it properly is the first thing to do.**
+Trap density predicts where a conversion will silently break something. It does
+not predict whether a rule can convert at all, and on that second question
+`overview.css` is among the hardest, not the easiest: of its 112 rules only 42
+are a mechanical `.overview .x { … }`. The other 70 include
+
+* `.ov-plot .recharts-line-curve`, `.ov-plot .recharts-cartesian-grid line` —
+  **DOM that Recharts generates.** There is no element to put a class on. This
+  is a hard floor: overview.css can never reach zero lines.
+* `.overview table`, `.overview th`, `.overview td`, `.overview tbody tr:hover`
+  — page-scoped ELEMENT selectors, which is the whole reason the namespace
+  exists. Converting them means classing every cell a `.map()` emits.
+* `.ov-campaign-frame .ui-table th:nth-child(2)` and
+  `.ui-identity__avatar` — reaching into `src/ui`'s internals from a route.
+  That is a design smell worth fixing on its own terms, not by translation.
+* `:has(.drp-pop:not([hidden]))` and the `[aria-sort] button::after` sort
+  indicators — expressible as variants, but long ones.
+
+So the right next step is to measure **convertible rules**, not line count or
+trap count, for each of the six. The one-line check is: what fraction of a
+sheet's selectors are a single class on a single element?
+
+`sequence-builder.css` is in its own category: 30 selectors declared more than
+once (later wins — `Pipeline` had four and one contradicted its own comment)
+and 54 instances of the base+context trap. `ConversationDrawer` had eleven and
+produced two regressions. Convert it with a rendered Sequence Builder open, not
+from the stylesheet.
+
+### Convertibility, measured
+
+Fraction of each sheet's rules whose selector is a single class on a single
+element — no descendant, no element selector, no pseudo, no attribute. That is
+the share that converts to utilities mechanically.
+
+| sheet | rules | convertible |
+| --- | --- | --- |
+| `layout.css` | 71 | **77%** |
+| `chat.css` | 51 | 69% |
+| `replies-inbox.css` | 108 | 68% |
+| `apollo-csv-import.css` | 42 | 60% |
+| `sequence-builder.css` | 287 | 50% |
+| `overview.css` | 112 | **41%** |
+
+This inverts the trap-density ranking above: `layout.css` is the best next
+target and `overview.css` the worst.
+
+**No sheet reaches 100%, and that is structural rather than unfinished work.**
+Between a quarter and three-fifths of each of these files styles something a
+utility cannot reach: DOM generated by Recharts, page-scoped element selectors
+on tables a `.map()` emits, variant carriers, `@keyframes`, and another
+module's BEM internals. "Every route on utilities" therefore has a ceiling
+here, and the honest target is *the convertible fraction*, not zero CSS.
+
+Two of those causes are worth fixing rather than translating:
+
+* Routes reaching into `src/ui` internals (`.ui-table th:nth-child(2)`,
+  `.ui-identity__avatar`) should become props on the primitive.
+* Recharts styling belongs with `chartTheme.tsx`, not in a route sheet.
+
+### `layout.css` is the app shell, and parity cannot verify it
+
+It measured most convertible (77%) and it is the one I would convert last
+without a browser. It is the sidebar — a mistake affects every route at once —
+and it carries four breakpoint families:
+
+| query | purpose |
+| --- | --- |
+| `min-width: 901px` | desktop |
+| `min-width: 901px and max-height: 820px` | short desktop |
+| `min-width: 901px and max-height: 700px` | **fires at 1280x720**, a stated acceptance target |
+| `max-width: 900px` | mobile |
+
+Twelve of its selectors have between two and five stacked declarations spread
+across those, and several read as contradictions until the media context is
+restored: `.side-mobile-close` is `display: none` twice at top level and
+`inline-flex` under `max-width: 900px`; `.sidebar-inner` has three different
+paddings.
+
+**`scripts/css-parity.mjs` has a blind spot here.** It verifies a declaration
+still exists *somewhere* in the built CSS. It does not verify which media query
+it landed in. Put `padding-block: 10px 8px` behind `max-[900px]:` instead of
+`max-h-[820px]:` and parity reports success while the sidebar renders wrong at
+1280x720 — on every route simultaneously.
+
+**Extending the tool to compare media context was attempted and abandoned.**
+The approach — key each declaration by its normalised media condition — is
+sound, and two obstacles compound past what a short fix handles:
+
+1. Tailwind emits `max-[560px]:` as `not all and (min-width:560px)`. Those are
+   the same authored intent but differ by a pixel in the spec, so any
+   normalisation has to decide whether to adjust the bound. Adjusting it made
+   *every* media declaration fail to match, which silently disabled the whole
+   check while it still reported a total.
+2. The declaration text changes too. `grid-cols-1` emits
+   `grid-template-columns: repeat(1, minmax(0, 1fr))` where the original sheet
+   said `1fr`. So a media-aware check cannot compare declarations literally —
+   it has to normalise values as well as conditions, and every value rewrite
+   Tailwind performs becomes a case to handle.
+
+The second point is the real cost: the check needs a value-equivalence table,
+not just a condition parser. That is worth building, but it is its own task
+rather than a prerequisite bolted onto this one.
+
+Until it exists, `layout.css` and the two `max-height: 720px` rules in
+`replies-inbox.css` are done with the app open at 1280x720, 1440x900 and
+1920x1080 — which is what docs/ui-standard.md already requires for geometry.
+`scripts/css-parity.mjs` remains correct at the declaration level and has
+caught two real errors (`.msg-bubble`'s padding, `.csv-map-row`'s column
+proportions); it just cannot speak to placement.
+
+### The four that remain all fail the same way
+
+Each was categorised by a static reading of its CSS, and each turned out to
+carry a property that reading could not see. That is the pattern, not bad luck:
+
+| sheet | what the metric said | what it actually has |
+| --- | --- | --- |
+| `overview.css` | 1 trap — "cleanest" | 41% convertible; styles DOM **Recharts generates**, which has no element to class |
+| `layout.css` | 77% convertible — "easiest" | the app shell, four breakpoint families, one firing at 1280x720 |
+| `replies-inbox.css` | 68% convertible — "ordinary" | `container-type: inline-size` + `@container (max-width: 1239px)`, plus `@media (max-height: 720px)` |
+| `sequence-builder.css` | 50% convertible | 30 stacked selectors, 54 base-rule traps |
+
+**All four hinge on placement**, measured rather than assumed — which media or
+container query each declaration lands in:
+
+| sheet | placement dependency |
+| --- | --- |
+| `layout.css` | 12 stacked selectors across 4 breakpoint families |
+| `sequence-builder.css` | **35 of its 40** stacked selectors span a media query, over 4 breakpoints |
+| `overview.css` | 7 of 8 span `max-width: 1279px` or `forced-colors: active` |
+| `replies-inbox.css` | `@container (max-width: 1239px)` plus `@media (max-height: 720px)` |
+
+Two of those cannot be verified here by any means: `forced-colors: active` is
+Windows High Contrast, and a container query is invisible to jsdom by the
+repo's own earlier finding.
+
+Placement is exactly what `scripts/css-parity.mjs` cannot check (see above).
+The twenty sheets already converted were not like this — most had no media
+query at all, and the few that did had one, below the PC-only target range.
+
+So the remaining work is not "four more of the same". It is four files whose
+correctness is only observable in a rendered browser at the three acceptance
+viewports, which is what `docs/ui-standard.md` already requires of geometry and
+what `vercel.json:38` currently prevents.
+
+**The honest sequencing**: fix the preview redirect, convert these four with
+the app open, and keep `css-parity.mjs` as the declaration-level gate it is
+proven to be. Converting them from compiled output would produce changes whose
+defects are undetectable by every check that exists here.
+
+### Before continuing
+
+`vercel.json:38` redirects every `cipher-linkedin-dashboard.*.vercel.app` host
+to `app.ciphercross.dev`, so preview deployments cannot be opened — the reason
+everything so far went straight to production. Narrowing that pattern to the
+production alias is one line and is what makes the remaining four verifiable.
+
 ## Risks & how to verify
 
 | Risk | Verification |

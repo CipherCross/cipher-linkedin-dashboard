@@ -59,7 +59,7 @@ function CopyButton({ text, label, className }: { text: string; label?: boolean;
   return (
     <button
       type="button"
-      className={`chat-copy ${className ?? ''}`}
+      className={`inline-flex items-center gap-[5px] bg-none border-none px-1.5 py-0.5 cursor-pointer text-app-text-muted text-[length:var(--text-xs)] rounded-sm transition-[color,background] hover:text-app-text hover:bg-app-surface-2 ${className ?? ''}`}
       onClick={copy}
       title={copied ? 'Copied' : 'Copy'}
     >
@@ -84,8 +84,8 @@ function CodeBlock({ children }: { children?: ReactNode }) {
     }
   }
   return (
-    <div className="chat-code">
-      <button type="button" className="chat-copy chat-code-copy" onClick={copy} title={copied ? 'Copied' : 'Copy code'}>
+    <div className="relative">
+      <button type="button" className="inline-flex items-center gap-[5px] bg-none border-none px-1.5 py-0.5 cursor-pointer text-app-text-muted text-[length:var(--text-xs)] rounded-sm transition-[color,background] hover:text-app-text hover:bg-app-surface-2 absolute top-1.5 right-1.5 z-[1] !p-[3px] bg-app-surface-2 border border-app-border hover:bg-app-surface-3" onClick={copy} title={copied ? 'Copied' : 'Copy code'}>
         {copied ? <Check size={12} /> : <Copy size={12} />}
       </button>
       <pre ref={ref}>{children}</pre>
@@ -104,20 +104,20 @@ function ToolCall({ part }: { part: any }) {
 
   return (
     <div className={`chat-tool ${failed ? 'failed' : running ? 'running' : ''}`}>
-      <button className="chat-tool-head" onClick={() => setOpen(!open)}>
-        <span className="chat-tool-icon">
+      <button className="flex gap-app-sm items-center w-full bg-none border-none text-app-text px-app-md py-app-sm cursor-pointer text-[length:var(--text-sm)] text-left" onClick={() => setOpen(!open)}>
+        <span className="chat-tool-icon inline-flex shrink-0 text-app-success">
           {running ? <Loader2 size={13} className="spin" /> : failed ? <X size={13} /> : <Check size={13} />}
         </span>
-        <Database size={13} className="chat-tool-glyph" />
-        <span className="chat-tool-name">{name}</span>
+        <Database size={13} className="text-app-text-muted shrink-0" />
+        <span className="font-semibold text-app-accent whitespace-nowrap">{name}</span>
         {part.input?.purpose && <span className="muted">{part.input.purpose}</span>}
         {rowCount != null && <span className="muted">{rowCount} rows</span>}
-        {open ? <ChevronDown size={14} className="chat-tool-caret" /> : <ChevronRight size={14} className="chat-tool-caret" />}
+        {open ? <ChevronDown size={14} className="ml-auto text-app-text-muted shrink-0" /> : <ChevronRight size={14} className="ml-auto text-app-text-muted shrink-0" />}
       </button>
       {open && (
-        <div className="chat-tool-body">
+        <div className="border-t border-app-border px-app-md py-app-sm flex flex-col gap-app-sm [&_pre]:m-0 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [&_pre]:max-h-[260px] [&_pre]:overflow-y-auto [&_pre]:text-app-text-secondary [&_pre]:text-[length:var(--text-xs)]">
           {sql && <pre>{sql}</pre>}
-          {failed && <pre className="chat-error-text">{String(part.errorText ?? 'failed')}</pre>}
+          {failed && <pre className="text-app-danger">{String(part.errorText ?? 'failed')}</pre>}
           {!failed && out != null && (
             <pre>
               {typeof out === 'string'
@@ -135,12 +135,12 @@ function Reasoning({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
   if (!text.trim()) return null
   return (
-    <div className="chat-reasoning">
-      <button className="chat-tool-head" onClick={() => setOpen(!open)}>
-        <span className="chat-reasoning-label">Thinking</span>
-        {open ? <ChevronDown size={14} className="chat-tool-caret" /> : <ChevronRight size={14} className="chat-tool-caret" />}
+    <div className="border border-dashed border-app-border rounded-md bg-transparent text-[length:var(--text-sm)]">
+      <button className="flex gap-app-sm items-center w-full bg-none border-none text-app-text px-app-md py-app-sm cursor-pointer text-[length:var(--text-sm)] text-left" onClick={() => setOpen(!open)}>
+        <span className="text-app-text-muted font-semibold italic">Thinking</span>
+        {open ? <ChevronDown size={14} className="ml-auto text-app-text-muted shrink-0" /> : <ChevronRight size={14} className="ml-auto text-app-text-muted shrink-0" />}
       </button>
-      {open && <div className="chat-reasoning-body">{text}</div>}
+      {open && <div className="border-t border-dashed border-app-border px-app-md py-app-sm text-app-text-muted whitespace-pre-wrap text-[length:var(--text-sm)] max-h-[220px] overflow-y-auto">{text}</div>}
     </div>
   )
 }
@@ -153,8 +153,8 @@ function Message({ m }: { m: UIMessage }) {
     .trim()
   return (
     <div className={`chat-msg ${m.role}`}>
-      <div className="chat-role">{m.role === 'user' ? 'You' : 'Claude'}</div>
-      <div className="chat-body">
+      <div className="text-[length:var(--text-2xs)] font-semibold text-app-text-muted uppercase tracking-[var(--tracking-caps)]">{m.role === 'user' ? 'You' : 'Claude'}</div>
+      <div className="flex flex-col gap-app-sm max-w-full">
         {m.parts.map((part, i) => {
           if (part.type === 'text') {
             return (
@@ -174,7 +174,7 @@ function Message({ m }: { m: UIMessage }) {
           return null
         })}
         {m.role === 'assistant' && assistantText && (
-          <div className="chat-msg-actions">
+          <div className="flex">
             <CopyButton text={assistantText} label  />
           </div>
         )}
@@ -278,19 +278,19 @@ export function Chat() {
         )}
       />
 
-      <div className="card chat-card">
-        <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
+      <div className="card flex flex-col h-[calc(100vh-190px)] min-h-[420px] p-0 overflow-hidden relative">
+        <div className="flex-1 overflow-y-auto p-[18px] flex flex-col gap-app-lg" ref={scrollRef} onScroll={onScroll}>
           {messages.length === 0 && (
-            <div className="chat-empty">
-              <div className="chat-empty-icon"><Sparkles size={26} /></div>
-              <div className="chat-empty-title">Ask about your campaign data</div>
-              <div className="chat-empty-blurb muted">
+            <div className="flex flex-col items-center text-center gap-2.5 m-auto max-w-[560px] py-app-sm px-0">
+              <div className="inline-flex items-center justify-center w-[52px] h-[52px] rounded-lg bg-app-accent-subtle text-app-accent mb-0.5"><Sparkles size={26} /></div>
+              <div className="text-[length:var(--text-lg)] font-semibold tracking-[-0.01em]">Ask about your campaign data</div>
+              <div className="text-[length:var(--text-sm)] leading-[1.5] max-w-[460px] muted">
                 Funnels, cohorts, per-account and per-step performance. Claude only
                 reads — it never changes your data. Try one of these:
               </div>
-              <div className="chat-suggestions">
+              <div className="grid grid-cols-2 max-[560px]:grid-cols-1 gap-2.5 w-full mt-app-sm">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} className="chat-suggestion" onClick={() => submit(s)}>
+                  <button key={s} className="bg-app-surface-2 border border-app-border text-app-text-secondary rounded-md px-[13px] py-[11px] text-[length:var(--text-sm)] leading-[1.4] text-left cursor-pointer transition-[border-color,color,background] hover:border-app-accent-border hover:text-app-text hover:bg-app-surface-3" onClick={() => submit(s)}>
                     {s}
                   </button>
                 ))}
@@ -300,16 +300,16 @@ export function Chat() {
           {messages.map((m) => (
             <Message key={m.id} m={m} />
           ))}
-          {status === 'submitted' && <div className="muted small chat-thinking">Thinking…</div>}
+          {status === 'submitted' && <div className="muted small pl-0.5">Thinking…</div>}
           {error && (
-            <div className="banner chat-error-banner" role="alert">
+            <div className="banner text-app-danger" role="alert">
               <span>
                 {looksLikeServerError(error)
                   ? 'Chat is not available right now. This is a server-side configuration problem, not something you can fix from here — the exact reason is in the details below.'
                   : `Request failed${error.message ? `: ${error.message}` : ''}.`}
               </span>
               {looksLikeServerError(error) && error.message && (
-                <details className="chat-error-detail">
+                <details className="basis-full [&>summary]:min-h-control-sm [&>summary]:text-app-text-secondary [&>summary]:text-app-meta [&>summary]:cursor-pointer [&_pre]:mt-app-sm [&_pre]:mx-0 [&_pre]:mb-0 [&_pre]:p-app-md [&_pre]:rounded-control [&_pre]:bg-[var(--code-bg)] [&_pre]:font-mono [&_pre]:text-app-meta [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]">
                   <summary>Details</summary>
                   <pre>{error.message}</pre>
                 </details>
@@ -328,14 +328,14 @@ export function Chat() {
         </div>
 
         {showJump && (
-          <button className="chat-jump" type="button" onClick={jumpToLatest}>
+          <button className="absolute left-1/2 -translate-x-1/2 bottom-[78px] z-[2] inline-flex items-center gap-1.5 px-app-md py-1.5 text-[length:var(--text-xs)] font-semibold text-app-text bg-app-surface-3 border border-app-border-strong rounded-full shadow-[var(--shadow-overlay)] cursor-pointer hover:border-app-accent-border hover:text-app-accent" type="button" onClick={jumpToLatest}>
             <ArrowDown size={14} />
             Jump to latest
           </button>
         )}
 
         <form
-          className="chat-input-row"
+          className="flex gap-2.5 p-app-md border-t border-app-border items-end"
           onSubmit={(e) => {
             e.preventDefault()
             submit(input)
@@ -343,7 +343,7 @@ export function Chat() {
         >
           <textarea
             ref={inputRef}
-            className="chat-input"
+            className="flex-1 bg-app-bg text-app-text border border-app-border rounded-md px-[14px] py-2.5 text-[length:var(--text-base)] font-[inherit] leading-[1.5] resize-none max-h-40 overflow-y-auto focus:border-app-accent focus:outline-none"
             value={input}
             rows={1}
             onChange={(e) => setInput(e.target.value)}
@@ -357,11 +357,11 @@ export function Chat() {
             autoFocus
           />
           {busy ? (
-            <button className="chat-send stop" type="button" onClick={() => stop()} title="Stop">
+            <button className="chat-send stop inline-flex items-center justify-center shrink-0 w-10 h-10 text-app-on-accent border-none rounded-md cursor-pointer transition-[background,transform] disabled:opacity-50 disabled:cursor-default" type="button" onClick={() => stop()} title="Stop">
               <Square size={15} fill="currentColor" />
             </button>
           ) : (
-            <button className="chat-send" type="submit" disabled={!input.trim()} title="Send">
+            <button className="chat-send inline-flex items-center justify-center shrink-0 w-10 h-10 bg-app-accent text-app-on-accent border-none rounded-md cursor-pointer transition-[background,transform] enabled:hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-default" type="submit" disabled={!input.trim()} title="Send">
               <Send size={16} />
             </button>
           )}
