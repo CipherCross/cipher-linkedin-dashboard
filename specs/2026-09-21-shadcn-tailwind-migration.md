@@ -939,6 +939,34 @@ Until it exists, `layout.css` and the two `max-height: 720px` rules in
 caught two real errors (`.msg-bubble`'s padding, `.csv-map-row`'s column
 proportions); it just cannot speak to placement.
 
+### The four that remain all fail the same way
+
+Each was categorised by a static reading of its CSS, and each turned out to
+carry a property that reading could not see. That is the pattern, not bad luck:
+
+| sheet | what the metric said | what it actually has |
+| --- | --- | --- |
+| `overview.css` | 1 trap — "cleanest" | 41% convertible; styles DOM **Recharts generates**, which has no element to class |
+| `layout.css` | 77% convertible — "easiest" | the app shell, four breakpoint families, one firing at 1280x720 |
+| `replies-inbox.css` | 68% convertible — "ordinary" | `container-type: inline-size` + `@container (max-width: 1239px)`, plus `@media (max-height: 720px)` |
+| `sequence-builder.css` | 50% convertible | 30 stacked selectors, 54 base-rule traps |
+
+Three of the four now hinge on **placement** — which media or container query a
+declaration lands in — and placement is exactly what
+`scripts/css-parity.mjs` cannot check (see above). The repo's own earlier
+lesson says the same thing from the other direction: jsdom cannot observe a
+cascade or container-query defect at all.
+
+So the remaining work is not "four more of the same". It is four files whose
+correctness is only observable in a rendered browser at the three acceptance
+viewports, which is what `docs/ui-standard.md` already requires of geometry and
+what `vercel.json:38` currently prevents.
+
+**The honest sequencing**: fix the preview redirect, convert these four with
+the app open, and keep `css-parity.mjs` as the declaration-level gate it is
+proven to be. Converting them from compiled output would produce changes whose
+defects are undetectable by every check that exists here.
+
 ### Before continuing
 
 `vercel.json:38` redirects every `cipher-linkedin-dashboard.*.vercel.app` host
