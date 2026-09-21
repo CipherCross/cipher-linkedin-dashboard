@@ -82,49 +82,49 @@ export function NewReplies({
             const body = (
               <>
                 <span className="new-reply-top">
-                  <span className="new-reply-name">{name}</span>
+                  <span className="font-semibold">{name}</span>
                   {sentiment && <span className={`badge senti ${sentiment.cls}`}>{sentiment.label}</span>}
                   {intent && (
                     <span className={`badge senti ${intent.cls}`}>{intent.short} · {intent.label}</span>
                   )}
-                  <span className="muted small new-reply-when">{ago(reply.sent_at)}</span>
+                  <span className="muted small ml-auto">{ago(reply.sent_at)}</span>
                 </span>
                 {reply.company && <span className="muted small">{reply.company}</span>}
                 {reply.body && <span className="reply-body">“{reply.body}”</span>}
-                <span className="muted small new-reply-attribution">
+                <span className="muted small mt-1">
                   {reply.account_name ?? reply.instance_id} · {reply.sequence_name}
                 </span>
               </>
             )
 
             return (
-              <li key={`${reply.instance_id}|${reply.profile_url}`} className="new-reply">
+              <li key={`${reply.instance_id}|${reply.profile_url}`} className="border-b border-app-border last:border-b-0">
                 {lead ? (
                   <>
                     <button
                       type="button"
-                      className="new-reply-open"
+                      className="block w-full text-left border-0 bg-transparent text-inherit font-[inherit] text-[length:inherit] cursor-pointer px-1.5 py-2.5 rounded-md no-underline hover:bg-app-surface-2 [&>span]:block [&>span.new-reply-top]:flex [&>span.new-reply-top]:items-center [&>span.new-reply-top]:gap-1.5 [&>span.new-reply-top]:flex-wrap"
                       aria-label={`Open conversation with ${name}`}
                       onClick={() => onOpen(lead)}
                     >
                       {body}
                     </button>
                     <Link
-                      className="new-reply-open new-reply-open--nav"
+                      className="group relative block w-full text-left border-0 bg-transparent text-inherit font-[inherit] text-[length:inherit] cursor-pointer px-1.5 py-2.5 rounded-md no-underline hover:bg-app-surface-2 [&>span]:block [&>span.new-reply-top]:flex [&>span.new-reply-top]:items-center [&>span.new-reply-top]:gap-1.5 [&>span.new-reply-top]:flex-wrap"
                       aria-label={`Open ${name} in Replies`}
                       to={threadHref(reply)}
                     >
-                      <span className="new-reply-nav-hint"><ArrowRight size={12} /></span>
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-app-text-muted opacity-0 transition-opacity group-hover:opacity-100"><ArrowRight size={12} /></span>
                     </Link>
                   </>
                 ) : (
                   <Link
-                    className="new-reply-open new-reply-open--nav"
+                    className="group relative block w-full text-left border-0 bg-transparent text-inherit font-[inherit] text-[length:inherit] cursor-pointer px-1.5 py-2.5 rounded-md no-underline hover:bg-app-surface-2 [&>span]:block [&>span.new-reply-top]:flex [&>span.new-reply-top]:items-center [&>span.new-reply-top]:gap-1.5 [&>span.new-reply-top]:flex-wrap"
                     aria-label={`Open ${name} in ${reply.sequence_name}`}
                     to={threadHref(reply)}
                   >
                     {body}
-                    <span className="new-reply-nav-hint">
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-app-text-muted opacity-0 transition-opacity group-hover:opacity-100">
                       <ArrowRight size={12} />
                     </span>
                   </Link>

@@ -39,7 +39,7 @@ export function DeployedSequence({ context }: { context: CampaignSequenceContext
 
   return (
     <div className="card deployed-sequence">
-      <div className="deployed-sequence-head">
+      <div className="mb-app-md [&_h2]:m-0">
         <h2>Deployed sequence</h2>
         <div className="muted small">
           Exactly what was published to Linked Helper
@@ -47,18 +47,18 @@ export function DeployedSequence({ context }: { context: CampaignSequenceContext
           {context.branch_letter ? ` · branch ${context.branch_letter}` : ''}.
         </div>
       </div>
-      <ol className="deployed-sequence-list">
+      <ol className="m-0 p-0 list-none flex flex-col gap-app-sm">
         {actions.map((action, index) => (
-          <li key={index} className={`deployed-step deployed-step-${action.kind}`}>
-            <div className="deployed-step-head">
-              <span className="deployed-step-label">{action.label}</span>
+          <li key={index} data-deployed="step" className={`border border-app-border rounded-md px-app-md py-[9px] bg-app-surface-2 deployed-step-${action.kind}`}>
+            <div className="flex items-baseline gap-app-sm flex-wrap">
+              <span data-deployed="label" className="font-semibold text-[length:var(--text-xs)]">{action.label}</span>
               {action.detail && <span className="muted small">{action.detail}</span>}
             </div>
             {action.body && (
-              <p className="deployed-step-body">
+              <p data-deployed="body" className="mt-[7px] mx-0 mb-0 whitespace-pre-wrap leading-[1.5] text-[length:var(--text-sm)]">
                 {action.body.map((node, nodeIndex) => (node.type === 'text'
                   ? <span key={nodeIndex}>{node.value}</span>
-                  : <span key={nodeIndex} className="deployed-step-var">{`{${node.name}}`}</span>))}
+                  : <span key={nodeIndex} data-deployed="var" className="rounded-[4px] px-[3px] bg-app-accent-subtle text-app-accent text-[length:var(--text-xs)]">{`{${node.name}}`}</span>))}
               </p>
             )}
           </li>

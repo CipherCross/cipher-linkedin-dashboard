@@ -383,7 +383,7 @@ describe('the Sequence tab', () => {
     paint()
     openSequenceTab()
 
-    const steps = Array.from(document.querySelectorAll('.deployed-step-label'))
+    const steps = Array.from(document.querySelectorAll('[data-deployed="label"]'))
       .map((node) => node.textContent)
     expect(steps).toEqual([
       'Visit profile and extract data',
@@ -394,9 +394,9 @@ describe('the Sequence tab', () => {
       'Check for replies',
     ])
 
-    const invite = document.querySelectorAll('.deployed-step-body')[0]
+    const invite = document.querySelectorAll('[data-deployed="body"]')[0]
     expect(invite.textContent).toBe('Hi {firstName}, revision seven copy.')
-    expect(invite.querySelector('.deployed-step-var')?.textContent).toBe('{firstName}')
+    expect(invite.querySelector('[data-deployed="var"]')?.textContent).toBe('{firstName}')
 
     expect(document.body.textContent).toContain('2 hours')
     expect(document.body.textContent).toContain('then wait 48 hours')
@@ -424,6 +424,6 @@ describe('the Sequence tab', () => {
     openSequenceTab()
 
     expect(document.body.textContent).toContain('linked to a sequence by hand')
-    expect(document.querySelector('.deployed-step')).toBeNull()
+    expect(document.querySelector('[data-deployed="step"]')).toBeNull()
   })
 })

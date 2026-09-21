@@ -36,7 +36,7 @@ export function ActiveSequences({
     <section className="card overview-panel active-sequences" aria-labelledby="active-sequences-title">
       <div className="overview-panel-head">
         <h2 id="active-sequences-title">Active sequences</h2>
-        <div className="overview-panel-actions">
+        <div className="flex items-center gap-app-sm flex-wrap">
           {onCreate && (
             <button type="button" className="btn primary" onClick={onCreate} disabled={creating}>
               <Plus size={15} /> {creating ? 'Creating…' : 'New sequence'}
@@ -73,9 +73,9 @@ export function ActiveSequences({
               .sort((left, right) => right.sent_at.localeCompare(left.sent_at))[0]
               ?? (item.latest_reply && currentCampaignIds.has(item.latest_reply.campaign_id) ? item.latest_reply : null)
             return (
-              <li key={item.id} className="active-sequence">
-                <div className="active-sequence-main">
-                  <Link className="active-sequence-name" to={sequenceHref(item)}>{item.name}</Link>
+              <li key={item.id} className="flex flex-col gap-1.5 py-2.5 border-b border-app-border last:border-b-0">
+                <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
+                  <Link className="font-semibold text-app-text no-underline hover:text-app-accent" to={sequenceHref(item)}>{item.name}</Link>
                   <span className={`badge source-${item.kind}`}>
                     {item.kind === 'managed' ? 'Builder' : 'Linked Helper'}
                   </span>
@@ -84,7 +84,7 @@ export function ActiveSequences({
                       {item.branch_count} branches
                     </span>
                   )}
-                  <span className="muted small active-sequence-accounts">
+                  <span className="muted small overflow-hidden text-ellipsis whitespace-nowrap">
                     {accounts.join(' · ')}
                     {currentDeployments.length > accounts.length
                       ? ` · ${currentDeployments.length} campaigns`
@@ -92,14 +92,14 @@ export function ActiveSequences({
                   </span>
                 </div>
 
-                <div className="active-sequence-detail">
-                  <dl className="active-sequence-metrics">
+                <div className="flex items-start justify-between gap-app-md flex-wrap max-[700px]:flex-col">
+                  <dl className="flex gap-[14px] m-0 shrink-0 [&_dt]:text-[length:var(--text-2xs)] [&_dt]:uppercase [&_dt]:tracking-[.04em] [&_dt]:text-app-text-muted [&_dd]:m-0 [&_dd]:tabular-nums [&_dd]:font-semibold">
                     <div><dt>Leads</dt><dd>{num(currentLeads)}</dd></div>
                     <div><dt>Replies</dt><dd>{num(currentReplies)}</dd></div>
                     <div><dt>P3</dt><dd>{num(currentP3)}</dd></div>
                   </dl>
 
-                  <div className="active-sequence-state">
+                  <div className="flex flex-col items-end gap-[3px] text-right min-w-0 max-[700px]:items-start max-[700px]:text-left">
                     <span className="muted small">
                       {currentLatestReply ? `Last reply ${ago(currentLatestReply.sent_at)}` : 'No replies yet'}
                     </span>
@@ -112,7 +112,7 @@ export function ActiveSequences({
       )}
 
       {(ranked.length > shown.length || drafts.length > 0) && (
-        <div className="overview-panel-foot muted small">
+        <div className="border-t border-app-border pt-[9px] muted small">
           {ranked.length > shown.length && (
             <Link className="row-link" to="/sequences">
               {ranked.length - shown.length} more deployed

@@ -3594,19 +3594,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .analyze-section > summary::-webkit-details-marker { display: none; }
 .analyze-section > summary::before { content: '▸'; color: var(--text-muted); font-size: var(--text-xs); }
 .analyze-section[open] > summary::before { content: '▾'; }
-.analyze-body { margin-top: var(--space-6); }
-
-.deployed-sequence-head { margin-bottom: 12px; }
-.deployed-sequence-head h2 { margin: 0; }
-.deployed-sequence-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.deployed-step { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 12px; background: var(--surface-2); }
-.deployed-step-wait, .deployed-step-automation { background: transparent; border-style: dashed; }
-.deployed-step-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.deployed-step-label { font-weight: 600; font-size: var(--text-xs); }
-.deployed-step-body { margin: 7px 0 0; white-space: pre-wrap; line-height: 1.5; font-size: var(--text-sm); }
-.deployed-step-var { border-radius: 4px; padding: 0 3px; background: var(--accent-subtle); color: var(--accent); font-size: var(--text-xs); }
-
-/* ── Shared leads & replies workspace ───────────────────────────────────── */
+.analyze-body { margin-top: var(--space-6); }.deployed-step-wait, .deployed-step-automation { background: transparent; border-style: dashed; }/* ── Shared leads & replies workspace ───────────────────────────────────── */
 
 .leads-replies-toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -3708,61 +3696,10 @@ td .pipe-stage-select.quiet:focus-visible {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
 }
-.overview-panel-head h2 { margin: 0; }
-.overview-panel-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.overview-panel-foot { border-top: 1px solid var(--border); padding-top: 9px; }
-
-.active-sequence-list, .new-reply-list { margin: 0; padding: 0; list-style: none; }
-.active-sequence {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 0; border-bottom: 1px solid var(--border-subtle, var(--border));
-}
-.active-sequence:last-child { border-bottom: none; }
-.active-sequence-main { min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.active-sequence-name { font-weight: 600; color: var(--text); text-decoration: none; }
-.active-sequence-name:hover { color: var(--accent); }
-.active-sequence-accounts { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.active-sequence-detail {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.active-sequence-metrics { display: flex; gap: 14px; margin: 0; flex-shrink: 0; }
-.active-sequence-metrics dt {
-  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .04em;
-  color: var(--text-muted);
-}
-.active-sequence-metrics dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
-.active-sequence-state { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; min-width: 0; }
-
-.badge.attention-alert { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
+.overview-panel-head h2 { margin: 0; }.active-sequence-list, .new-reply-list { margin: 0; padding: 0; list-style: none; }.badge.attention-alert { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
 .badge.attention-watch { border-color: var(--warning-border); background: var(--warning-subtle); color: var(--warning); }
 .badge.attention-ok { border-color: var(--success-border); background: var(--success-subtle); color: var(--success); }
-.badge.source-external { color: var(--text-muted); }
-
-.new-reply { border-bottom: 1px solid var(--border-subtle, var(--border)); }
-.new-reply:last-child { border-bottom: none; }
-.new-reply-open {
-  display: block; width: 100%; text-align: left; border: 0; background: transparent;
-  color: inherit; font: inherit; cursor: pointer; padding: 10px 6px;
-  border-radius: var(--radius-md); text-decoration: none;
-}
-.new-reply-open:hover { background: var(--surface-2); }
-/* The row is a <button> half the time, so its parts are spans; these three
-   rules restore the layout the elements would have had as divs. */
-.new-reply-open > span { display: block; }
-.new-reply-open > span.new-reply-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.new-reply-open > span.reply-body { display: -webkit-box; }
-.new-reply-name { font-weight: 600; }
-.new-reply-when { margin-left: auto; }
-.new-reply-attribution { margin-top: 4px; }
-.new-reply-nav-hint {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  color: var(--text-muted); opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-.new-reply-open--nav { position: relative; }
-.new-reply-open--nav:hover .new-reply-nav-hint { opacity: 1; }.overview-section { margin-top: var(--space-6); }
+.badge.source-external { color: var(--text-muted); }.new-reply-open > span.reply-body { display: -webkit-box; }.overview-section { margin-top: var(--space-6); }
 .overview-section-title {
   margin: 0 0 var(--space-6); font-size: var(--text-sm); text-transform: uppercase;
   letter-spacing: .06em; color: var(--text-muted);
@@ -3793,9 +3730,7 @@ td .pipe-stage-select.quiet:focus-visible {
 @media (max-width: 1100px) {
   .overview-operations { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 700px) {
-  .active-sequence-detail { flex-direction: column; }
-  .active-sequence-state { align-items: flex-start; text-align: left; }}
+@media (max-width: 700px) {}
 
 @media print {
   body { background: white !important; color: black !important; }
