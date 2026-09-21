@@ -32,8 +32,8 @@ export function FollowUpCalloutCard() {
   const today = urgent.length - overdue
 
   return (
-    <section className="card follow-callout">
-      <div className="follow-callout-head">
+    <section className="card mb-app-xl">
+      <div className="flex justify-between items-start gap-app-md [&_h2]:flex [&_h2]:items-center [&_h2]:gap-[7px] [&_h2]:mt-0 [&_h2]:mx-0 [&_h2]:mb-[3px] [&_h2]:text-[length:var(--text-md)] [&_h2_svg]:text-app-accent">
         <div>
           <h2><CalendarCheck2 size={17} /> Follow-ups</h2>
           <div className="muted small">
@@ -46,7 +46,7 @@ export function FollowUpCalloutCard() {
           Open queue <ChevronRight size={14} />
         </Link>
       </div>
-      <div className="follow-callout-list">
+      <div className="grid grid-cols-2 max-[700px]:grid-cols-1 gap-x-app-md gap-y-[6px] mt-app-md">
         {urgent.slice(0, 6).map((item) => {
           const lead = item.representative
           const name = lead.full_name ?? lead.profile_url.replace('https://www.linkedin.com/in/', '')
@@ -54,12 +54,12 @@ export function FollowUpCalloutCard() {
           return (
             <button
               type="button"
-              className="follow-callout-row"
+              className="min-w-0 flex items-center gap-app-sm px-app-sm py-[7px] border border-transparent rounded-sm bg-app-surface-2 text-app-text cursor-pointer text-left hover:border-app-border-strong"
               key={item.key}
               onClick={() => openConversation(lead, { mode: 'follow_up' })}
             >
               <LeadAvatar lead={lead} size={28} />
-              <span className="follow-callout-name">{name}</span>
+              <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold">{name}</span>
               <span className={`follow-due ${bucket}`}>{followUpDueLabel(item.state)}</span>
               <ChevronRight size={14} aria-hidden="true" />
             </button>

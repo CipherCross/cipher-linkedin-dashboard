@@ -144,16 +144,16 @@ function TemplateColumn({
       <div className="card tmpl-stat">
         <h2>{campaign.campaign_name}</h2>
         <div className="muted small">{account}</div>
-        <div className="tmpl-stat-grid">
+        <div className="grid grid-cols-3 gap-2.5 mt-app-md mb-1 mx-0">
           {stats.map((s) => (
-            <div className="tmpl-stat-cell" key={s.label}>
-              <div className="tmpl-stat-val">{s.value}</div>
+            <div className="bg-app-surface-2 border border-app-border rounded-md p-2.5 text-center" key={s.label}>
+              <div className="text-[length:var(--text-2xl)] font-bold tabular-nums">{s.value}</div>
               <div className="muted small">{s.label}</div>
-              <div className="muted tmpl-stat-n">n={s.n.toLocaleString('en-US')} {s.denom} in matured cohorts</div>
+              <div className="muted mt-[3px] text-[length:var(--text-2xs)] leading-[1.3]">n={s.n.toLocaleString('en-US')} {s.denom} in matured cohorts</div>
             </div>
           ))}
         </div>
-        <div className="muted small tmpl-stat-note">
+        <div className="muted small mt-1">
           Pooled over matured cohorts in the last {weeks} weeks
           {pooled.invites > 0 ? ` · ${pooled.invites.toLocaleString('en-US')} invites` : ' · no matured cohorts yet'}.
         </div>

@@ -49,7 +49,7 @@ const DYNAMIC_PREFIXES = [
 const PRE_EXISTING_DEAD = new Set([
   'access-denied', 'active-sequences', 'chart-card', 'chat-msg-copy',
   'conv-demo-gender', 'csv-company-overlay', 'data-table', 'deployed-sequence',
-  'has-selection', 'heatmap-corner', 'leads-replies-workspace', 'modal-actions',
+  'has-selection', 'leads-replies-workspace', 'modal-actions',
   'navlink-label', 'new-replies', 'outgoing', 'ov-campaign-table',
   'ov-loading-performance', 'overview-panel-foot-sep', 'overview-summary-scope',
   'page-stack', 'replies-save', 'sa-more-button', 'sa-weekly-chart',

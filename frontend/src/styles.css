@@ -285,12 +285,7 @@ tr:last-child td { border-bottom: none; }
   position: sticky; top: 0; z-index: 1;
   background: var(--surface-1);
   box-shadow: inset 0 -1px 0 var(--border);
-}
-
-.instance-list { display: flex; flex-direction: column; gap: 12px; }
-.instance-row { display: flex; gap: 10px; align-items: center; }
-
-/* Health page: put the Accounts panel first on narrow screens (it's the summary) */
+}/* Health page: put the Accounts panel first on narrow screens (it's the summary) */
 @media (max-width: 860px) {
   .health-grid > :last-child { order: -1; }
 }
@@ -327,11 +322,7 @@ tr:last-child td { border-bottom: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .error-cell-btn.open { white-space: pre-wrap; word-break: break-word; }
-.error-cell-btn:hover { color: var(--text); }
-
-/* per-instance uptime strip (last N sync runs as ticks) */
-.uptime-strip { display: flex; gap: 3px; align-items: flex-end; margin-left: 44px; }
-.uptime-tick { width: 6px; height: 16px; border-radius: var(--radius-xs); background: var(--surface-3); }
+.error-cell-btn:hover { color: var(--text); }.uptime-tick { width: 6px; height: 16px; border-radius: var(--radius-xs); background: var(--surface-3); }
 .uptime-tick.ok { background: var(--success); }
 .uptime-tick.error { background: var(--danger); }
 .uptime-tick.running { background: var(--warning); }
@@ -1045,21 +1036,7 @@ tr:last-child td { border-bottom: none; }
   background: var(--surface-2); border: 1px solid var(--border);
   color: var(--text-muted); font-size: var(--text-2xs); font-weight: 600;
 }
-.msgseq-auto-name { color: var(--text); }
-
-/* heatmap: 1 label column + 24 hour columns */
-.heatmap {
-  display: grid;
-  grid-template-columns: 36px repeat(24, 1fr);
-  gap: 2px;
-  margin-top: 12px;
-}
-.heatmap-corner { }
-.heatmap-hour { font-size: var(--text-2xs); text-align: center; }
-.heatmap-day { font-size: var(--text-2xs); line-height: 16px; }
-.heatmap-cell { height: 16px; border-radius: var(--radius-xs); }
-
-/* badges — subtle tinted fill, colored text */
+.msgseq-auto-name { color: var(--text); }/* badges — subtle tinted fill, colored text */
 .badge {
   display: inline-block;
   background: var(--surface-2);
@@ -1920,22 +1897,7 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .cohort-rate { font-variant-numeric: tabular-nums; }
 .cohort-rate.maturing { color: var(--text-muted); opacity: 0.65; cursor: help; }
 .cohort-d { margin-left: 6px; padding: 0 5px; }
-.cohort-foot { margin-top: 12px; }
-
-/* template comparison — pooled stat card atop each column's message sequence */
-.tmpl-stat-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 10px; margin: 12px 0 4px;
-}
-.tmpl-stat-cell {
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: var(--radius-md); padding: 10px; text-align: center;
-}
-.tmpl-stat-val { font-size: var(--text-2xl); font-weight: 700; font-variant-numeric: tabular-nums; }
-.tmpl-stat-n { margin-top: 3px; font-size: var(--text-2xs); line-height: 1.3; }
-.tmpl-stat-note { margin-top: 4px; }
-
-/* --- Motion: tactile press feedback (snaps back via each element's transition) */
+.cohort-foot { margin-top: 12px; }/* --- Motion: tactile press feedback (snaps back via each element's transition) */
 .btn:active:not(:disabled),
 .btn-accent:active:not(:disabled),
 .chat-send:active:not(:disabled),
@@ -2288,25 +2250,7 @@ td .pipe-stage-select.quiet:focus-visible {
   margin-top: var(--space-md);
 }
 .conv-pipeline-controls .filter-field { flex: 1 1 160px; min-width: 160px; }
-.conv-pipeline-controls select { width: 100%; }
-
-/* --- Lead notes (LeadNotesPanel) ------------------------------------------ */
-.note-add { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
-.note-add textarea { flex: 1; resize: vertical; }
-.note-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.note-item {
-  border-left: 2px solid var(--border);
-  padding-left: 9px;
-}
-.note-body { line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
-.note-meta { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
-.note-del {
-  background: none; border: none; cursor: pointer; color: var(--text-muted);
-  margin-left: auto; padding: 0; display: inline-flex;
-}
-.note-del:hover { color: var(--danger); }
-
-/* --- Lost-reason modal (LostReasonModal) ---------------------------------- */
+.conv-pipeline-controls select { width: 100%; }/* --- Lost-reason modal (LostReasonModal) ---------------------------------- */
 .pipe-modal-overlay {
   position: fixed;
   inset: 0;
@@ -2520,28 +2464,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .icp-view-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Copy button: same footprint as .icon-only-btn but sized for inline use. */
-.icp-copy-btn { flex-shrink: 0; }/* --- Conversation follow-up work queue ----------------------------------- */
-/* One aligned row per follow-up, with four zones — identity, status, message
- * preview, actions. The old card was much larger than its 11–12px contents and
- * still clipped the actions; the space now goes to the content. */
-.follow-toolbar { margin-bottom: var(--space-xl); }
-.follow-groups { display: flex; flex-direction: column; gap: var(--space-2xl); }
-.follow-group { display: flex; flex-direction: column; }
-.follow-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  height: 24px;
-  padding: 0 var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--text-meta);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.follow-list {
+.icp-copy-btn { flex-shrink: 0; }.follow-group { display: flex; flex-direction: column; }.follow-list {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
@@ -2616,9 +2539,7 @@ td .pipe-stage-select.quiet:focus-visible {
   overflow: hidden;
   overflow-wrap: anywhere;
 }
-.follow-item-context { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.follow-owner { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--text-meta); }
-.follow-item-message {
+.follow-item-context { min-width: 0; display: flex; flex-direction: column; gap: 2px; }.follow-item-message {
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2666,37 +2587,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .pipe-follow-due.today { background: var(--warning-subtle); color: var(--warning); }
 .follow-due.upcoming,
 .pipe-follow-due.upcoming { background: var(--accent-subtle); color: var(--accent); }
-.col-follow-up { white-space: nowrap; }
-
-/* Overview preview. */
-.follow-callout { margin-bottom: var(--space-8); }
-.follow-callout-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.follow-callout-head h2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 3px;
-  font-size: var(--text-md);
-}
-.follow-callout-head h2 svg { color: var(--accent); }
-.follow-callout-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin-top: 12px; }
-.follow-callout-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-.follow-callout-row:hover { border-color: var(--border-strong); }
-.follow-callout-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-
-/* Drawer follow-up entry point + workflow. */
+.col-follow-up { white-space: nowrap; }/* Drawer follow-up entry point + workflow. */
 .conv-follow-btn {
   display: inline-flex;
   align-items: center;
@@ -2805,9 +2696,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .pipe-card-controls select { width: 100%; }
 .pipe-card .substatus-chip { margin-top: 0; }
 
-@media (max-width: 700px) {
-  .follow-callout-list { grid-template-columns: 1fr; }
-  .follow-item-message { grid-template-columns: auto minmax(0, 1fr); }
+@media (max-width: 700px) {  .follow-item-message { grid-template-columns: auto minmax(0, 1fr); }
   .follow-item-message > .muted:last-child { display: none; }
   .follow-import-nudge { align-items: flex-start; flex-direction: column; }
 }

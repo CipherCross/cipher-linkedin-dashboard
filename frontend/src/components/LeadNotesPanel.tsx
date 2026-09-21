@@ -127,7 +127,7 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
           {error && <div className="banner conv-error">{error}</div>}
           {loading && <div className="muted small">Loading notes…</div>}
 
-          <div className="note-add">
+          <div className="flex gap-app-sm items-start mb-2.5 [&_textarea]:flex-1 [&_textarea]:resize-y">
             <textarea
               rows={2}
               value={body}
@@ -150,15 +150,15 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
           )}
 
           {notes && notes.length > 0 && (
-            <ul className="note-list">
+            <ul className="list-none m-0 p-0 flex flex-col gap-app-sm">
               {notes.map((n) => (
-                <li key={n.id} className="note-item">
-                  <div className="note-body small">{n.body}</div>
-                  <div className="note-meta muted small">
+                <li key={n.id} className="border-l-2 border-app-border pl-[9px]">
+                  <div className="leading-[1.45] [overflow-wrap:anywhere] whitespace-pre-wrap small">{n.body}</div>
+                  <div className="flex items-center gap-[5px] mt-0.5 muted small">
                     <span>{n.author || '—'}</span>
                     <span>· {ago(n.created_at)}</span>
                     <button
-                      className="note-del"
+                      className="bg-none border-none cursor-pointer text-app-text-muted ml-auto p-0 inline-flex hover:text-app-danger"
                       onClick={() => remove(n)}
                       aria-label="Delete note"
                       title="Delete note"

@@ -160,7 +160,7 @@ export function FollowUps() {
           {/* Search plus the owner scope stay on the page; account and campaign
               are the only two left, so they stay beside them rather than
               earning a sheet of their own. */}
-          <Toolbar className="follow-toolbar">
+          <Toolbar className="mb-app-xl">
             <TextField
               className="ui-toolbar__search"
               label="Search follow-ups"
@@ -205,7 +205,7 @@ export function FollowUps() {
               }
             />
           ) : (
-            <div className="follow-groups">
+            <div className="flex flex-col gap-app-2xl">
               {GROUPS.map((group) => {
                 const rows = grouped.get(group.id) ?? []
                 if (!rows.length) return null
@@ -213,7 +213,7 @@ export function FollowUps() {
                   <section className={`follow-group ${group.id}`} key={group.id}>
                     <SectionHeader
                       title={group.label}
-                      actions={<span className="follow-count">{rows.length}</span>}
+                      actions={<span className="inline-flex items-center justify-center min-w-[26px] h-6 px-app-sm rounded-pill bg-app-surface-2 text-app-text-secondary text-app-meta font-semibold tabular-nums">{rows.length}</span>}
                     />
                     <div className="follow-list">
                       {rows.map((item) => {
@@ -242,7 +242,7 @@ export function FollowUps() {
                               <span className={`follow-due ${group.id}`}>
                                 {followUpDueLabel(item.state)}
                               </span>
-                              <span className="follow-owner">
+                              <span className="inline-flex items-center gap-app-xs text-app-meta">
                                 <UserRound size={13} aria-hidden="true" />
                                 {ownerName(item.state.owner_id)}
                               </span>

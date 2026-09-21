@@ -26,12 +26,12 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
   return (
     <div className="card">
       <h2>Accounts</h2>
-      <div className="instance-list">
+      <div className="flex flex-col gap-app-md">
         {sorted.map((inst) => {
           const level = freshnessLevel(inst.last_sync_at)
           return (
             <div className="instance-item" key={inst.id}>
-              <div className="instance-row">
+              <div className="flex gap-2.5 items-center">
                 <Avatar inst={inst} size={34} />
                 <div style={{ minWidth: 0 }}>
                   <Link className="row-link" to={`/account/${encodeURIComponent(inst.id)}`}>
@@ -86,7 +86,7 @@ function UptimeStrip({ runs, instanceId }: { runs: SyncRun[]; instanceId: string
   const okCount = recent.filter((r) => r.status === 'ok').length
   return (
     <div
-      className="uptime-strip"
+      className="flex gap-[3px] items-end ml-11"
       role="img"
       aria-label={`Recent sync runs: ${okCount} of ${recent.length} ok`}
       title="Recent sync runs — newest on the right"
