@@ -35,7 +35,7 @@
       "has": [
         {
           "type": "host",
-          "value": "cipher-linkedin-dashboard.*\\.vercel\\.app"
+          "value": "cipher-linkedin-dashboard\\.vercel\\.app"
         }
       ],
       "destination": "https://app.ciphercross.dev/:path*",
