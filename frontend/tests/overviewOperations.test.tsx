@@ -7,6 +7,16 @@ import type { DashboardData, OverviewAccountCampaigns, OverviewPerformance, Over
 
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver
+const localValues = new Map<string, string>()
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (key: string) => localValues.get(key) ?? null,
+    setItem: (key: string, value: string) => localValues.set(key, value),
+    removeItem: (key: string) => localValues.delete(key),
+    clear: () => localValues.clear(),
+  },
+})
 
 const fetchPerformance = vi.fn()
 const fetchCampaigns = vi.fn()
@@ -67,6 +77,7 @@ const deferred = <T,>() => {
 const renderOverview = (entries = ['/']) => render(<MemoryRouter initialEntries={entries}><Overview /></MemoryRouter>)
 
 beforeEach(() => {
+  localStorage.clear()
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(new Date('2026-09-06T12:00:00Z'))
   data = {
@@ -106,8 +117,8 @@ describe('Overview narrow reads and loading orchestration', () => {
     expect(screen.getByText('40.0% of invited')).toBeTruthy()
     expect(screen.getByText('75.0% of connected')).toBeTruthy()
     expect(screen.getByText('25.0% of connected')).toBeTruthy()
-    expect(await screen.findByText((_, element) => element?.textContent === 'Acceptance 40.0% · 40 / 100 invited')).toBeTruthy()
-    expect(await screen.findByText((_, element) => element?.textContent === 'Reply rate 25.0% · 10 / 40 connected')).toBeTruthy()
+    expect(await screen.findByText((_, element) => element?.textContent === 'Acceptance 40.0%')).toBeTruthy()
+    expect(await screen.findByText((_, element) => element?.textContent === 'Reply rate 25.0%')).toBeTruthy()
     expect(fetchSystem).toHaveBeenCalledTimes(1)
     expect(fetchPerformance).toHaveBeenCalledTimes(1)
     expect(fetchCampaigns).toHaveBeenCalledTimes(1)
@@ -115,9 +126,18 @@ describe('Overview narrow reads and loading orchestration', () => {
 
   it('renders safe 7-day comparison labels, including previous zero', async () => {
     renderOverview()
-    expect(await screen.findByText('+100.0% vs previous 7 days · 10')).toBeTruthy()
-    expect(screen.getByText('+25.0% vs previous 7 days · 32')).toBeTruthy()
-    expect(screen.getByText('New vs previous 7 days · 0')).toBeTruthy()
+    expect(await screen.findByText('+100.0% vs previous 7 days')).toBeTruthy()
+    expect(screen.getByText('+25.0% vs previous 7 days')).toBeTruthy()
+    expect(screen.getByText('New vs previous 7 days')).toBeTruthy()
+  })
+
+  it('keeps account identities and healthy sync ages compact', async () => {
+    renderOverview()
+    await screen.findByRole('heading', { name: 'Campaign comparison' })
+    expect(screen.getAllByText('Alice').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Notebook one')).toBeNull()
+    expect(screen.getByText('2h')).toBeTruthy()
+    expect(screen.queryByText(/2h ·/)).toBeNull()
   })
 
   it('keeps section failures independent and retries only the failed operation', async () => {
@@ -166,7 +186,7 @@ describe('Overview narrow reads and loading orchestration', () => {
     expect(within(panel).getByText('11')).toBeTruthy()
     expect(within(panel).queryByText('777')).toBeNull()
     expect(within(panel).queryByText('888')).toBeNull()
-    expect(within(panel).getByText('+100.0% vs previous 7 days · 10')).toBeTruthy()
+    expect(within(panel).getByText('+100.0% vs previous 7 days')).toBeTruthy()
     // The account totals block keeps the Account analytics range.
     expect(screen.getByText('777')).toBeTruthy()
   })
@@ -192,7 +212,7 @@ describe('Overview narrow reads and loading orchestration', () => {
     renderOverview()
     expect(await screen.findByText('Account analytics could not load.')).toBeTruthy()
     const panel = screen.getByRole('region', { name: 'Performance' })
-    expect(within(panel).getByText('+25.0% vs previous 7 days · 32')).toBeTruthy()
+    expect(within(panel).getByText('+25.0% vs previous 7 days')).toBeTruthy()
     expect(within(panel).queryByText(/Performance data unavailable/)).toBeNull()
     expect(screen.getByText('100.0% of invited')).toBeTruthy()
   })
@@ -232,13 +252,18 @@ describe('Campaign comparison client-only controls', () => {
     const before = [fetchSystem.mock.calls.length, fetchPerformance.mock.calls.length, fetchCampaigns.mock.calls.length]
     fireEvent.click(screen.getByRole('button', { name: 'Next campaigns' }))
     expect(screen.getByText('Page 2 of 2')).toBeTruthy()
-    const remove = screen.getByRole('button', { name: 'Remove Campaign 24 from comparison' })
-    fireEvent.click(remove)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Campaign 24' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove selected (1)' }))
     expect(screen.queryByText('Campaign 24')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('overview.hiddenCampaignIds.v1') ?? '[]')).toContain('one:24')
     expect(fetchSystem).toHaveBeenCalledTimes(before[0])
     expect(fetchPerformance).toHaveBeenCalledTimes(before[1])
     expect(fetchCampaigns).toHaveBeenCalledTimes(before[2])
-    fireEvent.click(screen.getAllByRole('button', { name: 'Restore all' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Show removed (1)' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Campaign 24' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restore selected (1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show active' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next campaigns' }))
     expect(screen.getByText('Campaign 24')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Show archived'))
     fireEvent.click(screen.getByRole('button', { name: 'Next campaigns' }))
@@ -249,10 +274,13 @@ describe('Campaign comparison client-only controls', () => {
     fetchCampaigns.mockResolvedValue(accountCampaigns([campaign(1), campaign(2)]))
     renderOverview()
     await screen.findByText('Campaign 2')
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Campaign 1 from comparison' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Campaign 2 from comparison' }))
-    expect(screen.getByText('All campaigns are hidden from comparison.')).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Restore all' }).at(-1)!)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all campaigns on this page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove selected (2)' }))
+    expect(screen.getByText('All campaigns are removed from comparison.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show removed (2)' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all campaigns on this page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restore selected (2)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show active' }))
     fireEvent.change(screen.getByRole('combobox', { name: 'Performance account' }), { target: { value: 'one' } })
     expect(screen.getByText('Campaign 1')).toBeTruthy()
     expect(fetchSystem).toHaveBeenCalledTimes(1)

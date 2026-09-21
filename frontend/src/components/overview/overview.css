@@ -192,16 +192,26 @@
   line-height: var(--leading-body);
   font-weight: 600;
 }
-.overview .ov-campaign-frame .ui-table { min-width: 1180px; }
+.overview .ov-campaign-frame .ui-table { min-width: 1020px; }
 .overview .ov-campaign-frame .ui-table th,
-.overview .ov-campaign-frame .ui-table td { white-space: nowrap; }
+.overview .ov-campaign-frame .ui-table td {
+  padding: var(--space-sm) var(--space-md);
+  white-space: nowrap;
+  font-size: var(--text-meta);
+}
+.overview .ov-campaign-frame .ui-table th { font-size: var(--text-meta); }
 .overview .ov-campaign-frame .ui-table th:nth-child(2),
-.overview .ov-campaign-frame .ui-table td:nth-child(2) { min-width: 240px; }
-.overview .ov-campaign-frame .ui-table th:nth-child(9),
-.overview .ov-campaign-frame .ui-table td:nth-child(9) { width: 76px; }
-.overview .ov-campaign-frame .ui-table th:nth-child(10),
-.overview .ov-campaign-frame .ui-table td:nth-child(10) { width: 100px; }
-.overview .ov-campaign-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.overview .ov-campaign-frame .ui-table td:nth-child(2) { width: 176px; }
+.overview .ov-campaign-frame .ui-table th:nth-child(3),
+.overview .ov-campaign-frame .ui-table td:nth-child(3) { width: 260px; }
+.overview .ov-campaign-frame .ui-identity { min-width: 152px; gap: var(--space-sm); }
+.overview .ov-campaign-frame .ui-identity__avatar,
+.overview .ov-campaign-frame .ov-avatar { width: 28px; height: 28px; }
+.overview .ov-select-cell { width: 44px; min-width: 44px; padding-right: var(--space-sm) !important; text-align: center !important; }
+.overview .ov-select-cell input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.overview .ov-campaign-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.overview .ov-campaign-row { cursor: pointer; }
+.overview .ov-campaign-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .overview .ov-campaign-footer { margin-top: var(--space-md); }
 .overview .ov-sortable button {
   display: inline-flex;
@@ -327,6 +337,7 @@
   font-size: var(--text-meta);
 }
 .overview .ov-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.overview .ov-sync-overdue { color: var(--danger); font-weight: 600; }
 
 /* ---- Account drill-in ----------------------------------------------------- */
 .overview .ov-detail { margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--border); }

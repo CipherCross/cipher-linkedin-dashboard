@@ -92,7 +92,7 @@ export function comparisonLabel(
   const days = rangeDayCount(range)
   if (days == null || previous == null) return 'No comparison'
   const period = `previous ${days} day${days === 1 ? '' : 's'}`
-  if (previous === 0) return current > 0 ? `New vs ${period} · 0` : `0.0% vs ${period} · 0`
+  if (previous === 0) return current > 0 ? `New vs ${period}` : `0.0% vs ${period}`
   const change = percentageChange(current, previous) ?? 0
-  return `${change >= 0 ? '+' : ''}${change.toFixed(1)}% vs ${period} · ${num(previous)}`
+  return `${change >= 0 ? '+' : ''}${change.toFixed(1)}% vs ${period}`
 }

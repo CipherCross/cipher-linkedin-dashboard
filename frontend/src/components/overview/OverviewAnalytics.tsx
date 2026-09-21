@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import {
   Area,
   CartesianGrid,
@@ -15,8 +14,7 @@ import { DateRangePicker } from '../DateRangePicker'
 import { Skeleton } from '../Skeleton'
 import type { DateRange } from '../../lib/leads'
 import { accountLabeller } from '../../lib/leads'
-import { ago, comparisonLabel, num, pct, rate, shortDate } from '../../lib/format'
-import { freshnessLevel } from '../../lib/freshness'
+import { comparisonLabel, num, pct, rate, shortDate } from '../../lib/format'
 import type {
   CampaignMetrics,
   Instance,
@@ -29,8 +27,8 @@ import {
   AccountIdentity,
   Button,
   Checkbox,
-  IconButton,
   InlineError,
+  InitialsBadge,
   Table,
   TableFrame,
   TableToolbar,
@@ -189,6 +187,37 @@ function chartUsesWeeklyBuckets(performance: OverviewPerformance | null, range: 
 type CampaignSortKey = 'account' | 'campaign' | 'invited' | 'connected' | 'first_messages' | 'first_replies' | 'acceptance' | 'reply'
 type SortState = { key: CampaignSortKey; direction: 'asc' | 'desc' }
 
+const HIDDEN_CAMPAIGNS_KEY = 'overview.hiddenCampaignIds.v1'
+
+function readHiddenCampaignIds(): Set<string> {
+  try {
+    const value = JSON.parse(localStorage.getItem(HIDDEN_CAMPAIGNS_KEY) ?? '[]')
+    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function accountName(instance: Instance | undefined, fallback: string): string {
+  return instance?.account_name?.trim() || fallback
+}
+
+function AccountCell({ instance, fallback }: { instance: Instance | undefined; fallback: string }) {
+  const name = accountName(instance, fallback)
+  const avatar = instance?.account_avatar
+    ? <span className="ov-avatar" aria-hidden="true"><img src={instance.account_avatar} alt="" /></span>
+    : <InitialsBadge name={name} />
+  return <AccountIdentity name={name} avatar={avatar} title={name} />
+}
+
+function syncAgeLabel(timestamp: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(timestamp).getTime()) / 60_000))
+  if (minutes < 1) return '<1m'
+  if (minutes < 60) return `${minutes}m`
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)}h`
+  return `${Math.round(minutes / 1440)}d`
+}
+
 function compareValue(campaign: CampaignMetrics, key: CampaignSortKey, accountLabel: (id: string) => string): string | number {
   switch (key) {
     case 'account': return accountLabel(campaign.instance_id)
@@ -224,8 +253,11 @@ function CampaignComparison({
   accountLabel: (id: string) => string
   instances: Instance[]
 }) {
+  const navigate = useNavigate()
   const [showArchived, setShowArchived] = useState(false)
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set())
+  const [showHidden, setShowHidden] = useState(false)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(readHiddenCampaignIds)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<SortState>({ key: 'invited', direction: 'desc' })
 
@@ -238,8 +270,8 @@ function CampaignComparison({
     [accountScoped, showArchived],
   )
   const hiddenCount = campaigns.reduce((count, campaign) => count + (hiddenIds.has(campaign.campaign_id) ? 1 : 0), 0)
-  const visible = useMemo(() => {
-    const rows = eligible.filter((campaign) => !hiddenIds.has(campaign.campaign_id))
+  const displayed = useMemo(() => {
+    const rows = eligible.filter((campaign) => hiddenIds.has(campaign.campaign_id) === showHidden)
     return rows.sort((a, b) => {
       const av = compareValue(a, sort.key, accountLabel)
       const bv = compareValue(b, sort.key, accountLabel)
@@ -248,13 +280,21 @@ function CampaignComparison({
       return accountLabel(a.instance_id).localeCompare(accountLabel(b.instance_id)) ||
         a.campaign_name.localeCompare(b.campaign_name) || a.campaign_id.localeCompare(b.campaign_id)
     })
-  }, [eligible, hiddenIds, sort, accountLabel])
-  const pages = Math.max(1, Math.ceil(visible.length / 20))
+  }, [eligible, hiddenIds, showHidden, sort, accountLabel])
+  const pages = Math.max(1, Math.ceil(displayed.length / 20))
   const pageIndex = Math.min(page, pages - 1)
   useEffect(() => {
-    setPage((current) => Math.min(current, Math.max(0, Math.ceil(visible.length / 20) - 1)))
-  }, [visible.length])
-  useEffect(() => setPage(0), [account, showArchived, campaigns])
+    setPage((current) => Math.min(current, Math.max(0, Math.ceil(displayed.length / 20) - 1)))
+  }, [displayed.length])
+  useEffect(() => setPage(0), [account, showArchived, showHidden, campaigns])
+  useEffect(() => {
+    try {
+      localStorage.setItem(HIDDEN_CAMPAIGNS_KEY, JSON.stringify([...hiddenIds]))
+    } catch {
+      // Keep the table usable when browser storage is unavailable.
+    }
+  }, [hiddenIds])
+  useEffect(() => setSelectedIds(new Set()), [account, showArchived, showHidden, pageIndex])
   const setSortKey = (key: CampaignSortKey) => {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
@@ -263,7 +303,23 @@ function CampaignComparison({
   }
   const instanceFor = (id: string) => instances.find((instance) => instance.id === id)
   const apiEmpty = eligible.length === 0
-  const clientEmpty = !apiEmpty && visible.length === 0
+  const clientEmpty = !apiEmpty && displayed.length === 0
+  const pageRows = displayed.slice(pageIndex * 20, pageIndex * 20 + 20)
+  const allPageSelected = pageRows.length > 0 && pageRows.every((campaign) => selectedIds.has(campaign.campaign_id))
+  const togglePage = () => setSelectedIds((current) => {
+    const next = new Set(current)
+    if (allPageSelected) pageRows.forEach((campaign) => next.delete(campaign.campaign_id))
+    else pageRows.forEach((campaign) => next.add(campaign.campaign_id))
+    return next
+  })
+  const applySelection = () => {
+    setHiddenIds((current) => {
+      const next = new Set(current)
+      selectedIds.forEach((id) => showHidden ? next.delete(id) : next.add(id))
+      return next
+    })
+    setSelectedIds(new Set())
+  }
 
   return (
     <div className="ov-campaign-comparison">
@@ -273,11 +329,11 @@ function CampaignComparison({
         scrollLabel="Campaign comparison table"
         hint="Scroll horizontally for all campaign metrics."
         toolbar={(
-          <TableToolbar count={`${visible.length} campaigns`} actions={(
+          <TableToolbar count={`${displayed.length} ${showHidden ? 'hidden ' : ''}campaigns`} actions={(
             <>
+              {selectedIds.size > 0 && <Button variant={showHidden ? 'secondary' : 'danger'} size="sm" onClick={applySelection}>{showHidden ? 'Restore' : 'Remove'} selected ({selectedIds.size})</Button>}
+              {(showHidden || hiddenCount > 0) && <Button variant="ghost" size="sm" onClick={() => setShowHidden((value) => !value)}>{showHidden ? 'Show active' : `Show removed (${hiddenCount})`}</Button>}
               <Checkbox label="Show archived" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
-              {hiddenIds.size > 0 && <span className="ov-muted">Hidden: {hiddenCount}</span>}
-              {hiddenIds.size > 0 && <Button variant="ghost" size="sm" onClick={() => setHiddenIds(new Set())}>Restore all</Button>}
             </>
           )} />
         )}
@@ -286,52 +342,51 @@ function CampaignComparison({
           <p className="ov-table-empty">No campaigns are available for this scope.</p>
         ) : clientEmpty ? (
           <div className="ov-table-empty">
-            <p>All campaigns are hidden from comparison.</p>
-            <Button variant="ghost" size="sm" onClick={() => setHiddenIds(new Set())}>Restore all</Button>
+            <p>{showHidden ? 'No removed campaigns match this scope.' : 'All campaigns are removed from comparison.'}</p>
           </div>
         ) : (
-          <Table caption="Campaign comparison">
+          <Table className="ov-campaign-table" caption="Campaign comparison">
             <thead>
               <tr>
+                <th className="ov-select-cell"><input type="checkbox" aria-label="Select all campaigns on this page" checked={allPageSelected} onChange={togglePage} /></th>
                 {sortableHeader('account', 'Account', sort, setSortKey)}
                 {sortableHeader('campaign', 'Campaign', sort, setSortKey)}
                 {sortableHeader('invited', 'Invited', sort, setSortKey)}
+                {sortableHeader('acceptance', 'Acceptance rate', sort, setSortKey)}
+                {sortableHeader('reply', 'Reply rate', sort, setSortKey)}
                 {sortableHeader('connected', 'Connected', sort, setSortKey)}
                 {sortableHeader('first_messages', 'First messages', sort, setSortKey)}
                 {sortableHeader('first_replies', 'First replies', sort, setSortKey)}
-                {sortableHeader('acceptance', 'Acceptance rate · lifetime', sort, setSortKey)}
-                {sortableHeader('reply', 'Reply rate · lifetime', sort, setSortKey)}
-                <th>Remove</th>
-                <th>Open</th>
               </tr>
             </thead>
             <tbody>
-              {visible.slice(pageIndex * 20, pageIndex * 20 + 20).map((campaign) => {
+              {pageRows.map((campaign) => {
                 const instance = instanceFor(campaign.instance_id)
                 return (
-                  <tr key={campaign.campaign_id}>
+                  <tr
+                    key={campaign.campaign_id}
+                    className="ov-campaign-row"
+                    tabIndex={0}
+                    aria-label={`Open ${campaign.campaign_name}`}
+                    onClick={() => navigate(`/campaign/${encodeURIComponent(campaign.campaign_id)}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        navigate(`/campaign/${encodeURIComponent(campaign.campaign_id)}`)
+                      }
+                    }}
+                  >
+                    <td className="ov-select-cell" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`Select ${campaign.campaign_name}`} checked={selectedIds.has(campaign.campaign_id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(campaign.campaign_id)) next.delete(campaign.campaign_id); else next.add(campaign.campaign_id); return next })} /></td>
                     <td>
-                      <AccountIdentity
-                        name={accountLabel(campaign.instance_id)}
-                        secondary={instance && instance.label !== accountLabel(campaign.instance_id) ? instance.label : undefined}
-                        title={accountLabel(campaign.instance_id)}
-                      />
+                      <AccountCell instance={instance} fallback={accountLabel(campaign.instance_id)} />
                     </td>
                     <td className="ov-campaign-name" title={campaign.campaign_name}>{campaign.campaign_name}</td>
                     <td className="ui-table__num">{num(campaign.invites_sent)}</td>
+                    <td className="ui-table__num">{rate(campaign.lifetime_acceptance_rate)}</td>
+                    <td className="ui-table__num">{rate(campaign.lifetime_reply_rate)}</td>
                     <td className="ui-table__num">{num(campaign.connected ?? campaign.accepted)}</td>
                     <td className="ui-table__num">{num(campaign.first_messages ?? 0)}</td>
                     <td className="ui-table__num">{num(campaign.replies)}</td>
-                    <td className="ui-table__num">{rate(campaign.lifetime_acceptance_rate)}</td>
-                    <td className="ui-table__num">{rate(campaign.lifetime_reply_rate)}</td>
-                    <td>
-                      <IconButton
-                        label={`Remove ${campaign.campaign_name} from comparison`}
-                        icon={<X size={20} aria-hidden="true" />}
-                        onClick={() => setHiddenIds((current) => new Set(current).add(campaign.campaign_id))}
-                      />
-                    </td>
-                    <td><Link to={`/campaign/${encodeURIComponent(campaign.campaign_id)}`}>View leads</Link></td>
                   </tr>
                 )
               })}
@@ -340,7 +395,7 @@ function CampaignComparison({
         )}
       </TableFrame>
       <div className="ov-bottom ov-campaign-footer">
-        <span>{visible.length} campaigns</span>
+        <span>{displayed.length} campaigns</span>
         <span>
           <Button variant="secondary" size="sm" disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>Previous campaigns</Button>{' '}
           Page {pageIndex + 1} of {pages}{' '}
@@ -477,8 +532,8 @@ export function OverviewAnalytics({
                     <label>{metricLabels[key]}</label>
                     <strong>{num(currentTotals[key])}</strong>
                     <span>{comparisonLabel(currentTotals[key], previousTotals?.[key] ?? null, range)}</span>
-                    {key === 'connected' && <small>Acceptance <b>{pct(selectedCohort.connected, selectedCohort.invited)}</b> · {num(selectedCohort.connected)} / {num(selectedCohort.invited)} invited</small>}
-                    {key === 'replied' && <small>Reply rate <b>{pct(selectedCohort.replied, selectedCohort.connected)}</b> · {num(selectedCohort.replied)} / {num(selectedCohort.connected)} connected</small>}
+                    {key === 'connected' && <small>Acceptance <b>{pct(selectedCohort.connected, selectedCohort.invited)}</b></small>}
+                    {key === 'replied' && <small>Reply rate <b>{pct(selectedCohort.replied, selectedCohort.connected)}</b></small>}
                   </div>
                 ))}
               </div>
@@ -497,7 +552,7 @@ export function OverviewAnalytics({
                 </ResponsiveContainer>
               </div>
             </div>
-            <aside className="ov-rates"><h3>All-time conversion</h3><div className="ov-rate"><label>Acceptance rate</label><strong>{pct(lifetime.connected, lifetime.invited)}</strong><small>{num(lifetime.connected)} / {num(lifetime.invited)} invited</small></div><div className="ov-rate"><label>Reply rate</label><strong>{pct(lifetime.replied, lifetime.connected)}</strong><small>{num(lifetime.replied)} / {num(lifetime.connected)} connected</small></div></aside>
+            <aside className="ov-rates"><h3>All-time conversion</h3><div className="ov-rate"><label>Acceptance rate</label><strong>{pct(lifetime.connected, lifetime.invited)}</strong></div><div className="ov-rate"><label>Reply rate</label><strong>{pct(lifetime.replied, lifetime.connected)}</strong></div></aside>
           </div>
         ) : <p role="status" className="ov-muted">{account === 'all' ? 'Performance data unavailable. Try refreshing the performance range.' : 'This account has no performance data for the selected range. Select another account or refresh.'}</p>}
       </section>
@@ -519,7 +574,8 @@ export function OverviewAnalytics({
                     <tbody>{accountRows.slice(accountPageIndex * 20, accountPageIndex * 20 + 20).map((instance) => {
                       const row = accountCampaigns.accounts.find((item) => item.instance_id === instance.id)
                       const totals = row?.totals ?? zeroTotals()
-                      return <tr key={instance.id}><td><button className="ov-name" type="button" aria-label={accountLabel(instance.id)} onClick={() => onAccountChange(instance.id)}><span className="ov-avatar" aria-hidden="true">{instance.account_avatar ? <img src={instance.account_avatar} alt="" /> : accountLabel(instance.id).slice(0, 2).toUpperCase()}</span><span>{accountLabel(instance.id)}{instance.account_name && instance.label !== instance.account_name && <small>{instance.label}</small>}</span></button></td><td className="ui-table__num">{num(totals.invited)}</td><td className="ui-table__num">{num(totals.connected)}</td><td className="ui-table__num">{num(totals.replied)}</td><td className="ui-table__num">{pct(totals.acceptedOfInvited, totals.invited)}</td><td className="ui-table__num">{pct(totals.repliedOfConnected, totals.connected)}</td><td>{instance.last_sync_at ? <span title={new Date(instance.last_sync_at).toLocaleString()}>{ago(instance.last_sync_at)} · {freshnessLevel(instance.last_sync_at)}</span> : <span title="No successful sync recorded">Unknown</span>}</td></tr>
+                      const syncOverdue = !instance.last_sync_at || Date.now() - new Date(instance.last_sync_at).getTime() > 3 * 3_600_000
+                      return <tr key={instance.id}><td><button className="ov-name" type="button" aria-label={accountName(instance, accountLabel(instance.id))} onClick={() => onAccountChange(instance.id)}><AccountCell instance={instance} fallback={accountLabel(instance.id)} /></button></td><td className="ui-table__num">{num(totals.invited)}</td><td className="ui-table__num">{num(totals.connected)}</td><td className="ui-table__num">{num(totals.replied)}</td><td className="ui-table__num">{pct(totals.acceptedOfInvited, totals.invited)}</td><td className="ui-table__num">{pct(totals.repliedOfConnected, totals.connected)}</td><td>{instance.last_sync_at ? <span className={syncOverdue ? 'ov-sync-overdue' : undefined} title={new Date(instance.last_sync_at).toLocaleString()}>{syncAgeLabel(instance.last_sync_at)}{syncOverdue && ' · Not OK'}</span> : <span className="ov-sync-overdue" title="No successful sync recorded">Unknown · Not OK</span>}</td></tr>
                     })}</tbody>
                   </Table>
                 </TableFrame>

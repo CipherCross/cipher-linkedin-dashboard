@@ -63,8 +63,8 @@ describe('Overview fallback cohort semantics', () => {
   it('keeps all zero denominators finite and explicit', () => {
     const empty = buildOverviewSystemTotals([], range)
     expect(empty).toEqual({ leads: 0, invited: 0, connected: 0, messaged: 0, replied: 0 })
-    expect(comparisonLabel(0, 0, range)).toBe('0.0% vs previous 2 days · 0')
-    expect(comparisonLabel(3, 0, range)).toBe('New vs previous 2 days · 0')
+    expect(comparisonLabel(0, 0, range)).toBe('0.0% vs previous 2 days')
+    expect(comparisonLabel(3, 0, range)).toBe('New vs previous 2 days')
     expect(comparisonLabel(3, null, { from: null, to: null })).toBe('No comparison')
     expect(pct(empty.replied, empty.connected)).toBe('—')
     expect(comparisonLabel(0, 0, range)).not.toMatch(/NaN|Infinity/)
