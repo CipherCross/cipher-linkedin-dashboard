@@ -645,47 +645,131 @@ supplying *appearance* until each route converts to utilities in Phase 3. This
 gets the focus-trap / roving-tabindex / ARIA wins at no visual risk, and avoids
 a single high-risk restyling of all 13 primitives at once.
 
-### Phase 1b · Overlay — ATTEMPTED AND REVERTED, findings below
+### Phase 1b · Overlay — DONE, deployed at `4b9854f`
 
-`Dialog`/`Drawer` are the highest-value remaining port — Base UI's Dialog
-replaces ~60 lines of hand-rolled focus trap, scroll-lock depth counter and
-`inert` juggling in `Overlay.tsx`, and it has every prop needed (`modal`,
-`initialFocus`, `finalFocus`, `onOpenChange` with a `reason`).
+Dialog and Drawer are Base UI. 146 lines out, 35 in: the Tab-cycling focus
+trap, the module-level open-overlay depth counter, the manual `inert`
+toggling, the scroll-lock bookkeeping and the portal all gone. Props, markup
+and CSS unchanged, so all nine call sites and `useDirtyGuard` were untouched.
 
-**Attempted on 2026-09-21 and reverted.** The findings, so the next attempt
-does not rediscover them:
+**The structural worry in the first draft was wrong.** `Dialog.Backdrop` is not
+required. Keeping `ui-scrim` as a flex wrapper INSIDE `Dialog.Portal`, with
+`Dialog.Popup` as its child, needs no CSS change at all — verified at 534x640,
+16px radius, `rgba(16,24,40,0.45)` scrim, 24px gutter, body scrolling between a
+fixed header and footer. Clicking the scrim is outside the popup, so Base UI
+dismisses on it.
 
-*The structural worry was unfounded.* `Dialog.Backdrop` is not required.
-Keeping `ui-scrim` as a flex wrapper INSIDE `Dialog.Portal`, with
-`Dialog.Popup` as its child, needs **no CSS change at all** — verified in a
-browser: panel 534x640, white, 16px radius, shadow, scrim at
-`rgba(16,24,40,0.45)`. Clicking the scrim is still outside the popup, so Base
-UI dismisses on it.
+**This was reverted once, wrongly.** The revert in `514b7eb` was based on a bad
+measurement: the dialog had been opened from a body-focused state with no
+trigger to restore to, and with the browser pane hidden so `requestAnimationFrame`
+never ran. Re-measured with a real trigger and a visible pane, focus enters the
+dialog and returns to the trigger on close. **Lesson for the rest of this
+migration: when a browser check contradicts the library's own source, suspect
+the harness before the library.**
 
-*What actually works* through Base UI: Escape, outside press, `body {
-overflow: hidden }` scroll lock, and `aria-hidden="true"` on `#root`. Note the
-last two are invisible to jsdom — the primitive test asserting
-`document.body.style.overflow === 'hidden'` fails under Base UI even though the
-behaviour is correct in a real browser.
+One accepted trade-off, not a defect: Base UI queues initial focus through rAF,
+where the hand-rolled version focused synchronously on purpose because a frame
+never arrives in a background tab. Accepted — the queued focus is guarded by an
+`open` check and still applies when the tab is shown, and a dialog in a hidden
+tab cannot be typed into. The reasoning sits in the test so it is re-examined if
+Base UI's scheduling changes.
 
-*What does not work, and is why this was reverted:* **focus never enters the
-dialog, and is not restored to the trigger on close.** Measured:
-`document.activeElement` is `<body>` both while open and after Escape. Base UI
-moves focus on an open *transition*, and these components mount already open.
-Holding `open` permanently true produces no transition; mounting closed and
-flipping it in an effect does not fix it either — both were tried.
+Two primitive assertions were rewritten rather than deleted: `aria-modal` became
+the background's `aria-hidden` (Base UI hides siblings instead; the two are
+alternatives and this is what the standard's "inert background" wording asks
+for), and the scroll-lock assertion moved out of jsdom to the browser check,
+because jsdom computes no layout and would have passed while the page
+misbehaved.
 
-Two accessibility regressions against a contract the current implementation
-meets and `tests/uiPrimitives.test.tsx` pins, so the port was reverted rather
-than shipped.
+### Phase 2 · Widget tier — DONE, deployed at `b65b187` and `87dcd64`
 
-**Next attempt should start here:** get `Dialog.Popup`'s `initialFocus` to
-resolve to a real element (the ref is likely still null when Base UI calls it),
-or drive the dialog from a real trigger via `Dialog.Trigger` instead of a
-permanently-open root. Two of the sixteen primitive assertions will need
-rewording when it lands — `aria-modal` (Base UI uses `aria-hidden` on the
-background instead, which the standard's own wording allows) and the jsdom
-scroll-lock assertion, which must move to the browser check.
+Installed and demonstrated on a new **Widgets** tab in `#/ui-gallery`: popover,
+tooltip, dropdown menu, command palette, combobox, calendar, toasts.
+
+**shadcn's semantic palette now resolves to `tokens.css`** — `--background`,
+`--foreground`, `--popover`, `--primary`, `--destructive`, `--ring`, the sidebar
+set and the chart ramp. Anything a future `shadcn add` writes inherits the app's
+colours with no hand-restyling. Mapped by meaning, not by name: shadcn's
+`--accent` is a hover surface where ours is brand blue, its `--muted` is a
+surface where ours is muted TEXT.
+
+**A Phase 0 decision needed narrowing.** Dropping shadcn's global
+`* { @apply border-border }` was right unscoped — it changed 217 of 271 elements
+away from `currentColor`. But shadcn's own components rely on it: several set a
+border width and no colour, and without a default the popover drew a dark
+`currentColor` outline. Now scoped to `[data-slot]`, which every shadcn
+component carries and nothing hand-written here does — the exact boundary
+between their components and ours.
+
+Sonner is de-themed: `next-themes` uninstalled, theme fixed to light, severity
+colours bound to our tokens, and every severity ships an icon so colour never
+travels alone.
+
+**Quick Navigation is the first hand-rolled widget retired.** 218 lines to ~110,
+and **126 lines out of `styles.css` — the first time the legacy sheet has ever
+shrunk.** It stops owning a second focus trap, its own scroll lock, its own
+`inert` toggling, its own portal and its own active-descendant bookkeeping.
+Filtering is *not* delegated to cmdk (`shouldFilter={false}`), so
+`filterQuickNavigationDestinations` still ranks, caps and matches the meta line
+— what the palette finds is unchanged, and all three contract tests pass as
+written.
+
+Accessibility subtlety worth keeping: cmdk points the input's `aria-labelledby`
+at its own hidden label, and `aria-labelledby` beats `aria-label` in name
+computation, so an `aria-label` on the input is silently ignored. The name must
+be set through cmdk's `label` prop.
+
+### Phase 3 · Route migration — recipe proven, `334d38c`
+
+`NeonActivity` is off the legacy sheet. Small on purpose: it carried one legacy
+class, and `.filters` was used by no other file, so the rule left with the route.
+
+**The recipe, every step machine-checkable:**
+
+1. Replace the legacy class with token-bridge utilities.
+2. Delete the rule from `styles.css`.
+3. Diff the generated CSS against the rule just deleted.
+4. Suite green; the unknown-class guard fails on any class applied without a rule.
+
+Step 3 held exactly, including that the spacing utilities resolve to the *same
+tokens* rather than copied pixels (`.gap-app-lg{gap:var(--space-lg)}`). A
+descendant rule converts through an arbitrary variant without reintroducing a
+global selector: `[&_.ui-field]:min-w-[220px]` generates
+`…\]\:min-w-\[220px\] .ui-field{min-width:220px}`.
+
+`styles.css`: **4,578 → 4,450 lines.**
+
+### Bundle, measured honestly
+
+The gallery is a lazy chunk behind an `import.meta.env.DEV` route guard, so it
+ships in the deploy but is never requested in production. Summing every chunk
+overstates the cost by 79.7 KB gz.
+
+| | vs baseline |
+| --- | --- |
+| JS gz, excluding the dev-only chunk | **+2.8%** |
+| CSS gz | **+31.6%** (+10.6 KB) |
+
+CSS is the number to watch. It should fall below baseline as the remaining
+4,450 legacy lines go.
+
+### Next, in order
+
+1. **`DateRangePicker`** (312 lines, 6 consumers) — the largest hand-rolled
+   widget left. Not attempted here: `tests/dateRangePickerAccessibility.test.tsx`
+   pins implementation details (`data-day="1"`, exact focus targets) that a
+   Popover + react-day-picker rebuild will not reproduce, so the test has to be
+   rewritten deliberately alongside it. Keep the `Props` shape and the
+   `rangeButtonLabel` export, and keep local-calendar date math — never
+   `toISOString()` — so no timezone shift creeps into the range values.
+2. **Phase 1c** — `Tabs`/`SegmentedControl` and `Field`'s
+   Select/Checkbox/RadioGroup. Lower priority than it looks: `Tabs` already
+   implements the APG pattern correctly with tests, so the marginal gain is
+   small.
+3. **Phase 3 proper** — the remaining twenty routes, in the isolation order
+   below, `SequenceBuilder` (122 selectors) last and alone.
+4. **Phase 4** — delete `styles.css`, empty the dead-class ratchet, rewrite
+   `docs/ui-standard.md`, re-run the contrast audit.
 
 ### Remaining order
 
