@@ -888,6 +888,36 @@ Two of those causes are worth fixing rather than translating:
   `.ui-identity__avatar`) should become props on the primitive.
 * Recharts styling belongs with `chartTheme.tsx`, not in a route sheet.
 
+### `layout.css` is the app shell, and parity cannot verify it
+
+It measured most convertible (77%) and it is the one I would convert last
+without a browser. It is the sidebar — a mistake affects every route at once —
+and it carries four breakpoint families:
+
+| query | purpose |
+| --- | --- |
+| `min-width: 901px` | desktop |
+| `min-width: 901px and max-height: 820px` | short desktop |
+| `min-width: 901px and max-height: 700px` | **fires at 1280x720**, a stated acceptance target |
+| `max-width: 900px` | mobile |
+
+Twelve of its selectors have between two and five stacked declarations spread
+across those, and several read as contradictions until the media context is
+restored: `.side-mobile-close` is `display: none` twice at top level and
+`inline-flex` under `max-width: 900px`; `.sidebar-inner` has three different
+paddings.
+
+**`scripts/css-parity.mjs` has a blind spot here.** It verifies a declaration
+still exists *somewhere* in the built CSS. It does not verify which media query
+it landed in. Put `padding-block: 10px 8px` behind `max-[900px]:` instead of
+`max-h-[820px]:` and parity reports success while the sidebar renders wrong at
+1280x720 — on every route simultaneously.
+
+Extending the tool to compare media context per declaration is possible and is
+the prerequisite for converting this file without a browser. Until then, this
+one is done with the app open at 1280x720, 1440x900 and 1920x1080, which is
+what docs/ui-standard.md already requires for geometry.
+
 ### Before continuing
 
 `vercel.json:38` redirects every `cipher-linkedin-dashboard.*.vercel.app` host
