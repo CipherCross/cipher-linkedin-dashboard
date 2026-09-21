@@ -8,14 +8,19 @@
  * pre-existing `var(--…)` in styles.css re-themes without being touched; new
  * work should prefer the semantic names in the "standard" groups below.
  *
- * Contrast (WCAG 2.2 1.4.3 / 1.4.11), computed on the surfaces they are used on:
- *   --text            #182230 on #FFFFFF  15.85:1
- *   --text-secondary  #475467 on #FFFFFF   7.56:1
+ * Contrast (WCAG 2.2 1.4.3 / 1.4.11), computed on the surfaces they are used
+ * on. Re-measured in a browser against #/ui-gallery on 2026-09-21, after the
+ * Tailwind migration; five of these were previously recorded slightly off, so
+ * the numbers below are the measured ones. Every value passes: body text needs
+ * 4.5:1 and a meaningful border needs 3:1.
+ *
+ *   --text            #182230 on #FFFFFF  16.03:1
+ *   --text-secondary  #475467 on #FFFFFF   7.69:1
  *   --text-muted      #596579 on #FFFFFF   5.90:1   on #F2F4F7  5.35:1
  *   --accent          #2563EB on #FFFFFF   5.17:1
- *   --success         #067647 on #FFFFFF   4.99:1
- *   --warning         #92400E on #FFFFFF   7.19:1
- *   --danger          #B42318 on #FFFFFF   6.42:1
+ *   --success         #067647 on #FFFFFF   5.69:1
+ *   --warning         #92400E on #FFFFFF   7.09:1
+ *   --danger          #B42318 on #FFFFFF   6.57:1
  *   --border-strong   #7A8699 on #FFFFFF   3.69:1  (meaningful control border)
  * ======================================================================== */
 
