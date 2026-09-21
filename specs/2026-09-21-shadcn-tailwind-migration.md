@@ -578,6 +578,97 @@ that does.
 
 **Total: roughly 16–24 sessions.**
 
+## Status — 2026-09-21
+
+### Phase 0 · DONE, deployed to production at `c2460f5`
+
+Verified live on `app.ciphercross.dev`: Tailwind cascade layers present,
+`--accent: #2563eb`, `--border: #d0d5dd`, `--muted: #596579`.
+
+Acceptance was **26 of 271 elements changed on the gallery**, not zero. All 26
+are preflight's `button, input, select, textarea { font: inherit }` moving
+controls off the UA's 13.3px/normal onto the app's 16/24 — which is what
+docs/ui-standard.md specifies, so the pre-Tailwind rendering was the deviation.
+None are visible: icon buttons stay 44x44 around a 20px glyph.
+
+Four defects in shadcn's own output, each measured before being fixed:
+
+1. **Token capture.** `shadcn init` writes an UNLAYERED `:root`, outranking
+   tokens.css in `foundation`. It took `--accent`, `--border`, `--muted`; its
+   `--accent` is a near-white hover surface, so the primary button rendered
+   white-on-white. Fixed by prefixing its names to `--sh-*`. **Seven
+   collisions, not the three the spike found** — the spike only compared
+   `:root` and missed `@theme inline`, which also holds `--font-sans` and the
+   `--radius-*` scale.
+2. **The layer split inverted the cascade.** ui.css in `components` and
+   styles.css in `legacy` made every route rule beat every primitive rule,
+   because a layer beats specificity outright. Measured: the danger border
+   vanished off an invalid input, the grey fill off a disabled one, and a
+   textarea collapsed 120px -> 66px. **Decision 6 was wrong as written**: the
+   two sheets must share ONE layer, ui.css first, so specificity decides as it
+   did before layering.
+3. `* { @apply border-border }` changed the computed border-colour of 217 of
+   271 elements away from currentColor for no gain. Removed.
+4. `outline-ring/50` is the translucent halo reset.css rejects as a 1.4.11
+   failure. Removed, with the `.dark` block and the Geist webfont.
+
+**Decision 7 changed twice.** Omitting preflight breaks the shadcn CLI, which
+detects Tailwind by the literal `@import "tailwindcss"`. But the replacement —
+"keep preflight, `foundation` outranks it" — is only true for what `foundation`
+actually declares; reset.css sets font-*family* on controls, not size or
+line-height, so preflight's `font: inherit` passes straight through. That is
+the source of all 26 remaining diffs.
+
+Both guards shipped and are mutation-tested:
+- `tests/cssCascade.test.ts` — all eight defects above re-introduced, each
+  caught by its own assertion.
+- `tests/unknownClasses.test.ts` — TS AST walk, not regex (the regex version
+  was 80% false positives). Found a real defect immediately:
+  `.ui-updating__spinner` had no rule, so the updating spinner never turned.
+  Its allowlist of 30 pre-existing dead class names is a ratchet that may only
+  shrink; emptying it is a precondition for retiring styles.css.
+
+### Phase 1a · DONE, deployed at `0549984`
+
+- **Token bridge.** `@theme inline` exposes tokens.css as real utilities
+  (`bg-app-accent`, `rounded-control`, `h-control`). Every entry *references*
+  its token — confirmed in built CSS as
+  `.bg-app-accent{background-color:var(--accent)}` — so tokens.css stays the
+  only definition site. The `app-` prefix is deliberate: renaming shadcn's own
+  names would break the output of every future `shadcn add`.
+- **Button and IconButton on Base UI**, props and `ui.css` classes unchanged.
+  `LinkButton`/`ExternalLinkButton` deliberately are NOT, per Decision 5 —
+  confirmed in source at `useButton.mjs:177`.
+
+**Phase 1 strategy, revised.** Base UI supplies *behaviour*; `ui.css` keeps
+supplying *appearance* until each route converts to utilities in Phase 3. This
+gets the focus-trap / roving-tabindex / ARIA wins at no visual risk, and avoids
+a single high-risk restyling of all 13 primitives at once.
+
+### Phase 1b · NEXT, and one thing to know before starting
+
+`Dialog`/`Drawer` are the highest-value remaining port — Base UI's Dialog
+replaces ~60 lines of hand-rolled focus trap, scroll-lock depth counter and
+`inert` juggling in `Overlay.tsx`, and it has every prop needed (`modal`,
+`initialFocus`, `finalFocus`, `onOpenChange` with a `reason`).
+
+**The blocker is structural, not behavioural.** `ui-scrim` is today a flex
+*wrapper* that centres the panel, whereas Base UI renders `Dialog.Backdrop` as
+a *sibling* of `Dialog.Popup`. Porting therefore means repositioning the popup
+itself (`position: fixed` + transform, or an inset grid) and revalidating the
+geometry of all nine dialogs and the drawer variant. That is a focused pass
+with a browser check per dialog — not something to tack onto the end of another
+session.
+
+Keep the mount-based API when it happens: these components only render while
+open, so `<Dialog.Root open onOpenChange={…}>` preserves every call site.
+
+### Remaining order
+
+Phase 1b (Overlay) -> 1c (Tabs, Field's Select/Checkbox/RadioGroup, where Base
+UI adds real keyboard behaviour) -> Phase 2 (the missing widget tier) -> Phase 3
+(routes) -> Phase 4 (delete styles.css, rewrite the standard).
+
 ## Risks & how to verify
 
 | Risk | Verification |
