@@ -1,0 +1,35 @@
+/* --- Playbook page -------------------------------------------------------- */
+/* The split only exists when both panes can be useful: below 1200px of page
+ * width the editor keeps the full column and the segmented control decides
+ * which mode is shown. The preview is capped at 72ch for readability. */
+.playbook-panes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xl); align-items: stretch; }
+.playbook-pane { display: flex; min-width: 0; }
+.playbook-pane > * { width: 100%; }
+.playbook-editor textarea {
+  width: 100%; box-sizing: border-box; min-height: 520px; resize: vertical;
+  background: var(--surface-1); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-control);
+  padding: var(--space-lg);
+  font-family: var(--font-mono);
+  font-size: var(--text-table); line-height: 1.6;
+}
+.playbook-preview {
+  max-width: 72ch;
+  min-height: 520px;
+  max-height: 72vh;
+  padding: var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  overflow-y: auto;
+}
+/* The user's own Markdown headings are nested under the page title, so the
+ * largest of them may not compete with the h1 above. */
+.playbook-preview h1 { font-size: var(--text-section); line-height: var(--leading-section); }
+.playbook-preview h2 { font-size: var(--text-subsection); line-height: var(--leading-body); }
+.playbook-preview h3, .playbook-preview h4 { font-size: var(--text-body); }
+@media (max-width: 1199px) {
+.playbook-panes { grid-template-columns: 1fr; }
+.playbook-panes.show-edit .playbook-preview-pane { display: none; }
+.playbook-panes.show-preview .playbook-edit-pane { display: none; }
+}

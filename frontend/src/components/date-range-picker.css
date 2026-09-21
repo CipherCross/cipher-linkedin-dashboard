@@ -1,0 +1,55 @@
+/* Date range picker (single button + popover) */
+.drp { position: relative; }
+/* The date trigger is a control like any other select or button next to it:
+ * same height, same type size, same radius. It used to render 31.5px/13px
+ * beside a 44px/16px account select in the very same toolbar. */
+.drp-trigger {
+  display: inline-flex; align-items: center; gap: var(--space-sm);
+  min-height: var(--control-height);
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  padding: 0 var(--space-md); font-size: var(--text-body); cursor: pointer;
+  transition: border-color 0.14s ease;
+}
+.drp-trigger:hover { border-color: var(--accent); }
+.drp-cal-icon { color: var(--muted); }
+.drp-caret { color: var(--muted); margin-left: 2px; }
+.drp-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  display: flex; overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-overlay);
+}
+.drp-presets {
+  list-style: none; margin: 0; padding: 8px;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px; min-width: 132px;
+}
+.drp-presets button {
+  width: 100%; text-align: left; background: none; border: none;
+  color: var(--text); padding: 8px 12px; border-radius: var(--radius-sm);
+  font-size: var(--text-sm); cursor: pointer; white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.drp-presets button:hover { background: var(--surface-3); }
+.drp-cal { padding: 12px; }
+.drp-cal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; font-size: var(--text-sm); font-weight: 600;
+}
+.drp-nav {
+  background: none; border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius-sm); width: 26px; height: 26px; cursor: pointer; line-height: 1;
+}
+.drp-nav:hover { border-color: var(--accent); color: var(--accent); }
+.drp-grid {
+  display: grid; grid-template-columns: repeat(7, 30px); gap: 2px;
+}
+.drp-wd {
+  text-align: center; font-size: var(--text-2xs); color: var(--muted);
+  padding-bottom: 4px;
+}
+.drp-hint { margin-top: 8px; max-width: 224px; }
+.drp-wd-row { display: contents; }

@@ -44,6 +44,13 @@
 @import './pages/sentiment-analysis.css' layer(app);
 @import './components/overview/overview.css' layer(app);
 @import './pages/team.css' layer(app);
+@import './pages/sequence-builder.css' layer(app);
+@import './components/conversation-drawer.css' layer(app);
+@import './pages/chat.css' layer(app);
+@import './components/layout.css' layer(app);
+@import './pages/apollo-csv-import.css' layer(app);
+@import './components/date-range-picker.css' layer(app);
+@import './pages/playbook.css' layer(app);
 @import './components/import-history.css' layer(app);
 @import './components/import-callout.css' layer(app);
 @import './components/instance-config.css' layer(app);
