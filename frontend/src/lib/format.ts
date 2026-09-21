@@ -68,3 +68,31 @@ export function pct(a: number, b: number): string {
 export function rate(r: number | null | undefined): string {
   return r == null ? '—' : r.toFixed(1) + '%'
 }
+
+/** A safe percentage change. `null` means there is no finite comparison. */
+export function percentageChange(current: number, previous: number | null): number | null {
+  if (previous == null || previous <= 0) return null
+  return (100 * (current - previous)) / previous
+}
+
+/** Number of inclusive UTC days in a closed range. */
+export function rangeDayCount(range: { from: string | null; to: string | null }): number | null {
+  if (!range.from || !range.to) return null
+  return Math.round(
+    (Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000,
+  ) + 1
+}
+
+/** The exact comparison annotation used by the Performance KPI cards. */
+export function comparisonLabel(
+  current: number,
+  previous: number | null,
+  range: { from: string | null; to: string | null },
+): string {
+  const days = rangeDayCount(range)
+  if (days == null || previous == null) return 'No comparison'
+  const period = `previous ${days} day${days === 1 ? '' : 's'}`
+  if (previous === 0) return current > 0 ? `New vs ${period} · 0` : `0.0% vs ${period} · 0`
+  const change = percentageChange(current, previous) ?? 0
+  return `${change >= 0 ? '+' : ''}${change.toFixed(1)}% vs ${period} · ${num(previous)}`
+}

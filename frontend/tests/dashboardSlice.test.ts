@@ -88,6 +88,8 @@ import {
   campaignsSequenceStepsOperation,
   instancesOverviewOperation,
   overviewSystemTotalsOperation,
+  overviewPerformanceOperation,
+  overviewAccountCampaignsOperation,
   overviewSummaryOperation,
   syncRecentRunsOperation,
 } from '../api/_lib/data/operations/dashboard.js'
@@ -170,6 +172,8 @@ type Slice = ReadonlyArray<
 const READ_SLICE = [
   [DASHBOARD_OPERATIONS.bootstrap, dashboardBootstrapOperation],
   [DASHBOARD_OPERATIONS.overviewSystemTotals, overviewSystemTotalsOperation],
+  [DASHBOARD_OPERATIONS.overviewPerformance, overviewPerformanceOperation],
+  [DASHBOARD_OPERATIONS.overviewAccountCampaigns, overviewAccountCampaignsOperation],
   [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
   [ROUTE_SNAPSHOT_OPERATION, routeSnapshotInspectable],
   [SEQUENCE_HUB_OPERATION, sequenceHubOperation],
@@ -280,6 +284,8 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'messages.inboundHistory',
       'messages.outboundRecent',
       'messages.thread',
+      'overview.accountCampaigns',
+      'overview.performance',
       'overview.summary',
       'overview.systemTotals',
       'pipeline.eventLog',
@@ -634,7 +640,7 @@ describe('the server-side Overview summary', () => {
   it('keeps the headline totals on a single deduplicated leads aggregate', () => {
     const sql = sqlOf(inspectable(overviewSystemTotalsOperation)).toLowerCase()
     expect(sql).toContain('group by l.instance_id, l.profile_url')
-    expect(sql).toContain('count(p.instance_id)')
+    expect(sql).toContain('count(c.instance_id)')
     expect(sql).not.toContain('count(*) filter')
     expect(sql).toContain("'connected'")
     expect(sql).not.toContain('campaign_stats')

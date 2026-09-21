@@ -69,7 +69,7 @@
 
 /* The period is stated once per section, in its header — not repeated inside
  * every tile, which is where five "All time" captions came from. */
-.overview .ov-summary > .ov-summary {
+.overview .ov-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-lg);
@@ -77,10 +77,7 @@
 }
 .overview .ov-total {
   min-width: 0;
-  padding: var(--space-lg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
+  padding: 0;
 }
 .overview .ov-total span { color: var(--text-muted); font-size: var(--text-meta); }
 .overview .ov-total strong {
@@ -93,6 +90,7 @@
   font-variant-numeric: tabular-nums;
 }
 .overview .ov-total small { color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-total small { display: block; min-height: var(--leading-meta); line-height: var(--leading-meta); }
 
 /* ---- Controls ------------------------------------------------------------ */
 .overview .ov-controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--space-md); flex-wrap: wrap; }
@@ -133,6 +131,8 @@
 }
 .overview .ov-metric label { color: var(--text-muted); font-size: var(--text-meta); }
 .overview .ov-metric span:last-child { grid-column: 2; min-width: 0; color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-metric small { grid-column: 2; min-width: 0; color: var(--text); font-size: var(--text-meta); line-height: var(--leading-meta); }
+.overview .ov-metric small b { font-weight: 500; }
 
 .overview .ov-plot { display: block; width: 100%; height: 280px; min-height: 280px; overflow: visible; }
 .overview .ov-plot > div { min-height: 280px; }
@@ -168,6 +168,53 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
 }
+.overview .ov-account-frame { margin: 0; }
+.overview .ov-account-frame .ui-table { min-width: 720px; }
+.overview .ov-table-empty {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin: 0;
+  padding: var(--space-xl);
+  color: var(--text-muted);
+  text-align: center;
+}
+.overview .ov-campaign-comparison { margin-top: var(--space-xl); }
+.overview .ov-campaign-comparison h3 {
+  margin: 0 0 var(--space-md);
+  font-size: var(--text-subsection);
+  line-height: var(--leading-body);
+  font-weight: 600;
+}
+.overview .ov-campaign-frame .ui-table { min-width: 1180px; }
+.overview .ov-campaign-frame .ui-table th,
+.overview .ov-campaign-frame .ui-table td { white-space: nowrap; }
+.overview .ov-campaign-frame .ui-table th:nth-child(2),
+.overview .ov-campaign-frame .ui-table td:nth-child(2) { min-width: 240px; }
+.overview .ov-campaign-frame .ui-table th:nth-child(9),
+.overview .ov-campaign-frame .ui-table td:nth-child(9) { width: 76px; }
+.overview .ov-campaign-frame .ui-table th:nth-child(10),
+.overview .ov-campaign-frame .ui-table td:nth-child(10) { width: 100px; }
+.overview .ov-campaign-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.overview .ov-campaign-footer { margin-top: var(--space-md); }
+.overview .ov-sortable button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.overview .ov-sortable button::after { content: '↕'; margin-left: var(--space-xs); color: var(--text-muted); }
+.overview .ov-sortable[aria-sort='ascending'] button::after { content: '↑'; color: var(--accent); }
+.overview .ov-sortable[aria-sort='descending'] button::after { content: '↓'; color: var(--accent); }
 .overview table {
   width: 100%;
   min-width: 720px;
@@ -217,6 +264,34 @@
 }
 .overview tbody tr:last-child td { border-bottom: 0; }
 .overview tbody tr:hover { background: var(--surface-2); }
+
+/* Overview used to own the legacy table styling above. The campaign
+ * comparison is built from the shared table primitives, so restore their
+ * left-aligned headers and numeric-cell contract at this route's specificity. */
+.overview .ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+}
+.overview .ui-table th,
+.overview .ui-table td {
+  padding: var(--space-md) var(--space-lg);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+.overview .ui-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.overview .ui-table .ui-table__num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .overview .ov-name {
   display: flex;
@@ -293,7 +368,7 @@
 .overview .ov-loading-account { display: flex; align-items: center; gap: var(--space-md); }
 
 @media (max-width: 1279px) {
-  .overview .ov-summary > .ov-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overview .ov-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overview .ov-performance { grid-template-columns: 1fr; }
   .overview .ov-rates {
     display: flex;

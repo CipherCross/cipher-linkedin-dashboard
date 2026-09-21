@@ -100,6 +100,10 @@ export interface CampaignMetrics {
   briefing_context_updated_at?: string | null
   total_leads: number
   invites_sent: number
+  /** Connections whose milestone landed inside the selected range. */
+  connected?: number
+  /** First-message milestones whose timestamp landed inside the selected range. */
+  first_messages?: number
   accepted: number
   replies: number
   acceptance_rate: number | null
@@ -185,17 +189,70 @@ export interface OverviewAnalyticsTotals {
   repliedOfConnected: number
 }
 
+/** Event-time counts for the selected or immediately preceding period. */
+export interface OverviewEventTotals {
+  invited: number
+  connected: number
+  replied: number
+}
+
+/** Invite-cohort counts. Outcomes are observed through query time. */
+export interface OverviewCohortTotals {
+  leads: number
+  invited: number
+  connected: number
+  messaged: number
+  replied: number
+}
+
+export interface OverviewPerformanceAccount {
+  instance_id: string
+  current: OverviewEventTotals
+  previous: OverviewEventTotals | null
+  cohort: OverviewCohortTotals
+  previousCohort: OverviewCohortTotals | null
+  lifetime: OverviewCohortTotals
+}
+
+/** Narrow Performance response. It intentionally has no campaign/message/intent data. */
+export interface OverviewPerformance {
+  current: OverviewEventTotals
+  previous: OverviewEventTotals | null
+  cohort: OverviewCohortTotals
+  previousCohort: OverviewCohortTotals | null
+  lifetime: OverviewCohortTotals
+  accounts: OverviewPerformanceAccount[]
+  activity: DailyActivity[]
+}
+
+export interface OverviewSystemTotals {
+  leads: number
+  invited: number
+  connected: number
+  messaged: number
+  replied: number
+}
+
+export interface OverviewAccountCampaigns {
+  accounts: OverviewAnalyticsAccount[]
+  campaigns: CampaignMetrics[]
+}
+
 export interface OverviewAnalyticsAccount {
   instance_id: string
   totals: OverviewAnalyticsTotals
   previous: OverviewAnalyticsTotals | null
   lifetime: OverviewAnalyticsTotals
+  cohort: OverviewCohortTotals
+  previousCohort: OverviewCohortTotals | null
 }
 
 export interface OverviewAnalytics {
   totals: OverviewAnalyticsTotals
   previous: OverviewAnalyticsTotals | null
   lifetime: OverviewAnalyticsTotals
+  cohort: OverviewCohortTotals
+  previousCohort: OverviewCohortTotals | null
   accounts: OverviewAnalyticsAccount[]
   activity: DailyActivity[]
 }

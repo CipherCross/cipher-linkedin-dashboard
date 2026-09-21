@@ -748,7 +748,7 @@ export function rangedCampaigns(
 ): CampaignMetrics[] {
   const meta = new Map(base.map((c) => [c.campaign_id, c]))
   type Acc = {
-    added: number; invites: number; accepted: number; replies: number
+    added: number; invites: number; accepted: number; firstMessages: number; replies: number
     // Rate numerators, constrained like the campaign_metrics view (see below).
     acceptedOfInvited: number; repliedOfConnected: number
     total: number; last: string | null
@@ -757,7 +757,7 @@ export function rangedCampaigns(
   for (const l of leads) {
     let row = acc.get(l.campaign_id)
     if (!row) {
-      row = { added: 0, invites: 0, accepted: 0, replies: 0, acceptedOfInvited: 0, repliedOfConnected: 0, total: 0, last: null }
+      row = { added: 0, invites: 0, accepted: 0, firstMessages: 0, replies: 0, acceptedOfInvited: 0, repliedOfConnected: 0, total: 0, last: null }
       acc.set(l.campaign_id, row)
     }
     row.total++
@@ -773,6 +773,7 @@ export function rangedCampaigns(
       row.accepted++
       if (l.invited_at) row.acceptedOfInvited++
     }
+    if (tsInRange(l.first_message_at, r)) row.firstMessages++
     if (tsInRange(l.replied_at, r)) {
       row.replies++
       if (l.connected_at) row.repliedOfConnected++
@@ -797,6 +798,8 @@ export function rangedCampaigns(
       total_leads: row.total,
       leads_added: row.added,
       invites_sent: row.invites,
+      connected: row.accepted,
+      first_messages: row.firstMessages,
       accepted: row.accepted,
       replies: row.replies,
       // Constrained numerators (connected-with-invite, replied-with-connect)
@@ -804,6 +807,8 @@ export function rangedCampaigns(
       // (migrations 019/030), so displayed counts stay totals but rates ≤ 100%.
       acceptance_rate: row.invites > 0 ? (100 * row.acceptedOfInvited) / row.invites : null,
       reply_rate: row.accepted > 0 ? (100 * row.repliedOfConnected) / row.accepted : null,
+      lifetime_acceptance_rate: m?.lifetime_acceptance_rate ?? null,
+      lifetime_reply_rate: m?.lifetime_reply_rate ?? null,
       last_activity_at: row.last,
     })
   }

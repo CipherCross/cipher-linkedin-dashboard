@@ -1,4 +1,12 @@
-import type { DailyActivity, Lead, OverviewAnalytics, OverviewAnalyticsAccount, OverviewAnalyticsTotals } from './types'
+import type {
+  DailyActivity,
+  Lead,
+  OverviewAnalytics,
+  OverviewAnalyticsAccount,
+  OverviewAnalyticsTotals,
+  OverviewCohortTotals,
+  OverviewSystemTotals,
+} from './types'
 import { previousRange, tsInRange, type DateRange } from './leads'
 
 type Person = {
@@ -20,7 +28,8 @@ const earliest = (values: Array<string | null>): string | null => {
     : null
 }
 
-function peopleFromLeads(leads: Lead[]): Person[] {
+/** One synthetic person per (instance_id, profile_url), matching Neon SQL. */
+export function peopleFromLeads(leads: Lead[]): Person[] {
   const byKey = new Map<string, Person>()
   for (const lead of leads) {
     const key = `${lead.instance_id}|${lead.profile_url}`
@@ -54,29 +63,58 @@ const effectiveAddedAt = (person: Person): string | null =>
     person.replied_at,
   ])
 
-function totalsFor(people: Person[], range: DateRange | null): OverviewAnalyticsTotals {
-  const inPeriod = (ts: string | null) => Boolean(ts) && (range === null || tsInRange(ts, range))
-  const allTime = range === null || (range.from === null && range.to === null)
-  const included = allTime
-    ? people
-    : people.filter((person) => inPeriod(effectiveAddedAt(person)))
-  let invited = 0, connected = 0, messaged = 0, replied = 0
-  let acceptedOfInvited = 0, repliedOfConnected = 0
-  // Milestone activity uses each person's earliest recorded timestamp.
-  // Only the leads-added count is scoped by effective added date.
+const inPeriod = (timestamp: string | null, range: DateRange | null): boolean =>
+  Boolean(timestamp) && (range === null || tsInRange(timestamp, range))
+
+/** Event-time activity. Each milestone is counted by its own timestamp. */
+function eventTotalsFor(people: Person[], range: DateRange | null): OverviewAnalyticsTotals {
+  let invited = 0
+  let connected = 0
+  let messaged = 0
+  let replied = 0
+  let acceptedOfInvited = 0
+  let repliedOfConnected = 0
   for (const person of people) {
-    if (inPeriod(person.invited_at)) invited++
-    if (inPeriod(person.connected_at)) {
+    if (inPeriod(person.invited_at, range)) invited++
+    if (inPeriod(person.connected_at, range)) {
       connected++
       if (person.invited_at) acceptedOfInvited++
     }
-    if (inPeriod(person.first_message_at)) messaged++
-    if (inPeriod(person.replied_at)) {
+    if (inPeriod(person.first_message_at, range)) messaged++
+    if (inPeriod(person.replied_at, range)) {
       replied++
       if (person.connected_at) repliedOfConnected++
     }
   }
-  return { leads: included.length, invited, connected, messaged, replied, acceptedOfInvited, repliedOfConnected }
+  return {
+    leads: people.filter((person) => inPeriod(effectiveAddedAt(person), range)).length,
+    invited,
+    connected,
+    messaged,
+    replied,
+    acceptedOfInvited,
+    repliedOfConnected,
+  }
+}
+
+/** Invite-cohort funnel. Outcomes are deliberately not clipped to range.to. */
+export function cohortTotalsFor(people: Person[], range: DateRange | null): OverviewCohortTotals {
+  const cohort = people.filter((person) => inPeriod(person.invited_at, range))
+  let connected = 0
+  let messaged = 0
+  let replied = 0
+  for (const person of cohort) {
+    if (person.connected_at) connected++
+    if (person.connected_at && person.first_message_at) messaged++
+    if (person.connected_at && person.replied_at) replied++
+  }
+  return {
+    leads: cohort.length,
+    invited: cohort.length,
+    connected,
+    messaged,
+    replied,
+  }
 }
 
 function activityFor(people: Person[], range: DateRange): DailyActivity[] {
@@ -94,7 +132,27 @@ function activityFor(people: Person[], range: DateRange): DailyActivity[] {
     add(person, person.connected_at, 'connected')
     add(person, person.replied_at, 'replied')
   }
-  return [...rows.values()].sort((a, b) => a.day.localeCompare(b.day) || a.instance_id.localeCompare(b.instance_id) || a.event_type.localeCompare(b.event_type))
+  return [...rows.values()].sort((a, b) =>
+    a.day.localeCompare(b.day) || a.instance_id.localeCompare(b.instance_id) || a.event_type.localeCompare(b.event_type),
+  )
+}
+
+const asAnalyticsTotals = (totals: OverviewCohortTotals): OverviewAnalyticsTotals => ({
+  ...totals,
+  acceptedOfInvited: totals.connected,
+  repliedOfConnected: totals.replied,
+})
+
+export function buildOverviewSystemTotals(leads: Lead[], range: DateRange): OverviewSystemTotals {
+  const people = peopleFromLeads(leads)
+  const cohort = cohortTotalsFor(people, range)
+  return {
+    leads: eventTotalsFor(people, range).leads,
+    invited: cohort.invited,
+    connected: cohort.connected,
+    messaged: cohort.messaged,
+    replied: cohort.replied,
+  }
 }
 
 export function buildOverviewAnalytics(leads: Lead[], range: DateRange): OverviewAnalytics {
@@ -104,15 +162,20 @@ export function buildOverviewAnalytics(leads: Lead[], range: DateRange): Overvie
     const scoped = people.filter((person) => person.instance_id === instance_id)
     return {
       instance_id,
-      totals: totalsFor(scoped, range),
-      previous: previous ? totalsFor(scoped, previous) : null,
-      lifetime: totalsFor(scoped, null),
+      totals: eventTotalsFor(scoped, range),
+      previous: previous ? eventTotalsFor(scoped, previous) : null,
+      lifetime: asAnalyticsTotals(cohortTotalsFor(scoped, null)),
+      cohort: cohortTotalsFor(scoped, range),
+      previousCohort: previous ? cohortTotalsFor(scoped, previous) : null,
     }
   })
+  const cohort = cohortTotalsFor(people, range)
   return {
-    totals: totalsFor(people, range),
-    previous: previous ? totalsFor(people, previous) : null,
-    lifetime: totalsFor(people, null),
+    totals: eventTotalsFor(people, range),
+    previous: previous ? eventTotalsFor(people, previous) : null,
+    lifetime: asAnalyticsTotals(cohortTotalsFor(people, null)),
+    cohort,
+    previousCohort: previous ? cohortTotalsFor(people, previous) : null,
     accounts,
     activity: activityFor(people, range),
   }

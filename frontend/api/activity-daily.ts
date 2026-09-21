@@ -921,6 +921,14 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     operation: DASHBOARD_OPERATIONS.overviewSystemTotals,
     ranged: true,
   },
+  [DASHBOARD_OPERATIONS.overviewPerformance]: {
+    operation: DASHBOARD_OPERATIONS.overviewPerformance,
+    ranged: true,
+  },
+  [DASHBOARD_OPERATIONS.overviewAccountCampaigns]: {
+    operation: DASHBOARD_OPERATIONS.overviewAccountCampaigns,
+    ranged: true,
+  },
   [DASHBOARD_OPERATIONS.overviewSummary]: {
     operation: DASHBOARD_OPERATIONS.overviewSummary,
     ranged: true,

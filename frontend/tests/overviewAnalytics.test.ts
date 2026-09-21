@@ -1,68 +1,79 @@
 import { describe, expect, it } from 'vitest'
-import { buildOverviewAnalytics } from '../src/lib/overviewAnalytics'
-import type { DateRange } from '../src/lib/leads'
+import { buildOverviewAnalytics, buildOverviewSystemTotals } from '../src/lib/overviewAnalytics'
+import { comparisonLabel, pct } from '../src/lib/format'
+import { previousRange, type DateRange } from '../src/lib/leads'
 import type { Lead } from '../src/lib/types'
 
-const range: DateRange = { id: 'custom', label: 'window', from: '2026-01-02', to: '2026-01-03' }
 const lead = (overrides: Partial<Lead>): Lead => ({
   id: crypto.randomUUID(), instance_id: 'a', campaign_id: 'c', profile_url: 'p',
   full_name: null, headline: null, company: null, added_at: null,
   invited_at: null, connected_at: null, first_message_at: null, replied_at: null,
-  last_action_at: null, ...overrides,
-} as Lead)
+  last_action_at: null, pipeline_stage: null, pipeline_substatus: null, lost_reason: null,
+  pipeline_stage_changed_at: null, assigned_to: null, ...overrides,
+})
 
-describe('buildOverviewAnalytics', () => {
-  it('deduplicates within and across accounts, uses earliest milestones, and keeps lifetime nulls at zero', () => {
-    const result = buildOverviewAnalytics([
-      lead({ instance_id: 'a', profile_url: 'same', added_at: '2026-01-02T00:00:00Z', invited_at: '2026-01-02T12:00:00Z' }),
-      lead({ instance_id: 'a', profile_url: 'same', invited_at: '2026-01-02T01:00:00Z', connected_at: '2026-01-03T00:00:00Z' }),
-      lead({ instance_id: 'b', profile_url: 'same', added_at: '2026-01-02T00:00:00Z', invited_at: '2026-01-02T00:00:00Z', replied_at: '2026-01-03T23:00:00Z' }),
-      lead({ instance_id: 'a', profile_url: 'undated' }),
+const range: DateRange = { id: 'custom', label: '2–3 Jan', from: '2026-01-02', to: '2026-01-03' }
+
+describe('Overview fallback cohort semantics', () => {
+  it('deduplicates by account and profile, honors cohort boundaries, and follows late outcomes', () => {
+    const result = buildOverviewSystemTotals([
+      lead({ instance_id: 'a', profile_url: 'same', invited_at: '2026-01-02T12:00:00Z' }),
+      lead({ instance_id: 'a', profile_url: 'same', connected_at: '2026-01-05T12:00:00Z', first_message_at: '2026-01-06T12:00:00Z', replied_at: '2026-01-07T12:00:00Z' }),
+      lead({ instance_id: 'a', profile_url: 'new', invited_at: '2026-01-03T12:00:00Z' }),
+      lead({ instance_id: 'b', profile_url: 'same', invited_at: '2026-01-02T12:00:00Z' }),
+      lead({ instance_id: 'a', profile_url: 'organic', connected_at: '2026-01-02T12:00:00Z' }),
+      lead({ instance_id: 'a', profile_url: 'old', invited_at: '2026-01-01T12:00:00Z', connected_at: '2026-01-02T12:00:00Z', replied_at: '2026-01-03T00:00:00Z' }),
     ], range)
-    expect(result.totals.leads).toBe(2)
-    expect(result.totals.invited).toBe(2)
-    expect(result.totals.connected).toBe(1)
-    expect(result.totals.acceptedOfInvited).toBe(1)
-    expect(result.lifetime).toMatchObject({ leads: 3, invited: 2, connected: 1, replied: 1, messaged: 0 })
-    expect(result.accounts.map((account) => account.instance_id)).toEqual(['a', 'b'])
+
+    expect(result.invited).toBe(3)
+    expect(result.connected).toBe(1)
+    expect(result.messaged).toBe(1)
+    expect(result.replied).toBe(1)
+    // The organic connection and the old invite are not in this invite cohort.
+    expect(result.connected).toBeLessThanOrEqual(result.invited)
   })
 
-  it('uses inclusive UTC days and normalizes offset timestamps in activity', () => {
+  it('pins the 100/40/30/10 contract exactly', () => {
+    const rows = Array.from({ length: 100 }, (_, index) => lead({
+      profile_url: `p-${index}`,
+      added_at: '2026-01-02T00:00:00Z',
+      invited_at: '2026-01-02T00:00:00Z',
+      connected_at: index < 40 ? '2026-01-05T00:00:00Z' : null,
+      first_message_at: index < 30 ? '2026-01-06T00:00:00Z' : null,
+      replied_at: index < 10 ? '2026-01-07T00:00:00Z' : null,
+    }))
+    const totals = buildOverviewSystemTotals(rows, range)
+    expect(totals).toMatchObject({ invited: 100, connected: 40, messaged: 30, replied: 10 })
+    expect((100 * totals.connected) / totals.invited).toBe(40)
+    expect((100 * totals.messaged) / totals.connected).toBe(75)
+    expect((100 * totals.replied) / totals.connected).toBe(25)
+  })
+
+  it('uses event-time current/previous activity but cohort totals for conversion', () => {
     const result = buildOverviewAnalytics([
-      lead({ instance_id: 'a', profile_url: 'x', added_at: '2026-01-02T00:00:00Z', invited_at: '2026-01-03T00:30:00+02:00', connected_at: '2026-01-03T23:59:59Z', replied_at: '2026-01-04T00:00:00Z' }),
-    ], range)
-    expect(result.totals).toMatchObject({ invited: 1, connected: 1, replied: 0 })
-    expect(result.activity).toEqual([
-      { day: '2026-01-02', instance_id: 'a', event_type: 'invited', cnt: 1 },
-      { day: '2026-01-03', instance_id: 'a', event_type: 'connected', cnt: 1 },
-    ])
-    expect(result.activity.reduce((sum, row) => sum + row.cnt, 0)).toBe(2)
+      lead({ profile_url: 'late', invited_at: '2026-01-02T00:00:00Z', connected_at: '2026-01-10T00:00:00Z', replied_at: '2026-01-11T00:00:00Z' }),
+      lead({ profile_url: 'previous', invited_at: '2025-12-26T00:00:00Z' }),
+    ], { id: '7_days', label: 'Past 7 days', from: '2026-01-02', to: '2026-01-08' })
+    expect(result.totals).toMatchObject({ invited: 1, connected: 0, replied: 0 })
+    expect(result.cohort).toMatchObject({ invited: 1, connected: 1, replied: 1 })
+    expect(result.previous?.invited).toBe(1)
+    expect(result.previousCohort?.invited).toBe(1)
   })
 
-  it('returns a previous window for dated ranges and null for all time', () => {
-    const dated = buildOverviewAnalytics([lead({ added_at: '2025-12-31T00:00:00Z', invited_at: '2026-01-01T12:00:00Z' })], range)
-    expect(dated.previous).not.toBeNull()
-    expect(dated.previous?.invited).toBe(1)
-    expect(buildOverviewAnalytics([], { id: 'all', label: 'All time', from: null, to: null }).previous).toBeNull()
+  it('keeps all zero denominators finite and explicit', () => {
+    const empty = buildOverviewSystemTotals([], range)
+    expect(empty).toEqual({ leads: 0, invited: 0, connected: 0, messaged: 0, replied: 0 })
+    expect(comparisonLabel(0, 0, range)).toBe('0.0% vs previous 2 days · 0')
+    expect(comparisonLabel(3, 0, range)).toBe('New vs previous 2 days · 0')
+    expect(comparisonLabel(3, null, { from: null, to: null })).toBe('No comparison')
+    expect(pct(empty.replied, empty.connected)).toBe('—')
+    expect(comparisonLabel(0, 0, range)).not.toMatch(/NaN|Infinity/)
   })
 
-  it('counts undated people in all time and supports open ended UTC ranges', () => {
-    const rows = [
-      lead({ instance_id: 'a', profile_url: 'undated' }),
-      lead({ instance_id: 'a', profile_url: 'early', added_at: '2026-01-01T00:00:00Z', invited_at: '2026-01-01T00:00:00Z' }),
-      lead({ instance_id: 'a', profile_url: 'late', added_at: '2026-01-03T00:00:00Z', invited_at: '2026-01-03T00:00:00Z' }),
-    ]
-    expect(buildOverviewAnalytics(rows, { id: 'all', label: 'All time', from: null, to: null }).totals.leads).toBe(3)
-    expect(buildOverviewAnalytics(rows, { id: 'since', label: 'Since', from: '2026-01-02', to: null }).totals.leads).toBe(1)
-    expect(buildOverviewAnalytics(rows, { id: 'until', label: 'Until', from: null, to: '2026-01-02' }).totals.leads).toBe(1)
-  })
-
-  it('uses the instant, rather than the source offset date, for range membership and duplicate ordering', () => {
-    const result = buildOverviewAnalytics([
-      lead({ instance_id: 'a', profile_url: 'x', added_at: '2026-01-01T00:00:00Z', invited_at: '2026-01-01T01:00:00+02:00' }),
-      lead({ instance_id: 'a', profile_url: 'x', invited_at: '2026-01-01T00:30:00Z' }),
-    ], { id: 'day', label: 'Day', from: '2026-01-01', to: '2026-01-01' })
-    expect(result.totals.invited).toBe(0)
-    expect(result.lifetime.invited).toBe(1)
+  it('uses equal previous windows for 7-day, 30-day, and custom ranges', () => {
+    expect(previousRange({ id: '7', label: '7', from: '2026-09-01', to: '2026-09-07' })).toMatchObject({ from: '2026-08-25', to: '2026-08-31' })
+    expect(previousRange({ id: '30', label: '30', from: '2026-09-01', to: '2026-09-30' })).toMatchObject({ from: '2026-08-02', to: '2026-08-31' })
+    expect(previousRange({ id: 'custom', label: 'custom', from: '2026-09-10', to: '2026-09-12' })).toMatchObject({ from: '2026-09-07', to: '2026-09-09' })
+    expect(previousRange({ id: 'all', label: 'All time', from: null, to: null })).toBeNull()
   })
 })

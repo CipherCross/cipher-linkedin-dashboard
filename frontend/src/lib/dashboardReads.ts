@@ -62,7 +62,7 @@ import type {
   DashboardData, FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
-  OverviewAnalytics,
+  OverviewAccountCampaigns, OverviewPerformance, OverviewSystemTotals,
   LeadsSearchPage, SequenceHubSnapshot,
 } from './types'
 
@@ -86,6 +86,8 @@ export const READ_ENDPOINT = '/api/activity-daily'
 export const READ_OPS = {
   bootstrap: 'dashboard.bootstrap',
   overviewSystemTotals: 'overview.systemTotals',
+  overviewPerformance: 'overview.performance',
+  overviewAccountCampaigns: 'overview.accountCampaigns',
   overviewSummary: 'overview.summary',
   sequenceHub: 'sequences.hub',
   routeSnapshot: 'dashboard.routeSnapshot',
@@ -513,8 +515,9 @@ export async function readPage<T>(
   operation: string,
   query: ReadQuery = {},
   fetchImpl: ApiFetch = authFetch,
+  signal?: AbortSignal,
 ): Promise<ReadPage<T>> {
-  const res = await fetchImpl(buildUrl(operation, query))
+  const res = await fetchImpl(buildUrl(operation, query), signal ? { signal } : undefined)
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null
     throw new Error(
@@ -699,15 +702,88 @@ export async function fetchNeonOverviewAccountAnalytics(
 export async function fetchNeonOverviewSystemTotals(
   range: { readonly from: string | null; readonly to: string | null },
   fetchImpl: ApiFetch = authFetch,
-): Promise<OverviewAnalytics['totals']> {
-  const page = await readPage<{ totals: OverviewAnalytics['totals'] }>(
-    READ_OPS.overviewSystemTotals,
-    { from: range.from, to: range.to, limit: 1 },
-    fetchImpl,
+  signal?: AbortSignal,
+): Promise<OverviewSystemTotals> {
+  return overviewRead(READ_OPS.overviewSystemTotals, range, fetchImpl, signal, async () => {
+    const page = await readPage<{ totals: OverviewSystemTotals }>(
+      READ_OPS.overviewSystemTotals,
+      { from: range.from, to: range.to, limit: 1 },
+      fetchImpl,
+      signal,
+    )
+    const row = page.items[0]
+    if (!row) throw new Error(`${READ_OPS.overviewSystemTotals}: response contained no totals row`)
+    return row.totals
+  })
+}
+
+type OverviewRange = { readonly from: string | null; readonly to: string | null }
+const overviewRequests = new Map<string, Promise<unknown>>()
+
+function overviewRangeKey(range: OverviewRange): string {
+  const toExclusive = range.to
+    ? new Date(`${range.to}T00:00:00Z`).getTime() + 86_400_000
+    : null
+  return `${range.from ? `${range.from}T00:00:00.000Z` : null}|${toExclusive == null ? null : new Date(toExclusive).toISOString()}`
+}
+
+function overviewRead<T>(
+  operation: string,
+  range: OverviewRange,
+  fetchImpl: ApiFetch,
+  signal: AbortSignal | undefined,
+  read: () => Promise<T>,
+): Promise<T> {
+  const key = `${operation}|${overviewRangeKey(range)}`
+  const current = overviewRequests.get(key)
+  if (current) return current as Promise<T>
+  if (signal?.aborted) return Promise.reject(new DOMException('The request was aborted.', 'AbortError'))
+  const request = read()
+  overviewRequests.set(key, request)
+  void request.then(
+    () => { if (overviewRequests.get(key) === request) overviewRequests.delete(key) },
+    () => { if (overviewRequests.get(key) === request) overviewRequests.delete(key) },
   )
-  const row = page.items[0]
-  if (!row) throw new Error(`${READ_OPS.overviewSystemTotals}: response contained no totals row`)
-  return row.totals
+  // Keep the parameter in the helper's contract: operation + range is the
+  // dedupe key; fetchImpl is intentionally not part of it.
+  void fetchImpl
+  return request
+}
+
+export async function fetchNeonOverviewPerformance(
+  range: OverviewRange,
+  fetchImpl: ApiFetch = authFetch,
+  signal?: AbortSignal,
+): Promise<OverviewPerformance> {
+  return overviewRead(READ_OPS.overviewPerformance, range, fetchImpl, signal, async () => {
+    const page = await readPage<OverviewPerformance>(
+      READ_OPS.overviewPerformance,
+      { from: range.from, to: range.to, limit: 1 },
+      fetchImpl,
+      signal,
+    )
+    const row = page.items[0]
+    if (!row) throw new Error(`${READ_OPS.overviewPerformance}: response contained no performance row`)
+    return row
+  })
+}
+
+export async function fetchNeonOverviewAccountCampaigns(
+  range: OverviewRange,
+  fetchImpl: ApiFetch = authFetch,
+  signal?: AbortSignal,
+): Promise<OverviewAccountCampaigns> {
+  return overviewRead(READ_OPS.overviewAccountCampaigns, range, fetchImpl, signal, async () => {
+    const page = await readPage<OverviewAccountCampaigns>(
+      READ_OPS.overviewAccountCampaigns,
+      { from: range.from, to: range.to, limit: 1 },
+      fetchImpl,
+      signal,
+    )
+    const row = page.items[0]
+    if (!row) throw new Error(`${READ_OPS.overviewAccountCampaigns}: response contained no campaigns row`)
+    return row
+  })
 }
 
 /** Bounded union of managed sequences, direct campaigns, deployments and reply previews. */

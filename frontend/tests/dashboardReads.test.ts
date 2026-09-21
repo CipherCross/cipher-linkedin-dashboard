@@ -38,6 +38,8 @@ import {
   fetchNeonDashboard,
   fetchNeonLeadsSearchPage,
   fetchNeonOverviewSystemTotals,
+  fetchNeonOverviewPerformance,
+  fetchNeonOverviewAccountCampaigns,
   fetchNeonOverviewSummary,
   fetchNeonSequenceHub,
   fetchNeonRouteSnapshot,
@@ -126,9 +128,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names thirty-one reads including route-owned performance contracts', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(31)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(31)
+  it('names thirty-three reads including the three narrow Overview contracts', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(33)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(33)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -510,6 +512,8 @@ describe('the dashboard load', () => {
     const pageLocalReads = [
       READ_OPS.bootstrap,
       READ_OPS.overviewSystemTotals,
+      READ_OPS.overviewPerformance,
+      READ_OPS.overviewAccountCampaigns,
       READ_OPS.overviewSummary,
       READ_OPS.routeSnapshot,
       READ_OPS.sequenceHub,
@@ -616,6 +620,39 @@ describe('the dashboard load', () => {
     expect(query.get('from')).toBe('2026-05-01')
     expect(query.get('to')).toBe('2026-05-31')
     expect(query.get('limit')).toBe('1')
+  })
+
+  it('requests one exact Performance and one exact Account/Campaign row', async () => {
+    const performancePayload = {
+      current: { invited: 1, connected: 2, replied: 3 }, previous: null,
+      cohort: { leads: 1, invited: 1, connected: 1, messaged: 1, replied: 1 },
+      previousCohort: null, lifetime: { leads: 1, invited: 1, connected: 1, messaged: 1, replied: 1 },
+      accounts: [], activity: [],
+    }
+    const campaignsPayload = { accounts: [], campaigns: [] }
+    const rec = recorder((url) => url.searchParams.get('op') === READ_OPS.overviewPerformance
+      ? jsonResponse(emptyPage([performancePayload]))
+      : jsonResponse(emptyPage([campaignsPayload])))
+    await expect(fetchNeonOverviewPerformance({ from: '2026-05-01', to: '2026-05-07' }, rec.fetchImpl)).resolves.toEqual(performancePayload)
+    await expect(fetchNeonOverviewAccountCampaigns({ from: '2026-05-01', to: '2026-05-07' }, rec.fetchImpl)).resolves.toEqual(campaignsPayload)
+    expect(onlyQuery(rec, READ_OPS.overviewPerformance).get('from')).toBe('2026-05-01')
+    expect(onlyQuery(rec, READ_OPS.overviewAccountCampaigns).get('to')).toBe('2026-05-07')
+    expect(rec.urls).toHaveLength(2)
+  })
+
+  it('deduplicates identical Overview reads and forwards AbortSignal', async () => {
+    const deferred = new Promise<Response>((resolve) => setTimeout(() => resolve(jsonResponse(emptyPage([{ totals: { leads: 1, invited: 1, connected: 1, messaged: 1, replied: 1 } }]))), 0))
+    const fetchImpl: ApiFetch = async (_url, init) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal)
+      return deferred
+    }
+    const controller = new AbortController()
+    const first = fetchNeonOverviewSystemTotals({ from: '2026-05-01', to: '2026-05-07' }, fetchImpl, controller.signal)
+    const second = fetchNeonOverviewSystemTotals({ from: '2026-05-01', to: '2026-05-07' }, fetchImpl, controller.signal)
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { leads: 1, invited: 1, connected: 1, messaged: 1, replied: 1 },
+      { leads: 1, invited: 1, connected: 1, messaged: 1, replied: 1 },
+    ])
   })
 
   it('requests one bounded Sequence Hub snapshot', async () => {

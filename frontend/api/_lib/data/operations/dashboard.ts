@@ -57,6 +57,10 @@ export const DASHBOARD_OPERATIONS = {
   bootstrap: 'dashboard.bootstrap',
   /** Five system-wide funnel totals for the Overview headline card. */
   overviewSystemTotals: 'overview.systemTotals',
+  /** Event activity plus current/previous/lifetime invite-cohort totals. */
+  overviewPerformance: 'overview.performance',
+  /** Account totals and compact range-scoped campaign rows. */
+  overviewAccountCampaigns: 'overview.accountCampaigns',
   /** Exact route-level aggregates for Overview; never returns raw lead/message rows. */
   overviewSummary: 'overview.summary',
   /** Every notebook/account this team syncs, with its health fields. */
@@ -172,7 +176,48 @@ export interface OverviewAnalyticsTotalsRow {
 }
 
 export interface OverviewSystemTotalsRow {
-  readonly totals: OverviewAnalyticsTotalsRow
+  readonly totals: {
+    readonly leads: number
+    readonly invited: number
+    readonly connected: number
+    readonly messaged: number
+    readonly replied: number
+  }
+}
+
+export interface OverviewPerformanceRow {
+  readonly current: { invited: number; connected: number; replied: number }
+  readonly previous: { invited: number; connected: number; replied: number } | null
+  readonly cohort: { leads: number; invited: number; connected: number; messaged: number; replied: number }
+  readonly previousCohort: { leads: number; invited: number; connected: number; messaged: number; replied: number } | null
+  readonly lifetime: { leads: number; invited: number; connected: number; messaged: number; replied: number }
+  readonly accounts: readonly {
+    instance_id: string
+    current: { invited: number; connected: number; replied: number }
+    previous: { invited: number; connected: number; replied: number } | null
+    cohort: { leads: number; invited: number; connected: number; messaged: number; replied: number }
+    previousCohort: { leads: number; invited: number; connected: number; messaged: number; replied: number } | null
+    lifetime: { leads: number; invited: number; connected: number; messaged: number; replied: number }
+  }[]
+  readonly activity: readonly { day: string; instance_id: string; event_type: string; cnt: number }[]
+}
+
+export interface OverviewAccountCampaignsRow {
+  readonly accounts: readonly {
+    instance_id: string
+    totals: OverviewAnalyticsTotalsRow
+    previous: null
+    lifetime: OverviewAnalyticsTotalsRow
+    cohort: {
+      leads: number
+      invited: number
+      connected: number
+      messaged: number
+      replied: number
+    }
+    previousCohort: null
+  }[]
+  readonly campaigns: readonly CampaignMetricsRow[]
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +250,8 @@ export interface CampaignMetricsRow {
   readonly status_raw: string | null
   readonly total_leads: number
   readonly invites_sent: number
+  readonly connected?: number
+  readonly first_messages?: number
   readonly accepted: number
   readonly replies: number
   readonly acceptance_rate: number | null
@@ -356,45 +403,30 @@ const OVERVIEW_SYSTEM_TOTALS_SQL = `WITH bounds AS (
          ) AS effective_added_at
     FROM public.leads l
    GROUP BY l.instance_id, l.profile_url
+), lead_count AS (
+  SELECT count(*)::int AS leads
+    FROM people p CROSS JOIN bounds b
+   WHERE (b.cur_from IS NULL OR p.effective_added_at >= b.cur_from)
+     AND (b.cur_to IS NULL OR p.effective_added_at < b.cur_to)
+), cohort AS (
+  SELECT p.*
+    FROM people p CROSS JOIN bounds b
+   WHERE p.invited_at IS NOT NULL
+     AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from)
+     AND (b.cur_to IS NULL OR p.invited_at < b.cur_to)
 )
 SELECT jsonb_build_object(
-  'leads', count(p.instance_id) FILTER (
-    WHERE (b.cur_from IS NULL OR p.effective_added_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.effective_added_at < b.cur_to)
+  'leads', (SELECT leads FROM lead_count),
+  'invited', count(c.instance_id)::int,
+  'connected', count(c.instance_id) FILTER (WHERE c.connected_at IS NOT NULL)::int,
+  'messaged', count(c.instance_id) FILTER (
+    WHERE c.connected_at IS NOT NULL AND c.first_message_at IS NOT NULL
   )::int,
-  'invited', count(p.instance_id) FILTER (
-    WHERE p.invited_at IS NOT NULL
-      AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.invited_at < b.cur_to)
-  )::int,
-  'connected', count(p.instance_id) FILTER (
-    WHERE p.connected_at IS NOT NULL
-      AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.connected_at < b.cur_to)
-  )::int,
-  'messaged', count(p.instance_id) FILTER (
-    WHERE p.first_message_at IS NOT NULL
-      AND (b.cur_from IS NULL OR p.first_message_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.first_message_at < b.cur_to)
-  )::int,
-  'replied', count(p.instance_id) FILTER (
-    WHERE p.replied_at IS NOT NULL
-      AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.replied_at < b.cur_to)
-  )::int,
-  'acceptedOfInvited', count(p.instance_id) FILTER (
-    WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL
-      AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.connected_at < b.cur_to)
-  )::int,
-  'repliedOfConnected', count(p.instance_id) FILTER (
-    WHERE p.connected_at IS NOT NULL AND p.replied_at IS NOT NULL
-      AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from)
-      AND (b.cur_to IS NULL OR p.replied_at < b.cur_to)
+  'replied', count(c.instance_id) FILTER (
+    WHERE c.connected_at IS NOT NULL AND c.replied_at IS NOT NULL
   )::int
 ) AS totals
-  FROM people p
-  CROSS JOIN bounds b
+  FROM cohort c
  ORDER BY 1`
 
 export const overviewSystemTotalsOperation: NeonQueryOperation<OverviewSystemTotalsRow> = {
@@ -405,6 +437,196 @@ export const overviewSystemTotalsOperation: NeonQueryOperation<OverviewSystemTot
   mapRow: (row: NeonRow): OverviewSystemTotalsRow => ({
     totals: row.totals as OverviewAnalyticsTotalsRow,
   }),
+}
+
+// ---------------------------------------------------------------------------
+// overview.performance
+// ---------------------------------------------------------------------------
+
+/**
+ * Performance is intentionally smaller than overview.summary. It contains
+ * event-time activity for the chart and invite-cohort totals for the cards;
+ * campaign rows, messages, intent, pipeline, funnel and velocity do not enter
+ * this operation.
+ */
+const OVERVIEW_PERFORMANCE_SQL = `WITH bounds AS (
+  SELECT $1::timestamptz AS cur_from,
+         $2::timestamptz AS cur_to,
+         CASE WHEN $1::timestamptz IS NOT NULL AND $2::timestamptz IS NOT NULL
+              THEN $1::timestamptz - ($2::timestamptz - $1::timestamptz)
+              ELSE NULL END AS prev_from,
+         CASE WHEN $1::timestamptz IS NOT NULL AND $2::timestamptz IS NOT NULL
+              THEN $1::timestamptz ELSE NULL END AS prev_to
+), people AS MATERIALIZED (
+  SELECT l.instance_id, l.profile_url,
+         min(l.added_at) AS added_at,
+         min(l.invited_at) AS invited_at,
+         min(l.connected_at) AS connected_at,
+         min(l.first_message_at) AS first_message_at,
+         min(l.replied_at) AS replied_at,
+         COALESCE(min(l.added_at), LEAST(min(l.invited_at), min(l.connected_at), min(l.first_message_at), min(l.replied_at))) AS effective_added_at
+    FROM public.leads l
+   GROUP BY l.instance_id, l.profile_url
+), periods AS (
+  SELECT 'current'::text AS period, cur_from AS from_at, cur_to AS to_at FROM bounds
+  UNION ALL SELECT 'previous', prev_from, prev_to FROM bounds
+  UNION ALL SELECT 'lifetime', NULL::timestamptz, NULL::timestamptz FROM bounds
+), event_periods AS (
+  SELECT period, from_at, to_at FROM periods WHERE period <> 'lifetime'
+), event_stats AS (
+  SELECT CASE WHEN GROUPING(p.instance_id) = 1 THEN NULL ELSE p.instance_id END AS scope_id,
+         x.period,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND (x.from_at IS NULL OR p.invited_at >= x.from_at) AND (x.to_at IS NULL OR p.invited_at < x.to_at))::int AS invited,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND (x.from_at IS NULL OR p.connected_at >= x.from_at) AND (x.to_at IS NULL OR p.connected_at < x.to_at))::int AS connected,
+         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND (x.from_at IS NULL OR p.replied_at >= x.from_at) AND (x.to_at IS NULL OR p.replied_at < x.to_at))::int AS replied
+    FROM event_periods x
+    LEFT JOIN people p ON true
+   GROUP BY GROUPING SETS ((x.period), (x.period, p.instance_id))
+  HAVING GROUPING(p.instance_id) = 1 OR p.instance_id IS NOT NULL
+), cohort_stats AS (
+  SELECT CASE WHEN GROUPING(p.instance_id) = 1 THEN NULL ELSE p.instance_id END AS scope_id,
+         x.period,
+         count(p.instance_id)::int AS leads,
+         count(p.instance_id)::int AS invited,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL)::int AS connected,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND p.first_message_at IS NOT NULL)::int AS messaged,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND p.replied_at IS NOT NULL)::int AS replied
+    FROM periods x
+    LEFT JOIN people p ON (
+      (x.period = 'lifetime' AND p.invited_at IS NOT NULL)
+      OR (x.period <> 'lifetime' AND p.invited_at IS NOT NULL
+          AND (x.from_at IS NULL OR p.invited_at >= x.from_at)
+          AND (x.to_at IS NULL OR p.invited_at < x.to_at))
+    )
+   GROUP BY GROUPING SETS ((x.period), (x.period, p.instance_id))
+  HAVING GROUPING(p.instance_id) = 1 OR p.instance_id IS NOT NULL
+), activity AS (
+  SELECT to_char(e.ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+         e.instance_id, e.event_type, count(*)::int AS cnt
+    FROM (
+      SELECT instance_id, invited_at AS ts, 'invited'::text AS event_type FROM people
+      UNION ALL SELECT instance_id, connected_at, 'connected' FROM people
+      UNION ALL SELECT instance_id, replied_at, 'replied' FROM people
+    ) e CROSS JOIN bounds b
+   WHERE e.ts IS NOT NULL
+     AND (b.cur_from IS NULL OR e.ts >= b.cur_from)
+     AND (b.cur_to IS NULL OR e.ts < b.cur_to)
+   GROUP BY 1, e.instance_id, e.event_type
+), account_ids AS (
+  SELECT DISTINCT instance_id FROM people
+), global_payload AS (
+  SELECT jsonb_build_object(
+    'current', (SELECT jsonb_build_object('invited', invited, 'connected', connected, 'replied', replied) FROM event_stats WHERE scope_id IS NULL AND period = 'current'),
+    'previous', CASE WHEN (SELECT prev_from FROM bounds) IS NULL THEN NULL ELSE (SELECT jsonb_build_object('invited', invited, 'connected', connected, 'replied', replied) FROM event_stats WHERE scope_id IS NULL AND period = 'previous') END,
+    'cohort', (SELECT jsonb_build_object('leads', leads, 'invited', invited, 'connected', connected, 'messaged', messaged, 'replied', replied) FROM cohort_stats WHERE scope_id IS NULL AND period = 'current'),
+    'previousCohort', CASE WHEN (SELECT prev_from FROM bounds) IS NULL THEN NULL ELSE (SELECT jsonb_build_object('leads', leads, 'invited', invited, 'connected', connected, 'messaged', messaged, 'replied', replied) FROM cohort_stats WHERE scope_id IS NULL AND period = 'previous') END,
+    'lifetime', (SELECT jsonb_build_object('leads', leads, 'invited', invited, 'connected', connected, 'messaged', messaged, 'replied', replied) FROM cohort_stats WHERE scope_id IS NULL AND period = 'lifetime'),
+    'accounts', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+      'instance_id', a.instance_id,
+      'current', (SELECT jsonb_build_object('invited', invited, 'connected', connected, 'replied', replied) FROM event_stats e WHERE e.scope_id = a.instance_id AND e.period = 'current'),
+      'previous', CASE WHEN (SELECT prev_from FROM bounds) IS NULL THEN NULL ELSE (SELECT jsonb_build_object('invited', invited, 'connected', connected, 'replied', replied) FROM event_stats e WHERE e.scope_id = a.instance_id AND e.period = 'previous') END,
+      'cohort', (SELECT jsonb_build_object('leads', leads, 'invited', invited, 'connected', connected, 'messaged', messaged, 'replied', replied) FROM cohort_stats c WHERE c.scope_id = a.instance_id AND c.period = 'current'),
+      'previousCohort', CASE WHEN (SELECT prev_from FROM bounds) IS NULL THEN NULL ELSE (SELECT jsonb_build_object('leads', leads, 'invited', invited, 'connected', connected, 'messaged', messaged, 'replied', replied) FROM cohort_stats c WHERE c.scope_id = a.instance_id AND c.period = 'previous') END,
+      'lifetime', (SELECT jsonb_build_object('leads', leads, 'invited', invited, 'connected', connected, 'messaged', messaged, 'replied', replied) FROM cohort_stats c WHERE c.scope_id = a.instance_id AND c.period = 'lifetime')
+    ) ORDER BY a.instance_id) FROM account_ids a), '[]'::jsonb),
+    'activity', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.day, x.instance_id, x.event_type) FROM activity x), '[]'::jsonb)
+  ) AS performance
+)
+SELECT performance FROM global_payload`
+
+export const overviewPerformanceOperation: NeonQueryOperation<OverviewPerformanceRow> = {
+  build: ({ range }) => ({
+    text: OVERVIEW_PERFORMANCE_SQL,
+    values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
+  }),
+  mapRow: (row: NeonRow): OverviewPerformanceRow => row.performance as OverviewPerformanceRow,
+}
+
+// ---------------------------------------------------------------------------
+// overview.accountCampaigns
+// ---------------------------------------------------------------------------
+
+/**
+ * Account analytics is the only narrow read that joins campaign metadata. It
+ * returns range counts, range first_messages, and lifetime rates only; it does
+ * not carry the legacy summary's messages, intent, pipeline, funnel, velocity,
+ * or chart activity fields.
+ */
+const OVERVIEW_ACCOUNT_CAMPAIGNS_SQL = `WITH bounds AS (
+  SELECT $1::timestamptz AS cur_from, $2::timestamptz AS cur_to
+), lead_rows AS MATERIALIZED (
+  SELECT l.campaign_id, l.instance_id, l.profile_url, l.added_at, l.invited_at,
+         l.connected_at, l.first_message_at, l.replied_at,
+         COALESCE(l.added_at, LEAST(l.invited_at, l.connected_at, l.first_message_at, l.replied_at)) AS effective_added_at
+    FROM public.leads l
+), people AS MATERIALIZED (
+  SELECT instance_id, profile_url, min(added_at) AS added_at, min(invited_at) AS invited_at,
+         min(connected_at) AS connected_at, min(first_message_at) AS first_message_at,
+         min(replied_at) AS replied_at,
+         COALESCE(min(added_at), LEAST(min(invited_at), min(connected_at), min(first_message_at), min(replied_at))) AS effective_added_at
+    FROM lead_rows GROUP BY instance_id, profile_url
+), account_stats AS (
+  SELECT CASE WHEN GROUPING(p.instance_id) = 1 THEN NULL ELSE p.instance_id END AS instance_id,
+         count(p.instance_id) FILTER (WHERE (b.cur_from IS NULL OR p.effective_added_at >= b.cur_from) AND (b.cur_to IS NULL OR p.effective_added_at < b.cur_to))::int AS leads,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR p.invited_at < b.cur_to))::int AS invited,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR p.connected_at < b.cur_to))::int AS connected,
+         count(p.instance_id) FILTER (WHERE p.first_message_at IS NOT NULL AND (b.cur_from IS NULL OR p.first_message_at >= b.cur_from) AND (b.cur_to IS NULL OR p.first_message_at < b.cur_to))::int AS messaged,
+         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied,
+         count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND p.invited_at IS NOT NULL AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR p.connected_at < b.cur_to))::int AS accepted_of_invited,
+         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied_of_connected
+    FROM people p CROSS JOIN bounds b
+   GROUP BY GROUPING SETS ((), (p.instance_id))
+), campaign_stats AS (
+  SELECT c.id AS campaign_id, c.name AS campaign_name, c.instance_id, c.status,
+         c.runtime_status, c.is_archived, c.status_observed_at, c.status_source, c.status_raw,
+         count(l.campaign_id)::int AS total_leads,
+         count(l.added_at) FILTER (WHERE (b.cur_from IS NULL OR l.added_at >= b.cur_from) AND (b.cur_to IS NULL OR l.added_at < b.cur_to))::int AS leads_added,
+         count(l.invited_at) FILTER (WHERE (b.cur_from IS NULL OR l.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR l.invited_at < b.cur_to))::int AS invites_sent,
+         count(l.connected_at) FILTER (WHERE (b.cur_from IS NULL OR l.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS connected,
+         count(l.first_message_at) FILTER (WHERE (b.cur_from IS NULL OR l.first_message_at >= b.cur_from) AND (b.cur_to IS NULL OR l.first_message_at < b.cur_to))::int AS first_messages,
+         count(l.replied_at) FILTER (WHERE (b.cur_from IS NULL OR l.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replies,
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL AND l.connected_at IS NOT NULL)::int AS lifetime_accepted,
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL)::int AS lifetime_invites,
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL AND l.replied_at IS NOT NULL)::int AS lifetime_replied,
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL)::int AS lifetime_connected,
+         count(*) FILTER (WHERE l.invited_at IS NOT NULL AND l.connected_at IS NOT NULL AND (b.cur_from IS NULL OR l.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR l.connected_at < b.cur_to))::int AS accepted_of_invited,
+         count(*) FILTER (WHERE l.connected_at IS NOT NULL AND l.replied_at IS NOT NULL AND (b.cur_from IS NULL OR l.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR l.replied_at < b.cur_to))::int AS replied_of_connected,
+         max(GREATEST(l.invited_at, l.connected_at, l.first_message_at, l.replied_at)) AS last_activity_at,
+         c.briefing_context, c.briefing_context_updated_at
+    FROM public.campaigns c
+    LEFT JOIN lead_rows l ON l.campaign_id = c.id
+    CROSS JOIN bounds b
+   GROUP BY c.id, c.name, c.instance_id, c.status, c.runtime_status, c.is_archived,
+            c.status_observed_at, c.status_source, c.status_raw, c.briefing_context, c.briefing_context_updated_at
+)
+SELECT jsonb_build_object(
+  'accounts', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+    'instance_id', a.instance_id,
+    'totals', jsonb_build_object('leads', a.leads, 'invited', a.invited, 'connected', a.connected, 'messaged', a.messaged, 'replied', a.replied, 'acceptedOfInvited', a.accepted_of_invited, 'repliedOfConnected', a.replied_of_connected),
+    'previous', NULL, 'lifetime', jsonb_build_object('leads', a.leads, 'invited', a.invited, 'connected', a.connected, 'messaged', a.messaged, 'replied', a.replied, 'acceptedOfInvited', a.accepted_of_invited, 'repliedOfConnected', a.replied_of_connected),
+    'cohort', jsonb_build_object('leads', a.invited, 'invited', a.invited, 'connected', a.accepted_of_invited, 'messaged', 0, 'replied', a.replied_of_connected), 'previousCohort', NULL
+  ) ORDER BY a.instance_id) FROM account_stats a WHERE a.instance_id IS NOT NULL), '[]'::jsonb),
+  'campaigns', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+    'campaign_id', campaign_id, 'campaign_name', campaign_name, 'instance_id', instance_id,
+    'status', status, 'runtime_status', runtime_status, 'is_archived', is_archived,
+    'status_observed_at', status_observed_at, 'status_source', status_source, 'status_raw', status_raw,
+    'total_leads', total_leads, 'leads_added', leads_added, 'invites_sent', invites_sent,
+    'connected', connected, 'first_messages', first_messages, 'accepted', connected, 'replies', replies,
+    'lifetime_acceptance_rate', 100.0 * lifetime_accepted / NULLIF(lifetime_invites, 0),
+    'lifetime_reply_rate', 100.0 * lifetime_replied / NULLIF(lifetime_connected, 0),
+    'acceptance_rate', 100.0 * accepted_of_invited / NULLIF(invites_sent, 0),
+    'reply_rate', 100.0 * replied_of_connected / NULLIF(connected, 0),
+    'last_activity_at', last_activity_at, 'briefing_context', briefing_context,
+    'briefing_context_updated_at', briefing_context_updated_at
+  ) ORDER BY invites_sent DESC, campaign_name, campaign_id) FROM campaign_stats), '[]'::jsonb)
+) AS account_campaigns`
+
+export const overviewAccountCampaignsOperation: NeonQueryOperation<OverviewAccountCampaignsRow> = {
+  build: ({ range }) => ({
+    text: OVERVIEW_ACCOUNT_CAMPAIGNS_SQL,
+    values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
+  }),
+  mapRow: (row: NeonRow): OverviewAccountCampaignsRow => row.account_campaigns as OverviewAccountCampaignsRow,
 }
 
 // ---------------------------------------------------------------------------
