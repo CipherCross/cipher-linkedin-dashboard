@@ -16,7 +16,6 @@ import { ACTION_LABELS, isReplyManualReady, REASON_LABELS, SENTIMENT_LABELS, nex
 import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, IconButton, LinkButton, PageHeader, SelectField, Tabs } from '../ui'
 import { COPY } from '../ui/labels'
 import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
-import './replies-inbox.css'
 
 const VIEWS: ReplyInboxScope['view'][] = ['all', 'unreviewed', 'needs_reply', 'deferred', 'completed']
 const VIEW_LABELS: Record<ReplyInboxScope['view'], string> = { all: COPY.all, unreviewed: COPY.unreviewed, needs_reply: COPY.needsReply, deferred: COPY.deferred, completed: COPY.completed }

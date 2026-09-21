@@ -17,7 +17,6 @@ import {
   SegmentedControl, SelectField, TextField,
 } from '../ui'
 import { COPY } from '../ui/labels'
-import './sentiment-analysis.css'
 import { UI_LOCALE } from '../ui/datetime'
 
 export interface SentimentAnalyticsResponse {

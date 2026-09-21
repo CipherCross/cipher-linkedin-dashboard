@@ -34,6 +34,15 @@
  * Inside one layer, specificity decides exactly as it did before layering. */
 @import './ui/ui.css' layer(app);
 @import './styles.css' layer(app);
+
+/* Route-local sheets. These were imported directly by their components, which
+ * made Vite inject them UNLAYERED — and unlayered CSS outranks every layer, so
+ * on those routes each of these rules silently defeated every Tailwind utility
+ * regardless of specificity. They belong in `app` with the rest of the app's
+ * CSS, where specificity decides normally and utilities still win. */
+@import './pages/replies-inbox.css' layer(app);
+@import './pages/sentiment-analysis.css' layer(app);
+@import './components/overview/overview.css' layer(app);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 

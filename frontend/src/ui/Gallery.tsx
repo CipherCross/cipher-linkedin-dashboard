@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { presetRanges } from '../lib/leads'
-import '../pages/replies-inbox.css'
 import {
   ArrowRight, Check, CircleAlert, Clock, Download, Filter, MoreHorizontal, Plus,
   RefreshCw, Trash2,

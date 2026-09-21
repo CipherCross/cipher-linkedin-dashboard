@@ -10,7 +10,7 @@
  * gallery during the Phase 0 migration, not to a hypothetical.
  */
 import { describe, it, expect } from 'vitest'
-import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ENTRY = join(__dirname, '../src/index.css')
@@ -101,6 +101,39 @@ describe('CSS entry', () => {
       }
     }
     expect(captured, 'shadcn is defining a literal value for a token tokens.css owns').toEqual([])
+  })
+})
+
+describe('no stylesheet escapes the layer system', () => {
+  /**
+   * The entry file is not the only way CSS enters the bundle. A component that
+   * does `import './thing.css'` has Vite inject that sheet UNLAYERED, and
+   * unlayered CSS outranks every layer regardless of specificity — so every
+   * rule in it silently defeats every Tailwind utility on that route.
+   *
+   * This was live: replies-inbox.css and sentiment-analysis.css were imported
+   * from their pages, and nothing caught it, because the assertions above only
+   * read index.css. Every stylesheet must now arrive through index.css with an
+   * explicit layer().
+   */
+  it('imports every local stylesheet through the entry, with a layer', () => {
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name)
+        if (statSync(p).isDirectory()) { walk(p); continue }
+        if (!/\.(tsx|ts)$/.test(p)) continue
+        for (const [, spec] of readFileSync(p, 'utf8').matchAll(/^import\s+'([^']+\.css)'/gm)) {
+          // Package stylesheets (fontsource, etc.) are not ours to layer, and
+          // main.tsx importing the entry itself is the one legitimate case.
+          if (!spec.startsWith('.')) continue
+          if (p.endsWith('main.tsx') && spec === './index.css') continue
+          offenders.push(`${p.replace(/.*\/src\//, 'src/')} -> ${spec}`)
+        }
+      }
+    }
+    walk(join(__dirname, '../src'))
+    expect(offenders, 'these stylesheets bypass index.css and land unlayered').toEqual([])
   })
 })
 

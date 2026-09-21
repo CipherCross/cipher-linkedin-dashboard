@@ -18,7 +18,6 @@ import type {
 } from '../lib/types'
 import { OverviewAnalytics } from '../components/overview/OverviewAnalytics'
 import { InlineError, LinkButton, PageHeader } from '../ui'
-import '../components/overview/overview.css'
 
 type Answer<T> = { key: string; value: T }
 
