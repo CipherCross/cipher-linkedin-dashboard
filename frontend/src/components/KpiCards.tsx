@@ -130,14 +130,14 @@ export function KpiCards({
                     height={28}
                   />
                 ) : (
-                  <div className="kpi-spark-spacer" aria-hidden="true" />
+                  <div className="h-7" aria-hidden="true" />
                 )}
               </div>
             )}
           </>
         )
         return c.to ? (
-          <Link className="card kpi kpi-link" key={c.key} to={c.to}>{body}</Link>
+          <Link className="card kpi text-inherit no-underline cursor-pointer transition-[border-color] hover:border-app-accent" key={c.key} to={c.to}>{body}</Link>
         ) : (
           <div className="card kpi" key={c.key}>{body}</div>
         )
@@ -183,21 +183,21 @@ function IntentGroup({ intent, intentPrev }: { intent: ReplyIntentMetrics; inten
     },
   ]
   return (
-    <div className="card kpi kpi-intent-group">
+    <div className="card kpi flex-[2_1_420px] max-w-full">
       <div className="kpi-top">
         <span className="kpi-label"><Sparkles size={14} strokeWidth={2} /> Reply intent</span>
       </div>
-      <div className="kpi-intent-metrics">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-x-app-lg gap-y-app-md mt-app-xs">
         {rows.map((r) => (
-          <div className="kpi-intent-metric" key={r.key}>
-            <span className="kpi-intent-metric-label">{r.label}</span>
-            <span className="kpi-intent-metric-value">
+          <div className="flex flex-col gap-0.5 min-w-0" key={r.key}>
+            <span className="text-app-text-secondary text-app-meta">{r.label}</span>
+            <span className="inline-flex items-center gap-app-sm text-app-section font-semibold tabular-nums tracking-[-0.01em]">
               {num(r.value)}
               {r.cur !== undefined && r.prev !== undefined && (
                 <Delta cur={r.cur} prev={r.prev} maturing />
               )}
             </span>
-            <span className="kpi-intent-metric-sub">{r.sub}</span>
+            <span className="text-app-text-muted text-app-meta">{r.sub}</span>
           </div>
         ))}
       </div>

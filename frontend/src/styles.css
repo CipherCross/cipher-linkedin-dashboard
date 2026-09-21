@@ -210,14 +210,7 @@ select {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
-.kpi-sub { color: var(--text-secondary); font-size: var(--text-meta); }
-
-/* Clickable KPI tile — drills into a related page. No lift on hover: a data
- * surface does not move under the cursor. */
-.kpi-link { color: inherit; text-decoration: none; cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out); }
-.kpi-link:hover { border-color: var(--accent); }
-
-/* range-over-range delta chip */
+.kpi-sub { color: var(--text-secondary); font-size: var(--text-meta); }/* range-over-range delta chip */
 .kpi-delta {
   flex-shrink: 0;
   display: inline-flex; align-items: center;
@@ -232,12 +225,7 @@ select {
 
 .kpi-spark { margin-top: auto; padding-top: 6px; }
 .kpi-spark .sparkline { width: 100%; height: 28px; display: block; }
-.kpi-spark .sparkline-empty { padding: 6px 0 2px; }
-/* Blank stand-in for tiles with no activity series, so all values in a row sit
- * on the same baseline instead of floating in tiles of different anatomy. */
-.kpi-spark-spacer { height: 28px; }
-
-.hot-leads { margin-bottom: var(--space-8); }
+.kpi-spark .sparkline-empty { padding: 6px 0 2px; }.hot-leads { margin-bottom: var(--space-8); }
 .hot-leads-head {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: 12px; margin-bottom: 6px;
@@ -857,27 +845,7 @@ tr:last-child td { border-bottom: none; }
 }
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
-}
-/* layout scaffolding for PageSkeleton (kept separate from real component CSS) */
-.sk-header {
-  display: flex; justify-content: space-between; align-items: flex-end;
-  gap: var(--space-7); flex-wrap: wrap; margin-bottom: 20px;
-}
-.sk-stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.sk-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sk-row { display: flex; align-items: center; gap: 12px; }
-.sk-wrap { flex-wrap: wrap; }
-.sk-grow { flex: 1; }
-.sk-lines { display: flex; flex-direction: column; gap: 10px; }
-.sk-kpi-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-6); margin-bottom: var(--space-8);
-}
-.sk-account-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: var(--space-7);
-}
-@media (max-width: 480px) { .sk-account-grid { grid-template-columns: 1fr; } }
+}@media (max-width: 480px) { }
 
 /* --- Error boundary (crash) screen --------------------------------------- */
 .crash {
@@ -2362,18 +2330,7 @@ td .pipe-stage-select.quiet:focus-visible {
   cursor: pointer;
   padding: 0;
 }
-.chip button:hover { color: var(--text); }
-.chip-toggle {
-  cursor: pointer;
-  gap: 3px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-.chip-toggle:hover {
-  color: var(--text);
-  border-color: var(--text-muted);
-}
-.search-query {
+.chip button:hover { color: var(--text); }.search-query {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -2422,20 +2379,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .search-copy-inline { margin-left: 8px; }.kv-editor { display: flex; flex-direction: column; gap: 6px; }
 .kv-row { display: flex; gap: 6px; align-items: center; }
 .kv-key { flex: 0 0 40%; min-width: 0; }
-.kv-value { flex: 1; min-width: 0; }
-
-/* --- ICP editor: a persona / industry sub-form nested inside the ICP modal — */
-.icp-subentity {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--surface-2);
-}
-.icp-subentity-head { display: flex; align-items: center; gap: 8px; }
-.icp-subentity-title { flex: 1; min-width: 0; font-weight: 600; word-break: break-word; }
-
-/* --- ICP read-only viewer ------------------------------------------------- */
+.kv-value { flex: 1; min-width: 0; }/* --- ICP read-only viewer ------------------------------------------------- */
 /* Cards on the ICP grid open the read-only viewer on click. */
 .search-card.clickable { cursor: pointer; }
 .search-card.clickable:hover { border-color: var(--border-strong); }
@@ -2460,10 +2404,7 @@ td .pipe-stage-select.quiet:focus-visible {
   color: var(--accent);
 }
 .icp-view-link:hover { text-decoration: underline; }
-.icp-view-link svg { flex-shrink: 0; }
-.icp-view-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-
-/* Copy button: same footprint as .icon-only-btn but sized for inline use. */
+.icp-view-link svg { flex-shrink: 0; }/* Copy button: same footprint as .icon-only-btn but sized for inline use. */
 .icp-copy-btn { flex-shrink: 0; }.follow-group { display: flex; flex-direction: column; }.follow-list {
   container-type: inline-size;
   display: flex;
@@ -3960,42 +3901,7 @@ td .pipe-stage-select.quiet:focus-visible {
   transition: transform var(--dur-fast, .14s) var(--ease-out, ease-out);
   transform: rotate(-90deg);
 }
-[aria-expanded="true"] > .overview-section-chevron { transform: rotate(0deg); }
-
-/* ── Intent grouped KPI card ────────────────────────────────────────────── */
-
-/* One tile wide enough for its five sub-metrics to sit side by side, not a
- * full-width banner: `flex: 2 1 420px` let it swallow the rest of the row. */
-.kpi-intent-group { flex: 2 1 420px; max-width: 100%; }
-.kpi-intent-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: var(--space-md) var(--space-lg);
-  margin-top: var(--space-xs);
-}
-/* Label, value and qualifier in one column, so the number is under the words
- * that name it however wide the card gets. */
-.kpi-intent-metric { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.kpi-intent-metric-label {
-  color: var(--text-secondary);
-  font-size: var(--text-meta);
-  line-height: var(--leading-meta);
-}
-.kpi-intent-metric-value {
-  display: inline-flex; align-items: center; gap: var(--space-sm);
-  font-size: var(--text-section);
-  line-height: var(--leading-section);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-.kpi-intent-metric-sub {
-  color: var(--text-muted);
-  font-size: var(--text-meta);
-  line-height: var(--leading-meta);
-}
-
-/* ── DateRangePicker ARIA grid row wrappers ─────────────────────────────── */
+[aria-expanded="true"] > .overview-section-chevron { transform: rotate(0deg); }/* ── DateRangePicker ARIA grid row wrappers ─────────────────────────────── */
 
 .drp-wd-row { display: contents; }
 

@@ -395,7 +395,7 @@ function ViewChips({
         {collapsible && <span className="muted small">{values.length}</span>}
         <CopyButton text={values.join(', ')} title={`Copy ${label.toLowerCase()}`} />
       </div>
-      <div className="icp-view-chips">
+      <div className="flex flex-wrap gap-[6px]">
         {shown.map((v) => (
           <span className={`chip${variant ? ` ${variant}` : ''}`} key={v}>
             {variant === 'exclude' ? '−' : ''}
@@ -405,7 +405,7 @@ function ViewChips({
         {collapsible && (
           <button
             type="button"
-            className="chip chip-toggle"
+            className="chip cursor-pointer gap-[3px] text-app-text-secondary font-medium hover:text-app-text hover:border-app-text-muted"
             aria-expanded={expanded}
             onClick={() => setExpanded((e) => !e)}
           >
@@ -570,9 +570,9 @@ function IcpViewer({
               <h3 className="search-group-head">Buyer personas</h3>
               <div className="kv-editor">
                 {personas.map((p) => (
-                  <div className="card icp-subentity" key={p.id}>
-                    <div className="icp-subentity-head">
-                      <span className="icp-subentity-title">{p.kind}</span>
+                  <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={p.id}>
+                    <div className="flex items-center gap-app-sm">
+                      <span className="flex-1 min-w-0 font-semibold break-words">{p.kind}</span>
                       <CopyButton
                         text={`Persona — ${p.kind}`}
                         title="Copy persona name"
@@ -598,9 +598,9 @@ function IcpViewer({
               <h3 className="search-group-head">Industries</h3>
               <div className="kv-editor">
                 {industries.map((x) => (
-                  <div className="card icp-subentity" key={x.id}>
-                    <div className="icp-subentity-head">
-                      <span className="icp-subentity-title">{x.name}</span>
+                  <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={x.id}>
+                    <div className="flex items-center gap-app-sm">
+                      <span className="flex-1 min-w-0 font-semibold break-words">{x.name}</span>
                     </div>
                     <ViewChips label="Include keywords" values={x.include_keywords} variant="include" />
                   </div>
@@ -899,10 +899,10 @@ function IcpEditor({
           <h3 className="search-group-head">Buyer personas</h3>
           <div className="kv-editor">
             {draft.personas.map((p) => (
-              <div className="card icp-subentity" key={p._key}>
-                <div className="icp-subentity-head">
+              <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={p._key}>
+                <div className="flex items-center gap-app-sm">
                   <input
-                    className="icp-subentity-title"
+                    className="flex-1 min-w-0 font-semibold break-words"
                     value={p.kind}
                     placeholder="Persona name (e.g. management)"
                     onChange={(e) => setPersona(p._key, { kind: e.target.value })}
@@ -984,10 +984,10 @@ function IcpEditor({
           </div>
           <div className="kv-editor">
             {draft.industries.map((x) => (
-              <div className="card icp-subentity" key={x._key}>
-                <div className="icp-subentity-head">
+              <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={x._key}>
+                <div className="flex items-center gap-app-sm">
                   <input
-                    className="icp-subentity-title"
+                    className="flex-1 min-w-0 font-semibold break-words"
                     value={x.name}
                     placeholder="Industry name"
                     onChange={(e) => setIndustry(x._key, { name: e.target.value })}

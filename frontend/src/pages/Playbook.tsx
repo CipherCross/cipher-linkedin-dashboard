@@ -180,7 +180,7 @@ export function Playbook() {
           </div>
         )}
         {!loaded ? (
-          <div className="sk-lines" aria-busy="true">
+          <div className="flex flex-col gap-2.5" aria-busy="true">
             {['40%', '92%', '88%', '70%', '95%', '64%', '90%', '80%', '55%', '86%'].map((w, i) => (
               <Skeleton key={i} width={w} height={13} />
             ))}
