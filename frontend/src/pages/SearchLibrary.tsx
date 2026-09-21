@@ -217,9 +217,9 @@ export function SearchLibrary() {
       </Toolbar>
 
       {platforms.length > 0 && (
-        <div className="active-filters">
+        <div className="flex flex-wrap gap-app-sm items-center mb-app-lg">
           <button
-            className={`filter-chip${platform === 'all' ? ' active' : ''}`}
+            className={`inline-flex items-center gap-app-xs h-8 px-app-md border border-app-border rounded-pill bg-app-surface-2 text-app-text font-[inherit] text-app-meta cursor-pointer hover:border-app-accent [&_svg]:text-app-text-muted${platform === 'all' ? ' active' : ''}`}
             onClick={() => setPlatform('all')}
           >
             All platforms
@@ -227,7 +227,7 @@ export function SearchLibrary() {
           {platforms.map((p) => (
             <button
               key={p}
-              className={`filter-chip${platform === p ? ' active' : ''}`}
+              className={`inline-flex items-center gap-app-xs h-8 px-app-md border border-app-border rounded-pill bg-app-surface-2 text-app-text font-[inherit] text-app-meta cursor-pointer hover:border-app-accent [&_svg]:text-app-text-muted${platform === p ? ' active' : ''}`}
               onClick={() => setPlatform(platform === p ? 'all' : p)}
             >
               {p}
@@ -255,7 +255,7 @@ export function SearchLibrary() {
         </div>
       ) : (
         groups.map((g) => (
-          <section className="search-group" key={g.name}>
+          <section className="mb-app-xl" key={g.name}>
             <h2 className="search-group-head">
               {g.name} <span className="muted small">· {g.list.length}</span>
             </h2>
@@ -325,7 +325,7 @@ function SearchCard({
       {s.description && <p className="search-card-desc small">{s.description}</p>}
 
       {((s.include_keywords?.length ?? 0) > 0 || (s.exclude_keywords?.length ?? 0) > 0) && (
-        <div className="search-chips">
+        <div className="flex flex-wrap gap-1.5">
           {s.include_keywords?.map((k) => (
             <span className="chip include" key={`i-${k}`}>{k}</span>
           ))}
@@ -336,8 +336,8 @@ function SearchCard({
       )}
 
       {s.boolean_query && (
-        <div className="search-query">
-          <code className="search-query-text">{s.boolean_query}</code>
+        <div className="flex items-start gap-app-sm bg-app-surface-2 border border-app-border rounded-sm px-2.5 py-app-sm">
+          <code className="flex-1 min-w-0 whitespace-pre-wrap [word-break:break-word] text-[length:var(--text-sm)] text-app-text">{s.boolean_query}</code>
           <Button variant="secondary" size="sm" icon={<Copy size={16} aria-hidden="true" />} onClick={onCopy}>
             Copy
           </Button>
@@ -345,9 +345,9 @@ function SearchCard({
       )}
 
       {filterEntries.length > 0 && (
-        <dl className="search-filters small">
+        <dl className="m-0 flex flex-col gap-[3px] small [&_dt]:min-w-[90px] [&_dt]:shrink-0 [&_dd]:m-0 [&_dd]:[word-break:break-word]">
           {filterEntries.map(([k, v]) => (
-            <div className="search-filter-row" key={k}>
+            <div className="flex gap-app-sm" key={k}>
               <dt className="muted">{k}</dt>
               <dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
             </div>
@@ -355,9 +355,9 @@ function SearchCard({
         </dl>
       )}
 
-      {s.notes && <p className="search-card-notes small muted">{s.notes}</p>}
+      {s.notes && <p className="m-0 small muted">{s.notes}</p>}
 
-      <div className="search-card-foot muted small">
+      <div className="border-t border-app-border pt-app-sm mt-auto muted small">
         {s.author ? `${s.author} · ` : ''}updated {shortDate(s.updated_at)}
       </div>
     </article>
@@ -539,7 +539,7 @@ function SearchEditor({
               <Button
                 variant="secondary"
                 size="sm"
-                className="search-copy-inline"
+                className="ml-app-sm"
                 icon={<Copy size={16} aria-hidden="true" />}
                 onClick={copyQuery}
                 disabled={!draft.boolean_query.trim()}
@@ -560,14 +560,14 @@ function SearchEditor({
             <span className="filter-label">Filters</span>
             <div className="kv-editor">
               {draft.filterRows.map((row, i) => (
-                <div className="kv-row" key={i}>
+                <div className="flex gap-1.5 items-center" key={i}>
                   <input
-                    className="kv-key"
+                    className="flex-[0_0_40%] min-w-0"
                     value={row.key}
                     placeholder="key (e.g. seniority)"
                     onChange={(e) => setFilterRow(i, { key: e.target.value })}
                   />
-                  <div className="kv-value">
+                  <div className="flex-1 min-w-0">
                     {row.isList ? (
                       <ChipInput
                         values={row.list}

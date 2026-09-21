@@ -167,43 +167,43 @@ export function Funnel({
   return (
     <div className="card">
       <h3 className="card-title">Funnel</h3>
-      <div className="funnel">
+      <div className="flex flex-col gap-app-xs">
         {rows.map((s, i) => (
           <Fragment key={s.key}>
             {i > 0 &&
               (s.boundary ? (
-                <div className="funnel-divider">
-                  <span className="funnel-divider-label">Manual pipeline</span>
-                  <span className="funnel-conv-inline">
-                    <span className="funnel-conv-rate">
+                <div className="flex items-center gap-2.5 pl-[82px] my-[3px] text-[length:var(--text-2xs)] leading-[1.4] before:content-[''] before:self-stretch before:-ml-px before:border-l-2 before:border-dashed before:border-app-border-strong">
+                  <span className="uppercase tracking-[var(--tracking-caps)] text-app-text-muted font-semibold whitespace-nowrap">Manual pipeline</span>
+                  <span className="inline-flex gap-1.5">
+                    <span className="text-app-text-secondary font-semibold tabular-nums">
                       {s.base && s.base > 0 ? pct(s.count, s.base) : '—'}
                     </span>
-                    <span className="funnel-conv-verb">{s.verb}</span>
+                    <span className="text-app-text-muted">{s.verb}</span>
                   </span>
                 </div>
               ) : (
-                <div className="funnel-conv">
-                  <span className="funnel-conv-rate">
+                <div className="flex items-center gap-1.5 pl-[82px] text-[length:var(--text-2xs)] leading-[1.4] before:content-[''] before:self-stretch before:-ml-px before:border-l-2 before:border-solid before:border-app-border-strong">
+                  <span className="text-app-text-secondary font-semibold tabular-nums">
                     {s.base && s.base > 0 ? pct(s.count, s.base) : '—'}
                   </span>
-                  <span className="funnel-conv-verb">{s.verb}</span>
+                  <span className="text-app-text-muted">{s.verb}</span>
                 </div>
               ))}
             <div className={`funnel-row${s.pipeline ? ' funnel-row--pipeline' : ''}`}>
-              <span className="funnel-label">{s.label}</span>
+              <span className="text-app-text-muted text-[length:var(--text-xs)]">{s.label}</span>
               <div className="funnel-track">
                 <div
-                  className="funnel-bar"
+                  className="h-full rounded-sm transition-[width] duration-300 print:[print-color-adjust:exact]"
                   style={{ width: barWidth(s.count, s.pipeline), background: s.color }}
                 />
               </div>
-              <span className="funnel-count">{num(s.count)}</span>
+              <span className="text-right tabular-nums font-semibold min-w-11">{num(s.count)}</span>
             </div>
           </Fragment>
         ))}
       </div>
 
-      <div className="funnel-footer">
+      <div className="flex flex-wrap justify-between items-baseline gap-app-sm mt-app-md">
         <span className="muted small">
           {num(pending)} invites still pending (sent, not yet accepted)
           {preExisting > 0 &&
@@ -211,7 +211,7 @@ export function Funnel({
           {pipelineRows && pipelineMax > 0 && ' · manual-pipeline bars use their own zoomed scale'}
         </span>
         {pipelineRows && (
-          <span className="funnel-overall">
+          <span className="text-[length:var(--text-xs)] text-app-text-secondary tabular-nums [&_strong]:text-app-text [&_strong]:font-semibold">
             <strong>{num(clients)}</strong> clients from {num(total)} leads ·{' '}
             <strong>{total > 0 ? pct(clients, total) : '—'}</strong> Lead→Client
           </span>
