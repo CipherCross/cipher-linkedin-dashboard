@@ -645,23 +645,47 @@ supplying *appearance* until each route converts to utilities in Phase 3. This
 gets the focus-trap / roving-tabindex / ARIA wins at no visual risk, and avoids
 a single high-risk restyling of all 13 primitives at once.
 
-### Phase 1b · NEXT, and one thing to know before starting
+### Phase 1b · Overlay — ATTEMPTED AND REVERTED, findings below
 
 `Dialog`/`Drawer` are the highest-value remaining port — Base UI's Dialog
 replaces ~60 lines of hand-rolled focus trap, scroll-lock depth counter and
 `inert` juggling in `Overlay.tsx`, and it has every prop needed (`modal`,
 `initialFocus`, `finalFocus`, `onOpenChange` with a `reason`).
 
-**The blocker is structural, not behavioural.** `ui-scrim` is today a flex
-*wrapper* that centres the panel, whereas Base UI renders `Dialog.Backdrop` as
-a *sibling* of `Dialog.Popup`. Porting therefore means repositioning the popup
-itself (`position: fixed` + transform, or an inset grid) and revalidating the
-geometry of all nine dialogs and the drawer variant. That is a focused pass
-with a browser check per dialog — not something to tack onto the end of another
-session.
+**Attempted on 2026-09-21 and reverted.** The findings, so the next attempt
+does not rediscover them:
 
-Keep the mount-based API when it happens: these components only render while
-open, so `<Dialog.Root open onOpenChange={…}>` preserves every call site.
+*The structural worry was unfounded.* `Dialog.Backdrop` is not required.
+Keeping `ui-scrim` as a flex wrapper INSIDE `Dialog.Portal`, with
+`Dialog.Popup` as its child, needs **no CSS change at all** — verified in a
+browser: panel 534x640, white, 16px radius, shadow, scrim at
+`rgba(16,24,40,0.45)`. Clicking the scrim is still outside the popup, so Base
+UI dismisses on it.
+
+*What actually works* through Base UI: Escape, outside press, `body {
+overflow: hidden }` scroll lock, and `aria-hidden="true"` on `#root`. Note the
+last two are invisible to jsdom — the primitive test asserting
+`document.body.style.overflow === 'hidden'` fails under Base UI even though the
+behaviour is correct in a real browser.
+
+*What does not work, and is why this was reverted:* **focus never enters the
+dialog, and is not restored to the trigger on close.** Measured:
+`document.activeElement` is `<body>` both while open and after Escape. Base UI
+moves focus on an open *transition*, and these components mount already open.
+Holding `open` permanently true produces no transition; mounting closed and
+flipping it in an effect does not fix it either — both were tried.
+
+Two accessibility regressions against a contract the current implementation
+meets and `tests/uiPrimitives.test.tsx` pins, so the port was reverted rather
+than shipped.
+
+**Next attempt should start here:** get `Dialog.Popup`'s `initialFocus` to
+resolve to a real element (the ref is likely still null when Base UI calls it),
+or drive the dialog from a real trigger via `Dialog.Trigger` instead of a
+permanently-open root. Two of the sixteen primitive assertions will need
+rewording when it lands — `aria-modal` (Base UI uses `aria-hidden` on the
+background instead, which the standard's own wording allows) and the jsdom
+scroll-lock assertion, which must move to the browser check.
 
 ### Remaining order
 
