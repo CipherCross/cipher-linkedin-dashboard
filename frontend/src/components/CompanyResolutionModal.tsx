@@ -64,7 +64,7 @@ export function CompanyResolutionModal({
   return (
     <div className="pipe-modal-overlay csv-company-overlay" onClick={onClose}>
       <div
-        className="pipe-modal csv-company-modal"
+        className="pipe-modal w-[min(720px,100%)] max-h-[min(760px,calc(100vh-40px))]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="csv-company-title"
@@ -85,7 +85,7 @@ export function CompanyResolutionModal({
           </button>
         </div>
 
-        <label className="csv-company-search">
+        <label className="flex items-center gap-app-sm px-2.5 border border-app-border rounded-md bg-app-surface-2 focus-within:border-app-accent focus-within:shadow-[0_0_0_3px_var(--accent-subtle)] [&_input]:flex-1 [&_input]:border-0 [&_input]:pl-0 [&_input]:bg-transparent [&_input]:shadow-none!">
           <Search size={16} aria-hidden="true" />
           <input
             autoFocus
@@ -98,10 +98,10 @@ export function CompanyResolutionModal({
 
         {error && <div className="csv-inline-error" role="alert">{error}</div>}
 
-        <div className="csv-company-results" aria-busy={busy}>
-          {busy && <div className="muted small csv-company-empty">Searching Airtable…</div>}
+        <div className="min-h-[180px] max-h-[440px] overflow-y-auto flex flex-col gap-[6px]" aria-busy={busy}>
+          {busy && <div className="muted small min-h-[180px] flex flex-col items-center justify-center gap-[5px] text-center [&_svg]:text-app-text-muted">Searching Airtable…</div>}
           {!busy && results.length === 0 && (
-            <div className="csv-company-empty">
+            <div className="min-h-[180px] flex flex-col items-center justify-center gap-[5px] text-center [&_svg]:text-app-text-muted">
               <Building2 size={24} aria-hidden="true" />
               <div>No matching Companies found.</div>
               <div className="muted small">
@@ -113,18 +113,18 @@ export function CompanyResolutionModal({
             results.map((company) => (
               <button
                 type="button"
-                className="csv-company-option"
+                className="w-full grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2.5 items-center text-left p-2.5 border border-app-border rounded-md bg-app-surface-2 text-app-text cursor-pointer hover:border-app-accent-border hover:bg-app-surface-3 [&>svg]:text-app-accent"
                 key={company.id}
                 onClick={() => onSelect(company)}
               >
                 <Building2 size={18} aria-hidden="true" />
-                <span className="csv-company-option-main">
+                <span className="min-w-0 flex flex-col gap-0.5">
                   <strong>{company.name || 'Unnamed company'}</strong>
                   <span className="muted small">
                     {[company.website, company.linkedin].filter(Boolean).join(' · ') || 'No website or LinkedIn stored'}
                   </span>
                 </span>
-                <span className="csv-company-pick">Select</span>
+                <span className="text-app-accent text-[length:var(--text-xs)] font-semibold">Select</span>
               </button>
             ))}
         </div>

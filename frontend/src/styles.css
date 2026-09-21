@@ -845,52 +845,7 @@ tr:last-child td { border-bottom: none; }
 }
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
-}@media (max-width: 480px) { }
-
-/* --- Error boundary (crash) screen --------------------------------------- */
-.crash {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.crash-card {
-  width: 100%;
-  max-width: 440px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  text-align: center;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-overlay);
-  padding: 32px 28px;
-}
-.crash-title { margin: 4px 0 0; font-size: var(--text-xl); }
-.crash-sub { margin: 0; color: var(--text-secondary); line-height: 1.5; }
-.crash-detail {
-  width: 100%;
-  margin: 4px 0 0;
-  text-align: left;
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--danger);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 160px;
-  overflow-y: auto;
-}
-.crash-actions { display: flex; gap: 10px; margin-top: 6px; }
-.crash-hint { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; }
-
-.breadcrumb { margin-bottom: 2px; }
+}@media (max-width: 480px) { }.breadcrumb { margin-bottom: 2px; }
 .breadcrumb a { color: var(--muted); }
 
 .row-link { color: var(--text); text-decoration: none; transition: color 0.14s ease; }
@@ -1968,19 +1923,7 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .msg-senti-btns { display: none; }
 .msg-reclassify.open .msg-senti-btns,
 .msg:hover .msg-senti-btns { display: flex; }
-.msg-senti-btns button { display: inline-flex; align-items: center; gap: 4px; }
-
-/* --- Reply rows: keyboard focus already styled; nothing extra needed ----- */
-
-/* --- Inline route-error fallback card (rendered inside Layout) ----------- */
-.crash-inline { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.crash-inline-head { display: flex; align-items: center; gap: 10px; color: var(--danger); }
-.crash-inline .crash-title { font-size: var(--text-lg); }
-.crash-inline .crash-sub { margin: 0; }
-.crash-inline .crash-detail { margin: 0; }
-.crash-inline .crash-actions { margin-top: 2px; }
-
-/* --- Inline-style cleanup: warn dot, error banner, danger text, disabled day --- */
+.msg-senti-btns button { display: inline-flex; align-items: center; gap: 4px; }/* --- Inline-style cleanup: warn dot, error banner, danger text, disabled day --- */
 .dot.warn { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
 
 .banner.error {
@@ -2908,69 +2851,11 @@ td .pipe-stage-select.quiet:focus-visible {
   border-radius: var(--radius-md);
   background: var(--surface-1);
   box-shadow: var(--shadow-overlay);
-}
-
-.csv-company-modal { width: min(720px, 100%); max-height: min(760px, calc(100vh - 40px)); }
-.csv-company-modal .pipe-modal-head { align-items: flex-start; }
-.csv-company-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-}
-.csv-company-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
-.csv-company-search input {
-  flex: 1;
-  border: 0;
-  padding-left: 0;
-  background: transparent;
-  box-shadow: none !important;
-}
-.csv-company-results {
-  min-height: 180px;
-  max-height: 440px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.csv-company-empty {
-  min-height: 180px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  text-align: center;
-}
-.csv-company-empty svg { color: var(--text-muted); }
-.csv-company-option {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  text-align: left;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-}
-.csv-company-option:hover { border-color: var(--accent-border); background: var(--surface-3); }
-.csv-company-option > svg { color: var(--accent); }
-.csv-company-option-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.csv-company-option-main .small {
+}.csv-company-modal .pipe-modal-head { align-items: flex-start; }.csv-company-option-main .small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.csv-company-pick { color: var(--accent); font-size: var(--text-xs); font-weight: 600; }
-.btn.danger { color: var(--danger); border-color: var(--danger-border); }
+}.btn.danger { color: var(--danger); border-color: var(--danger-border); }
 .btn.danger:hover:not(:disabled) { background: var(--danger-subtle); border-color: var(--danger); }
 
 .csv-result-hero {
