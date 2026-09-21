@@ -232,7 +232,7 @@ export function CampaignDetail() {
               <span className="cmp-chip" key={c.campaign_id}>
                 {c.campaign_name}
                 {c.campaign_id === campaign.campaign_id ? (
-                  <span className="cmp-chip-base"> · base</span>
+                  <span className="text-app-text-muted text-[length:var(--text-2xs)]"> · base</span>
                 ) : (
                   <button
                     aria-label={`Remove ${c.campaign_name}`}
@@ -264,7 +264,7 @@ export function CampaignDetail() {
             intentPrev={kpis.intentPrev}
           />
 
-          <div className="two-col">
+          <div className="grid grid-cols-2 gap-app-lg mb-app-xl">
             <Funnel leads={leads} showPipeline />
             <CohortChart leads={leads} />
           </div>
@@ -281,16 +281,16 @@ export function CampaignDetail() {
 
           {/* Diagnostics that answer a specific question rather than the daily
               one. Collapsed so the funnel and activity stay the headline. */}
-          <details className="card analyze-section">
+          <details className="analyze-section card mt-app-lg [&>summary]:cursor-pointer [&>summary]:font-semibold [&>summary]:list-none [&>summary]:flex [&>summary]:items-baseline [&>summary]:gap-1.5">
             <summary>
               Analyze
               <span className="muted small"> · demographics, lead additions, timing</span>
             </summary>
-            <div className="stack analyze-body">
+            <div className="stack mt-app-lg">
               <DemographicsSection leads={leads} />
               <LeadAdditionsChart leads={leads} granularity="day" />
               <AddBatchesTable leads={leads} />
-              <div className="two-col">
+              <div className="grid grid-cols-2 gap-app-lg mb-app-xl">
                 <LagHistogram
                   title="Time from invite to accept"
                   color="var(--success)"
@@ -316,7 +316,7 @@ export function CampaignDetail() {
 function DeploymentSource({ context }: { context: CampaignSequenceContext | null }) {
   if (!context || context.source !== 'builder') {
     return (
-      <div className="campaign-source muted small">
+      <div data-campaign="source" className="flex items-center gap-1.5 flex-wrap mt-[5px] muted small">
         <span className="badge">Created in Linked Helper</span>
       </div>
     )
@@ -327,7 +327,7 @@ function DeploymentSource({ context }: { context: CampaignSequenceContext | null
   if (context.publish_status) parts.push(publishStatusLabel(context.publish_status))
   if (context.lineage === 'explicit_link') parts.push('linked by hand')
   return (
-    <div className="campaign-source muted small">
+    <div data-campaign="source" className="flex items-center gap-1.5 flex-wrap mt-[5px] muted small">
       <span className="badge">Sequence Builder</span>
       {context.sequence_document_id ? (
         <Link className="row-link" to={`/sequences/${encodeURIComponent(context.sequence_document_id)}`}>
@@ -385,7 +385,7 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
   }
 
   return (
-    <section className="card campaign-briefing-context">
+    <section className="card mb-app-xl flex flex-col gap-app-md [&_h2]:m-0 [&_p]:mt-1 [&_p]:mx-0 [&_p]:mb-0 [&_p]:max-w-[820px] [&_p]:leading-[1.5] [&_textarea]:min-h-24">
       <div>
         <h2>Briefing context</h2>
         <p className="muted small">
@@ -401,7 +401,7 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Example: This campaign re-engages older leads who did not accept from Mykyta's main profile. Compare it as a second-touch audience, not a fresh outbound campaign."
       />
-      <div className="campaign-briefing-context-foot">
+      <div className="flex items-center justify-between gap-app-md max-[560px]:items-start max-[560px]:flex-col">
         <span className="muted small">
           {campaign.briefing_context_updated_at
             ? `Updated ${new Date(campaign.briefing_context_updated_at).toLocaleString()}`
@@ -468,7 +468,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
 
   return (
     <div className="stack">
-      <div className="two-col">
+      <div className="grid grid-cols-2 gap-app-lg mb-app-xl">
         <div className="card">
           <h2>Age distribution</h2>
           {demo.ages.length === 0 ? (
@@ -502,13 +502,13 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
           {genderTotal === 0 ? (
             <ChartEmpty height={240} label="No gender data yet" />
           ) : (
-            <div className="gender-split">
-              <div className="gender-split-bar" role="img" aria-label="Gender split">
+            <div className="flex flex-col gap-[14px] py-app-sm px-0">
+              <div className="flex w-full h-[22px] rounded-sm overflow-hidden bg-app-surface-2" role="img" aria-label="Gender split">
                 {demo.gender.map((g) =>
                   g.count > 0 ? (
                     <span
                       key={g.id}
-                      className="gender-split-seg"
+                      className="h-full"
                       style={{
                         width: `${(100 * g.count) / genderTotal}%`,
                         background: GENDER_COLOR[g.id],
@@ -518,11 +518,11 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
                   ) : null,
                 )}
               </div>
-              <ul className="gender-legend small">
+              <ul className="list-none m-0 p-0 flex flex-wrap gap-x-[18px] gap-y-1.5 [&_li]:flex [&_li]:items-center [&_li]:gap-[7px] small">
                 {demo.gender.map((g) => (
                   <li key={g.id}>
                     <span
-                      className="gender-swatch"
+                      className="w-[11px] h-[11px] rounded-[3px] shrink-0"
                       style={{ background: GENDER_COLOR[g.id] }}
                       aria-hidden="true"
                     />
@@ -538,7 +538,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
           )}
         </div>
       </div>
-      <div className="muted small demo-ethics">
+      <div className="muted small leading-[1.5]">
         Age is a career-history estimate; contradictory education/job signals remain unknown.
         Gender is inferred from name and headline until an SDR confirms it. “Pending evaluation”
         and an evaluated “unknown” are separate; neither is dropped from the totals.
