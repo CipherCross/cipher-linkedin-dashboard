@@ -339,7 +339,7 @@ function SequenceLibrary() {
 
       {loading ? (
         <div className="sequence-card-grid" aria-label="Loading sequences">
-          {[0, 1, 2].map((key) => <div key={key} className="sequence-card sequence-card-skeleton" />)}
+          {[0, 1, 2].map((key) => <div key={key} className="sequence-card min-h-[300px] cursor-default [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" />)}
         </div>
       ) : view === 'deployments' ? (
         hubError ? (
@@ -350,7 +350,7 @@ function SequenceLibrary() {
           /* One table, one header row, a banner row per sequence. Every group
              used to be its own card repeating the same six column headers, so
              a 1280px window showed about two of sixty-six deployments. */
-          <TableFrame className="deployment-frame" scrollLabel="Deployments">
+          <TableFrame className="mb-app-xl" scrollLabel="Deployments">
             <Table className="deployment-table" caption="Deployments by sequence">
               <thead><tr>
                 <th>Campaign / notebook</th><th>Linked Helper runtime</th><th>Publish</th>
@@ -362,8 +362,8 @@ function SequenceLibrary() {
                     <th colSpan={6} scope="colgroup">
                       <div className="deployment-group-head">
                         <div>
-                          <span className="eyebrow">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</span>
-                          <span className="deployment-group-name" id={`deployment-${item.id}`}>{item.name}</span>
+                          <span className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</span>
+                          <span className="text-[length:var(--text-subsection)] font-semibold" id={`deployment-${item.id}`}>{item.name}</span>
                           <span className="muted small">{rows.length} campaign{rows.length === 1 ? '' : 's'}</span>
                         </div>
                         {item.sequence_document_id && <Link className="link-btn" to={`/sequences/${encodeURIComponent(item.sequence_document_id)}`}>Open builder <ChevronRight size={14} /></Link>}
@@ -394,7 +394,7 @@ function SequenceLibrary() {
         </div>
       ) : visible.length === 0 ? (
         <div className="card sequence-empty-state">
-          <div className="sequence-empty-icon"><MessageSquarePlus size={26} /></div>
+          <div className="grid place-items-center size-[58px] rounded-[18px] text-app-accent bg-app-accent-subtle border border-app-accent-border"><MessageSquarePlus size={26} /></div>
           <h2>{query ? 'No matching sequences' : showArchived ? 'No archived sequences' : 'Start with a blank canvas'}</h2>
           <p>{query ? 'Try another name or message fragment.' : 'Connection request, follow-ups and variations all stay together.'}</p>
           {!query && !showArchived && (
@@ -403,7 +403,7 @@ function SequenceLibrary() {
         </div>
       ) : (
         <>
-        <div className="sequence-library-switch build-archive-switch" role="group" aria-label="Builder sequence status">
+        <div className="sequence-library-switch w-fit mb-[14px]" role="group" aria-label="Builder sequence status">
           <button className={!showArchived ? 'active' : ''} onClick={() => setShowArchived(false)}>Current <span>{items.filter((item) => !item.archived).length}</span></button>
           <button className={showArchived ? 'active' : ''} onClick={() => setShowArchived(true)}>Archived <span>{items.filter((item) => item.archived).length}</span></button>
         </div>
@@ -421,8 +421,8 @@ function SequenceLibrary() {
                   if (event.key === 'Enter' || event.key === ' ') navigate(`/sequences/${item.id}`)
                 }}
               >
-                <div className="sequence-card-top">
-                  <div className="sequence-card-glyph"><Split size={19} /></div>
+                <div className="flex items-center justify-between">
+                  <div className="size-[38px] grid place-items-center rounded-[11px] text-app-accent bg-app-accent-subtle border border-app-accent-border"><Split size={19} /></div>
                   <button
                     className="icon-only-btn"
                     aria-label={item.archived ? 'Restore sequence' : 'Archive sequence'}
@@ -433,7 +433,7 @@ function SequenceLibrary() {
                   </button>
                 </div>
                 <h2>{item.name}</h2>
-                <p className="sequence-card-preview">{sequencePreviewText(item)}</p>
+                <p className="line-clamp-2 min-h-[42px] m-0 text-app-text-secondary text-[length:var(--text-sm)] leading-[1.55]">{sequencePreviewText(item)}</p>
                 <div className="sequence-mini-flow" aria-hidden="true">
                   {item.document.steps.slice(0, 5).map((step, index) => (
                     <span key={step.id} className={step.kind === 'connection' ? 'connection' : ''}>
@@ -492,7 +492,7 @@ function SortableStepShell({ step, children }: { step: SequenceStep; children: (
       <GripVertical size={17} />
     </button>
   )
-  return <section ref={sortable.setNodeRef} style={style} className="sequence-step-card">{children(handle)}</section>
+  return <section ref={sortable.setNodeRef} style={style} className="border border-app-border rounded-[15px] bg-app-surface [box-shadow:var(--shadow-sm)] overflow-hidden">{children(handle)}</section>
 }
 
 function SortableVariationShell({
@@ -524,7 +524,7 @@ function SortableVariationShell({
       <GripVertical size={15} />
     </button>
   )
-  return <article ref={sortable.setNodeRef} style={style} className="sequence-variation-card">{children(handle)}</article>
+  return <article ref={sortable.setNodeRef} style={style} className="min-w-0 p-2.5 border border-app-border rounded-[12px] bg-app-surface-2">{children(handle)}</article>
 }
 
 function CommentComposer({
@@ -541,7 +541,7 @@ function CommentComposer({
   const [body, setBody] = useState('')
   return (
     <div className="pipe-modal-overlay" onClick={onClose}>
-      <div className="pipe-modal sequence-comment-modal" role="dialog" aria-modal="true" aria-label="Add comment" onClick={(event) => event.stopPropagation()}>
+      <div className="pipe-modal w-[min(520px,calc(100vw-28px))]" role="dialog" aria-modal="true" aria-label="Add comment" onClick={(event) => event.stopPropagation()}>
         <div className="pipe-modal-head">
           <span>Add comment</span>
           <button className="conv-close" onClick={onClose} aria-label="Close"><X size={16} /></button>
@@ -630,7 +630,7 @@ function VariationEditor({
           onChange={(event) => onDocument(updateVariation(document, step.id, variation.id, { label: event.target.value }))}
           aria-label="Variation name"
         />
-        <span className="sequence-comment-count"><MessageCircle size={13} /> {relevant.length}</span>
+        <span className="flex items-center gap-[3px] text-app-text-muted text-[length:var(--text-meta)]"><MessageCircle size={13} /> {relevant.length}</span>
         <button
           className="icon-only-btn danger"
           aria-label="Remove variation"
@@ -643,13 +643,13 @@ function VariationEditor({
         {PERSONALIZATION_TOKENS.map((token) => (
           <button key={token} type="button" onClick={() => insertText(token)}>{token}</button>
         ))}
-        <span className="sequence-emoji-tools">
+        <span className="inline-flex gap-app-xs ml-auto">
           {['😊', '👋', '🚀', '💡'].map((emoji) => <button key={emoji} type="button" onClick={() => insertText(emoji)}>{emoji}</button>)}
         </span>
       </div>
       <textarea
         ref={textareaRef}
-        className="sequence-message-textarea"
+        className="w-full min-h-[220px] resize-y leading-[1.6] bg-app-surface"
         value={variation.text}
         onChange={(event) => onDocument(updateVariation(document, step.id, variation.id, { text: event.target.value }))}
         onSelect={captureSelection}
@@ -658,14 +658,14 @@ function VariationEditor({
         placeholder={step.kind === 'connection' ? 'Connection note can be empty…' : 'Write this variation…'}
         rows={7}
       />
-      <div className="sequence-variation-footer">
+      <div className="flex items-center justify-between pt-[5px]">
         <button className="link-btn" onClick={addSelectionComment}>
           <MessageCircle size={13} />
           {selection && selection.end > selection.start ? 'Comment on selection' : 'Comment'}
         </button>
         <span className={overLimit ? 'char-warning' : 'muted'}>{count}{step.kind === 'connection' ? ` / ${CONNECTION_REQUEST_WARNING_LIMIT}` : ''}</span>
       </div>
-      {overLimit && <p className="sequence-inline-warning">LinkedIn may reject this connection note. This is a warning only.</p>}
+      {overLimit && <p className="[margin:5px_0_0] text-app-warning text-[length:var(--text-meta)]">LinkedIn may reject this connection note. This is a warning only.</p>}
       {anchors.length > 0 && (
         <div className="sequence-commented-copy" aria-label="Commented text preview">
           {highlighted.map((part, index) => part.highlighted ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>)}
@@ -725,17 +725,17 @@ function BuildCanvas({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
       <SortableContext items={document.steps.slice(1).map((step) => step.id)} strategy={verticalListSortingStrategy}>
-        <div className="sequence-step-list">
+        <div className="flex flex-col gap-3">
           {document.steps.map((step, index) => (
             <SortableStepShell key={step.id} step={step}>
               {(stepHandle) => (
                 <>
                   <header className="sequence-step-head">
-                    <div className={`sequence-step-icon ${step.kind}`}>
+                    <div className={`sequence-step-icon ${step.kind} grid place-items-center size-9 flex-none rounded-[11px]`}>
                       {step.kind === 'connection' ? <UserRoundPlus size={17} /> : <MessageCircle size={17} />}
                     </div>
                     <div>
-                      <span className="eyebrow">Step {index + 1}</span>
+                      <span className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase">Step {index + 1}</span>
                       <h2>{stepTitle(document, step.id)}</h2>
                     </div>
                     <span className="sequence-step-meta">{step.variations.length} variation{step.variations.length === 1 ? '' : 's'}</span>
@@ -782,7 +782,7 @@ function BuildCanvas({
               )}
             </SortableStepShell>
           ))}
-          <button className="sequence-add-step" onClick={() => onDocument(addMessageStep(document))}>
+          <button className="self-center flex items-center justify-center gap-[7px] w-[min(320px,100%)] p-[11px] [border:1px_dashed_var(--accent-border)] rounded-[12px] bg-app-accent-subtle text-app-accent [font:inherit] font-[650] cursor-pointer" onClick={() => onDocument(addMessageStep(document))}>
             <Plus size={18} /> Add message
           </button>
         </div>
@@ -804,7 +804,7 @@ function BranchBuilder({
     <div >
       <header className="sequence-section-intro">
         <div>
-          <div className="eyebrow"><Split size={14} /> Sequence versions</div>
+          <div className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase"><Split size={14} /> Sequence versions</div>
           <h2>Build A/B/C branches</h2>
           <p>Choose one variation from every step. These branches are prepared sequences, not live traffic experiments.</p>
         </div>
@@ -818,11 +818,11 @@ function BranchBuilder({
           <button className="btn" onClick={() => onDocument(addBranch(document))}><Plus size={15} /> Create branch A</button>
         </div>
       ) : (
-        <div className="sequence-branch-grid">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(330px,100%),1fr))] gap-3">
           {document.branches.map((branch, branchIndex) => (
             <article key={branch.id} className="card sequence-branch-card">
               <header>
-                <span className="sequence-branch-letter">{branch.name.trim().slice(0, 2) || branchIndex + 1}</span>
+                <span className="grid place-items-center size-[34px] rounded-[10px] bg-[var(--purple-subtle)] border border-[var(--purple-border)] text-[var(--purple)] font-extrabold">{branch.name.trim().slice(0, 2) || branchIndex + 1}</span>
                 <input
                   value={branch.name}
                   onChange={(event) => onDocument(updateBranch(document, branch.id, { name: event.target.value }))}
@@ -844,7 +844,7 @@ function BranchBuilder({
                   </label>
                 ))}
               </div>
-              <button className="btn sequence-preview-branch" onClick={() => onPreview(branch.id)}><Eye size={14} /> Preview branch {branch.name}</button>
+              <button className="btn w-full justify-center" onClick={() => onPreview(branch.id)}><Eye size={14} /> Preview branch {branch.name}</button>
             </article>
           ))}
         </div>
@@ -879,7 +879,7 @@ function PreviewPanel({
     <div >
       <header className="sequence-section-intro">
         <div>
-          <div className="eyebrow"><Eye size={14} /> Recipient view</div>
+          <div className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase"><Eye size={14} /> Recipient view</div>
           <h2>LinkedIn preview</h2>
           <p>An approximate rendering for reading the whole flow. LinkedIn can change its UI and limits independently.</p>
         </div>
@@ -914,10 +914,10 @@ function PreviewPanel({
             {Object.entries(document.sampleData).map(([key, value]) => <span key={key}><b>{`{${key}}`}</b>{value}</span>)}
           </div>
         </aside>
-        <div className={`linkedin-preview ${device}`}>
-          {device === 'mobile' && <div className="linkedin-phone-notch" />}
+        <div className={`linkedin-preview ${device} w-[min(780px,100%)] min-h-[620px] my-0 mx-auto [border:1px_solid_#d4d8dd] rounded-[10px] bg-white text-[#191919] [box-shadow:var(--shadow-overlay)] overflow-hidden [&.mobile]:w-[min(390px,100%)] [&.mobile]:border-[8px] [&.mobile]:border-[#24272b] [&.mobile]:rounded-[34px]`}>
+          {device === 'mobile' && <div className="w-[120px] h-[20px] my-0 mx-auto [border-radius:0_0_13px_13px] [background:#24272b]" />}
           <div className="linkedin-preview-topbar">
-            <div className="linkedin-back">‹</div>
+            <div className="text-[#666] text-[28px] leading-none">‹</div>
             <div className="linkedin-avatar">A</div>
             <div><strong>{document.sampleData.firstName}</strong><span>{document.sampleData.jobTitle}</span></div>
             <MoreHorizontal size={18} />
@@ -992,9 +992,9 @@ function CommentsPanel({
       </div>
       {view === 'comments' ? (
         <>
-          <label className="sequence-resolved-toggle"><input type="checkbox" checked={showResolved} onChange={(event) => setShowResolved(event.target.checked)} /> Show resolved</label>
+          <label className="flex items-center gap-[7px] [padding:3px_12px_10px] text-app-text-muted text-[length:var(--text-2xs)]"><input type="checkbox" checked={showResolved} onChange={(event) => setShowResolved(event.target.checked)} /> Show resolved</label>
           <div className="sequence-comment-list">
-            {visible.length === 0 && <div className="sequence-panel-empty"><MessageCircle size={22} /><p>No {showResolved ? '' : 'open '}comments.</p></div>}
+            {visible.length === 0 && <div className="flex flex-col items-center gap-[7px] [padding:40px_10px] text-app-text-muted text-center"><MessageCircle size={22} /><p>No {showResolved ? '' : 'open '}comments.</p></div>}
             {visible.map((thread) => {
               const step = document.steps.find((candidate) => candidate.id === thread.step_id)
               const variation = step?.variations.find((candidate) => candidate.id === thread.variation_id)
@@ -1160,7 +1160,7 @@ export function PublishWizard({
         <header className="sequence-publish-head">
           <div className="sequence-publish-head-icon"><Send size={19} /></div>
           <div>
-            <span className="eyebrow">Linked Helper</span>
+            <span className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase">Linked Helper</span>
             <h2 id="sequence-publish-title">Publish campaign</h2>
             <p>{sequence.name} · revision {sequence.revision}</p>
           </div>
@@ -1190,14 +1190,14 @@ export function PublishWizard({
             {loadingTargets && <div className="sequence-publish-loading"><LoaderCircle size={20} /><span>Checking available accounts…</span></div>}
             {!loadingTargets && targetsError && <div className="sequence-publish-state error"><AlertCircle size={20} /><div><strong>Accounts could not be loaded</strong><p>{targetsError}</p></div><button className="btn sm" onClick={loadTargets}>Try again</button></div>}
             {!loadingTargets && !targetsError && targets.length === 0 && <div className="sequence-publish-state"><Laptop size={22} /><div><strong>No publishing destinations yet</strong><p>Open Linked Helper on an approved machine and wait for its next sync.</p></div></div>}
-            {!loadingTargets && !targetsError && targets.length > 0 && <div className="sequence-publish-target-list">
+            {!loadingTargets && !targetsError && targets.length > 0 && <div className="grid gap-[9px]">
               {targets.map((item) => {
                 const normalized = normalizeVerifiedAccountSnapshot(item.account_snapshot, { instanceId: item.instance_id, machineKey: item.machine_key })
                 const available = item.compatible && Boolean(normalized)
                 const selected = item.instance_id === targetId
                 return <label key={item.instance_id} className={`sequence-publish-target ${selected ? 'selected' : ''} ${!available ? 'unavailable' : ''}`}>
                   <input type="radio" name="publish-target" value={item.instance_id} checked={selected} disabled={!available} onChange={() => setTargetId(item.instance_id)} />
-                  <span className="sequence-publish-target-avatar">{publishAccountName(item).slice(0, 1).toUpperCase()}</span>
+                  <span className="size-10 grid place-items-center rounded-full bg-app-accent-subtle text-app-accent text-[length:var(--text-md)] font-[780]">{publishAccountName(item).slice(0, 1).toUpperCase()}</span>
                   <span className="sequence-publish-target-copy">
                     <strong>{publishAccountName(item)}</strong>
                     <small>{item.machine_key} · {item.instance_id}</small>
@@ -1205,11 +1205,11 @@ export function PublishWizard({
                     <small title={item.contract_fingerprint ?? undefined}>Observed {shortFingerprint(item.contract_fingerprint)}{item.approved_contract_fingerprint ? ` · approved ${shortFingerprint(item.approved_contract_fingerprint)}` : ''}</small>
                   </span>
                   <span className={`sequence-publish-readiness ${available ? 'ready' : ''}`}>{available ? <><CheckCircle2 size={13} /> Ready</> : <><AlertCircle size={13} /> Not ready</>}</span>
-                  {!available && <small className="sequence-publish-target-error">{item.compatibility_error_code ? item.compatibility_error_code.split('_').join(' ') : 'Account details could not be verified'}</small>}
+                  {!available && <small className="[grid-column:2_/_-1] -mt-[5px] text-app-warning text-[length:var(--text-meta)] capitalize">{item.compatibility_error_code ? item.compatibility_error_code.split('_').join(' ') : 'Account details could not be verified'}</small>}
                 </label>
               })}
             </div>}
-            {unavailableTargets.length > 0 && <p className="sequence-publish-help"><ShieldCheck size={14} /> Unavailable machines stay visible so you know why they cannot receive a campaign.</p>}
+            {unavailableTargets.length > 0 && <p className="flex items-center gap-1.5 [margin:12px_2px_0] text-app-text-muted text-[length:var(--text-2xs)]"><ShieldCheck size={14} /> Unavailable machines stay visible so you know why they cannot receive a campaign.</p>}
           </section>}
 
           {step === 2 && <section className="sequence-publish-section" aria-labelledby="publish-setup-title">
@@ -1218,24 +1218,24 @@ export function PublishWizard({
               <button className="link-btn" onClick={() => setBranchIds(allBranchesSelected ? [] : document.branches.map((branch) => branch.id))}>{allBranchesSelected ? 'Clear all' : 'Select all'}</button>
             </div>
             <div className="sequence-publish-branch-list">
-              {document.branches.length === 0 && <div className="sequence-publish-no-branches"><Split size={18} /><span>No branches configured yet. Add a branch in the Branches tab before publishing.</span></div>}
+              {document.branches.length === 0 && <div className="[grid-column:1_/_-1] flex items-center gap-2 p-3 [border:1px_dashed_var(--warning-border)] rounded-[11px] bg-app-warning-subtle text-app-warning text-[length:var(--text-xs)]"><Split size={18} /><span>No branches configured yet. Add a branch in the Branches tab before publishing.</span></div>}
               {document.branches.map((branch, index) => {
                 const checked = branchIds.includes(branch.id)
                 return <label key={branch.id} className={checked ? 'selected' : ''}>
                   <input type="checkbox" checked={checked} onChange={(event) => setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id))} />
-                  <span className="sequence-publish-branch-letter">{String.fromCharCode(65 + index)}</span>
+                  <span className="sequence-publish-branch-letter size-8 grid place-items-center border border-app-border rounded-[9px] bg-app-surface text-app-text-muted font-[780] [label.selected_&]:border-[var(--purple-border)] [label.selected_&]:text-[var(--purple)]">{String.fromCharCode(65 + index)}</span>
                   <span><strong>{branch.name}</strong><small>{sequence.name} {String.fromCharCode(65 + index)}</small></span>
                   <Check size={15} />
                 </label>
               })}
             </div>
             <div className="sequence-publish-config-grid">
-              <div className="sequence-publish-config-card">
+              <div className="p-[13px] border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_65%,transparent)]">
                 <div className="sequence-publish-config-title"><Laptop size={16} /><div><strong>Profile actions</strong><small>Optional actions before the invite</small></div></div>
                 <label className="sequence-publish-switch"><span><strong>Visit profile</strong><small>Open and extract the profile first</small></span><input type="checkbox" checked={visit} onChange={(event) => setVisit(event.target.checked)} /><i /></label>
                 <label className="sequence-publish-switch"><span><strong>Follow profile</strong><small>Follow before sending the invite</small></span><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /><i /></label>
               </div>
-              <div className="sequence-publish-config-card">
+              <div className="p-[13px] border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_65%,transparent)]">
                 <div className="sequence-publish-config-title"><Clock3 size={16} /><div><strong>Timing</strong><small>Hours between campaign actions</small></div></div>
                 <label className="sequence-publish-delay"><span><strong>Before connection request</strong><small>Optional</small></span><input aria-label="Hours before connection request" type="number" min="1" max="720" placeholder="None" value={preInviteDelay} onChange={(event) => setPreInviteDelay(event.target.value)} /><b>hours</b></label>
                 <label className="sequence-publish-delay"><span><strong>After connection</strong><small>Before Message 1</small></span><input aria-label="Hours after connection" type="number" min="1" max="720" value={inviteDelay} onChange={(event) => setInviteDelay(event.target.value)} /><b>hours</b></label>
@@ -1254,8 +1254,8 @@ export function PublishWizard({
               <div><span>Campaigns</span><strong>{preview.length}</strong><small>{branchIds.length} selected {branchIds.length === 1 ? 'branch' : 'branches'}</small></div>
               <div><span>Sequence version</span><strong>Revision {sequence.revision}</strong><small>Immutable snapshot</small></div>
             </div>
-            {previewError ? <div className="sequence-publish-state error"><AlertCircle size={20} /><div><strong>Preview needs attention</strong><p>{previewError}</p></div></div> : <div className="sequence-publish-preview-list">
-              {preview.map((campaign) => <article key={campaign.branchId} className="sequence-publish-preview">
+            {previewError ? <div className="sequence-publish-state error"><AlertCircle size={20} /><div><strong>Preview needs attention</strong><p>{previewError}</p></div></div> : <div className="grid gap-[9px]">
+              {preview.map((campaign) => <article key={campaign.branchId} className="p-3 border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_62%,transparent)]">
                 <div className="sequence-publish-preview-head"><span>{campaign.branchLetter}</span><div><strong>{campaign.campaignName}</strong><small>{campaign.actions.length} campaign actions</small></div><CheckCircle2 size={17} /></div>
                 <div className="sequence-publish-action-flow">{campaign.actions.map((action, index) => <span key={`${action.type}-${index}`}>{PUBLISH_ACTION_LABELS[action.type] ?? action.type}</span>)}</div>
               </article>)}
@@ -1407,7 +1407,7 @@ function SequenceEditor({ id }: { id: string }) {
     }
   }
 
-  if (loading) return <div className="sequence-editor-loading"><div className="sequence-card sequence-card-skeleton" /></div>
+  if (loading) return <div className="max-w-[900px] [margin:30px_auto]"><div className="sequence-card min-h-[300px] cursor-default [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" /></div>
   if (error || !detail || !document) return <div className="card sequence-empty-state"><h2>Could not open sequence</h2><p>{error ?? 'Unknown sequence.'}</p><Button variant="secondary" onClick={() => navigate('/sequences')}>Back to sequences</Button></div>
 
   return (
@@ -1458,7 +1458,7 @@ function SequenceEditor({ id }: { id: string }) {
 
       {isAdmin && publishJobs.length > 0 && (
         <section className={`sequence-publish-job-strip ${publishJobs[0].status}`} aria-label="Latest campaign publishing status">
-          <span className="sequence-publish-job-icon">{publishJobs[0].status === 'success' ? <CheckCircle2 size={17} /> : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status) ? <AlertCircle size={17} /> : <LoaderCircle size={17} />}</span>
+          <span className="sequence-publish-job-icon size-7 grid place-items-center rounded-[8px] bg-app-surface text-app-accent [.sequence-publish-job-strip.succeeded_&]:text-app-success [.sequence-publish-job-strip.failed_&]:text-app-danger">{publishJobs[0].status === 'success' ? <CheckCircle2 size={17} /> : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status) ? <AlertCircle size={17} /> : <LoaderCircle size={17} />}</span>
           <div><strong>{publishStatusLabel(publishJobs[0].status)}</strong><small>{publishJobs[0].target_machine_key} · revision {publishJobs[0].sequence_revision}</small>{publishJobs[0].replaces_job_id && <small>Replacement for job {publishJobs[0].replaces_job_id.slice(0, 8)}</small>}{publishJobs[0].replaced_by_job_id && <small>Replaced by job {publishJobs[0].replaced_by_job_id.slice(0, 8)}</small>}</div>
           <span>{publishJobs[0].branches.length} {publishJobs[0].branches.length === 1 ? 'campaign' : 'campaigns'}</span>
         </section>
@@ -1473,7 +1473,7 @@ function SequenceEditor({ id }: { id: string }) {
       {/* The review rail is collapsed by default: it used to take a third of
           the editor's width even with no comments on the sequence. */}
       <div className={`sequence-editor-body${reviewOpen ? ' with-review' : ''}`}>
-        <main className="sequence-editor-canvas">
+        <main className="min-w-0">
           {tab === 'build' && (
             <BuildCanvas
               document={document}
