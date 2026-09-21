@@ -1,0 +1,9 @@
+/* --- Charts (shared, see components/chartTheme.tsx) ----------------------- */
+.chart-empty {
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 4px;
+  color: var(--text-muted); font-size: var(--text-sm);
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}

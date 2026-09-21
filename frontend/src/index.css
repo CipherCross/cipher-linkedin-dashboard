@@ -7,7 +7,7 @@
  *   theme       Tailwind's design tokens
  *   base        Tailwind preflight
  *   foundation  our tokens + reset + document base — outranks preflight
- *   app         src/ui/ui.css then src/styles.css, in that order, ONE layer
+ *   app         ui/ui.css first, then every route's own sheet — ONE layer
  *   utilities   Tailwind utilities — win over everything above
  * ======================================================================== */
 @layer theme, base, foundation, app, utilities;
@@ -26,14 +26,19 @@
 @import './styles/tokens.css' layer(foundation);
 @import './styles/reset.css' layer(foundation);
 @import './styles/base.css' layer(foundation);
-/* ui.css and styles.css MUST share one layer, in this order. Splitting them
- * into `components` + `legacy` inverts the cascade: a layer beats specificity
- * outright, so every route rule in styles.css would defeat every primitive
- * rule in ui.css — measured, it silently dropped the danger border off an
- * invalid input, the grey fill off a disabled one, and collapsed a textarea.
- * Inside one layer, specificity decides exactly as it did before layering. */
+/* Every app stylesheet shares ONE layer, ui.css first.
+ *
+ * Splitting them across layers inverts the cascade between them: a layer beats
+ * specificity outright, so every rule in the later layer would defeat every
+ * rule in the earlier one however specific. Measured when this was briefly
+ * wrong — it dropped the danger border off an invalid input, the grey fill off
+ * a disabled one, and collapsed a textarea from 120px to 66px.
+ *
+ * Route sheets are imported HERE rather than from their components: a
+ * component-level `import './x.css'` lands unlayered, which outranks every
+ * layer and would silently defeat every Tailwind utility on that route.
+ * tests/cssCascade.test.ts enforces both rules. */
 @import './ui/ui.css' layer(app);
-@import './styles.css' layer(app);
 
 /* Route-local sheets. These were imported directly by their components, which
  * made Vite inject them UNLAYERED — and unlayered CSS outranks every layer, so
@@ -44,6 +49,8 @@
 @import './pages/sentiment-analysis.css' layer(app);
 @import './components/overview/overview.css' layer(app);
 @import './pages/team.css' layer(app);
+@import './components/instance-panel.css' layer(app);
+@import './components/chart-theme.css' layer(app);
 @import './pages/sequence-builder.css' layer(app);
 @import './components/conversation-drawer.css' layer(app);
 @import './pages/chat.css' layer(app);

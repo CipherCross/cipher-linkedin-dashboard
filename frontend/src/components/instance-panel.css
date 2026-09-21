@@ -1,0 +1,4 @@
+.uptime-tick { width: 6px; height: 16px; border-radius: var(--radius-xs); background: var(--surface-3); }
+/* Per-instance online config editor (Health page) */
+.instance-item { display: flex; flex-direction: column; gap: 8px; }
+.instance-item + .instance-item { border-top: 1px solid var(--border); padding-top: 12px; }

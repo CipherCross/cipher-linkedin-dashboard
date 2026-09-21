@@ -44,16 +44,26 @@ describe('CSS entry', () => {
     }
   })
 
-  it('keeps ui.css and styles.css in ONE layer, ui.css first', () => {
-    // Splitting them inverts the cascade: a layer beats specificity outright,
-    // so every route rule in styles.css would defeat every primitive rule in
-    // ui.css. Measured: it dropped the danger border off an invalid input, the
-    // grey fill off a disabled one, and collapsed a textarea from 120px to 66px.
-    const ui = entry.match(/@import\s+'\.\/ui\/ui\.css'\s+layer\((\w+)\)/)
-    const legacy = entry.match(/@import\s+'\.\/styles\.css'\s+layer\((\w+)\)/)
-    expect(ui?.[1]).toBeDefined()
-    expect(legacy?.[1]).toBe(ui?.[1])
-    expect(entry.indexOf("'./ui/ui.css'")).toBeLessThan(entry.indexOf("'./styles.css'"))
+  it('is retired: styles.css no longer exists', () => {
+    // The legacy sheet is gone. Twenty-four routes took their own co-located
+    // sheets and what remained — the app's shared component layer — was merged
+    // into ui.css, which is what that file already was.
+    expect(existsSync(join(__dirname, '../src/styles.css'))).toBe(false)
+    expect(code).not.toMatch(/styles\.css/)
+  })
+
+  it('puts every app stylesheet in ONE layer, ui.css first', () => {
+    // A layer beats specificity outright, so splitting the app's CSS across
+    // two layers inverts the cascade between them: every rule in the later
+    // layer defeats every rule in the earlier one regardless of how specific
+    // it is. Measured when this was briefly wrong: it dropped the danger
+    // border off an invalid input, the grey fill off a disabled one, and
+    // collapsed a textarea from 120px to 66px.
+    const imports = [...entry.matchAll(/@import\s+'\.\/([^']+)'\s+layer\((\w+)\)/g)]
+    const app = imports.filter(([, , layer]) => layer === 'app')
+    expect(app.length).toBeGreaterThan(20)
+    for (const [, file, layer] of app) expect(layer, file).toBe('app')
+    expect(app[0][1], 'ui.css must come first in the app layer').toBe('ui/ui.css')
   })
 
   it('has no dark-mode block', () => {
