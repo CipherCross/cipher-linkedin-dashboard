@@ -56,7 +56,7 @@ export function MessageSequence({ steps }: { steps: CampaignStep[] }) {
   return (
     <div className="card">
       <h2>Campaign sequence — invite &amp; message funnel</h2>
-      <div className="msgseq">
+      <div className="flex flex-col gap-app-lg">
         {groups.map((g, gi) =>
           g.kind === 'primary' ? (
             <PrimaryStep key={`p${g.i}`} step={g.step} i={g.i} ordered={ordered} topSent={topSent} />
@@ -94,44 +94,44 @@ function PrimaryStep({
   const small = s.sent_count > 0 && s.sent_count < SMALL_SAMPLE
 
   return (
-    <div className="msgstep">
-      <div className="msgstep-head">
-        <span className="msgstep-n">{s.step_index + 1}</span>
-        <span className="msgstep-name">{s.step_label || `Step ${s.step_index + 1}`}</span>
-        <span className="msgstep-type">{TYPE_LABEL[s.step_type ?? ''] ?? s.step_type}</span>
+    <div className="flex flex-col gap-[7px]">
+      <div className="flex items-center gap-app-sm">
+        <span className="inline-flex items-center justify-center rounded-full w-5 h-5 bg-app-accent text-app-on-accent text-[length:var(--text-xs)] font-bold">{s.step_index + 1}</span>
+        <span className="font-semibold">{s.step_label || `Step ${s.step_index + 1}`}</span>
+        <span className="text-[length:var(--text-2xs)] text-app-text-muted border border-app-border rounded-pill px-app-sm py-px">{TYPE_LABEL[s.step_type ?? ''] ?? s.step_type}</span>
         {small && (
           <span className="cmp-warn" title={`Only ${s.sent_count} sent — reply rate is noisy`}>⚠</span>
         )}
       </div>
 
       {/* depth bar: how many reached this step vs the first step */}
-      <div className="msgstep-track">
+      <div className="bg-app-surface-2 rounded-sm h-4 overflow-hidden">
         <div
-          className="msgstep-bar"
+          className="h-full rounded-sm bg-app-accent transition-[width] duration-300"
           style={{ width: `${Math.max((100 * s.sent_count) / topSent, s.sent_count > 0 ? 2 : 0)}%` }}
         />
       </div>
 
-      <div className="msgstep-stats">
+      <div className="flex items-center flex-wrap gap-2.5 text-[length:var(--text-sm)] tabular-nums">
         <span><strong>{num(s.sent_count)}</strong> sent</span>
-        <span className="msgstep-arrow">→</span>
+        <span className="text-app-text-muted">→</span>
         <span><strong>{num(s.replied_count)}</strong> replied</span>
         {replyRate != null && (
-          <span className="msgstep-rate">
+          <span className="inline-flex items-center gap-[7px] text-app-warning">
             <span className="cmp-bar" style={{ width: 56 }}>
               <span style={{ width: `${Math.min(100, replyRate)}%`, background: 'var(--warning)' }} />
             </span>
             {replyRate.toFixed(1)}%
           </span>
         )}
-        <span className="msgstep-now muted">{num(s.current_count)} here now</span>
+        <span className="text-[length:var(--text-xs)] muted">{num(s.current_count)} here now</span>
         {dropFromPrev != null && dropFromPrev > 0 && (
-          <span className="msgstep-drop muted">−{dropFromPrev.toFixed(0)}% from prev</span>
+          <span className="text-[length:var(--text-xs)] muted">−{dropFromPrev.toFixed(0)}% from prev</span>
         )}
       </div>
 
       {s.template_body && (
-        <details className="msgstep-tmpl">
+        <details className="text-[length:var(--text-sm)] [&_summary]:text-app-text-muted [&_summary]:cursor-pointer [&_summary]:select-none [&_summary]:w-fit [&_summary:hover]:text-app-text [&_pre]:mt-1.5 [&_pre]:mx-0 [&_pre]:mb-0 [&_pre]:px-app-md [&_pre]:py-2.5 [&_pre]:bg-[var(--code-bg)] [&_pre]:border [&_pre]:border-app-border [&_pre]:rounded-md [&_pre]:whitespace-pre-wrap [&_pre]:[word-break:break-word] [&_pre]:text-app-text [&_pre]:font-[inherit] [&_pre]:text-[length:var(--text-sm)] [&_pre]:leading-[1.45]">
           <summary>Message template</summary>
           <pre>{s.template_body}</pre>
         </details>
@@ -148,23 +148,23 @@ function AutoGroup({ steps }: { steps: Indexed[] }) {
   const here = steps.reduce((n, { step }) => n + step.current_count, 0)
 
   return (
-    <div className="msgseq-auto">
-      <button className="msgseq-auto-toggle" onClick={() => setOpen((o) => !o)}>
+    <div className="ml-[9px] border-l-2 border-dashed border-app-border-strong pt-0.5 pb-0.5 pl-[18px]">
+      <button className="inline-flex items-center gap-[7px] bg-none border-none py-0.5 px-0 cursor-pointer text-app-text-muted text-[length:var(--text-xs)] font-semibold transition-colors hover:text-app-text [&_svg]:shrink-0" onClick={() => setOpen((o) => !o)}>
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span className="msgseq-auto-count">
+        <span className="text-app-text-secondary">
           {steps.length} automation step{steps.length === 1 ? '' : 's'}
         </span>
         {here > 0 && <span className="muted small">· {num(here)} here now</span>}
       </button>
       {open && (
-        <div className="msgseq-auto-body">
+        <div className="flex flex-col gap-1.5 mt-app-sm">
           {steps.map(({ step }) => (
-            <div className="msgseq-auto-step" key={step.step_index}>
-              <span className="msgseq-auto-n">{step.step_index + 1}</span>
-              <span className="msgseq-auto-name">
+            <div className="flex items-center gap-app-sm flex-wrap text-[length:var(--text-sm)] text-app-text-secondary" key={step.step_index}>
+              <span className="inline-flex items-center justify-center rounded-full w-[18px] h-[18px] shrink-0 bg-app-surface-2 border border-app-border text-app-text-muted text-[length:var(--text-2xs)] font-semibold">{step.step_index + 1}</span>
+              <span className="text-app-text">
                 {step.step_label || `Step ${step.step_index + 1}`}
               </span>
-              <span className="msgstep-type">
+              <span className="text-[length:var(--text-2xs)] text-app-text-muted border border-app-border rounded-pill px-app-sm py-px">
                 {TYPE_LABEL[step.step_type ?? ''] ?? step.step_type ?? '—'}
               </span>
               {step.current_count > 0 && (

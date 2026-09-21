@@ -64,12 +64,12 @@ export function Health() {
         title="Sync health"
         description="Per-instance freshness and the recent sync-run history. Agents run every 30 minutes."
         actions={isAdmin && (
-          <details className="health-actions-menu">
+          <details className="relative [&>summary]:inline-flex [&>summary]:items-center [&>summary]:gap-app-sm [&>summary]:min-h-control [&>summary]:px-app-lg [&>summary]:border [&>summary]:border-app-border-strong [&>summary]:rounded-control [&>summary]:bg-app-surface [&>summary]:text-app-text [&>summary]:text-app-body [&>summary]:font-semibold [&>summary]:cursor-pointer [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden">
             <summary>
               <MoreHorizontal size={18} aria-hidden="true" />
               Actions
             </summary>
-            <div className="health-actions-body">
+            <div className="absolute right-0 z-30 w-[min(360px,calc(100vw-48px))] mt-app-sm p-app-lg flex flex-col gap-app-md items-start border border-app-border rounded-card bg-app-surface shadow-[var(--shadow-overlay)] [&_h3]:flex [&_h3]:items-center [&_h3]:gap-app-sm [&_h3]:m-0">
               <h3>
                 <Megaphone size={18} aria-hidden="true" />
                 Monday briefing
@@ -99,8 +99,8 @@ export function Health() {
       />
 
       {isAdmin && (
-        <section className="card publish-compatibility-card" aria-labelledby="publish-compatibility-title">
-          <div className="publish-compatibility-heading">
+        <section className="card mb-[18px] [&_code]:text-app-meta" aria-labelledby="publish-compatibility-title">
+          <div className="flex justify-between gap-app-lg mb-[14px] [&>div]:flex [&>div]:items-start [&>div]:gap-2.5 [&_svg]:flex-[0_0_auto] [&_svg]:mt-0.5 [&_svg]:text-app-accent [&_h2]:m-0 [&_p]:mt-[3px] [&_p]:mx-0 [&_p]:mb-0">
             <div><FlaskConical size={20} aria-hidden="true" /><div><h2 id="publish-compatibility-title">Publishing compatibility</h2><p className="muted small">Measured Linked Helper state. This is separate from sync freshness and campaign runtime.</p></div></div>
           </div>
           {publishTargetsError && <div className="sequence-publish-state error"><AlertCircle size={18} /><div><strong>Compatibility could not be loaded</strong><p>{publishTargetsError}</p></div></div>}
@@ -120,8 +120,8 @@ export function Health() {
         </section>
       )}
 
-      <div className="main-grid health-grid">
-        <div className="card health-runs">
+      <div className="grid grid-cols-[1fr_300px] gap-app-lg mb-app-xl max-[860px]:grid-cols-1 max-[860px]:[&>:last-child]:order-[-1]">
+        <div className="card [&_table]:min-w-[520px]">
           <h2>Recent sync runs</h2>
           <div className="table-scroll tall">
           <table>
@@ -175,9 +175,9 @@ function ErrorCell({ error }: { error: string | null }) {
   const [open, setOpen] = useState(false)
   if (!error) return <td className="muted">—</td>
   return (
-    <td className="error-cell">
+    <td className="max-w-[280px]">
       <button
-        className={`error-cell-btn ${open ? 'open' : ''}`}
+        className={`block w-full text-left bg-none border-none cursor-pointer p-0 text-app-danger font-[inherit] text-[length:var(--text-xs)] leading-[1.4] whitespace-nowrap overflow-hidden text-ellipsis hover:text-app-text ${open ? 'open' : ''}`}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         title={open ? 'Collapse' : 'Show full error'}

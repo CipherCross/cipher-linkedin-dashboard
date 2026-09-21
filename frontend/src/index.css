@@ -58,9 +58,7 @@
 @import './pages/playbook.css' layer(app);
 @import './components/import-history.css' layer(app);
 @import './components/funnel.css' layer(app);
-@import './components/message-sequence.css' layer(app);
 @import './components/follow-up-panel.css' layer(app);
-@import './pages/health.css' layer(app);
 @import './pages/campaign-detail.css' layer(app);
 @import './pages/leads-explorer.css' layer(app);
 @import './pages/pipeline.css' layer(app);
