@@ -79,39 +79,51 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* shadcn's semantic palette, repointed at tokens.css. Every component added by
+ * `shadcn add` from here on inherits the app's own colours instead of shadcn's
+ * neutral OKLCH scale, so a popover or a toast matches every other surface
+ * without being restyled by hand.
+ *
+ * Where the two systems mean different things by a name, ours keeps the name
+ * and shadcn's carries the `sh-` prefix: its `--accent` is a subtle hover
+ * surface, ours is the brand blue; its `--muted` is a surface, ours is muted
+ * TEXT. Those are mapped by meaning, not by name.
+ *
+ * Values are references, never literals — tokens.css stays the only place a
+ * colour is defined, which tests/cssCascade.test.ts enforces. */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --sh-muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --sh-accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --sh-border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --background: var(--surface-1);
+    --foreground: var(--text);
+    --card: var(--surface-1);
+    --card-foreground: var(--text);
+    --popover: var(--surface-1);
+    --popover-foreground: var(--text);
+    --primary: var(--accent);
+    --primary-foreground: var(--on-accent);
+    --secondary: var(--surface-2);
+    --secondary-foreground: var(--text);
+    --sh-muted: var(--surface-2);
+    --muted-foreground: var(--text-muted);
+    --sh-accent: var(--surface-2);
+    --accent-foreground: var(--text);
+    --destructive: var(--danger);
+    --sh-border: var(--border);
+    --input: var(--border-strong);
+    --ring: var(--focus-ring);
+    --chart-1: var(--accent);
+    --chart-2: var(--success);
+    --chart-3: var(--warning);
+    --chart-4: var(--purple);
+    --chart-5: var(--info);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: var(--surface-1);
+    --sidebar-foreground: var(--text);
+    --sidebar-primary: var(--accent);
+    --sidebar-primary-foreground: var(--on-accent);
+    --sidebar-accent: var(--surface-2);
+    --sidebar-accent-foreground: var(--text);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--focus-ring);
 }
 
 /* ---------------------------------------------------------------------------
@@ -189,11 +201,19 @@
 
 @layer base {
   /* shadcn's init writes `* { @apply border-border }` here, defaulting EVERY
-   * element's border-colour to its own neutral. Removed: it changed the
-   * computed border-colour of 217 of 271 elements on the gallery away from the
-   * browser default (currentColor) for no visual gain, and it is a trap for any
-   * future rule that sets a border-width without a colour. shadcn's own
-   * components set `border-border` explicitly where they need it. */
+   * element's border-colour. Unscoped it changed 217 of 271 elements on the
+   * gallery away from the browser default (currentColor) for no visual gain.
+   *
+   * But shadcn's own components DO rely on it: several set a border width and
+   * no colour, so without a default a popover drew a dark `currentColor`
+   * outline instead of a hairline. Measured on the gallery's Widgets tab.
+   *
+   * So it is scoped to shadcn's components rather than dropped. Every one of
+   * them carries `data-slot`, and nothing hand-written in this app does, which
+   * makes that the exact boundary between "theirs" and "ours". */
+  [data-slot] {
+    border-color: var(--border);
+    }
   body {
     @apply bg-background text-foreground;
     }

@@ -4,8 +4,20 @@ import { DateRangePicker } from '../components/DateRangePicker'
 import { presetRanges } from '../lib/leads'
 import '../pages/replies-inbox.css'
 import {
-  ArrowRight, Check, CircleAlert, Clock, Download, Filter, Plus, RefreshCw, Trash2,
+  ArrowRight, Check, CircleAlert, Clock, Download, Filter, MoreHorizontal, Plus,
+  RefreshCw, Trash2,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Toaster } from '../components/ui/sonner'
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '../components/ui/command'
 import {
   AccountIdentity, ActiveFilters, Badge, Button, Checkbox, Dialog, FilterCount, IconButton,
   InitialsBadge, InlineError, LinkButton, PageHeader, Panel, RadioGroup, SectionHeader,
@@ -47,7 +59,7 @@ function Swatch({ token, note }: { token: string; note: string }) {
 }
 
 export function Gallery() {
-  const [tab, setTab] = useState<'states' | 'composition' | 'list-chrome'>('states')
+  const [tab, setTab] = useState<'states' | 'composition' | 'list-chrome' | 'widgets'>('states')
   const [period, setPeriod] = useState<'7d' | '28d' | 'all'>('28d')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [choice, setChoice] = useState<'positive' | 'neutral' | 'negative'>('neutral')
@@ -74,10 +86,13 @@ export function Gallery() {
             { id: 'states', label: 'Primitives' },
             { id: 'composition', label: 'Compositions' },
             { id: 'list-chrome', label: 'List chrome' },
+            { id: 'widgets', label: 'Widgets' },
           ]}
         />
 
-        {tab === 'states' ? (
+        {tab === 'widgets' ? (
+          <WidgetTier />
+        ) : tab === 'states' ? (
           <div className="ui-gallery">
             <Panel>
               <SectionHeader title="Palette" description="Opaque surfaces only — no tint, blur or rim." />
@@ -462,5 +477,96 @@ export function Gallery() {
         )}
       </div>
     </MemoryRouter>
+  )
+}
+
+
+/**
+ * The widget tier that the hand-built system never had: the controls every
+ * new view used to reinvent as raw CSS and `keydown` handlers.
+ *
+ * These are shadcn components on Base UI, and they read the app's own colours
+ * because shadcn's semantic palette is repointed at tokens.css in index.css —
+ * nothing here is restyled by hand. Checking them on this page is how that
+ * mapping is verified.
+ */
+function WidgetTier() {
+  const people = ['Ivan Petrenko', 'Mykyta Shevchenko', 'Olena Kovalenko', 'Andrii Bondar']
+  const [picked, setPicked] = useState<string | null>(null)
+
+  return (
+    <div className="ui-gallery">
+      <Toaster />
+
+      <Panel>
+        <SectionHeader
+          title="Overlays"
+          description="Positioning, dismissal and focus come from Base UI. Previously each of these was an outside-click listener written per route."
+        />
+        <div className="controls" style={{ justifyContent: 'flex-start' }}>
+          <Popover>
+            <PopoverTrigger render={<Button variant="secondary">Popover</Button>} />
+            <PopoverContent>
+              <p className="small muted" style={{ margin: 0 }}>
+                Anchored, collision-aware, dismissed on Escape and outside press.
+              </p>
+            </PopoverContent>
+          </Popover>
+
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="secondary">Tooltip</Button>} />
+            <TooltipContent>Describes, never the only label</TooltipContent>
+          </Tooltip>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button variant="secondary" icon={<MoreHorizontal size={18} />}>Menu</Button>}
+            />
+            <DropdownMenuContent>
+              <DropdownMenuItem>Export CSV</DropdownMenuItem>
+              <DropdownMenuItem>Duplicate</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionHeader
+          title="Command palette"
+          description="Type-ahead over a list. Supersedes the hand-rolled Quick Navigation."
+        />
+        <Command style={{ maxWidth: 420 }}>
+          <CommandInput placeholder="Search people…" />
+          <CommandList>
+            <CommandEmpty>No match.</CommandEmpty>
+            <CommandGroup heading="People">
+              {people.map((name) => (
+                <CommandItem key={name} value={name} onSelect={() => setPicked(name)}>
+                  {name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+        <p className="small muted" style={{ marginTop: 'var(--space-sm)' }}>
+          {picked ? `Selected: ${picked}` : 'Nothing selected yet.'}
+        </p>
+      </Panel>
+
+      <Panel>
+        <SectionHeader
+          title="Toasts"
+          description="Colour never travels alone — every severity ships an icon too."
+        />
+        <div className="controls" style={{ justifyContent: 'flex-start' }}>
+          <Button variant="secondary" onClick={() => toast.success('Sequence published')}>Success</Button>
+          <Button variant="secondary" onClick={() => toast.info('Sync started')}>Info</Button>
+          <Button variant="secondary" onClick={() => toast.warning('Two accounts are paused')}>Warning</Button>
+          <Button variant="danger" onClick={() => toast.error('Publish failed')}>Error</Button>
+        </div>
+      </Panel>
+    </div>
   )
 }

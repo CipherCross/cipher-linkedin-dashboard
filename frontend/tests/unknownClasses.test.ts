@@ -22,6 +22,16 @@ const DIST = join(__dirname, '../dist/assets')
 /** Class names assembled at runtime from a literal prefix, e.g.
  *  `compatibility-${status}` in Health.tsx. The prefix alone never matches a
  *  rule, so it is declared here rather than silently ignored. */
+/**
+ * Class names that legitimately have no CSS rule of their own:
+ *  - Tailwind markers. `group` and `peer` exist only so that `group-hover:*`
+ *    and `peer-checked:*` on descendants have something to match; Tailwind
+ *    emits no `.group` rule.
+ *  - Class names owned by a third-party package's own stylesheet, which is
+ *    bundled separately from ours.
+ */
+const NO_RULE_BY_DESIGN = new Set(['group', 'peer', 'toaster', 'cn-toast'])
+
 const DYNAMIC_PREFIXES = [
   'compatibility-', 'deployed-step-', 'observation-', 'publish-', 'runtime-',
   'sentiment-', 'source-', 'stage-', 'status-', 'ui-status--',
@@ -108,6 +118,8 @@ describe('unknown class names', () => {
       for (const [tok, where] of classTokens(file)) {
         if (present.has(tok)) continue
         if (DYNAMIC_PREFIXES.some((p) => tok === p || tok.startsWith(p))) continue
+        if (NO_RULE_BY_DESIGN.has(tok)) continue
+        if (tok.startsWith('group/') || tok.startsWith('peer/')) continue
         if (PRE_EXISTING_DEAD.has(tok)) continue
         unknown.set(tok, where.replace(/.*\/src\//, 'src/'))
       }
