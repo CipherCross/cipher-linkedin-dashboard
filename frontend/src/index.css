@@ -114,6 +114,79 @@
     --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* ---------------------------------------------------------------------------
+ * Token bridge: exposes tokens.css to Tailwind as real utilities, so product
+ * code writes `bg-app-accent` rather than `bg-[var(--accent)]`.
+ *
+ * The `app-` prefix is deliberate. shadcn's generated components reference
+ * `bg-accent`, `text-muted-foreground` and friends, and those names are mapped
+ * to ITS palette above. Renaming shadcn's names instead would break the output
+ * of every future `shadcn add`, which is the one thing this migration must
+ * keep cheap. So ours are namespaced and shadcn's are left alone.
+ *
+ * Values are referenced, never duplicated: tokens.css stays the only place a
+ * colour, size or duration is defined.
+ * ------------------------------------------------------------------------ */
+@theme inline {
+  --color-app-bg: var(--bg);
+  --color-app-surface: var(--surface-1);
+  --color-app-surface-2: var(--surface-2);
+  --color-app-surface-3: var(--surface-3);
+  --color-app-border: var(--border);
+  --color-app-border-strong: var(--border-strong);
+  --color-app-text: var(--text);
+  --color-app-text-secondary: var(--text-secondary);
+  --color-app-text-muted: var(--text-muted);
+  --color-app-accent: var(--accent);
+  --color-app-accent-hover: var(--accent-hover);
+  --color-app-accent-subtle: var(--accent-subtle);
+  --color-app-accent-border: var(--accent-border);
+  --color-app-on-accent: var(--on-accent);
+  --color-app-success: var(--success);
+  --color-app-success-subtle: var(--success-subtle);
+  --color-app-success-border: var(--success-border);
+  --color-app-warning: var(--warning);
+  --color-app-warning-subtle: var(--warning-subtle);
+  --color-app-warning-border: var(--warning-border);
+  --color-app-danger: var(--danger);
+  --color-app-danger-subtle: var(--danger-subtle);
+  --color-app-danger-border: var(--danger-border);
+
+  --spacing-app-xs: var(--space-xs);
+  --spacing-app-sm: var(--space-sm);
+  --spacing-app-md: var(--space-md);
+  --spacing-app-lg: var(--space-lg);
+  --spacing-app-xl: var(--space-xl);
+  --spacing-app-2xl: var(--space-2xl);
+  --spacing-app-3xl: var(--space-3xl);
+  --spacing-control: var(--control-height);
+  --spacing-control-sm: var(--control-height-sm);
+  --spacing-icon-hit: var(--icon-hit);
+  --spacing-icon-glyph: var(--icon-glyph);
+  --spacing-row: var(--row-height);
+  --spacing-row-identity: var(--row-height-identity);
+
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-dialog: var(--radius-dialog);
+  --radius-pill: var(--radius-pill);
+
+  --text-app-meta: var(--text-meta);
+  --text-app-meta--line-height: var(--leading-meta);
+  --text-app-table: var(--text-table);
+  --text-app-table--line-height: var(--leading-table);
+  --text-app-body: var(--text-body);
+  --text-app-body--line-height: var(--leading-body);
+  --text-app-section: var(--text-section);
+  --text-app-section--line-height: var(--leading-section);
+  --text-app-page: var(--text-page);
+  --text-app-page--line-height: var(--leading-page);
+  --text-app-kpi: var(--text-kpi);
+  --text-app-kpi--line-height: var(--leading-kpi);
+
+  --default-transition-duration: var(--dur-fast);
+}
+
 @layer base {
   /* shadcn's init writes `* { @apply border-border }` here, defaulting EVERY
    * element's border-colour to its own neutral. Removed: it changed the

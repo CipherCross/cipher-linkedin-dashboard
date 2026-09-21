@@ -2,6 +2,7 @@ import { forwardRef } from 'react'
 import type { ButtonHTMLAttributes, AnchorHTMLAttributes, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { LinkProps } from 'react-router-dom'
+import { Button as BaseButton } from '@base-ui/react/button'
 
 /**
  * The one action surface. Every product action in the app renders through
@@ -12,6 +13,15 @@ import type { LinkProps } from 'react-router-dom'
  * A navigation stays a link and an action stays a button: `LinkButton` renders
  * an `<a>`/`<Link>` and therefore supports middle-click, copy-link and the
  * browser's own focus semantics, while `Button` never carries an `href`.
+ *
+ * `Button` and `IconButton` are Base UI buttons — that is what gives them
+ * consistent disabled and activation semantics across the app. `LinkButton`
+ * and `ExternalLinkButton` deliberately are NOT: Base UI's `useButton` applies
+ * `role="button"` to any element that is not a native `<button>`
+ * (`isNativeButton ? { type: 'button' } : { role: 'button' }`), which would
+ * override the link role and break exactly the navigation semantics this file
+ * exists to preserve. They render a bare `<Link>`/`<a>` carrying the same
+ * classes. tests/uiPrimitives.test.tsx pins this.
  */
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -58,7 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   return (
-    <button
+    <BaseButton
       ref={ref}
       type={type ?? 'button'}
       className={classes({ variant, size, block, className })}
@@ -70,7 +80,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       <Leading loading={loading} icon={icon} />
       {children}
       {loading && loadingLabel && <span className="sr-only">{loadingLabel}</span>}
-    </button>
+    </BaseButton>
   )
 })
 
@@ -115,7 +125,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   ref,
 ) {
   return (
-    <button
+    <BaseButton
       ref={ref}
       type={type ?? 'button'}
       className={[
@@ -131,6 +141,6 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       {...rest}
     >
       {loading ? <span className="ui-btn__spinner" aria-hidden="true" /> : icon}
-    </button>
+    </BaseButton>
   )
 })

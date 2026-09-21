@@ -86,16 +86,21 @@ describe('CSS entry', () => {
       ...entry.matchAll(/@theme inline \{([\s\S]*?)\n\}/g),
       ...entry.matchAll(/\n:root \{([\s\S]*?)\n\}/g),
     ]
-    const collisions: string[] = []
+    // CAPTURE is redefining a name tokens.css owns to a DIFFERENT value.
+    // Re-declaring one as a reference — `--radius-control: var(--radius-control)`
+    // in the token bridge, or `--radius-sm: var(--radius-control)` repointing
+    // shadcn's scale at our geometry — resolves back to tokens.css and is how
+    // a Tailwind namespace (`rounded-*`, `bg-*`) is fed. Only a literal wins
+    // over us silently, and only a literal is a defect.
+    const captured: string[] = []
     for (const [, body] of blocks) {
-      for (const [, name] of body.matchAll(/--([a-z0-9-]+)\s*:/g)) {
-        if (ours.has(name)) collisions.push(name)
+      for (const [, name, value] of body.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+        if (!ours.has(name)) continue
+        if (/^var\(--[a-z0-9-]+\)$/.test(value.trim())) continue
+        captured.push(`${name}: ${value.trim()}`)
       }
     }
-    // The radius scale is deliberately shared: shadcn's names are repointed at
-    // our geometry (--radius-sm: var(--radius-control)), so the VALUES agree.
-    const deliberate = new Set(['radius-sm', 'radius-md', 'radius-lg'])
-    expect([...new Set(collisions)].filter((c) => !deliberate.has(c))).toEqual([])
+    expect(captured, 'shadcn is defining a literal value for a token tokens.css owns').toEqual([])
   })
 })
 
