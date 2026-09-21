@@ -333,7 +333,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
 
     <PageHeader
       title={COPY.replies}
-      actions={<div className="replies-head-actions">
+      actions={<div className="flex items-center gap-app-md">
         <LinkButton to="/sentiment-analysis" variant="ghost">Sentiment analysis</LinkButton>
         <Button
           variant="secondary"
@@ -347,9 +347,9 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
 
     {inbox.capabilities && !capabilityReady && <div className="replies-unavailable" role="status"><AlertCircle size={18} aria-hidden="true" /> {capabilityMessage(inbox.capabilities)}</div>}
 
-    <div className="replies-toolbar">
+    <div className="flex items-center gap-app-md flex-[0_0_auto] justify-between min-w-0">
       <Tabs
-        className="replies-views"
+        className="flex-[1_1_auto] min-w-0 mb-0 border-b-0"
         label="Reply queue"
         value={inbox.scope.view}
         onChange={(view) => guardedScope({ view, cursor: null })}
@@ -387,7 +387,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         <Button variant="primary" onClick={applyFilters}>{COPY.apply}</Button>
       </>}
     >
-      <div className="replies-filter-grid">
+      <div className="grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
         <SelectField label="Arrived" value={filterDraft.scope} onChange={(event) => patchDraft({ scope: event.target.value as ReplyInboxScope['scope'] })}>
           <option value="new">Since manual review started</option>
           <option value="historical">Before manual review started</option>
@@ -420,7 +420,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
           {Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </SelectField>
       </div>
-      <div className="replies-filter-toggles">
+      <div className="flex flex-col gap-app-xs">
         {([['my', 'Assigned to me'], ['unacknowledged', 'Needs a next step'], ['unowned', 'Unassigned'], ['overdue', 'Follow-up overdue']] as const).map(([key, label]) => (
           <Checkbox key={key} label={label} checked={filterDraft[key]} onChange={(event) => patchDraft({ [key]: event.target.checked })} />
         ))}
@@ -454,16 +454,16 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         {inbox.loading && !inbox.items.length ? <div className="replies-loading" role="status" aria-busy="true">Loading replies…</div>
           : inbox.error && !hasData ? <div className="replies-error" role="alert"><AlertCircle size={20} aria-hidden="true" />{inbox.error}<Button variant="secondary" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button></div>
             : !inbox.items.length ? <EmptyState icon={Inbox} title={scopeLabel ? 'No conversations match this report period' : 'Nothing to review'} hint={scopeLabel ? 'Check the period and the conditions of the report.' : 'Try another queue or a wider arrival period.'} />
-              : <div className="replies-list">{inbox.items.map((item) => {
+              : <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain]">{inbox.items.map((item) => {
                 const selected = inbox.scope.thread?.instance_id === item.instance_id && inbox.scope.thread.profile_url === item.profile_url
                 const name = item.name || UNKNOWN_PERSON_LABEL
                 return <button type="button" key={item.instance_id + '|' + item.profile_url} className={'replies-list-item' + (selected ? ' selected' : '')} onClick={() => guardedSelect(item)}>
-                  <span className="replies-list-identity"><InitialsAvatar name={name} size={36} /><span className="replies-list-identity-text"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="muted small ellipsis">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
-                  <span className="replies-list-snippet">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
+                  <span className="replies-list-identity"><InitialsAvatar name={name} size={36} /><span className="flex-1 min-w-0"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="muted small ellipsis">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
+                  <span className="[display:-webkit-box] my-app-sm mx-0 text-app-text-muted text-app-meta overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
                   <span className="replies-list-item-bottom"><span>{accountLabel(item.instance_id)}</span><span>{item.owner_id ? ownerLabel(item.owner_id) : null}{item.action ? ' · ' + ACTION_LABELS[item.action] : ''}</span>{item.pending_count > 0 && <b>{item.pending_count}</b>}</span>
                 </button>
               })}</div>}
-        {inbox.nextCursor && <button className="replies-load-more" type="button" onClick={inbox.loadMore} disabled={inbox.loadingMore}>{inbox.loadingMore ? COPY.loading : 'Load more'}</button>}
+        {inbox.nextCursor && <button className="flex-[0_0_auto] min-h-control border-0 border-t border-app-border bg-transparent font-[inherit] text-app-table font-semibold cursor-pointer text-app-accent" type="button" onClick={inbox.loadMore} disabled={inbox.loadingMore}>{inbox.loadingMore ? COPY.loading : 'Load more'}</button>}
       </aside>
 
       <main className="replies-thread-pane">
@@ -473,7 +473,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
               <h2>{currentName}</h2>
               <p className="muted small">{selectedItem?.company || selectedItem?.headline || profileName(inbox.scope.thread?.profile_url ?? '')} · {accountLabel(inbox.scope.thread?.instance_id ?? '')}</p>
             </div>
-            <div className="replies-thread-links">
+            <div className="flex items-center gap-app-sm flex-[0_0_auto] flex-wrap justify-end">
               {newInboundAvailable && <Button variant="secondary" size="sm" onClick={() => { if (inbox.thread?.newer_cursor) inbox.loadNewer(); else if (latestInbound) confirmNavigation(() => { updateScope({ thread: { instance_id: latestInbound.instance_id, profile_url: latestInbound.profile_url, focus_message_id: latestInbound.id } }); setNewInboundAvailable(false) }) }}>New reply · show it</Button>}
               {selectedLead && <Button variant="ghost" size="sm" onClick={() => confirmNavigation(() => openConversation(selectedLead, { mode: 'import_history' }))}>Import history</Button>}
               <ExternalLinkButton variant="ghost" size="sm" href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer">LinkedIn ↗</ExternalLinkButton>
@@ -494,7 +494,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
 
       <aside className="replies-inspector-pane" aria-label="Review reply and next step">
         {hasSelection ? <>
-          <div className="replies-inspector-scroll">
+          <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain]">
             {selectedMessage?.direction === 'in' ? <ReplyReviewPanel message={selectedMessage} review={selectedMessage.review} saving={actions.saving} error={actions.error ?? (actions.conflict ? 'This conversation changed in another tab. Your input is kept — reload the conversation once you have compared them.' : null)} history={inbox.history} historyLoading={inbox.historyLoading} historyCursor={inbox.historyCursor} historyRequested={inbox.historyRequested} onOpenHistory={inbox.requestHistory} onLoadHistoryMore={inbox.loadHistoryMore} onDirtyChange={setReviewDirty} onDraftChange={handleReviewDraftChange} onSave={saveReview} onSaveAndNext={saveReviewAndNext} externalActions />
               : <div className="replies-inspector-empty">{selectedIsOutboundOnly ? <>An outbound message is selected. {inbox.thread?.messages.some((message) => message.direction === 'in') ? <Button variant="ghost" size="sm" onClick={() => { const inbound = [...(inbox.thread?.messages ?? [])].reverse().find((message) => message.direction === 'in'); if (inbound) updateScope({ thread: { instance_id: inbound.instance_id, profile_url: inbound.profile_url, focus_message_id: inbound.id } }) }}>Go to the latest inbound reply</Button> : 'There are no inbound messages in the loaded part of this thread.'}</> : inbox.loadingThread ? 'Loading the reply…' : 'Select an inbound reply in the thread.'}</div>}
             <ConversationActionPanel workflow={actionWorkflow} members={inbox.capabilities?.members} inboundRevision={inbox.thread?.inbound_revision ?? selectedItem?.inbound_revision ?? 0} persistedDoNotContact={inbox.thread?.workflow?.do_not_contact ?? selectedItem?.do_not_contact ?? false} saving={actions.saving} error={actions.error} onDirtyChange={handleWorkflowDirtyChange} onDraftChange={handleWorkflowDraftChange} onSave={saveWorkflow} onValidityChange={setWorkflowValid} externalActions />

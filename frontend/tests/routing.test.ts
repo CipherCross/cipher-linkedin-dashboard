@@ -46,12 +46,18 @@ describe('canonical-host routing', () => {
         .filter(({ source }) => source !== '/')
         .every(({ source }) => source === '/:path((?!api/).*)'),
     ).toBe(true)
+    // The host pattern is EXACT, not `cipher-linkedin-dashboard.*\.vercel\.app`.
+    // The wildcard matched every preview deployment as well as the production
+    // alias, so opening a preview bounced to production — which is why nothing
+    // in this repo could be reviewed before it shipped. Only the default
+    // production host is redirected to the canonical domain now; branch and
+    // deployment URLs load.
     expect(manifest.redirects).toContainEqual({
       source: '/:path((?!api/).*)',
       has: [
         {
           type: 'host',
-          value: 'cipher-linkedin-dashboard.*\\.vercel\\.app',
+          value: 'cipher-linkedin-dashboard\\.vercel\\.app',
         },
       ],
       destination: 'https://app.ciphercross.dev/:path*',
