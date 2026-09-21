@@ -48,7 +48,7 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
 
   return (
     <div className="card chart-card">
-      <div className="cmp-chart-head">
+      <div className="flex items-center justify-between [&_h2]:mb-0">
         <h2>Quality vs volume</h2>
         <div className="range-group">
           <button className={metric === 'reply' ? 'active' : ''} onClick={() => setMetric('reply')}>Reply %</button>
@@ -125,10 +125,10 @@ function PointTooltip({ active, payload, metric }: {
   const p = payload[0].payload
   const kind = metric === 'reply' ? 'replies / accepted' : 'accepted / invites'
   return (
-    <div className="chart-tip">
-      <div className="chart-tip-name">{p.name}</div>
-      <div className="chart-tip-row">{num(p.x)} leads</div>
-      <div className="chart-tip-row">
+    <div className="bg-app-surface border border-app-border rounded-md shadow-[var(--shadow-overlay)] px-2.5 py-2">
+      <div className="text-app-text font-semibold mb-0.5">{p.name}</div>
+      <div className="text-app-text-muted text-[length:var(--text-xs)] tabular-nums">{num(p.x)} leads</div>
+      <div className="text-app-text-muted text-[length:var(--text-xs)] tabular-nums">
         {p.y.toFixed(1)}% — {num(p.num)} / {num(p.den)} {kind}
       </div>
     </div>

@@ -393,7 +393,7 @@ function HypothesisViewer({
   return (
     <div className="pipe-modal-overlay" onClick={onClose}>
       <div
-        className="pipe-modal search-modal hyp-view-modal"
+        className="pipe-modal search-modal w-[min(880px,100%)]"
         role="dialog"
         aria-modal="true"
         aria-label={`Hypothesis ${hyp.name}`}
@@ -705,14 +705,14 @@ function HypothesisEditor({
               value={campaignFilter}
               onChange={(e) => setCampaignFilter(e.target.value)}
             />
-            <div className="icp-checklist">
+            <div className="flex flex-col max-h-[220px] overflow-y-auto border border-app-border rounded-sm bg-app-surface">
               {filteredCampaigns.map((c) => {
                 const acct = instanceName(
                   instances.find((i) => i.id === c.instance_id),
                   c.instance_id,
                 )
                 return (
-                  <label className="icp-checklist-row" key={c.campaign_id}>
+                  <label className="flex items-center gap-app-sm px-2.5 py-1.5 border-b border-app-border last:border-b-0 [&>span:nth-child(2)]:flex-1 [&>span:nth-child(2)]:min-w-0" key={c.campaign_id}>
                     <input
                       type="checkbox"
                       checked={draft.campaignIds.includes(c.campaign_id)}
@@ -729,9 +729,9 @@ function HypothesisEditor({
 
           <div className="filter-field">
             <span className="filter-label">Searches ({draft.searchIds.length} attached)</span>
-            <div className="icp-checklist">
+            <div className="flex flex-col max-h-[220px] overflow-y-auto border border-app-border rounded-sm bg-app-surface">
               {savedSearches.map((s) => (
-                <label className="icp-checklist-row" key={s.id}>
+                <label className="flex items-center gap-app-sm px-2.5 py-1.5 border-b border-app-border last:border-b-0 [&>span:nth-child(2)]:flex-1 [&>span:nth-child(2)]:min-w-0" key={s.id}>
                   <input
                     type="checkbox"
                     checked={draft.searchIds.includes(s.id)}

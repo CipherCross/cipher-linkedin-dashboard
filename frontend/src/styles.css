@@ -344,16 +344,7 @@ tr:last-child td { border-bottom: none; }
   background: var(--surface-2);
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
-}
-
-.chart-tip {
-  background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: var(--radius-md); box-shadow: var(--shadow-overlay); padding: 8px 10px;
-}
-.chart-tip-name { color: var(--text); font-weight: 600; margin-bottom: 2px; }
-.chart-tip-row { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-
-.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+}.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
 .dot.stale { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
 .dot.inline { display: inline-block; margin-right: 8px; }
@@ -1233,20 +1224,13 @@ tr:last-child td { border-bottom: none; }
   background: none; border: none; color: var(--muted); cursor: pointer;
   font-size: var(--text-md); line-height: 1; padding: 0; margin-left: 2px;
 }
-.cmp-chip button:hover { color: var(--text); }
-
-.cmp-rate { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.cmp-rate-val { font-variant-numeric: tabular-nums; }
-.cmp-bar {
+.cmp-chip button:hover { color: var(--text); }.cmp-bar {
   width: 72px; height: 5px; background: var(--surface-2);
   border-radius: var(--radius-xs); overflow: hidden;
 }
 .cmp-bar > span { display: block; height: 100%; border-radius: var(--radius-xs); }
 .cmp-warn { color: var(--warning); cursor: help; }
-.cmp-avg td { border-top: 1px solid var(--border); color: var(--muted); font-weight: 600; }
-.cmp-chart-head { display: flex; align-items: center; justify-content: space-between; }
-.cmp-chart-head h2 { margin-bottom: 0; }
-.ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-avg td { border-top: 1px solid var(--border); color: var(--muted); font-weight: 600; }.ellipsis { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pager {
   display: flex;
@@ -1254,9 +1238,7 @@ tr:last-child td { border-bottom: none; }
   align-items: center;
   gap: var(--space-6);
   padding-top: 12px;
-}.account-cell { display: flex; align-items: center; gap: 8px; }
-.account-head { display: flex; align-items: center; gap: var(--space-6); }
-.li-link {
+}.account-cell { display: flex; align-items: center; gap: 8px; }.li-link {
   display: inline-block;
   margin-left: 8px;
   padding: 0 5px;
@@ -2538,32 +2520,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .icp-view-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Copy button: same footprint as .icon-only-btn but sized for inline use. */
-.icp-copy-btn { flex-shrink: 0; }
-
-/* Hypothesis viewer holds funnel + KPI cards + tables — wider than the ICP modal. */
-.hyp-view-modal { width: min(880px, 100%); }
-
-/* --- Hypothesis editor: scrollable checkbox list (campaigns / searches) --- */
-.icp-checklist {
-  display: flex;
-  flex-direction: column;
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-1);
-}
-.icp-checklist-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-}
-.icp-checklist-row:last-child { border-bottom: none; }
-.icp-checklist-row span:nth-child(2) { flex: 1; min-width: 0; }
-
-/* --- Conversation follow-up work queue ----------------------------------- */
+.icp-copy-btn { flex-shrink: 0; }/* --- Conversation follow-up work queue ----------------------------------- */
 /* One aligned row per follow-up, with four zones — identity, status, message
  * preview, actions. The old card was much larger than its 11–12px contents and
  * still clipped the actions; the space now goes to the content. */
@@ -3251,21 +3208,7 @@ td .pipe-stage-select.quiet:focus-visible {
   font-weight: 600;
 }
 .auth-form input { width: 100%; }
-.auth-form .btn.accent { width: 100%; justify-content: center; }
-.auth-link {
-  align-self: center;
-  min-height: var(--control-height);
-  border: 0;
-  padding: 0 var(--space-sm);
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--text-table);
-  font-weight: 600;
-  cursor: pointer;
-}
-.auth-link:hover { color: var(--accent-hover); text-decoration: underline; }
-.auth-error,
+.auth-form .btn.accent { width: 100%; justify-content: center; }.auth-error,
 .auth-success {
   padding: var(--space-md);
   border: 1px solid var(--danger-border);
@@ -3274,29 +3217,7 @@ td .pipe-stage-select.quiet:focus-visible {
   color: var(--danger);
   font-size: var(--text-table);
   line-height: var(--leading-table);
-}
-.auth-success {
-  border-color: var(--success-border);
-  background: var(--success-subtle);
-  color: var(--success);
-}
-.auth-email {
-  width: fit-content;
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--text-table);
-}
-.auth-spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: auth-spin 0.8s linear infinite;
-}
-@keyframes auth-spin { to { transform: rotate(360deg); } }
+}@keyframes auth-spin { to { transform: rotate(360deg); } }
 
 /* --- Authenticated identity --------------------------------------------- */
 .identity-chip {
@@ -3469,10 +3390,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .runtime-unknown, .archive-unknown, .observation-unsupported,
 .observation-awaiting_first_sync { color: var(--warning); background: var(--warning-subtle); }
 .archive-yes { color: var(--purple); background: color-mix(in srgb, var(--purple) 12%, transparent); }
-.observation-stale { color: var(--danger); background: var(--danger-subtle); }
-.campaign-table-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 12px; }
-.campaign-table-head h2 { margin: 0; }
-.campaign-table-filters, .deployment-filters { display: flex; flex-wrap: wrap; gap: 10px; }
+.observation-stale { color: var(--danger); background: var(--danger-subtle); }.campaign-table-filters, .deployment-filters { display: flex; flex-wrap: wrap; gap: 10px; }
 .campaign-table-filters label, .deployment-filters label { display: grid; gap: 4px; color: var(--text-secondary); font-size: var(--text-xs); }
 .campaign-table-filters select, .deployment-filters select { min-width: 140px; }
 .deployment-filters { align-items: end; margin-top: -8px; }
@@ -3493,9 +3411,7 @@ td .pipe-stage-select.quiet:focus-visible {
 .deployment-group-name { font-size: var(--text-subsection); font-weight: 600; }
 .build-archive-switch { width: fit-content; margin-bottom: 14px; }
 .active-sequence-runtime { font-weight: 650; font-size: var(--text-sm); }
-@media (max-width: 720px) {
-  .campaign-table-head { flex-direction: column; }
-  .campaign-table-filters, .deployment-filters { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+@media (max-width: 720px) {  .campaign-table-filters, .deployment-filters { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
   .campaign-table-filters select, .deployment-filters select { width: 100%; min-width: 0; }
   .deployment-group-head { align-items: flex-start; }}
 .sequence-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; color: var(--text-muted); padding: 0 9px; }
@@ -4236,18 +4152,7 @@ td .pipe-stage-select.quiet:focus-visible {
  * rather than a fixed slab, so the first row stays high and the last is
  * reachable by the frame's own scrollbar. */
 .leads-table-frame .ui-table-scroll { max-height: calc(100vh - 360px); min-height: 280px; }
-.leads-table-frame .pager { padding: 0; }
-
-/* ── Weekly add-limit meter (Account) ────────────────────────────────────── */
-.cap-meter {
-  height: 10px;
-  margin: var(--space-md) 0 var(--space-sm);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-.cap-meter > span { display: block; height: 100%; border-radius: inherit; transition: width .2s; }
-
-/* ── Sequences: deployment filter sheet ─────────────────────────────────── */
+.leads-table-frame .pager { padding: 0; }/* ── Sequences: deployment filter sheet ─────────────────────────────────── */
 .deployment-filters { display: grid; gap: var(--space-lg); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .deployment-advanced { grid-column: 1 / -1; }
 .deployment-advanced > summary {

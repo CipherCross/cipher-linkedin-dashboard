@@ -133,8 +133,8 @@ export function CampaignCompareTable({
 function rateCell(rate: number | null, max: number, color: string) {
   if (rate == null) return <span className="muted">—</span>
   return (
-    <div className="cmp-rate">
-      <span className="cmp-rate-val">{rate.toFixed(1)}%</span>
+    <div className="flex flex-col items-end gap-[3px]">
+      <span className="tabular-nums">{rate.toFixed(1)}%</span>
       <div className="cmp-bar">
         <span style={{ width: `${Math.min(100, (100 * rate) / max)}%`, background: color }} />
       </div>

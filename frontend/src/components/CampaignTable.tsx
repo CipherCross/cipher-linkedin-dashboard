@@ -76,7 +76,7 @@ export function CampaignTable({ campaigns, instances, title = 'Campaigns' }: Pro
 
   return (
     <div className="card">
-      <div className="campaign-table-head">
+      <div className="flex items-start justify-between gap-[18px] mb-app-md max-[720px]:flex-col [&_h2]:m-0">
         <h2>{title}</h2>
         <div className="campaign-table-filters" aria-label="Campaign filters">
           <label>

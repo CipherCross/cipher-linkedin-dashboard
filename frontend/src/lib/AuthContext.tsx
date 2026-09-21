@@ -644,7 +644,7 @@ function AuthScreen() {
 
         {auth.status === 'initializing' && (
           <div className="auth-state">
-            <div className="auth-spinner" aria-hidden="true" />
+            <div className="w-7 h-7 border-[3px] border-app-border border-t-app-accent rounded-full animate-[auth-spin_0.8s_linear_infinite]" aria-hidden="true" />
             <h1>Checking your session…</h1>
           </div>
         )}
@@ -670,7 +670,7 @@ function AuthScreen() {
               {auth.error ??
                 'Your login is not linked to an active teammate. Ask an admin to update your access.'}
             </p>
-            {auth.user?.email && <div className="auth-email">{auth.user.email}</div>}
+            {auth.user?.email && <div className="w-fit px-app-md py-app-sm rounded-control bg-app-surface-2 text-app-text-secondary text-app-table">{auth.user.email}</div>}
             <button className="btn" type="button" onClick={() => void auth.signOut()}>
               Sign out
             </button>
@@ -745,7 +745,7 @@ function AuthScreen() {
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
             <button
-              className="auth-link"
+              className="self-center min-h-control border-0 px-app-sm bg-transparent text-app-accent font-semibold text-app-table cursor-pointer hover:text-app-accent-hover hover:underline"
               type="button"
               onClick={() => {
                 setMode('forgot')
@@ -773,13 +773,13 @@ function AuthScreen() {
                 required
               />
             </label>
-            {message && <div className="auth-success">{message}</div>}
+            {message && <div className="border-app-success-border bg-app-success-subtle text-app-success">{message}</div>}
             {localError && <div className="auth-error" role="alert">{localError}</div>}
             <button className="btn accent" disabled={busy} type="submit">
               {busy ? 'Sending…' : 'Send recovery link'}
             </button>
             <button
-              className="auth-link"
+              className="self-center min-h-control border-0 px-app-sm bg-transparent text-app-accent font-semibold text-app-table cursor-pointer hover:text-app-accent-hover hover:underline"
               type="button"
               onClick={() => {
                 setMode('login')

@@ -91,7 +91,7 @@ export function AccountDetail() {
       <PageHeader
         breadcrumb={[{ label: 'Overview', to: '/' }, { label: 'Account' }]}
         title={
-          <span className="account-head">
+          <span className="flex items-center gap-app-lg">
             <Avatar inst={inst} size={44} />
             {instanceName(inst)}
           </span>
@@ -132,7 +132,7 @@ export function AccountDetail() {
         {/* A meter is data, so it keeps its status hue — and it is always read
             out in words underneath, never by colour alone. */}
         <div
-          className="cap-meter"
+          className="h-2.5 mt-app-md mb-app-sm rounded-pill overflow-hidden [&>span]:block [&>span]:h-full [&>span]:rounded-[inherit] [&>span]:transition-[width]"
           role="meter"
           aria-valuenow={addedThisWeek}
           aria-valuemin={0}
