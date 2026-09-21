@@ -30,7 +30,7 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
         {sorted.map((inst) => {
           const level = freshnessLevel(inst.last_sync_at)
           return (
-            <div className="instance-item" key={inst.id}>
+            <div className="flex flex-col gap-app-sm [&+&]:border-t [&+&]:border-app-border [&+&]:pt-app-md" key={inst.id}>
               <div className="flex gap-2.5 items-center">
                 <Avatar inst={inst} size={34} />
                 <div style={{ minWidth: 0 }}>

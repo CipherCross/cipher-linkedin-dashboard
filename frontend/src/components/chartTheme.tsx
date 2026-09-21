@@ -75,7 +75,7 @@ export const legendText = (value: string) => (
  *  bare grid of empty axes. */
 export function ChartEmpty({ height = 240, label }: { height?: number; label: string }) {
   return (
-    <div className="chart-empty" style={{ height }}>
+    <div className="flex items-center justify-center mt-1 text-app-text-muted text-[length:var(--text-sm)] bg-app-surface-2 border border-dashed border-app-border rounded-md" style={{ height }}>
       <span>{label}</span>
     </div>
   )

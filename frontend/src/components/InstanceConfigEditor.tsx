@@ -196,7 +196,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   if (!open) {
     const hasConfig = cfg && Object.keys(cfg).length > 0
     return (
-      <div className="config-toggle">
+      <div className="pl-11">
         <button
           className="link-btn"
           onClick={() => setOpen(true)}
@@ -209,11 +209,11 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         <button className="link-btn" onClick={() => setViewRaw((v) => !v)}>
           {viewRaw ? 'Hide raw' : 'View raw'}
         </button>
-        {pending && <span className="config-pending"> · pending next sync</span>}
+        {pending && <span className="text-app-text-muted text-[length:var(--text-xs)]"> · pending next sync</span>}
         {viewRaw && (
           // The literal stored override blob (not the editor's reconstructed
           // view) so the true persisted config is auditable at a glance.
-          <pre className="config-view">
+          <pre className="mt-app-sm mx-0 mb-0 p-2.5 border border-app-border rounded-md bg-app-bg font-mono text-[length:var(--text-xs)] text-app-text-secondary whitespace-pre-wrap [word-break:break-word] max-h-80 overflow-y-auto">
             {hasConfig
               ? JSON.stringify(cfg, null, 2)
               : 'No online config — this notebook runs on its local config.yaml.'}
@@ -224,10 +224,10 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   }
 
   return (
-    <div className="config-editor">
+    <div className="p-2.5 ml-11 border border-app-border rounded-md bg-app-bg flex flex-col gap-2.5">
       {raw ? (
-        <label className="config-raw">
-          <span className="config-label">Raw config (JSON)</span>
+        <label className="flex flex-col gap-[3px] [&_textarea]:font-mono">
+          <span className="text-app-text-muted text-[length:var(--text-2xs)]">Raw config (JSON)</span>
           <textarea
             value={rawText}
             spellCheck={false}
@@ -236,10 +236,10 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
           />
         </label>
       ) : (
-        <div className="config-fields">
+        <div className="grid grid-cols-2 gap-x-app-md gap-y-app-sm">
           {TEXT_FIELDS.map((f) => (
-            <label className="config-field" key={f.key}>
-              <span className="config-label">{f.label}</span>
+            <label className="flex flex-col gap-[3px]" key={f.key}>
+              <span className="text-app-text-muted text-[length:var(--text-2xs)]">{f.label}</span>
               <input
                 type="text"
                 value={text[f.key]}
@@ -249,8 +249,8 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
             </label>
           ))}
           {BOOL_FIELDS.map((f) => (
-            <label className="config-field" key={f.key}>
-              <span className="config-label">{f.label}</span>
+            <label className="flex flex-col gap-[3px]" key={f.key}>
+              <span className="text-app-text-muted text-[length:var(--text-2xs)]">{f.label}</span>
               <select
                 value={bool[f.key]}
                 onChange={(e) => { setDirty(true); setBool({ ...bool, [f.key]: e.target.value as Tri }) }}
@@ -270,7 +270,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         </div>
       )}
 
-      <div className="config-actions">
+      <div className="flex items-center gap-app-md flex-wrap">
         <button className="btn-accent" onClick={save} disabled={busy}>
           {busy ? 'Saving…' : 'Save'}
         </button>

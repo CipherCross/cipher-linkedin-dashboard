@@ -256,7 +256,7 @@ const paint = (search = '') =>
   )
 
 const rowNames = () => Array.from(
-  document.querySelectorAll('.leads-replies-table tbody tr'),
+  document.querySelectorAll('[data-leads-replies="table"] tbody tr'),
 ).map((row) => row.getAttribute('aria-label'))
 
 const chip = (label: string) => screen
@@ -273,7 +273,7 @@ describe('the campaign page as a reply workspace', () => {
   it('opens on leads and replies, not on the analytics it used to lead with', () => {
     paint()
 
-    expect(document.querySelector('.leads-replies-table')).not.toBeNull()
+    expect(document.querySelector('[data-leads-replies="table"]')).not.toBeNull()
     // The KPI cards are the old landing content; they belong behind Performance.
     expect(document.querySelector('.kpi')).toBeNull()
     expect(rowNames()).toEqual([
@@ -331,7 +331,7 @@ describe('the campaign page as a reply workspace', () => {
     expect(openConversation).toHaveBeenCalledTimes(1)
     expect(openConversation.mock.calls[0][0]).toMatchObject({ full_name: 'Grace Hopper' })
     // A drawer, not a navigation: the leads table is still on screen.
-    expect(document.querySelector('.leads-replies-table')).not.toBeNull()
+    expect(document.querySelector('[data-leads-replies="table"]')).not.toBeNull()
   })
 
   it('filters by name, company or headline', () => {

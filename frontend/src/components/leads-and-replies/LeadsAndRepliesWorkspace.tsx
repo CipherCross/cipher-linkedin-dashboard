@@ -129,8 +129,8 @@ export function LeadsAndRepliesWorkspace({
 
   return (
     <section >
-      <div className="leads-replies-toolbar">
-        <div className="segmented leads-replies-filters" role="tablist" aria-label="Filter campaign leads">
+      <div className="flex items-center justify-between gap-app-md flex-wrap mb-app-lg max-[700px]:items-stretch">
+        <div className="segmented flex-wrap" role="tablist" aria-label="Filter campaign leads">
           {FILTERS.map((item) => (
             <button
               key={item.id}
@@ -140,11 +140,11 @@ export function LeadsAndRepliesWorkspace({
               aria-selected={filter === item.id}
               onClick={() => setParam('people', item.id)}
             >
-              {item.label} <span className="segmented-count">{counts[item.id]}</span>
+              {item.label} <span className="tabular-nums text-app-text-muted text-[length:var(--text-xs)]">{counts[item.id]}</span>
             </button>
           ))}
         </div>
-        <label className="leads-replies-search">
+        <label className="flex items-center gap-[7px] min-w-[240px] max-[700px]:min-w-0 border border-app-border rounded-md px-2.5 bg-app-surface text-app-text-muted [&_input]:border-0 [&_input]:bg-transparent [&_input]:text-app-text [&_input]:py-app-sm [&_input]:px-0 [&_input]:font-[inherit] [&_input]:flex-1 [&_input]:min-w-0 [&_input:focus]:outline-none">
           <Search size={15} />
           <input
             type="search"
@@ -159,12 +159,12 @@ export function LeadsAndRepliesWorkspace({
         </label>
       </div>
 
-      <div className="card leads-replies-card">
-        <div className="leads-replies-summary muted small">
+      <div className="card pt-app-md">
+        <div className="mb-[9px] muted small">
           {rows.length} of {leads.length} leads · newest replies first
         </div>
         <div className="table-scroll">
-          <table className="leads-replies-table">
+          <table data-leads-replies="table" className="w-full border-collapse [&_th]:text-left [&_th]:text-[length:var(--text-2xs)] [&_th]:uppercase [&_th]:tracking-[.04em] [&_th]:text-app-text-muted [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:border-b [&_th]:border-app-border [&_th]:whitespace-nowrap [&_td]:px-2.5 [&_td]:py-[9px] [&_td]:border-b [&_td]:border-app-border [&_td]:align-top [&_tbody_tr:last-child_td]:border-b-0">
             <thead>
               <tr>
                 <th>Lead & latest reply</th>
@@ -231,7 +231,7 @@ export function LeadsAndRepliesWorkspace({
             </tbody>
           </table>
         </div>
-        {rows.length > 100 && <div className="muted small leads-replies-limit">Showing the 100 most recent matches.</div>}
+        {rows.length > 100 && <div className="muted small mt-[9px]">Showing the 100 most recent matches.</div>}
       </div>
     </section>
   )

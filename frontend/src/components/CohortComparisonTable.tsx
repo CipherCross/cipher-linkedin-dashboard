@@ -80,7 +80,7 @@ export function CohortComparisonTable({
     <div className="card">
       <div className="card-head">
         <h2>Cohort comparison — by invite week</h2>
-        <div className="table-toolbar-actions">
+        <div className="flex items-center gap-app-sm flex-wrap">
           <div className="segmented" role="tablist" aria-label="Metric">
             {METRICS.map((m) => (
               <button
@@ -100,11 +100,11 @@ export function CohortComparisonTable({
         </div>
       </div>
 
-      <div className="cohort-scroll">
-        <table className="cohort-table">
+      <div className="flex overflow-x-auto [&>table]:flex-[0_0_auto]">
+        <table className="min-w-[640px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
           <thead>
             <tr>
-              <th className="cohort-camp-col">Campaign</th>
+              <th className="sticky left-0 z-[1] bg-app-surface max-w-[220px] overflow-hidden text-ellipsis">Campaign</th>
               {data.weeks.map((w) => (
                 <th key={w} className="num">{shortDate(w)}</th>
               ))}
@@ -129,7 +129,7 @@ export function CohortComparisonTable({
         </table>
       </div>
 
-      <div className="muted small cohort-foot">
+      <div className="muted small mt-app-md">
         Cohort = the week the invite went out. A cohort's rates stay greyed as
         “still maturing” until {maturity.acceptWeeks}w (accept) / {maturity.replyWeeks}w
         (reply) after its Monday; WoW ▲/▼ (percentage points) compare only matured
@@ -153,16 +153,16 @@ function SubGroup({
 }) {
   return (
     <>
-      <tr className="cohort-subhead">
+      <tr className="[&_td]:text-app-text-secondary [&_td]:font-semibold [&_td]:text-app-meta [&_td]:bg-app-surface-2">
         <td colSpan={colSpan}>
           {/* Sticky so the group label stays readable while the matrix is
               scrolled horizontally (the full-width td itself can't be pinned). */}
-          <span className="cohort-subhead-label">{account}</span>
+          <span className="sticky left-2.5 inline-block">{account}</span>
         </td>
       </tr>
       {rows.map((row) => (
         <tr key={row.campaignId}>
-          <td className="cohort-camp-col" title={row.campaignName}>{row.campaignName}</td>
+          <td className="sticky left-0 z-[1] bg-app-surface max-w-[220px] overflow-hidden text-ellipsis" title={row.campaignName}>{row.campaignName}</td>
           {weeks.map((w) => (
             <Cell key={w} cell={row.cells.get(w)} prevRate={prevMaturedRate(row, weeks, w, metric)} metric={metric} />
           ))}
@@ -207,7 +207,7 @@ function Cell({
         {small && <span className="cmp-warn" title={`Only ${cell.invites} invites — rate is noisy`}> ⚠</span>}
       </span>
       {delta != null && delta !== 0 && (
-        <span className={`kpi-delta ${delta > 0 ? 'up' : 'down'} cohort-d`} title="vs prior matured cohort (pct points)">
+        <span className={`kpi-delta ${delta > 0 ? 'up' : 'down'} ml-1.5 px-[5px]`} title="vs prior matured cohort (pct points)">
           {delta > 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}
         </span>
       )}

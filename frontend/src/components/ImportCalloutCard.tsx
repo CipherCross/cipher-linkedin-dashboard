@@ -43,17 +43,17 @@ export function ImportCalloutCard() {
 
   return (
     <div className="card import-callout">
-      <h2 className="import-callout-title">
-        <History size={16} className="import-callout-icon" />
+      <h2 className="inline-flex items-center gap-app-sm mt-0 mx-0 mb-0.5 text-app-text text-[length:var(--text-md)]">
+        <History size={16} className="text-app-warning shrink-0" />
         Import conversation history
       </h2>
-      <p className="import-callout-lede">
+      <p className="mt-app-sm mx-0 mb-0 leading-[1.55] text-app-text-secondary">
         These warm replies are only visible through the sync — whatever happened
         after the reply stays invisible. Import the conversation history so that
         follow-ups and booked calls show up in the dashboard.
       </p>
 
-      <div className="import-callout-list">
+      <div className="mt-[14px] flex flex-col max-w-[760px]">
         {visible.map(({ lead, reply }) => {
           const meta = reply.sentiment ? SENTIMENT_META[reply.sentiment] : null
           const intentMeta = reply.highest_intent ? INTENT_META[reply.highest_intent] : null
@@ -66,7 +66,7 @@ export function ImportCalloutCard() {
           return (
             <div
               key={lead.id}
-              className="import-callout-row row-clickable"
+              className="grid grid-cols-[1fr_auto] items-center gap-x-app-md gap-y-0.5 px-app-sm py-2.5 border-b border-app-border last:border-b-0 rounded-sm row-clickable"
               role="button"
               tabIndex={0}
               onClick={() => openConversation(lead)}
@@ -77,8 +77,8 @@ export function ImportCalloutCard() {
                 }
               }}
             >
-              <div className="import-callout-who">
-                <span className="import-callout-name">{name}</span>
+              <div className="col-start-1 row-start-1 flex items-center gap-app-sm flex-wrap min-w-0">
+                <span className="font-semibold">{name}</span>
                 {meta && (
                   <span className={`badge senti ${meta.cls}`} title={reply.reason ?? ''}>
                     {meta.label}
@@ -90,17 +90,17 @@ export function ImportCalloutCard() {
                   </span>
                 )}
               </div>
-              <div className="import-callout-meta muted small">
+              <div className="col-start-1 row-start-2 min-w-0 muted small">
                 {[lead.company, account].filter(Boolean).join(' · ') || '—'}
               </div>
-              <div className="import-callout-when muted small">{replyDate(reply.sent_at)}</div>
+              <div className="col-start-2 row-start-1 row-end-3 text-right whitespace-nowrap muted small">{replyDate(reply.sent_at)}</div>
             </div>
           )
         })}
       </div>
 
-      {extra > 0 && <div className="import-callout-more muted small">+ {extra} more</div>}
-      <div className="import-callout-hint muted small">
+      {extra > 0 && <div className="mt-app-sm muted small">+ {extra} more</div>}
+      <div className="mt-app-md muted small">
         Select a row to open the conversation → Import history
       </div>
     </div>

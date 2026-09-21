@@ -50,7 +50,6 @@
 @import './components/overview/overview.css' layer(app);
 @import './pages/team.css' layer(app);
 @import './components/instance-panel.css' layer(app);
-@import './components/chart-theme.css' layer(app);
 @import './pages/sequence-builder.css' layer(app);
 @import './components/conversation-drawer.css' layer(app);
 @import './pages/chat.css' layer(app);
@@ -59,14 +58,10 @@
 @import './components/date-range-picker.css' layer(app);
 @import './pages/playbook.css' layer(app);
 @import './components/import-history.css' layer(app);
-@import './components/import-callout.css' layer(app);
-@import './components/instance-config.css' layer(app);
-@import './components/cohort-comparison.css' layer(app);
 @import './components/funnel.css' layer(app);
 @import './components/account-card.css' layer(app);
 @import './components/message-sequence.css' layer(app);
 @import './components/follow-up-panel.css' layer(app);
-@import './components/leads-and-replies/workspace.css' layer(app);
 @import './pages/health.css' layer(app);
 @import './pages/campaign-detail.css' layer(app);
 @import './pages/search-library.css' layer(app);
