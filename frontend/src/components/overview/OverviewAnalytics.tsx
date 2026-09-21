@@ -323,8 +323,8 @@ export function OverviewAnalytics({
                   : sort.key === "replied"
                     ? a.replies
                     : sort.key === "acceptance"
-                      ? (a.lifetime_acceptance_rate ?? -1)
-                      : (a.lifetime_reply_rate ?? -1);
+                      ? (a.acceptance_rate ?? -1)
+                      : (a.reply_rate ?? -1);
           const bv =
             sort.key === "name"
               ? b.campaign_name
@@ -335,8 +335,8 @@ export function OverviewAnalytics({
                   : sort.key === "replied"
                     ? b.replies
                     : sort.key === "acceptance"
-                      ? (b.lifetime_acceptance_rate ?? -1)
-                      : (b.lifetime_reply_rate ?? -1);
+                      ? (b.acceptance_rate ?? -1)
+                      : (b.reply_rate ?? -1);
           const comparison =
             typeof av === "string" && typeof bv === "string"
               ? av.localeCompare(bv)
@@ -377,12 +377,12 @@ export function OverviewAnalytics({
           if (!row) return -1;
           if (sort.key === "acceptance")
             return (
-              row.lifetime.acceptedOfInvited / Math.max(1, row.lifetime.invited)
+              row.totals.acceptedOfInvited / Math.max(1, row.totals.invited)
             );
           if (sort.key === "reply")
             return (
-              row.lifetime.repliedOfConnected /
-              Math.max(1, row.lifetime.connected)
+              row.totals.repliedOfConnected /
+              Math.max(1, row.totals.connected)
             );
           return row.totals[sort.key];
         };
@@ -651,8 +651,8 @@ export function OverviewAnalytics({
             </h2>
             <p className="ov-muted">
               {account === "all"
-                ? `${accountRange.label} counts · lifetime rates${accountRange.from || accountRange.to ? " · UTC" : ""}${incompleteAccountToday ? " · Today is in progress" : ""}`
-                : `Campaigns · ${accountRange.label} counts · lifetime rates${accountRange.from || accountRange.to ? " · UTC" : ""}${incompleteAccountToday ? " · Today is in progress" : ""}`}
+                ? `${accountRange.label} counts and rates${accountRange.from || accountRange.to ? " · UTC" : ""}${incompleteAccountToday ? " · Today is in progress" : ""}`
+                : `Campaigns · ${accountRange.label} counts and rates${accountRange.from || accountRange.to ? " · UTC" : ""}${incompleteAccountToday ? " · Today is in progress" : ""}`}
             </p>
           </div>
           <div className="ov-controls">
@@ -774,10 +774,10 @@ export function OverviewAnalytics({
                           onClick={() => setSortKey("acceptance")}
                           aria-label={sortLabel(
                             "acceptance",
-                            "Acceptance lifetime",
+                            "Acceptance rate",
                           )}
                         >
-                          Acceptance · lifetime
+                          Acceptance rate
                         </button>
                       </th>
                       <th
@@ -792,9 +792,9 @@ export function OverviewAnalytics({
                         <button
                           type="button"
                           onClick={() => setSortKey("reply")}
-                          aria-label={sortLabel("reply", "Reply rate lifetime")}
+                          aria-label={sortLabel("reply", "Reply rate")}
                         >
-                          Reply rate · lifetime
+                          Reply rate
                         </button>
                       </th>
                       <th>Last sync</th>
@@ -808,7 +808,6 @@ export function OverviewAnalytics({
                           (x) => x.instance_id === i.id,
                         );
                         const t = row?.totals ?? zero();
-                        const l = row?.lifetime ?? zero();
                         return (
                           <tr key={i.id}>
                             <td>
@@ -831,14 +830,14 @@ export function OverviewAnalytics({
                             <td>{num(t.connected)}</td>
                             <td>{num(t.replied)}</td>
                             <td
-                              title={`${num(l.acceptedOfInvited)} connected of ${num(l.invited)} invited`}
+                              title={`${num(t.acceptedOfInvited)} connected of ${num(t.invited)} invited`}
                             >
-                              {pct(l.acceptedOfInvited, l.invited)}
+                              {pct(t.acceptedOfInvited, t.invited)}
                             </td>
                             <td
-                              title={`${num(l.repliedOfConnected)} replies of ${num(l.connected)} connected`}
+                              title={`${num(t.repliedOfConnected)} replies of ${num(t.connected)} connected`}
                             >
-                              {pct(l.repliedOfConnected, l.connected)}
+                              {pct(t.repliedOfConnected, t.connected)}
                             </td>
                             <td>
                               {i.last_sync_at ? (
@@ -864,7 +863,7 @@ export function OverviewAnalytics({
               </div>
               <div className="ov-bottom">
                 <span>
-                  {accountRange.label} account counts · rates use invited → connected and
+                  {accountRange.label} account counts and rates · rates use invited → connected and
                   connected → replies
                 </span>
                 <span>
@@ -1015,9 +1014,9 @@ export function OverviewAnalytics({
                       <button
                         type="button"
                         onClick={() => setSortKey("acceptance")}
-                        aria-label={sortLabel("acceptance", "Acceptance lifetime")}
+                        aria-label={sortLabel("acceptance", "Acceptance rate")}
                       >
-                        Acceptance · lifetime
+                        Acceptance rate
                       </button>
                     </th>
                     <th
@@ -1032,9 +1031,9 @@ export function OverviewAnalytics({
                       <button
                         type="button"
                         onClick={() => setSortKey("reply")}
-                        aria-label={sortLabel("reply", "Reply rate lifetime")}
+                        aria-label={sortLabel("reply", "Reply rate")}
                       >
-                        Reply rate · lifetime
+                        Reply rate
                       </button>
                     </th>
                     <th>Open</th>
@@ -1050,14 +1049,14 @@ export function OverviewAnalytics({
                         <td>{num(c.accepted)}</td>
                         <td>{num(c.replies)}</td>
                         <td>
-                          {c.lifetime_acceptance_rate == null
+                          {c.acceptance_rate == null
                             ? "—"
-                            : `${c.lifetime_acceptance_rate.toFixed(1)}%`}
+                            : `${c.acceptance_rate.toFixed(1)}%`}
                         </td>
                         <td>
-                          {c.lifetime_reply_rate == null
+                          {c.reply_rate == null
                             ? "—"
-                            : `${c.lifetime_reply_rate.toFixed(1)}%`}
+                            : `${c.reply_rate.toFixed(1)}%`}
                         </td>
                         <td>
                           <Link

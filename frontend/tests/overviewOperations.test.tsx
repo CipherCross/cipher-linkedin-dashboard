@@ -261,6 +261,39 @@ describe("Overview request orchestration and real analytics UI", () => {
     );
   });
   it("changes Account Analytics independently, using the same calendar interaction", async () => {
+    fetchAccountAnalytics.mockResolvedValue(
+      summary(true, {
+        analytics: analytics({
+          accounts: [
+            {
+              instance_id: "one",
+              totals: totals({
+                invited: 10,
+                connected: 4,
+                replied: 2,
+                acceptedOfInvited: 3,
+                repliedOfConnected: 1,
+              }),
+              previous: null,
+              lifetime: totals({
+                invited: 100,
+                connected: 50,
+                acceptedOfInvited: 80,
+                repliedOfConnected: 30,
+              }),
+            },
+          ],
+        }),
+        campaigns: [
+          campaign({
+            acceptance_rate: 30,
+            reply_rate: 25,
+            lifetime_acceptance_rate: 80,
+            lifetime_reply_rate: 60,
+          }),
+        ],
+      }),
+    );
     paint();
     await screen.findByRole("heading", { name: "Account analytics" });
     expect(
@@ -278,7 +311,19 @@ describe("Overview request orchestration and real analytics UI", () => {
       expect.objectContaining({ from: "2026-08-08", to: "2026-09-06" }),
     );
     expect(fetchSummary).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/Past 30 days counts · lifetime rates · UTC/)).toBeTruthy();
+    expect(screen.getByText(/Past 30 days counts and rates · UTC/)).toBeTruthy();
+    expect(screen.getByText(/Past 30 days account counts and rates/)).toBeTruthy();
+    expect(screen.getByText("30.0%")).toBeTruthy();
+    expect(screen.getByText("25.0%")).toBeTruthy();
+    expect(screen.queryByText(/Acceptance · lifetime/)).toBeNull();
+    expect(screen.queryByText(/Reply rate · lifetime/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Alice" }));
+    expect(await screen.findByRole("heading", { name: "Alice campaigns" })).toBeTruthy();
+    expect(screen.getByText("30.0%")).toBeTruthy();
+    expect(screen.getByText("25.0%")).toBeTruthy();
+    expect(screen.queryByText("80.0%")).toBeNull();
+    expect(screen.queryByText("60.0%")).toBeNull();
   });
   it("changes only the selected performance scope and keeps lifetime rates account-specific", async () => {
     fetchSummary.mockResolvedValue(
