@@ -1926,49 +1926,11 @@ svg.coach-digest-caret { width: auto; flex-shrink: 0; }
 .empty-state-title { font-size: var(--text-base); font-weight: 600; color: var(--text); }
 .empty-state-hint { max-width: 340px; line-height: 1.5; }
 .empty-state-action { margin-top: 6px; }
-.empty-state-action .link-btn { font-size: var(--text-sm); }
-
-/* --- Toasts -------------------------------------------------------------- */
-.toast-viewport {
-  position: fixed; top: 16px; right: 16px; z-index: 100;
-  display: flex; flex-direction: column; gap: 10px;
-  max-width: min(380px, calc(100vw - 32px));
-  pointer-events: none;
-}
-.toast {
-  pointer-events: auto;
-  display: flex; align-items: flex-start; gap: 10px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-overlay);
-  padding: 11px 12px;
-  font-size: var(--text-sm); line-height: 1.45; color: var(--text);
-  animation: toast-in 0.16s ease-out;
-}
-
-.toast.success { border-left-color: var(--success); }
-.toast.error { border-left-color: var(--danger); }
-.toast.info { border-left-color: var(--accent); }
-.toast-icon { flex-shrink: 0; margin-top: 1px; }
-.toast.success .toast-icon { color: var(--success); }
-.toast.error .toast-icon { color: var(--danger); }
-.toast.info .toast-icon { color: var(--accent); }
-.toast-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.toast-close {
-  flex-shrink: 0; background: none; border: none; cursor: pointer;
-  color: var(--text-muted); padding: 0; margin-top: 1px;
-  transition: color 0.14s ease;
-}
-.toast-close:hover { color: var(--text); }
-@keyframes toast-in {
+.empty-state-action .link-btn { font-size: var(--text-sm); }@keyframes toast-in {
   from { opacity: 0; transform: translateX(12px); }
   to { opacity: 1; transform: translateX(0); }
 }
-@media (max-width: 480px) {
-  .toast-viewport { left: 16px; right: 16px; max-width: none; }
-}
+@media (max-width: 480px) {}
 
 /* conversation thread skeleton (drawer) */
 .conv-thread-skeleton { display: flex; flex-direction: column; gap: var(--space-6); }
