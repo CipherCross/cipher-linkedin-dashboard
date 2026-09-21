@@ -1,6 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { ArrowRight, Megaphone, Search, UserRound, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowRight, Megaphone, Search, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { DashboardData } from '../lib/types'
 import {
@@ -8,14 +7,25 @@ import {
   filterQuickNavigationDestinations,
   type QuickNavigationDestination,
 } from '../lib/navigation'
-import { IconButton } from '../ui'
+import { Dialog } from '../ui'
+import {
+  Command, CommandEmpty, CommandInput, CommandItem, CommandList,
+} from './ui/command'
 
-function focusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(
-    'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-  )).filter((element) => !element.hasAttribute('hidden') && element.getClientRects().length > 0)
-}
-
+/**
+ * Jump to any page, account or campaign. Opened with Cmd/Ctrl+K.
+ *
+ * The modal shell is the shared `Dialog`, so focus trapping, the scroll lock,
+ * Escape, outside press and focus restoration are the same Base UI behaviour
+ * every other overlay in the app gets — this component used to carry its own
+ * copy of all of it, including a second hand-rolled Tab cycle.
+ *
+ * The list is `cmdk`, which owns arrow-key movement, the active descendant and
+ * Enter-to-select. Filtering is NOT delegated to it: `shouldFilter={false}`
+ * keeps `filterQuickNavigationDestinations`, which ranks and caps results and
+ * matches on the meta line as well as the label, so what the palette finds is
+ * unchanged from before.
+ */
 export function QuickNavigation({
   open,
   data,
@@ -30,12 +40,8 @@ export function QuickNavigation({
   onClose: () => void
 }) {
   const navigate = useNavigate()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
-  const listId = useId()
+
   const destinations = useMemo(
     () => buildQuickNavigationDestinations(data, isAdmin),
     [data, isAdmin],
@@ -56,135 +62,48 @@ export function QuickNavigation({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose, onOpen, open])
 
-  useEffect(() => {
-    if (!open) return
-    previousFocusRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-    const previousOverflow = document.body.style.overflow
-    const app = document.querySelector<HTMLElement>('.app')
-    document.body.style.overflow = 'hidden'
-    app?.setAttribute('inert', '')
-    setQuery('')
-    setActiveIndex(0)
-    requestAnimationFrame(() => inputRef.current?.focus())
+  // A fresh query each time it opens: the palette is a jump, not a session.
+  useEffect(() => { if (open) setQuery('') }, [open])
 
-    return () => {
-      document.body.style.overflow = previousOverflow
-      app?.removeAttribute('inert')
-      requestAnimationFrame(() => previousFocusRef.current?.focus())
-    }
-  }, [open])
-
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [query])
+  if (!open) return null
 
   const choose = (destination: QuickNavigationDestination) => {
     navigate(destination.to)
     onClose()
   }
 
-  if (!open) return null
-
-  const resolvedActiveIndex = Math.min(activeIndex, Math.max(0, results.length - 1))
-  const active = results[resolvedActiveIndex]
-  const activeId = active ? `${listId}-${active.id.replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined
-
-  return createPortal(
-    <div
-      className="quick-nav-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
+  return (
+    <Dialog
+      title="Go to"
+      description="Search pages, accounts, or campaigns."
+      onRequestClose={onClose}
+      closeLabel="Close quick navigation"
+      className="quick-nav"
     >
-      <div
-        ref={dialogRef}
-        className="quick-nav-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`${listId}-title`}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            onClose()
-            return
-          }
-          if (event.key !== 'Tab' || !dialogRef.current) return
-          const focusable = focusableElements(dialogRef.current)
-          if (focusable.length === 0) return
-          const first = focusable[0]
-          const last = focusable[focusable.length - 1]
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault()
-            last.focus()
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault()
-            first.focus()
-          }
-        }}
-      >
-        <div className="quick-nav-head">
-          <div>
-            <span className="quick-nav-eyebrow">Quick navigation</span>
-            <h2 id={`${listId}-title`}>Go to</h2>
-          </div>
-          <IconButton
-            label="Close quick navigation"
-            icon={<X size={20} aria-hidden="true" />}
-            onClick={onClose}
-          />
-        </div>
-
-        <div className="quick-nav-search">
-          <Search size={18} aria-hidden="true" />
-          <input
-            ref={inputRef}
-            type="search"
-            role="combobox"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search pages, accounts, or campaigns"
-            aria-label="Search destinations"
-            aria-controls={listId}
-            aria-activedescendant={activeId}
-            aria-autocomplete="list"
-            aria-expanded="true"
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
-                event.preventDefault()
-                setActiveIndex((current) => results.length ? (current + 1) % results.length : 0)
-              } else if (event.key === 'ArrowUp') {
-                event.preventDefault()
-                setActiveIndex((current) => results.length
-                  ? (current - 1 + results.length) % results.length
-                  : 0)
-              } else if (event.key === 'Enter' && active) {
-                event.preventDefault()
-                choose(active)
-              }
-            }}
-          />
-          <kbd>esc</kbd>
-        </div>
-
-        <div className="quick-nav-results" id={listId} role="listbox" aria-label="Destinations">
-          {results.map((destination, index) => {
+      {/* cmdk points the input's `aria-labelledby` at its own hidden label, and
+        * `aria-labelledby` beats `aria-label` in name computation — so the name
+        * has to be set through cmdk's `label`, not on the input. */}
+      <Command shouldFilter={false} loop label="Search destinations">
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search pages, accounts, or campaigns"
+        />
+        <CommandList>
+          <CommandEmpty>
+            <Search size={20} aria-hidden="true" />
+            <strong>No destinations found</strong>
+            <span>Try a page, account, or campaign name.</span>
+          </CommandEmpty>
+          {results.map((destination) => {
             const Icon = destination.icon ?? (
               destination.kind === 'account' ? UserRound : Megaphone
             )
-            const optionId = `${listId}-${destination.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
             return (
-              <button
+              <CommandItem
                 key={destination.id}
-                id={optionId}
-                type="button"
-                role="option"
-                aria-selected={index === resolvedActiveIndex}
-                tabIndex={-1}
-                className={`quick-nav-result${index === resolvedActiveIndex ? ' active' : ''}`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => choose(destination)}
+                value={destination.id}
+                onSelect={() => choose(destination)}
               >
                 <span className="quick-nav-result-icon" aria-hidden="true">
                   <Icon size={17} />
@@ -194,25 +113,11 @@ export function QuickNavigation({
                   <span>{destination.meta}</span>
                 </span>
                 <ArrowRight size={15} aria-hidden="true" />
-              </button>
+              </CommandItem>
             )
           })}
-          {results.length === 0 && (
-            <div className="quick-nav-empty">
-              <Search size={20} aria-hidden="true" />
-              <strong>No destinations found</strong>
-              <span>Try a page, account, or campaign name.</span>
-            </div>
-          )}
-        </div>
-
-        <div className="quick-nav-foot" aria-hidden="true">
-          <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-          <span><kbd>↵</kbd> Open</span>
-          <span><kbd>⌘</kbd><kbd>K</kbd> Toggle</span>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        </CommandList>
+      </Command>
+    </Dialog>
   )
 }

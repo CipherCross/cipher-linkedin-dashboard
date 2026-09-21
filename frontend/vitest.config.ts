@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 /**
@@ -31,8 +32,13 @@ import { defineConfig } from 'vitest/config'
  * in a test process.
  */
 export default defineConfig({
+  /* Mirrors vite.config.ts. shadcn components import each other through
+   * `@/components/ui/...`, so without this a test that pulls one in fails to
+   * resolve rather than failing an assertion. */
+  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   test: {
     environment: 'node',
+    setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     exclude: [
       '**/node_modules/**',

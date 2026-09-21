@@ -80,6 +80,15 @@
 .ui-icon-btn--bordered { border-color: var(--border-strong); background: var(--surface-1); }
 .ui-icon-btn--danger:hover:not(:disabled) { background: var(--danger-subtle); color: var(--danger); }
 
+/* ---- Quick navigation ---------------------------------------------------- */
+/* The palette is the shared Dialog plus a cmdk list. Only the list scrolls, and
+ * it is capped so a long result set cannot push the dialog past the viewport —
+ * the rest of the dialog's geometry is the standard one. */
+.quick-nav [cmdk-list] {
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+}
+
 /* ---- PageHeader ---------------------------------------------------------- */
 .ui-page-header {
   display: flex;
