@@ -80,9 +80,9 @@ function SystemTotalsLoading() {
     <div className="ov-summary-grid ov-loading-grid" role="status" aria-label="Loading system totals">
       {Array.from({ length: 5 }).map((_, index) => (
         <div className="ov-total ov-loading-card" key={index}>
-          <Skeleton width="52%" height={12} />
-          <Skeleton width="38%" height={31} />
-          <Skeleton width="64%" height={10} />
+          <Skeleton width="52%" height={15} />
+          <Skeleton width="38%" height={40} />
+          <Skeleton width="64%" height={18} />
         </div>
       ))}
     </div>
@@ -379,20 +379,15 @@ export function OverviewAnalytics({
   const accountLabel = useMemo(() => accountLabeller(instances), [instances])
   const selected = instances.find((item) => item.id === account)
   const selectedAccount = accountCampaigns?.accounts.find((item) => item.instance_id === account)
-  const currentTotals = account === 'all'
-    ? performance?.current ?? { invited: 0, connected: 0, replied: 0 }
-    : selectedAccount?.totals ?? zeroTotals()
-  const previousTotals = account === 'all'
-    ? performance?.previous
-    : performance?.accounts.find((item) => item.instance_id === account)?.current
-      ? performance.accounts.find((item) => item.instance_id === account)?.previous ?? null
-      : null
-  const selectedCohort = account === 'all'
-    ? performance?.cohort ?? zeroCohort()
-    : performance?.accounts.find((item) => item.instance_id === account)?.cohort ?? zeroCohort()
-  const lifetime = account === 'all'
-    ? performance?.lifetime ?? zeroCohort()
-    : performance?.accounts.find((item) => item.instance_id === account)?.lifetime ?? zeroCohort()
+  // Performance reads only overview.performance. Account analytics carries its
+  // own range, so borrowing its totals here would compare one range's counts
+  // against another range's previous period.
+  const selectedPerformance = performance?.accounts.find((item) => item.instance_id === account)
+  const scopedPerformance = account === 'all' ? performance : selectedPerformance
+  const currentTotals = scopedPerformance?.current ?? { invited: 0, connected: 0, replied: 0 }
+  const previousTotals = scopedPerformance?.previous ?? null
+  const selectedCohort = scopedPerformance?.cohort ?? zeroCohort()
+  const lifetime = scopedPerformance?.lifetime ?? zeroCohort()
   const chart = useMemo(() => chartRows(performance, range, account), [performance, range, account])
   const weeklyChart = useMemo(() => chartUsesWeeklyBuckets(performance, range, account), [performance, range, account])
   const [accountSort, setAccountSort] = useState<'name' | 'invited' | 'connected' | 'replied'>('invited')
@@ -428,7 +423,9 @@ export function OverviewAnalytics({
   const systemSubtitle = systemRange.from || systemRange.to
     ? `${systemRange.label} · Invite cohort · All accounts · UTC`
     : 'All time · Invite cohort · All accounts'
-  const accountDataAvailable = account === 'all' ? Boolean(accountCampaigns) : Boolean(selected)
+  // A rostered account with no performance row is a valid empty account, and a
+  // failed Account analytics read must never blank out Performance.
+  const accountDataAvailable = account === 'all' ? Boolean(performance) : Boolean(selected)
 
   useEffect(() => setAccountPage((current) => Math.min(current, accountPages - 1)), [accountPages])
 
@@ -518,7 +515,7 @@ export function OverviewAnalytics({
               <>
                 <TableFrame className="ov-account-frame" scrollLabel="Account analytics table">
                   <Table caption="Account analytics">
-                    <thead><tr>{accountSortHeader('name', 'Account')} {accountSortHeader('invited', 'Invited')} {accountSortHeader('connected', 'Connected')} {accountSortHeader('replied', 'First replies')}<th>Acceptance rate</th><th>Reply rate</th><th>Last sync</th></tr></thead>
+                    <thead><tr>{accountSortHeader('name', 'Account')}{accountSortHeader('invited', 'Invited')}{accountSortHeader('connected', 'Connected')}{accountSortHeader('replied', 'First replies')}<th>Acceptance rate</th><th>Reply rate</th><th>Last sync</th></tr></thead>
                     <tbody>{accountRows.slice(accountPageIndex * 20, accountPageIndex * 20 + 20).map((instance) => {
                       const row = accountCampaigns.accounts.find((item) => item.instance_id === instance.id)
                       const totals = row?.totals ?? zeroTotals()

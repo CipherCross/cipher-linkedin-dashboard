@@ -573,7 +573,15 @@ const OVERVIEW_ACCOUNT_CAMPAIGNS_SQL = `WITH bounds AS (
          count(p.instance_id) FILTER (WHERE p.first_message_at IS NOT NULL AND (b.cur_from IS NULL OR p.first_message_at >= b.cur_from) AND (b.cur_to IS NULL OR p.first_message_at < b.cur_to))::int AS messaged,
          count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied,
          count(p.instance_id) FILTER (WHERE p.connected_at IS NOT NULL AND p.invited_at IS NOT NULL AND (b.cur_from IS NULL OR p.connected_at >= b.cur_from) AND (b.cur_to IS NULL OR p.connected_at < b.cur_to))::int AS accepted_of_invited,
-         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied_of_connected
+         count(p.instance_id) FILTER (WHERE p.replied_at IS NOT NULL AND p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.replied_at >= b.cur_from) AND (b.cur_to IS NULL OR p.replied_at < b.cur_to))::int AS replied_of_connected,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL)::int AS life_invited,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL)::int AS life_connected,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL AND p.first_message_at IS NOT NULL)::int AS life_messaged,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL AND p.replied_at IS NOT NULL)::int AS life_replied,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR p.invited_at < b.cur_to))::int AS cohort_invited,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR p.invited_at < b.cur_to))::int AS cohort_connected,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL AND p.first_message_at IS NOT NULL AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR p.invited_at < b.cur_to))::int AS cohort_messaged,
+         count(p.instance_id) FILTER (WHERE p.invited_at IS NOT NULL AND p.connected_at IS NOT NULL AND p.replied_at IS NOT NULL AND (b.cur_from IS NULL OR p.invited_at >= b.cur_from) AND (b.cur_to IS NULL OR p.invited_at < b.cur_to))::int AS cohort_replied
     FROM people p CROSS JOIN bounds b
    GROUP BY GROUPING SETS ((), (p.instance_id))
 ), campaign_stats AS (
@@ -603,8 +611,9 @@ SELECT jsonb_build_object(
   'accounts', COALESCE((SELECT jsonb_agg(jsonb_build_object(
     'instance_id', a.instance_id,
     'totals', jsonb_build_object('leads', a.leads, 'invited', a.invited, 'connected', a.connected, 'messaged', a.messaged, 'replied', a.replied, 'acceptedOfInvited', a.accepted_of_invited, 'repliedOfConnected', a.replied_of_connected),
-    'previous', NULL, 'lifetime', jsonb_build_object('leads', a.leads, 'invited', a.invited, 'connected', a.connected, 'messaged', a.messaged, 'replied', a.replied, 'acceptedOfInvited', a.accepted_of_invited, 'repliedOfConnected', a.replied_of_connected),
-    'cohort', jsonb_build_object('leads', a.invited, 'invited', a.invited, 'connected', a.accepted_of_invited, 'messaged', 0, 'replied', a.replied_of_connected), 'previousCohort', NULL
+    'previous', NULL,
+    'lifetime', jsonb_build_object('leads', a.life_invited, 'invited', a.life_invited, 'connected', a.life_connected, 'messaged', a.life_messaged, 'replied', a.life_replied, 'acceptedOfInvited', a.life_connected, 'repliedOfConnected', a.life_replied),
+    'cohort', jsonb_build_object('leads', a.cohort_invited, 'invited', a.cohort_invited, 'connected', a.cohort_connected, 'messaged', a.cohort_messaged, 'replied', a.cohort_replied), 'previousCohort', NULL
   ) ORDER BY a.instance_id) FROM account_stats a WHERE a.instance_id IS NOT NULL), '[]'::jsonb),
   'campaigns', COALESCE((SELECT jsonb_agg(jsonb_build_object(
     'campaign_id', campaign_id, 'campaign_name', campaign_name, 'instance_id', instance_id,

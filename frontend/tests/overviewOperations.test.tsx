@@ -133,6 +133,70 @@ describe('Overview narrow reads and loading orchestration', () => {
     expect(fetchCampaigns).toHaveBeenCalledTimes(1)
   })
 
+  it('reads Performance KPIs from overview.performance, never from the Account analytics range', async () => {
+    // Account analytics has its own range. If Performance borrowed its totals,
+    // the card would show one range's count above another range's comparison.
+    fetchPerformance.mockResolvedValue(performance({
+      accounts: [{
+        instance_id: 'one',
+        current: { invited: 20, connected: 41, replied: 11 },
+        previous: { invited: 10, connected: 32, replied: 0 },
+        cohort: { leads: 100, invited: 100, connected: 40, messaged: 30, replied: 10 },
+        previousCohort: null,
+        lifetime: { leads: 200, invited: 200, connected: 100, messaged: 80, replied: 25 },
+      }],
+    }))
+    fetchCampaigns.mockResolvedValue({
+      accounts: [{
+        instance_id: 'one',
+        totals: totals({ invited: 777, connected: 888, replied: 999 }),
+        previous: null,
+        lifetime: totals({ invited: 777, connected: 888, replied: 999 }),
+        cohort: { leads: 777, invited: 777, connected: 888, messaged: 0, replied: 999 },
+        previousCohort: null,
+      }],
+      campaigns: [campaign()] as never,
+    })
+    renderOverview()
+    await screen.findByRole('heading', { name: 'Campaign comparison' })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Performance account' }), { target: { value: 'one' } })
+    const panel = screen.getByRole('region', { name: 'Performance' })
+    expect(within(panel).getByText('20')).toBeTruthy()
+    expect(within(panel).getByText('41')).toBeTruthy()
+    expect(within(panel).getByText('11')).toBeTruthy()
+    expect(within(panel).queryByText('777')).toBeNull()
+    expect(within(panel).queryByText('888')).toBeNull()
+    expect(within(panel).getByText('+100.0% vs previous 7 days · 10')).toBeTruthy()
+    // The account totals block keeps the Account analytics range.
+    expect(screen.getByText('777')).toBeTruthy()
+  })
+
+  it('refetches only the section whose range changed', async () => {
+    renderOverview()
+    await screen.findByRole('heading', { name: 'Campaign comparison' })
+    expect(fetchCampaigns).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'System totals date range' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Past 30 days' }))
+    await waitFor(() => expect(fetchSystem).toHaveBeenCalledTimes(2))
+    expect(fetchPerformance).toHaveBeenCalledTimes(1)
+    expect(fetchCampaigns).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Performance date range' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Past 30 days' }))
+    await waitFor(() => expect(fetchPerformance).toHaveBeenCalledTimes(2))
+    expect(fetchSystem).toHaveBeenCalledTimes(2)
+    expect(fetchCampaigns).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Performance readable when the Account analytics read fails', async () => {
+    fetchCampaigns.mockRejectedValue(new Error('campaigns down'))
+    renderOverview()
+    expect(await screen.findByText('Account analytics could not load.')).toBeTruthy()
+    const panel = screen.getByRole('region', { name: 'Performance' })
+    expect(within(panel).getByText('+25.0% vs previous 7 days · 32')).toBeTruthy()
+    expect(within(panel).queryByText(/Performance data unavailable/)).toBeNull()
+    expect(screen.getByText('100.0% of invited')).toBeTruthy()
+  })
+
   it('cancels obsolete range requests and does not render stale responses', async () => {
     const first = deferred<OverviewPerformance>()
     const second = deferred<OverviewPerformance>()

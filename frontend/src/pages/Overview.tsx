@@ -144,7 +144,10 @@ export function Overview() {
   const [campaignsRetry, setCampaignsRetry] = useState(0)
   const [readPath, setReadPath] = useState<'pending' | 'neon' | 'legacy' | 'error'>('pending')
   const [discoveryRetry, setDiscoveryRetry] = useState(0)
-  const [criticalReadyKey, setCriticalReadyKey] = useState<string | null>(null)
+  // Campaigns waits for the first critical read to settle. This is a one-way
+  // latch: once Overview has yielded a connection, a later System or
+  // Performance range change must not re-queue the Account analytics read.
+  const [criticalSettled, setCriticalSettled] = useState(false)
   const legacy = readPath === 'legacy'
 
   useEffect(() => {
@@ -187,7 +190,6 @@ export function Overview() {
   const systemAttempt = `${systemKey}:${systemRetry}`
   const performanceAttempt = `${performanceKey}:${performanceRetry}`
   const campaignsAttempt = `${campaignsKey}:${campaignsRetry}`
-  const criticalKey = `${systemKey}|${performanceKey}`
 
   useEffect(() => {
     let cancelled = false
@@ -218,7 +220,7 @@ export function Overview() {
       .finally(() => {
         if (!controller.signal.aborted) {
           setSystemLoading(false)
-          setCriticalReadyKey((current) => current === criticalKey ? current : criticalKey)
+          setCriticalSettled(true)
         }
       })
     return () => controller.abort()
@@ -243,7 +245,7 @@ export function Overview() {
       .finally(() => {
         if (!controller.signal.aborted) {
           setPerformanceLoading(false)
-          setCriticalReadyKey((current) => current === criticalKey ? current : criticalKey)
+          setCriticalSettled(true)
         }
       })
     return () => controller.abort()
@@ -252,7 +254,7 @@ export function Overview() {
   }, [ready, readPath, performanceAttempt])
 
   useEffect(() => {
-    if (!ready || readPath !== 'neon' || criticalReadyKey !== criticalKey) return
+    if (!ready || readPath !== 'neon' || !criticalSettled) return
     const controller = new AbortController()
     globalThis.performance.mark('dashboard_overview_campaigns_start')
     setCampaignsLoading(true)
@@ -271,7 +273,7 @@ export function Overview() {
     return () => controller.abort()
     // `accountRange` is read for its value; the attempt key controls refetches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, readPath, criticalReadyKey, criticalKey, campaignsAttempt])
+  }, [ready, readPath, criticalSettled, campaignsAttempt])
 
   const currentSystem = system?.key === systemKey ? system.value : null
   const currentPerformance = performance?.key === performanceKey ? performance.value : null
