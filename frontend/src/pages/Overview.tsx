@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
-import { fetchNeonOverviewSummary, fetchNeonOverviewSystemTotals, resolveReadPath } from '../lib/dashboardReads'
+import {
+  fetchNeonOverviewAccountAnalytics,
+  fetchNeonOverviewSummary,
+  fetchNeonOverviewSystemTotals,
+  resolveReadPath,
+} from '../lib/dashboardReads'
 import { ALL_TIME_RANGE, rangeFromParam, rangeToParam, presetRanges, rangedCampaigns } from '../lib/leads'
 import { buildOverviewAnalytics } from '../lib/overviewAnalytics'
 import type { DateRange } from '../lib/leads'
@@ -30,12 +35,16 @@ export function Overview() {
    */
   const [system, setSystem] = useState<{ key: string; value: Analytics } | null>(null)
   const [performance, setPerformance] = useState<{ key: string; value: Analytics; campaigns: CampaignMetrics[] } | null>(null)
+  const [accountAnalytics, setAccountAnalytics] = useState<{ key: string; value: Analytics; campaigns: CampaignMetrics[] } | null>(null)
   const [systemLoading, setSystemLoading] = useState(true)
   const [performanceLoading, setPerformanceLoading] = useState(true)
+  const [accountAnalyticsLoading, setAccountAnalyticsLoading] = useState(true)
   const [systemError, setSystemError] = useState<string | null>(null)
   const [performanceError, setPerformanceError] = useState<string | null>(null)
+  const [accountAnalyticsError, setAccountAnalyticsError] = useState<string | null>(null)
   const [systemRetry, setSystemRetry] = useState(0)
   const [performanceRetry, setPerformanceRetry] = useState(0)
+  const [accountAnalyticsRetry, setAccountAnalyticsRetry] = useState(0)
   const [readPath, setReadPath] = useState<'pending' | 'neon' | 'legacy' | 'error'>('pending')
   const [discoveryRetry, setDiscoveryRetry] = useState(0)
   const legacy = readPath === 'legacy'
@@ -46,6 +55,10 @@ export function Overview() {
   }, [])
 
   const presets = useMemo(() => presetRanges(new Date(`${today}T12:00:00Z`)), [today])
+  const accountPresets = useMemo(
+    () => presets.map(preset => preset.id === 'all' ? { ...preset, label: 'Lifetime' } : preset),
+    [presets],
+  )
   const range = useMemo(
     () => rangeFromParam(params.get('range'), presets) ?? presets[0],
     [params, presets],
@@ -53,6 +66,10 @@ export function Overview() {
   const systemRange = useMemo(
     () => rangeFromParam(params.get('systemRange'), [ALL_TIME_RANGE, ...presets]) ?? ALL_TIME_RANGE,
     [params, presets],
+  )
+  const accountRange = useMemo(
+    () => rangeFromParam(params.get('accountRange'), accountPresets) ?? accountPresets.find(preset => preset.id === 'all') ?? ALL_TIME_RANGE,
+    [accountPresets, params],
   )
   const account = params.get('account') || 'all'
   const updateParam = (name: string, value: string | null) => setParams(current => {
@@ -63,12 +80,15 @@ export function Overview() {
   })
   const setRange = (next: DateRange) => updateParam('range', rangeToParam(next))
   const setSystemRange = (next: DateRange) => updateParam('systemRange', rangeToParam(next))
+  const setAccountRange = (next: DateRange) => updateParam('accountRange', next.id === 'all' ? null : rangeToParam(next))
   const setAccount = (next: string) => updateParam('account', next === 'all' ? null : next)
 
   const systemKey = `${systemRange.from}:${systemRange.to}:${systemRetry}`
   const performanceKey = `${range.from}:${range.to}:${performanceRetry}`
+  const accountAnalyticsKey = `${accountRange.from}:${accountRange.to}:${accountAnalyticsRetry}`
   const systemInFlight = useRef<string | null>(null)
   const performanceInFlight = useRef<string | null>(null)
+  const accountAnalyticsInFlight = useRef<string | null>(null)
 
   /**
    * Which provider answers, resolved once.
@@ -151,10 +171,41 @@ export function Overview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, readPath, performanceKey])
 
+  useEffect(() => {
+    if (!ready || readPath !== 'neon') return
+    if (accountAnalyticsInFlight.current === accountAnalyticsKey) return
+    accountAnalyticsInFlight.current = accountAnalyticsKey
+    let cancelled = false
+    setAccountAnalyticsLoading(true)
+    setAccountAnalyticsError(null)
+    fetchNeonOverviewAccountAnalytics(accountRange)
+      .then(summary => {
+        if (cancelled) return
+        if (!summary.analytics) throw new Error('Account analytics are unavailable')
+        setAccountAnalytics({
+          key: accountAnalyticsKey,
+          value: summary.analytics,
+          campaigns: summary.campaigns ?? [],
+        })
+      })
+      .catch(error => {
+        if (!cancelled) setAccountAnalyticsError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (cancelled) return
+        accountAnalyticsInFlight.current = null
+        setAccountAnalyticsLoading(false)
+      })
+    return () => { cancelled = true }
+    // `accountRange` is read for its value; the key decides whether to refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, readPath, accountAnalyticsKey])
+
   // Only an answer for the range on screen counts as useful.
   const currentSystem = system?.key === systemKey ? system.value : null
   const currentPerformance = performance?.key === performanceKey ? performance.value : null
-  const performanceCampaigns = performance?.key === performanceKey ? performance.campaigns : []
+  const currentAccountAnalytics = accountAnalytics?.key === accountAnalyticsKey ? accountAnalytics.value : null
+  const accountCampaigns = accountAnalytics?.key === accountAnalyticsKey ? accountAnalytics.campaigns : []
   useEffect(() => {
     if (readPath === 'neon' && currentSystem && currentPerformance) {
       globalThis.performance.mark('dashboard_overview_useful')
@@ -166,19 +217,20 @@ export function Overview() {
     if (!legacy || phase !== 'full' || !data) return null
     const systemAnalytics = buildOverviewAnalytics(data.leads, systemRange)
     const performanceAnalytics = buildOverviewAnalytics(data.leads, range)
+    const accountAnalytics = buildOverviewAnalytics(data.leads, accountRange)
     const lifetime = new Map(rangedCampaigns(data.leads, data.campaigns, ALL_TIME_RANGE).map(c => [c.campaign_id, c]))
-    const campaigns = rangedCampaigns(data.leads, data.campaigns, range).map(c => ({
+    const campaigns = rangedCampaigns(data.leads, data.campaigns, accountRange).map(c => ({
       ...c,
       lifetime_acceptance_rate: lifetime.get(c.campaign_id)?.acceptance_rate,
       lifetime_reply_rate: lifetime.get(c.campaign_id)?.reply_rate,
     }))
-    return { systemAnalytics, performanceAnalytics, campaigns }
-  }, [legacy, phase, data, range, systemRange])
+    return { systemAnalytics, performanceAnalytics, accountAnalytics, campaigns }
+  }, [legacy, phase, data, range, systemRange, accountRange])
 
   if (!data) return null
 
   const mergedCampaigns = data.campaigns.map(base => {
-    const measured = performanceCampaigns.find(row => row.campaign_id === base.campaign_id)
+    const measured = accountCampaigns.find(row => row.campaign_id === base.campaign_id)
     return measured ?? {
       ...base,
       invites_sent: 0,
@@ -188,13 +240,13 @@ export function Overview() {
       lifetime_reply_rate: null,
     }
   })
-  for (const measured of performanceCampaigns) {
+  for (const measured of accountCampaigns) {
     if (!mergedCampaigns.some(row => row.campaign_id === measured.campaign_id)) mergedCampaigns.push(measured)
   }
 
   const props = legacy && fallback
-    ? { system: fallback.systemAnalytics, performance: fallback.performanceAnalytics, campaigns: fallback.campaigns, instances: data.instances }
-    : { system: currentSystem, performance: currentPerformance, campaigns: mergedCampaigns, instances: data.instances }
+    ? { system: fallback.systemAnalytics, performance: fallback.performanceAnalytics, accountAnalytics: fallback.accountAnalytics, campaigns: fallback.campaigns, instances: data.instances }
+    : { system: currentSystem, performance: currentPerformance, accountAnalytics: currentAccountAnalytics, campaigns: mergedCampaigns, instances: data.instances }
 
   return (
     <div className="overview">
@@ -215,17 +267,23 @@ export function Overview() {
           {...props}
           systemRange={systemRange}
           range={range}
+          accountRange={accountRange}
           presets={presets}
+          accountPresets={accountPresets}
           account={account}
           onSystemRangeChange={setSystemRange}
           onRangeChange={setRange}
+          onAccountRangeChange={setAccountRange}
           onAccountChange={setAccount}
           systemLoading={readPath === 'pending' || (legacy && !fallback) ? true : legacy ? false : systemLoading}
           performanceLoading={readPath === 'pending' || (legacy && !fallback) ? true : legacy ? false : performanceLoading}
+          accountAnalyticsLoading={readPath === 'pending' || (legacy && !fallback) ? true : legacy ? false : accountAnalyticsLoading}
           systemError={legacy ? null : systemError}
           performanceError={legacy ? null : performanceError}
+          accountAnalyticsError={legacy ? null : accountAnalyticsError}
           onSystemRetry={() => setSystemRetry(value => value + 1)}
           onPerformanceRetry={() => setPerformanceRetry(value => value + 1)}
+          onAccountAnalyticsRetry={() => setAccountAnalyticsRetry(value => value + 1)}
         />
       )}
     </div>

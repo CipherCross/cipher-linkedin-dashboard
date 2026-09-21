@@ -26,21 +26,28 @@ import { Button, InlineError } from "../../ui";
 type Props = {
   system: Analytics | null;
   performance: Analytics | null;
+  accountAnalytics: Analytics | null;
   campaigns: CampaignMetrics[];
   instances: Instance[];
   systemRange: DateRange;
   range: DateRange;
+  accountRange: DateRange;
   presets: DateRange[];
+  accountPresets: DateRange[];
   account: string;
   onSystemRangeChange: (range: DateRange) => void;
   onRangeChange: (range: DateRange) => void;
+  onAccountRangeChange: (range: DateRange) => void;
   onAccountChange: (id: string) => void;
   systemLoading: boolean;
   performanceLoading: boolean;
+  accountAnalyticsLoading: boolean;
   systemError: string | null;
   performanceError: string | null;
+  accountAnalyticsError: string | null;
   onSystemRetry: () => void;
   onPerformanceRetry: () => void;
+  onAccountAnalyticsRetry: () => void;
 };
 const zero = (): Analytics["totals"] => ({
   leads: 0,
@@ -234,21 +241,28 @@ function chartUsesWeeklyBuckets(
 export function OverviewAnalytics({
   system,
   performance,
+  accountAnalytics,
   campaigns,
   instances,
   systemRange,
   range,
+  accountRange,
   presets,
+  accountPresets,
   account,
   onSystemRangeChange,
   onRangeChange,
+  onAccountRangeChange,
   onAccountChange,
   systemLoading,
   performanceLoading,
+  accountAnalyticsLoading,
   systemError,
   performanceError,
+  accountAnalyticsError,
   onSystemRetry,
   onPerformanceRetry,
+  onAccountAnalyticsRetry,
 }: Props) {
   const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(0);
@@ -261,22 +275,25 @@ export function OverviewAnalytics({
      this page comes from the one shared formatter. */
   const accountLabel = useMemo(() => accountLabeller(instances), [instances]);
   const selected = instances.find((item) => item.id === account);
-  const selectedAccount = performance?.accounts.find(
+  const selectedPerformanceAccount = performance?.accounts.find(
+    (item) => item.instance_id === account,
+  );
+  const selectedAccountAnalytics = accountAnalytics?.accounts.find(
     (item) => item.instance_id === account,
   );
   const totals =
-    selectedAccount?.totals ??
+    selectedPerformanceAccount?.totals ??
     (account === "all" ? performance?.totals : undefined) ??
     zero();
   const lifetime =
-    selectedAccount?.lifetime ??
+    selectedPerformanceAccount?.lifetime ??
     (account === "all" ? performance?.lifetime : undefined) ??
     zero();
   const previous =
-    selectedAccount?.previous ??
+    selectedPerformanceAccount?.previous ??
     (account === "all"
       ? performance?.previous
-      : selected && !selectedAccount && performance?.previous !== null
+      : selected && !selectedPerformanceAccount && performance?.previous !== null
         ? zero()
         : null);
   const chart = useMemo(
@@ -338,11 +355,11 @@ export function OverviewAnalytics({
   // and undefined conversion rates.
   const accountDataAvailable =
     account === "all" ? Boolean(performance) : Boolean(selected);
-  const selectedLifetime = selectedAccount?.lifetime ?? zero();
+  const selectedAccountTotals = selectedAccountAnalytics?.totals ?? zero();
   useEffect(() => {
     setPage(0);
     setAccountPage(0);
-  }, [account, showArchived]);
+  }, [account, showArchived, accountRange.from, accountRange.to]);
   useEffect(() => {
     setPage((current) =>
       Math.min(current, Math.max(0, Math.ceil(visible.length / 20) - 1)),
@@ -354,7 +371,7 @@ export function OverviewAnalytics({
         const accountValue = (instance: Instance) => {
           if (sort.key === "name")
             return instance.account_name || instance.label || instance.id;
-          const row = performance?.accounts.find(
+          const row = accountAnalytics?.accounts.find(
             (x) => x.instance_id === instance.id,
           );
           if (!row) return -1;
@@ -380,7 +397,7 @@ export function OverviewAnalytics({
           a.id.localeCompare(b.id)
         );
       }),
-    [instances, performance, sort],
+    [instances, accountAnalytics, sort],
   );
   const accountPages = Math.max(1, Math.ceil(accountRows.length / 20));
   const accountPageIndex = Math.min(accountPage, accountPages - 1);
@@ -395,6 +412,7 @@ export function OverviewAnalytics({
   };
   const today = new Date().toISOString().slice(0, 10);
   const incompleteToday = range.to === today;
+  const incompleteAccountToday = accountRange.to === today;
   const sortLabel = (key: typeof sort.key, label: string) =>
     `${label}, ${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "not sorted"}`;
   const fields: Array<[string, keyof Analytics["totals"]]> = [
@@ -619,7 +637,11 @@ export function OverviewAnalytics({
           </p>
         )}
       </section>
-      <section className="ov-panel" aria-labelledby="overview-account-title">
+      <section
+        className="ov-panel"
+        aria-labelledby="overview-account-title"
+        aria-busy={accountAnalyticsLoading}
+      >
         <div className="ov-row">
           <div>
             <h2 id="overview-account-title">
@@ -629,21 +651,41 @@ export function OverviewAnalytics({
             </h2>
             <p className="ov-muted">
               {account === "all"
-                ? "Selected period counts · lifetime rates"
-                : "Campaigns in the selected account"}
+                ? `${accountRange.label} counts · lifetime rates${accountRange.from || accountRange.to ? " · UTC" : ""}${incompleteAccountToday ? " · Today is in progress" : ""}`
+                : `Campaigns · ${accountRange.label} counts · lifetime rates${accountRange.from || accountRange.to ? " · UTC" : ""}${incompleteAccountToday ? " · Today is in progress" : ""}`}
             </p>
           </div>
-          {account !== "all" && (
-            <Button variant="secondary" size="sm" onClick={() => onAccountChange("all")}>
-              ← All accounts
-            </Button>
-          )}
+          <div className="ov-controls">
+            {accountAnalyticsLoading && accountAnalytics && (
+              <span className="ov-muted" role="status">Refreshing…</span>
+            )}
+            <label className="ov-muted">
+              Dates
+              <DateRangePicker
+                ariaLabel="Account analytics date range"
+                presets={accountPresets}
+                value={accountRange}
+                onChange={onAccountRangeChange}
+              />
+            </label>
+            {account !== "all" && (
+              <Button variant="secondary" size="sm" onClick={() => onAccountChange("all")}>
+                ← All accounts
+              </Button>
+            )}
+          </div>
         </div>
-        {performanceLoading && !performance ? (
+        {accountAnalyticsLoading && !accountAnalytics ? (
           <AccountTableLoading />
+        ) : accountAnalyticsError ? (
+          <InlineError
+            title="Account analytics could not load."
+            detail={accountAnalyticsError}
+            onRetry={onAccountAnalyticsRetry}
+          />
         ) : account === "all" ? (
-          !performance ? (
-            <p className="ov-muted">Account data unavailable until performance data loads.</p>
+          !accountAnalytics ? (
+            <p className="ov-muted">Account analytics data is unavailable.</p>
           ) : (
             <>
               <div className="ov-tablewrap">
@@ -762,7 +804,7 @@ export function OverviewAnalytics({
                     {accountRows
                       .slice(accountPageIndex * 20, accountPageIndex * 20 + 20)
                       .map((i) => {
-                        const row = performance?.accounts.find(
+                        const row = accountAnalytics?.accounts.find(
                           (x) => x.instance_id === i.id,
                         );
                         const t = row?.totals ?? zero();
@@ -822,7 +864,7 @@ export function OverviewAnalytics({
               </div>
               <div className="ov-bottom">
                 <span>
-                  Lifetime account totals · rates use invited → connected and
+                  {accountRange.label} account counts · rates use invited → connected and
                   connected → replies
                 </span>
                 <span>
@@ -862,15 +904,17 @@ export function OverviewAnalytics({
           </p>
         ) : (
           <>
-            <div className="ov-detail" aria-label="Lifetime account totals">
+            <div className="ov-detail" aria-label={`${accountRange.label} account totals`}>
               <div className="ov-row">
-                <h3>Lifetime account totals</h3>
-                <span className="ov-muted">Selected account · all time</span>
+                <h3>{accountRange.label} account totals</h3>
+                <span className="ov-muted">
+                  Selected account{accountRange.from || accountRange.to ? " · UTC" : ""}
+                </span>
               </div>
               <div className="ov-details">
                 {fields.map(([label, key]) => (
                   <div key={key}>
-                    <strong>{num(selectedLifetime[key])}</strong>
+                    <strong>{num(selectedAccountTotals[key])}</strong>
                     <span>{label === "Leads added" ? "Leads" : label}</span>
                   </div>
                 ))}

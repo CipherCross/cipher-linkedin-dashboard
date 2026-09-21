@@ -682,6 +682,19 @@ export async function fetchNeonOverviewSummary(
   return row
 }
 
+/**
+ * Account Analytics uses its own date range, independent from the Performance
+ * chart. It intentionally reuses the same compact server operation because the
+ * response already contains the per-account totals and range-scoped campaign
+ * rows that section needs.
+ */
+export async function fetchNeonOverviewAccountAnalytics(
+  range: { readonly from: string | null; readonly to: string | null },
+  fetchImpl: ApiFetch = authFetch,
+): Promise<OverviewSummary> {
+  return fetchNeonOverviewSummary(range, fetchImpl)
+}
+
 /** Exact system-wide funnel totals without the wider Overview analytics payload. */
 export async function fetchNeonOverviewSystemTotals(
   range: { readonly from: string | null; readonly to: string | null },

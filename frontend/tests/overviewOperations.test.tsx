@@ -20,6 +20,7 @@ globalThis.ResizeObserver =
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const fetchSummary = vi.fn();
+const fetchAccountAnalytics = vi.fn();
 const fetchSystemTotals = vi.fn();
 const resolvePath = vi.fn();
 let data: DashboardData;
@@ -28,6 +29,7 @@ vi.mock("../src/lib/DataContext", () => ({ useData: () => ({ data, phase }) }));
 vi.mock("../src/lib/dashboardReads", () => ({
   resolveReadPath: () => resolvePath(),
   fetchNeonOverviewSummary: (...args: unknown[]) => fetchSummary(...args),
+  fetchNeonOverviewAccountAnalytics: (...args: unknown[]) => fetchAccountAnalytics(...args),
   fetchNeonOverviewSystemTotals: (...args: unknown[]) => fetchSystemTotals(...args),
 }));
 
@@ -148,6 +150,7 @@ beforeEach(() => {
   };
   resolvePath.mockReset().mockResolvedValue("neon");
   fetchSummary.mockReset().mockResolvedValue(summary());
+  fetchAccountAnalytics.mockReset().mockResolvedValue(summary());
   fetchSystemTotals.mockReset().mockResolvedValue(analytics().totals);
 });
 afterEach(() => {
@@ -160,8 +163,9 @@ describe("Overview asks again only when the answer would differ", () => {
    * `DataContext` replaces its `data` object on every load and on the five
    * minute refresh, keeping the slices inside it reference-stable. Overview used
    * to depend on that object in three places — discovery and both analytics
-   * reads — so each refresh reset the read path to `pending`, re-issued two
-   * server reads and blanked two complete sections while they ran.
+   * reads — so each refresh reset the read path to `pending`, re-issued the
+   * analytics reads
+   * and blanked complete sections while they ran.
    */
   const refreshDataObject = () => {
     data = { ...data };
@@ -171,6 +175,7 @@ describe("Overview asks again only when the answer would differ", () => {
     const { rerender } = paint();
     await screen.findByRole("heading", { name: "Performance" });
     await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(1));
+    expect(fetchAccountAnalytics).toHaveBeenCalledTimes(1);
     expect(fetchSystemTotals).toHaveBeenCalledTimes(1);
     expect(resolvePath).toHaveBeenCalledTimes(1);
 
@@ -185,6 +190,7 @@ describe("Overview asks again only when the answer would differ", () => {
       expect(screen.getByRole("heading", { name: "Performance" })).toBeTruthy(),
     );
     expect(fetchSummary).toHaveBeenCalledTimes(1);
+    expect(fetchAccountAnalytics).toHaveBeenCalledTimes(1);
     expect(fetchSystemTotals).toHaveBeenCalledTimes(1);
     expect(resolvePath).toHaveBeenCalledTimes(1);
   });
@@ -249,6 +255,30 @@ describe("Overview request orchestration and real analytics UI", () => {
     expect(fetchSummary).toHaveBeenCalledWith(
       expect.objectContaining({ from: "2026-08-31", to: "2026-09-06" }),
     );
+    expect(fetchAccountAnalytics).toHaveBeenCalledTimes(1);
+    expect(fetchAccountAnalytics).toHaveBeenCalledWith(
+      expect.objectContaining({ from: null, to: null, label: "Lifetime" }),
+    );
+  });
+  it("changes Account Analytics independently, using the same calendar interaction", async () => {
+    paint();
+    await screen.findByRole("heading", { name: "Account analytics" });
+    expect(
+      screen.getByRole("button", { name: "Account analytics date range" }).textContent,
+    ).toContain("Lifetime");
+
+    fireEvent.click(screen.getByRole("button", { name: "Account analytics date range" }));
+    expect(
+      screen.getByRole("dialog", { name: "Account analytics date range calendar" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Past 30 days" }));
+
+    await waitFor(() => expect(fetchAccountAnalytics).toHaveBeenCalledTimes(2));
+    expect(fetchAccountAnalytics).toHaveBeenLastCalledWith(
+      expect.objectContaining({ from: "2026-08-08", to: "2026-09-06" }),
+    );
+    expect(fetchSummary).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Past 30 days counts · lifetime rates · UTC/)).toBeTruthy();
   });
   it("changes only the selected performance scope and keeps lifetime rates account-specific", async () => {
     fetchSummary.mockResolvedValue(
@@ -289,12 +319,12 @@ describe("Overview request orchestration and real analytics UI", () => {
     expect(screen.queryByText("0.0%")).toBeNull();
   });
   it("renders a rostered account with no analytics row as an empty account", async () => {
-    fetchSummary.mockResolvedValue(
-      summary(
-        true,
-        { analytics: analytics({ accounts: [], previous: totals({ invited: 5, connected: 4, replied: 2 }) }) },
-      ),
+    const emptyAccountSummary = summary(
+      true,
+      { analytics: analytics({ accounts: [], previous: totals({ invited: 5, connected: 4, replied: 2 }) }) },
     );
+    fetchSummary.mockResolvedValue(emptyAccountSummary);
+    fetchAccountAnalytics.mockResolvedValue(emptyAccountSummary);
     paint(["/?account=one"]);
     await screen.findByRole("heading", { name: "Lifetime account totals" });
     expect(screen.queryByText(/Performance data unavailable/)).toBeNull();
@@ -323,11 +353,8 @@ describe("Overview request orchestration and real analytics UI", () => {
     await waitFor(() => expect(screen.getAllByRole("alert").length).toBe(1));
     expect(screen.getAllByText("Retry").length).toBe(1);
     expect(screen.getByRole("heading", { name: "System totals" })).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Account data unavailable until performance data loads.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Account analytics" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
   });
   it("renders independent system and performance responses in either resolution order", async () => {
     const first = deferred<OverviewSummary>();
@@ -359,9 +386,11 @@ describe("Overview request orchestration and real analytics UI", () => {
     paint();
     await screen.findByRole("alert");
     expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchAccountAnalytics).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("heading", { name: "System totals" });
     expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchAccountAnalytics).not.toHaveBeenCalled();
   });
   it("uses legacy analytics only after the full data phase, without Neon requests", async () => {
     resolvePath.mockResolvedValue("supabase");
@@ -371,6 +400,7 @@ describe("Overview request orchestration and real analytics UI", () => {
     expect(screen.getByRole("status", { name: "Loading performance analytics" })).toBeTruthy();
     expect(screen.getByRole("status", { name: "Loading account analytics" })).toBeTruthy();
     expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchAccountAnalytics).not.toHaveBeenCalled();
     phase = "full";
     view.rerender(
       <MemoryRouter>
@@ -379,6 +409,7 @@ describe("Overview request orchestration and real analytics UI", () => {
     );
     await screen.findByRole("heading", { name: "System totals" });
     expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchAccountAnalytics).not.toHaveBeenCalled();
   });
   it("updates the default preset at the UTC midnight boundary", async () => {
     paint();
@@ -441,7 +472,7 @@ describe("Overview request orchestration and real analytics UI", () => {
         invites_sent: i + 1,
       }),
     ) as never;
-    fetchSummary.mockResolvedValue(
+    fetchAccountAnalytics.mockResolvedValue(
       summary(true, { campaigns: data.campaigns }),
     );
     paint();
