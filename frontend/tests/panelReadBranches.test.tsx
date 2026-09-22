@@ -119,9 +119,8 @@ beforeEach(() => {
 })
 
 const expandNotes = async () => {
-  const toggle = document.querySelector('.conv-coaching-toggle') as HTMLButtonElement
   await act(async () => {
-    toggle.click()
+    screen.getByRole('button', { name: /^Notes/ }).click()
   })
 }
 
@@ -168,11 +167,7 @@ describe('LeadNotesPanel on the application-API read path', () => {
     render(<LeadNotesPanel lead={LEAD} />)
 
     await expandNotes()
-    await waitFor(() =>
-      expect(document.querySelector('.conv-coaching-body .banner')?.textContent).toMatch(
-        /leads\.notes/,
-      ),
-    )
+    await waitFor(() => expect(screen.getByText(/leads\.notes/)).toBeDefined())
     expect(screen.queryByText('No notes yet.')).toBeNull()
   })
 
@@ -236,9 +231,7 @@ describe('FollowUpPanel history on the application-API read path', () => {
     // disagree with the server's `(occurred_at, id)` ordering.
     expect(fetchNeonFollowUpHistory.mock.calls[1][3]).toBe('cursor-1')
     // Appended: two events on screen, not one replaced by one.
-    await waitFor(() =>
-      expect(document.querySelectorAll('.follow-event').length).toBeGreaterThan(1),
-    )
+    await waitFor(() => expect(screen.getAllByText(/^Scheduled ·/).length).toBeGreaterThan(1))
     // And the button is gone, because the server said the walk is finished.
     await waitFor(() => expect(screen.queryByText('Load more')).toBeNull())
   })

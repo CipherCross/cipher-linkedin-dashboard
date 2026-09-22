@@ -256,7 +256,7 @@ const paint = (search = '') =>
   )
 
 const rowNames = () => Array.from(
-  document.querySelectorAll('[data-leads-replies="table"] tbody tr'),
+  within(screen.getByRole('table')).getAllByRole('button'),
 ).map((row) => row.getAttribute('aria-label'))
 
 const chip = (label: string) => screen
@@ -273,9 +273,9 @@ describe('the campaign page as a reply workspace', () => {
   it('opens on leads and replies, not on the analytics it used to lead with', () => {
     paint()
 
-    expect(document.querySelector('[data-leads-replies="table"]')).not.toBeNull()
+    expect(screen.getByRole('table')).toBeTruthy()
     // The KPI cards are the old landing content; they belong behind Performance.
-    expect(document.querySelector('.kpi')).toBeNull()
+    expect(screen.queryByText('Invites sent')).toBeNull()
     expect(rowNames()).toEqual([
       'Open conversation with Ada Lovelace',
       'Open conversation with Grace Hopper',
@@ -331,7 +331,7 @@ describe('the campaign page as a reply workspace', () => {
     expect(openConversation).toHaveBeenCalledTimes(1)
     expect(openConversation.mock.calls[0][0]).toMatchObject({ full_name: 'Grace Hopper' })
     // A drawer, not a navigation: the leads table is still on screen.
-    expect(document.querySelector('[data-leads-replies="table"]')).not.toBeNull()
+    expect(screen.getByRole('table')).toBeTruthy()
   })
 
   it('filters by name, company or headline', () => {
@@ -408,7 +408,10 @@ describe('the Sequence tab', () => {
     openSequenceTab()
 
     expect(screen.getByRole('heading', { name: 'Created in Linked Helper' })).toBeTruthy()
-    expect(document.querySelector('.deployed-sequence')).toBeNull()
+    // An externally created campaign has no deployed sequence card or compiled
+    // steps; the surrounding page still explains the Linked Helper source.
+    expect(screen.queryByRole('heading', { name: 'Deployed sequence' })).toBeNull()
+    expect(document.querySelector('[data-deployed="step"]')).toBeNull()
     expect(document.body.textContent).toContain('no Builder')
   })
 

@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "native-file-input-csv",
+      "kind": "raw-control",
+      "path": "src/pages/UnifiedApolloCsvImport.tsx",
+      "symbol": "UnifiedApolloCsvImport",
+      "tag": "input",
+      "nativeType": "file",
+      "owner": "frontend/import",
+      "reason": "Native file input remains behind the canonical upload action.",
+      "verification": "Keyboard activation and announced filename.",
+      "removeByPhase": null
+    },
+    {
+      "id": "quick-navigation-command",
+      "kind": "direct-import",
+      "path": "src/components/QuickNavigation.tsx",
+      "symbol": "{ Command, CommandEmpty, CommandInput, CommandItem, CommandList }",
+      "specifier": "./ui/command",
+      "owner": "frontend/navigation",
+      "reason": "Command palette is an application composition over generated command primitives.",
+      "verification": "Quick Navigation keyboard and focus-return checks.",
+      "removeByPhase": null
+    },
+    {
+      "id": "date-range-popover-calendar",
+      "kind": "direct-import",
+      "path": "src/components/DateRangePicker.tsx",
+      "symbol": "{ Popover, PopoverContent, PopoverTrigger }",
+      "specifier": "./ui/popover",
+      "owner": "frontend/date-range-picker",
+      "reason": "Date range picker is the named application composition for calendar and popover behavior.",
+      "verification": "Date-range keyboard and focus checks.",
+      "removeByPhase": null
+    },
+    {
+      "id": "toast-provider",
+      "kind": "direct-import",
+      "path": "src/lib/ToastContext.tsx",
+      "symbol": "{ Toaster }",
+      "specifier": "../components/ui/sonner",
+      "owner": "frontend/toasts",
+      "reason": "The provider owns the generated toast host behind the application toast context.",
+      "verification": "Toast success and error presentation checks.",
+      "removeByPhase": null
+    },
+    {
+      "id": "date-range-calendar",
+      "kind": "direct-import",
+      "path": "src/components/DateRangePicker.tsx",
+      "symbol": "{ Calendar }",
+      "specifier": "./ui/calendar",
+      "owner": "frontend/date-range-picker",
+      "reason": "Date range picker is the named application composition for calendar behavior.",
+      "verification": "Date-range keyboard and focus checks.",
+      "removeByPhase": null
+    }
+  ]
+}

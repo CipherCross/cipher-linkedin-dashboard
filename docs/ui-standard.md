@@ -148,8 +148,12 @@ a domain adapter maps values to labels and variants.
 `role="button"` to any non-native element, which would relabel every in-app
 navigation as a button for assistive technology.
 
-`Drawer` and `RefreshingRegion` were removed — both were exported, documented
-and used nowhere.
+`Drawer` and `RefreshingRegion` are still implemented and exported, but the
+current route tree has zero consumers for either one. They remain pending
+Phase 1 contract cleanup; this document must not describe them as removed until
+that phase deletes the exports and the scan proves the same zero-consumer state.
+The product `ConversationDrawer` is a separate, currently used modal surface
+and is not evidence that the unused `Drawer` primitive has a consumer.
 
 Base UI queues a dialog's initial focus through `requestAnimationFrame`, so one
 opened while the tab is hidden receives focus late; it still lands when the tab
@@ -176,10 +180,12 @@ wanted. One light theme, still.
 ## Layout
 
 - Sidebar 232px, nav rows 44px.
-- Page gutters 32px (24px below 1440), analytics max-width 1600px.
+- Page gutters are 24px below 1440px and 32px at 1440px and wider; analytics
+  max-width is 1600px.
 - List routes read title → context → toolbar → results. **The first result
-  starts no lower than y=340 at 1280×720** with default filters; the gallery's
-  "List chrome" composition is what that is measured on.
+  starts no lower than y=340 at 1280×720** with default filters. This is measured
+  on the real routed list surface; the Gallery's "List chrome" composition is a
+  reference for the anatomy and cannot prove the route-level position.
 - Filters open **over** the page. They never take height from the results.
 - A wide table or board scrolls inside its own region, with a written hint. It
   is never shrunk until its text is unreadable.

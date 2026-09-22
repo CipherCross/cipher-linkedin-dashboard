@@ -23,6 +23,13 @@
  * visually — icon buttons stay 44x44 around a 20px glyph. */
 @import "tailwindcss";
 
+/* Evidence harnesses contain example class strings, not product utilities. */
+@source not "../scripts";
+@source not "../tests";
+@source not "../ui-inventory-baseline.json";
+@source not "../ui-inventory-allowlist.json";
+@source not "../ui-selector-owners.json";
+
 @import './styles/tokens.css' layer(foundation);
 @import './styles/reset.css' layer(foundation);
 @import './styles/base.css' layer(foundation);
