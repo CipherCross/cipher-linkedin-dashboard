@@ -227,8 +227,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -253,8 +251,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -263,21 +259,6 @@
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-93be862bb149",
-      "kind": "compatibility-selector",
-      "selector": ".search-form-grid",
-      "ruleKey": "compatibility-selector:@media (max-width: 560px)|.search-form-grid:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
     },
     {
       "id": "compatibility-rule-288a71a39225",
@@ -294,8 +275,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -320,8 +299,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -379,13 +356,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -443,8 +416,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -483,8 +454,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -617,10 +586,7 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/Review.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -665,8 +631,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -784,13 +748,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -847,13 +807,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -910,10 +866,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -938,10 +891,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -966,10 +916,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -994,10 +941,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1022,10 +966,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1050,10 +991,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1078,10 +1016,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1106,10 +1041,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1134,10 +1066,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1162,10 +1091,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1190,10 +1116,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1218,10 +1141,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1249,11 +1169,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/Playbook.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1274,11 +1190,7 @@
         "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Playbook.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/pages/Chat.tsx",
       "destination": "src/pages/Chat.tsx",
@@ -1297,11 +1209,7 @@
         "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Playbook.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/pages/Chat.tsx",
       "destination": "src/pages/Chat.tsx",
@@ -1321,11 +1229,7 @@
         "src/components/LeadNotesPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/Playbook.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -1345,11 +1249,7 @@
         "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/Playbook.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -1402,8 +1302,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1432,8 +1330,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1459,8 +1355,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1485,8 +1379,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1511,8 +1403,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1537,8 +1427,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1563,8 +1451,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1589,8 +1475,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1615,8 +1499,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1641,8 +1523,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1667,8 +1547,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1693,8 +1571,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1719,8 +1595,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1745,8 +1619,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1785,10 +1657,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -1854,7 +1723,6 @@
         "src/components/LeadsAddedTable.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/TemplateComparison.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/Heatmap.tsx",
@@ -1899,10 +1767,7 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/Review.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -2118,86 +1983,6 @@
       "removeByPhase": "Phase 10"
     },
     {
-      "id": "compatibility-rule-8e4209298989",
-      "kind": "compatibility-selector",
-      "selector": ".chip button",
-      "ruleKey": "compatibility-selector:|.chip button:1",
-      "consumerCandidates": [
-        "src/components/ChipInput.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/components/ChipInput.tsx",
-      "destination": "src/components/ChipInput.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-ca74b6d16f58",
-      "kind": "compatibility-selector",
-      "selector": ".chip button:hover",
-      "ruleKey": "compatibility-selector:|.chip button:hover:1",
-      "consumerCandidates": [
-        "src/components/ChipInput.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/components/ChipInput.tsx",
-      "destination": "src/components/ChipInput.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-dbd7737a564b",
-      "kind": "compatibility-selector",
-      "selector": ".chip",
-      "ruleKey": "compatibility-selector:|.chip:1",
-      "consumerCandidates": [
-        "src/components/ChipInput.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/components/ChipInput.tsx",
-      "destination": "src/components/ChipInput.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-70e2c0f5a7c4",
-      "kind": "compatibility-selector",
-      "selector": ".chip.exclude",
-      "ruleKey": "compatibility-selector:|.chip.exclude:1",
-      "consumerCandidates": [
-        "src/components/ChipInput.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/components/ChipInput.tsx",
-      "destination": "src/components/ChipInput.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-21606abcdc1c",
-      "kind": "compatibility-selector",
-      "selector": ".chip.include",
-      "ruleKey": "compatibility-selector:|.chip.include:1",
-      "consumerCandidates": [
-        "src/components/ChipInput.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/components/ChipInput.tsx",
-      "destination": "src/components/ChipInput.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-d31f42a35d43",
       "kind": "compatibility-selector",
       "selector": ".cmp-avg td",
@@ -2347,38 +2132,6 @@
       "removeByPhase": "Phase 9"
     },
     {
-      "id": "compatibility-rule-b53638e41a09",
-      "kind": "compatibility-selector",
-      "selector": ".col-toggle input",
-      "ruleKey": "compatibility-selector:|.col-toggle input:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-98a23e93a067",
-      "kind": "compatibility-selector",
-      "selector": ".col-toggle",
-      "ruleKey": "compatibility-selector:|.col-toggle:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
       "id": "compatibility-rule-6bc028ab0cec",
       "kind": "compatibility-selector",
       "selector": ".compare-grid",
@@ -2415,8 +2168,6 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/ImportHistoryPanel.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -2435,8 +2186,6 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/ImportHistoryPanel.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -2596,10 +2345,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -2618,10 +2364,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/components/LeadNotesPanel.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
       "destination": "src/components/ConversationDrawer.tsx",
@@ -2657,10 +2400,7 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
       "destination": "src/components/ConversationDrawer.tsx",
@@ -2676,8 +2416,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -2731,13 +2469,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -2955,8 +2689,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -3013,13 +2745,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -3259,9 +2987,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -3309,26 +3034,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-c8eafaceb6a2",
-      "kind": "compatibility-selector",
-      "selector": ".filter-chip.active",
-      "ruleKey": "compatibility-selector:|.filter-chip.active:1",
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/DateRangePicker.tsx",
-      "destination": "src/components/DateRangePicker.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-5029f66893b6",
       "kind": "compatibility-selector",
       "selector": ".filter-field select",
@@ -3336,10 +3041,7 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
       "destination": "src/components/ConversationDrawer.tsx",
@@ -3355,10 +3057,7 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
       "destination": "src/components/ConversationDrawer.tsx",
@@ -3374,10 +3073,7 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
+        "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
       "destination": "src/components/ConversationDrawer.tsx",
@@ -3400,8 +3096,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -3659,9 +3353,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -3703,9 +3394,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -3959,13 +3647,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -3984,8 +3668,6 @@
       "selector": ".icon-btn svg, .icon-only-btn svg",
       "ruleKey": "compatibility-selector:|.icon-btn svg, .icon-only-btn svg:1",
       "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -4000,8 +3682,6 @@
       "selector": ".icon-btn, .icon-only-btn",
       "ruleKey": "compatibility-selector:|.icon-btn, .icon-only-btn:1",
       "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -4016,8 +3696,6 @@
       "selector": ".icon-btn:disabled, .icon-only-btn:disabled",
       "ruleKey": "compatibility-selector:|.icon-btn:disabled, .icon-only-btn:disabled:1",
       "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -4032,8 +3710,6 @@
       "selector": ".icon-btn:hover:not(:disabled), .icon-only-btn:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.icon-btn:hover:not(:disabled), .icon-only-btn:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -4050,8 +3726,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -4059,138 +3733,6 @@
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 11"
-    },
-    {
-      "id": "compatibility-rule-1c5a41feb094",
-      "kind": "compatibility-selector",
-      "selector": ".icp-copy-btn",
-      "ruleKey": "compatibility-selector:|.icp-copy-btn:1",
-      "consumerCandidates": [],
-      "owner": "src/ui/ui.css",
-      "destination": "src/ui/ui.css",
-      "reason": "No statically discoverable JSX class-token reference; inspect before deleting because CSS may be reached through dynamic or generated markup.",
-      "verification": "Zero-candidate inspection plus CSS parity before deletion.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-864e0af1d92b",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-field",
-      "ruleKey": "compatibility-selector:|.icp-view-field:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-e2d7e9222aa8",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-head-actions",
-      "ruleKey": "compatibility-selector:|.icp-view-head-actions:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-b3afa9d104f1",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-heading",
-      "ruleKey": "compatibility-selector:|.icp-view-heading:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-8bfa7c9dba7f",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-link svg",
-      "ruleKey": "compatibility-selector:|.icp-view-link svg:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-ffc767aafb5a",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-link",
-      "ruleKey": "compatibility-selector:|.icp-view-link:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-265952000b4f",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-link:hover",
-      "ruleKey": "compatibility-selector:|.icp-view-link:hover:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-a7fa42ccfec5",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-value > span",
-      "ruleKey": "compatibility-selector:|.icp-view-value > span:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-d8c848b46d8e",
-      "kind": "compatibility-selector",
-      "selector": ".icp-view-value",
-      "ruleKey": "compatibility-selector:|.icp-view-value:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
     },
     {
       "id": "compatibility-rule-4c500044e37e",
@@ -4264,7 +3806,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
@@ -4282,7 +3823,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
@@ -4694,21 +4234,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-6297fe106a6d",
-      "kind": "compatibility-selector",
-      "selector": ".kv-editor",
-      "ruleKey": "compatibility-selector:|.kv-editor:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
       "id": "compatibility-rule-dbd0ccca1d5b",
       "kind": "compatibility-selector",
       "selector": ".leads-table-frame .ui-table-scroll",
@@ -4769,9 +4294,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -4798,9 +4320,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -4827,9 +4346,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -4960,7 +4476,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortComparisonTable.tsx",
         "src/components/LeadsAddedTable.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
@@ -5102,8 +4617,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -5119,9 +4632,7 @@
       "ruleKey": "compatibility-selector:|.pipe-modal-actions:1",
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
+        "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/LostReasonModal.tsx",
       "destination": "src/components/LostReasonModal.tsx",
@@ -5137,8 +4648,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -5155,8 +4664,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -5173,8 +4680,6 @@
       "consumerCandidates": [
         "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -5198,10 +4703,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -5261,10 +4763,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -5310,7 +4809,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
@@ -5334,10 +4832,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -5356,7 +4851,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
@@ -5461,13 +4955,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -5528,13 +5018,9 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
@@ -5558,292 +5044,6 @@
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
       "destination": "src/components/CampaignRuntimeStatus.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-c55e78c10538",
-      "kind": "compatibility-selector",
-      "selector": ".search-card-actions",
-      "ruleKey": "compatibility-selector:|.search-card-actions:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-51343dac27bd",
-      "kind": "compatibility-selector",
-      "selector": ".search-card-desc",
-      "ruleKey": "compatibility-selector:|.search-card-desc:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-1f0e9c18b099",
-      "kind": "compatibility-selector",
-      "selector": ".search-card-head",
-      "ruleKey": "compatibility-selector:|.search-card-head:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-317001cd9a23",
-      "kind": "compatibility-selector",
-      "selector": ".search-card-name",
-      "ruleKey": "compatibility-selector:|.search-card-name:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-7e4eeee0613e",
-      "kind": "compatibility-selector",
-      "selector": ".search-card-title",
-      "ruleKey": "compatibility-selector:|.search-card-title:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-db2186a30104",
-      "kind": "compatibility-selector",
-      "selector": ".search-card",
-      "ruleKey": "compatibility-selector:|.search-card:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-5ab39ecd7139",
-      "kind": "compatibility-selector",
-      "selector": ".search-card.archived",
-      "ruleKey": "compatibility-selector:|.search-card.archived:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-dc089cb11d9f",
-      "kind": "compatibility-selector",
-      "selector": ".search-card.clickable",
-      "ruleKey": "compatibility-selector:|.search-card.clickable:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-8bdbab337ec1",
-      "kind": "compatibility-selector",
-      "selector": ".search-card.clickable:focus-visible",
-      "ruleKey": "compatibility-selector:|.search-card.clickable:focus-visible:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-f3830756e938",
-      "kind": "compatibility-selector",
-      "selector": ".search-card.clickable:hover",
-      "ruleKey": "compatibility-selector:|.search-card.clickable:hover:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-f2ca297da09d",
-      "kind": "compatibility-selector",
-      "selector": ".search-form textarea",
-      "ruleKey": "compatibility-selector:|.search-form textarea:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-2784018c5748",
-      "kind": "compatibility-selector",
-      "selector": ".search-form textarea.mono",
-      "ruleKey": "compatibility-selector:|.search-form textarea.mono:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-c8f2d00c4dd7",
-      "kind": "compatibility-selector",
-      "selector": ".search-form-grid",
-      "ruleKey": "compatibility-selector:|.search-form-grid:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-75bee8ead64c",
-      "kind": "compatibility-selector",
-      "selector": ".search-form",
-      "ruleKey": "compatibility-selector:|.search-form:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-b77b37bfca82",
-      "kind": "compatibility-selector",
-      "selector": ".search-grid",
-      "ruleKey": "compatibility-selector:|.search-grid:1",
-      "consumerCandidates": [
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Icp.tsx",
-      "destination": "src/pages/Icp.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-09642045c94e",
-      "kind": "compatibility-selector",
-      "selector": ".search-group-head",
-      "ruleKey": "compatibility-selector:|.search-group-head:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-7538daa9a958",
-      "kind": "compatibility-selector",
-      "selector": ".search-modal",
-      "ruleKey": "compatibility-selector:|.search-modal:1",
-      "consumerCandidates": [
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx"
-      ],
-      "owner": "src/pages/Hypotheses.tsx",
-      "destination": "src/pages/Hypotheses.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 4"
-    },
-    {
-      "id": "compatibility-rule-aaa43202781a",
-      "kind": "compatibility-selector",
-      "selector": ".search-query .btn",
-      "ruleKey": "compatibility-selector:|.search-query .btn:1",
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/ErrorBoundary.tsx",
-      "destination": "src/components/ErrorBoundary.tsx",
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 12"
@@ -6340,8 +5540,6 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/ImportHistoryPanel.tsx",
         "src/components/LostReasonModal.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6450,9 +5648,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
@@ -6540,7 +5735,6 @@
       "ruleKey": "compatibility-selector:|.sequence-publish-state.error > svg:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6556,7 +5750,6 @@
       "ruleKey": "compatibility-selector:|.sequence-publish-state.error:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6669,7 +5862,6 @@
       "ruleKey": "compatibility-selector:|.sequence-save-state.conflict i, .sequence-save-state.error i:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6685,7 +5877,6 @@
       "ruleKey": "compatibility-selector:|.sequence-save-state.conflict, .sequence-save-state.error:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6795,8 +5986,6 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -6853,7 +6042,6 @@
       "consumerCandidates": [
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/CampaignCompareTable.tsx",
@@ -6972,7 +6160,6 @@
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
@@ -6990,7 +6177,6 @@
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
@@ -7113,7 +6299,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
@@ -7131,7 +6316,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Hypotheses.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",

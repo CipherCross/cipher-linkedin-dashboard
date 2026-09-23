@@ -149,6 +149,51 @@ function messageRows(scenario) {
   }]
 }
 
+function savedSearchRows(scenario) {
+  if (isEmpty(scenario)) return []
+  const row = (id, name, platform, extra = {}) => ({
+    id, name, platform, description: null, include_keywords: [], exclude_keywords: [], boolean_query: null,
+    filters: {}, notes: null, author: 'Fixture Admin', archived: false, hypothesis_id: null,
+    created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-20T00:00:00.000Z', ...extra,
+  })
+  return [
+    row(1, 'Fintech VPs, US, 200–1000', 'Apollo', {
+      description: 'Revenue leaders at growth-stage fintechs.',
+      include_keywords: ['fintech', 'payments'], exclude_keywords: ['intern'],
+      boolean_query: '("VP Sales" OR "Head of Sales") NOT intern', filters: { seniority: ['vp', 'head'], employees: 200 },
+    }),
+    row(2, 'Operations leaders in logistics and freight forwarding — wave 4 of the long-running outbound programme', 'Sales Navigator', {
+      notes: 'Long name on purpose: card titles must wrap.',
+    }),
+    row(3, 'Retired list', 'Apollo', { archived: true }),
+  ]
+}
+
+const STAMP = { created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-20T00:00:00.000Z' }
+
+function strategyRows(scenario) {
+  if (isEmpty(scenario)) return { icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [] }
+  return {
+    icps: [{
+      id: 1, name: 'Growth-stage fintech', airtable_url: null, main_product: 'Payments API', core_sphere: 'Fintech',
+      secondary_sphere: 'B2B SaaS', product_stage: 'Scale-up', monetization: 'Usage-based', features_note: null,
+      purchase_triggers: ['New funding round'], features: ['Instant payouts'], company_countries: ['US', 'DE'],
+      company_headcount: '200–1000', company_age: '3–8 years', apollo_industries: ['Financial Services'], funding: 'Series B+',
+      dev_team_availability: null, dev_team_location: null, exclude_keywords: ['crypto'], archived: false, ...STAMP,
+    }],
+    icpPersonas: [{
+      id: 1, icp_id: 1, kind: 'Head of Revenue', job_titles: ['VP Sales', 'CRO'], age_range: null, location: 'US',
+      background: null, profile_status: null, connections_note: null, followers_note: null, sort: 0, ...STAMP,
+    }],
+    icpIndustries: [{ id: 1, icp_id: 1, name: 'Payments', include_keywords: ['payments', 'acquiring'], ...STAMP }],
+    hypotheses: [
+      { id: 1, name: 'Founders respond to payout-speed pain', icp_id: 1, description: 'Lead with instant payouts.', archived: false, ...STAMP },
+      { id: 2, name: 'Unassigned idea', icp_id: null, description: null, archived: false, ...STAMP },
+    ],
+    hypothesisCampaigns: [{ hypothesis_id: 1, campaign_id: campaign.campaign_id, created_at: STAMP.created_at }],
+  }
+}
+
 function snapshot(scenario) {
   return {
     instances: isEmpty(scenario) ? [] : [instance],
@@ -163,12 +208,8 @@ function snapshot(scenario) {
     followUpStates: [],
     latestConversationMessages: [],
     followUpsAvailable: false,
-    savedSearches: [],
-    icps: [],
-    icpPersonas: [],
-    icpIndustries: [],
-    hypotheses: [],
-    hypothesisCampaigns: [],
+    savedSearches: savedSearchRows(scenario),
+    ...strategyRows(scenario),
     campaignSequenceContext: null,
   }
 }
@@ -319,6 +360,13 @@ export async function activityFixture(request) {
     }]))
   }
   if (op === 'activity.dailySeries') return json(page([]))
+  if (op === 'coaching.digests') return json(page([]))
+  if (op === 'coach.playbook') {
+    return json(page(isEmpty(scenario) ? [] : [{
+      content: '# Outreach playbook\n\n## Tone\n\n- Short, specific, no pitch in the first message.\n- Ask one question.\n',
+      updated_at: '2026-09-20T09:00:00.000Z',
+    }]))
+  }
   if (op === 'identity.teamRoster') return json(page([member(role)]))
   return json({ error: 'Local fixture operation is unsupported', operation: op }, 501)
 }

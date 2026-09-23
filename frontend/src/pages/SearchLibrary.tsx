@@ -7,9 +7,13 @@ import { useToast } from '../lib/ToastContext'
 import { authPost } from '../lib/api'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ChipInput } from '../components/ChipInput'
+import { KeywordChips, LibraryCard, LibraryGroup } from '../components/library'
 import { shortDate } from '../lib/format'
 import type { SavedSearch } from '../lib/types'
-import { Button, Checkbox, Dialog, IconButton, PageHeader, TextField, Toolbar, useDirtyGuard, EmptyState } from '../ui'
+import {
+  Button, Checkbox, Dialog, EmptyState, IconButton, InlineError, PageHeader, Panel, SegmentedControl,
+  TextField, TextareaField, Toolbar, useDirtyGuard,
+} from '../ui'
 import { COPY } from '../ui/labels'
 
 // Free-text platform with UI suggestions — deliberately not an enum ("and
@@ -216,28 +220,19 @@ export function SearchLibrary() {
       </Toolbar>
 
       {platforms.length > 0 && (
-        <div className="flex flex-wrap gap-app-sm items-center mb-app-lg">
-          <button
-            className={`inline-flex items-center gap-app-xs h-8 px-app-md border border-app-border rounded-pill bg-app-surface-2 text-app-text font-[inherit] text-app-meta cursor-pointer hover:border-app-accent [&_svg]:text-app-text-muted${platform === 'all' ? ' active' : ''}`}
-            onClick={() => setPlatform('all')}
-          >
-            All platforms
-          </button>
-          {platforms.map((p) => (
-            <button
-              key={p}
-              className={`inline-flex items-center gap-app-xs h-8 px-app-md border border-app-border rounded-pill bg-app-surface-2 text-app-text font-[inherit] text-app-meta cursor-pointer hover:border-app-accent [&_svg]:text-app-text-muted${platform === p ? ' active' : ''}`}
-              onClick={() => setPlatform(platform === p ? 'all' : p)}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Platform"
+          className="mb-app-lg"
+          value={platforms.includes(platform) ? platform : 'all'}
+          onChange={setPlatform}
+          items={[{ id: 'all', label: 'All platforms' }, ...platforms.map((p) => ({ id: p, label: p }))]}
+        />
       )}
 
       {total === 0 ? (
-        <div className="card">
+        <Panel>
           <EmptyState
+            kind={all.length === 0 ? 'empty' : 'no-match'}
             icon={SearchIcon}
             title={all.length === 0 ? 'No searches yet' : 'No searches match these filters'}
             hint={
@@ -251,26 +246,21 @@ export function SearchLibrary() {
               ) : undefined
             }
           />
-        </div>
+        </Panel>
       ) : (
         groups.map((g) => (
-          <section className="mb-app-xl" key={g.name}>
-            <h2 className="search-group-head">
-              {g.name} <span className="muted small">· {g.list.length}</span>
-            </h2>
-            <div className="search-grid">
-              {g.list.map((s) => (
-                <SearchCard
-                  key={s.id}
-                  search={s}
-                  onEdit={() => setEditing(s)}
-                  onCopy={() => copyQuery(s.boolean_query ?? '')}
-                  onArchive={() => setArchived(s, !s.archived)}
-                  onDelete={() => del(s)}
-                />
-              ))}
-            </div>
-          </section>
+          <LibraryGroup key={g.name} title={g.name} count={g.list.length}>
+            {g.list.map((s) => (
+              <SearchCard
+                key={s.id}
+                search={s}
+                onEdit={() => setEditing(s)}
+                onCopy={() => copyQuery(s.boolean_query ?? '')}
+                onArchive={() => setArchived(s, !s.archived)}
+                onDelete={() => del(s)}
+              />
+            ))}
+          </LibraryGroup>
         ))
       )}
 
@@ -304,39 +294,27 @@ function SearchCard({
 }) {
   const filterEntries = Object.entries(s.filters ?? {})
   return (
-    <article className={`card search-card${s.archived ? ' archived' : ''}`}>
-      <div className="search-card-head">
-        <div className="search-card-title">
-          <span className="search-card-name">{s.name}</span>
-          {s.archived && <span className="badge">Archived</span>}
-        </div>
-        <div className="search-card-actions">
-          <IconButton label="Edit this search" icon={<Pencil size={20} aria-hidden="true" />} onClick={onEdit} />
-          <IconButton
-            label={s.archived ? 'Restore this search' : 'Archive this search'}
-            icon={s.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
-            onClick={onArchive}
-          />
-          <IconButton label="Delete this search" tone="danger" icon={<Trash2 size={20} aria-hidden="true" />} onClick={onDelete} />
-        </div>
-      </div>
+    <LibraryCard
+      title={s.name}
+      archived={s.archived}
+      actions={<>
+        <IconButton label="Edit this search" icon={<Pencil size={20} aria-hidden="true" />} onClick={onEdit} />
+        <IconButton
+          label={s.archived ? 'Restore this search' : 'Archive this search'}
+          icon={s.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
+          onClick={onArchive}
+        />
+        <IconButton label="Delete this search" tone="danger" icon={<Trash2 size={20} aria-hidden="true" />} onClick={onDelete} />
+      </>}
+      footer={<>{s.author ? `${s.author} · ` : ''}updated {shortDate(s.updated_at)}</>}
+    >
+      {s.description && <p className="m-0 text-app-table text-app-text-secondary">{s.description}</p>}
 
-      {s.description && <p className="search-card-desc small">{s.description}</p>}
-
-      {((s.include_keywords?.length ?? 0) > 0 || (s.exclude_keywords?.length ?? 0) > 0) && (
-        <div className="flex flex-wrap gap-1.5">
-          {s.include_keywords?.map((k) => (
-            <span className="chip include" key={`i-${k}`}>{k}</span>
-          ))}
-          {s.exclude_keywords?.map((k) => (
-            <span className="chip exclude" key={`e-${k}`}>−{k}</span>
-          ))}
-        </div>
-      )}
+      <KeywordChips include={s.include_keywords ?? []} exclude={s.exclude_keywords ?? []} />
 
       {s.boolean_query && (
-        <div className="flex items-start gap-app-sm bg-app-surface-2 border border-app-border rounded-sm px-2.5 py-app-sm">
-          <code className="flex-1 min-w-0 whitespace-pre-wrap [word-break:break-word] text-[length:var(--text-sm)] text-app-text">{s.boolean_query}</code>
+        <div className="flex items-start gap-app-sm bg-app-surface-2 border border-app-border rounded-control px-2.5 py-app-sm">
+          <code className="flex-1 min-w-0 whitespace-pre-wrap [word-break:break-word] font-mono text-app-meta text-app-text">{s.boolean_query}</code>
           <Button variant="secondary" size="sm" icon={<Copy size={16} aria-hidden="true" />} onClick={onCopy}>
             Copy
           </Button>
@@ -344,22 +322,18 @@ function SearchCard({
       )}
 
       {filterEntries.length > 0 && (
-        <dl className="m-0 flex flex-col gap-[3px] small [&_dt]:min-w-[90px] [&_dt]:shrink-0 [&_dd]:m-0 [&_dd]:[word-break:break-word]">
+        <dl className="m-0 flex flex-col gap-0.5 text-app-meta">
           {filterEntries.map(([k, v]) => (
             <div className="flex gap-app-sm" key={k}>
-              <dt className="muted">{k}</dt>
-              <dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
+              <dt className="min-w-[90px] shrink-0 text-app-text-muted">{k}</dt>
+              <dd className="m-0 [word-break:break-word]">{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
             </div>
           ))}
         </dl>
       )}
 
-      {s.notes && <p className="m-0 small muted">{s.notes}</p>}
-
-      <div className="border-t border-app-border pt-app-sm mt-auto muted small">
-        {s.author ? `${s.author} · ` : ''}updated {shortDate(s.updated_at)}
-      </div>
-    </article>
+      {s.notes && <p className="m-0 text-app-meta text-app-text-muted">{s.notes}</p>}
+    </LibraryCard>
   )
 }
 
@@ -475,179 +449,167 @@ function SearchEditor({
           </Button>
         </>}
       >
-        <div className="search-form">
-          <div className="search-form-grid">
-            <label className="filter-field">
-              <span className="filter-label">Name</span>
-              <input
-                autoFocus
-                value={draft.name}
-                placeholder="e.g. Fintech VPs, US, 200–1000"
-                onChange={(e) => set('name', e.target.value)}
-              />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Platform</span>
-              <input
-                list="platform-suggestions"
-                value={draft.platform}
-                placeholder="Apollo / Sales Navigator / esun"
-                onChange={(e) => set('platform', e.target.value)}
-              />
-              <datalist id="platform-suggestions">
-                {PLATFORM_SUGGESTIONS.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-            </label>
+        {error && <div className="mb-app-lg"><InlineError title="Could not save the search." message={error} /></div>}
+        <div className="flex flex-col gap-app-lg">
+          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <TextField
+              label="Name"
+              required
+              value={draft.name}
+              placeholder="e.g. Fintech VPs, US, 200–1000"
+              onChange={(e) => set('name', e.target.value)}
+            />
+            <TextField
+              label="Platform"
+              required
+              list="platform-suggestions"
+              value={draft.platform}
+              placeholder="Apollo / Sales Navigator / esun"
+              onChange={(e) => set('platform', e.target.value)}
+            />
+            <datalist id="platform-suggestions">
+              {PLATFORM_SUGGESTIONS.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
           </div>
 
-          <label className="filter-field">
-            <span className="filter-label">Description</span>
-            <textarea
-              rows={2}
-              value={draft.description}
-              placeholder="What this search targets, in a line or two."
-              onChange={(e) => set('description', e.target.value)}
-            />
-          </label>
+          <TextareaField
+            label="Description"
+            rows={2}
+            value={draft.description}
+            placeholder="What this search targets, in a line or two."
+            onChange={(e) => set('description', e.target.value)}
+          />
 
-          <label className="filter-field">
-            <span className="filter-label">Include keywords</span>
-            <ChipInput
-              values={draft.include}
-              variant="include"
-              placeholder="Type a keyword, press Enter"
-              onChange={(v) => set('include', v)}
-            />
-          </label>
+          <ChipInput
+            label="Include keywords"
+            values={draft.include}
+            variant="include"
+            placeholder="Type a keyword, press Enter"
+            onChange={(v) => set('include', v)}
+          />
 
-          <label className="filter-field">
-            <span className="filter-label">Exclude keywords</span>
-            <ChipInput
-              values={draft.exclude}
-              variant="exclude"
-              placeholder="Type a keyword, press Enter"
-              onChange={(v) => set('exclude', v)}
-            />
-          </label>
+          <ChipInput
+            label="Exclude keywords"
+            values={draft.exclude}
+            variant="exclude"
+            placeholder="Type a keyword, press Enter"
+            onChange={(v) => set('exclude', v)}
+          />
 
-          <div className="filter-field">
-            <span className="filter-label">
-              Boolean query
-              <Button
-                variant="secondary"
-                size="sm"
-                className="ml-app-sm"
-                icon={<Copy size={16} aria-hidden="true" />}
-                onClick={copyQuery}
-                disabled={!draft.boolean_query.trim()}
-              >
-                Copy
-              </Button>
-            </span>
-            <textarea
-              className="mono"
+          <div className="flex flex-col gap-app-xs">
+            <TextareaField
+              label="Boolean query"
+              className="[&_textarea]:font-mono"
               rows={3}
               value={draft.boolean_query}
               placeholder={'("VP Sales" OR "Head of Sales") NOT intern'}
               onChange={(e) => set('boolean_query', e.target.value)}
             />
+            <Button
+              variant="secondary"
+              size="sm"
+              className="self-start"
+              icon={<Copy size={16} aria-hidden="true" />}
+              onClick={copyQuery}
+              disabled={!draft.boolean_query.trim()}
+            >
+              Copy
+            </Button>
           </div>
 
-          <div className="filter-field">
-            <span className="filter-label">Filters</span>
-            <div className="kv-editor">
-              {draft.filterRows.map((row, i) => (
-                <div className="flex gap-1.5 items-center" key={i}>
-                  <input
-                    className="flex-[0_0_40%] min-w-0"
-                    value={row.key}
-                    placeholder="key (e.g. seniority)"
-                    onChange={(e) => setFilterRow(i, { key: e.target.value })}
-                  />
-                  <div className="flex-1 min-w-0">
-                    {row.isList ? (
-                      <ChipInput
-                        values={row.list}
-                        variant="include"
-                        placeholder="Type a value, press Enter"
-                        onChange={(v) => setFilterRow(i, { list: v })}
-                      />
-                    ) : (
-                      <input
-                        value={row.value}
-                        placeholder="value (text, number, or true/false)"
-                        onChange={(e) => setFilterRow(i, { value: e.target.value })}
-                      />
-                    )}
-                  </div>
-                  <label className="col-toggle" title="Store as multiple values">
-                    <input
-                      type="checkbox"
-                      checked={row.isList}
-                      onChange={(e) => {
-                        const checked = e.target.checked
-                        // Switch representation explicitly rather than
-                        // inferring array-ness from punctuation — see the
-                        // coerceFilterValue comment for why.
-                        setFilterRow(
-                          i,
-                          checked
-                            ? { isList: true, list: row.value.trim() ? [row.value.trim()] : [] }
-                            : { isList: false, value: row.list[0] ?? '' },
-                        )
-                      }}
+          <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-sm">
+            <legend className="mb-app-xs text-app-table font-semibold">Filters</legend>
+            {draft.filterRows.map((row, i) => (
+              <div className="flex gap-app-sm items-center" key={i}>
+                <TextField
+                  className="flex-[0_0_40%] min-w-0"
+                  label={`Filter ${i + 1} key`}
+                  labelHidden
+                  value={row.key}
+                  placeholder="key (e.g. seniority)"
+                  onChange={(e) => setFilterRow(i, { key: e.target.value })}
+                />
+                <div className="flex-1 min-w-0">
+                  {row.isList ? (
+                    <ChipInput
+                      label={`Filter ${i + 1} values`}
+                      labelHidden
+                      values={row.list}
+                      variant="include"
+                      placeholder="Type a value, press Enter"
+                      onChange={(v) => setFilterRow(i, { list: v })}
                     />
-                    List
-                  </label>
-                  <IconButton
-                    label="Remove this filter"
-                    tone="danger"
-                    icon={<X size={20} aria-hidden="true" />}
-                    onClick={() =>
-                      set('filterRows', draft.filterRows.filter((_, idx) => idx !== i))
-                    }
-                  />
+                  ) : (
+                    <TextField
+                      label={`Filter ${i + 1} value`}
+                      labelHidden
+                      value={row.value}
+                      placeholder="value (text, number, or true/false)"
+                      onChange={(e) => setFilterRow(i, { value: e.target.value })}
+                    />
+                  )}
                 </div>
-              ))}
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() =>
-                  set('filterRows', [
-                    ...draft.filterRows,
-                    { key: '', value: '', list: [], isList: false },
-                  ])
-                }
-              >
-                <Plus size={13} /> Add filter
-              </button>
-            </div>
-          </div>
+                <Checkbox
+                  label="List"
+                  title="Store as multiple values"
+                  checked={row.isList}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    // Switch representation explicitly rather than
+                    // inferring array-ness from punctuation — see the
+                    // coerceFilterValue comment for why.
+                    setFilterRow(
+                      i,
+                      checked
+                        ? { isList: true, list: row.value.trim() ? [row.value.trim()] : [] }
+                        : { isList: false, value: row.list[0] ?? '' },
+                    )
+                  }}
+                />
+                <IconButton
+                  label={`Remove filter ${i + 1}`}
+                  tone="danger"
+                  icon={<X size={20} aria-hidden="true" />}
+                  onClick={() =>
+                    set('filterRows', draft.filterRows.filter((_, idx) => idx !== i))
+                  }
+                />
+              </div>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              icon={<Plus size={16} aria-hidden="true" />}
+              onClick={() =>
+                set('filterRows', [
+                  ...draft.filterRows,
+                  { key: '', value: '', list: [], isList: false },
+                ])
+              }
+            >
+              Add filter
+            </Button>
+          </fieldset>
 
-          <div className="search-form-grid">
-            <label className="filter-field">
-              <span className="filter-label">Author</span>
-              <input
-                value={draft.author}
-                placeholder="Who owns this search"
-                onChange={(e) => set('author', e.target.value)}
-              />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Notes</span>
-              <textarea
-                rows={2}
-                value={draft.notes}
-                placeholder="Anything else worth knowing."
-                onChange={(e) => set('notes', e.target.value)}
-              />
-            </label>
+          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <TextField
+              label="Author"
+              value={draft.author}
+              placeholder="Who owns this search"
+              onChange={(e) => set('author', e.target.value)}
+            />
+            <TextareaField
+              label="Notes"
+              rows={2}
+              value={draft.notes}
+              placeholder="Anything else worth knowing."
+              onChange={(e) => set('notes', e.target.value)}
+            />
           </div>
         </div>
-
-        {error && <div className="banner conv-error" role="alert">{error}</div>}
       </Dialog>
     </>
   )

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  Archive, ArchiveRestore, ExternalLink, FlaskConical, Pencil, Plus, Trash2, X,
+  Archive, ArchiveRestore, ExternalLink, FlaskConical, Pencil, Plus, Trash2,
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
@@ -19,7 +19,13 @@ import type { DateRange } from '../lib/leads'
 import type {
   CampaignMetrics, Hypothesis, HypothesisCampaign, Icp, Instance, Lead, SavedSearch,
 } from '../lib/types'
-import { Button, PageHeader, Toolbar, EmptyState } from '../ui'
+import {
+  Badge, Button, Checkbox, Dialog, EmptyState, IconButton, InlineError, PageHeader, Panel, SectionHeader,
+  SelectField, Table, TableFrame, TextField, TextareaField, Toolbar, useDirtyGuard,
+} from '../ui'
+import { COPY } from '../ui/labels'
+
+type SortKey = 'name' | 'campaigns' | 'leads' | 'connect' | 'reply'
 
 interface HypDraft {
   id?: number
@@ -52,7 +58,7 @@ export function Hypotheses() {
   const [params, setParams] = useSearchParams()
   const [showArchived, setShowArchived] = useState(false)
   const [editing, setEditing] = useState<Hypothesis | 'new' | null>(null)
-  const [sortKey, setSortKey] = useState<'name' | 'campaigns' | 'leads' | 'connect' | 'reply'>('leads')
+  const [sortKey, setSortKey] = useState<SortKey>('leads')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const hypotheses = data?.hypotheses ?? []
@@ -107,19 +113,34 @@ export function Hypotheses() {
     })
   }, [rows, sortKey, sortDir])
 
-  const toggleSort = (key: typeof sortKey) => {
+  const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortKey(key); setSortDir('desc') }
   }
-  const sortInd = (key: typeof sortKey) => (
-    <span className="sort-ind">{key === sortKey ? (sortDir === 'asc' ? '↑' : '↓') : ''}</span>
-  )
-  const sortHead = (key: typeof sortKey, text: string, cls = '') => (
-    <th className={`sortable ${cls}`.trim()} onClick={() => toggleSort(key)}>
-      {text}
-      {sortInd(key)}
-    </th>
-  )
+
+  const sortHead = (key: SortKey, label: string, numeric = false) => {
+    const active = sortKey === key
+    const direction = active ? sortDir : undefined
+    return (
+      <th
+        scope="col"
+        className={numeric ? 'text-right' : undefined}
+        aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => toggleSort(key)}
+          aria-label={`${label}, ${active ? (direction === 'asc' ? 'ascending' : 'descending') : 'not sorted'}`}
+        >
+          {label}
+          <span aria-hidden="true">
+            {active ? (direction === 'asc' ? '↑' : '↓') : ''}
+          </span>
+        </Button>
+      </th>
+    )
+  }
 
   const selectedId = params.get('h') ? Number(params.get('h')) : null
   const selected = selectedId != null ? hypotheses.find((h) => h.id === selectedId) ?? null : null
@@ -174,22 +195,17 @@ export function Hypotheses() {
       />
 
       <Toolbar>
-        <div className="filter-field">
-          <span className="filter-label">Archived</span>
-          <label className="col-toggle">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived{archivedCount ? ` (${archivedCount})` : ''}
-          </label>
-        </div>
+        <Checkbox
+          label={`Show archived${archivedCount ? ` (${archivedCount})` : ''}`}
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        />
       </Toolbar>
 
       {visible.length === 0 ? (
-        <div className="card">
+        <Panel>
           <EmptyState
+            kind={hypotheses.length === 0 ? 'empty' : 'no-match'}
             icon={FlaskConical}
             title={hypotheses.length === 0 ? 'No hypotheses yet' : 'No hypotheses match this filter'}
             hint={
@@ -199,77 +215,81 @@ export function Hypotheses() {
             }
             action={
               hypotheses.length === 0 ? (
-                <button className="link-btn" onClick={() => setEditing('new')}>New hypothesis</button>
+                <Button variant="primary" onClick={() => setEditing('new')}>New hypothesis</Button>
               ) : undefined
             }
           />
-        </div>
+        </Panel>
       ) : (
-        <div className="card">
-          <h2>Comparison</h2>
-          <div className="table-scroll">
-            <table>
+        <Panel>
+          <SectionHeader title="Comparison" />
+          <TableFrame
+            scrollLabel="Hypothesis comparison"
+            hint="Deduped by person across each hypothesis's campaigns — a shared lead counts once. Recent invite cohorts are still maturing; treat their rates as provisional."
+          >
+            <Table caption="Hypothesis comparison">
               <thead>
                 <tr>
                   {sortHead('name', 'Hypothesis')}
-                  <th>ICP</th>
-                  {sortHead('campaigns', 'Campaigns', 'num')}
-                  {sortHead('leads', 'Leads', 'num')}
-                  {sortHead('connect', 'Connect %', 'num')}
-                  {sortHead('reply', 'Reply %', 'num')}
-                  <th aria-label="Actions" />
+                  <th scope="col">ICP</th>
+                  {sortHead('campaigns', 'Campaigns', true)}
+                  {sortHead('leads', 'Leads', true)}
+                  {sortHead('connect', 'Connect %', true)}
+                  {sortHead('reply', 'Reply %', true)}
+                  <th scope="col" aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((r) => (
                   <tr
                     key={r.hyp.id}
-                    className="row-clickable"
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Open ${r.hyp.name}`}
+                    className="relative"
                     style={{ background: selectedId === r.hyp.id ? 'var(--surface-3)' : undefined }}
-                    onClick={() => select(selectedId === r.hyp.id ? null : r.hyp.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        select(selectedId === r.hyp.id ? null : r.hyp.id)
-                      }
-                    }}
                   >
-                    <td>{r.hyp.name}{r.hyp.archived && <span className="badge" style={{ marginLeft: 6 }}>Archived</span>}</td>
-                    <td className="muted">{r.icpName}</td>
-                    <td className="num">{num(r.campaigns)}</td>
-                    <td className="num">{num(r.leads)}</td>
-                    <td className="num">{r.connect == null ? '—' : r.connect.toFixed(1) + '%'}</td>
-                    <td className="num">{r.reply == null ? '—' : r.reply.toFixed(1) + '%'}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <div className="search-card-actions">
-                        <button className="icon-only-btn" title="Edit" onClick={() => setEditing(r.hyp)}>
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          className="icon-only-btn"
-                          title={r.hyp.archived ? 'Restore' : 'Archive'}
+                    <td>
+                      <button
+                        type="button"
+                        className="p-0 border-0 bg-transparent text-left font-semibold text-app-text cursor-pointer focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
+                        onClick={() => select(selectedId === r.hyp.id ? null : r.hyp.id)}
+                        aria-label={`Open ${r.hyp.name}`}
+                        aria-expanded={selectedId === r.hyp.id}
+                      >
+                        {r.hyp.name}
+                      </button>
+                      {r.hyp.archived && <Badge className="ml-1.5">Archived</Badge>}
+                    </td>
+                    <td className="text-app-text-secondary">{r.icpName}</td>
+                    <td className="text-right tabular-nums">{num(r.campaigns)}</td>
+                    <td className="text-right tabular-nums">{num(r.leads)}</td>
+                    <td className="text-right tabular-nums">{r.connect == null ? '—' : r.connect.toFixed(1) + '%'}</td>
+                    <td className="text-right tabular-nums">{r.reply == null ? '—' : r.reply.toFixed(1) + '%'}</td>
+                    <td className="relative z-10 text-right whitespace-nowrap">
+                      {/* Icon-only so all three stay inside the frame at 1280. */}
+                      <span className="inline-flex">
+                        <IconButton
+                          label={`Edit ${r.hyp.name}`}
+                          icon={<Pencil size={20} aria-hidden="true" />}
+                          onClick={() => setEditing(r.hyp)}
+                        />
+                        <IconButton
+                          label={`${r.hyp.archived ? 'Restore' : 'Archive'} ${r.hyp.name}`}
+                          icon={r.hyp.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
                           onClick={() => setArchived(r.hyp, !r.hyp.archived)}
-                        >
-                          {r.hyp.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                        </button>
-                        <button className="icon-only-btn danger" title="Delete" onClick={() => del(r.hyp)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                        />
+                        <IconButton
+                          label={`Delete ${r.hyp.name}`}
+                          tone="danger"
+                          icon={<Trash2 size={20} aria-hidden="true" />}
+                          onClick={() => del(r.hyp)}
+                        />
+                      </span>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-          <div className="muted small" style={{ marginTop: 8 }}>
-            Deduped by person across each hypothesis's campaigns — a shared lead counts once.
-            Recent invite cohorts are still maturing; treat their rates as provisional.
-          </div>
-        </div>
+            </Table>
+          </TableFrame>
+        </Panel>
       )}
 
       {selected && (
@@ -390,155 +410,134 @@ function HypothesisViewer({
   }, [campaigns, instances])
 
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div
-        className="pipe-modal search-modal w-[min(880px,100%)]"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Hypothesis ${hyp.name}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="pipe-modal-head">
-          <span className="icp-view-heading">
-            {hyp.name}
-            {hyp.archived && <span className="badge">Archived</span>}
-          </span>
-          <div className="icp-view-head-actions">
-            <button className="btn ghost sm" onClick={onEdit}>
-              <Pencil size={13} /> Edit
-            </button>
-            <CopyButton
-              text={hypToText(hyp, icp?.name ?? null, breakdown, searches)}
-              title="Copy all fields"
-            />
-            <button className="conv-close" onClick={onClose} aria-label="Close">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
-        <div className="search-form">
-          <div className="filter-field icp-view-field">
-            <span className="filter-label">ICP</span>
-            <div className="icp-view-value">
-              {icp ? (
-                <Link to="/icp" className="icp-view-link" onClick={onClose}>
-                  {icp.name}
-                  <ExternalLink size={12} />
-                </Link>
-              ) : (
-                <span className="muted">Unassigned</span>
-              )}
-              {icp && <CopyButton text={icp.name} title="Copy ICP name" />}
+    <Dialog
+      size="lg"
+      title={<>{hyp.name}{hyp.archived && <Badge className="ml-2">Archived</Badge>}</>}
+      onRequestClose={onClose}
+      footer={<>
+        <CopyButton text={hypToText(hyp, icp?.name ?? null, breakdown, searches)} title="Copy all fields" />
+        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button variant="primary" icon={<Pencil size={16} aria-hidden="true" />} onClick={onEdit}>
+          Edit hypothesis
+        </Button>
+      </>}
+    >
+      <div className="flex flex-col gap-app-lg">
+        <dl className="m-0 flex flex-col gap-app-md">
+          <div className="flex items-start justify-between gap-app-sm">
+            <div>
+              <dt className="text-app-meta text-app-text-muted">ICP</dt>
+              <dd className="m-0 mt-0.5">
+                {icp ? (
+                  <Link to="/icp" className="inline-flex items-center gap-1" onClick={onClose}>
+                    {icp.name}
+                    <ExternalLink size={12} aria-hidden="true" />
+                  </Link>
+                ) : (
+                  <span className="text-app-text-muted">Unassigned</span>
+                )}
+              </dd>
             </div>
+            {icp && <CopyButton text={icp.name} title="Copy ICP name" />}
           </div>
 
           {hyp.description && (
-            <div className="filter-field icp-view-field">
-              <div className="icp-view-value">
-                <span className="filter-label">Description</span>
-                <CopyButton text={hyp.description} title="Copy description" />
+            <div className="flex items-start justify-between gap-app-sm">
+              <div>
+                <dt className="text-app-meta text-app-text-muted">Description</dt>
+                <dd className="m-0 mt-0.5">{hyp.description}</dd>
               </div>
-              <span>{hyp.description}</span>
+              <CopyButton text={hyp.description} title="Copy description" />
             </div>
           )}
+        </dl>
 
-          <div className="card-head" style={{ marginTop: 4 }}>
-            <h3 className="search-group-head" style={{ margin: 0 }}>Results</h3>
-            <DateRangePicker presets={RANGES} value={range} onChange={setRange} />
-          </div>
-          <KpiCards totals={totals} prev={prevTotals} />
-          <Funnel leads={scopedLeads} />
+        <SectionHeader
+          level="subsection"
+          title="Results"
+          actions={<DateRangePicker presets={RANGES} value={range} onChange={setRange} />}
+        />
+        <KpiCards totals={totals} prev={prevTotals} />
+        <Funnel leads={scopedLeads} />
 
-          <h3 className="search-group-head">Per-campaign breakdown</h3>
-          {breakdown.length === 0 ? (
-            <p className="muted small">No campaigns assigned to this hypothesis yet.</p>
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Campaign</th>
-                    <th>Account</th>
-                    <th className="num">Invites</th>
-                    <th className="num">Accepted</th>
-                    <th className="num">Replies</th>
-                    <th className="num">Accept %</th>
-                    <th className="num">Reply %</th>
+        <SectionHeader level="subsection" title="Per-campaign breakdown" />
+        {breakdown.length === 0 ? (
+          <p className="m-0 text-app-meta text-app-text-muted">No campaigns assigned to this hypothesis yet.</p>
+        ) : (
+          <TableFrame scrollLabel="Per-campaign breakdown">
+            <Table caption="Per-campaign breakdown">
+              <thead>
+                <tr>
+                  <th scope="col">Campaign</th>
+                  <th scope="col">Account</th>
+                  <th scope="col" className="text-right">Invites</th>
+                  <th scope="col" className="text-right">Accepted</th>
+                  <th scope="col" className="text-right">Replies</th>
+                  <th scope="col" className="text-right">Accept %</th>
+                  <th scope="col" className="text-right">Reply %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakdown.map((c) => (
+                  <tr key={c.campaign_id}>
+                    <td>
+                      <Link to={`/campaign/${encodeURIComponent(c.campaign_id)}`} onClick={onClose}>
+                        {c.campaign_name}
+                      </Link>
+                    </td>
+                    <td className="text-app-text-secondary">{instanceOfCampaign.get(c.campaign_id) ?? '—'}</td>
+                    <td className="text-right tabular-nums">{num(c.invites_sent)}</td>
+                    <td className="text-right tabular-nums">{num(c.accepted)}</td>
+                    <td className="text-right tabular-nums">{num(c.replies)}</td>
+                    <td className="text-right tabular-nums">{c.acceptance_rate == null ? '—' : c.acceptance_rate.toFixed(1) + '%'}</td>
+                    <td className="text-right tabular-nums">{c.reply_rate == null ? '—' : c.reply_rate.toFixed(1) + '%'}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {breakdown.map((c) => (
-                    <tr key={c.campaign_id}>
-                      <td>
-                        <Link to={`/campaign/${encodeURIComponent(c.campaign_id)}`} onClick={onClose}>
-                          {c.campaign_name}
-                        </Link>
-                      </td>
-                      <td className="muted">{instanceOfCampaign.get(c.campaign_id) ?? '—'}</td>
-                      <td className="num">{num(c.invites_sent)}</td>
-                      <td className="num">{num(c.accepted)}</td>
-                      <td className="num">{num(c.replies)}</td>
-                      <td className="num">{c.acceptance_rate == null ? '—' : c.acceptance_rate.toFixed(1) + '%'}</td>
-                      <td className="num">{c.reply_rate == null ? '—' : c.reply_rate.toFixed(1) + '%'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+              </tbody>
+            </Table>
+          </TableFrame>
+        )}
 
-          <div className="icp-view-value">
-            <h3 className="search-group-head" style={{ margin: 0 }}>
-              Linked searches{searches.length ? ` (${searches.length})` : ''}
-            </h3>
-            {searches.length > 0 && (
-              <CopyButton
-                text={searches.map((s) => `${s.name} (${s.platform})`).join('\n')}
-                title="Copy searches"
-              />
-            )}
-          </div>
-          {searches.length === 0 ? (
-            <p className="muted small">No saved searches attached to this hypothesis.</p>
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Search</th>
-                    <th>Platform</th>
+        <SectionHeader
+          level="subsection"
+          title={`Linked searches${searches.length ? ` (${searches.length})` : ''}`}
+          actions={searches.length > 0 && (
+            <CopyButton
+              text={searches.map((s) => `${s.name} (${s.platform})`).join('\n')}
+              title="Copy searches"
+            />
+          )}
+        />
+        {searches.length === 0 ? (
+          <p className="m-0 text-app-meta text-app-text-muted">No saved searches attached to this hypothesis.</p>
+        ) : (
+          <TableFrame scrollLabel="Linked searches">
+            <Table caption="Linked searches">
+              <thead>
+                <tr>
+                  <th scope="col">Search</th>
+                  <th scope="col">Platform</th>
+                </tr>
+              </thead>
+              <tbody>
+                {searches.map((s) => (
+                  <tr key={s.id}>
+                    <td><Link to="/searches" onClick={onClose}>{s.name}</Link></td>
+                    <td className="text-app-text-secondary">{s.platform}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {searches.map((s) => (
-                    <tr key={s.id}>
-                      <td>
-                        <Link to="/searches" onClick={onClose}>{s.name}</Link>
-                      </td>
-                      <td className="muted">{s.platform}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+              </tbody>
+            </Table>
+          </TableFrame>
+        )}
 
-          <p className="muted small" style={{ marginTop: 8 }}>
-            Deduped by person across this hypothesis's campaigns — a shared lead counts once.
-            Replies lag invites by days to weeks; treat the most recent invite cohorts' rates as
-            still maturing, not a verdict on this hypothesis.
-          </p>
-        </div>
-
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onClose}>Close</button>
-          <button className="btn accent sm" onClick={onEdit}>
-            <Pencil size={13} /> Edit hypothesis
-          </button>
-        </div>
+        <p className="m-0 text-app-meta text-app-text-muted">
+          Deduped by person across this hypothesis's campaigns — a shared lead counts once.
+          Replies lag invites by days to weeks; treat the most recent invite cohorts' rates as
+          still maturing, not a verdict on this hypothesis.
+        </p>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -561,10 +560,16 @@ function HypothesisEditor({
   upsertSavedSearch: (s: SavedSearch) => void
 }) {
   const toast = useToast()
-  const [draft, setDraft] = useState<HypDraft>(() => toDraft(hyp, campaignIds, searchIds))
+  // Frozen once at mount, like the draft itself — the source props are fresh
+  // array literals on every parent render, so re-deriving this from them (a
+  // useMemo keyed on those arrays) would silently reset the dirty baseline.
+  const [initial] = useState<HypDraft>(() => toDraft(hyp, campaignIds, searchIds))
+  const [draft, setDraft] = useState<HypDraft>(initial)
   const [campaignFilter, setCampaignFilter] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
+  const { guard, prompt } = useDirtyGuard(dirty)
 
   const set = <K extends keyof HypDraft>(key: K, value: HypDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -648,57 +653,63 @@ function HypothesisEditor({
   }
 
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div
-        className="pipe-modal search-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={draft.id ? 'Edit hypothesis' : 'New hypothesis'}
-        onClick={(e) => e.stopPropagation()}
+    <>
+      {prompt}
+      <Dialog
+        size="lg"
+        title={draft.id ? 'Edit hypothesis' : 'New hypothesis'}
+        description="Nothing is saved until you press the button in the footer."
+        onRequestClose={() => guard(onClose)}
+        busy={saving}
+        footerNote={error ? undefined : dirty ? COPY.unsavedChanges : undefined}
+        footer={<>
+          <Button variant="secondary" onClick={() => guard(onClose)} disabled={saving}>{COPY.cancel}</Button>
+          <Button
+            variant="primary"
+            onClick={save}
+            loading={saving}
+            loadingLabel="Saving the hypothesis"
+            disabled={!draft.name.trim()}
+          >
+            {draft.id ? 'Save changes' : 'Create hypothesis'}
+          </Button>
+        </>}
       >
-        <div className="pipe-modal-head">
-          <span>{draft.id ? 'Edit hypothesis' : 'New hypothesis'}</span>
-          <button className="conv-close" onClick={onClose} aria-label="Close">
-            <X size={16} />
-          </button>
-        </div>
+        {error && <div className="mb-app-lg"><InlineError title="Could not save the hypothesis." message={error} /></div>}
+        <div className="flex flex-col gap-app-lg">
+          <TextField
+            label="Name"
+            required
+            value={draft.name}
+            placeholder="e.g. Web 2 Mob — US wellness founders"
+            onChange={(e) => set('name', e.target.value)}
+          />
 
-        <div className="search-form">
-          <label className="filter-field">
-            <span className="filter-label">Name</span>
-            <input
-              autoFocus
-              value={draft.name}
-              placeholder="e.g. Web 2 Mob — US wellness founders"
-              onChange={(e) => set('name', e.target.value)}
-            />
-          </label>
+          <SelectField
+            label="ICP"
+            value={draft.icp_id ?? ''}
+            onChange={(e) => set('icp_id', e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Unassigned</option>
+            {icps.map((i) => (
+              <option key={i.id} value={i.id}>{i.name}</option>
+            ))}
+          </SelectField>
 
-          <label className="filter-field">
-            <span className="filter-label">ICP</span>
-            <select
-              value={draft.icp_id ?? ''}
-              onChange={(e) => set('icp_id', e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">Unassigned</option>
-              {icps.map((i) => (
-                <option key={i.id} value={i.id}>{i.name}</option>
-              ))}
-            </select>
-          </label>
+          <TextareaField
+            label="Description"
+            rows={2}
+            value={draft.description}
+            onChange={(e) => set('description', e.target.value)}
+          />
 
-          <label className="filter-field">
-            <span className="filter-label">Description</span>
-            <textarea
-              rows={2}
-              value={draft.description}
-              onChange={(e) => set('description', e.target.value)}
-            />
-          </label>
-
-          <div className="filter-field">
-            <span className="filter-label">Campaigns ({draft.campaignIds.length} selected)</span>
-            <input
+          <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-sm">
+            <legend className="mb-app-xs text-app-table font-semibold">
+              Campaigns ({draft.campaignIds.length} selected)
+            </legend>
+            <TextField
+              label="Filter campaigns"
+              labelHidden
               type="search"
               placeholder="Filter campaigns…"
               value={campaignFilter}
@@ -711,49 +722,44 @@ function HypothesisEditor({
                   c.instance_id,
                 )
                 return (
-                  <label className="flex items-center gap-app-sm px-2.5 py-1.5 border-b border-app-border last:border-b-0 [&>span:nth-child(2)]:flex-1 [&>span:nth-child(2)]:min-w-0" key={c.campaign_id}>
-                    <input
-                      type="checkbox"
-                      checked={draft.campaignIds.includes(c.campaign_id)}
-                      onChange={() => toggleCampaign(c.campaign_id)}
-                    />
-                    <span>{c.campaign_name}</span>
-                    <span className="muted small">{acct}</span>
-                  </label>
+                  <Checkbox
+                    key={c.campaign_id}
+                    className="px-2.5 py-1.5 border-b border-app-border last:border-b-0"
+                    label={c.campaign_name}
+                    hint={acct}
+                    checked={draft.campaignIds.includes(c.campaign_id)}
+                    onChange={() => toggleCampaign(c.campaign_id)}
+                  />
                 )
               })}
-              {filteredCampaigns.length === 0 && <p className="muted small">No campaigns match.</p>}
+              {filteredCampaigns.length === 0 && (
+                <p className="m-0 px-2.5 py-1.5 text-app-meta text-app-text-muted">No campaigns match.</p>
+              )}
             </div>
-          </div>
+          </fieldset>
 
-          <div className="filter-field">
-            <span className="filter-label">Searches ({draft.searchIds.length} attached)</span>
+          <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-sm">
+            <legend className="mb-app-xs text-app-table font-semibold">
+              Searches ({draft.searchIds.length} attached)
+            </legend>
             <div className="flex flex-col max-h-[220px] overflow-y-auto border border-app-border rounded-sm bg-app-surface">
               {savedSearches.map((s) => (
-                <label className="flex items-center gap-app-sm px-2.5 py-1.5 border-b border-app-border last:border-b-0 [&>span:nth-child(2)]:flex-1 [&>span:nth-child(2)]:min-w-0" key={s.id}>
-                  <input
-                    type="checkbox"
-                    checked={draft.searchIds.includes(s.id)}
-                    onChange={() => toggleSearch(s.id)}
-                  />
-                  <span>{s.name}</span>
-                  <span className="muted small">{s.platform}</span>
-                </label>
+                <Checkbox
+                  key={s.id}
+                  className="px-2.5 py-1.5 border-b border-app-border last:border-b-0"
+                  label={s.name}
+                  hint={s.platform}
+                  checked={draft.searchIds.includes(s.id)}
+                  onChange={() => toggleSearch(s.id)}
+                />
               ))}
-              {savedSearches.length === 0 && <p className="muted small">No saved searches yet.</p>}
+              {savedSearches.length === 0 && (
+                <p className="m-0 px-2.5 py-1.5 text-app-meta text-app-text-muted">No saved searches yet.</p>
+              )}
             </div>
-          </div>
+          </fieldset>
         </div>
-
-        {error && <div className="banner conv-error">{error}</div>}
-
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onClose}>Cancel</button>
-          <button className="btn accent sm" onClick={save} disabled={saving || !draft.name.trim()}>
-            {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create hypothesis'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </Dialog>
+    </>
   )
 }

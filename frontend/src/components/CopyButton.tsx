@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
+import { IconButton } from '../ui'
 
-/** Small icon button that copies `text` to the clipboard and briefly shows a
- *  check. Shared by the ICP and Hypothesis read-only viewers. Stops click
+/** Icon button that copies `text` to the clipboard and briefly shows a check.
+ *  The one copy action for the ICP and Hypothesis viewers. Stops click
  *  propagation so it can sit inside clickable cards/rows without triggering them. */
 export function CopyButton({
   text,
@@ -24,17 +25,14 @@ export function CopyButton({
     }
   }
   return (
-    <button
-      type="button"
-      className={`icon-only-btn icp-copy-btn ${className}`.trim()}
+    <IconButton
+      className={className}
+      label={copied ? 'Copied' : title}
+      icon={copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
       onClick={(e) => {
         e.stopPropagation()
-        copy()
+        void copy()
       }}
-      title={copied ? 'Copied' : title}
-      aria-label={copied ? 'Copied' : title}
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-    </button>
+    />
   )
 }

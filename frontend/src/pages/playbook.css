@@ -1,4 +1,7 @@
 /* --- Playbook page -------------------------------------------------------- */
+/* ui-exception(playbook-split): the edit/preview split collapses to one
+ * mode-selected pane below 1200px and the editor is a tall monospace
+ * document, not a form field. verify: Playbook at 1280/1440/1920, both modes. */
 /* The split only exists when both panes can be useful: below 1200px of page
  * width the editor keeps the full column and the segmented control decides
  * which mode is shown. The preview is capped at 72ch for readability. */

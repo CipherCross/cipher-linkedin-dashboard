@@ -36,8 +36,9 @@ http://127.0.0.1:4300/api/ui-fixture?scenario=empty-admin
 
 Reload the route after changing it. The fixture read endpoint implements only
 the path lookup, bootstrap, route snapshot, the three narrow Overview reads,
-the default Leads page and text no-match query, daily series, and roster
-projection needed by the initial shell and first route checks. Other Leads
+the default Leads page and text no-match query, daily series, roster
+projection, saved searches, ICPs and hypotheses (in the route snapshot), the playbook document, and
+an empty coaching-digest list needed by the shell and the route checks so far. Other Leads
 filters and unknown operations return HTTP 501 with an explicit error. The known
 product mutation endpoints (`pipeline`, `import`, `playbook`, `coach`, review,
 classify, briefing, and notification) are temporary read-only wrappers

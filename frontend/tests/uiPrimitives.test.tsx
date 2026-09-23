@@ -232,6 +232,19 @@ describe('Dialog contract', () => {
     expect(document.activeElement).toBe(screen.getByLabelText('Name'))
   })
 
+  it('brings back focus that a closing dialog restores into the page behind it', () => {
+    const root = document.createElement('div')
+    root.id = 'root'
+    const behind = document.createElement('button')
+    behind.textContent = 'Card trigger'
+    root.append(behind)
+    document.body.append(root)
+    render(<Dialog title="Edit ICP" onRequestClose={() => {}}><input aria-label="Name" /></Dialog>)
+    behind.focus()
+    expect(document.activeElement).toBe(screen.getByLabelText('Name'))
+    root.remove()
+  })
+
   it('moves focus to the requested control on open', async () => {
     function Harness() {
       const target = useRef<HTMLInputElement>(null)

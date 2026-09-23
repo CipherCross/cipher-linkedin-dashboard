@@ -78,6 +78,39 @@
       "reason": "Quick Navigation trigger presented as a search field with its ⌘K hint; it opens the command dialog rather than performing an action.",
       "verification": "Click and ⌘K open Quick Navigation; focus returns to the trigger on close.",
       "removeByPhase": null
+    },
+    {
+      "id": "library-card-open",
+      "kind": "raw-control",
+      "path": "src/components/library.tsx",
+      "symbol": "LibraryCard",
+      "tag": "button",
+      "owner": "frontend/library",
+      "reason": "Card title button stretched over the whole library card (after:inset-0) so a click anywhere opens the viewer; the row actions sit above it as separate buttons. Button chrome would restyle the title.",
+      "verification": "Click and Enter/Space on the title open the viewer; row actions stay individually focusable; searchLibraryPage/icpPage.",
+      "removeByPhase": null
+    },
+    {
+      "id": "chip-input-entry",
+      "kind": "raw-control",
+      "path": "src/components/ChipInput.tsx",
+      "symbol": "box",
+      "tag": "input",
+      "owner": "frontend/library",
+      "reason": "Text box inside the tag field; the framed chip container is the visible control and the Field label targets this input.",
+      "verification": "Enter/comma adds, Backspace removes, label focuses it; searchLibraryPage.",
+      "removeByPhase": null
+    },
+    {
+      "id": "hypothesis-row-open",
+      "kind": "raw-control",
+      "path": "src/pages/Hypotheses.tsx",
+      "symbol": "Hypotheses",
+      "tag": "button",
+      "owner": "frontend/library",
+      "reason": "Hypothesis name in the comparison table: a real button stretched over the row so the row stays clickable while keyboard activation goes through a button, not <tr onClick>.",
+      "verification": "Tab to the name, Enter opens the viewer; row actions stay separate; hypothesesPage.",
+      "removeByPhase": null
     }
   ]
 }

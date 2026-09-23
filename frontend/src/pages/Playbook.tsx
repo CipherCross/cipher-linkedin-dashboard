@@ -8,7 +8,7 @@ import { useToast } from '../lib/ToastContext'
 import { shortDate } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import { useAuth } from '../lib/AuthContext'
-import { Button, PageHeader, Panel, SegmentedControl } from '../ui'
+import { Button, InlineError, PageHeader, Panel, SaveStatus, SegmentedControl, TextareaField } from '../ui'
 import { COPY } from '../ui/labels'
 
 // The single global playbook: one Markdown document that grounds the AI
@@ -141,13 +141,11 @@ export function Playbook() {
       <PageHeader
         title="Playbook"
         description="One Markdown document that grounds the AI conversation coach for every account."
-        context={
-          <span className="muted small">
-            {savedAt ? `Last saved ${shortDate(savedAt)}` : 'Never saved'}
-            {dirty && ` · ${COPY.unsavedChanges}`}
-          </span>
-        }
-        actions={<>
+      />
+
+      <Panel className="playbook-editor">
+        {/* Mode and save state stay in view while the document scrolls. */}
+        <div className="sticky top-0 z-10 -mx-app-xl -mt-app-xl mb-app-lg px-app-xl py-app-md flex items-center gap-app-md flex-wrap bg-app-surface border-b border-app-border rounded-t-card">
           {/* Edit and Preview are explicit modes; at a width that fits both,
               the split below shows them side by side and this only marks
               which pane has focus. */}
@@ -156,6 +154,14 @@ export function Playbook() {
             value={preview ? 'preview' : 'edit'}
             onChange={(mode) => setPreview(mode === 'preview')}
             items={[{ id: 'edit', label: 'Edit' }, { id: 'preview', label: 'Preview' }]}
+          />
+          <SaveStatus
+            className="ml-auto"
+            state={busy ? 'saving' : dirty ? 'dirty' : 'saved'}
+            label={busy ? undefined : <>
+              {savedAt ? `Last saved ${shortDate(savedAt)}` : 'Never saved'}
+              {dirty && ` · ${COPY.unsavedChanges}`}
+            </>}
           />
           <Button
             variant="primary"
@@ -167,16 +173,16 @@ export function Playbook() {
           >
             {dirty ? 'Save changes' : COPY.saved}
           </Button>
-        </>}
-      />
+        </div>
 
-      <Panel className="playbook-editor">
         {loadError && (
-          <div className="banner error" role="alert">
-            <span>{loadError}</span>
-            <Button variant="secondary" size="sm" onClick={load} disabled={!loaded}>
-              {loaded ? COPY.retry : COPY.loading}
-            </Button>
+          <div className="mb-app-lg">
+            <InlineError
+              title={loadError}
+              onRetry={load}
+              retryLabel={loaded ? COPY.retry : COPY.loading}
+              busy={!loaded}
+            />
           </div>
         )}
         {!loaded ? (
@@ -186,9 +192,11 @@ export function Playbook() {
             ))}
           </div>
         ) : (
-          <div className={`playbook-panes ${preview ? 'show-preview' : 'show-edit'}`}>
+          <div className={preview ? 'playbook-panes show-preview' : 'playbook-panes show-edit'}>
             <div className="playbook-pane playbook-edit-pane flex min-w-0 [&>*]:w-full">
-              <textarea
+              <TextareaField
+                label="Playbook (Markdown)"
+                labelHidden
                 value={content}
                 spellCheck={false}
                 placeholder={PLACEHOLDER}
@@ -204,7 +212,7 @@ export function Playbook() {
                 {content.trim() ? (
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                 ) : (
-                  <p className="muted">Nothing to preview yet — write the playbook on the left.</p>
+                  <p className="text-app-text-muted">Nothing to preview yet — write the playbook on the left.</p>
                 )}
               </div>
             </div>

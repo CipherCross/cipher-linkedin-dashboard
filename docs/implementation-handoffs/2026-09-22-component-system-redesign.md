@@ -145,3 +145,35 @@ Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720
 Known and left: the account avatar's initials render at 12.92px (Avatar scales them from its 34px size, unchanged from HEAD) — Avatar belongs to Phase 12. Neon Activity's populated/empty rendering is covered by `neonActivityPage` only; the fixture does not implement its read.
 
 Next: Phase 4 — SearchLibrary first (list + dirty-form reference), then Playbook, ICP, Hypotheses (four hand-built dialogs).
+
+## Phase 4 — accepted (2026-09-23)
+
+SearchLibrary (reference) and Playbook by the orchestrator; ICP and Hypotheses by two parallel Sonnet workers with disjoint files, then reviewed, browser-checked and corrected by the orchestrator.
+
+- **Shared library composition** — new `src/components/library.tsx`: `LibraryGroup` (heading + count + card grid), `LibraryCard` (title, row actions, footer; in `onOpen` mode the title is a real button stretched over the card, so a click anywhere opens the viewer while row actions stay separate buttons — this replaces ICP's `role="button"` cards that nested other buttons), `Chip`/`KeywordChips` (exclude carries a visible "−"). `ChipInput` labels itself through `Field` (`label`/`labelHidden`) and uses `Chip`; `CopyButton` is an `IconButton`.
+- **SearchLibrary** — `LibraryGroup`/`LibraryCard`. The platform chips become a `SegmentedControl` (single choice, arrow keys); their active state had no styling before. `EmptyState` gets `empty`/`no-match`. The editor fields are `TextField`/`TextareaField`/`ChipInput`; filter rows are a `fieldset` with labelled key/value fields, and save errors show as `InlineError` above the fields. Icon-button names, copy, archive, the delete confirm, payloads and 409/401 branches are unchanged.
+- **Playbook** — a sticky mode/save row inside the panel (`SegmentedControl`, `SaveStatus` with "Last saved …/Unsaved changes", Save). The load failure is `InlineError` with Retry, and the editor is a labelled `TextareaField`. The split stays contextual CSS under `ui-exception(playbook-split)`. `chat-md` prose styling stays until Chat (Phase 10).
+- **ICP** — both hand-built modals (viewer, editor) are `Dialog`; the editor has `useDirtyGuard` and `busy`. Cards are `LibraryCard` with open mode. Fields are canonical, and personas/industries are fieldsets with labelled rows. Copy uses `CopyButton`. The "+N more" toggle is a ghost `Button`.
+- **Hypotheses** — both modals are `Dialog`, the editor with `useDirtyGuard`. The comparison and viewer tables are `TableFrame`/`Table`; sort headers are `Button`s with `aria-sort` on the `th`; the row opens through a real stretched button. Row actions are `IconButton`s named per row ("Edit {name}"): the worker's text buttons pushed Delete past the table frame at 1280, and the orchestrator reverted them to icons.
+- **Shared Dialog** — while a dialog is the topmost one, focus that a closing dialog restores into the page behind it (`#root`) is pulled back inside. This fixes ICP viewer → Edit, where the editor opened with focus on the card behind it. Base UI's unmount-time restore does not consult `finalFocus`, so that hook could not be used. A new `uiPrimitives` case covers it, and removing the listener fails the case.
+- **CSS** — deleted 36 dead rules from `ui.css` (`.search-*`, `.chip*`, `.filter-chip.active`, `.search-modal`, `.search-form*`, `.kv-editor`, `.col-toggle`, `.icp-view-*`, `.icp-copy-btn`), each grepped for zero consumers first.
+- **Allowlist** — `library-card-open`, `chip-input-entry`, `hypothesis-row-open`.
+- **Fixture** — synthetic saved searches, ICP/persona/industry, hypotheses, playbook document, empty coaching digests.
+
+Tests: new `searchLibraryPage` (9), `icpPage` (9), `hypothesesPage` (9), `uiPrimitives` +1. Mutation checks: removing ICP's editor `guard()` fails `icpPage`; forcing Hypotheses' `useDirtyGuard(false)` fails `hypothesesPage`; removing the Dialog focus pull-back fails `uiPrimitives`.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 91 files / 1,385 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 297 → 222 plus 3 named exceptions; compatibility tokens 1,332 → 1,008; selectors 391 → 354; **modal roots 9 → 5**; Phase 4 files have zero raw controls and zero modal roots, and one intentional `chat-md`); fixture `--check` passed; `git diff --check` passed. Production gzip JS 653,843 (+0.5% vs Phase 0), CSS 39,711 (−1,154 vs Phase 0).
+
+Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720 / 1440×900 / 1920×1080**, no writes (the fixture refuses mutations):
+
+| Surface | Result at all three viewports |
+| --- | --- |
+| Searches list | two platform groups, card widths 323/371/372, gutters 24/32/32; SegmentedControl ArrowRight selects Apollo and filters to 1 card; no text under 13px; no overflow-x |
+| Search editor | 880px dialog, focus on Name, body scrolls, footer in view; edited + Escape → discard prompt; Discard returns focus to "Edit this search"; archive shows the fixture's refusal toast "Admin access required." |
+| Playbook | sticky bar with Edit/Preview, SaveStatus "Last saved Sep 20", typing shows "· Unsaved changes"; member: textarea and Save disabled |
+| ICP | card opens by click anywhere and by Enter on its title; viewer 1120px with footer in view; Escape returns focus to the card; viewer → Edit focuses Name inside the editor; dirty Escape → prompt; Discard returns focus to the card |
+| Hypotheses | comparison table with `aria-sort` on Leads; row click opens the viewer; Edit/Archive/Delete all inside the frame (1280: last action right edge 1214 vs frame 1230) |
+
+Known and left (flagged as a separate task, not a presentation defect): selecting a hypothesis writes `?h=`, and `DataContext` restarts the route snapshot on any query change outside Replies/Sentiment. The page flashes to the skeleton and remounts, so closing the viewer returns focus to `<body>`. Fixing it touches DataContext state, which this programme excludes.
+
+Next: Phase 5 — CSV import workflow (UnifiedApolloCsvImport, CompanyResolutionModal, ImportHistoryPanel, import callouts), fixture-only mutation checks.

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   Archive, ArchiveRestore, ChevronDown, ChevronUp, ExternalLink, Pencil, Plus, Target, Trash2, X,
 } from 'lucide-react'
@@ -7,8 +7,13 @@ import { useToast } from '../lib/ToastContext'
 import { authPost } from '../lib/api'
 import { ChipInput } from '../components/ChipInput'
 import { CopyButton } from '../components/CopyButton'
+import { Chip, LibraryCard } from '../components/library'
 import type { Icp, IcpIndustry, IcpPersona } from '../lib/types'
-import { Button, PageHeader, Toolbar, EmptyState } from '../ui'
+import {
+  Badge, Button, Checkbox, Dialog, EmptyState, IconButton, InlineError, PageHeader, Panel,
+  SectionHeader, TextField, TextareaField, Toolbar, useDirtyGuard,
+} from '../ui'
+import { COPY } from '../ui/labels'
 
 // Draft rows carry an optional `id` (present = existing DB row, save is a
 // partial-patch update; absent = new, save is a create) and `_new` purely so
@@ -189,22 +194,17 @@ export function Icp() {
       />
 
       <Toolbar>
-        <div className="filter-field">
-          <span className="filter-label">Archived</span>
-          <label className="col-toggle">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived{archivedCount ? ` (${archivedCount})` : ''}
-          </label>
-        </div>
+        <Checkbox
+          label={`Show archived${archivedCount ? ` (${archivedCount})` : ''}`}
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        />
       </Toolbar>
 
       {visible.length === 0 ? (
-        <div className="card">
+        <Panel>
           <EmptyState
+            kind={icps.length === 0 ? 'empty' : 'no-match'}
             icon={Target}
             title={icps.length === 0 ? 'No ICPs yet' : 'No ICPs match this filter'}
             hint={
@@ -214,13 +214,13 @@ export function Icp() {
             }
             action={
               icps.length === 0 ? (
-                <button className="link-btn" onClick={() => setEditing('new')}>New ICP</button>
+                <Button variant="primary" onClick={() => setEditing('new')}>New ICP</Button>
               ) : undefined
             }
           />
-        </div>
+        </Panel>
       ) : (
-        <div className="search-grid">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-app-lg">
           {visible.map((icp) => (
             <IcpCard
               key={icp.id}
@@ -292,46 +292,28 @@ function IcpCard({
 }) {
   const context = [icp.main_product, icp.core_sphere].filter(Boolean)
   return (
-    <article
-      className={`card search-card clickable${icp.archived ? ' archived' : ''}`}
-      role="button"
-      tabIndex={0}
-      onClick={onView}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onView()
-        }
-      }}
-    >
-      <div className="search-card-head">
-        <div className="search-card-title">
-          <span className="search-card-name">{icp.name}</span>
-          {icp.archived && <span className="badge">Archived</span>}
-        </div>
-        <div className="search-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-only-btn" title="Edit" onClick={onEdit}>
-            <Pencil size={14} />
-          </button>
-          <button
-            className="icon-only-btn"
-            title={icp.archived ? 'Restore' : 'Archive'}
-            onClick={onArchive}
-          >
-            {icp.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-          </button>
-          <button className="icon-only-btn danger" title="Delete" onClick={onDelete}>
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </div>
-      {context.length > 0 && <p className="search-card-desc small">{context.join(' — ')}</p>}
-      <div className="muted small">
+    <LibraryCard
+      title={icp.name}
+      openLabel={`Open ICP ${icp.name}`}
+      onOpen={onView}
+      archived={icp.archived}
+      actions={<>
+        <IconButton label="Edit" icon={<Pencil size={20} aria-hidden="true" />} onClick={onEdit} />
+        <IconButton
+          label={icp.archived ? 'Restore' : 'Archive'}
+          icon={icp.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
+          onClick={onArchive}
+        />
+        <IconButton label="Delete" tone="danger" icon={<Trash2 size={20} aria-hidden="true" />} onClick={onDelete} />
+      </>}
+      footer={<>
         {personaCount} persona{personaCount === 1 ? '' : 's'} · {industryCount} industr
         {industryCount === 1 ? 'y' : 'ies'} · {hypothesisCount} hypothesis
         {hypothesisCount === 1 ? '' : 'es'}
-      </div>
-    </article>
+      </>}
+    >
+      {context.length > 0 && <p className="m-0 text-app-table text-app-text-secondary">{context.join(' — ')}</p>}
+    </LibraryCard>
   )
 }
 
@@ -350,16 +332,21 @@ function ViewField({
 }) {
   if (!value || !value.trim()) return null
   return (
-    <div className="filter-field icp-view-field">
-      <span className="filter-label">{label}</span>
-      <div className="icp-view-value">
+    <div className="flex flex-col gap-1 min-w-0">
+      <span className="text-app-meta font-medium text-app-text-muted">{label}</span>
+      <div className="flex items-start justify-between gap-2 min-w-0">
         {link ? (
-          <a href={value} target="_blank" rel="noreferrer" className="icp-view-link">
+          <a
+            href={value}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 min-w-0 [word-break:break-all] text-app-accent hover:underline"
+          >
             {value}
-            <ExternalLink size={12} />
+            <ExternalLink size={12} aria-hidden="true" className="shrink-0" />
           </a>
         ) : (
-          <span>{value}</span>
+          <span className="min-w-0 [word-break:break-word] whitespace-pre-wrap">{value}</span>
         )}
         <CopyButton text={value} title={`Copy ${label.toLowerCase()}`} />
       </div>
@@ -388,36 +375,33 @@ function ViewChips({
   const shown = collapsible && !expanded ? values.slice(0, COLLAPSED_CHIPS) : values
   const hidden = values.length - shown.length
   return (
-    <div className="filter-field icp-view-field">
-      <div className="icp-view-value">
-        <span className="filter-label">{label}</span>
-        {collapsible && <span className="muted small">{values.length}</span>}
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <div className="flex items-center gap-2">
+        <span className="text-app-meta font-medium text-app-text-muted">{label}</span>
+        {collapsible && <span className="text-app-meta text-app-text-muted">{values.length}</span>}
         <CopyButton text={values.join(', ')} title={`Copy ${label.toLowerCase()}`} />
       </div>
-      <div className="flex flex-wrap gap-[6px]">
+      <div className="flex flex-wrap gap-1.5">
         {shown.map((v) => (
-          <span className={`chip${variant ? ` ${variant}` : ''}`} key={v}>
-            {variant === 'exclude' ? '−' : ''}
-            {v}
-          </span>
+          <Chip tone={variant ?? 'include'} key={v}>{v}</Chip>
         ))}
         {collapsible && (
-          <button
-            type="button"
-            className="chip cursor-pointer gap-[3px] text-app-text-secondary font-medium hover:text-app-text hover:border-app-text-muted"
+          <Button
+            variant="ghost"
+            size="sm"
             aria-expanded={expanded}
             onClick={() => setExpanded((e) => !e)}
           >
             {expanded ? (
               <>
-                Show less <ChevronUp size={12} />
+                Show less <ChevronUp size={12} aria-hidden="true" />
               </>
             ) : (
               <>
-                +{hidden} more <ChevronDown size={12} />
+                +{hidden} more <ChevronDown size={12} aria-hidden="true" />
               </>
             )}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -493,130 +477,109 @@ function IcpViewer({
   const hasKeywords = icp.exclude_keywords.length
 
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div
-        className="pipe-modal search-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`ICP ${icp.name}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="pipe-modal-head">
-          <span className="icp-view-heading">
-            {icp.name}
-            {icp.archived && <span className="badge">Archived</span>}
-          </span>
-          <div className="icp-view-head-actions">
-            <button className="btn ghost sm" onClick={onEdit}>
-              <Pencil size={13} /> Edit
-            </button>
-            <CopyButton text={icpToText(icp, personas, industries)} title="Copy all fields" />
-            <button className="conv-close" onClick={onClose} aria-label="Close">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
+    <Dialog
+      size="xl"
+      title={<>
+        {icp.name}
+        {icp.archived && <Badge className="ml-2">Archived</Badge>}
+      </>}
+      description={<>
+        {personas.length} persona{personas.length === 1 ? '' : 's'} · {industries.length} industr
+        {industries.length === 1 ? 'y' : 'ies'} · {hypothesisCount} hypothesis
+        {hypothesisCount === 1 ? '' : 'es'}
+      </>}
+      onRequestClose={onClose}
+      footer={<>
+        <CopyButton text={icpToText(icp, personas, industries)} title="Copy all fields" />
+        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button variant="primary" icon={<Pencil size={16} aria-hidden="true" />} onClick={onEdit}>
+          Edit ICP
+        </Button>
+      </>}
+    >
+      <div className="flex flex-col gap-app-lg">
+        <ViewField label="Airtable URL" value={icp.airtable_url} link />
 
-        <div className="search-form">
-          <div className="muted small">
-            {personas.length} persona{personas.length === 1 ? '' : 's'} · {industries.length} industr
-            {industries.length === 1 ? 'y' : 'ies'} · {hypothesisCount} hypothesis
-            {hypothesisCount === 1 ? '' : 'es'}
-          </div>
+        {hasProduct ? (
+          <>
+            <SectionHeader title="Product context" level="subsection" />
+            <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+              <ViewField label="Main product" value={icp.main_product} />
+              <ViewField label="Product stage" value={icp.product_stage} />
+              <ViewField label="Core sphere" value={icp.core_sphere} />
+              <ViewField label="Secondary sphere" value={icp.secondary_sphere} />
+              <ViewField label="Monetization" value={icp.monetization} />
+              <ViewField label="Funding" value={icp.funding} />
+            </div>
+            <ViewField label="Features note" value={icp.features_note} />
+            <ViewChips label="Features" values={icp.features} />
+            <ViewChips label="Purchase triggers" values={icp.purchase_triggers} />
+          </>
+        ) : null}
 
-          <ViewField label="Airtable URL" value={icp.airtable_url} link />
+        {hasCompany ? (
+          <>
+            <SectionHeader title="Company criteria" level="subsection" />
+            <ViewChips label="Countries" values={icp.company_countries} />
+            <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+              <ViewField label="Headcount" value={icp.company_headcount} />
+              <ViewField label="Company age" value={icp.company_age} />
+              <ViewField label="Dev team availability" value={icp.dev_team_availability} />
+              <ViewField label="Dev team location" value={icp.dev_team_location} />
+            </div>
+            <ViewChips label="Apollo industries" values={icp.apollo_industries} />
+          </>
+        ) : null}
 
-          {hasProduct ? (
-            <>
-              <h3 className="search-group-head">Product context</h3>
-              <div className="search-form-grid">
-                <ViewField label="Main product" value={icp.main_product} />
-                <ViewField label="Product stage" value={icp.product_stage} />
-                <ViewField label="Core sphere" value={icp.core_sphere} />
-                <ViewField label="Secondary sphere" value={icp.secondary_sphere} />
-                <ViewField label="Monetization" value={icp.monetization} />
-                <ViewField label="Funding" value={icp.funding} />
-              </div>
-              <ViewField label="Features note" value={icp.features_note} />
-              <ViewChips label="Features" values={icp.features} />
-              <ViewChips label="Purchase triggers" values={icp.purchase_triggers} />
-            </>
-          ) : null}
+        {hasKeywords ? (
+          <>
+            <SectionHeader title="ICP-wide exclude keywords" level="subsection" />
+            <ViewChips label="Exclude keywords" values={icp.exclude_keywords} variant="exclude" />
+          </>
+        ) : null}
 
-          {hasCompany ? (
-            <>
-              <h3 className="search-group-head">Company criteria</h3>
-              <ViewChips label="Countries" values={icp.company_countries} />
-              <div className="search-form-grid">
-                <ViewField label="Headcount" value={icp.company_headcount} />
-                <ViewField label="Company age" value={icp.company_age} />
-                <ViewField label="Dev team availability" value={icp.dev_team_availability} />
-                <ViewField label="Dev team location" value={icp.dev_team_location} />
-              </div>
-              <ViewChips label="Apollo industries" values={icp.apollo_industries} />
-            </>
-          ) : null}
-
-          {hasKeywords ? (
-            <>
-              <h3 className="search-group-head">ICP-wide exclude keywords</h3>
-              <ViewChips label="Exclude keywords" values={icp.exclude_keywords} variant="exclude" />
-            </>
-          ) : null}
-
-          {personas.length > 0 && (
-            <>
-              <h3 className="search-group-head">Buyer personas</h3>
-              <div className="kv-editor">
-                {personas.map((p) => (
-                  <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={p.id}>
-                    <div className="flex items-center gap-app-sm">
-                      <span className="flex-1 min-w-0 font-semibold break-words">{p.kind}</span>
-                      <CopyButton
-                        text={`Persona — ${p.kind}`}
-                        title="Copy persona name"
-                      />
-                    </div>
-                    <ViewChips label="Job titles" values={p.job_titles} />
-                    <div className="search-form-grid">
-                      <ViewField label="Age range" value={p.age_range} />
-                      <ViewField label="Location" value={p.location} />
-                      <ViewField label="Connections" value={p.connections_note} />
-                      <ViewField label="Followers" value={p.followers_note} />
-                    </div>
-                    <ViewField label="Background" value={p.background} />
-                    <ViewField label="LinkedIn profile status" value={p.profile_status} />
+        {personas.length > 0 && (
+          <>
+            <SectionHeader title="Buyer personas" level="subsection" />
+            <div className="flex flex-col gap-app-sm">
+              {personas.map((p) => (
+                <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={p.id}>
+                  <div className="flex items-center gap-app-sm">
+                    <span className="flex-1 min-w-0 font-semibold break-words">{p.kind}</span>
+                    <CopyButton text={`Persona — ${p.kind}`} title="Copy persona name" />
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {industries.length > 0 && (
-            <>
-              <h3 className="search-group-head">Industries</h3>
-              <div className="kv-editor">
-                {industries.map((x) => (
-                  <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={x.id}>
-                    <div className="flex items-center gap-app-sm">
-                      <span className="flex-1 min-w-0 font-semibold break-words">{x.name}</span>
-                    </div>
-                    <ViewChips label="Include keywords" values={x.include_keywords} variant="include" />
+                  <ViewChips label="Job titles" values={p.job_titles} />
+                  <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+                    <ViewField label="Age range" value={p.age_range} />
+                    <ViewField label="Location" value={p.location} />
+                    <ViewField label="Connections" value={p.connections_note} />
+                    <ViewField label="Followers" value={p.followers_note} />
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+                  <ViewField label="Background" value={p.background} />
+                  <ViewField label="LinkedIn profile status" value={p.profile_status} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onClose}>Close</button>
-          <button className="btn accent sm" onClick={onEdit}>
-            <Pencil size={13} /> Edit ICP
-          </button>
-        </div>
+        {industries.length > 0 && (
+          <>
+            <SectionHeader title="Industries" level="subsection" />
+            <div className="flex flex-col gap-app-sm">
+              {industries.map((x) => (
+                <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={x.id}>
+                  <div className="flex items-center gap-app-sm">
+                    <span className="flex-1 min-w-0 font-semibold break-words">{x.name}</span>
+                  </div>
+                  <ViewChips label="Include keywords" values={x.include_keywords} variant="include" />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -645,6 +608,12 @@ function IcpEditor({
 }) {
   const toast = useToast()
   const [draft, setDraft] = useState<IcpDraft>(() => toDraft(icp, personas, industries))
+  // Captured once, from the same initial value `draft` was seeded with above —
+  // never recomputed, so a background refetch of `personas`/`industries` (new
+  // array identity, same content) can't make a clean draft read as dirty.
+  const initialRef = useRef(draft)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initialRef.current)
+  const { guard, prompt } = useDirtyGuard(dirty)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -759,210 +728,176 @@ function IcpEditor({
   }
 
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div
-        className="pipe-modal search-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={draft.id ? 'Edit ICP' : 'New ICP'}
-        onClick={(e) => e.stopPropagation()}
+    <>
+      {prompt}
+      <Dialog
+        size="xl"
+        title={draft.id ? 'Edit ICP' : 'New ICP'}
+        onRequestClose={() => guard(onClose)}
+        busy={saving}
+        footerNote={error ? undefined : dirty ? COPY.unsavedChanges : undefined}
+        footer={<>
+          <Button variant="secondary" onClick={() => guard(onClose)} disabled={saving}>{COPY.cancel}</Button>
+          <Button
+            variant="primary"
+            onClick={save}
+            loading={saving}
+            loadingLabel="Saving the ICP"
+            disabled={!draft.name.trim()}
+          >
+            {draft.id ? 'Save changes' : 'Create ICP'}
+          </Button>
+        </>}
       >
-        <div className="pipe-modal-head">
-          <span>{draft.id ? 'Edit ICP' : 'New ICP'}</span>
-          <button className="conv-close" onClick={onClose} aria-label="Close">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="search-form">
-          <div className="search-form-grid">
-            <label className="filter-field">
-              <span className="filter-label">Name</span>
-              <input
-                autoFocus
-                value={draft.name}
-                placeholder="e.g. Web 2 Mob"
-                onChange={(e) => set('name', e.target.value)}
-              />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Airtable URL</span>
-              <input
-                value={draft.airtable_url}
-                placeholder="https://airtable.com/…"
-                onChange={(e) => set('airtable_url', e.target.value)}
-              />
-            </label>
+        {error && <div className="mb-app-lg"><InlineError title="Could not save the ICP." message={error} /></div>}
+        <div className="flex flex-col gap-app-lg">
+          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <TextField
+              label="Name"
+              required
+              autoFocus
+              value={draft.name}
+              placeholder="e.g. Web 2 Mob"
+              onChange={(e) => set('name', e.target.value)}
+            />
+            <TextField
+              label="Airtable URL"
+              value={draft.airtable_url}
+              placeholder="https://airtable.com/…"
+              onChange={(e) => set('airtable_url', e.target.value)}
+            />
           </div>
 
-          <h3 className="search-group-head">Product context</h3>
-          <div className="search-form-grid">
-            <label className="filter-field">
-              <span className="filter-label">Main product</span>
-              <input value={draft.main_product} onChange={(e) => set('main_product', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Product stage</span>
-              <input value={draft.product_stage} onChange={(e) => set('product_stage', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Core sphere</span>
-              <input value={draft.core_sphere} onChange={(e) => set('core_sphere', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Secondary sphere</span>
-              <input value={draft.secondary_sphere} onChange={(e) => set('secondary_sphere', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Monetization</span>
-              <input value={draft.monetization} onChange={(e) => set('monetization', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Funding</span>
-              <input value={draft.funding} onChange={(e) => set('funding', e.target.value)} />
-            </label>
+          <SectionHeader title="Product context" level="subsection" />
+          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <TextField label="Main product" value={draft.main_product} onChange={(e) => set('main_product', e.target.value)} />
+            <TextField label="Product stage" value={draft.product_stage} onChange={(e) => set('product_stage', e.target.value)} />
+            <TextField label="Core sphere" value={draft.core_sphere} onChange={(e) => set('core_sphere', e.target.value)} />
+            <TextField
+              label="Secondary sphere"
+              value={draft.secondary_sphere}
+              onChange={(e) => set('secondary_sphere', e.target.value)}
+            />
+            <TextField label="Monetization" value={draft.monetization} onChange={(e) => set('monetization', e.target.value)} />
+            <TextField label="Funding" value={draft.funding} onChange={(e) => set('funding', e.target.value)} />
           </div>
-          <label className="filter-field">
-            <span className="filter-label">Features note</span>
-            <textarea rows={2} value={draft.features_note} onChange={(e) => set('features_note', e.target.value)} />
-          </label>
-          <label className="filter-field">
-            <span className="filter-label">Features</span>
-            <ChipInput values={draft.features} onChange={(v) => set('features', v)} placeholder="Type a feature, press Enter" />
-          </label>
-          <label className="filter-field">
-            <span className="filter-label">Purchase triggers</span>
-            <ChipInput
-              values={draft.purchase_triggers}
-              onChange={(v) => set('purchase_triggers', v)}
-              placeholder="Why they buy — type one, press Enter"
-            />
-          </label>
+          <TextareaField
+            label="Features note"
+            rows={2}
+            value={draft.features_note}
+            onChange={(e) => set('features_note', e.target.value)}
+          />
+          <ChipInput
+            label="Features"
+            values={draft.features}
+            onChange={(v) => set('features', v)}
+            placeholder="Type a feature, press Enter"
+          />
+          <ChipInput
+            label="Purchase triggers"
+            values={draft.purchase_triggers}
+            onChange={(v) => set('purchase_triggers', v)}
+            placeholder="Why they buy — type one, press Enter"
+          />
 
-          <h3 className="search-group-head">Company criteria</h3>
-          <label className="filter-field">
-            <span className="filter-label">Countries</span>
-            <ChipInput
-              values={draft.company_countries}
-              onChange={(v) => set('company_countries', v)}
-              placeholder="Type a country, press Enter"
+          <SectionHeader title="Company criteria" level="subsection" />
+          <ChipInput
+            label="Countries"
+            values={draft.company_countries}
+            onChange={(v) => set('company_countries', v)}
+            placeholder="Type a country, press Enter"
+          />
+          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <TextField
+              label="Headcount"
+              value={draft.company_headcount}
+              onChange={(e) => set('company_headcount', e.target.value)}
             />
-          </label>
-          <div className="search-form-grid">
-            <label className="filter-field">
-              <span className="filter-label">Headcount</span>
-              <input value={draft.company_headcount} onChange={(e) => set('company_headcount', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Company age</span>
-              <input value={draft.company_age} onChange={(e) => set('company_age', e.target.value)} />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Dev team availability</span>
-              <input
-                value={draft.dev_team_availability}
-                onChange={(e) => set('dev_team_availability', e.target.value)}
-              />
-            </label>
-            <label className="filter-field">
-              <span className="filter-label">Dev team location</span>
-              <input
-                value={draft.dev_team_location}
-                onChange={(e) => set('dev_team_location', e.target.value)}
-              />
-            </label>
+            <TextField label="Company age" value={draft.company_age} onChange={(e) => set('company_age', e.target.value)} />
+            <TextField
+              label="Dev team availability"
+              value={draft.dev_team_availability}
+              onChange={(e) => set('dev_team_availability', e.target.value)}
+            />
+            <TextField
+              label="Dev team location"
+              value={draft.dev_team_location}
+              onChange={(e) => set('dev_team_location', e.target.value)}
+            />
           </div>
-          <label className="filter-field">
-            <span className="filter-label">Apollo industries</span>
-            <ChipInput
-              values={draft.apollo_industries}
-              onChange={(v) => set('apollo_industries', v)}
-              placeholder="Type an industry, press Enter"
-            />
-          </label>
+          <ChipInput
+            label="Apollo industries"
+            values={draft.apollo_industries}
+            onChange={(v) => set('apollo_industries', v)}
+            placeholder="Type an industry, press Enter"
+          />
 
-          <h3 className="search-group-head">ICP-wide exclude keywords</h3>
-          <div className="muted small">
-            One exclude list for the whole ICP. Include keywords are set per sub-industry below.
-          </div>
-          <label className="filter-field">
-            <span className="filter-label">Exclude keywords</span>
-            <ChipInput
-              values={draft.exclude_keywords}
-              variant="exclude"
-              onChange={(v) => set('exclude_keywords', v)}
-              placeholder="Type a keyword, press Enter"
-            />
-          </label>
+          <SectionHeader
+            title="ICP-wide exclude keywords"
+            level="subsection"
+            description="One exclude list for the whole ICP. Include keywords are set per sub-industry below."
+          />
+          <ChipInput
+            label="Exclude keywords"
+            values={draft.exclude_keywords}
+            variant="exclude"
+            onChange={(v) => set('exclude_keywords', v)}
+            placeholder="Type a keyword, press Enter"
+          />
 
-          <h3 className="search-group-head">Buyer personas</h3>
-          <div className="kv-editor">
-            {draft.personas.map((p) => (
-              <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={p._key}>
+          <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-sm">
+            <legend className="mb-app-xs text-app-table font-semibold">Buyer personas</legend>
+            {draft.personas.map((p, i) => (
+              <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={p._key}>
                 <div className="flex items-center gap-app-sm">
-                  <input
-                    className="flex-1 min-w-0 font-semibold break-words"
+                  <TextField
+                    className="flex-1 min-w-0"
+                    label={`Persona ${i + 1} name`}
+                    labelHidden
                     value={p.kind}
                     placeholder="Persona name (e.g. management)"
                     onChange={(e) => setPersona(p._key, { kind: e.target.value })}
                   />
-                  <button
-                    type="button"
-                    className="icon-only-btn danger"
-                    aria-label="Remove persona"
+                  <IconButton
+                    label="Remove persona"
+                    tone="danger"
+                    icon={<X size={20} aria-hidden="true" />}
                     onClick={() => set('personas', draft.personas.filter((x) => x._key !== p._key))}
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-                <label className="filter-field">
-                  <span className="filter-label">Job titles</span>
-                  <ChipInput
-                    values={p.job_titles}
-                    onChange={(v) => setPersona(p._key, { job_titles: v })}
-                    placeholder="Type a title, press Enter"
                   />
-                </label>
-                <div className="search-form-grid">
-                  <label className="filter-field">
-                    <span className="filter-label">Age range</span>
-                    <input value={p.age_range} onChange={(e) => setPersona(p._key, { age_range: e.target.value })} />
-                  </label>
-                  <label className="filter-field">
-                    <span className="filter-label">Location</span>
-                    <input value={p.location} onChange={(e) => setPersona(p._key, { location: e.target.value })} />
-                  </label>
-                  <label className="filter-field">
-                    <span className="filter-label">Connections</span>
-                    <input
-                      value={p.connections_note}
-                      onChange={(e) => setPersona(p._key, { connections_note: e.target.value })}
-                    />
-                  </label>
-                  <label className="filter-field">
-                    <span className="filter-label">Followers</span>
-                    <input
-                      value={p.followers_note}
-                      onChange={(e) => setPersona(p._key, { followers_note: e.target.value })}
-                    />
-                  </label>
                 </div>
-                <label className="filter-field">
-                  <span className="filter-label">Background</span>
-                  <input value={p.background} onChange={(e) => setPersona(p._key, { background: e.target.value })} />
-                </label>
-                <label className="filter-field">
-                  <span className="filter-label">LinkedIn profile status</span>
-                  <input
-                    value={p.profile_status}
-                    onChange={(e) => setPersona(p._key, { profile_status: e.target.value })}
+                <ChipInput
+                  label="Job titles"
+                  values={p.job_titles}
+                  onChange={(v) => setPersona(p._key, { job_titles: v })}
+                  placeholder="Type a title, press Enter"
+                />
+                <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+                  <TextField label="Age range" value={p.age_range} onChange={(e) => setPersona(p._key, { age_range: e.target.value })} />
+                  <TextField label="Location" value={p.location} onChange={(e) => setPersona(p._key, { location: e.target.value })} />
+                  <TextField
+                    label="Connections"
+                    value={p.connections_note}
+                    onChange={(e) => setPersona(p._key, { connections_note: e.target.value })}
                   />
-                </label>
+                  <TextField
+                    label="Followers"
+                    value={p.followers_note}
+                    onChange={(e) => setPersona(p._key, { followers_note: e.target.value })}
+                  />
+                </div>
+                <TextField label="Background" value={p.background} onChange={(e) => setPersona(p._key, { background: e.target.value })} />
+                <TextField
+                  label="LinkedIn profile status"
+                  value={p.profile_status}
+                  onChange={(e) => setPersona(p._key, { profile_status: e.target.value })}
+                />
               </div>
             ))}
-            <button
-              type="button"
-              className="link-btn"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              icon={<Plus size={16} aria-hidden="true" />}
               onClick={() =>
                 set('personas', [
                   ...draft.personas,
@@ -973,47 +908,47 @@ function IcpEditor({
                 ])
               }
             >
-              <Plus size={13} /> Add persona
-            </button>
-          </div>
+              Add persona
+            </Button>
+          </fieldset>
 
-          <h3 className="search-group-head">Industries</h3>
-          <div className="muted small">
-            Set include keywords per sub-industry — start empty. The ICP-wide exclude list above applies to all.
-          </div>
-          <div className="kv-editor">
-            {draft.industries.map((x) => (
-              <div className="card flex flex-col gap-app-sm p-2.5 bg-app-surface-2" key={x._key}>
+          <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-sm">
+            <legend className="mb-app-xs text-app-table font-semibold">Industries</legend>
+            <p className="m-0 text-app-meta text-app-text-muted">
+              Set include keywords per sub-industry — start empty. The ICP-wide exclude list above applies to all.
+            </p>
+            {draft.industries.map((x, i) => (
+              <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={x._key}>
                 <div className="flex items-center gap-app-sm">
-                  <input
-                    className="flex-1 min-w-0 font-semibold break-words"
+                  <TextField
+                    className="flex-1 min-w-0"
+                    label={`Industry ${i + 1} name`}
+                    labelHidden
                     value={x.name}
                     placeholder="Industry name"
                     onChange={(e) => setIndustry(x._key, { name: e.target.value })}
                   />
-                  <button
-                    type="button"
-                    className="icon-only-btn danger"
-                    aria-label="Remove industry"
+                  <IconButton
+                    label="Remove industry"
+                    tone="danger"
+                    icon={<X size={20} aria-hidden="true" />}
                     onClick={() => set('industries', draft.industries.filter((y) => y._key !== x._key))}
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-                <label className="filter-field">
-                  <span className="filter-label">Include keywords</span>
-                  <ChipInput
-                    values={x.include_keywords}
-                    variant="include"
-                    onChange={(v) => setIndustry(x._key, { include_keywords: v })}
-                    placeholder="Type a keyword, press Enter"
                   />
-                </label>
+                </div>
+                <ChipInput
+                  label="Include keywords"
+                  values={x.include_keywords}
+                  variant="include"
+                  onChange={(v) => setIndustry(x._key, { include_keywords: v })}
+                  placeholder="Type a keyword, press Enter"
+                />
               </div>
             ))}
-            <button
-              type="button"
-              className="link-btn"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              icon={<Plus size={16} aria-hidden="true" />}
               onClick={() =>
                 set('industries', [
                   ...draft.industries,
@@ -1021,20 +956,11 @@ function IcpEditor({
                 ])
               }
             >
-              <Plus size={13} /> Add industry
-            </button>
-          </div>
+              Add industry
+            </Button>
+          </fieldset>
         </div>
-
-        {error && <div className="banner conv-error">{error}</div>}
-
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onClose}>Cancel</button>
-          <button className="btn accent sm" onClick={save} disabled={saving || !draft.name.trim()}>
-            {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create ICP'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </Dialog>
+    </>
   )
 }

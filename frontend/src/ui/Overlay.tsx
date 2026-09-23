@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef } from 'react'
+import { useCallback, useEffect, useId, useRef } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
@@ -62,12 +62,35 @@ export function Dialog({
     [initialFocusRef],
   )
   const finalFocus = useCallback(() => finalFocusRef?.current ?? true, [finalFocusRef])
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  // When one dialog hands over to another (viewer → editor), the closing one
+  // restores focus to its trigger in the page after the next one has already
+  // taken it. While this is the topmost dialog, focus that lands in the page
+  // behind it is brought back. Portalled popovers render outside #root and are
+  // left alone.
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const popup = popupRef.current
+      const target = event.target as Node | null
+      if (!popup || !target || popup.contains(target)) return
+      if (!document.getElementById('root')?.contains(target)) return
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      if (dialogs[dialogs.length - 1] !== popup) return
+      const next = bodyRef.current?.querySelector<HTMLElement>(BODY_FOCUS_TARGETS)
+        ?? popup.querySelector<HTMLElement>(BODY_FOCUS_TARGETS)
+      next?.focus()
+    }
+    document.addEventListener('focusin', onFocusIn)
+    return () => document.removeEventListener('focusin', onFocusIn)
+  }, [])
 
   return (
     <BaseDialog.Root open onOpenChange={handleOpenChange} modal>
       <BaseDialog.Portal>
         <div className={placement === 'end' ? 'ui-scrim ui-scrim--end' : 'ui-scrim ui-scrim--center'}>
           <BaseDialog.Popup
+            ref={popupRef}
             initialFocus={initialFocus}
             finalFocus={finalFocus}
             aria-busy={busy || undefined}
