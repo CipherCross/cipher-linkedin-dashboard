@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Filter, Inbox, RefreshCw, Search, X } from 'lucide-react'
+import { AlertCircle, Filter, Inbox, RefreshCw, X } from 'lucide-react'
 import { Link, UNSAFE_DataRouterContext, useBlocker, useLocation } from 'react-router-dom'
 import { InitialsAvatar } from '../components/Avatar'
 import { useData } from '../lib/DataContext'
@@ -12,7 +12,7 @@ import { WORKFLOW_LABELS } from '../components/reply-analysis/WorkflowBuckets'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { useRepliesInbox } from '../lib/useRepliesInbox'
 import { ACTION_LABELS, isReplyManualReady, REASON_LABELS, SENTIMENT_LABELS, nextUnreviewedReply, REPLY_SEARCH_DEBOUNCE_MS, type ReplyCapabilities, type ReplyInboxScope, type ReplyReadClient, type ReplyReviewDraft, type ReplyThreadMessage, type ReplyWorkflowMutation } from '../lib/replyReview'
-import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, IconButton, LinkButton, PageHeader, SelectField, Tabs, EmptyState } from '../ui'
+import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, FilterDialog, IconButton, LinkButton, PageHeader, SelectField, Tabs, TextField, EmptyState } from '../ui'
 import { COPY } from '../ui/labels'
 import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
 
@@ -375,16 +375,12 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
 
     {/* Filters open OVER the page. Nothing below them moves, so the workspace
         keeps its full height whether they are open or closed. */}
-    {filterDraft && <Dialog
-      title={COPY.filters}
+    {filterDraft && <FilterDialog
       description="Applies to the conversation list when you apply them. The account selector stays on the page."
-      onRequestClose={() => setFilterDraft(null)}
-      footerNote={draftFilterCount ? `${draftFilterCount} filter${draftFilterCount === 1 ? '' : 's'} selected` : 'No filters selected'}
-      footer={<>
-        <Button variant="ghost" onClick={() => setFilterDraft(EMPTY_FILTER_DRAFT)}>{COPY.clearAll}</Button>
-        <Button variant="secondary" onClick={() => setFilterDraft(null)}>{COPY.cancel}</Button>
-        <Button variant="primary" onClick={applyFilters}>{COPY.apply}</Button>
-      </>}
+      selectedCount={draftFilterCount}
+      onClearAll={() => setFilterDraft(EMPTY_FILTER_DRAFT)}
+      onCancel={() => setFilterDraft(null)}
+      onApply={applyFilters}
     >
       <div className="grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
         <SelectField label="Arrived" value={filterDraft.scope} onChange={(event) => patchDraft({ scope: event.target.value as ReplyInboxScope['scope'] })}>
@@ -424,7 +420,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
           <Checkbox key={key} label={label} checked={filterDraft[key]} onChange={(event) => patchDraft({ [key]: event.target.checked })} />
         ))}
       </div>
-    </Dialog>}
+    </FilterDialog>}
 
     {scopeLabel && <div className="replies-drill-banner" role="status">
       <span>From analytics · {inbox.scope.from ?? 'start'} — {inbox.scope.to ?? 'today'} · {scopeLabel}</span>
@@ -442,27 +438,44 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         <div className="replies-pane-title">
           <div>
             <h2>{inbox.scope.view === 'unreviewed' ? 'Review queue' : 'Conversations'}</h2>
-            <span className="muted small">{inbox.nextCursor ? `${inbox.items.length} loaded · more available` : `${inbox.items.length} conversation${inbox.items.length === 1 ? '' : 's'}`}</span>
+            <span className="block mt-0.5 text-app-text-muted text-app-meta">{inbox.nextCursor ? `${inbox.items.length} loaded · more available` : `${inbox.items.length} conversation${inbox.items.length === 1 ? '' : 's'}`}</span>
           </div>
         </div>
-        <label className="replies-search">
-          <Search size={18} aria-hidden="true" />
-          <input type="search" value={search} maxLength={200} placeholder="Search conversations" aria-label="Search conversations" onChange={(event) => setSearch(event.target.value)} />
+        <div className="flex items-center gap-app-sm px-app-lg py-app-sm border-b border-app-border flex-[0_0_auto]">
+          <TextField
+            className="flex-1 min-w-0"
+            label="Search conversations"
+            labelHidden
+            type="search"
+            maxLength={200}
+            placeholder="Search conversations"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
           <IconButton label="Clear the search" icon={<X size={18} aria-hidden="true" />} onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }} />
-        </label>
+        </div>
         {inbox.loading && !inbox.items.length ? <div className="replies-loading" role="status" aria-busy="true">Loading replies…</div>
           : inbox.error && !hasData ? <div className="replies-error" role="alert"><AlertCircle size={20} aria-hidden="true" />{inbox.error}<Button variant="secondary" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button></div>
             : !inbox.items.length ? <EmptyState icon={Inbox} title={scopeLabel ? 'No conversations match this report period' : 'Nothing to review'} hint={scopeLabel ? 'Check the period and the conditions of the report.' : 'Try another queue or a wider arrival period.'} />
               : <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain]">{inbox.items.map((item) => {
                 const selected = inbox.scope.thread?.instance_id === item.instance_id && inbox.scope.thread.profile_url === item.profile_url
                 const name = item.name || UNKNOWN_PERSON_LABEL
-                return <button type="button" key={item.instance_id + '|' + item.profile_url} className={'replies-list-item' + (selected ? ' selected' : '')} onClick={() => guardedSelect(item)}>
-                  <span className="replies-list-identity"><InitialsAvatar name={name} size={36} /><span className="flex-1 min-w-0"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="muted small ellipsis">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
+                /* ui-exception(replies-queue-item): a conversation row is rich,
+                   multi-line content (avatar, name, timestamp, snippet, account,
+                   owner and pending badge) that Button's fixed-height contract
+                   cannot render; it stays a real, keyboard-operable <button> so
+                   Tab/Enter/Space still select it. verify: Tab through the
+                   queue, Enter selects a row, and the selected row carries
+                   aria-current="true". */
+                return <button type="button" key={item.instance_id + '|' + item.profile_url} className="replies-list-item" aria-current={selected ? 'true' : undefined} onClick={() => guardedSelect(item)}>
+                  <span className="replies-list-identity"><InitialsAvatar name={name} size={36} /><span className="flex-1 min-w-0"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="block truncate text-app-text-muted text-app-meta">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
                   <span className="[display:-webkit-box] my-app-sm mx-0 text-app-text-muted text-app-meta overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
                   <span className="replies-list-item-bottom"><span>{accountLabel(item.instance_id)}</span><span>{item.owner_id ? ownerLabel(item.owner_id) : null}{item.action ? ' · ' + ACTION_LABELS[item.action] : ''}</span>{item.pending_count > 0 && <b>{item.pending_count}</b>}</span>
                 </button>
               })}</div>}
-        {inbox.nextCursor && <button className="flex-[0_0_auto] min-h-control border-0 border-t border-app-border bg-transparent font-[inherit] text-app-table font-semibold cursor-pointer text-app-accent" type="button" onClick={inbox.loadMore} disabled={inbox.loadingMore}>{inbox.loadingMore ? COPY.loading : 'Load more'}</button>}
+        {inbox.nextCursor && <div className="flex-[0_0_auto] border-t border-app-border p-app-sm">
+          <Button variant="ghost" size="sm" block onClick={inbox.loadMore} loading={inbox.loadingMore} loadingLabel="Loading more conversations">Load more</Button>
+        </div>}
       </aside>
 
       <main className="replies-thread-pane">
@@ -470,7 +483,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
           <div className="replies-thread-head">
             <div>
               <h2>{currentName}</h2>
-              <p className="muted small">{selectedItem?.company || selectedItem?.headline || profileName(inbox.scope.thread?.profile_url ?? '')} · {accountLabel(inbox.scope.thread?.instance_id ?? '')}</p>
+              <p className="text-app-text-muted text-app-meta">{selectedItem?.company || selectedItem?.headline || profileName(inbox.scope.thread?.profile_url ?? '')} · {accountLabel(inbox.scope.thread?.instance_id ?? '')}</p>
             </div>
             <div className="flex items-center gap-app-sm flex-[0_0_auto] flex-wrap justify-end">
               {newInboundAvailable && <Button variant="secondary" size="sm" onClick={() => { if (inbox.thread?.newer_cursor) inbox.loadNewer(); else if (latestInbound) confirmNavigation(() => { updateScope({ thread: { instance_id: latestInbound.instance_id, profile_url: latestInbound.profile_url, focus_message_id: latestInbound.id } }); setNewInboundAvailable(false) }) }}>New reply · show it</Button>}
@@ -487,7 +500,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         </> : <div className="replies-select-empty">
           <Inbox size={32} aria-hidden="true" />
           <h2>Select a conversation</h2>
-          <p className="muted">The thread and its next step open here.</p>
+          <p className="text-app-text-muted">The thread and its next step open here.</p>
         </div>}
       </main>
 
@@ -517,7 +530,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     </div> : inbox.capabilities ? <div className="replies-inactive-empty" role="status">
       <Inbox size={32} aria-hidden="true" />
       <h2>Replies is not available yet</h2>
-      <p className="muted">{capabilityMessage(inbox.capabilities)}</p>
+      <p className="text-app-text-muted">{capabilityMessage(inbox.capabilities)}</p>
     </div> : <div className="replies-loading" role="status" aria-busy="true">Opening replies…</div>}
   </div>
 }

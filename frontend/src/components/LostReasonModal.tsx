@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { Button, Dialog, TextareaField } from '../ui'
 
-/** Small centred modal that captures the required free-text reason before a lead
- *  is moved to "Lost". Shared by the board, the leads table, and the drawer so
- *  the flow is identical everywhere. Enter submits, Esc / backdrop cancels. */
+/** Small centred dialog that captures the required free-text reason before a
+ *  lead is moved to "Lost". Shared by the board, the leads table, and the
+ *  conversation drawer so the flow is identical everywhere. Cmd/Ctrl+Enter
+ *  submits; Escape, the backdrop and Close cancel. */
 export function LostReasonModal({
   leadName,
   onConfirm,
@@ -15,59 +16,36 @@ export function LostReasonModal({
 }) {
   const [reason, setReason] = useState('')
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
   const submit = () => {
     const t = reason.trim()
     if (t) onConfirm(t)
   }
 
   return (
-    <div className="pipe-modal-overlay" onClick={onCancel}>
-      <div
-        className="pipe-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Reason for marking lost"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="pipe-modal-head">
-          <span>Mark as lost{leadName ? ` — ${leadName}` : ''}</span>
-          <button className="conv-close" onClick={onCancel} aria-label="Cancel">
-            <X size={16} />
-          </button>
-        </div>
-        <label className="filter-field">
-          <span className="filter-label">Reason (required)</span>
-          <textarea
-            autoFocus
-            rows={3}
-            value={reason}
-            placeholder="Why was this lead lost?"
-            onChange={(e) => setReason(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault()
-                submit()
-              }
-            }}
-          />
-        </label>
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onCancel}>
-            Cancel
-          </button>
-          <button className="btn accent sm" onClick={submit} disabled={!reason.trim()}>
-            Mark lost
-          </button>
-        </div>
-      </div>
-    </div>
+    <Dialog
+      size="sm"
+      title={`Mark as lost${leadName ? ` — ${leadName}` : ''}`}
+      closeLabel="Cancel"
+      onRequestClose={onCancel}
+      footer={<>
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" onClick={submit} disabled={!reason.trim()}>Mark lost</Button>
+      </>}
+    >
+      <TextareaField
+        label="Reason"
+        required
+        rows={3}
+        value={reason}
+        placeholder="Why was this lead lost?"
+        onChange={(e) => setReason(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault()
+            submit()
+          }
+        }}
+      />
+    </Dialog>
   )
 }

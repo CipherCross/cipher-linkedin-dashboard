@@ -181,6 +181,52 @@ function latestMessageRows(scenario) {
   }]
 }
 
+/* The drawer's thread for the fixture lead: our first message, their reply,
+ * and one imported message so the edit/delete controls render. */
+function threadRows(scenario) {
+  if (isEmpty(scenario)) return []
+  const base = { sentiment: null, reason: null, classified_model: null, intent_level: null, intent_reason: null, intent_classified_model: null }
+  return [
+    { ...base, id: 11, direction: 'out', body: 'Hi Alex — saw Fixture Labs is hiring for payouts. Worth a quick chat?', sent_at: '2026-09-20T11:00:00.000Z', source: 'fixture' },
+    { ...base, id: 1, direction: 'in', body: 'Thanks for reaching out — happy to chat.', sent_at: '2026-09-21T12:00:00.000Z', source: 'fixture', sentiment: 'positive', intent_level: 'p2' },
+    { ...base, id: 12, direction: 'out', body: 'Great — does Tuesday 10:00 work?', sent_at: '2026-09-21T12:30:00.000Z', source: 'manual' },
+  ]
+}
+
+/* Manual review is switched on for the fixture tenant, with one conversation
+ * in the queue: the fixture lead's positive reply, not yet reviewed. Saving a
+ * review is a write and is refused by the pipeline endpoint like every other. */
+function replyCapabilities(role) {
+  return {
+    available: true, active: true, manual_ready: true, mode: 'manual',
+    members: [{ id: role === 'admin' ? 1 : 2, name: role === 'admin' ? 'Fixture Admin' : 'Fixture Member', active: true }],
+    instances: [{ id: instance.id, label: instance.label }],
+    campaigns: [{ id: campaign.campaign_id, name: campaign.campaign_name, instance_id: instance.id }],
+  }
+}
+
+function replyInboxRows(scenario, search) {
+  if (isEmpty(scenario)) return []
+  const query = (search.get('query') ?? '').toLowerCase()
+  if (query && !'alex fixture'.includes(query)) return []
+  return [{
+    instance_id: instance.id, profile_url: 'https://example.test/fixture-lead',
+    name: 'Alex Fixture', company: 'Fixture Labs', headline: 'Product leader', campaign_id: campaign.campaign_id,
+    latest_snippet: 'Thanks for reaching out — happy to chat.', latest_direction: 'in',
+    latest_sent_at: '2026-09-21T12:00:00.000Z', selected_message_id: 1, pending_count: 1,
+    owner_id: null, action: null, next_follow_up_date: null, do_not_contact: false,
+    review_revision: 0, workflow_revision: 0, revision: 0, inbound_revision: 1, acknowledged_inbound_revision: 0,
+  }]
+}
+
+function replyThreadRows(scenario) {
+  return threadRows(scenario).map((message) => ({
+    id: message.id, instance_id: instance.id, profile_url: 'https://example.test/fixture-lead',
+    campaign_id: campaign.campaign_id, direction: message.direction, body: message.body,
+    sent_at: message.sent_at, source: message.source, review: null,
+  }))
+}
+
 function savedSearchRows(scenario) {
   if (isEmpty(scenario)) return []
   const row = (id, name, platform, extra = {}) => ({
@@ -400,6 +446,14 @@ export async function activityFixture(request) {
     }]))
   }
   if (op === 'identity.teamRoster') return json(page([member(role)]))
+  if (op === 'messages.thread') return json(page(threadRows(scenario)))
+  if (op === 'replies.capabilities') return json(replyCapabilities(role))
+  if (op === 'replies.inbox') return json({ items: replyInboxRows(scenario, url.searchParams), next_cursor: null })
+  if (op === 'replies.facets') return json({ facets: {} })
+  if (op === 'replies.thread') {
+    return json({ messages: replyThreadRows(scenario), older_cursor: null, newer_cursor: null, inbound_revision: 1, workflow: null, next_focus_message_id: null })
+  }
+  if (op === 'replies.reviewHistory') return json({ items: [], next_cursor: null })
   return json({ error: 'Local fixture operation is unsupported', operation: op }, 501)
 }
 

@@ -278,3 +278,70 @@ Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720
 **Open, Phase 7:** the conversation drawer never returns focus to its trigger on close; it has no focus-return code, before or after this phase. Moving it onto the shared Dialog in Phase 7 fixes that. The intermittent drawer freeze recorded in Phase 5 did not reproduce in any of this phase's runs, but it is still Phase 7's entry check.
 
 Next: Phase 7 — Replies and the conversation modal (Replies, ConversationDrawer and its child panels, LostReasonModal on the shared Dialog).
+
+## Phase 7 — accepted (2026-09-23)
+
+Replies and the conversation modal. The orchestrator did `ConversationDrawer`, `ConversationContext`, `LostReasonModal`, `LeadNotesPanel` and the new `ConversationSection`. A Sonnet worker did Replies and the three `conversation/*` panels; the orchestrator reviewed and corrected its output.
+
+- **Entry blocker: the drawer freeze.**
+  - Not reproducible. The Phase 5 script that hit it was re-run verbatim: `headless: true`, `127.0.0.1`, element-handle click on the second cell.
+  - It was run on both this tree and a worktree of `a2dfc75`, with three other loops alongside it (programmatic clicks, real mouse input with moves, wheel and backdrop close, and open/idle-ping/close). No run hung in 60+ open/close cycles, before or after the conversion.
+  - The first sightings happened while parallel workers were running full test suites, so the likeliest cause is a starved machine rather than the page. That is unproven.
+  - Opening the drawer never touches the URL, so the uncommitted DataContext fix was not a factor. This phase's own browser pass ends with 26 more open/close cycles with no hang.
+- **ConversationDrawer on the shared Dialog.** The hand-built `aria-modal` aside is gone, along with its document Escape listener, its Tab trap, its `body.style.overflow` lock and its 160ms close-animation timer. It is now `Dialog placement="end"` (560px). A new `bodyClassName` prop lets the drawer lay out its own scroll regions, and the popup keeps the slide-in.
+  - **Header:** the title is avatar plus name (avatar `aria-hidden`; the accessible name is "Alex Fixture"), and the description is headline · company. The body starts with a meta row: campaign link, account, sentiment and intent chips. Below it an action row holds LinkedIn (`ExternalLinkButton`), Open in Replies (`LinkButton`), Import history (`Button`) and the follow-up toggle (`Button`, `aria-pressed`). Lead details stay a native `<details>`, with `SelectField`s for Stage, Substatus, Owner and Gender; the Reviewed/AI marks are `Badge`s.
+  - **Thread:** a named, focusable "Messages" region, where focus starts. Bubbles are utilities; the `.msg`/`.sk-bubble` variants are gone. Edit, save, cancel and delete are `IconButton`s (32px, loading states built in). The edit box is the canonical `Textarea`; its Escape now stops propagation, so it cancels the edit rather than closing the conversation. Delete keeps its native confirmation. A failed thread read is an `InlineError` with Retry instead of a `.banner`.
+  - **Focus:** closing returns focus to the exact trigger — verified for the Leads row button and "Open follow-up". The provider now keys the drawer per open, so it starts in the requested view on its first frame. Before, the thread rendered for one frame, took focus, and then vanished.
+  - **Import and follow-up views:** these render inside a focusable region, "Import history" or "Follow-up". It is the initial focus in those modes, and it is where focus lands if a view switch removes the focused control. Closing a view returns focus to Messages. Finishing an edit returns focus to that message's Edit button. `.ui-dialog:focus-visible` has no ring, because the popup only takes focus as a fallback.
+  - **Reachability fix (pre-existing):** the manual review form is taller than the drawer at 720px and used to push the AI coach and Notes below the drawer's bottom edge. It is now capped at 45% and scrolls on its own; the thread keeps a 120px floor; an open section is capped at 40%. At 1280×720 both section toggles stay inside the drawer, with a section closed or open.
+  - **LostReasonModal:** now a small shared `Dialog` rendered inside the drawer, with a required "Reason" field and Cmd/Ctrl+Enter still submitting. Escape closes only the nested dialog and returns focus to Stage. Its own document Escape listener is gone.
+  - **AI coach and Notes:** each is a `ConversationSection` — a disclosure `Button` with `aria-expanded`/`aria-controls`, badges and actions beside it — in place of the `.conv-coaching*` markup. Notes uses a labelled `TextareaField`, `IconButton` delete and an `InlineError`.
+  - **Sentiment chips:** sentiment, intent, next-action and severity chips keep the domain `badge senti` classes on purpose. Referral is purple, which no `Badge` tone has, and the same chips appear on every reply surface. Converting them is a Phase 12 design decision, not a refactor.
+- **Replies (worker)**
+  - The filter sheet is `FilterDialog`; the draft, Apply and Clear-all handlers are unchanged. Search is a labelled `TextField type="search"`. Load more is a `Button`.
+  - The queue row and the thread's message bubble stay real `<button>`s with rich content (`ui-exception(replies-queue-item)`, `ui-exception(replies-message-bubble)`, both allowlisted). They mark selection with `aria-current` and `aria-pressed` instead of a `.selected` class.
+  - The review panel uses `RadioGroup` for sentiment, `Checkbox` with a visible help line for reasons, `SelectField` for buying interest, `TextareaField` for the comment, and `Button`s.
+  - The action panel uses `SelectField`, `TextField`, `Checkbox` and `Button`.
+  - `replies-inbox.css` lost 67 dead lines; the pane grid and container queries are untouched.
+  - The row-style `RadioGroup` wrapped with a 16px row gap on top of each 44px option. The orchestrator made `.ui-radio-group--row` gap column-only, which also tightens Import history's direction choice.
+- **CSS**
+  - `conversation-drawer.css` and its import are deleted.
+  - Removed from `ui.css`, all with zero consumers: `.filter-field`/`.filter-label` (their last users were the drawer and LostReasonModal), `.conv-coaching*`, `.conv-error`, `.conv-account`, `.msg*`, `.sk-bubble*`, the `conv-fade-in`/`conv-fade-out`/`conv-slide-out` keyframes (`conv-slide-in` stays, used by the drawer), and `.conv-drawer` from the print rule. Three orphaned comments went with them.
+  - `.conv-close`, `.pipe-modal*`, `.li-link` and `.link-btn` remain for the Sequence builder, AccountCard and the analytics routes.
+- **Fixture** — `messages.thread` answers with an outbound, an inbound and an imported message. The `replies.capabilities`/`inbox`/`facets`/`thread`/`reviewHistory` reads answer too, with manual review on and one unreviewed conversation. So Replies, the review form and the drawer's thread all render populated. Saves still hit the refusing write paths; `--check` passes.
+
+Tests: new `conversationDrawer` (5) and `repliesWorkspacePage` (5); the existing six `replies*` suites and `panelReadBranches` are green. Mutation checks: removing the edit box's `stopPropagation` fails `conversationDrawer`; making the Replies filter draft write straight to scope fails `repliesWorkspacePage`.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 99 files / 1,439 tests passed; `typecheck:api` passed; `ui:inventory` passed after update. Inventory movement:
+
+| Count | Before | After |
+| --- | --- | --- |
+| Raw controls | 159 | 112 |
+| Allowlisted | 7 | 9 |
+| Compatibility tokens | 637 | 519 |
+| Selectors | 286 | 260 |
+| Modal roots | 4 | 2 |
+
+The two remaining modal roots are in `SequenceBuilder` (Phase 11). Fixture `--check` passed; `git diff --check` passed. Production gzip JS 654,399 (+0.5% vs Phase 0), CSS 36,881 (−3,984 vs Phase 0). TS/TSX +749/−700 and CSS +12/−163 lines.
+
+Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720 / 1440×900 / 1920×1080**:
+
+| Surface | Result |
+| --- | --- |
+| Replies panes | 1920: queue 320 + thread 854 + inspector 360, Save and Save-and-next at y=963 inside the pane. 1280/1440: queue 320 + thread; "Review reply and next step →" swaps in the inspector (895–1255 / 1047–1407) with both saves inside it (bottom 627/639, 783/795) and "← Back to conversations" offered. No overflow-x; the selected row carries `aria-current="true"` |
+| Drawer from Leads (keyboard) | 560px end dialog named "Alex Fixture"; focus starts on Messages; 40 Tabs stay inside; thread scrolled to the newest message; Escape and the backdrop close it and return focus to "Open conversation with Alex Fixture" |
+| Drawer lost-reason | Stage → Lost opens "Mark as lost — Alex Fixture" over the drawer with focus in Reason; Mark lost disabled until a reason; Escape closes only it and returns focus to Stage |
+| Drawer edit / delete | Edit focuses "Edit imported message"; Escape cancels the edit, keeps the drawer, focus back on Edit; Delete raises the existing native confirmation, and dismissing it keeps the message |
+| Drawer layout at 720 | review form 382–614; AI coach and Notes toggles at 623–712 inside the 720 drawer; with Notes open, the section is 600–720 and both toggles remain visible |
+| Drawer from Follow-ups | opens in the follow-up view with focus on the "Follow-up" region; "← Conversation" moves focus to Messages; Escape returns focus to "Open follow-up"; 1440/1920 the same, no horizontal scroll |
+| Responsiveness | 26 open/close cycles across Leads and Follow-ups (programmatic and real-mouse) with idle pings; no hang |
+
+**Changed on purpose, for review:**
+- The drawer no longer plays a slide-out on close; it unmounts, and focus returns at once.
+- The review panel's sentiment choice is a radio list, not a two-column pill grid.
+- Each reason shows its help text rather than a tooltip.
+- The drawer's name link to LinkedIn became an explicit "LinkedIn" button in the action row.
+
+**Open:** closing the drawer with a pasted-but-unsaved import or an edited review still discards the draft without asking. That is unchanged from before, but the dirty-close contract (spec §4) would add a Keep editing / Discard prompt there; it needs a decision on which drafts count. The Pipeline route opens the same drawer and is Phase 8.
+
+Next: Phase 8 — Pipeline and the campaign-leads workspace (Pipeline, `LeadsAndRepliesWorkspace`, shared campaign lead rows, conversation entry points).

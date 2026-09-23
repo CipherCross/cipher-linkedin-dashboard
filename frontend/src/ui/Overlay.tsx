@@ -36,6 +36,9 @@ export interface DialogProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   closeLabel?: string
   className?: string
+  /** Replaces the body's default padding and scrolling, for a dialog that
+   *  lays out its own scroll regions (the conversation drawer). */
+  bodyClassName?: string
   busy?: boolean
   /** Shown and announced while `busy`; also describes the disabled Close button. */
   busyMessage?: string
@@ -46,7 +49,7 @@ const BODY_FOCUS_TARGETS = 'input:not([disabled]):not([type="hidden"]), select:n
 export function Dialog({
   title, description, children, footer, footerNote, onRequestClose,
   initialFocusRef, finalFocusRef, placement = 'center', size = 'md',
-  closeLabel = 'Close', className = '', busy,
+  closeLabel = 'Close', className = '', bodyClassName, busy,
   busyMessage = 'Wait for the current action to finish before closing.',
 }: DialogProps) {
   const busyId = useId()
@@ -108,7 +111,7 @@ export function Dialog({
                 render={<IconButton className="ui-dialog__close" label={closeLabel} icon={<X size={20} aria-hidden="true" />} />}
               />
             </div>
-            <div className="ui-dialog__body" ref={bodyRef}>{children}</div>
+            <div className={bodyClassName ? `ui-dialog__body ${bodyClassName}` : 'ui-dialog__body'} ref={bodyRef}>{children}</div>
             {(footer || footerNote) && (
               <div className="ui-dialog__footer">
                 {footerNote && <span className="ui-dialog__footer-note">{footerNote}</span>}

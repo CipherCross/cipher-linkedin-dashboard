@@ -1,8 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CalendarCheck2, Check, ChevronDown, ChevronRight, Loader2, MessagesSquare,
-  Pencil, Trash2, X,
+  CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Trash2, X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { authPost } from '../lib/api'
@@ -37,7 +36,11 @@ import { clockTime, dayHeading } from '../lib/format'
 import type { ConversationMode } from '../lib/ConversationContext'
 import type { Coaching, Gender, Lead, Message } from '../lib/types'
 import type { ReplyReview } from '../lib/replyReview'
-import { IconButton, EmptyState } from '../ui'
+import {
+  Badge, Button, Dialog, EmptyState, ExternalLinkButton, IconButton, InlineError, LinkButton,
+  SelectField, Textarea,
+} from '../ui'
+import { ConversationSection } from './ConversationSection'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
@@ -67,12 +70,10 @@ function repliesHref(lead: Lead, focusMessageId: number | null = null): string {
 export function ConversationDrawer({
   lead,
   initialMode = 'thread',
-  closing,
   onClose,
 }: {
   lead: Lead | null
   initialMode?: ConversationMode
-  closing?: boolean
   onClose: () => void
 }) {
   const { isAdmin } = useAuth()
@@ -100,49 +101,15 @@ export function ConversationDrawer({
   const [followUpReturnAction, setFollowUpReturnAction] = useState<
     'complete' | 'skip' | undefined
   >()
-  const drawerRef = useRef<HTMLDivElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
+  // The import or follow-up view, when one replaces the thread.
+  const viewRef = useRef<HTMLDivElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
   const replyActions = useReplyReviewActions(() => { setReloadKey((value) => value + 1); refetch() })
   // Identifies the conversation a coach request was issued for, so a slow
   // response can't land on a drawer the user has since switched away from.
   const coachReqKey = useRef('')
-
-  // Esc closes; Tab is trapped inside the drawer while it's open (modal dialog).
-  useEffect(() => {
-    if (!lead) return
-    const el = drawerRef.current
-    // Move focus into the dialog so keyboard users start inside it.
-    el?.focus()
-    const focusables = () =>
-      Array.from(
-        el?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      ).filter((n) => n.offsetParent !== null)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key !== 'Tab' || !el) return
-      const items = focusables()
-      if (items.length === 0) return
-      const first = items[0]
-      const last = items[items.length - 1]
-      const active = document.activeElement as HTMLElement | null
-      if (e.shiftKey && (active === first || active === el)) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [lead, onClose])
 
   // Switching leads (or opening one from the worklist) resets the transient
   // workflow and honors the caller's requested destination.
@@ -154,16 +121,6 @@ export function ConversationDrawer({
     setSavingEdit(false)
   }, [lead, initialMode])
 
-  // Lock the background from scrolling while the drawer is open (restore on close).
-  useEffect(() => {
-    if (!lead) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [lead])
-
   // The thread renders oldest-first; triage users click a recent reply, so open
   // at the newest message. Re-runs after an import bumps reloadKey.
   useEffect(() => {
@@ -171,6 +128,30 @@ export function ConversationDrawer({
     const el = threadRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [rows, reloadKey, importOpen, followUpOpen])
+
+  // Closing the import or follow-up view unmounts the control that had focus.
+  // Hand it to the messages, which is where that view returns to.
+  // Opening one can unmount the focused message control the same way; then
+  // focus goes to the view itself.
+  const wasSubView = useRef(importOpen || followUpOpen)
+  useEffect(() => {
+    const subView = importOpen || followUpOpen
+    const lost = !document.activeElement || document.activeElement === document.body
+      || document.activeElement.getAttribute('role') === 'dialog'
+    if (wasSubView.current && !subView) threadRef.current?.focus()
+    else if (subView && lost) viewRef.current?.focus()
+    wasSubView.current = subView
+  }, [importOpen, followUpOpen])
+
+  // Saving or cancelling an edit unmounts its text box; return focus to that
+  // message's edit button rather than letting it fall to the dialog itself.
+  const lastEdited = useRef<number | null>(null)
+  useEffect(() => {
+    if (editing) { lastEdited.current = editing.id; return }
+    if (lastEdited.current == null) return
+    threadRef.current?.querySelector<HTMLElement>(`[data-edit-for="${lastEdited.current}"]`)?.focus()
+    lastEdited.current = null
+  }, [editing])
 
   // Fetch the full thread whenever the active lead changes (or an import lands).
   useEffect(() => {
@@ -462,495 +443,497 @@ export function ConversationDrawer({
   }
 
   const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
+  const identityLine = [lead.headline, lead.company].filter(Boolean).join(' · ')
 
   return (
-    <div className={`conv-overlay ${closing ? 'closing' : ''}`} onClick={onClose}>
-      <aside
-        className="conv-drawer"
-        onClick={(e) => e.stopPropagation()}
-        ref={drawerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Conversation with ${name}`}
-        tabIndex={-1}
-      >
-        <header className="flex flex-col gap-app-md p-app-lg border-b border-app-border">
-          <div className="flex items-center gap-app-md">
-            <LeadAvatar lead={lead} size={40} />
-            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-              <div className="flex items-center gap-app-sm">
-                <a
-                  className="row-link text-app-section font-semibold"
-                  href={lead.profile_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {name}
-                </a>
-                <a
-                  className="li-link"
-                  href={lead.profile_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Open LinkedIn profile"
-                >
-                  in
-                </a>
-              </div>
-              <div className="muted small ellipsis" title={[lead.headline, lead.company].filter(Boolean).join(' · ')}>
-                {[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
-              </div>
-            </div>
-            <IconButton
-              className="conv-close"
-              label="Close"
-              icon={<X size={20} aria-hidden="true" />}
-              onClick={onClose}
-            />
-          </div>
-
-          <div className="flex items-center gap-app-sm flex-wrap">
-            <Link
-              className="row-link muted small"
-              to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
-              onClick={onClose}
+    <Dialog
+      placement="end"
+      title={
+        <span className="flex items-center gap-app-md min-w-0">
+          {/* The avatar's initials would otherwise be read as part of the name. */}
+          <span aria-hidden="true" className="contents"><LeadAvatar lead={lead} size={40} /></span>
+          <span className="truncate">{name}</span>
+        </span>
+      }
+      description={identityLine || '—'}
+      onRequestClose={onClose}
+      // Focus starts in whatever the drawer opened on: the messages, so the
+      // keyboard can scroll the thread at once, or the import / follow-up view.
+      initialFocusRef={importOpen || followUpOpen ? viewRef : threadRef}
+      className="animate-[conv-slide-in_0.25s_var(--ease-out)]"
+      bodyClassName="p-0 overflow-hidden flex flex-col"
+    >
+      <div className="shrink-0 flex flex-col gap-app-md px-app-xl py-app-md border-b border-app-border">
+        <div className="flex items-center gap-app-sm flex-wrap">
+          <Link
+            className="text-app-meta text-app-text-muted no-underline hover:text-app-accent hover:underline"
+            to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
+            onClick={onClose}
+          >
+            {campaignName}
+          </Link>
+          {outreachAccount ? (
+            <a
+              className="inline-flex items-center gap-1.5 text-app-meta text-app-text-muted no-underline [&[href]:hover]:text-app-text"
+              href={outreachAccount.account_url ?? undefined}
+              target={outreachAccount.account_url ? '_blank' : undefined}
+              rel={outreachAccount.account_url ? 'noreferrer' : undefined}
+              title={`Outreach account: ${accountLabel}`}
+              onClick={outreachAccount.account_url ? undefined : (e) => e.preventDefault()}
             >
-              {campaignName}
-            </Link>
-            {outreachAccount ? (
-              <a
-                className="inline-flex items-center gap-1.5 text-app-text-muted no-underline [&[href]:hover]:text-app-text muted small"
-                href={outreachAccount.account_url ?? undefined}
-                target={outreachAccount.account_url ? '_blank' : undefined}
-                rel={outreachAccount.account_url ? 'noreferrer' : undefined}
-                title={`Outreach account: ${accountLabel}`}
-                onClick={outreachAccount.account_url ? undefined : (e) => e.preventDefault()}
-              >
-                <Avatar key={outreachAccount.id} inst={outreachAccount} size={22} />
-                <span>{accountLabel}</span>
-              </a>
-            ) : (
-              <span className="muted small">· {accountLabel}</span>
-            )}
-            {statusMeta ? (
-              <span
-                className={`badge senti ${statusMeta.cls}`}
-                title={latestReason ?? 'Follows the most recent reply'}
-              >
-                {statusMeta.label}
-              </span>
-            ) : (
-              <span className="badge">No reply yet</span>
-            )}
-            {latestIntentMeta && (
-              <span
-                className={`badge senti ${latestIntentMeta.cls}`}
-                title={latestInbound?.intent_reason ?? 'Commercial intent on latest reply'}
-              >
-                {latestIntentMeta.short} · {latestIntentMeta.label}
-              </span>
-            )}
-            {/* Hidden while the empty state shows — that state carries its own
-                Import-history CTA, and two identical links one viewport apart
-                read as clutter. */}
-            {!importOpen && !followUpOpen && !(rows && rows.length === 0) && (
-              <button
-                className="link-btn ml-auto"
-                onClick={() => setImportOpen(true)}
-                disabled={!rows}
-                title="Paste a conversation copied from LinkedIn"
-              >
-                Import history
-              </button>
-            )}
-            {data?.followUpsAvailable && (
-              <button
-                className={`inline-flex items-center gap-[5px] border border-app-border rounded-pill px-[9px] py-[3px] bg-app-surface-2 text-app-text-secondary text-[length:var(--text-xs)] cursor-pointer ${activeFollowUp(followUpState) ? 'active' : ''}`}
-                onClick={() => {
-                  setImportOpen(false)
-                  setFollowUpReturnAction(undefined)
-                  setFollowUpOpen((open) => !open)
-                }}
-              >
-                <CalendarCheck2 size={13} />
-                {activeFollowUp(followUpState)
-                  ? followUpDueLabel(followUpState)
-                : 'Schedule follow-up'}
-              </button>
-            )}
-            {rows && rows.length > 0 && (
-              <Link
-                className="link-btn"
-                to={repliesHref(lead, latestInbound?.id ?? null)}
-                onClick={onClose}
-              >
-                Open in Replies
-              </Link>
-            )}
-          </div>
-
-          {/* Everything below is lead metadata, not the conversation. It sits
-              behind one disclosure so the thread starts near the top of the
-              drawer instead of below four rows of controls. */}
-          <details className="[&>summary]:flex [&>summary]:items-center [&>summary]:min-h-control-sm [&>summary]:text-app-accent [&>summary]:text-app-table [&>summary]:font-semibold [&>summary]:cursor-pointer">
-            <summary>Lead details</summary>
-            <div className="flex gap-app-md flex-wrap mt-app-md [&_select]:w-full">
-            <label className="filter-field">
-              <span className="filter-label">Stage</span>
-              <select
-                value={live.pipeline_stage ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === 'lost') setPendingLost(true)
-                  else void setStage(live, v || null)
-                }}
-              >
-                <option value="">Not in pipeline</option>
-                {PIPELINE_STAGES.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-              </select>
-            </label>
-            {liveStage && liveStage.substatuses.length > 0 && (
-              <label className="filter-field">
-                <span className="filter-label">Substatus</span>
-                <select
-                  value={live.pipeline_substatus ?? ''}
-                  onChange={(e) =>
-                    void setStage(live, live.pipeline_stage, { substatus: e.target.value || null })
-                  }
-                >
-                  <option value="">—</option>
-                  {liveStage.substatuses.map((s) => (
-                    <option key={s} value={s}>{substatusLabel(s)}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className="filter-field">
-              <span className="filter-label">Owner</span>
-              {/* Disabled rather than emptied. This control *displays* the
-                  current owner as well as changing them, and a select whose
-                  value matches no option renders as "Unassigned" — so dropping
-                  the options would turn a blocked write into a wrong reading.
-                  The chooser in `FollowUpPanel`, which displays nothing, empties
-                  its list instead. */}
-              <select
-                value={String(live.assigned_to ?? '')}
-                onChange={(e) => void assign(live, e.target.value ? Number(e.target.value) : null)}
-                disabled={memberWritesBlockedReason !== null}
-                title={memberWritesBlockedReason ?? undefined}
-              >
-                <option value="">Unassigned</option>
-                {members.map((m) => (
-                  <option key={m.id} value={String(m.id)}>{m.name}</option>
-                ))}
-              </select>
-              </label>
-            </div>
-
-            <div className="flex items-end flex-wrap gap-app-md mt-2.5">
-            <span className="flex flex-col gap-app-xs">
-              <span className="filter-label">Age</span>
-              <span className="tabular-nums font-semibold">{ageRange(live) ?? '—'}</span>
+              <Avatar key={outreachAccount.id} inst={outreachAccount} size={22} />
+              <span>{accountLabel}</span>
+            </a>
+          ) : (
+            <span className="text-app-meta text-app-text-muted">· {accountLabel}</span>
+          )}
+          {/* Sentiment and intent keep the domain chip colours every other
+              reply surface uses (referral is purple, which no Badge tone has). */}
+          {statusMeta ? (
+            <span
+              className={`badge senti ${statusMeta.cls}`}
+              title={latestReason ?? 'Follows the most recent reply'}
+            >
+              {statusMeta.label}
             </span>
-            <label className="filter-field">
-              <span className="filter-label">Gender</span>
-              <select
-                value={live.gender ?? ''}
-                disabled={savingGender || !isAdmin}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === '') return
-                  void setGender(v === 'clear' ? null : (v as Gender))
-                }}
+          ) : (
+            <span className="badge">No reply yet</span>
+          )}
+          {latestIntentMeta && (
+            <span
+              className={`badge senti ${latestIntentMeta.cls}`}
+              title={latestInbound?.intent_reason ?? 'Commercial intent on latest reply'}
+            >
+              {latestIntentMeta.short} · {latestIntentMeta.label}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-app-sm flex-wrap">
+          <ExternalLinkButton
+            variant="ghost"
+            size="sm"
+            href={lead.profile_url}
+            target="_blank"
+            rel="noreferrer"
+            icon={<ExternalLink size={14} aria-hidden="true" />}
+          >
+            LinkedIn
+          </ExternalLinkButton>
+          {rows && rows.length > 0 && (
+            <LinkButton
+              variant="ghost"
+              size="sm"
+              to={repliesHref(lead, latestInbound?.id ?? null)}
+              onClick={onClose}
+            >
+              Open in Replies
+            </LinkButton>
+          )}
+          {/* Hidden while the empty state shows — that state carries its own
+              Import-history action, and two identical actions one viewport
+              apart read as clutter. */}
+          {!importOpen && !followUpOpen && !(rows && rows.length === 0) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setImportOpen(true)}
+              disabled={!rows}
+              title="Paste a conversation copied from LinkedIn"
+            >
+              Import history
+            </Button>
+          )}
+          {data?.followUpsAvailable && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="ml-auto"
+              icon={<CalendarCheck2 size={14} aria-hidden="true" />}
+              aria-pressed={followUpOpen}
+              onClick={() => {
+                setImportOpen(false)
+                setFollowUpReturnAction(undefined)
+                setFollowUpOpen((open) => !open)
+              }}
+            >
+              {activeFollowUp(followUpState)
+                ? followUpDueLabel(followUpState)
+                : 'Schedule follow-up'}
+            </Button>
+          )}
+        </div>
+
+        {/* Everything below is lead metadata, not the conversation. It sits
+            behind one disclosure so the thread starts near the top of the
+            drawer instead of below four rows of controls. */}
+        <details className="[&>summary]:flex [&>summary]:items-center [&>summary]:min-h-control-sm [&>summary]:text-app-accent [&>summary]:text-app-table [&>summary]:font-semibold [&>summary]:cursor-pointer">
+          <summary>Lead details</summary>
+          <div className="grid grid-cols-2 gap-app-md mt-app-md">
+            <SelectField
+              label="Stage"
+              value={live.pipeline_stage ?? ''}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === 'lost') setPendingLost(true)
+                else void setStage(live, v || null)
+              }}
+            >
+              <option value="">Not in pipeline</option>
+              {PIPELINE_STAGES.map((s) => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </SelectField>
+            {liveStage && liveStage.substatuses.length > 0 && (
+              <SelectField
+                label="Substatus"
+                value={live.pipeline_substatus ?? ''}
+                onChange={(e) =>
+                  void setStage(live, live.pipeline_stage, { substatus: e.target.value || null })
+                }
               >
-                {!live.gender && (
-                  <option value="" disabled>
-                    Set gender…
-                  </option>
-                )}
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="unknown">Unknown</option>
-                {live.gender && <option value="clear">Clear override → re-infer</option>}
-              </select>
-            </label>
-            {live.gender &&
-              (live.demo_model === 'manual' ? (
-                <span className="badge" title="Reviewed by an SDR — manual override">
-                  Reviewed
-                </span>
-              ) : (
-                <span
-                  className="badge"
-                  title="Inferred by AI from name + headline — pick a value to confirm"
-                >
-                  AI
-                  {live.gender_confidence != null
-                    ? ` ·${Math.round(live.gender_confidence * 100)}%`
-                    : ''}
-                </span>
+                <option value="">—</option>
+                {liveStage.substatuses.map((s) => (
+                  <option key={s} value={s}>{substatusLabel(s)}</option>
                 ))}
-            </div>
-          </details>
-        </header>
-
-        {error && <div className="banner conv-error">{error}</div>}
-
-        {importOpen && (
-          <ImportHistoryPanel
-            lead={lead}
-            accountName={
-              data?.instances.find((i) => i.id === lead.instance_id)?.account_name ?? null
-            }
-            existing={rows}
-            onImported={() => {
-              setReloadKey((k) => k + 1)
-              refetch()
-            }}
-            onClose={() => setImportOpen(false)}
-          />
-        )}
-
-        {!importOpen && followUpOpen && (
-          <FollowUpPanel
-            lead={live}
-            initialAction={followUpReturnAction}
-            onBack={() => {
-              setFollowUpOpen(false)
-              setFollowUpReturnAction(undefined)
-            }}
-            onImport={(returnTo) => {
-              setFollowUpReturnAction(returnTo)
-              setImportOpen(true)
-            }}
-            onCompleted={() => {
-              setFollowUpOpen(false)
-              setFollowUpReturnAction(undefined)
-            }}
-          />
-        )}
-
-        {!importOpen && !followUpOpen && (
-        <>
-        <div className="flex-1 overflow-y-auto p-app-lg flex flex-col gap-app-lg [overscroll-behavior:contain]" ref={threadRef}>
-          {loading && (
-            <div className="flex flex-col gap-app-lg" aria-hidden="true">
-              <Skeleton className="sk-bubble in" width="68%" height={44} radius="10px 10px 10px 2px" />
-              <Skeleton className="sk-bubble out" width="54%" height={32} radius="10px 10px 2px 10px" />
-              <Skeleton className="sk-bubble in" width="60%" height={38} radius="10px 10px 10px 2px" />
-            </div>
-          )}
-          {rows && rows.length === 0 && !loading && (
-            <EmptyState
-              icon={MessagesSquare}
-              title="No messages yet"
-              hint="LH2 stops capturing a thread once you take it over by hand. Paste the LinkedIn conversation to import its history."
-              action={
-                <button className="link-btn" onClick={() => setImportOpen(true)}>
-                  Import history
-                </button>
-              }
-            />
-          )}
-          {rows?.map((m, idx) => {
-            const inbound = m.direction === 'in'
-            const prev = idx > 0 ? rows[idx - 1] : null
-            const newDay =
-              !prev || new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString()
-            return (
-              <Fragment key={m.id}>
-              {newDay && (
-                <div className="flex items-center gap-2.5 my-1 mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border [&_span]:text-[length:var(--text-2xs)] [&_span]:font-semibold [&_span]:uppercase [&_span]:tracking-[var(--tracking-caps)] [&_span]:whitespace-nowrap"><span>{dayHeading(m.sent_at)}</span></div>
+              </SelectField>
+            )}
+            {/* Disabled rather than emptied. This control *displays* the
+                current owner as well as changing them, and a select whose
+                value matches no option renders as "Unassigned" — so dropping
+                the options would turn a blocked write into a wrong reading.
+                The chooser in `FollowUpPanel`, which displays nothing, empties
+                its list instead. */}
+            <SelectField
+              label="Owner"
+              value={String(live.assigned_to ?? '')}
+              onChange={(e) => void assign(live, e.target.value ? Number(e.target.value) : null)}
+              disabled={memberWritesBlockedReason !== null}
+              title={memberWritesBlockedReason ?? undefined}
+              help={memberWritesBlockedReason ?? undefined}
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.id} value={String(m.id)}>{m.name}</option>
+              ))}
+            </SelectField>
+            <SelectField
+              label="Gender"
+              value={live.gender ?? ''}
+              disabled={savingGender || !isAdmin}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === '') return
+                void setGender(v === 'clear' ? null : (v as Gender))
+              }}
+              help={live.gender
+                ? live.demo_model === 'manual'
+                  ? <Badge title="Reviewed by an SDR — manual override">Reviewed</Badge>
+                  : (
+                    <Badge title="Inferred by AI from name + headline — pick a value to confirm">
+                      AI{live.gender_confidence != null ? ` ·${Math.round(live.gender_confidence * 100)}%` : ''}
+                    </Badge>
+                  )
+                : undefined}
+            >
+              {!live.gender && (
+                <option value="" disabled>
+                  Set gender…
+                </option>
               )}
-              <div className={`msg ${inbound ? 'in' : 'out'}`}>
-                <div className="msg-bubble px-app-md py-app-sm text-[length:var(--text-sm)] leading-[1.5] whitespace-pre-wrap [overflow-wrap:anywhere]">
-                  {editing?.id === m.id ? (
-                    <textarea
-                      className="block w-[min(340px,65vw)] min-h-[72px] resize-y text-inherit bg-transparent border border-current rounded-sm px-app-sm py-[7px] font-[inherit]"
-                      value={editing.body}
-                      maxLength={5000}
-                      autoFocus
-                      onChange={(e) => setEditing({ id: m.id, body: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') setEditing(null)
-                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void editMessage(m)
-                      }}
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="unknown">Unknown</option>
+              {live.gender && <option value="clear">Clear override → re-infer</option>}
+            </SelectField>
+            <div className="flex flex-col gap-app-xs">
+              <span className="text-app-meta font-semibold text-app-text-secondary">Age</span>
+              <span className="tabular-nums font-semibold">{ageRange(live) ?? '—'}</span>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      {error && (
+        <div className="shrink-0 px-app-xl pt-app-md">
+          <InlineError
+            title="The conversation could not load."
+            message={error}
+            onRetry={() => setReloadKey((k) => k + 1)}
+          />
+        </div>
+      )}
+
+      {(importOpen || followUpOpen) && (
+      <div
+        ref={viewRef}
+        tabIndex={-1}
+        role="region"
+        aria-label={importOpen ? 'Import history' : 'Follow-up'}
+        className="flex-1 min-h-0 flex flex-col focus:outline-none"
+      >
+      {importOpen && (
+        <ImportHistoryPanel
+          lead={lead}
+          accountName={
+            data?.instances.find((i) => i.id === lead.instance_id)?.account_name ?? null
+          }
+          existing={rows}
+          onImported={() => {
+            setReloadKey((k) => k + 1)
+            refetch()
+          }}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
+
+      {!importOpen && followUpOpen && (
+        <FollowUpPanel
+          lead={live}
+          initialAction={followUpReturnAction}
+          onBack={() => {
+            setFollowUpOpen(false)
+            setFollowUpReturnAction(undefined)
+          }}
+          onImport={(returnTo) => {
+            setFollowUpReturnAction(returnTo)
+            setImportOpen(true)
+          }}
+          onCompleted={() => {
+            setFollowUpOpen(false)
+            setFollowUpReturnAction(undefined)
+          }}
+        />
+      )}
+      </div>
+      )}
+
+      {!importOpen && !followUpOpen && (
+      <>
+      <div
+        className="flex-[1_1_0] min-h-[120px] overflow-y-auto px-app-xl py-app-lg flex flex-col gap-app-lg [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
+        ref={threadRef}
+        role="region"
+        aria-label="Messages"
+        tabIndex={0}
+      >
+        {loading && (
+          <div className="flex flex-col gap-app-lg" aria-hidden="true">
+            <Skeleton className="self-start" width="68%" height={44} radius="10px 10px 10px 2px" />
+            <Skeleton className="self-end" width="54%" height={32} radius="10px 10px 2px 10px" />
+            <Skeleton className="self-start" width="60%" height={38} radius="10px 10px 10px 2px" />
+          </div>
+        )}
+        {rows && rows.length === 0 && !loading && (
+          <EmptyState
+            icon={MessagesSquare}
+            title="No messages yet"
+            hint="LH2 stops capturing a thread once you take it over by hand. Paste the LinkedIn conversation to import its history."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+                Import history
+              </Button>
+            }
+          />
+        )}
+        {rows?.map((m, idx) => {
+          const inbound = m.direction === 'in'
+          const prev = idx > 0 ? rows[idx - 1] : null
+          const newDay =
+            !prev || new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString()
+          const busyRow = deleting !== null || savingEdit || editing !== null
+          return (
+            <Fragment key={m.id}>
+            {newDay && (
+              <div className="flex items-center gap-2.5 my-1 mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{dayHeading(m.sent_at)}</span></div>
+            )}
+            <div className={`flex flex-col gap-[3px] max-w-[88%] ${inbound ? 'self-start items-start' : 'self-end items-end'}`}>
+              <div
+                className={[
+                  'px-app-md py-app-sm text-app-table whitespace-pre-wrap [overflow-wrap:anywhere]',
+                  inbound
+                    ? 'bg-app-surface-2 border border-app-border rounded-[10px_10px_10px_2px]'
+                    : 'bg-[var(--bubble-out)] text-[color:var(--bubble-out-fg)] rounded-[10px_10px_2px_10px]',
+                ].join(' ')}
+              >
+                {editing?.id === m.id ? (
+                  <Textarea
+                    aria-label="Edit imported message"
+                    className="block w-[min(340px,65vw)] min-h-[72px] text-app-table"
+                    value={editing.body}
+                    maxLength={5000}
+                    autoFocus
+                    onChange={(e) => setEditing({ id: m.id, body: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        // Cancels the edit, not the whole conversation.
+                        e.stopPropagation()
+                        setEditing(null)
+                      }
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void editMessage(m)
+                    }}
+                  />
+                ) : (
+                  m.body || <span className="text-app-text-muted">(empty)</span>
+                )}
+              </div>
+              <div className={`flex items-center gap-1.5 ${inbound ? '' : 'flex-row-reverse'}`}>
+                <span className="text-app-meta text-app-text-muted">{clockTime(m.sent_at)}</span>
+                {m.source === 'manual' && (
+                  <>
+                    <span
+                      className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-[5px] cursor-help"
+                      title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
+                    >
+                      imported
+                    </span>
+                    {editing?.id === m.id ? (
+                      <>
+                        <IconButton
+                          className="size-8"
+                          label="Save message"
+                          icon={<Check size={16} aria-hidden="true" />}
+                          loading={savingEdit}
+                          disabled={!editing.body.trim()}
+                          onClick={() => void editMessage(m)}
+                        />
+                        <IconButton
+                          className="size-8"
+                          label="Cancel editing"
+                          icon={<X size={16} aria-hidden="true" />}
+                          disabled={savingEdit}
+                          onClick={() => setEditing(null)}
+                        />
+                      </>
+                    ) : (
+                      <IconButton
+                        className="size-8"
+                        data-edit-for={m.id}
+                        label="Edit imported message"
+                        icon={<Pencil size={16} aria-hidden="true" />}
+                        disabled={busyRow}
+                        onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
+                      />
+                    )}
+                    <IconButton
+                      className="size-8"
+                      tone="danger"
+                      label="Delete imported message"
+                      icon={<Trash2 size={16} aria-hidden="true" />}
+                      loading={deleting === m.id}
+                      disabled={busyRow}
+                      onClick={() => deleteMessage(m)}
                     />
-                  ) : (
-                    m.body || <span className="muted">(empty)</span>
-                  )}
-                </div>
-                <div className="msg-meta flex items-center gap-1.5">
-                  <span className="text-[length:var(--text-2xs)] muted small">{clockTime(m.sent_at)}</span>
-                  {m.source === 'manual' && (
-                    <>
-                      <span
-                        className="text-[length:var(--text-2xs)] font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-[5px] cursor-help"
-                        title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
-                      >
-                        imported
+                  </>
+                )}
+              </div>
+            </div>
+            </Fragment>
+          )
+        })}
+      </div>
+
+      {/* The review form is taller than the drawer at 720px. Capped and
+          scrolling on its own, it can no longer push the coach and the notes
+          below the drawer's bottom edge, out of reach. */}
+      {manualReviewReady && latestInbound && (
+        <div className="min-h-0 max-h-[45%] shrink overflow-y-auto border-t border-app-border px-app-xl py-app-md">
+        <ReplyReviewPanel
+          message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
+          review={latestInbound.review ?? null}
+          saving={replyActions.saving}
+          error={replyActions.error}
+          onSave={(draft) => replyActions.saveReview({
+            instance_id: lead.instance_id,
+            profile_url: lead.profile_url,
+            message_id: latestInbound.id,
+            expected_review_revision: latestInbound.review?.revision ?? 0,
+            review: draft,
+          })}
+        />
+        </div>
+      )}
+
+      <ConversationSection
+        title="AI coach"
+        open={coachOpen}
+        onToggle={() => setCoachOpen((o) => !o)}
+        badges={actionMeta && (
+          <span className={`badge senti ${actionMeta.cls}`} title="Suggested next action">
+            {actionMeta.label}
+          </span>
+        )}
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={coachLoading}
+            loadingLabel="Coaching…"
+            onClick={() => {
+              setCoachOpen(true)
+              loadCoaching(!!coaching)
+            }}
+          >
+            {coaching ? 'Regenerate' : 'Get coaching'}
+          </Button>
+        }
+      >
+        {coachError && <InlineError title="Coaching failed." message={coachError} />}
+        {coachLoading && !coaching && (
+          <p className="m-0 text-app-meta text-app-text-muted">Reading the conversation…</p>
+        )}
+        {!coaching && !coachLoading && !coachError && (
+          <p className="m-0 text-app-meta text-app-text-muted">Get an AI read on what to say next to earn a reply.</p>
+        )}
+
+        {coaching && (
+          <div className="flex flex-col gap-app-md text-app-table">
+            {coaching.cached && <p className="m-0 text-app-meta text-app-text-muted">Cached take</p>}
+
+            {coaching.summary && <p className="m-0">{coaching.summary}</p>}
+
+            {coaching.issues.length > 0 && (
+              <div>
+                <h3 className="m-0 mb-app-xs text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted">What hurt your reply odds</h3>
+                <div className="flex flex-col gap-app-sm">
+                  {coaching.issues.map((iss, i) => (
+                    <div className="flex flex-col items-start gap-[3px] pl-[9px] border-l-2 border-app-border" key={i}>
+                      <span className={`badge senti ${SEVERITY_CLS[iss.severity]}`}>
+                        {ISSUE_KIND_LABEL[iss.kind]}
                       </span>
-                      {editing?.id === m.id ? (
-                        <>
-                          <button
-                            type="button"
-                            className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-text"
-                            title="Save message"
-                            disabled={savingEdit || !editing.body.trim()}
-                            onClick={() => void editMessage(m)}
-                          >
-                            {savingEdit ? <Loader2 size={12} className="spin" /> : <Check size={12} />}
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-text"
-                            title="Cancel editing"
-                            disabled={savingEdit}
-                            onClick={() => setEditing(null)}
-                          >
-                            <X size={12} />
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-text"
-                          title="Edit imported message"
-                          disabled={deleting !== null || savingEdit || editing !== null}
-                          onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
-                        >
-                          <Pencil size={12} />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="inline-flex items-center border-none bg-none p-0 text-app-text-muted cursor-pointer enabled:hover:text-app-danger"
-                        title="Delete imported message"
-                        disabled={deleting !== null || savingEdit || editing !== null}
-                        onClick={() => deleteMessage(m)}
-                      >
-                        {deleting === m.id ? (
-                          <Loader2 size={12} className="spin" />
-                        ) : (
-                          <Trash2 size={12} />
-                        )}
-                      </button>
-                    </>
-                  )}
+                      <div>
+                        {iss.quote && <div className="italic mb-0.5 [overflow-wrap:anywhere] text-app-text-muted">“{iss.quote}”</div>}
+                        <div>{iss.fix}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              </Fragment>
-            )
-          })}
-        </div>
-
-        {manualReviewReady && latestInbound && (
-          <ReplyReviewPanel
-            message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
-            review={latestInbound.review ?? null}
-            saving={replyActions.saving}
-            error={replyActions.error}
-            onSave={(draft) => replyActions.saveReview({
-              instance_id: lead.instance_id,
-              profile_url: lead.profile_url,
-              message_id: latestInbound.id,
-              expected_review_revision: latestInbound.review?.revision ?? 0,
-              review: draft,
-            })}
-          />
-        )}
-
-        <div className={`conv-coaching ${coachOpen ? 'open' : ''}`}>
-          <div className="conv-coaching-head">
-            <button
-              className="conv-coaching-toggle"
-              onClick={() => setCoachOpen((o) => !o)}
-              aria-expanded={coachOpen}
-            >
-              {coachOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-              <span className="conv-coaching-title">AI coach</span>
-            </button>
-            {actionMeta && (
-              <span className={`badge senti ${actionMeta.cls}`} title="Suggested next action">
-                {actionMeta.label}
-              </span>
             )}
-            <span className="grow" />
-            <button
-              className="link-btn"
-              onClick={() => {
-                setCoachOpen(true)
-                loadCoaching(!!coaching)
-              }}
-              disabled={coachLoading}
-            >
-              {coachLoading ? 'Coaching…' : coaching ? 'Regenerate' : 'Get coaching'}
-            </button>
+
+            {coaching.tips.length > 0 && (
+              <div>
+                <h3 className="m-0 mb-app-xs text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted">How to respond now</h3>
+                <ul className="m-0 pl-[18px] flex flex-col gap-app-xs">
+                  {coaching.tips.map((t, i) => (
+                    <li key={i}>{t}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {coachStale && (
+              <p className="m-0 text-app-meta text-app-text-muted italic">
+                New messages since this was generated — Regenerate for an updated take.
+              </p>
+            )}
           </div>
-
-          {coachOpen && (
-          <div className="conv-coaching-body">
-          {coachError && <div className="banner conv-error">{coachError}</div>}
-          {coachLoading && !coaching && (
-            <div className="muted small">Reading the conversation…</div>
-          )}
-          {!coaching && !coachLoading && !coachError && (
-            <div className="muted small">Get an AI read on what to say next to earn a reply.</div>
-          )}
-
-          {coaching && (
-            <>
-              {coaching.cached && <div className="muted small mb-app-sm">Cached take</div>}
-
-              {coaching.summary && <div className="leading-[1.5] mb-2.5 small">{coaching.summary}</div>}
-
-              {coaching.issues.length > 0 && (
-                <div className="mt-2.5">
-                  <div className="uppercase tracking-[var(--tracking-caps)] mb-[5px] muted small">What hurt your reply odds</div>
-                  <div className="flex flex-col gap-app-sm">
-                    {coaching.issues.map((iss, i) => (
-                      <div className="flex flex-col gap-[3px] pl-[9px] border-l-2 border-app-border" key={i}>
-                        <span className={`badge senti ${SEVERITY_CLS[iss.severity]}`}>
-                          {ISSUE_KIND_LABEL[iss.kind]}
-                        </span>
-                        <div className="leading-[1.45] small">
-                          {iss.quote && <div className="italic mb-0.5 [overflow-wrap:anywhere] muted">“{iss.quote}”</div>}
-                          <div>{iss.fix}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {coaching.tips.length > 0 && (
-                <div className="mt-2.5">
-                  <div className="uppercase tracking-[var(--tracking-caps)] mb-[5px] muted small">How to respond now</div>
-                  <ul className="m-0 pl-[18px] flex flex-col gap-app-xs leading-[1.45] small">
-                    {coaching.tips.map((t, i) => (
-                      <li key={i}>{t}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {coachStale && (
-                <div className="muted small mt-2.5 italic">
-                  New messages since this was generated — Regenerate for an updated take.
-                </div>
-              )}
-            </>
-          )}
-          </div>
-          )}
-        </div>
-
-        <LeadNotesPanel lead={lead} />
-        </>
         )}
-      </aside>
+      </ConversationSection>
+
+      <LeadNotesPanel lead={lead} />
+      </>
+      )}
 
       {pendingLost && (
         <LostReasonModal
@@ -962,6 +945,6 @@ export function ConversationDrawer({
           }}
         />
       )}
-    </div>
+    </Dialog>
   )
 }

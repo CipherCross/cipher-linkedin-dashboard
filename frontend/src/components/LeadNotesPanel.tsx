@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { fetchNeonLeadNotes, resolveReadPath } from '../lib/dashboardReads'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ago } from '../lib/format'
 import type { Lead, LeadNote } from '../lib/types'
+import { Button, IconButton, InlineError, TextareaField } from '../ui'
+import { ConversationSection } from './ConversationSection'
 
-/** Collapsible per-lead notes, styled after the drawer's AI-coach panel. Notes
+/** Collapsible per-lead notes, the same band as the drawer's AI coach. Notes
  *  are fetched on first expand (authenticated client), newest first; add/delete are
  *  optimistic and revert on failure. */
 export function LeadNotesPanel({ lead }: { lead: Lead }) {
@@ -110,68 +112,59 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
   const count = notes?.length ?? 0
 
   return (
-    <div className={`conv-coaching ${open ? 'open' : ''}`}>
-      <div className="conv-coaching-head">
-        <button
-          className="conv-coaching-toggle"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-        >
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="conv-coaching-title">Notes{count > 0 ? ` (${count})` : ''}</span>
-        </button>
+    <ConversationSection
+      title={`Notes${count > 0 ? ` (${count})` : ''}`}
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+    >
+      {error && <InlineError title="Notes could not load." message={error} />}
+      {loading && <p className="m-0 text-app-meta text-app-text-muted">Loading notes…</p>}
+
+      <div className="flex gap-app-sm items-end mb-app-md">
+        <TextareaField
+          className="flex-1"
+          label="Add a note"
+          labelHidden
+          rows={2}
+          value={body}
+          placeholder="Add a note…"
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              add()
+            }
+          }}
+        />
+        <Button variant="primary" size="sm" onClick={add} disabled={!body.trim() || busy}>
+          Add
+        </Button>
       </div>
 
-      {open && (
-        <div className="conv-coaching-body">
-          {error && <div className="banner conv-error">{error}</div>}
-          {loading && <div className="muted small">Loading notes…</div>}
-
-          <div className="flex gap-app-sm items-start mb-2.5 [&_textarea]:flex-1 [&_textarea]:resize-y">
-            <textarea
-              rows={2}
-              value={body}
-              placeholder="Add a note…"
-              onChange={(e) => setBody(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault()
-                  add()
-                }
-              }}
-            />
-            <button className="btn accent sm" onClick={add} disabled={!body.trim() || busy}>
-              Add
-            </button>
-          </div>
-
-          {notes && notes.length === 0 && !loading && (
-            <div className="muted small">No notes yet.</div>
-          )}
-
-          {notes && notes.length > 0 && (
-            <ul className="list-none m-0 p-0 flex flex-col gap-app-sm">
-              {notes.map((n) => (
-                <li key={n.id} className="border-l-2 border-app-border pl-[9px]">
-                  <div className="leading-[1.45] [overflow-wrap:anywhere] whitespace-pre-wrap small">{n.body}</div>
-                  <div className="flex items-center gap-[5px] mt-0.5 muted small">
-                    <span>{n.author || '—'}</span>
-                    <span>· {ago(n.created_at)}</span>
-                    <button
-                      className="bg-none border-none cursor-pointer text-app-text-muted ml-auto p-0 inline-flex hover:text-app-danger"
-                      onClick={() => remove(n)}
-                      aria-label="Delete note"
-                      title="Delete note"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {notes && notes.length === 0 && !loading && (
+        <p className="m-0 text-app-meta text-app-text-muted">No notes yet.</p>
       )}
-    </div>
+
+      {notes && notes.length > 0 && (
+        <ul className="list-none m-0 p-0 flex flex-col gap-app-sm">
+          {notes.map((n) => (
+            <li key={n.id} className="border-l-2 border-app-border pl-[9px]">
+              <div className="text-app-table [overflow-wrap:anywhere] whitespace-pre-wrap">{n.body}</div>
+              <div className="flex items-center gap-[5px] text-app-meta text-app-text-muted">
+                <span>{n.author || '—'}</span>
+                <span>· {ago(n.created_at)}</span>
+                <IconButton
+                  className="ml-auto"
+                  tone="danger"
+                  label="Delete note"
+                  icon={<Trash2 size={16} aria-hidden="true" />}
+                  onClick={() => remove(n)}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </ConversationSection>
   )
 }

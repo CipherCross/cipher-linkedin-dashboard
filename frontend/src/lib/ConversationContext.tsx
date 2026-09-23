@@ -12,42 +12,24 @@ const Ctx = createContext<{
   openConversation: () => {},
 })
 
-// Matches the 0.15s reverse keyframes in styles.css, with a small margin.
-const CLOSE_MS = 160
-
 /** Holds the lead whose conversation is open and renders the single shared
  *  drawer. Mounted inside the router + DataProvider so the drawer can use
  *  router Links and refetch dashboard data after a reclassification. */
 export function ConversationProvider({ children }: { children: ReactNode }) {
   const [lead, setLead] = useState<Lead | null>(null)
   const [mode, setMode] = useState<ConversationMode>('thread')
-  // Kept mounted through the close animation, then unmounted after CLOSE_MS.
-  const [closing, setClosing] = useState(false)
-  const closeTimer = useRef<ReturnType<typeof setTimeout>>()
-
-  const clearTimer = () => {
-    if (closeTimer.current) {
-      clearTimeout(closeTimer.current)
-      closeTimer.current = undefined
-    }
-  }
 
   const openConversation = useCallback((l: Lead, options?: { mode?: ConversationMode }) => {
-    clearTimer()
-    setClosing(false)
     setMode(options?.mode ?? 'thread')
     setLead(l)
   }, [])
 
+  /* Closing unmounts the drawer at once. The shared Dialog restores focus to
+   * whatever opened it as it unmounts, so the old 160ms reverse-animation
+   * delay would only have held a dismissed dialog on screen. */
   const close = useCallback(() => {
-    setClosing(true)
-    clearTimer()
-    closeTimer.current = setTimeout(() => {
-      setLead(null)
-      setMode('thread')
-      setClosing(false)
-      closeTimer.current = undefined
-    }, CLOSE_MS)
+    setLead(null)
+    setMode('thread')
   }, [])
 
   // The drawer is modal to the page it was opened from — navigating (browser
@@ -60,12 +42,13 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     if (leadRef.current) close()
   }, [pathname, close])
 
-  useEffect(() => () => clearTimer(), [])
-
   return (
     <Ctx.Provider value={{ openConversation }}>
       {children}
-      <ConversationDrawer lead={lead} initialMode={mode} closing={closing} onClose={close} />
+      {/* Keyed per open, so the drawer's view state starts from `mode` on its
+          first frame. Otherwise it renders the thread for one frame, the
+          thread takes focus, and switching to the requested view drops it. */}
+      <ConversationDrawer key={lead ? `${lead.id}:${mode}` : 'closed'} lead={lead} initialMode={mode} onClose={close} />
     </Ctx.Provider>
   )
 }

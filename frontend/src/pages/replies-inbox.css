@@ -107,27 +107,6 @@
   font-size: var(--text-subsection);
   line-height: var(--leading-body);
 }
-.replies-pane-title .small { display: block; margin-top: 2px; }
-
-.replies-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex: 0 0 auto;
-  min-height: var(--control-height);
-  padding: 0 var(--space-lg);
-  border-bottom: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.replies-search input {
-  flex: 1; min-width: 0;
-  min-height: var(--control-height);
-  padding: 0;
-  border: 0; outline: 0; background: transparent;
-  font-size: var(--text-table);
-}
-.replies-search:focus-within { outline: var(--focus-width) solid var(--focus-ring); outline-offset: -2px; }
-
 
 /* The name is the first thing in the row and gets two lines before anything
  * is clipped; the time, the snippet and the account context are all quieter. */
@@ -144,7 +123,7 @@
   cursor: pointer;
 }
 .replies-list-item:hover { background: var(--surface-2); }
-.replies-list-item.selected { background: var(--accent-subtle); box-shadow: inset 3px 0 var(--accent); }
+.replies-list-item[aria-current='true'] { background: var(--accent-subtle); box-shadow: inset 3px 0 var(--accent); }
 .replies-list-identity, .replies-list-item-top, .replies-list-item-bottom {
   display: flex; align-items: center; gap: var(--space-sm); justify-content: space-between; min-width: 0;
 }
@@ -160,7 +139,6 @@
   overflow-wrap: anywhere;
 }
 .replies-list-item time { flex: 0 0 auto; color: var(--text-muted); font-size: var(--text-meta); white-space: nowrap; }
-.replies-list-identity .small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .replies-list-item-bottom { color: var(--text-muted); font-size: var(--text-meta); }
 .replies-list-item-bottom > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .replies-list-item-bottom b, .replies-pending-badge {
@@ -187,7 +165,7 @@
 }
 .replies-message.inbound { background: var(--surface-2); margin-right: auto; }
 .replies-message.outbound { background: var(--accent-subtle); margin-left: auto; }
-.replies-message:hover, .replies-message.selected { border-color: var(--accent); }
+.replies-message:hover, .replies-message[aria-pressed='true'] { border-color: var(--accent); }
 .replies-message-meta, .replies-message-footer {
   display: flex; gap: var(--space-sm); justify-content: space-between;
   color: var(--text-muted); font-size: var(--text-meta);
@@ -208,49 +186,10 @@
 .replies-action-panel { border-top: 1px solid var(--border); }
 .replies-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-md); }
 .replies-panel-heading time { display: block; margin-top: 2px; }
-.replies-fieldset { display: flex; flex-direction: column; gap: var(--space-xs); margin: 0 0 var(--space-lg); padding: 0; border: 0; min-width: 0; }
-.replies-fieldset legend, .replies-label {
-  margin-bottom: var(--space-xs);
-  color: var(--text);
-  font-size: var(--text-table);
-  line-height: var(--leading-table);
-  font-weight: 600;
-}
-.replies-label { display: flex; align-items: center; gap: var(--space-xs); }
-.replies-choice {
-  min-height: var(--control-height);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--text-table);
-  text-align: left;
-  cursor: pointer;
-}
-.replies-choice.selected { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.replies-reason {
-  display: flex; align-items: center; gap: var(--space-sm);
-  min-height: var(--control-height);
-  padding: var(--space-xs);
-  border-radius: var(--radius-control);
-  cursor: pointer;
-}
-.replies-reason:hover { background: var(--surface-2); }
-.replies-reason span { flex: 1; min-width: 0; }
-.replies-reason strong { font-size: var(--text-table); font-weight: 500; line-height: var(--leading-table); }
-.replies-reason input, .replies-dnc input, .replies-confirm input { flex: 0 0 20px; width: 20px; height: 20px; accent-color: var(--accent); }
-.replies-fieldset select, .replies-fieldset input, .replies-fieldset textarea { width: 100%; min-width: 0; }
 .replies-optional { margin: var(--space-md) 0; padding-top: var(--space-md); border-top: 1px solid var(--border); font-size: var(--text-table); }
 .replies-optional summary { min-height: var(--control-height-sm); color: var(--accent); font-weight: 600; cursor: pointer; }
-.replies-optional .replies-fieldset { margin: var(--space-md) 0; }
 .replies-form-error, .replies-inline-error { margin: var(--space-xs) 0; color: var(--danger); font-size: var(--text-meta); }
 .replies-inline-error { padding: var(--space-md); border: 1px solid var(--danger-border); border-radius: var(--radius-control); background: var(--danger-subtle); }
-.replies-confirm, .replies-dnc { display: flex; align-items: flex-start; gap: var(--space-sm); margin: var(--space-md) 0; }
-.replies-confirm span, .replies-dnc span { font-size: var(--text-table); line-height: var(--leading-table); }
-.replies-dnc span { display: flex; flex-direction: column; gap: 2px; }
-.replies-dnc small { color: var(--text-muted); font-size: var(--text-meta); }
 .replies-review-meta, .replies-history { margin-top: var(--space-md); color: var(--text-muted); font-size: var(--text-meta); }
 .replies-history { padding-top: var(--space-md); border-top: 1px solid var(--border); }
 .replies-history summary { color: var(--accent); font-weight: 600; cursor: pointer; }
@@ -286,7 +225,7 @@
   text-align: center;
 }
 .replies-select-empty { flex: 1; }
-.replies-error, .replies-thread-status.error { color: var(--danger); }
+.replies-error { color: var(--danger); }
 
 /* A short window is a stress case, not a separate design: the same hierarchy
  * with one tighter step, so the sticky footer still fits. */

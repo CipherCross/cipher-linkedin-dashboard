@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
 import { replyDateKey, replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
 import { SENTIMENT_LABELS, type ReplyThreadMessage } from '../../lib/replyReview'
+import { Button } from '../../ui'
 
 export interface ConversationThreadProps {
   messages: ReplyThreadMessage[]
@@ -42,12 +43,14 @@ export function ConversationThread({
     if (focusMessageId == null) lastFocus.current = null
   }, [messages, focusMessageId])
   if (loading && !messages.length) return <div className="replies-thread-status" aria-busy="true">Loading the conversation…</div>
-  if (error && !messages.length) return <div className="replies-thread-status error">{error}</div>
+  if (error && !messages.length) return <div className="replies-thread-status text-app-danger">{error}</div>
   if (!messages.length) return <div className="replies-thread-status"><MessageCircle size={20} aria-hidden="true" /> No messages in this window.</div>
   let previousDay = ''
   return (
     <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain] px-app-xl py-app-lg" aria-label="Conversation" ref={scrollRef}>
-      {olderCursor && <button className="flex items-center gap-app-sm mt-0 mx-auto mb-app-md min-h-control-sm px-app-md py-0 border border-app-border-strong rounded-control bg-transparent font-[inherit] text-app-table font-semibold cursor-pointer text-app-accent" type="button" onClick={onLoadOlder} disabled={loading}><ArrowUp size={14} /> Load older messages</button>}
+      {olderCursor && <div className="flex justify-center mb-app-md">
+        <Button variant="ghost" size="sm" icon={<ArrowUp size={14} aria-hidden="true" />} onClick={onLoadOlder} disabled={loading}>Load older messages</Button>
+      </div>}
       {messages.map((message) => {
         const day = replyDateKey(message.sent_at)
         const showDay = day !== previousDay
@@ -59,9 +62,16 @@ export function ConversationThread({
         return (
           <div key={message.id}>
             {showDay && <div className="my-app-lg mx-auto text-app-text-muted text-app-meta text-center">{replyDayHeading(message.sent_at)}</div>}
+            {/* ui-exception(replies-message-bubble): a message row is the whole
+                conversation bubble (sender, timestamp, body, sentiment badge) —
+                richer content than Button's fixed contract renders — kept as a
+                real, keyboard-operable <button> so Tab/Enter/Space still select
+                it for review. verify: Tab through the thread, Enter/Space
+                selects a message, and the selected bubble carries
+                aria-pressed="true". */}
             <button
               type="button"
-              className={`replies-message ${inbound ? 'inbound' : 'outbound'} ${selected ? 'selected' : ''} ${focused ? 'focused' : ''}`}
+              className={`replies-message ${inbound ? 'inbound' : 'outbound'} ${focused ? 'focused' : ''}`}
               data-message-id={message.id}
               onClick={() => onSelectMessage(message)}
               aria-pressed={selected}
@@ -83,17 +93,22 @@ export function ConversationThread({
                             ? 'sentiment-neutral'
                             : 'sentiment-auto'
                 )}>{SENTIMENT_LABELS[review.sentiment]}</span> : <span className="text-app-warning text-app-meta font-semibold">Unreviewed</span>}
-                {review?.reason_ids?.length ? <span className="muted small">{review.reason_ids.length === 1 ? '1 reason' : `${review.reason_ids.length} reasons`}</span> : null}
+                {review?.reason_ids?.length ? <span className="text-app-text-muted text-app-meta">{review.reason_ids.length === 1 ? '1 reason' : `${review.reason_ids.length} reasons`}</span> : null}
               </span>}
             </button>
           </div>
         )
       })}
-      {newerCursor && <button className="flex items-center gap-app-sm mt-0 mx-auto mb-app-md min-h-control-sm px-app-md py-0 border border-app-border-strong rounded-control bg-transparent font-[inherit] text-app-table font-semibold cursor-pointer text-app-accent" type="button" onClick={onLoadNewer} disabled={loading}><ArrowDown size={14} /> Load newer messages</button>}
+      {newerCursor && <div className="flex justify-center mb-app-md">
+        <Button variant="ghost" size="sm" icon={<ArrowDown size={14} aria-hidden="true" />} onClick={onLoadNewer} disabled={loading}>Load newer messages</Button>
+      </div>}
     </div>
   )
 }
 
 export function ThreadScrollHint({ older, newer, onOlder, onNewer }: { older: boolean; newer: boolean; onOlder: () => void; onNewer: () => void }) {
-  return <div className="replies-thread-hints">{older && <button type="button" onClick={onOlder}><ChevronUp size={14} /> Older</button>}{newer && <button type="button" onClick={onNewer}><ChevronDown size={14} /> Newer</button>}</div>
+  return <div className="replies-thread-hints">
+    {older && <Button variant="ghost" size="sm" icon={<ChevronUp size={14} aria-hidden="true" />} onClick={onOlder}>Older</Button>}
+    {newer && <Button variant="ghost" size="sm" icon={<ChevronDown size={14} aria-hidden="true" />} onClick={onNewer}>Newer</Button>}
+  </div>
 }

@@ -122,6 +122,28 @@
       "reason": "The Leads row's open action: a real button laid over the row with pointer-events off, so Tab reaches it and its focus ring outlines the row while the links, stage select and tooltips beneath keep working. Replaces <tr role=\"button\"> around other controls.",
       "verification": "Tab to a row, Enter opens the conversation, focus returns to it on close; leadsExplorerPage.",
       "removeByPhase": null
+    },
+    {
+      "id": "replies-queue-item",
+      "kind": "raw-control",
+      "path": "src/pages/Replies.tsx",
+      "symbol": "Replies",
+      "tag": "button",
+      "owner": "frontend/replies",
+      "reason": "A queue row is a selectable list item with rich multi-line content (avatar, name, time, snippet, account, owner, pending count) that the fixed-height Button cannot hold; it stays a real button and marks selection with aria-current.",
+      "verification": "Tab through the queue, Enter/Space selects a row, the selected row carries aria-current=\"true\"; repliesWorkspacePage.",
+      "removeByPhase": null
+    },
+    {
+      "id": "replies-message-bubble",
+      "kind": "raw-control",
+      "path": "src/components/conversation/ConversationThread.tsx",
+      "symbol": "ConversationThread",
+      "tag": "button",
+      "owner": "frontend/replies",
+      "reason": "A message in the Replies thread is selectable for review; the whole bubble (sender, time, body, status) is the button, which Button cannot render, and aria-pressed marks the selected one.",
+      "verification": "Tab through the thread, Enter/Space selects a message, the selected bubble carries aria-pressed=\"true\"; repliesInboxComponents.",
+      "removeByPhase": null
     }
   ]
 }
