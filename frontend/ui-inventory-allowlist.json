@@ -75,8 +75,8 @@
       "symbol": "Sidebar",
       "tag": "button",
       "owner": "frontend/navigation",
-      "reason": "Quick Navigation trigger presented as a search field with its ⌘K hint; it opens the command dialog rather than performing an action.",
-      "verification": "Click and ⌘K open Quick Navigation; focus returns to the trigger on close.",
+      "reason": "Quick Navigation trigger presented as a search field with its \u2318K hint; it opens the command dialog rather than performing an action.",
+      "verification": "Click and \u2318K open Quick Navigation; focus returns to the trigger on close.",
       "removeByPhase": null
     },
     {
@@ -113,14 +113,14 @@
       "removeByPhase": null
     },
     {
-      "id": "leads-row-open",
+      "id": "row-open-button",
       "kind": "raw-control",
-      "path": "src/pages/LeadsExplorer.tsx",
-      "symbol": "LeadsExplorer",
+      "path": "src/components/RowOpenButton.tsx",
+      "symbol": "RowOpenButton",
       "tag": "button",
-      "owner": "frontend/leads",
-      "reason": "The Leads row's open action: a real button laid over the row with pointer-events off, so Tab reaches it and its focus ring outlines the row while the links, stage select and tooltips beneath keep working. Replaces <tr role=\"button\"> around other controls.",
-      "verification": "Tab to a row, Enter opens the conversation, focus returns to it on close; leadsExplorerPage.",
+      "owner": "frontend/lists",
+      "reason": "A table row's open action for rows that contain their own links and controls (Leads, campaign leads): a real button laid over the row with pointer-events off, so Tab reaches it and its focus ring outlines the row while the links, selects and tooltips beneath keep working. Replaces <tr role=\"button\"> around other controls.",
+      "verification": "Tab to a row, Enter opens the conversation, focus returns to it on close; leadsExplorerPage, campaignWorkspace.",
       "removeByPhase": null
     },
     {

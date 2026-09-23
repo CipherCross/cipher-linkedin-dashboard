@@ -28,7 +28,7 @@ export function LeadReplyIdentity({
       <LeadAvatar lead={lead} size={30} />
       <div className="min-w-0">
         <a
-          className="row-link"
+          className="relative z-10 text-app-text no-underline hover:text-app-accent hover:underline"
           href={lead.profile_url}
           target="_blank"
           rel="noreferrer"
@@ -36,6 +36,8 @@ export function LeadReplyIdentity({
         >
           {lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')}
         </a>
+        {/* Sentiment, intent and milestone keep the domain chip colours used on
+            every reply surface (referral is purple, which no Badge tone has). */}
         {sentiment && (
           <span className={`badge senti ${sentiment.cls}`} title={reply?.reason ?? ''}>
             {sentiment.label}
@@ -46,8 +48,12 @@ export function LeadReplyIdentity({
             {intent.short} · {intent.label}
           </span>
         )}
-        {lead.company && <div className="muted small">{lead.company}</div>}
-        {showSnippet && reply?.body && <div className="reply-body">“{reply.body}”</div>}
+        {lead.company && <div className="text-app-meta text-app-text-muted">{lead.company}</div>}
+        {showSnippet && reply?.body && (
+          <div className="mt-1.5 px-2.5 py-1.5 bg-app-surface-2 border-l-2 border-app-border-strong rounded-r-sm text-app-table text-app-text-secondary line-clamp-2">
+            “{reply.body}”
+          </div>
+        )}
       </div>
     </div>
   )

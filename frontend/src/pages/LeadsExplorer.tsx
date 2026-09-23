@@ -23,6 +23,7 @@ import type { Tone } from '../ui'
 import { COPY } from '../ui/labels'
 import { LeadMilestoneBadge, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
 import { LostReasonModal } from '../components/LostReasonModal'
+import { RowOpenButton } from '../components/RowOpenButton'
 import type {
   CoachingDigest, Gender, Lead, LeadsSearchItem, LeadsSearchPage, ReplyIntent, Sentiment,
 } from '../lib/types'
@@ -976,22 +977,7 @@ export function LeadsExplorer() {
                 onClick={() => openConversation(l)}
               >
                 <td onClick={(e) => e.stopPropagation()}>
-                  {/* ui-exception(leads-row-open): the row's open action. A real
-                      button laid over the whole row so Tab reaches it and its
-                      focus ring outlines the row, but it ignores the pointer, so
-                      the links, the stage select and every tooltip underneath
-                      keep working. verify: Tab to a row, Enter opens the
-                      conversation, focus returns to it on close. */}
-                  <button
-                    type="button"
-                    data-row-open=""
-                    className="absolute inset-0 z-0 p-0 border-0 bg-transparent pointer-events-none focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
-                    aria-label={`Open conversation with ${name}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openConversation(l)
-                    }}
-                  />
+                  <RowOpenButton label={`Open conversation with ${name}`} onOpen={() => openConversation(l)} />
                   <LeadReplyIdentity
                     lead={l}
                     reply={reply}

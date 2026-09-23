@@ -20,11 +20,23 @@ import {
   latestConversationMessageMap,
   messageSnippet,
 } from '../lib/followUps'
+import type { FollowUpBucket } from '../lib/followUps'
 import type { ConversationLatestMessage, FollowUpState, Lead } from '../lib/types'
-import { PageHeader, SelectField, TextField, Toolbar } from '../ui'
+import {
+  Badge, Button, PageHeader, Select, SelectField, StatusText, TextField, Toolbar,
+} from '../ui'
+import type { Tone } from '../ui'
 
 // Intake lane: replies that haven't been triaged into the pipeline yet.
 const INTAKE = 'untriaged'
+
+/* Due-date urgency, in the same words as the Leads and Follow-ups queues. */
+const FOLLOW_UP_TONE: Record<FollowUpBucket, Tone> = {
+  overdue: 'danger',
+  today: 'warning',
+  upcoming: 'accent',
+  unscheduled: 'neutral',
+}
 
 export function Pipeline() {
   const { data } = useData()
@@ -159,8 +171,8 @@ export function Pipeline() {
         title="Pipeline"
         description="Drag replies into the funnel and track them by hand. Filters are kept in the URL."
         actions={
-          <span className="identity-chip" title="Audit identity comes from your login">
-            Working as <strong>{actor}</strong>
+          <span className="text-app-meta text-app-text-muted" title="Audit identity comes from your login">
+            Working as <strong className="text-app-text font-semibold">{actor}</strong>
           </span>
         }
       />
@@ -196,16 +208,34 @@ export function Pipeline() {
         </SelectField>
       </Toolbar>
 
-      <div className="pipe-board">
+      <p className="mt-0 mb-app-sm text-app-meta text-app-text-muted">
+        The board scrolls sideways. Drag a card to another stage, or open Manage lead on the card.
+      </p>
+      <div
+        className="flex items-start gap-app-lg overflow-x-auto pb-2 [overscroll-behavior-x:contain]"
+        style={{
+          // Full-bleed: escape the centered .page container so columns scroll to
+          // the content-area edges instead of clipping at the page's max width.
+          marginInline: 'calc(50% - 50vw + var(--sidebar-w) / 2)',
+          paddingInline: 'calc(50vw - 50% - var(--sidebar-w) / 2)',
+        }}
+        role="region"
+        aria-label="Pipeline board"
+        tabIndex={0}
+      >
         {boardColumns.map((col) => {
           const cards = columns.get(col.id) ?? []
           return (
             <section
               key={col.id}
-              className={`pipe-col ${dragOver === col.id ? 'drag-over' : ''}`}
-              /* One status accent per COLUMN. The cards inside it no longer
-                 repeat the same hue on their own left border. */
-              style={{ borderTopColor: col.color }}
+              className={[
+                'flex-none w-[340px] flex flex-col rounded-card bg-app-surface border h-[calc(100vh-240px)]',
+                dragOver === col.id ? 'border-app-accent bg-app-accent-subtle' : 'border-app-border',
+              ].join(' ')}
+              // The ONE status accent on this board: a 3px stage stripe along the
+              // column's top edge, which an inline style always keeps regardless
+              // of the drag-over highlight above. Cards inside carry no colour.
+              style={{ borderTopWidth: 3, borderTopColor: col.color }}
               onDragOver={(e) => {
                 e.preventDefault()
                 setDragOver(col.id)
@@ -261,7 +291,9 @@ export function Pipeline() {
                     draggingRef={draggingId}
                   />
                 ))}
-                {cards.length === 0 && <div className="text-center py-app-md px-0 muted small">—</div>}
+                {cards.length === 0 && (
+                  <div className="text-center py-app-md px-0 text-app-text-muted text-app-meta">—</div>
+                )}
               </div>
             </section>
           )
@@ -338,53 +370,53 @@ function PipeCard({
 
   return (
     <article
-      className="flex flex-col gap-[7px] p-2.5 border border-app-border rounded-control bg-app-surface cursor-grab active:cursor-grabbing hover:border-app-border-strong [&_.substatus-chip]:mt-0"
+      className="flex flex-col gap-[7px] p-2.5 border border-app-border rounded-control bg-app-surface cursor-grab active:cursor-grabbing hover:border-app-border-strong"
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <button
-        type="button"
-        className="flex flex-col gap-1.5 min-w-0 w-full border-0 p-0 bg-none text-app-text cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)] focus-visible:outline-offset-[3px] focus-visible:rounded-sm"
+      <Button
+        variant="ghost"
+        className="flex-col items-stretch justify-start gap-1.5 min-w-0 w-full h-auto p-0 text-left whitespace-normal font-normal text-app-text"
         draggable={false}
         onClick={() => {
           if (draggingRef.current) return
           onOpen()
         }}
       >
-        <span className="flex items-center gap-app-sm [&_.pipe-card-name]:min-w-0">
+        <span className="flex items-center gap-app-sm min-w-0">
           <LeadAvatar lead={lead} size={32} />
           <span className="min-w-0 flex flex-col gap-px">
-            <span className="pipe-card-name text-app-table font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
-            <span className="overflow-hidden text-ellipsis whitespace-nowrap muted small">
+            <span className="text-app-table font-semibold truncate">{name}</span>
+            <span className="truncate text-app-meta text-app-text-muted">
               {[lead.company, lead.headline].filter(Boolean).join(' · ') || '—'}
             </span>
           </span>
         </span>
         {activeFollowUp(followUp) && (
-          <span className={`pipe-follow-due ${followUpBucket(followUp)}`}>
+          <Badge tone={FOLLOW_UP_TONE[followUpBucket(followUp)]} className="self-start">
             {followUpDueLabel(followUp)}
             {followUpOwnerName && followUp?.owner_id !== lead.assigned_to
               ? ` · ${followUpOwnerName}`
               : ''}
-          </span>
+          </Badge>
         )}
         {latestMessage && (
           <span className="flex items-center gap-1.5 min-w-0 text-[length:var(--text-xs)] text-app-text-secondary">
-            <span className={`pipe-msg-dir ${latestMessage.direction}`}>
+            <StatusText tone={latestMessage.direction === 'in' ? 'accent' : 'neutral'}>
               {latestMessage.direction === 'in' ? 'Them' : 'Us'}
-            </span>
-            <span className="ellipsis">{messageSnippet(latestMessage.body, 74)}</span>
-            <time className="flex-[0_0_auto] text-app-text-muted" dateTime={latestMessage.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(latestMessage.sent_at)}</time>
+            </StatusText>
+            <span className="truncate min-w-0">{messageSnippet(latestMessage.body, 74)}</span>
+            <time className="flex-none text-app-text-muted" dateTime={latestMessage.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(latestMessage.sent_at)}</time>
           </span>
         )}
         <span
-          className="block max-w-full muted small ellipsis"
+          className="block max-w-full truncate text-app-meta text-app-text-muted"
           title={`${campaignName} · ${accountName}`}
         >
           {campaignName} · {accountName}
         </span>
-      </button>
+      </Button>
 
       <div className="flex items-center gap-app-sm mt-app-xs text-app-meta min-h-5">
         {assigneeName && (
@@ -392,9 +424,9 @@ function PipeCard({
             <InitialsAvatar name={assigneeName} size={20} />
           </span>
         )}
-        <span className="muted small ellipsis">{substatusLabel(lead.pipeline_substatus ?? '') || ''}</span>
+        <span className="text-app-text-muted truncate">{substatusLabel(lead.pipeline_substatus ?? '') || ''}</span>
         {days != null && (
-          <span className="ml-auto muted small" title="Days in this stage">
+          <span className="ml-auto text-app-text-muted" title="Days in this stage">
             {days}d
           </span>
         )}
@@ -410,11 +442,11 @@ function PipeCard({
         <summary>Manage lead</summary>
         {/* Drag-and-drop stays the fast path; this is the explicit one, and it
             is also the only path a keyboard user has. */}
-        <div className="pipe-card-controls">
+        <div className="flex flex-col gap-app-sm mt-app-sm">
           {substatuses.length > 0 && (
-            <select
-              className="substatus-chip"
+            <Select
               aria-label="Pipeline substatus"
+              className="min-h-control-sm text-app-meta"
               value={lead.pipeline_substatus ?? ''}
               draggable={false}
               onMouseDown={stopControl}
@@ -425,11 +457,11 @@ function PipeCard({
               {substatuses.map((s) => (
                 <option key={s} value={s}>{substatusLabel(s)}</option>
               ))}
-            </select>
+            </Select>
           )}
-          <select
-            className="pipe-stage-select"
+          <Select
             aria-label="Pipeline stage"
+            className="min-h-control-sm text-app-meta"
             value={isIntake ? '' : currentStage}
             draggable={false}
             onMouseDown={stopControl}
@@ -440,10 +472,10 @@ function PipeCard({
             {PIPELINE_STAGES.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
-          </select>
-          <select
-            className="pipe-assign-select"
+          </Select>
+          <Select
             aria-label="Lead owner"
+            className="min-h-control-sm text-app-meta"
             value={String(lead.assigned_to ?? '')}
             draggable={false}
             onMouseDown={stopControl}
@@ -456,7 +488,12 @@ function PipeCard({
             {members.map((m) => (
               <option key={m.id} value={String(m.id)}>{m.name}</option>
             ))}
-          </select>
+          </Select>
+          {/* A disabled control's `title` is not reliably announced, so the
+              reason it's disabled is also plain visible text. */}
+          {assignBlockedReason && (
+            <span className="text-app-meta text-app-text-muted">{assignBlockedReason}</span>
+          )}
         </div>
       </details>
     </article>

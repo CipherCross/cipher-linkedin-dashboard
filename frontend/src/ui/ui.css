@@ -1068,8 +1068,6 @@ tr:last-child td { border-bottom: none; }
 /* spinner used on busy icon-buttons */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.9s linear infinite; }
-.reply-row > .avatar { margin-top: 1px; }
-.reply-who-top .badge { margin-right: 0; }
 .reply-body {
   margin-top: 5px;
   padding: 6px 10px;
@@ -1114,10 +1112,8 @@ tr:last-child td { border-bottom: none; }
 /* --- Clickable rows (campaign table, campaign leads workspace) ------------ */
 .row-clickable { cursor: pointer; transition: background 0.14s ease; }
 tr.row-clickable:hover { background: var(--surface-3); }
-.reply-row.row-clickable:hover { background: var(--surface-3); }
 /* keyboard focus for row-click tables (outline inset so it isn't clipped) */
-tr.row-clickable:focus-visible,
-.reply-row.row-clickable:focus-visible {
+tr.row-clickable:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
   background: var(--surface-3);
@@ -1185,47 +1181,6 @@ tr.row-clickable:focus-visible,
 .drp-day.disabled { opacity: 0.3; cursor: not-allowed; }
 .drp-day.disabled:hover { background: none; }
 
-/* --- Pipeline board (pages/Pipeline.tsx) ----------------------------------- */
-.pipe-board {
-  display: flex;
-  gap: var(--space-lg);
-  overflow-x: auto;
-  padding-bottom: 8px;
-  align-items: flex-start;
-  /* Horizontal drag-scroll shouldn't chain into a browser back/forward swipe. */
-  overscroll-behavior-x: contain;
-  /* Full-bleed: escape the centered .page container so columns scroll to the
-   * content-area edges instead of clipping at the 1280px content box. The page
-   * is centred within the content column (viewport minus the sidebar), so the
-   * classic 50vw trick is offset by half the rail width to land on the content
-   * edges rather than under the sidebar. --sidebar-w is 0 on mobile, collapsing
-   * this back to plain viewport-centred behaviour. The inner padding puts the
-   * first column back on the page's left edge. */
-  margin-inline: calc(50% - 50vw + var(--sidebar-w) / 2);
-  padding-inline: calc(50vw - 50% - var(--sidebar-w) / 2);
-}
-.pipe-card-message .ellipsis {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  white-space: normal;
-}
-.substatus-chip,
-.pipe-stage-select,
-.pipe-assign-select {
-  min-height: var(--control-height-sm);
-  font-size: var(--text-meta);
-  padding: 0 var(--space-sm);
-  /* Base `select` rule sets the chevron at `right 10px`; keep the text box
-   * clear of it and truncate long labels instead of colliding with the arrow. */
-  padding-right: 1.75rem;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* --- Small centred modal (Sequence builder) ------------------------------- */
 .pipe-modal-overlay {
   position: fixed;
@@ -1256,39 +1211,7 @@ tr.row-clickable:focus-visible,
   font-weight: 600;
 }
 .pipe-modal textarea { resize: vertical; }
-.pipe-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .conv-demographics .badge { margin-bottom: 4px; }
-.pipe-msg-dir {
-  padding: 2px var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--text-meta);
-  font-weight: 600;
-}
-.pipe-msg-dir.in { color: var(--accent); }
-.follow-due,
-.pipe-follow-due {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  border-radius: var(--radius-pill);
-  padding: 2px var(--space-sm);
-  border: 1px solid var(--border);
-  font-size: var(--text-meta);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: var(--surface-2);
-  color: var(--text-secondary);
-}
-.follow-due.overdue,
-.pipe-follow-due.overdue { background: var(--danger-subtle); color: var(--danger); }
-.follow-due.today,
-.pipe-follow-due.today { background: var(--warning-subtle); color: var(--warning); }
-.follow-due.upcoming,
-.pipe-follow-due.upcoming { background: var(--accent-subtle); color: var(--accent); }
-.pipe-card-message .ellipsis { flex: 1; min-width: 0; }
-.pipe-card-foot > .ellipsis { flex: 1; }
 
 .btn.danger { color: var(--danger); border-color: var(--danger-border); }
 
@@ -1297,22 +1220,6 @@ tr.row-clickable:focus-visible,
 /* --- Authentication: AuthCard.tsx owns its utilities; the spinner keyframes
  * stay shared (the sequence publish strip reuses them). */
 @keyframes auth-spin { to { transform: rotate(360deg); } }
-
-/* --- Authenticated identity --------------------------------------------- */
-.identity-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: var(--control-height);
-  padding: 0 var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--text-table);
-}
-.identity-chip strong { color: var(--text); font-weight: 600; }
-.identity-chip.compact { width: fit-content; min-height: 30px; padding-block: 5px; }
 
 .campaign-runtime.compact { gap: 2px; }
 .runtime-unknown, .archive-unknown, .observation-unsupported,

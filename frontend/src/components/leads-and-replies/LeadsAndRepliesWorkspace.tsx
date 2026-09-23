@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, SearchX } from 'lucide-react'
+import { SearchX } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useConversation } from '../../lib/ConversationContext'
 import type {
@@ -10,10 +10,15 @@ import {
   INTENT_META, highestIntentByLead, instanceName, latestRepliesByLead, leadKey,
 } from '../../lib/leads'
 import {
-  activeFollowUp, followUpDueLabel, followUpKey, followUpStateMap,
+  activeFollowUp, followUpBucket, followUpDueLabel, followUpKey, followUpStateMap,
 } from '../../lib/followUps'
+import type { FollowUpBucket } from '../../lib/followUps'
 import { replyDate, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
-import { EmptyState } from '../../ui'
+import {
+  AccountIdentity, Badge, Button, EmptyState, Table, TableFrame, TableToolbar, Tabs, TextField,
+} from '../../ui'
+import type { Tone } from '../../ui'
+import { RowOpenButton } from '../RowOpenButton'
 import { LeadMilestoneBadge, LeadReplyIdentity } from './LeadReplyIdentity'
 
 export type LeadsReplyFilter = 'all' | 'replied' | 'p3' | 'needs-follow-up' | 'no-reply'
@@ -27,6 +32,14 @@ const FILTERS: Array<{ id: LeadsReplyFilter; label: string }> = [
 ]
 
 const FILTER_IDS = new Set(FILTERS.map((filter) => filter.id))
+
+/* Due-date urgency, in the same words and tones as Leads and Follow-ups. */
+const FOLLOW_UP_TONE: Record<FollowUpBucket, Tone> = {
+  overdue: 'danger',
+  today: 'warning',
+  upcoming: 'accent',
+  unscheduled: 'neutral',
+}
 
 export function LeadsAndRepliesWorkspace({
   leads,
@@ -127,112 +140,107 @@ export function LeadsAndRepliesWorkspace({
     setParams(next, { replace: true })
   }
 
+  const clearFilters = () => {
+    setQueryInput('')
+    const next = new URLSearchParams(params)
+    next.delete('people')
+    next.delete('q')
+    setParams(next, { replace: true })
+  }
+
   return (
-    <section >
-      <div className="flex items-center justify-between gap-app-md flex-wrap mb-app-lg max-[700px]:items-stretch">
-        <div className="segmented flex-wrap" role="tablist" aria-label="Filter campaign leads">
-          {FILTERS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`segmented-item ${filter === item.id ? 'active' : ''}`}
-              role="tab"
-              aria-selected={filter === item.id}
-              onClick={() => setParam('people', item.id)}
-            >
-              {item.label} <span className="tabular-nums text-app-text-muted text-[length:var(--text-xs)]">{counts[item.id]}</span>
-            </button>
-          ))}
-        </div>
-        <label className="flex items-center gap-[7px] min-w-[240px] max-[700px]:min-w-0 border border-app-border rounded-md px-2.5 bg-app-surface text-app-text-muted [&_input]:border-0 [&_input]:bg-transparent [&_input]:text-app-text [&_input]:py-app-sm [&_input]:px-0 [&_input]:font-[inherit] [&_input]:flex-1 [&_input]:min-w-0 [&_input:focus]:outline-none">
-          <Search size={15} />
-          <input
-            type="search"
-            value={queryInput}
-            placeholder="Search name, company, headline…"
-            onChange={(event) => setQueryInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') setParam('q', queryInput.trim() || null)
-            }}
-            onBlur={() => setParam('q', queryInput.trim() || null)}
-          />
-        </label>
+    <section>
+      {/* The segments narrow the same list, so they are tabs, not a mode switch. */}
+      <div className="flex items-end justify-between gap-app-md flex-wrap mb-app-lg">
+        <Tabs
+          label="Filter campaign leads"
+          value={filter}
+          onChange={(id) => setParam('people', id)}
+          items={FILTERS.map((item) => ({ id: item.id, label: item.label, count: counts[item.id] }))}
+        />
+        <TextField
+          className="min-w-[280px]"
+          label="Search campaign leads"
+          labelHidden
+          type="search"
+          value={queryInput}
+          placeholder="Search name, company, headline…"
+          onChange={(event) => setQueryInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') setParam('q', queryInput.trim() || null)
+          }}
+          onBlur={() => setParam('q', queryInput.trim() || null)}
+        />
       </div>
 
-      <div className="card pt-app-md">
-        <div className="mb-[9px] muted small">
-          {rows.length} of {leads.length} leads · newest replies first
-        </div>
-        <div className="table-scroll">
-          <table data-leads-replies="table" className="w-full border-collapse [&_th]:text-left [&_th]:text-[length:var(--text-2xs)] [&_th]:uppercase [&_th]:tracking-[.04em] [&_th]:text-app-text-muted [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:border-b [&_th]:border-app-border [&_th]:whitespace-nowrap [&_td]:px-2.5 [&_td]:py-[9px] [&_td]:border-b [&_td]:border-app-border [&_td]:align-top [&_tbody_tr:last-child_td]:border-b-0">
-            <thead>
-              <tr>
-                <th>Lead & latest reply</th>
-                <th>Milestone</th>
-                <th>Reply</th>
-                <th>Intent</th>
-                <th>Follow-up</th>
-                <th>Sender & campaign</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 100).map(({ lead, reply, highestIntent, followUp, needsFollowUp }) => (
-                <tr
-                  key={lead.id}
-                  className="row-clickable"
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Open conversation with ${lead.full_name || 'lead'}`}
-                  onClick={() => openConversation(lead)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      openConversation(lead)
-                    }
-                  }}
-                >
-                  <td><LeadReplyIdentity lead={lead} reply={reply} highestIntent={highestIntent} /></td>
-                  <td><LeadMilestoneBadge lead={lead} /></td>
-                  <td className="muted small">
-                    {reply
-                      ? <time dateTime={reply.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(reply.sent_at)}</time>
-                      : 'No reply yet'}
-                  </td>
-                  <td>{highestIntent ? <IntentBadge intent={highestIntent} /> : <span className="muted">—</span>}</td>
-                  <td>
-                    {activeFollowUp(followUp)
-                      ? <span className="follow-due">{followUpDueLabel(followUp)}</span>
-                      : needsFollowUp
-                        ? <span className="badge risk">Needs response</span>
-                        : <span className="muted">—</span>}
-                  </td>
-                  <td>
-                    <div>{instanceNames.get(lead.instance_id) ?? lead.instance_id}</div>
-                    <div className="muted small">{campaignNames.get(lead.campaign_id) ?? lead.campaign_id}</div>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={6}>
-                  <EmptyState
-                    icon={SearchX}
-                    title="No leads match this view"
-                    hint="Choose another segment or clear the search."
-                    action={<button className="link-btn" onClick={() => {
-                      setQueryInput('')
-                      const next = new URLSearchParams(params)
-                      next.delete('people')
-                      next.delete('q')
-                      setParams(next, { replace: true })
-                    }}>Clear filters</button>}
+      <TableFrame
+        scrollLabel="Campaign leads"
+        toolbar={<TableToolbar count={`${rows.length} of ${leads.length} leads · newest replies first`} />}
+        hint={rows.length > 100 ? 'Showing the 100 most recent matches.' : undefined}
+      >
+        <Table caption="Campaign leads and their latest replies">
+          <thead>
+            <tr>
+              <th scope="col">Lead &amp; latest reply</th>
+              <th scope="col">Milestone</th>
+              <th scope="col">Reply</th>
+              <th scope="col">Intent</th>
+              <th scope="col">Follow-up</th>
+              <th scope="col">Sender &amp; campaign</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 100).map(({ lead, reply, highestIntent, followUp, needsFollowUp }) => (
+              <tr
+                key={lead.id}
+                data-leads-replies="row"
+                className="relative cursor-pointer"
+                // The pointer path; the keyboard path is the row's button.
+                onClick={() => openConversation(lead)}
+              >
+                <td>
+                  <RowOpenButton
+                    label={`Open conversation with ${lead.full_name || 'lead'}`}
+                    onOpen={() => openConversation(lead)}
                   />
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {rows.length > 100 && <div className="muted small mt-[9px]">Showing the 100 most recent matches.</div>}
-      </div>
+                  <LeadReplyIdentity lead={lead} reply={reply} highestIntent={highestIntent} />
+                </td>
+                <td><LeadMilestoneBadge lead={lead} /></td>
+                <td className="whitespace-nowrap text-app-meta text-app-text-muted">
+                  {reply
+                    ? <time dateTime={reply.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(reply.sent_at)}</time>
+                    : 'No reply yet'}
+                </td>
+                <td>{highestIntent ? <IntentBadge intent={highestIntent} /> : <span className="text-app-text-muted">—</span>}</td>
+                <td className="whitespace-nowrap">
+                  {activeFollowUp(followUp)
+                    ? <Badge tone={FOLLOW_UP_TONE[followUpBucket(followUp)]}>{followUpDueLabel(followUp)}</Badge>
+                    : needsFollowUp
+                      ? <Badge tone="danger">Needs response</Badge>
+                      : <span className="text-app-text-muted">—</span>}
+                </td>
+                <td>
+                  <AccountIdentity
+                    name={instanceNames.get(lead.instance_id) ?? lead.instance_id}
+                    secondary={campaignNames.get(lead.campaign_id) ?? lead.campaign_id}
+                  />
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={6}>
+                <EmptyState
+                  kind={leads.length ? 'no-match' : 'empty'}
+                  icon={SearchX}
+                  title={leads.length ? 'No leads match this view' : 'No leads in this campaign yet'}
+                  hint={leads.length ? 'Choose another segment or clear the search.' : 'Leads appear here once the campaign syncs.'}
+                  action={leads.length ? <Button variant="secondary" size="sm" onClick={clearFilters}>Clear filters</Button> : undefined}
+                />
+              </td></tr>
+            )}
+          </tbody>
+        </Table>
+      </TableFrame>
     </section>
   )
 }

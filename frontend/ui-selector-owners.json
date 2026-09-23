@@ -312,7 +312,6 @@
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -448,8 +447,6 @@
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -457,7 +454,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Pipeline.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
@@ -490,8 +486,6 @@
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -499,7 +493,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Pipeline.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
@@ -926,7 +919,6 @@
       "ruleKey": "compatibility-selector:|.btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .segmented-item:active, .navlink:active:1",
       "consumerCandidates": [
         "src/components/SentimentTrendChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
@@ -1247,7 +1239,6 @@
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -1815,8 +1806,7 @@
       "ruleKey": "compatibility-selector:|.ellipsis:1",
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/Pipeline.tsx"
+        "src/components/RateVolumeScatter.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -1830,7 +1820,6 @@
       "selector": ".empty-state-action .link-btn",
       "ruleKey": "compatibility-selector:|.empty-state-action .link-btn:1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
@@ -1880,66 +1869,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-fa2471ad0195",
-      "kind": "compatibility-selector",
-      "selector": ".follow-due, .pipe-follow-due",
-      "ruleKey": "compatibility-selector:|.follow-due, .pipe-follow-due:1",
-      "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-f333b737c579",
-      "kind": "compatibility-selector",
-      "selector": ".follow-due.overdue, .pipe-follow-due.overdue",
-      "ruleKey": "compatibility-selector:|.follow-due.overdue, .pipe-follow-due.overdue:1",
-      "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-cafa1099b24c",
-      "kind": "compatibility-selector",
-      "selector": ".follow-due.today, .pipe-follow-due.today",
-      "ruleKey": "compatibility-selector:|.follow-due.today, .pipe-follow-due.today:1",
-      "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-8ebbbdc61085",
-      "kind": "compatibility-selector",
-      "selector": ".follow-due.upcoming, .pipe-follow-due.upcoming",
-      "ruleKey": "compatibility-selector:|.follow-due.upcoming, .pipe-follow-due.upcoming:1",
-      "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-309e06355956",
       "kind": "compatibility-selector",
       "selector": ".hot-leads-title .muted",
@@ -1961,8 +1890,6 @@
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -1973,7 +1900,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Pipeline.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
@@ -2054,48 +1980,6 @@
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 11"
-    },
-    {
-      "id": "compatibility-rule-4c500044e37e",
-      "kind": "compatibility-selector",
-      "selector": ".identity-chip strong",
-      "ruleKey": "compatibility-selector:|.identity-chip strong:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
-      "id": "compatibility-rule-7d99c050b983",
-      "kind": "compatibility-selector",
-      "selector": ".identity-chip",
-      "ruleKey": "compatibility-selector:|.identity-chip:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
-      "id": "compatibility-rule-f2614ac51df5",
-      "kind": "compatibility-selector",
-      "selector": ".identity-chip.compact",
-      "ruleKey": "compatibility-selector:|.identity-chip.compact:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
     },
     {
       "id": "compatibility-rule-ba11275ff102",
@@ -2398,7 +2282,6 @@
       "selector": ".link-btn",
       "ruleKey": "compatibility-selector:|.link-btn:1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
@@ -2417,7 +2300,6 @@
       "selector": ".link-btn:disabled",
       "ruleKey": "compatibility-selector:|.link-btn:disabled:1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
@@ -2436,7 +2318,6 @@
       "selector": ".link-btn:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.link-btn:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
@@ -2483,7 +2364,6 @@
       "selector": ".new-reply-open > span.reply-body",
       "ruleKey": "compatibility-selector:|.new-reply-open > span.reply-body:1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/leads-and-replies/LeadReplyIdentity.tsx",
@@ -2555,68 +2435,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-2ca9d853721f",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-board",
-      "ruleKey": "compatibility-selector:|.pipe-board:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
-      "id": "compatibility-rule-4ba8f4c274e5",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-card-foot > .ellipsis",
-      "ruleKey": "compatibility-selector:|.pipe-card-foot > .ellipsis:1",
-      "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-2de56cf63144",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-card-message .ellipsis",
-      "ruleKey": "compatibility-selector:|.pipe-card-message .ellipsis:1",
-      "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-30a0e7b1d6bd",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-card-message .ellipsis",
-      "ruleKey": "compatibility-selector:|.pipe-card-message .ellipsis:2",
-      "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-ef41eb45903f",
       "kind": "compatibility-selector",
       "selector": ".pipe-modal textarea",
@@ -2629,18 +2447,6 @@
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 11"
-    },
-    {
-      "id": "compatibility-rule-188f236f8149",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-modal-actions",
-      "ruleKey": "compatibility-selector:|.pipe-modal-actions:1",
-      "consumerCandidates": [],
-      "owner": "src/components/LostReasonModal.tsx",
-      "destination": "src/components/LostReasonModal.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 7"
     },
     {
       "id": "compatibility-rule-e1f5d052edcc",
@@ -2683,34 +2489,6 @@
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 11"
-    },
-    {
-      "id": "compatibility-rule-59a49a1e70a7",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-msg-dir",
-      "ruleKey": "compatibility-selector:|.pipe-msg-dir:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
-      "id": "compatibility-rule-6f404349acd3",
-      "kind": "compatibility-selector",
-      "selector": ".pipe-msg-dir.in",
-      "ruleKey": "compatibility-selector:|.pipe-msg-dir.in:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
     },
     {
       "id": "compatibility-rule-b645b3e7e9b9",
@@ -2795,7 +2573,6 @@
       "selector": ".reply-body",
       "ruleKey": "compatibility-selector:|.reply-body:1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/leads-and-replies/LeadReplyIdentity.tsx",
@@ -2805,62 +2582,12 @@
       "removeByPhase": "Phase 8"
     },
     {
-      "id": "compatibility-rule-9fa6a5a0edc0",
-      "kind": "compatibility-selector",
-      "selector": ".reply-row > .avatar",
-      "ruleKey": "compatibility-selector:|.reply-row > .avatar:1",
-      "consumerCandidates": [],
-      "owner": "src/ui/ui.css",
-      "destination": "src/ui/ui.css",
-      "reason": "No statically discoverable JSX class-token reference; inspect before deleting because CSS may be reached through dynamic or generated markup.",
-      "verification": "Zero-candidate inspection plus CSS parity before deletion.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-b288d98a9f18",
-      "kind": "compatibility-selector",
-      "selector": ".reply-row.row-clickable:hover",
-      "ruleKey": "compatibility-selector:|.reply-row.row-clickable:hover:1",
-      "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
-      ],
-      "owner": "src/components/ImportCalloutCard.tsx",
-      "destination": "src/components/ImportCalloutCard.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-9804c117933c",
-      "kind": "compatibility-selector",
-      "selector": ".reply-who-top .badge",
-      "ruleKey": "compatibility-selector:|.reply-who-top .badge:1",
-      "consumerCandidates": [
-        "src/components/CampaignRuntimeStatus.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "owner": "src/components/CampaignRuntimeStatus.tsx",
-      "destination": "src/components/CampaignRuntimeStatus.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-f0deec905a7e",
       "kind": "compatibility-selector",
       "selector": ".row-clickable",
       "ruleKey": "compatibility-selector:|.row-clickable:1",
       "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/CampaignTable.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -2877,7 +2604,6 @@
         "src/components/AccountCard.tsx",
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
@@ -2898,7 +2624,6 @@
         "src/components/AccountCard.tsx",
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
@@ -2932,8 +2657,6 @@
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -2944,7 +2667,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Pipeline.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
@@ -2978,8 +2700,6 @@
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
         "src/components/WarmupChart.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/GlobalSummary.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -2990,7 +2710,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Pipeline.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
@@ -3095,8 +2814,7 @@
       "selector": ".segmented-item",
       "ruleKey": "compatibility-selector:|.segmented-item:1",
       "consumerCandidates": [
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/SentimentTrendChart.tsx"
       ],
       "owner": "src/components/SentimentTrendChart.tsx",
       "destination": "src/components/SentimentTrendChart.tsx",
@@ -3110,8 +2828,7 @@
       "selector": ".segmented-item:hover",
       "ruleKey": "compatibility-selector:|.segmented-item:hover:1",
       "consumerCandidates": [
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/SentimentTrendChart.tsx"
       ],
       "owner": "src/components/SentimentTrendChart.tsx",
       "destination": "src/components/SentimentTrendChart.tsx",
@@ -3130,7 +2847,6 @@
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/DateRangePicker.tsx",
@@ -3150,7 +2866,6 @@
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/DateRangePicker.tsx",
@@ -3165,8 +2880,7 @@
       "selector": ".segmented",
       "ruleKey": "compatibility-selector:|.segmented:1",
       "consumerCandidates": [
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/SentimentTrendChart.tsx"
       ],
       "owner": "src/components/SentimentTrendChart.tsx",
       "destination": "src/components/SentimentTrendChart.tsx",
@@ -3567,7 +3281,6 @@
       "selector": ".sequence-publish-section-head .link-btn",
       "ruleKey": "compatibility-selector:|.sequence-publish-section-head .link-btn:1",
       "consumerCandidates": [
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
@@ -3997,28 +3710,13 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-101ec03da029",
-      "kind": "compatibility-selector",
-      "selector": ".substatus-chip, .pipe-stage-select, .pipe-assign-select",
-      "ruleKey": "compatibility-selector:|.substatus-chip, .pipe-stage-select, .pipe-assign-select:1",
-      "consumerCandidates": [
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
       "id": "compatibility-rule-5d305f434cd0",
       "kind": "compatibility-selector",
       "selector": ".table-scroll thead th",
       "ruleKey": "compatibility-selector:|.table-scroll thead th:1",
       "consumerCandidates": [
         "src/components/AddBatchesTable.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/CampaignTable.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
       "destination": "src/components/AddBatchesTable.tsx",
@@ -4033,8 +3731,7 @@
       "ruleKey": "compatibility-selector:|.table-scroll:1",
       "consumerCandidates": [
         "src/components/AddBatchesTable.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/CampaignTable.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
       "destination": "src/components/AddBatchesTable.tsx",
@@ -4118,19 +3815,18 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-8cdd2d7833bc",
+      "id": "compatibility-rule-f6e4f58e8a6f",
       "kind": "compatibility-selector",
-      "selector": "tr.row-clickable:focus-visible, .reply-row.row-clickable:focus-visible",
-      "ruleKey": "compatibility-selector:|tr.row-clickable:focus-visible, .reply-row.row-clickable:focus-visible:1",
+      "selector": "tr.row-clickable:focus-visible",
+      "ruleKey": "compatibility-selector:|tr.row-clickable:focus-visible:1",
       "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/CampaignTable.tsx"
       ],
-      "owner": "src/components/ImportCalloutCard.tsx",
-      "destination": "src/components/ImportCalloutCard.tsx",
+      "owner": "src/components/CampaignTable.tsx",
+      "destination": "src/components/CampaignTable.tsx",
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
+      "removeByPhase": "Phase 8"
     },
     {
       "id": "compatibility-rule-3178fd533d9b",
@@ -4138,8 +3834,7 @@
       "selector": "tr.row-clickable:hover",
       "ruleKey": "compatibility-selector:|tr.row-clickable:hover:1",
       "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
+        "src/components/CampaignTable.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",

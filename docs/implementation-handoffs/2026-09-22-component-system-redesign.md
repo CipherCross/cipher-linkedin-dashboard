@@ -345,3 +345,48 @@ Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720
 **Open:** closing the drawer with a pasted-but-unsaved import or an edited review still discards the draft without asking. That is unchanged from before, but the dirty-close contract (spec §4) would add a Keep editing / Discard prompt there; it needs a decision on which drafts count. The Pipeline route opens the same drawer and is Phase 8.
 
 Next: Phase 8 — Pipeline and the campaign-leads workspace (Pipeline, `LeadsAndRepliesWorkspace`, shared campaign lead rows, conversation entry points).
+
+## Phase 8 — accepted (2026-09-23)
+
+Pipeline and the campaign-leads workspace. A Sonnet worker did the Pipeline board, which the orchestrator reviewed and corrected. The orchestrator did `LeadsAndRepliesWorkspace`, `LeadReplyIdentity` and the new shared `RowOpenButton`.
+
+**Correction to Phases 5 and 7: the "drawer freeze" was never the app.** In this phase the Pipeline page hung the same way, with `Runtime.callFunctionOn` / `Page.captureScreenshot` timeouts, and so did a HEAD worktree. The hang had these properties:
+- the debugger could not pause it;
+- plain evaluates still answered;
+- `requestAnimationFrame` never fired, on `/leads` as well;
+- even a blank `data:` page could not be screenshotted.
+
+The cause is headless Chrome's `headless: 'new'` / `true` mode on macOS, which stops producing frames while the display sleeps; `headless: 'shell'` is unaffected. That explains why the freeze was intermittent, why it "reproduced" at every commit including `38d139b`, and why it vanished again in Phase 7. The Phase 5 entry blocker and the Phase 7 "machine starvation" guess are both superseded. Browser checks from here on run with `headless: 'shell'`. All results below are from shell mode.
+
+- **Shared `RowOpenButton`** (`src/components/RowOpenButton.tsx`) — the Leads row-open overlay button, extracted because a second route now needs it. The row keeps its pointer click. The button, laid over the row with pointer-events off, is the keyboard and screen-reader path. It is one allowlist entry (`row-open-button`, replacing `leads-row-open`), not one per route.
+- **Campaign leads workspace**
+  - Segment chips (a hand-built `segmented` tablist) → `Tabs` with counts. The search label+input → labelled `TextField type="search"`, with Enter/blur commit unchanged.
+  - The `card` + `table-scroll` + raw `<table>` with arbitrary header utilities → `TableFrame`/`TableToolbar`/`Table`. The "Showing the 100 most recent" note moves to the frame hint.
+  - Rows are no longer `<tr role="button" tabIndex=0>`; they use `RowOpenButton`.
+  - Follow-up due is a `Badge` in the Leads/Follow-ups tones, and "Needs response" is a danger `Badge`. Sender & campaign is `AccountIdentity`.
+  - The empty state distinguishes `no-match` (with a Clear filters `Button`) from `empty` ("No leads in this campaign yet").
+- **LeadReplyIdentity** (shared by Leads and the workspace) — the name link, company line and reply snippet are utilities (`.row-link`, `muted small`, `.reply-body` gone). The sentiment/intent/milestone/risk chips keep their domain classes, as decided in Phase 7.
+- **Pipeline**
+  - The card's open target is a ghost `Button` restyled like `FollowUpRow`'s. The orchestrator added `font-normal`, because otherwise every line inside inherited the button's bold.
+  - The three Manage-lead selects are canonical `Select`s with their existing names. The owner-blocked reason is now visible text, not only a `title`.
+  - Follow-up due → `Badge`; Them/Us → `StatusText`; the "Working as" chip → meta text.
+  - The board is a named, focusable "Pipeline board" region that scrolls sideways, with a visible hint. The orchestrator corrected the worker's hint copy, which claimed arrow-key moves; the keyboard path is Manage lead. Full-bleed maths, drag-and-drop, the drag-over highlight, the per-column stripe and the fixed column height are unchanged.
+  - `pipeline.css` is deleted; its rules are utilities now.
+- **CSS** — removed from `ui.css`, all with zero consumers: `.pipe-board`, `.substatus-chip`/`.pipe-stage-select`/`.pipe-assign-select`, `.pipe-msg-dir`, `.follow-due`/`.pipe-follow-due` (all variants), `.identity-chip` (all), `.pipe-card-message`/`.pipe-card-foot` (already dead), `.pipe-modal-actions` (dead), `.reply-row*` and `.reply-who-top` (dead), plus two empty section headers. `.segmented*`, `.table-scroll`, `.row-clickable`, `.row-link` and `.reply-body` stay; the analytics tables, SentimentTrendChart and NewReplies still use them.
+
+Tests: new `pipelinePage` (5). `campaignWorkspace` gains 2: no `tr[role=button]` plus canonical list chrome, and no-match plus Clear filters. One existing assertion now reads its row as the button's `tr`; the assertion itself is unchanged. Mutation checks:
+- Dropping the `lost` interception fails `pipelinePage`.
+- Clear filters that keeps the segment fails `campaignWorkspace`.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 100 files / 1,446 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 112 → 104; allowlisted 9; compatibility tokens 519 → 476; selectors 260 → 242; modal roots 2). Fixture `--check` passed; `git diff --check` passed. Production gzip JS 654,667 (+0.6% vs Phase 0), CSS 36,125 (−4,740 vs Phase 0). TS/TSX +197/−160 and CSS +1/−118 lines.
+
+Browser evidence — **local synthetic fixture, headless Chrome `shell` mode, exact 1280×720 / 1440×900 / 1920×1080**:
+
+| Surface | Result at all three |
+| --- | --- |
+| Pipeline board | named region from x=232 to the viewport edge; scrolls locally; page overflow-x 0; 13 columns, fixed height 480/660/840; the card's Manage-lead selects named "Pipeline stage", "Lead owner" |
+| Pipeline card keyboard | focus the card button, Enter opens the conversation drawer, Escape returns focus to the same card button |
+| Campaign leads | tabs "All 1 · Replied 1 · P3 0 · Needs follow-up 1 · No reply 0"; searchbox "Search campaign leads"; one row-open button per row; first row at y=385 under the campaign header and tabs; overflow-x 0 |
+| Campaign row keyboard | Enter on the row button opens the drawer; Escape returns focus to "Open conversation with Alex Fixture" |
+
+Next: Phase 9 — the analytics and detail family (Overview, AccountDetail, CampaignDetail performance/sequence presentation, SentimentAnalysis, KPI/funnel/chart/table components, DateRangePicker integration).

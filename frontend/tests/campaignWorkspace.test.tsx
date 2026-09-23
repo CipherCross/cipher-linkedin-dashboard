@@ -286,7 +286,8 @@ describe('the campaign page as a reply workspace', () => {
   it('shows the latest reply, its sentiment and the durable intent beside the lead', () => {
     paint()
 
-    const row = screen.getByLabelText('Open conversation with Ada Lovelace')
+    // The row's open action is a button laid over the row; its content is the row's.
+    const row = screen.getByLabelText('Open conversation with Ada Lovelace').closest('tr') as HTMLElement
     expect(within(row).getByText(/Send me a calendar link/)).toBeTruthy()
     expect(within(row).getByText('Analytical Engines')).toBeTruthy()
     // P3 comes from conversation_reply_intent, the durable milestone.
@@ -338,6 +339,25 @@ describe('the campaign page as a reply workspace', () => {
     paint('?q=naval')
 
     expect(rowNames()).toEqual(['Open conversation with Grace Hopper'])
+  })
+
+  it('opens rows through a real button and keeps the list chrome canonical', () => {
+    paint()
+
+    // No row is a role="button" wrapped around the identity link and the chips.
+    expect(document.querySelector('tr[role="button"]')).toBeNull()
+    expect(screen.getByRole('searchbox', { name: 'Search campaign leads' })).toBeTruthy()
+    expect(screen.getByRole('tablist', { name: 'Filter campaign leads' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Campaign leads' })).toBeTruthy()
+  })
+
+  it('says "no match" with a way back when the segment and search exclude everything', () => {
+    paint('?people=p3&q=naval')
+
+    const empty = screen.getByText('No leads match this view').closest('[data-empty-kind]')
+    expect(empty?.getAttribute('data-empty-kind')).toBe('no-match')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(rowNames()).toHaveLength(3)
   })
 })
 
