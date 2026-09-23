@@ -14,9 +14,8 @@ import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { authFetch } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
-import { EmptyState } from '../components/EmptyState'
 import {
-  AccountIdentity, ActiveFilters, Button, Dialog, FilterCount, InlineError, LinkButton,
+  AccountIdentity, ActiveFilters, Button, Dialog, EmptyState, FilterCount, InlineError, LinkButton,
   PageHeader, Panel, SelectField, TableFrame, TableToolbar, Tabs, TextField, Toolbar,
 } from '../ui'
 import { COPY } from '../ui/labels'

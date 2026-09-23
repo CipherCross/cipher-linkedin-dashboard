@@ -55,3 +55,31 @@ Browser evidence — **local synthetic fixture evidence only** (`node scripts/ui
 | auth error | shell | 1280×720 | "Sign-in is unavailable" card with the error and Try again |
 
 Observations for later phases (current behavior, not changed in Phase 0): Leads, a list route, inherits the analytics 1600px `.page` cap at 1920 (Phase 6); `coaching.digests` is not implemented by the fixture and returns 501, so the Leads coaching digest is not a populated-state proof. Keyboard checks were not run in Phase 0. No interaction or mutation states were exercised.
+
+## Phase 1 — accepted (2026-09-23)
+
+Shared contracts completed; no route adopted a new visual yet (adoption belongs to each route's phase).
+
+- `Dialog` (`src/ui/Overlay.tsx`): `placement="center" | "end"` (end = 560px, full height, `.ui-dialog--end`, replacing `.ui-drawer`); Close is Base UI `Dialog.Close` rendered as `IconButton`; `finalFocusRef` alongside `initialFocusRef`; `busy` refuses Escape, backdrop and Close, disables Close, sets `aria-busy`, and shows a visible `role="status"` `busyMessage` that describes the Close button. `OverlayProps` became `DialogProps`.
+- `FilterDialog`: end-placed `Dialog` composition. Route owns the draft; footer counts draft filters; Clear all / Cancel / Apply from `COPY`. Zero route consumers until Phases 6–7 (Leads, Replies, Sentiment) adopt it.
+- `EmptyState` moved from `src/components/EmptyState.tsx` into `src/ui/States.tsx` and is exported through `src/ui`; gains `kind="empty" | "no-match"` (`data-empty-kind`). Its `muted small` compatibility tokens became utilities. 17 import sites updated; no rendering change.
+- `SaveStatus`: presentational `saved | dirty | saving | conflict | error`, dot plus word, `role="status"`, complete class strings. Not yet adopted (SequenceBuilder's `SaveIndicator` moves in Phase 11).
+- Deleted `Drawer` and `RefreshingRegion` after a fresh zero-consumer scan; `docs/ui-standard.md` and the route ledger corrected.
+- `ActiveFilters`: its two raw buttons became `IconButton` and `Button`; the remove control keeps its 24px chip geometry, and its hover rule gained `:not(:disabled)` so the IconButton hover no longer overrides it.
+- Gallery pins: EmptyState empty/no-match, all five SaveStatus states, busy Dialog, and FilterDialog with a real draft/apply/cancel cycle.
+
+Tests: `uiPrimitives` +9 cases (end placement, busy refusal and description, initial focus, FilterDialog count / Cancel / Escape / Clear all / Apply, EmptyState kinds, SaveStatus wording, ActiveFilters names). Mutation check: removing the busy guard from `handleOpenChange` fails the busy test.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 84 files / 1,326 tests passed; `typecheck:api` passed; `ui:inventory` passed after `ui:inventory:update` (compatibility tokens 1,524 → 1,522; raw controls, selectors, modal roots unchanged; bundle baseline preserved); fixture `--check` passed; root `git diff --check` passed. Production gzip JS 651,540 (+670 vs Phase 0, +0.1%), CSS 40,910 (+45; the final-phase CSS budget is what binds); Gallery JS 23,589 excluded.
+
+Browser evidence — **local synthetic fixture, headless Chrome (global puppeteer) at exact 1280×720, 1440×900, 1920×1080**, no writes:
+
+| Surface | Result at all three viewports |
+| --- | --- |
+| Leads → Filters (real route, still centered) | opens with focus on Close inside the dialog; 40× Shift+Tab stays inside; body scroll locked; Escape closes and returns focus to the Filters trigger |
+| Gallery FilterDialog | end-docked 560px full height (e.g. x=720 at 1280); `#root` aria-hidden; draft shows "1 filter selected"; Cancel leaves trigger count unchanged; Apply sets it to 1 |
+| Gallery busy Dialog | Close disabled, busy note visible; Escape and backdrop click refused (dialog stays, scroll stays locked); closing via its own action returns focus to the trigger |
+
+Known limit: a backdrop click on a busy dialog moves focus to `<body>`; the next Tab returns it to the dialog (trap intact). Keyboard checks beyond the dialog trap were not run.
+
+Next: Phase 2 — shell, auth, reset, access, shared feedback (`App` admin fallback, `AuthContext`, `ResetPassword`, `Layout`, Quick Navigation, ErrorBoundary, Skeleton, toasts).

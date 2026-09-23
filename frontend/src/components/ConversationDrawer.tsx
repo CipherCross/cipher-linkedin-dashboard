@@ -20,7 +20,6 @@ import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { defaultReplyReadClient, isReplyManualReady } from '../lib/replyReview'
 import { LostReasonModal } from './LostReasonModal'
 import { Avatar, LeadAvatar } from './Avatar'
-import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
 import {
   INTENT_META, ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META,
@@ -38,7 +37,7 @@ import { clockTime, dayHeading } from '../lib/format'
 import type { ConversationMode } from '../lib/ConversationContext'
 import type { Coaching, Gender, Lead, Message } from '../lib/types'
 import type { ReplyReview } from '../lib/replyReview'
-import { IconButton } from '../ui'
+import { IconButton, EmptyState } from '../ui'
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").

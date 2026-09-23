@@ -3,8 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { presetRanges } from '../lib/leads'
 import {
-  ArrowRight, Check, CircleAlert, Clock, Download, Filter, MoreHorizontal, Plus,
-  RefreshCw, Trash2,
+  ArrowRight, Check, CircleAlert, Clock, Download, Filter, Inbox, MoreHorizontal, Plus,
+  RefreshCw, SearchX, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '../components/ui/sonner'
@@ -18,8 +18,9 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '../components/ui/command'
 import {
-  AccountIdentity, ActiveFilters, Badge, Button, Checkbox, Dialog, FilterCount, IconButton,
-  InitialsBadge, InlineError, LinkButton, PageHeader, Panel, RadioGroup, SectionHeader,
+  AccountIdentity, ActiveFilters, Badge, Button, Checkbox, Dialog, EmptyState, FilterCount,
+  FilterDialog, IconButton, InitialsBadge, InlineError, LinkButton, PageHeader, Panel, RadioGroup,
+  SaveStatus, SectionHeader,
   SegmentedControl, SelectField, StatusText, Table, TableFrame, TableToolbar, Tabs,
   TextField, TextareaField, Toolbar, UpdatingNote, businessTimeLabelled, analyticsDate,
 } from './index'
@@ -61,6 +62,9 @@ export function Gallery() {
   const [tab, setTab] = useState<'states' | 'composition' | 'list-chrome' | 'widgets'>('states')
   const [period, setPeriod] = useState<'7d' | '28d' | 'all'>('28d')
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [busyDialogOpen, setBusyDialogOpen] = useState(false)
+  const [filterDraft, setFilterDraft] = useState<null | { stage: string; owner: string }>(null)
+  const [appliedFilters, setAppliedFilters] = useState({ stage: 'all', owner: 'all' })
   const [choice, setChoice] = useState<'positive' | 'neutral' | 'negative'>('neutral')
   const [range, setRange] = useState(GALLERY_PRESETS[1] ?? GALLERY_PRESETS[0])
   const [reviewPane, setReviewPane] = useState(false)
@@ -226,6 +230,14 @@ export function Gallery() {
               <SectionHeader title="Load, empty and failure" description="Four states, never conflated." />
               <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
                 <UpdatingNote>Showing notebook-1 while notebook-3 loads…</UpdatingNote>
+                <EmptyState kind="empty" icon={Inbox} title="No replies yet" hint="Replies appear here after the next sync." />
+                <EmptyState
+                  kind="no-match"
+                  icon={SearchX}
+                  title="No leads match these filters"
+                  hint="Adjust or clear the filters to see more leads."
+                  action={<Button variant="secondary" size="sm">Clear filters</Button>}
+                />
                 <InlineError
                   message="The replies list could not be read. The rest of the page still works."
                   detail={'STATUS_PROFILE_VERSION_MISMATCH\nat readReplies (dashboardReads.ts:412)'}
@@ -235,8 +247,53 @@ export function Gallery() {
             </Panel>
 
             <Panel>
+              <SectionHeader title="Save status" description="Presentation only; the editor owns the state." />
+              <div style={{ display: 'flex', gap: 'var(--space-xl)', flexWrap: 'wrap' }}>
+                {(['saved', 'dirty', 'saving', 'conflict', 'error'] as const).map((state) => <SaveStatus key={state} state={state} />)}
+              </div>
+            </Panel>
+
+            <Panel>
               <SectionHeader title="Overlays" description="One contract: name, focus trap, Escape, inert background, returned focus." />
-              <Button variant="secondary" onClick={() => setDialogOpen(true)}>Open dialog</Button>
+              <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+                <Button variant="secondary" onClick={() => setDialogOpen(true)}>Open dialog</Button>
+                <Button variant="secondary" onClick={() => setBusyDialogOpen(true)}>Open busy dialog</Button>
+                <Button variant="secondary" icon={<Filter size={18} aria-hidden="true" />} onClick={() => setFilterDraft({ ...appliedFilters })}>
+                  Filters<FilterCount count={Object.values(appliedFilters).filter((value) => value !== 'all').length} />
+                </Button>
+              </div>
+              {busyDialogOpen && (
+                <Dialog
+                  size="sm"
+                  title="Publishing sequence"
+                  description="Escape, the backdrop and Close are refused until the action finishes."
+                  onRequestClose={() => setBusyDialogOpen(false)}
+                  busy
+                  footer={<Button variant="secondary" onClick={() => setBusyDialogOpen(false)}>Stop demo</Button>}
+                >
+                  <p>Sending the snapshot to the notebook…</p>
+                </Dialog>
+              )}
+              {filterDraft && (
+                <FilterDialog
+                  description="Nothing changes until you apply."
+                  selectedCount={Object.values(filterDraft).filter((value) => value !== 'all').length}
+                  onClearAll={() => setFilterDraft({ stage: 'all', owner: 'all' })}
+                  onCancel={() => setFilterDraft(null)}
+                  onApply={() => { setAppliedFilters(filterDraft); setFilterDraft(null) }}
+                >
+                  <div style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+                    <SelectField label="Milestone" value={filterDraft.stage} onChange={(event) => setFilterDraft({ ...filterDraft, stage: event.target.value })}>
+                      <option value="all">All milestones</option>
+                      <option value="replied">Replied</option>
+                    </SelectField>
+                    <SelectField label="Owner" value={filterDraft.owner} onChange={(event) => setFilterDraft({ ...filterDraft, owner: event.target.value })}>
+                      <option value="all">Anyone</option>
+                      <option value="unassigned">Unassigned</option>
+                    </SelectField>
+                  </div>
+                </FilterDialog>
+              )}
               {dialogOpen && (
                 <Dialog
                   title="New search"

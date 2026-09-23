@@ -7,7 +7,6 @@ import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
 import { authPost } from '../lib/api'
 import { CopyButton } from '../components/CopyButton'
-import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { DateRangePicker } from '../components/DateRangePicker'
@@ -20,7 +19,7 @@ import type { DateRange } from '../lib/leads'
 import type {
   CampaignMetrics, Hypothesis, HypothesisCampaign, Icp, Instance, Lead, SavedSearch,
 } from '../lib/types'
-import { Button, PageHeader, Toolbar } from '../ui'
+import { Button, PageHeader, Toolbar, EmptyState } from '../ui'
 
 interface HypDraft {
   id?: number

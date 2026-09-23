@@ -6,7 +6,7 @@ import { ago } from '../lib/format'
 import { freshnessLevel } from '../lib/freshness'
 import type { FreshnessLevel } from '../lib/freshness'
 import { Avatar } from './Avatar'
-import { EmptyState } from './EmptyState'
+import { EmptyState } from '../ui'
 import { InstanceConfigEditor } from './InstanceConfigEditor'
 
 const STRIP_RUNS = 14

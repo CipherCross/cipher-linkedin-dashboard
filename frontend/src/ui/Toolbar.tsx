@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
+import { Button, IconButton } from './Button'
+import { COPY } from './labels'
 
 /**
  * Search plus one or two primary selectors stay on the page; everything else
- * moves into a `FilterSheet` that opens *over* the page.
+ * moves into a `FilterDialog` (Overlay.tsx) that opens *over* the page.
  *
  * That is the whole point: on Replies, opening the filters pushed the workspace
  * from y≈145 to y≈362, and on Leads twelve inline filters plus a digest plus
@@ -41,19 +43,15 @@ export function ActiveFilters({
           <span>
             <span className="muted">{filter.label}:</span> {filter.value}
           </span>
-          <button
-            type="button"
+          <IconButton
             className="ui-active-filter__remove"
             onClick={filter.onRemove}
-            aria-label={`Remove filter ${filter.label}: ${filter.value}`}
-          >
-            <X size={14} aria-hidden="true" />
-          </button>
+            label={`Remove filter ${filter.label}: ${filter.value}`}
+            icon={<X size={14} aria-hidden="true" />}
+          />
         </span>
       ))}
-      <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={onClearAll}>
-        Clear all
-      </button>
+      <Button variant="ghost" size="sm" onClick={onClearAll}>{COPY.clearAll}</Button>
     </div>
   )
 }

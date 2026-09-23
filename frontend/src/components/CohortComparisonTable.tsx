@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Download, CalendarRange } from 'lucide-react'
 import type { Instance } from '../lib/types'
-import { EmptyState } from './EmptyState'
+import { EmptyState } from '../ui'
 import { downloadCsv, instanceName, toCsv } from '../lib/leads'
 import {
   SMALL_COHORT, cellAcceptRate, cellPositiveShare, cellReplyRate, reviewCsvRows,

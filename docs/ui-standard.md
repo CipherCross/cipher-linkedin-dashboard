@@ -138,22 +138,21 @@ a domain adapter maps values to labels and variants.
 | `Badge` / `StatusText` | Colour always travels with a word. |
 | `AccountIdentity` + `disambiguate` | Name alone when unique, `name · account` when not. An unknown contact is `LinkedIn contact` plus an identifier — never a name invented from a slug. |
 | `TableFrame` / `TableToolbar` / `Table` | Frame, toolbar, local scroll, sticky head. Sorting, paging and filtering stay with the screen. |
-| `Toolbar` / `ActiveFilters` | Search plus one or two primary selectors on the page; everything else in a sheet. |
-| `Dialog` | Role and name, initial focus, focus trap, background hidden from assistive technology, Escape, scroll lock, returned focus. A persistent pane is not a modal and must not use it. |
+| `Toolbar` / `ActiveFilters` | Search plus one or two primary selectors on the page; everything else in a `FilterDialog`. |
+| `FilterDialog` | End-placed modal `Dialog`, 560px at most, fixed header and footer. The route owns the draft; Apply commits every key at once; Cancel, Escape and the backdrop change nothing; Clear all clears the draft only. |
+| `Dialog` | `placement="center"` (sizes `sm`–`xl`) or `"end"`. Role and name, initial focus (`initialFocusRef`), focus trap, background hidden from assistive technology, Escape, scroll lock, returned focus (`finalFocusRef`, else the element focused at open). Close is Base UI `Dialog.Close`. While `busy`, every close path is refused and `busyMessage` is announced. A persistent pane is not a modal and must not use it. |
 | `useDirtyGuard` | A clean form closes at once; a dirty one asks `Keep editing` / `Discard changes` — for Escape, Close, the backdrop and navigation alike. |
-| `UpdatingNote` / `InlineError` | Initial load, refresh, empty, and failure are four different things. |
+| `UpdatingNote` / `InlineError` / `EmptyState` | Initial load, refresh, empty, and failure are four different things. `EmptyState` says `kind="empty"` (no rows exist) or `kind="no-match"` (filters exclude them all). |
+| `SaveStatus` | Presentation of a route's existing save state (`saved`, `dirty`, `saving`, `conflict`, `error`). Owns no timer, draft or conflict logic. |
 
 `Button`, `IconButton` and `Dialog` are Base UI underneath. `LinkButton` and
 `ExternalLinkButton` deliberately are **not**: Base UI's `useButton` applies
 `role="button"` to any non-native element, which would relabel every in-app
 navigation as a button for assistive technology.
 
-`Drawer` and `RefreshingRegion` are still implemented and exported, but the
-current route tree has zero consumers for either one. They remain pending
-Phase 1 contract cleanup; this document must not describe them as removed until
-that phase deletes the exports and the scan proves the same zero-consumer state.
-The product `ConversationDrawer` is a separate, currently used modal surface
-and is not evidence that the unused `Drawer` primitive has a consumer.
+`Drawer` and `RefreshingRegion` were removed: neither had a consumer. A
+refreshing region sets `aria-busy` itself and shows `UpdatingNote`. The product
+`ConversationDrawer` is a modal conversation surface and keeps its name.
 
 Base UI queues a dialog's initial focus through `requestAnimationFrame`, so one
 opened while the tab is hidden receives focus late; it still lands when the tab

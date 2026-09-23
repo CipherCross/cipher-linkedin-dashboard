@@ -9,7 +9,6 @@ import {
 } from '../lib/leads'
 import type { DateRange, ReplyIntentMetrics } from '../lib/leads'
 import { authPost } from '../lib/api'
-import { EmptyState } from '../components/EmptyState'
 import { CohortComparisonTable } from '../components/CohortComparisonTable'
 import { TemplateComparison } from '../components/TemplateComparison'
 import { SentimentTrendChart } from '../components/SentimentTrendChart'
@@ -19,7 +18,7 @@ import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
 import { num } from '../lib/format'
-import { Button, LinkButton, PageHeader, SectionHeader, SegmentedControl, SelectField, Tabs } from '../ui'
+import { Button, LinkButton, PageHeader, SectionHeader, SegmentedControl, SelectField, Tabs, EmptyState } from '../ui'
 
 const WEEK_OPTIONS = [8, 12, 16]
 const DEFAULT_WEEKS = 12

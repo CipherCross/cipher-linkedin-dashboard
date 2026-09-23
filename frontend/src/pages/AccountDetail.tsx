@@ -9,13 +9,12 @@ import {
 import type { DateRange } from '../lib/leads'
 import { ago, num } from '../lib/format'
 import { DateRangePicker } from '../components/DateRangePicker'
-import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
 import { WarmupChart } from '../components/WarmupChart'
 import { Heatmap } from '../components/Heatmap'
 import { CampaignTable } from '../components/CampaignTable'
 import { Avatar } from '../components/Avatar'
-import { PageHeader, Panel, SectionHeader } from '../ui'
+import { PageHeader, Panel, SectionHeader, EmptyState } from '../ui'
 
 export function AccountDetail() {
   const { id } = useParams<{ id: string }>()

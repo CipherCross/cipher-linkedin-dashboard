@@ -7,9 +7,8 @@ import { useToast } from '../lib/ToastContext'
 import { authPost } from '../lib/api'
 import { ChipInput } from '../components/ChipInput'
 import { CopyButton } from '../components/CopyButton'
-import { EmptyState } from '../components/EmptyState'
 import type { Icp, IcpIndustry, IcpPersona } from '../lib/types'
-import { Button, PageHeader, Toolbar } from '../ui'
+import { Button, PageHeader, Toolbar, EmptyState } from '../ui'
 
 // Draft rows carry an optional `id` (present = existing DB row, save is a
 // partial-patch update; absent = new, save is a create) and `_new` purely so

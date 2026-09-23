@@ -3,7 +3,7 @@ import { ArrowRight, Plus, Workflow } from 'lucide-react'
 import type { SequenceHubItem } from '../../lib/types'
 import { activeSequences, draftSequences, sequenceAccounts, sequenceHref } from '../../lib/sequenceHub'
 import { ago, num } from '../../lib/format'
-import { EmptyState } from '../EmptyState'
+import { EmptyState } from '../../ui'
 
 /** Enough to see what is running without turning the first viewport into a list. */
 const VISIBLE = 6

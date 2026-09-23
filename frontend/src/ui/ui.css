@@ -342,7 +342,25 @@
   border: 0; border-radius: 50%;
   background: none; color: var(--text-muted); cursor: pointer;
 }
-.ui-active-filter__remove:hover { background: var(--surface-3); color: var(--text); }
+.ui-active-filter__remove:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+
+/* ---- SaveStatus ------------------------------------------------------------ */
+.ui-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  color: var(--text-muted);
+}
+.ui-save-status__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.ui-save-status--dirty .ui-save-status__dot { background: var(--text-muted); }
+.ui-save-status--saved .ui-save-status__dot { background: var(--success); }
+.ui-save-status--saving .ui-save-status__dot { background: var(--accent); }
+.ui-save-status--conflict,
+.ui-save-status--error { color: var(--danger); }
+.ui-save-status--conflict .ui-save-status__dot,
+.ui-save-status--error .ui-save-status__dot { background: var(--danger); }
 
 /* ---- Badge / StatusText / AccountIdentity ------------------------------- */
 .ui-badge {
@@ -464,7 +482,7 @@
 .ui-table tbody tr:hover { background: var(--surface-2); }
 .ui-table__num { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* ---- Dialog / Drawer / Popover ------------------------------------------- */
+/* ---- Dialog / Popover ----------------------------------------------------- */
 .ui-scrim {
   position: fixed;
   inset: 0;
@@ -489,7 +507,8 @@
 .ui-dialog--sm { width: min(100%, 480px); }
 .ui-dialog--lg { width: min(100%, 880px); }
 .ui-dialog--xl { width: min(100%, 1120px); }
-.ui-drawer {
+/* placement="end": the same modal, docked to the end edge (FilterDialog). */
+.ui-dialog--end {
   width: min(100%, 560px);
   height: 100%;
   border-radius: 0;
@@ -519,6 +538,7 @@
   line-height: var(--leading-table);
   color: var(--text-secondary);
 }
+.ui-dialog__busy { margin: var(--space-xs) 0 0; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
 .ui-dialog__close { margin-left: auto; flex-shrink: 0; }
 .ui-dialog__body { padding: var(--space-xl); overflow-y: auto; flex: 1; min-height: 0; }
 .ui-dialog__footer {

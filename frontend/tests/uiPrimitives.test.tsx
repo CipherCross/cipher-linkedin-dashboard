@@ -15,6 +15,8 @@
  *   - a field's error is text and is wired to the control, not colour alone;
  *   - tabs expose exactly one tab stop and move with the arrow keys;
  *   - a dialog traps focus, closes on Escape, and returns focus to its trigger;
+ *   - a busy dialog refuses every close path and says why;
+ *   - a filter dialog changes nothing until Apply;
  *   - a duplicate person name carries what tells them apart;
  *   - a business time says Madrid and an analytics date says UTC.
  */
@@ -25,7 +27,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Button, LinkButton, IconButton } from '../src/ui/Button'
 import { TextField, RadioGroup } from '../src/ui/Field'
 import { Tabs } from '../src/ui/Tabs'
-import { Dialog } from '../src/ui/Overlay'
+import { Dialog, FilterDialog } from '../src/ui/Overlay'
+import { EmptyState, SaveStatus } from '../src/ui/States'
+import { ActiveFilters } from '../src/ui/Toolbar'
+import { useRef, useState } from 'react'
+import { Inbox } from 'lucide-react'
 import { disambiguate, initialsOf, UNKNOWN_PERSON_LABEL } from '../src/ui/Identity'
 import { analyticsDate, businessTimeLabelled, relativeTime } from '../src/ui/datetime'
 
@@ -190,6 +196,151 @@ describe('Dialog', () => {
    * passed while the page misbehaved, which is the failure mode this file's
    * header warns about.
    */
+})
+
+describe('Dialog contract', () => {
+  const frame = () => act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))) })
+
+  it('places a dialog at the end edge without changing its modal contract', () => {
+    const onClose = vi.fn()
+    render(<Dialog placement="end" title="Filters" onRequestClose={onClose}><p>Body</p></Dialog>)
+    const dialog = screen.getByRole('dialog', { name: 'Filters' })
+    expect(dialog.className).toContain('ui-dialog--end')
+    expect(dialog.parentElement?.className).toContain('ui-scrim--end')
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses Escape and Close while busy and describes why', () => {
+    const onClose = vi.fn()
+    render(<Dialog busy busyMessage="Publishing is in progress." title="Publish" onRequestClose={onClose}><p>Body</p></Dialog>)
+    const dialog = screen.getByRole('dialog', { name: 'Publish' })
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    const close = screen.getByRole('button', { name: 'Close' })
+    fireEvent.click(close)
+    expect(onClose).not.toHaveBeenCalled()
+    expect((close as HTMLButtonElement).disabled).toBe(true)
+    expect(dialog.getAttribute('aria-busy')).toBe('true')
+    const reason = screen.getByRole('status')
+    expect(reason.textContent).toBe('Publishing is in progress.')
+    expect(close.getAttribute('aria-describedby')).toBe(reason.id)
+  })
+
+  it('moves focus to the requested control on open', async () => {
+    function Harness() {
+      const target = useRef<HTMLInputElement>(null)
+      return (
+        <Dialog title="Rename" onRequestClose={() => {}} initialFocusRef={target}>
+          <input aria-label="First" />
+          <input aria-label="Second" ref={target} />
+        </Dialog>
+      )
+    }
+    render(<Harness />)
+    await frame()
+    expect(document.activeElement).toBe(screen.getByLabelText('Second'))
+  })
+})
+
+describe('FilterDialog', () => {
+  function Harness({ onApplied }: { onApplied: (value: string) => void }) {
+    const [applied, setApplied] = useState('all')
+    const [draft, setDraft] = useState<string | null>(null)
+    return (
+      <>
+        <button type="button" onClick={() => setDraft(applied)}>Open filters</button>
+        <output aria-label="Applied">{applied}</output>
+        {draft !== null && (
+          <FilterDialog
+            selectedCount={draft === 'all' ? 0 : 1}
+            onClearAll={() => setDraft('all')}
+            onCancel={() => setDraft(null)}
+            onApply={() => { setApplied(draft); onApplied(draft); setDraft(null) }}
+          >
+            <label>Owner<select value={draft} onChange={(event) => setDraft(event.target.value)}>
+              <option value="all">Anyone</option>
+              <option value="me">Me</option>
+            </select></label>
+          </FilterDialog>
+        )}
+      </>
+    )
+  }
+
+  it('is an end-placed dialog whose footer counts the draft', () => {
+    render(<Harness onApplied={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open filters' }))
+    const dialog = screen.getByRole('dialog', { name: 'Filters' })
+    expect(dialog.className).toContain('ui-dialog--end')
+    expect(within(dialog).getByText('No filters selected')).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText('Owner'), { target: { value: 'me' } })
+    expect(within(dialog).getByText('1 filter selected')).toBeTruthy()
+  })
+
+  it('leaves the applied value alone on Cancel, Escape and Clear all', () => {
+    const onApplied = vi.fn()
+    render(<Harness onApplied={onApplied} />)
+    const applied = () => screen.getByLabelText('Applied').textContent
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open filters' }))
+    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: 'me' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(applied()).toBe('all')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open filters' }))
+    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: 'me' } })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(applied()).toBe('all')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open filters' }))
+    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: 'me' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect((screen.getByLabelText('Owner') as HTMLSelectElement).value).toBe('all')
+    expect(applied()).toBe('all')
+    expect(onApplied).not.toHaveBeenCalled()
+  })
+
+  it('commits the draft only on Apply', () => {
+    const onApplied = vi.fn()
+    render(<Harness onApplied={onApplied} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open filters' }))
+    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: 'me' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(onApplied).toHaveBeenCalledWith('me')
+    expect(screen.getByLabelText('Applied').textContent).toBe('me')
+  })
+})
+
+describe('state presentation', () => {
+  it('marks an empty dataset and a no-match result differently', () => {
+    render(<>
+      <EmptyState icon={Inbox} title="No replies yet" />
+      <EmptyState kind="no-match" icon={Inbox} title="No replies match these filters" />
+    </>)
+    expect(screen.getByText('No replies yet').closest('[data-empty-kind]')?.getAttribute('data-empty-kind')).toBe('empty')
+    expect(screen.getByText('No replies match these filters').closest('[data-empty-kind]')?.getAttribute('data-empty-kind')).toBe('no-match')
+  })
+
+  it('announces a save state in words', () => {
+    const { rerender } = render(<SaveStatus state="saving" />)
+    expect(screen.getByRole('status').textContent).toBe('Saving…')
+    rerender(<SaveStatus state="conflict" />)
+    expect(screen.getByRole('status').textContent).toBe('Newer version found')
+    rerender(<SaveStatus state="error" label="Could not save the draft" />)
+    expect(screen.getByRole('status').textContent).toBe('Could not save the draft')
+  })
+
+  it('names every active-filter removal and keeps Clear all a button', () => {
+    const onRemove = vi.fn()
+    const onClearAll = vi.fn()
+    render(<ActiveFilters onClearAll={onClearAll} filters={[{ id: 'owner', label: 'Owner', value: 'Me', onRemove }]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove filter Owner: Me' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(onRemove).toHaveBeenCalledTimes(1)
+    expect(onClearAll).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('identity', () => {

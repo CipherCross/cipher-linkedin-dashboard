@@ -7,10 +7,9 @@ import { useToast } from '../lib/ToastContext'
 import { authPost } from '../lib/api'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ChipInput } from '../components/ChipInput'
-import { EmptyState } from '../components/EmptyState'
 import { shortDate } from '../lib/format'
 import type { SavedSearch } from '../lib/types'
-import { Button, Checkbox, Dialog, IconButton, PageHeader, TextField, Toolbar, useDirtyGuard } from '../ui'
+import { Button, Checkbox, Dialog, IconButton, PageHeader, TextField, Toolbar, useDirtyGuard, EmptyState } from '../ui'
 import { COPY } from '../ui/labels'
 
 // Free-text platform with UI suggestions — deliberately not an enum ("and

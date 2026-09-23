@@ -16,7 +16,6 @@ import type { DateRange } from '../lib/leads'
 import { num, pct, rate } from '../lib/format'
 import { AXIS, BAR_CURSOR, ChartEmpty, GRID, TOOLTIP } from '../components/chartTheme'
 import { DateRangePicker } from '../components/DateRangePicker'
-import { EmptyState } from '../components/EmptyState'
 import { KpiCards } from '../components/KpiCards'
 import { Funnel } from '../components/Funnel'
 import { CohortChart } from '../components/CohortChart'
@@ -31,7 +30,7 @@ import { DeployedSequence } from '../components/DeployedSequence'
 import { LeadsAndRepliesWorkspace } from '../components/leads-and-replies/LeadsAndRepliesWorkspace'
 import { publishStatusLabel } from '../lib/sequenceBuilder'
 import { CampaignRuntimeStatusView } from '../components/CampaignRuntimeStatus'
-import { PageHeader, SelectField, Tabs } from '../ui'
+import { PageHeader, SelectField, Tabs, EmptyState } from '../ui'
 
 const TABS = [
   { id: 'leads', label: 'Leads & replies' },

@@ -5,10 +5,9 @@ import { useAuth } from '../lib/AuthContext'
 import { authPost } from '../lib/api'
 import { instanceName } from '../lib/leads'
 import { InstancePanel } from '../components/InstancePanel'
-import { EmptyState } from '../components/EmptyState'
 import { ago } from '../lib/format'
 import { listSequencePublishTargets, type SequencePublishTarget } from '../lib/sequenceBuilderApi'
-import { Button, PageHeader } from '../ui'
+import { Button, PageHeader, EmptyState } from '../ui'
 
 export function Health() {
   const { data } = useData()

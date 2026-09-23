@@ -6,7 +6,7 @@ import type { ReplyInfo } from '../lib/leads'
 import { pooledMaturedRates } from '../lib/review'
 import type { MaturityInfo } from '../lib/review'
 import { rate } from '../lib/format'
-import { EmptyState } from './EmptyState'
+import { EmptyState } from '../ui'
 import { MessageSequence } from './MessageSequence'
 
 const DEFAULT_COLUMNS = 2

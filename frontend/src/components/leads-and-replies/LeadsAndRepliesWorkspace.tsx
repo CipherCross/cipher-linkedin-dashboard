@@ -13,7 +13,7 @@ import {
   activeFollowUp, followUpDueLabel, followUpKey, followUpStateMap,
 } from '../../lib/followUps'
 import { replyDate, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
-import { EmptyState } from '../EmptyState'
+import { EmptyState } from '../../ui'
 import { LeadMilestoneBadge, LeadReplyIdentity } from './LeadReplyIdentity'
 
 export type LeadsReplyFilter = 'all' | 'replied' | 'p3' | 'needs-follow-up' | 'no-reply'

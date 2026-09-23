@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { CalendarCheck2, ExternalLink, UserRound } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { LeadAvatar } from '../components/Avatar'
-import { EmptyState } from '../components/EmptyState'
 import { useConversation } from '../lib/ConversationContext'
 import { useData } from '../lib/DataContext'
 import {
@@ -18,7 +17,7 @@ import {
 import { accountLabeller } from '../lib/leads'
 import { replyDate, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { useFollowUpActions } from '../lib/useFollowUpActions'
-import { Button, PageHeader, SectionHeader, SelectField, TextField, Toolbar } from '../ui'
+import { Button, PageHeader, SectionHeader, SelectField, TextField, Toolbar, EmptyState } from '../ui'
 import type { FollowUpBucket, FollowUpWorkItem } from '../lib/followUps'
 
 const GROUPS: Array<{ id: Exclude<FollowUpBucket, 'unscheduled'>; label: string }> = [

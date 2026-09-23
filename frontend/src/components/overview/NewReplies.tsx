@@ -3,7 +3,7 @@ import { ArrowRight, Inbox } from 'lucide-react'
 import type { Lead, SequenceHubReplyPreview } from '../../lib/types'
 import { INTENT_META, SENTIMENT_META } from '../../lib/leads'
 import { ago } from '../../lib/format'
-import { EmptyState } from '../EmptyState'
+import { EmptyState } from '../../ui'
 
 /** One screenful. The snapshot already caps the query at twelve. */
 const VISIBLE = 6

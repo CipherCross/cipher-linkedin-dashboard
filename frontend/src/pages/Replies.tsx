@@ -9,11 +9,10 @@ import { ConversationActionPanel } from '../components/conversation/Conversation
 import { ConversationThread } from '../components/conversation/ConversationThread'
 import { ReplyReviewPanel } from '../components/conversation/ReplyReviewPanel'
 import { WORKFLOW_LABELS } from '../components/reply-analysis/WorkflowBuckets'
-import { EmptyState } from '../components/EmptyState'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { useRepliesInbox } from '../lib/useRepliesInbox'
 import { ACTION_LABELS, isReplyManualReady, REASON_LABELS, SENTIMENT_LABELS, nextUnreviewedReply, REPLY_SEARCH_DEBOUNCE_MS, type ReplyCapabilities, type ReplyInboxScope, type ReplyReadClient, type ReplyReviewDraft, type ReplyThreadMessage, type ReplyWorkflowMutation } from '../lib/replyReview'
-import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, IconButton, LinkButton, PageHeader, SelectField, Tabs } from '../ui'
+import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, IconButton, LinkButton, PageHeader, SelectField, Tabs, EmptyState } from '../ui'
 import { COPY } from '../ui/labels'
 import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
 
