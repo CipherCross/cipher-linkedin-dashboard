@@ -43,7 +43,8 @@ import {
   type ReactNode,
 } from 'react'
 import type { EmailOtpType, Session } from '@supabase/supabase-js'
-import { Logo } from '../components/Logo'
+import { AuthCard, AuthForm, AuthMessage, AuthState } from '../components/AuthCard'
+import { Button, TextField } from '../ui'
 import { useVisibleInterval } from './useVisibleInterval'
 import { deploymentAuthPath, type AuthPath } from './authPath'
 import {
@@ -76,7 +77,7 @@ export interface AuthUser {
   readonly email: string | null
 }
 
-interface AuthContextValue {
+export interface AuthContextValue {
   status: AuthStatus
   /** Which authenticator answered. Read by `authFetch` and the Team page. */
   authPath: AuthPath
@@ -91,7 +92,8 @@ interface AuthContextValue {
   revalidate: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+/** Exported so rendering tests can supply a fixed session state. */
+export const AuthContext = createContext<AuthContextValue | null>(null)
 const NEEDS_PASSWORD_KEY = 'outreach-deck-needs-password'
 
 function passwordFlag(): string | null {
@@ -632,166 +634,136 @@ function AuthScreen() {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-live="polite">
-        <div className="auth-brand">
-          <Logo size={34} className="brand-mark" />
-          <div>
-            <div className="auth-product">Outreach Deck</div>
-            <div className="auth-kicker">Team dashboard</div>
-          </div>
-        </div>
+    <AuthCard>
+      {auth.status === 'initializing' && (
+        <AuthState title="Checking your session…">
+          <div className="w-7 h-7 border-[3px] border-app-border border-t-app-accent rounded-full animate-[auth-spin_0.8s_linear_infinite]" aria-hidden="true" />
+        </AuthState>
+      )}
 
-        {auth.status === 'initializing' && (
-          <div className="auth-state">
-            <div className="w-7 h-7 border-[3px] border-app-border border-t-app-accent rounded-full animate-[auth-spin_0.8s_linear_infinite]" aria-hidden="true" />
-            <h1>Checking your session…</h1>
-          </div>
-        )}
+      {auth.status === 'unavailable' && (
+        <AuthState
+          title="Sign-in is unavailable"
+          description="We couldn’t check your session. See the details below, then try again once the service is available."
+        >
+          {auth.error && <AuthMessage tone="danger">{auth.error}</AuthMessage>}
+          <Button block onClick={() => void auth.revalidate()}>Try again</Button>
+        </AuthState>
+      )}
 
-        {auth.status === 'unavailable' && (
-          <div className="auth-state">
-            <h1>Sign-in is unavailable</h1>
-            <p>
-              We couldn’t check your session. See the details below, then try
-              again once the service is available.
-            </p>
-            {auth.error && <div className="auth-error" role="alert">{auth.error}</div>}
-            <button className="btn" type="button" onClick={() => void auth.revalidate()}>
-              Try again
-            </button>
-          </div>
-        )}
+      {auth.status === 'unauthorized' && (
+        <AuthState
+          title="Access isn’t active"
+          description={auth.error ??
+            'Your login is not linked to an active teammate. Ask an admin to update your access.'}
+        >
+          {auth.user?.email && <div className="w-fit px-app-md py-app-sm rounded-control bg-app-surface-2 text-app-text-secondary text-app-table">{auth.user.email}</div>}
+          <Button block onClick={() => void auth.signOut()}>Sign out</Button>
+        </AuthState>
+      )}
 
-        {auth.status === 'unauthorized' && (
-          <div className="auth-state">
-            <h1>Access isn’t active</h1>
-            <p>
-              {auth.error ??
-                'Your login is not linked to an active teammate. Ask an admin to update your access.'}
-            </p>
-            {auth.user?.email && <div className="w-fit px-app-md py-app-sm rounded-control bg-app-surface-2 text-app-text-secondary text-app-table">{auth.user.email}</div>}
-            <button className="btn" type="button" onClick={() => void auth.signOut()}>
-              Sign out
-            </button>
-          </div>
-        )}
+      {auth.status === 'setting_password' && (
+        <AuthForm
+          title="Set your password"
+          description="Use at least 12 characters. This finishes your invitation or recovery."
+          error={localError}
+          onSubmit={submitPassword}
+        >
+          <TextField
+            label="New password"
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            value={password}
+            onChange={(event) => setPasswordValue(event.target.value)}
+            required
+          />
+          <TextField
+            label="Confirm password"
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+            required
+          />
+          <Button variant="primary" block type="submit" loading={busy}>
+            {busy ? 'Saving…' : 'Save password'}
+          </Button>
+        </AuthForm>
+      )}
 
-        {auth.status === 'setting_password' && (
-          <form className="auth-form" onSubmit={submitPassword}>
-            <div>
-              <h1>Set your password</h1>
-              <p>Use at least 12 characters. This finishes your invitation or recovery.</p>
-            </div>
-            <label>
-              New password
-              <input
-                type="password"
-                autoComplete="new-password"
-                minLength={12}
-                value={password}
-                onChange={(event) => setPasswordValue(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Confirm password
-              <input
-                type="password"
-                autoComplete="new-password"
-                minLength={12}
-                value={confirm}
-                onChange={(event) => setConfirm(event.target.value)}
-                required
-              />
-            </label>
-            {localError && <div className="auth-error" role="alert">{localError}</div>}
-            <button className="btn accent" disabled={busy} type="submit">
-              {busy ? 'Saving…' : 'Save password'}
-            </button>
-          </form>
-        )}
+      {auth.status === 'signed_out' && mode === 'login' && (
+        <AuthForm
+          title="Sign in"
+          description="Use the email address your admin invited."
+          error={localError ?? auth.error}
+          onSubmit={submitLogin}
+        >
+          <TextField
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+          <TextField
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPasswordValue(event.target.value)}
+            required
+          />
+          <Button variant="primary" block type="submit" loading={busy}>
+            {busy ? 'Signing in…' : 'Sign in'}
+          </Button>
+          <Button
+            variant="ghost"
+            className="self-center"
+            onClick={() => {
+              setMode('forgot')
+              setLocalError(null)
+            }}
+          >
+            Forgot password?
+          </Button>
+        </AuthForm>
+      )}
 
-        {auth.status === 'signed_out' && mode === 'login' && (
-          <form className="auth-form" onSubmit={submitLogin}>
-            <div>
-              <h1>Sign in</h1>
-              <p>Use the email address your admin invited.</p>
-            </div>
-            <label>
-              Email
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPasswordValue(event.target.value)}
-                required
-              />
-            </label>
-            {(localError || auth.error) && (
-              <div className="auth-error" role="alert">{localError ?? auth.error}</div>
-            )}
-            <button className="btn accent" disabled={busy} type="submit">
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
-            <button
-              className="self-center min-h-control border-0 px-app-sm bg-transparent text-app-accent font-semibold text-app-table cursor-pointer hover:text-app-accent-hover hover:underline"
-              type="button"
-              onClick={() => {
-                setMode('forgot')
-                setLocalError(null)
-              }}
-            >
-              Forgot password?
-            </button>
-          </form>
-        )}
-
-        {auth.status === 'signed_out' && mode === 'forgot' && (
-          <form className="auth-form" onSubmit={submitReset}>
-            <div>
-              <h1>Reset password</h1>
-              <p>We’ll email a one-time recovery link if your invitation exists.</p>
-            </div>
-            <label>
-              Email
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            {message && <div className="border-app-success-border bg-app-success-subtle text-app-success">{message}</div>}
-            {localError && <div className="auth-error" role="alert">{localError}</div>}
-            <button className="btn accent" disabled={busy} type="submit">
-              {busy ? 'Sending…' : 'Send recovery link'}
-            </button>
-            <button
-              className="self-center min-h-control border-0 px-app-sm bg-transparent text-app-accent font-semibold text-app-table cursor-pointer hover:text-app-accent-hover hover:underline"
-              type="button"
-              onClick={() => {
-                setMode('login')
-                setMessage(null)
-                setLocalError(null)
-              }}
-            >
-              Back to sign in
-            </button>
-          </form>
-        )}
-      </section>
-    </main>
+      {auth.status === 'signed_out' && mode === 'forgot' && (
+        <AuthForm
+          title="Reset password"
+          description="We’ll email a one-time recovery link if your invitation exists."
+          error={localError}
+          onSubmit={submitReset}
+        >
+          {message && <AuthMessage tone="success">{message}</AuthMessage>}
+          <TextField
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+          <Button variant="primary" block type="submit" loading={busy}>
+            {busy ? 'Sending…' : 'Send recovery link'}
+          </Button>
+          <Button
+            variant="ghost"
+            className="self-center"
+            onClick={() => {
+              setMode('login')
+              setMessage(null)
+              setLocalError(null)
+            }}
+          >
+            Back to sign in
+          </Button>
+        </AuthForm>
+      )}
+    </AuthCard>
   )
 }

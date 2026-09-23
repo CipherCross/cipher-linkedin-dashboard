@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { ResetPassword, resetTokenFromHash } from './pages/ResetPassword'
 import { APP_ROUTE_SEGMENTS } from './lib/navigation'
+import { Panel } from './ui'
 
 /** Dev-only UI reference (`#/ui-gallery`). `import.meta.env.DEV` is statically
  *  false in a production build, so this import and the branch below are dropped
@@ -35,14 +36,14 @@ const CsvImport = lazy(() => import('./pages/CsvImport').then((m) => ({ default:
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const NeonActivity = lazy(() => import('./pages/NeonActivity').then((m) => ({ default: m.NeonActivity })))
 
-function AdminOnly({ children }: { children: ReactNode }) {
+export function AdminOnly({ children }: { children: ReactNode }) {
   const { isAdmin } = useAuth()
   if (isAdmin) return <>{children}</>
   return (
-    <div className="card">
-      <h1>Admin access required</h1>
-      <p className="muted">Your account can view dashboard data but cannot run imports.</p>
-    </div>
+    <Panel>
+      <h1 className="m-0 text-app-page">Admin access required</h1>
+      <p className="mt-app-sm mb-0 text-app-text-muted">Your account can view dashboard data but cannot run imports.</p>
+    </Panel>
   )
 }
 

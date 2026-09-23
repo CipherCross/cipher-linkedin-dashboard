@@ -114,16 +114,14 @@ export function Layout() {
       {/* Mobile-only bar: hamburger toggles the off-canvas sidebar; the rail
           itself is display:none here and only appears ≥900px. */}
       <div className="mobile-topbar hidden [@media(max-width:900px)]:flex" ref={mobileTopbarRef}>
-        <button
+        <IconButton
           ref={mobileToggleRef}
-          type="button"
-          className="nav-toggle"
+          bordered
           onClick={() => setNavOpen((o) => !o)}
-          aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+          label={navOpen ? 'Close navigation' : 'Open navigation'}
           aria-expanded={navOpen}
-        >
-          {navOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+          icon={navOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+        />
         <Link to="/" className="brand" aria-label="Outreach Deck — home">
           <Logo size={24} className="brand-mark" />
           <span className="brand-name">Outreach Deck</span>
@@ -357,24 +355,19 @@ function Sidebar({
             <Logo size={26} className="brand-mark" />
             <span className="brand-name">Outreach Deck</span>
           </Link>
-          <button
-            type="button"
+          <IconButton
             className="side-hide"
             onClick={onHide}
-            aria-label="Hide navigation"
-            title="Hide navigation"
-          >
-            <PanelLeftClose size={18} aria-hidden="true" />
-          </button>
-          <button
+            label="Hide navigation"
+            icon={<PanelLeftClose size={20} aria-hidden="true" />}
+          />
+          <IconButton
             ref={mobileCloseRef}
-            type="button"
             className="side-mobile-close"
             onClick={onClose}
-            aria-label="Close navigation"
-          >
-            <X size={19} aria-hidden="true" />
-          </button>
+            label="Close navigation"
+            icon={<X size={20} aria-hidden="true" />}
+          />
         </div>
 
         <button type="button" className="quick-nav-trigger" onClick={onOpenQuickNavigation}>
@@ -392,7 +385,7 @@ function Sidebar({
         </nav>
 
         <div className="side-footer">
-          <div className="side-user w-full min-w-0 flex items-center gap-2 pb-2">
+          <div className="w-full min-w-0 flex items-center gap-2 pb-2">
             <span
               className="size-[30px] flex-[0_0_30px] grid place-items-center border border-app-accent-border rounded-full bg-app-accent-subtle text-app-accent text-[length:var(--text-xs)] font-[750]"
               aria-hidden="true"

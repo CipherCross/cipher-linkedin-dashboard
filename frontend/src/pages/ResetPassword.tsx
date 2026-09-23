@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Logo } from '../components/Logo'
+import { AuthCard, AuthForm, AuthState } from '../components/AuthCard'
+import { Button, TextField } from '../ui'
 import { completePasswordReset } from '../lib/identityAuth'
 
 /** What the recovery link carries, and the route that renders this screen. */
@@ -77,68 +78,43 @@ export function ResetPassword({ token }: { token: string }) {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-live="polite">
-        <div className="auth-brand">
-          <Logo size={34} className="brand-mark" />
-          <div>
-            <div className="auth-product">Outreach Deck</div>
-            <div className="auth-kicker">Team dashboard</div>
-          </div>
-        </div>
-
-        {done ? (
-          <div className="auth-state">
-            <h1>Password set</h1>
-            <p>You can sign in with it now.</p>
-            <button className="btn accent" type="button" onClick={goToSignIn}>
-              Go to sign in
-            </button>
-          </div>
-        ) : (
-          <form className="auth-form" onSubmit={submit}>
-            <div>
-              <h1>Choose a password</h1>
-              <p>
-                This link works once. Use at least {MINIMUM_LENGTH} characters,
-                then sign in with your new password.
-              </p>
-            </div>
-            <label>
-              New password
-              <input
-                type="password"
-                autoComplete="new-password"
-                minLength={MINIMUM_LENGTH}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                disabled={busy}
-                required
-              />
-            </label>
-            <label>
-              Repeat it
-              <input
-                type="password"
-                autoComplete="new-password"
-                minLength={MINIMUM_LENGTH}
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-                disabled={busy}
-                required
-              />
-            </label>
-            {error && (
-              <div className="auth-error" role="alert">
-                {error}
-              </div>
-            )}
-            <button className="btn accent" disabled={busy} type="submit">
-              {busy ? 'Setting…' : 'Set password'}
-            </button>
-          </form>
-        )}
-      </section>
-    </main>
+    <AuthCard>
+      {done ? (
+        <AuthState title="Password set" description="You can sign in with it now.">
+          <Button variant="primary" block onClick={goToSignIn}>Go to sign in</Button>
+        </AuthState>
+      ) : (
+        <AuthForm
+          title="Choose a password"
+          description={`This link works once. Use at least ${MINIMUM_LENGTH} characters, then sign in with your new password.`}
+          error={error}
+          onSubmit={submit}
+        >
+          <TextField
+            label="New password"
+            type="password"
+            autoComplete="new-password"
+            minLength={MINIMUM_LENGTH}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={busy}
+            required
+          />
+          <TextField
+            label="Repeat it"
+            type="password"
+            autoComplete="new-password"
+            minLength={MINIMUM_LENGTH}
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            disabled={busy}
+            required
+          />
+          <Button variant="primary" block type="submit" loading={busy}>
+            {busy ? 'Setting…' : 'Set password'}
+          </Button>
+        </AuthForm>
+      )}
+    </AuthCard>
   )
 }

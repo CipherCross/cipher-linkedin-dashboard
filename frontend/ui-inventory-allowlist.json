@@ -56,6 +56,28 @@
       "reason": "Date range picker is the named application composition for calendar behavior.",
       "verification": "Date-range keyboard and focus checks.",
       "removeByPhase": null
+    },
+    {
+      "id": "nav-section-disclosure",
+      "kind": "raw-control",
+      "path": "src/components/Layout.tsx",
+      "symbol": "renderSection",
+      "tag": "button",
+      "owner": "frontend/navigation",
+      "reason": "Collapsible navigation group header: a disclosure button (aria-expanded/aria-controls) styled as a section title, not an action with Button chrome.",
+      "verification": "Enter/Space toggles the group; aria-expanded tracks it; navigation test.",
+      "removeByPhase": null
+    },
+    {
+      "id": "quick-nav-search-trigger",
+      "kind": "raw-control",
+      "path": "src/components/Layout.tsx",
+      "symbol": "Sidebar",
+      "tag": "button",
+      "owner": "frontend/navigation",
+      "reason": "Quick Navigation trigger presented as a search field with its ⌘K hint; it opens the command dialog rather than performing an action.",
+      "verification": "Click and ⌘K open Quick Navigation; focus returns to the trigger on close.",
+      "removeByPhase": null
     }
   ]
 }

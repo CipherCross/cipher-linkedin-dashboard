@@ -2,6 +2,7 @@ import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { TriangleAlert, RotateCw } from 'lucide-react'
 import { Logo } from './Logo'
+import { Button } from '../ui'
 
 interface Props {
   children: ReactNode
@@ -35,7 +36,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (this.props.variant === 'inline') {
       return (
-        <div className="card flex flex-col gap-2.5 items-start" role="alert">
+        <div className="bg-app-surface border border-app-border rounded-card p-4 flex flex-col gap-2.5 items-start" role="alert">
           <div className="flex items-center gap-2.5 text-app-danger">
             <TriangleAlert size={18} />
             <h2 className="mt-1 mx-0 mb-0 text-[length:var(--text-lg)]">This page failed to load</h2>
@@ -46,10 +47,9 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-2.5 font-mono text-[length:var(--text-xs)] text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
           <div className="flex gap-2.5 mt-0.5">
-            <button className="btn accent" onClick={() => this.setState({ error: null })}>
-              <RotateCw size={15} />
+            <Button variant="primary" icon={<RotateCw size={16} aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
               Try again
-            </button>
+            </Button>
           </div>
         </div>
       )
@@ -65,15 +65,14 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-2.5 font-mono text-[length:var(--text-xs)] text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
           <div className="flex gap-2.5 mt-0.5">
-            <button className="btn accent" onClick={() => this.setState({ error: null })}>
-              <RotateCw size={15} />
+            <Button variant="primary" icon={<RotateCw size={16} aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
               Try again
-            </button>
-            <button className="btn" onClick={() => window.location.reload()}>
+            </Button>
+            <Button onClick={() => window.location.reload()}>
               Reload page
-            </button>
+            </Button>
           </div>
-          <div className="inline-flex items-center gap-1.5 mt-1 muted small">
+          <div className="inline-flex items-center gap-1.5 mt-1 text-app-meta text-app-text-muted">
             <TriangleAlert size={13} />
             If this keeps happening, check the browser console and Sync health.
           </div>

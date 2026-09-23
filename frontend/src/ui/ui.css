@@ -820,181 +820,6 @@ tr:last-child td { border-bottom: none; }
 .dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
 .dot.stale { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
 .dot.inline { display: inline-block; margin-right: 8px; }
-.brand-mark { display: block; border-radius: var(--radius-sm); }
-.nav-section.primary .nav-section-title { color: var(--text-secondary); }
-.nav-section-trigger.open > svg { transform: rotate(90deg); }
-.navlink {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: var(--nav-row-height);
-  color: var(--text-secondary);
-  text-decoration: none;
-  padding: 0 var(--space-md);
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  font-size: var(--text-table);
-  font-weight: 500;
-  white-space: nowrap;
-  transition:
-    color var(--dur-fast) ease,
-    background var(--dur-fast) ease,
-    border-color var(--dur-fast) ease;
-}
-.navlink::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 9px;
-  bottom: 9px;
-  width: 3px;
-  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-  background: transparent;
-}
-.navlink:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
-  border-color: color-mix(in srgb, var(--border) 72%, transparent);
-}
-.navlink.active {
-  color: var(--text);
-  background: var(--accent-subtle);
-  border-color: var(--accent-border);
-  font-weight: 650;
-}
-.navlink.active::before { background: var(--accent); }
-.navlink.active .navlink-icon { color: var(--accent); }
-.sync-chip.ok .sync-dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
-.sync-chip.warn .sync-dot { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
-.sync-chip.stale .sync-dot { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
-
-/* Below 900px the rail becomes an off-canvas drawer: a sticky top bar with a
- * hamburger sits above full-width content, and --sidebar-w drops to 0 so the
- * full-bleed math falls back to plain viewport-centred behaviour. */
-@media (max-width: 900px) {
-  .app { flex-direction: column; --sidebar-w: 0px; }
-
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    position: sticky;
-    top: 0;
-    z-index: 45;
-    padding: 10px 14px;
-    background: color-mix(in srgb, var(--bg) 72%, transparent);
-    border-bottom: 1px solid var(--border);
-  }
-  .mobile-topbar .appbar-actions { margin-left: auto; }
-
-  .content { width: 100%; }
-
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    height: 100vh;
-    width: min(300px, 84vw);
-    transform: translateX(-100%);
-    transition: transform 0.22s var(--ease-out);
-    box-shadow: var(--shadow-overlay);
-    z-index: 60;
-  }
-  .sidebar.open { transform: none; }
-  .side-footer { display: none; }
-
-  .nav-backdrop.show {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: 55;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-}
-.quick-nav-trigger kbd,
-.quick-nav-dialog kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 5px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: var(--surface-1);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-strong) 70%, transparent);
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: var(--text-2xs);
-  font-weight: 650;
-  line-height: 1;
-}
-.nav-section.primary .nav-section-links { gap: 3px; }
-.nav-section-trigger.active {
-  background: color-mix(in srgb, var(--accent-subtle) 64%, transparent);
-  color: var(--text-secondary);
-}
-.nav-section-trigger.active .nav-section-title { color: inherit; }
-.nav-section-trigger.active::before {
-  content: '';
-  width: 3px;
-  height: 14px;
-  flex: 0 0 3px;
-  margin-left: 4px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-}
-.nav-section-trigger.active .nav-section-title { padding-left: 6px; }
-
-@media (min-width: 901px) {
-}
-@media (min-width: 901px) and (max-width: 1320px) {
-  .nav-hidden .page { padding-left: 72px; }
-}.quick-nav-result:hover,
-.quick-nav-result.active {
-  border-color: var(--accent-border);
-  background: var(--accent-subtle);
-  color: var(--text);
-}
-.quick-nav-result-icon {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  color: var(--text-muted);
-}
-.quick-nav-result.active .quick-nav-result-icon { color: var(--accent); }
-.quick-nav-result-copy {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.quick-nav-result-copy strong,
-.quick-nav-result-copy span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.quick-nav-result-copy strong { font-size: var(--text-sm); }
-.quick-nav-result-copy span { color: var(--text-muted); font-size: var(--text-xs); }@media (min-width: 901px) and (max-height: 700px) {
-}
-
-@media (max-width: 900px) {
-}
-
-@media (max-width: 600px) {}
-
-@media (prefers-reduced-motion: reduce) {}
-
 /* --- Skeletons (initial load) -------------------------------------------- */
 .skeleton {
   display: block;
@@ -1830,49 +1655,10 @@ td .pipe-stage-select.quiet:focus-visible {
   .csv-import-footer .btn { width: 100%; }
 }
 
-/* --- Authentication ------------------------------------------------------ */
-.auth-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--bg);
-}
-.auth-card {
-  width: min(100%, 440px);
-  padding: var(--space-2xl);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-dialog);
-  background: var(--surface-1);
-  box-shadow: var(--shadow-overlay);
-}
-.auth-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding-bottom: var(--space-xl);
-  margin-bottom: var(--space-xl);
-  border-bottom: 1px solid var(--border);
-}
-.auth-product { font-weight: 600; font-size: var(--text-subsection); }
-.auth-kicker { margin-top: 2px; color: var(--text-muted); font-size: var(--text-meta); }
-.auth-form,
-.auth-state { display: flex; flex-direction: column; gap: var(--space-lg); }
-.auth-form h1,
-.auth-state h1 { font-size: var(--text-page); line-height: var(--leading-page); margin: 0; }
-.auth-form p,
-.auth-state p { color: var(--text-muted); margin: 0; line-height: 1.55; }
-.auth-form label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  color: var(--text);
-  font-size: var(--text-table);
-  font-weight: 600;
-}
-.auth-form input { width: 100%; }
-.auth-form .btn.accent { width: 100%; justify-content: center; }.auth-error,
-.auth-success {
+/* --- Authentication: AuthCard.tsx owns its utilities; the spinner keyframes
+ * stay shared (the sequence publish strip reuses them). */
+/* Team's inline-error alert still uses this; it moves with Team in Phase 3. */
+.auth-error {
   padding: var(--space-md);
   border: 1px solid var(--danger-border);
   border-radius: var(--radius-control);
@@ -1880,7 +1666,8 @@ td .pipe-stage-select.quiet:focus-visible {
   color: var(--danger);
   font-size: var(--text-table);
   line-height: var(--leading-table);
-}@keyframes auth-spin { to { transform: rotate(360deg); } }
+}
+@keyframes auth-spin { to { transform: rotate(360deg); } }
 
 /* --- Authenticated identity --------------------------------------------- */
 .identity-chip {
@@ -1897,17 +1684,13 @@ td .pipe-stage-select.quiet:focus-visible {
 }
 .identity-chip strong { color: var(--text); font-weight: 600; }
 .identity-chip.compact { width: fit-content; min-height: 30px; padding-block: 5px; }
-.side-user .icon-btn { padding: 6px; color: var(--text-muted); }
 .role-badge.admin { color: var(--purple); border-color: var(--purple-border); background: var(--purple-subtle); }
 .status-dot-label.active { color: var(--success); }
 .status-dot-label.active > span { background: var(--success); }
 .status-dot-label.inactive { color: var(--text-muted); }
 .team-actions .btn + .btn { margin-left: 6px; }
 
-@media (max-width: 700px) {
-  .auth-shell { padding: 14px; }
-  .auth-card { padding: 20px; }
-}.campaign-runtime.compact { gap: 2px; }
+.campaign-runtime.compact { gap: 2px; }
 .runtime-unknown, .archive-unknown, .observation-unsupported,
 .observation-awaiting_first_sync { color: var(--warning); background: var(--warning-subtle); }
 .archive-yes { color: var(--purple); background: color-mix(in srgb, var(--purple) 12%, transparent); }.campaign-table-filters, .deployment-filters { display: flex; flex-wrap: wrap; gap: 10px; }

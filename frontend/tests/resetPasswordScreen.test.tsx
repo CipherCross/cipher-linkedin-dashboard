@@ -39,8 +39,8 @@ describe('reading the token out of the link', () => {
 
 describe('setting the password', () => {
   function fill(password: string, confirmation = password) {
-    fireEvent.change(screen.getByLabelText('New password'), { target: { value: password } })
-    fireEvent.change(screen.getByLabelText('Repeat it'), { target: { value: confirmation } })
+    fireEvent.change(screen.getByLabelText(/^New password/), { target: { value: password } })
+    fireEvent.change(screen.getByLabelText(/^Repeat it/), { target: { value: confirmation } })
     fireEvent.click(screen.getByRole('button', { name: 'Set password' }))
   }
 

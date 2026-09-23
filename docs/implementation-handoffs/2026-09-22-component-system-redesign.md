@@ -83,3 +83,29 @@ Browser evidence — **local synthetic fixture, headless Chrome (global puppetee
 Known limit: a backdrop click on a busy dialog moves focus to `<body>`; the next Tab returns it to the dialog (trap intact). Keyboard checks beyond the dialog trap were not run.
 
 Next: Phase 2 — shell, auth, reset, access, shared feedback (`App` admin fallback, `AuthContext`, `ResetPassword`, `Layout`, Quick Navigation, ErrorBoundary, Skeleton, toasts).
+
+## Phase 2 — accepted (2026-09-23)
+
+Shell, auth, reset, access, and shared feedback converted.
+
+- **Auth**: new `src/components/AuthCard.tsx` (`AuthCard`, `AuthForm`, `AuthState`, `AuthMessage`) is the single pre-session surface for sign-in, recovery, invitation password, unavailable, unauthorized, and `ResetPassword`. Fields are `TextField`, the one submit is a block primary `Button` with `loading`, secondary links are ghost `Button`s, and form errors render directly above the fields. The recovery success message now has its intended framed style (it previously rendered with only a border colour). Behaviour, copy, handlers and minimum lengths unchanged. `.auth-*` rules deleted from `ui.css` except `.auth-error`, which Team still uses (owner Team.tsx, Phase 3).
+- **Layout**: mobile toggle, Hide navigation and Close navigation are `IconButton`s. Hide navigation grows from 32×32 to the standard 44×44 target (measured at 173,14 44×44 vs 185,20 32×32). The group disclosure and the Quick Navigation search-style trigger stay native buttons under named allowlist entries (`nav-section-disclosure`, `quick-nav-search-trigger`). The shell block (brand mark, nav groups, navlinks, sync chip, ≤900px drawer, quick-nav kbd and results) moved verbatim from `ui.css` to the top of `layout.css`, which keeps its cascade position; dead `.nav-toggle`, `.side-user .icon-btn` and custom side-button chrome removed.
+- **Feedback**: `ErrorBoundary` actions are `Button`s and its frame and hint use utilities; `PageSkeleton` cards use the same frame utilities as `.card` (identical values); the `App` admin fallback is a `Panel`. `AuthContext` and `AdminOnly` are exported for rendering tests.
+- **Tests**: new `tests/shellAccess.test.tsx` (10): sign-in with one primary submit and error-above-fields, recovery round trip, password mismatch refusal, unavailable retry, unauthorized sign-out, initializing/ready, admin gate member/admin, sidebar hide/show focus, group disclosure, member nav hides CSV Import, route error boundary recovery. `resetPasswordScreen` label queries take the required-field asterisk into account (`/^New password/`). Mutation check: removing the focus move in `onHide` fails the sidebar test.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 85 files / 1,336 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 356 → 332 plus 2 new named exceptions; compatibility tokens 1,522 → 1,438 and selectors 452 → 404, mostly shell rules now owned by `layout.css`); fixture `--check` passed; `git diff --check` passed. `css-parity.mjs` against the pre-phase `ui.css` and `layout.css`: no declaration missing that HEAD's build had. Production gzip JS 651,705 (+0.1% vs Phase 0), CSS 40,642 (−223 vs Phase 0).
+
+Browser evidence — **local synthetic fixture, headless Chrome, side by side against a HEAD (`779c4da`) fixture on another port**, at exact 1280×720, 1440×900, 1920×1080:
+
+| Surface | Result |
+| --- | --- |
+| Shell geometry | sidebar 232px, brand, Go to…, first navlink, group triggers, footer, sign-out, sync chip and page h1 identical to HEAD at all three sizes; only Hide navigation changed (44×44). No page overflow-x. |
+| Sidebar hide/show | hide moves focus to Show navigation and sets `aria-hidden`; Enter restores the rail and focuses Go to…; same as HEAD |
+| Quick Navigation | Enter on Go to… opens the dialog with focus inside; Escape closes and returns focus to the trigger; same as HEAD |
+| Auth (identity failure) | centred 440px card, 28px heading, alert above Try again; 14px shorter than HEAD from the intro spacing |
+| Member on CSV Import | "Admin access required" panel at all three sizes; member nav omits CSV Import |
+| ≤900px (preserved, not accepted) | at 800px the toggle opens the drawer with focus on Close navigation, and Escape closes it and refocuses the toggle; identical to HEAD |
+
+Not exercised in a browser: the sign-in form itself (the fixture has no signed-out identity state; covered by `shellAccess`), password reset screen (covered by `resetPasswordScreen`), and the screen-level ErrorBoundary.
+
+Next: Phase 3 — Team first (reference directory/table/row-action/dialog), then Health and Neon Activity.
