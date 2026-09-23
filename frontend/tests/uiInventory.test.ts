@@ -2,13 +2,15 @@
  * test completes; it exercises the same AST path a product edit uses. */
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { bundleDelta } from '../scripts/ui-inventory.mjs'
 
 const frontend = join(__dirname, '..')
 const script = join(frontend, 'scripts/ui-inventory.mjs')
 let mutation: string | null = null
+let fixtureRoot: string | null = null
 
 function inventory(fixture?: string): { status: number, output: string } {
   try {
@@ -20,7 +22,12 @@ function inventory(fixture?: string): { status: number, output: string } {
   }
 }
 
-afterEach(() => { if (mutation && existsSync(mutation)) rmSync(join(mutation, '..'), { recursive: true, force: true }); mutation = null })
+afterEach(() => {
+  if (mutation && existsSync(mutation)) rmSync(join(mutation, '..'), { recursive: true, force: true })
+  if (fixtureRoot && existsSync(fixtureRoot)) rmSync(fixtureRoot, { recursive: true, force: true })
+  mutation = null
+  fixtureRoot = null
+})
 
 describe('UI inventory ratchet', () => {
   it('passes the unmodified reviewed Phase 0 baseline', () => {
@@ -42,5 +49,44 @@ describe('UI inventory ratchet', () => {
     expect(result.output).toContain('FAIL raw controls:')
     expect(result.output).toContain('FAIL compatibility tokens:')
     expect(result.output).toContain('FAIL forbidden direct imports:')
+  })
+
+  it('matches route chunks across Vite content hashes and enforces their gzip budget', () => {
+    fixtureRoot = mkdtempSync(join(tmpdir(), 'ui-bundle-inventory-'))
+    const fixture = join(fixtureRoot, 'bundle.json')
+    writeFileSync(fixture, JSON.stringify({
+      baseline: { available: true, chunks: [{ name: 'Overview-a1b2c3d4.js', type: 'js', scope: 'production', gzipBytes: 10000 }] },
+      current: { available: true, chunks: [{ name: 'Overview-e5f6g7h8.js', type: 'js', scope: 'production', entry: false, gzipBytes: 25000 }] },
+    }))
+    const { baseline, current } = JSON.parse(readFileSync(fixture, 'utf8'))
+    const failures: string[] = []
+
+    bundleDelta(current, baseline, failures)
+
+    expect(failures).toEqual(['bundle: Overview-e5f6g7h8.js gzip grew above its larger-of-10%-or-10KB route budget (10000 -> 25000)'])
+  })
+
+  it('keeps same-named entry and route chunks distinct by budget', () => {
+    fixtureRoot = mkdtempSync(join(tmpdir(), 'ui-bundle-inventory-'))
+    const fixture = join(fixtureRoot, 'bundle.json')
+    writeFileSync(fixture, JSON.stringify({
+      baseline: { available: true, chunks: [
+        { name: 'index.js', type: 'js', scope: 'production', gzipBytes: 10000 },
+        { name: 'index.js', type: 'js', scope: 'production', entry: true, gzipBytes: 20000 },
+      ] },
+      current: { available: true, chunks: [
+        { name: 'index-11111111.js', type: 'js', scope: 'production', entry: true, gzipBytes: 21100 },
+        { name: 'index-22222222.js', type: 'js', scope: 'production', entry: false, gzipBytes: 20300 },
+      ] },
+    }))
+    const { baseline, current } = JSON.parse(readFileSync(fixture, 'utf8'))
+    const failures: string[] = []
+
+    bundleDelta(current, baseline, failures)
+
+    expect(failures).toEqual([
+      'bundle: index-11111111.js gzip grew above its 5% entry budget (20000 -> 21100)',
+      'bundle: index-22222222.js gzip grew above its larger-of-10%-or-10KB route budget (10000 -> 20300)',
+    ])
   })
 })

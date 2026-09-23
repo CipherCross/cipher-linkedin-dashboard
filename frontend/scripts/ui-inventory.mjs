@@ -15,6 +15,7 @@ import { promisify } from 'node:util'
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, extname, join, relative, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
 import postcss from 'postcss'
@@ -330,11 +331,27 @@ function checkAllowlist(allowlist, scan, failures) {
   }
 }
 
-function bundleDelta(current, baseline, failures) {
+function bundleNameIdentity(name) {
+  return name.replace(/-[A-Za-z0-9_-]{8}(?=\.(?:js|css)$)/, '')
+}
+
+// Vite content hashes change on every rebuild, so chunks are matched by
+// scope, type, hash-free name and entry flag. A baseline row without an
+// entry flag is a route chunk; the Phase 0 baseline marks its one entry.
+function bundleChunkIdentity(chunk) {
+  return `${chunk.scope}:${chunk.type}:${bundleNameIdentity(chunk.name)}:${chunk.entry === true ? 'entry' : 'route'}`
+}
+
+export function bundleDelta(current, baseline, failures) {
   if (!current.available || !baseline?.available) return
-  const oldChunks = new Map((baseline.chunks ?? []).map((chunk) => [chunk.key, chunk]))
+  const oldChunks = new Map()
+  for (const chunk of baseline.chunks ?? []) {
+    const identity = bundleChunkIdentity(chunk)
+    if (oldChunks.has(identity)) failures.push(`bundle: baseline has duplicate chunk identity ${identity}`)
+    oldChunks.set(identity, chunk)
+  }
   for (const chunk of current.chunks.filter((item) => item.scope === 'production' && item.type === 'js')) {
-    const old = oldChunks.get(chunk.key)
+    const old = oldChunks.get(bundleChunkIdentity(chunk))
     const isEntry = chunk.entry
     const maximum = isEntry ? Math.ceil(old?.gzipBytes * 1.05) : (old?.gzipBytes ?? 0) + Math.max(Math.ceil((old?.gzipBytes ?? 0) * 0.10), 10 * 1024)
     if (old && chunk.gzipBytes > maximum) failures.push(`bundle: ${chunk.name} gzip grew above its ${isEntry ? '5% entry' : 'larger-of-10%-or-10KB route'} budget (${old.gzipBytes} -> ${chunk.gzipBytes})`)
@@ -406,4 +423,6 @@ async function main() {
   process.exitCode = failures.length ? 1 : 0
 }
 
-main().catch((error) => { console.error(error.stack || error); process.exitCode = 1 })
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => { console.error(error.stack || error); process.exitCode = 1 })
+}

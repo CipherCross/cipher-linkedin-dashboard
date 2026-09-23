@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5178", "--strictPort"],
       "port": 5178
+    },
+    {
+      "name": "ui-fixture",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["frontend/scripts/ui-fixture-dev.mjs", "populated-admin"],
+      "port": 4300
     }
   ]
 }
