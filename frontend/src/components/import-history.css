@@ -1,7 +1,0 @@
-/* `.import-flag` takes a `.dup` modifier, so it stays a class: utilities have
- * no specificity to resolve a variant against. */
-.import-flag {
-  font-size: var(--text-2xs); padding: 1px 7px; border-radius: var(--radius-sm); white-space: nowrap;
-  border: 1px solid var(--warning-border); background: var(--warning-subtle); color: var(--warning);
-}
-.import-flag.dup { border-color: var(--border); background: var(--surface-2); color: var(--muted); }

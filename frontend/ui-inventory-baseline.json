@@ -79,52 +79,6 @@
     },
     {
       "kind": "raw-control",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 83,
-      "symbol": "CompanyResolutionModal",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 114,
-      "symbol": "CompanyResolutionModal",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 133,
-      "symbol": "CompanyResolutionModal",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 134,
-      "symbol": "CompanyResolutionModal",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 90,
-      "symbol": "CompanyResolutionModal",
-      "tag": "input",
-      "nativeType": "search",
-      "ordinal": 1,
-      "key": "raw-control:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:input:search:1"
-    },
-    {
-      "kind": "raw-control",
       "path": "src/components/conversation/ConversationActionPanel.tsx",
       "line": 54,
       "symbol": "ConversationActionPanel",
@@ -642,135 +596,6 @@
       "tag": "button",
       "ordinal": 1,
       "key": "raw-control:src/components/Heatmap.tsx:Heatmap:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 246,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 270,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 273,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 308,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 320,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 5,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::5"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 324,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 6,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::6"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 342,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 7,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::7"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 348,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 8,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::8"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 359,
-      "symbol": "ImportHistoryPanel",
-      "tag": "button",
-      "ordinal": 9,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:button::9"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 302,
-      "symbol": "ImportHistoryPanel",
-      "tag": "input",
-      "nativeType": "checkbox",
-      "ordinal": 1,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:input:checkbox:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 328,
-      "symbol": "ImportHistoryPanel",
-      "tag": "input",
-      "nativeType": "datetime-local",
-      "ordinal": 1,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:input:datetime-local:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 288,
-      "symbol": "ImportHistoryPanel",
-      "tag": "input",
-      "nativeType": "radio",
-      "ordinal": 1,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:input:radio:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 261,
-      "symbol": "ImportHistoryPanel",
-      "tag": "textarea",
-      "ordinal": 1,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:textarea::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 333,
-      "symbol": "ImportHistoryPanel",
-      "tag": "textarea",
-      "ordinal": 2,
-      "key": "raw-control:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:textarea::2"
     },
     {
       "kind": "raw-control",
@@ -1884,150 +1709,6 @@
       "tag": "textarea",
       "ordinal": 1,
       "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:textarea::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 539,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 755,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 10,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::10"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 782,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 11,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::11"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 789,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 12,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::12"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 794,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 13,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::13"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 798,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 14,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::14"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 560,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 582,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 602,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 623,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 5,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::5"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 664,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 6,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::6"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 671,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 7,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::7"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 686,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 8,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::8"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 734,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "button",
-      "ordinal": 9,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:button::9"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 565,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "select",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:select::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 715,
-      "symbol": "UnifiedApolloCsvImport",
-      "tag": "table",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:table::1"
     }
   ],
   "allowlistedRawControls": [
@@ -2085,7 +1766,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 514,
+      "line": 577,
       "symbol": "UnifiedApolloCsvImport",
       "tag": "input",
       "nativeType": "file",
@@ -3081,186 +2762,6 @@
     },
     {
       "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 133,
-      "symbol": "CompanyResolutionModal",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 134,
-      "symbol": "CompanyResolutionModal",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 83,
-      "symbol": "CompanyResolutionModal",
-      "token": "conv-close",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:conv-close::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 99,
-      "symbol": "CompanyResolutionModal",
-      "token": "csv-inline-error",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:csv-inline-error::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 134,
-      "symbol": "CompanyResolutionModal",
-      "token": "danger",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:danger::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 133,
-      "symbol": "CompanyResolutionModal",
-      "token": "ghost",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:ghost::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 76,
-      "symbol": "CompanyResolutionModal",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 102,
-      "symbol": "CompanyResolutionModal",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 107,
-      "symbol": "CompanyResolutionModal",
-      "token": "muted",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:muted::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 123,
-      "symbol": "CompanyResolutionModal",
-      "token": "muted",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:muted::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 132,
-      "symbol": "CompanyResolutionModal",
-      "token": "pipe-modal-actions",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:pipe-modal-actions::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 73,
-      "symbol": "CompanyResolutionModal",
-      "token": "pipe-modal-head",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:pipe-modal-head::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 65,
-      "symbol": "CompanyResolutionModal",
-      "token": "pipe-modal-overlay",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:pipe-modal-overlay::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 66,
-      "symbol": "CompanyResolutionModal",
-      "token": "pipe-modal",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:pipe-modal::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 133,
-      "symbol": "CompanyResolutionModal",
-      "token": "sm",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:sm::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 134,
-      "symbol": "CompanyResolutionModal",
-      "token": "sm",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:sm::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 76,
-      "symbol": "CompanyResolutionModal",
-      "token": "small",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 102,
-      "symbol": "CompanyResolutionModal",
-      "token": "small",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:small::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 107,
-      "symbol": "CompanyResolutionModal",
-      "token": "small",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:small::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 123,
-      "symbol": "CompanyResolutionModal",
-      "token": "small",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:small::4"
-    },
-    {
-      "kind": "compatibility-token",
       "path": "src/components/conversation/ConversationActionPanel.tsx",
       "line": 56,
       "symbol": "ConversationActionPanel",
@@ -3357,24 +2858,6 @@
       "token": "small",
       "ordinal": 1,
       "key": "compatibility-token:src/components/conversation/ReplyReviewPanel.tsx:ReplyReviewPanel:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/conversation/ReplyReviewPanel.tsx",
-      "line": 75,
-      "symbol": "ReplyReviewPanel",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/conversation/ReplyReviewPanel.tsx:ReplyReviewPanel:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/conversation/ReplyReviewPanel.tsx",
-      "line": 76,
-      "symbol": "ReplyReviewPanel",
-      "token": "sr-only",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/conversation/ReplyReviewPanel.tsx:ReplyReviewPanel:sr-only::2"
     },
     {
       "kind": "compatibility-token",
@@ -3834,15 +3317,6 @@
       "token": "muted",
       "ordinal": 9,
       "key": "compatibility-token:src/components/ConversationDrawer.tsx:ConversationDrawer:muted::9"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ConversationDrawer.tsx",
-      "line": 741,
-      "symbol": "ConversationDrawer",
-      "token": "out",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ConversationDrawer.tsx:ConversationDrawer:out::1"
     },
     {
       "kind": "compatibility-token",
@@ -4833,420 +4307,6 @@
       "token": "small",
       "ordinal": 1,
       "key": "compatibility-token:src/components/Heatmap.tsx:Heatmap:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 83,
-      "symbol": "ImportCalloutCard",
-      "token": "badge",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:badge::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 88,
-      "symbol": "ImportCalloutCard",
-      "token": "badge",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:badge::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 45,
-      "symbol": "ImportCalloutCard",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 45,
-      "symbol": "ImportCalloutCard",
-      "token": "import-callout",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:import-callout::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 93,
-      "symbol": "ImportCalloutCard",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 96,
-      "symbol": "ImportCalloutCard",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 102,
-      "symbol": "ImportCalloutCard",
-      "token": "muted",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:muted::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 103,
-      "symbol": "ImportCalloutCard",
-      "token": "muted",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:muted::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 67,
-      "symbol": "ImportCalloutCard",
-      "token": "row-clickable",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:row-clickable::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 83,
-      "symbol": "ImportCalloutCard",
-      "token": "senti",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:senti::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 88,
-      "symbol": "ImportCalloutCard",
-      "token": "senti",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:senti::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 93,
-      "symbol": "ImportCalloutCard",
-      "token": "small",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 96,
-      "symbol": "ImportCalloutCard",
-      "token": "small",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:small::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 102,
-      "symbol": "ImportCalloutCard",
-      "token": "small",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:small::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportCalloutCard.tsx",
-      "line": 103,
-      "symbol": "ImportCalloutCard",
-      "token": "small",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/ImportCalloutCard.tsx:ImportCalloutCard:small::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 243,
-      "symbol": "ImportHistoryPanel",
-      "token": "banner",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:banner::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 268,
-      "symbol": "ImportHistoryPanel",
-      "token": "banner",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:banner::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 281,
-      "symbol": "ImportHistoryPanel",
-      "token": "banner",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:banner::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 340,
-      "symbol": "ImportHistoryPanel",
-      "token": "banner",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:banner::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 246,
-      "symbol": "ImportHistoryPanel",
-      "token": "btn-accent",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:btn-accent::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 270,
-      "symbol": "ImportHistoryPanel",
-      "token": "btn-accent",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:btn-accent::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 342,
-      "symbol": "ImportHistoryPanel",
-      "token": "btn-accent",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:btn-accent::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 324,
-      "symbol": "ImportHistoryPanel",
-      "token": "conv-close",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:conv-close::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 243,
-      "symbol": "ImportHistoryPanel",
-      "token": "conv-error",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:conv-error::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 268,
-      "symbol": "ImportHistoryPanel",
-      "token": "conv-error",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:conv-error::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 340,
-      "symbol": "ImportHistoryPanel",
-      "token": "conv-error",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:conv-error::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 315,
-      "symbol": "ImportHistoryPanel",
-      "token": "ellipsis",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:ellipsis::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 315,
-      "symbol": "ImportHistoryPanel",
-      "token": "grow",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:grow::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 345,
-      "symbol": "ImportHistoryPanel",
-      "token": "grow",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:grow::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 273,
-      "symbol": "ImportHistoryPanel",
-      "token": "link-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:link-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 320,
-      "symbol": "ImportHistoryPanel",
-      "token": "link-btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:link-btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 348,
-      "symbol": "ImportHistoryPanel",
-      "token": "link-btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:link-btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 359,
-      "symbol": "ImportHistoryPanel",
-      "token": "link-btn",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:link-btn::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 234,
-      "symbol": "ImportHistoryPanel",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 238,
-      "symbol": "ImportHistoryPanel",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 257,
-      "symbol": "ImportHistoryPanel",
-      "token": "muted",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:muted::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 285,
-      "symbol": "ImportHistoryPanel",
-      "token": "muted",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:muted::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 315,
-      "symbol": "ImportHistoryPanel",
-      "token": "muted",
-      "ordinal": 5,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:muted::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 345,
-      "symbol": "ImportHistoryPanel",
-      "token": "muted",
-      "ordinal": 6,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:muted::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 238,
-      "symbol": "ImportHistoryPanel",
-      "token": "small",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 257,
-      "symbol": "ImportHistoryPanel",
-      "token": "small",
-      "ordinal": 2,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:small::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 284,
-      "symbol": "ImportHistoryPanel",
-      "token": "small",
-      "ordinal": 3,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:small::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 345,
-      "symbol": "ImportHistoryPanel",
-      "token": "small",
-      "ordinal": 4,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:small::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 281,
-      "symbol": "ImportHistoryPanel",
-      "token": "warn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:ImportHistoryPanel:warn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 218,
-      "symbol": "stepsHeader",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:stepsHeader:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ImportHistoryPanel.tsx",
-      "line": 218,
-      "symbol": "stepsHeader",
-      "token": "done",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ImportHistoryPanel.tsx:stepsHeader:done::1"
     },
     {
       "kind": "compatibility-token",
@@ -6816,15 +5876,6 @@
     },
     {
       "kind": "compatibility-token",
-      "path": "src/components/reply-analysis/ComparisonTable.tsx",
-      "line": 11,
-      "symbol": "ComparisonTable",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/reply-analysis/ComparisonTable.tsx:ComparisonTable:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
       "path": "src/components/reply-analysis/ReasonBars.tsx",
       "line": 21,
       "symbol": "ReasonBars",
@@ -7128,24 +6179,6 @@
       "token": "small",
       "ordinal": 1,
       "key": "compatibility-token:src/components/TemplateComparison.tsx:TemplateComparison:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ui/command.tsx",
-      "line": 50,
-      "symbol": "CommandDialog",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ui/command.tsx:CommandDialog:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/components/ui/dialog.tsx",
-      "line": 75,
-      "symbol": "DialogContent",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/components/ui/dialog.tsx:DialogContent:sr-only::1"
     },
     {
       "kind": "compatibility-token",
@@ -9894,879 +8927,6 @@
     },
     {
       "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 582,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 623,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 664,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 686,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 755,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 789,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 6,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 794,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "accent",
-      "ordinal": 7,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:accent::7"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 527,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 641,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "badge",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:badge::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 709,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "badge",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:badge::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 710,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "badge",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:badge::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 711,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "badge",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:badge::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 560,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 782,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 10,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::10"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 789,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 11,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::11"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 794,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 12,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::12"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 798,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 13,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::13"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 582,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 602,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 623,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 664,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 671,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 6,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 686,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 7,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::7"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 734,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 8,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::8"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 755,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "btn",
-      "ordinal": 9,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:btn::9"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 545,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card-head",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card-head::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 595,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card-head",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card-head::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 634,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card-head",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card-head::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 701,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card-head",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card-head::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 765,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card-head",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card-head::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 544,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 575,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 594,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 633,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 700,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 764,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "card",
-      "ordinal": 6,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:card::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 649,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-company-action-row",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-company-action-row::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 633,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-company-actions",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-company-actions::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 558,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-inline-error",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-inline-error::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 611,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-map-row",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-map-row::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 617,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-map-row",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-map-row::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 594,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-mapping-card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-mapping-card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 700,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-preview-card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-preview-card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 764,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-results-card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-results-card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 544,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-setup-card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-setup-card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 727,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-status",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-status::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 575,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "csv-upload-card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:csv-upload-card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 527,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "done",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:done::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 602,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "ghost",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:ghost::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 734,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "ghost",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:ghost::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 798,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "ghost",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:ghost::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 539,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "link-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:link-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 548,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 704,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 10,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::10"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 724,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 11,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::11"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 730,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 12,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::12"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 768,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 13,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::13"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 554,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 578,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 589,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 598,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 637,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 6,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 653,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 7,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::7"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 656,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 8,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::8"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 684,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "muted",
-      "ordinal": 9,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:muted::9"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 658,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "skipped",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:skipped::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 659,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "skipped",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:skipped::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 560,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "sm",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:sm::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 602,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "sm",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:sm::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 664,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "sm",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:sm::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 671,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "sm",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:sm::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 734,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "sm",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:sm::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 548,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 730,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 10,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::10"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 768,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 11,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::11"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 554,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 589,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 598,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 637,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 653,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 6,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 656,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 7,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::7"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 704,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 8,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::8"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 724,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "small",
-      "ordinal": 9,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:small::9"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 555,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "spin",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:spin::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 624,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "spin",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:spin::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 691,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "spin",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:spin::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 756,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "spin",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:spin::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 790,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "spin",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:spin::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 795,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "spin",
-      "ordinal": 6,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:spin::6"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 514,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 711,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "status-error",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:status-error::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 641,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "status-running",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:status-running::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 657,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "success",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:success::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "line": 714,
-      "symbol": "UnifiedApolloCsvImport",
-      "token": "table-scroll",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/UnifiedApolloCsvImport.tsx:UnifiedApolloCsvImport:table-scroll::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/ui/Button.tsx",
-      "line": 82,
-      "symbol": "Button",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/ui/Button.tsx:Button:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/ui/Field.tsx",
-      "line": 41,
-      "symbol": "Field",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/ui/Field.tsx:Field:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/ui/Field.tsx",
-      "line": 160,
-      "symbol": "RadioGroup",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/ui/Field.tsx:RadioGroup:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
       "path": "src/ui/Gallery.tsx",
       "line": 451,
       "symbol": "Gallery",
@@ -11182,15 +9342,6 @@
     {
       "kind": "compatibility-token",
       "path": "src/ui/Table.tsx",
-      "line": 66,
-      "symbol": "Table",
-      "token": "sr-only",
-      "ordinal": 1,
-      "key": "compatibility-token:src/ui/Table.tsx:Table:sr-only::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/ui/Table.tsx",
       "line": 26,
       "symbol": "TableFrame",
       "token": "ui-table-scroll",
@@ -11215,7 +9366,7 @@
       "ancestry": [
         "@container (max-width: 1079px)"
       ],
-      "line": 1359,
+      "line": 1337,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -11230,7 +9381,7 @@
       "ancestry": [
         "@container (max-width: 620px)"
       ],
-      "line": 1368,
+      "line": 1346,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -11245,7 +9396,7 @@
       "ancestry": [
         "@keyframes auth-spin"
       ],
-      "line": 1550,
+      "line": 1453,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes auth-spin|to:1"
@@ -11353,7 +9504,7 @@
       "ancestry": [
         "@keyframes sequence-pulse"
       ],
-      "line": 1587,
+      "line": 1490,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes sequence-pulse|to:1"
@@ -11365,7 +9516,7 @@
       "ancestry": [
         "@keyframes sequence-shimmer"
       ],
-      "line": 1580,
+      "line": 1483,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes sequence-shimmer|to:1"
@@ -11401,7 +9552,7 @@
       "ancestry": [
         "@keyframes toast-in"
       ],
-      "line": 1181,
+      "line": 1159,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes toast-in|from:1"
@@ -11413,7 +9564,7 @@
       "ancestry": [
         "@keyframes toast-in"
       ],
-      "line": 1182,
+      "line": 1160,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes toast-in|to:1"
@@ -11425,11 +9576,10 @@
       "ancestry": [
         "@media (max-width: 1180px)"
       ],
-      "line": 1648,
+      "line": 1551,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -11437,8 +9587,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:@media (max-width: 1180px)|.sequence-step-actions .btn svg:1"
     },
@@ -11449,11 +9598,10 @@
       "ancestry": [
         "@media (max-width: 1180px)"
       ],
-      "line": 1647,
+      "line": 1550,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -11461,58 +9609,9 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:@media (max-width: 1180px)|.sequence-step-actions .btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-company-action-row > .btn, .csv-company-action-row > .csv-row-actions",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1543,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.csv-company-action-row > .btn, .csv-company-action-row > .csv-row-actions:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-import-footer .btn",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1545,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.csv-import-footer .btn:1"
     },
     {
       "kind": "compatibility-selector",
@@ -11521,7 +9620,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1466,
+      "line": 1444,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/AccountCard.tsx",
@@ -11531,15 +9630,12 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -11571,7 +9667,6 @@
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
       ],
@@ -11584,7 +9679,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1465,
+      "line": 1443,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -11599,7 +9694,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1658,
+      "line": 1561,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -11614,11 +9709,10 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1654,
+      "line": 1557,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -11626,8 +9720,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:@media (max-width: 700px)|.sequence-editor-topbar .btn:1"
     },
@@ -11638,7 +9731,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1652,
+      "line": 1555,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -11652,11 +9745,10 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1655,
+      "line": 1558,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -11664,8 +9756,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:@media (max-width: 700px)|.sequence-step-actions .btn:1"
     },
@@ -11676,7 +9767,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1657,
+      "line": 1560,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -11691,7 +9782,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1656,
+      "line": 1559,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -11706,7 +9797,7 @@
       "ancestry": [
         "@media (max-width: 720px)"
       ],
-      "line": 1575,
+      "line": 1478,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
@@ -11721,7 +9812,7 @@
       "ancestry": [
         "@media (max-width: 720px)"
       ],
-      "line": 1574,
+      "line": 1477,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
@@ -11751,7 +9842,7 @@
       "ancestry": [
         "@media (prefers-reduced-motion: reduce)"
       ],
-      "line": 1196,
+      "line": 1174,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media (prefers-reduced-motion: reduce)|*, *::before, *::after:1"
@@ -11763,7 +9854,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1676,
+      "line": 1579,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/AccountCard.tsx",
@@ -11777,7 +9868,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/KpiCards.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
@@ -11798,7 +9888,6 @@
         "src/pages/FollowUps.tsx",
         "src/pages/Review.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:@media print|.card:1"
@@ -11810,7 +9899,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1677,
+      "line": 1580,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/KpiCards.tsx",
@@ -11827,11 +9916,10 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1673,
+      "line": 1576,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Layout.tsx",
@@ -11841,8 +9929,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:@media print|.sidebar, .mobile-header, .drp, .btn, .overview-section-toggle .overview-section-chevron, .skip-link, .conv-drawer:1"
     },
@@ -11853,7 +9940,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1678,
+      "line": 1581,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|[hidden]:1"
@@ -11865,7 +9952,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1672,
+      "line": 1575,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|body:1"
@@ -11877,7 +9964,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1675,
+      "line": 1578,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|main:1"
@@ -11920,15 +10007,12 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -11957,7 +10041,6 @@
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.account-card-cap .small:1"
@@ -11977,15 +10060,12 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -12014,7 +10094,6 @@
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.account-card-spark .small:1"
@@ -12024,7 +10103,7 @@
       "path": "src/ui/ui.css",
       "selector": ".active-sequence-list, .new-reply-list",
       "ancestry": [],
-      "line": 1666,
+      "line": 1569,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/overview/ActiveSequences.tsx",
@@ -12037,7 +10116,7 @@
       "path": "src/ui/ui.css",
       "selector": ".archive-yes",
       "ancestry": [],
-      "line": 1571,
+      "line": 1474,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
@@ -12056,15 +10135,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge:1"
     },
@@ -12073,21 +10150,19 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-alert",
       "ancestry": [],
-      "line": 1666,
+      "line": 1569,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.attention-alert:1"
     },
@@ -12096,21 +10171,19 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-ok",
       "ancestry": [],
-      "line": 1668,
+      "line": 1571,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.attention-ok:1"
     },
@@ -12119,21 +10192,19 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-watch",
       "ancestry": [],
-      "line": 1667,
+      "line": 1570,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.attention-watch:1"
     },
@@ -12148,15 +10219,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.risk:1"
     },
@@ -12165,21 +10234,19 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.source-external",
       "ancestry": [],
-      "line": 1669,
+      "line": 1572,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.source-external:1"
     },
@@ -12194,15 +10261,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-accepted:1"
     },
@@ -12217,15 +10282,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-invited:1"
     },
@@ -12240,15 +10303,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-queued:1"
     },
@@ -12263,15 +10324,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-replied:1"
     },
@@ -12286,15 +10345,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.status-error:1"
     },
@@ -12309,15 +10366,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.badge.status-running:1"
     },
@@ -12330,10 +10385,8 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -12342,8 +10395,7 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.banner > .btn:1"
     },
@@ -12357,7 +10409,6 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
         "src/pages/LeadsExplorer.tsx"
@@ -12374,7 +10425,6 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
         "src/pages/LeadsExplorer.tsx"
@@ -12386,12 +10436,11 @@
       "path": "src/ui/ui.css",
       "selector": ".banner.error",
       "ancestry": [],
-      "line": 1225,
+      "line": 1203,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
         "src/pages/Chat.tsx",
@@ -12410,7 +10459,6 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -12425,9 +10473,7 @@
       "ancestry": [],
       "line": 1000,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.btn-accent:1"
     },
     {
@@ -12437,9 +10483,7 @@
       "ancestry": [],
       "line": 1001,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.btn-accent:hover:not(:disabled):1"
     },
     {
@@ -12451,17 +10495,14 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn, .btn-accent:1"
     },
@@ -12470,13 +10511,11 @@
       "path": "src/ui/ui.css",
       "selector": ".btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .segmented-item:active, .navlink:active",
       "ancestry": [],
-      "line": 1188,
+      "line": 1166,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/SentimentTrendChart.tsx",
@@ -12486,8 +10525,7 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .segmented-item:active, .navlink:active:1"
     },
@@ -12500,17 +10538,14 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn:disabled, .btn-accent:disabled:1"
     },
@@ -12523,7 +10558,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12531,8 +10565,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn:hover:not(:disabled):1"
     },
@@ -12545,7 +10578,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12553,8 +10585,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.accent:1"
     },
@@ -12567,7 +10598,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12575,8 +10605,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.accent:hover:not(:disabled):1"
     },
@@ -12589,7 +10618,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12597,8 +10625,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.danger:1"
     },
@@ -12607,11 +10634,10 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.danger",
       "ancestry": [],
-      "line": 1539,
+      "line": 1447,
       "ordinal": 2,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12619,8 +10645,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.danger:2"
     },
@@ -12633,7 +10658,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12641,8 +10665,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.danger:hover:not(:disabled):1"
     },
@@ -12651,11 +10674,10 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.danger:hover:not(:disabled)",
       "ancestry": [],
-      "line": 1540,
+      "line": 1449,
       "ordinal": 2,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12663,8 +10685,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.danger:hover:not(:disabled):2"
     },
@@ -12677,7 +10698,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12685,8 +10705,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.ghost:1"
     },
@@ -12699,7 +10718,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12707,8 +10725,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.ghost:hover:not(:disabled):1"
     },
@@ -12721,7 +10738,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12729,8 +10745,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn.sm:1"
     },
@@ -12743,7 +10758,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -12751,8 +10765,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.btn[aria-pressed='true']:1"
     },
@@ -12761,7 +10774,7 @@
       "path": "src/ui/ui.css",
       "selector": ".campaign-runtime.compact",
       "ancestry": [],
-      "line": 1568,
+      "line": 1471,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx"
@@ -12773,21 +10786,19 @@
       "path": "src/ui/ui.css",
       "selector": ".campaign-source .badge",
       "ancestry": [],
-      "line": 1644,
+      "line": 1547,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.campaign-source .badge:1"
     },
@@ -12796,7 +10807,7 @@
       "path": "src/ui/ui.css",
       "selector": ".campaign-table-filters label, .deployment-filters label",
       "ancestry": [],
-      "line": 1572,
+      "line": 1475,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
@@ -12809,7 +10820,7 @@
       "path": "src/ui/ui.css",
       "selector": ".campaign-table-filters select, .deployment-filters select",
       "ancestry": [],
-      "line": 1573,
+      "line": 1476,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
@@ -12822,7 +10833,7 @@
       "path": "src/ui/ui.css",
       "selector": ".campaign-table-filters, .deployment-filters",
       "ancestry": [],
-      "line": 1571,
+      "line": 1474,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
@@ -12842,8 +10853,7 @@
         "src/components/Heatmap.tsx",
         "src/components/LeadsAddedTable.tsx",
         "src/components/SentimentTrendChart.tsx",
-        "src/components/TemplateComparison.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/components/TemplateComparison.tsx"
       ],
       "key": "compatibility-selector:|.card-head:1"
     },
@@ -12866,7 +10876,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/KpiCards.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
@@ -12887,7 +10896,6 @@
         "src/pages/FollowUps.tsx",
         "src/pages/Review.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.card:1"
@@ -12897,7 +10905,7 @@
       "path": "src/ui/ui.css",
       "selector": ".char-warning",
       "ancestry": [],
-      "line": 1599,
+      "line": 1502,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -13025,7 +11033,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-msg.user .chat-body",
       "ancestry": [],
-      "line": 1213,
+      "line": 1191,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/Chat.tsx"
@@ -13037,7 +11045,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-msg.user .chat-msg-actions",
       "ancestry": [],
-      "line": 1218,
+      "line": 1196,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx"
@@ -13049,7 +11057,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-msg.user .chat-role",
       "ancestry": [],
-      "line": 1212,
+      "line": 1190,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx"
@@ -13061,7 +11069,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-msg.user",
       "ancestry": [],
-      "line": 1211,
+      "line": 1189,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx"
@@ -13178,7 +11186,7 @@
       "path": "src/ui/ui.css",
       "selector": ".cohort-rate",
       "ancestry": [],
-      "line": 1186,
+      "line": 1164,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx"
@@ -13190,7 +11198,7 @@
       "path": "src/ui/ui.css",
       "selector": ".cohort-rate.maturing",
       "ancestry": [],
-      "line": 1187,
+      "line": 1165,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx"
@@ -13228,9 +11236,7 @@
       "line": 1117,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -13241,12 +11247,10 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-close",
       "ancestry": [],
-      "line": 1221,
+      "line": 1199,
       "ordinal": 2,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -13274,7 +11278,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx"
       ],
       "key": "compatibility-selector:|.conv-coaching-head .grow:1"
@@ -13375,21 +11378,19 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-demographics .badge",
       "ancestry": [],
-      "line": 1322,
+      "line": 1300,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.conv-demographics .badge:1"
     },
@@ -13403,7 +11404,6 @@
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadNotesPanel.tsx"
       ],
       "key": "compatibility-selector:|.conv-error:1"
@@ -13413,16 +11413,14 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-follow-btn.active",
       "ancestry": [],
-      "line": 1452,
+      "line": 1430,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.conv-follow-btn.active:1"
     },
@@ -13431,7 +11429,7 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-pipeline-controls .filter-field",
       "ancestry": [],
-      "line": 1291,
+      "line": 1269,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -13443,349 +11441,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".csv-company-modal .pipe-modal-head",
-      "ancestry": [],
-      "line": 1535,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-company-modal .pipe-modal-head:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-company-option-main .small",
-      "ancestry": [],
-      "line": 1535,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/AddBatchesTable.tsx",
-        "src/components/CampaignCompareTable.tsx",
-        "src/components/CampaignRuntimeStatus.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/Funnel.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LagHistogram.tsx",
-        "src/components/LeadAdditionsChart.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
-        "src/components/MessageSequence.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
-        "src/components/WarmupChart.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ConversationThread.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/GlobalSummary.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/components/reply-analysis/WeeklyTrendChart.tsx",
-        "src/pages/AccountDetail.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/pages/SentimentAnalysis.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-company-option-main .small:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-error-banner, .csv-inline-error, .csv-warning-line",
-      "ancestry": [],
-      "line": 1497,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-error-banner, .csv-inline-error, .csv-warning-line:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-import-steps li.active > span",
-      "ancestry": [],
-      "line": 1486,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-import-steps li.active > span:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-import-steps li.active",
-      "ancestry": [],
-      "line": 1481,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-import-steps li.active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-import-steps li.done > span",
-      "ancestry": [],
-      "line": 1492,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-import-steps li.done > span:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-import-steps li.done",
-      "ancestry": [],
-      "line": 1491,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-import-steps li.done:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-inline-error",
-      "ancestry": [],
-      "line": 1510,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-inline-error:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-map-row.locked",
-      "ancestry": [],
-      "line": 1524,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-map-row.locked:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-setup-card h2, .csv-mapping-card h2, .csv-company-actions h2, .csv-preview-card h2, .csv-result-hero h2",
-      "ancestry": [],
-      "line": 1519,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-setup-card h2, .csv-mapping-card h2, .csv-company-actions h2, .csv-preview-card h2, .csv-result-hero h2:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-setup-card, .csv-upload-card, .csv-mapping-card, .csv-company-actions, .csv-preview-card, .csv-results-card, .csv-result-hero",
-      "ancestry": [],
-      "line": 1512,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-setup-card, .csv-upload-card, .csv-mapping-card, .csv-company-actions, .csv-preview-card, .csv-results-card, .csv-result-hero:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-status.company_action",
-      "ancestry": [],
-      "line": 1531,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-status.company_action:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-status.duplicate, .csv-status.skipped",
-      "ancestry": [],
-      "line": 1534,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-status.duplicate, .csv-status.skipped:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-status.invalid, .csv-status.failed",
-      "ancestry": [],
-      "line": 1532,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-status.invalid, .csv-status.failed:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-status.ready, .csv-status.created",
-      "ancestry": [],
-      "line": 1529,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-status.ready, .csv-status.created:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-summary-card.danger",
-      "ancestry": [],
-      "line": 1527,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-summary-card.danger:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-summary-card.muted",
-      "ancestry": [],
-      "line": 1528,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/AddBatchesTable.tsx",
-        "src/components/CampaignCompareTable.tsx",
-        "src/components/CampaignRuntimeStatus.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/Funnel.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LagHistogram.tsx",
-        "src/components/LeadAdditionsChart.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
-        "src/components/MessageSequence.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
-        "src/components/WarmupChart.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ConversationThread.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/GlobalSummary.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/components/reply-analysis/ComparisonTable.tsx",
-        "src/components/reply-analysis/ReasonBars.tsx",
-        "src/components/reply-analysis/WeeklyTrendChart.tsx",
-        "src/components/reply-analysis/WorkflowBuckets.tsx",
-        "src/pages/AccountDetail.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/pages/SentimentAnalysis.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
-        "src/ui/Gallery.tsx",
-        "src/ui/Toolbar.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-summary-card.muted:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-summary-card.success",
-      "ancestry": [],
-      "line": 1525,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.csv-summary-card.success:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".csv-summary-card.warning",
-      "ancestry": [],
-      "line": 1526,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.csv-summary-card.warning:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".deployment-advanced .ui-field",
       "ancestry": [],
-      "line": 1684,
+      "line": 1587,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -13876,7 +11534,7 @@
       "path": "src/ui/ui.css",
       "selector": ".drp-day.disabled",
       "ancestry": [],
-      "line": 1232,
+      "line": 1210,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.drp-day.disabled:1"
@@ -13886,7 +11544,7 @@
       "path": "src/ui/ui.css",
       "selector": ".drp-day.disabled:hover",
       "ancestry": [],
-      "line": 1233,
+      "line": 1211,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.drp-day.disabled:hover:1"
@@ -13911,11 +11569,9 @@
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.drp-presets button.active:1"
     },
@@ -13929,7 +11585,6 @@
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -13944,13 +11599,12 @@
       "path": "src/ui/ui.css",
       "selector": ".empty-state-action .link-btn",
       "ancestry": [],
-      "line": 1180,
+      "line": 1158,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -13958,7 +11612,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.empty-state-action .link-btn:1"
@@ -13968,7 +11621,7 @@
       "path": "src/ui/ui.css",
       "selector": ".empty-state",
       "ancestry": [],
-      "line": 1177,
+      "line": 1155,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.empty-state:1"
@@ -14040,11 +11693,10 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-actions-grid .btn:first-child",
       "ancestry": [],
-      "line": 1455,
+      "line": 1433,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -14052,8 +11704,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.follow-actions-grid .btn:first-child:1"
     },
@@ -14062,7 +11713,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-current-date.overdue",
       "ancestry": [],
-      "line": 1454,
+      "line": 1432,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx",
@@ -14075,17 +11726,15 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-current.active",
       "ancestry": [],
-      "line": 1453,
+      "line": 1431,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.follow-current.active:1"
     },
@@ -14094,7 +11743,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-direction, .pipe-msg-dir",
       "ancestry": [],
-      "line": 1412,
+      "line": 1390,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14108,7 +11757,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-direction.in, .pipe-msg-dir.in",
       "ancestry": [],
-      "line": 1421,
+      "line": 1399,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -14123,7 +11772,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-due, .pipe-follow-due",
       "ancestry": [],
-      "line": 1432,
+      "line": 1410,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpCalloutCard.tsx",
@@ -14140,7 +11789,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-due.overdue, .pipe-follow-due.overdue",
       "ancestry": [],
-      "line": 1446,
+      "line": 1424,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpCalloutCard.tsx",
@@ -14157,7 +11806,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-due.today, .pipe-follow-due.today",
       "ancestry": [],
-      "line": 1448,
+      "line": 1426,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpCalloutCard.tsx",
@@ -14174,7 +11823,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-due.upcoming, .pipe-follow-due.upcoming",
       "ancestry": [],
-      "line": 1450,
+      "line": 1428,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpCalloutCard.tsx",
@@ -14191,7 +11840,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-event.completed .follow-event-dot",
       "ancestry": [],
-      "line": 1457,
+      "line": 1435,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx"
@@ -14203,7 +11852,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-event.scheduled .follow-event-dot, .follow-event.rescheduled .follow-event-dot",
       "ancestry": [],
-      "line": 1460,
+      "line": 1438,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx"
@@ -14215,11 +11864,10 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-event.skipped .follow-event-dot, .follow-event.canceled .follow-event-dot",
       "ancestry": [],
-      "line": 1458,
+      "line": 1436,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/components/FollowUpPanel.tsx"
       ],
       "key": "compatibility-selector:|.follow-event.skipped .follow-event-dot, .follow-event.canceled .follow-event-dot:1"
     },
@@ -14228,7 +11876,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-group",
       "ancestry": [],
-      "line": 1329,
+      "line": 1307,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx"
@@ -14240,7 +11888,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-group.overdue .follow-item",
       "ancestry": [],
-      "line": 1376,
+      "line": 1354,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14253,7 +11901,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-group.today .follow-item",
       "ancestry": [],
-      "line": 1377,
+      "line": 1355,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14266,13 +11914,12 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-history-head .link-btn",
       "ancestry": [],
-      "line": 1456,
+      "line": 1434,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -14280,7 +11927,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.follow-history-head .link-btn:1"
@@ -14290,7 +11936,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item + .follow-item",
       "ancestry": [],
-      "line": 1373,
+      "line": 1351,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14303,13 +11949,12 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-actions .link-btn",
       "ancestry": [],
-      "line": 1431,
+      "line": 1409,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -14317,7 +11962,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.follow-item-actions .link-btn:1"
@@ -14327,7 +11971,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-actions",
       "ancestry": [],
-      "line": 1356,
+      "line": 1334,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14340,7 +11984,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-actions",
       "ancestry": [],
-      "line": 1423,
+      "line": 1401,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14353,7 +11997,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-context",
       "ancestry": [],
-      "line": 1354,
+      "line": 1332,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14366,7 +12010,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-context",
       "ancestry": [],
-      "line": 1404,
+      "line": 1382,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14379,7 +12023,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-main",
       "ancestry": [],
-      "line": 1393,
+      "line": 1371,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14392,7 +12036,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-message",
       "ancestry": [],
-      "line": 1355,
+      "line": 1333,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14405,7 +12049,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-message",
       "ancestry": [],
-      "line": 1404,
+      "line": 1382,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14418,7 +12062,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-name",
       "ancestry": [],
-      "line": 1394,
+      "line": 1372,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14431,7 +12075,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-open",
       "ancestry": [],
-      "line": 1353,
+      "line": 1331,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14444,7 +12088,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-open",
       "ancestry": [],
-      "line": 1378,
+      "line": 1356,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14457,7 +12101,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item-open:hover .follow-item-name",
       "ancestry": [],
-      "line": 1392,
+      "line": 1370,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14470,7 +12114,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-item",
       "ancestry": [],
-      "line": 1344,
+      "line": 1322,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14483,7 +12127,7 @@
       "path": "src/ui/ui.css",
       "selector": ".follow-list",
       "ancestry": [],
-      "line": 1329,
+      "line": 1307,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/FollowUps.tsx",
@@ -14506,15 +12150,12 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -14546,7 +12187,6 @@
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
       ],
@@ -14608,7 +12248,6 @@
       "line": 1024,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -14619,7 +12258,7 @@
       "path": "src/ui/ui.css",
       "selector": ".identity-chip strong",
       "ancestry": [],
-      "line": 1565,
+      "line": 1468,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx",
@@ -14633,7 +12272,7 @@
       "path": "src/ui/ui.css",
       "selector": ".identity-chip",
       "ancestry": [],
-      "line": 1553,
+      "line": 1456,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx",
@@ -14647,7 +12286,7 @@
       "path": "src/ui/ui.css",
       "selector": ".identity-chip.compact",
       "ancestry": [],
-      "line": 1566,
+      "line": 1469,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx",
@@ -14655,161 +12294,6 @@
         "src/pages/Pipeline.tsx"
       ],
       "key": "compatibility-selector:|.identity-chip.compact:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-block-head .grow",
-      "ancestry": [],
-      "line": 1171,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx"
-      ],
-      "key": "compatibility-selector:|.import-block-head .grow:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-callout-row.row-clickable:focus-visible",
-      "ancestry": [],
-      "line": 1160,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/LeadsExplorer.tsx"
-      ],
-      "key": "compatibility-selector:|.import-callout-row.row-clickable:focus-visible:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-callout-row.row-clickable:hover",
-      "ancestry": [],
-      "line": 1159,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/CampaignTable.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/LeadsExplorer.tsx"
-      ],
-      "key": "compatibility-selector:|.import-callout-row.row-clickable:hover:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-callout",
-      "ancestry": [],
-      "line": 1153,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportCalloutCard.tsx"
-      ],
-      "key": "compatibility-selector:|.import-callout:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-dir.in",
-      "ancestry": [],
-      "line": 1173,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:|.import-dir.in:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-dir.out",
-      "ancestry": [],
-      "line": 1172,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx"
-      ],
-      "key": "compatibility-selector:|.import-dir.out:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-foot .grow",
-      "ancestry": [],
-      "line": 1174,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx"
-      ],
-      "key": "compatibility-selector:|.import-foot .grow:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-steps li.active .import-step-n",
-      "ancestry": [],
-      "line": 1164,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.import-steps li.active .import-step-n:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-steps li.active",
-      "ancestry": [],
-      "line": 1163,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.import-steps li.active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-steps li.done .import-step-n",
-      "ancestry": [],
-      "line": 1168,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.import-steps li.done .import-step-n:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".import-steps li.done",
-      "ancestry": [],
-      "line": 1167,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "key": "compatibility-selector:|.import-steps li.done:1"
     },
     {
       "kind": "compatibility-selector",
@@ -14998,11 +12482,9 @@
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.kpi-toggle button.active:1"
     },
@@ -15056,7 +12538,7 @@
       "path": "src/ui/ui.css",
       "selector": ".leads-table-frame .ui-table-scroll",
       "ancestry": [],
-      "line": 1683,
+      "line": 1586,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/LeadsExplorer.tsx",
@@ -15101,7 +12583,6 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -15109,7 +12590,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.link-btn:1"
@@ -15125,7 +12605,6 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -15133,7 +12612,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.link-btn:disabled:1"
@@ -15149,7 +12627,6 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -15157,7 +12634,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.link-btn:hover:not(:disabled):1"
@@ -15167,11 +12643,10 @@
       "path": "src/ui/ui.css",
       "selector": ".linkedin-connection-preview small.warn",
       "ancestry": [],
-      "line": 1603,
+      "line": 1506,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.linkedin-connection-preview small.warn:1"
@@ -15181,7 +12656,7 @@
       "path": "src/ui/ui.css",
       "selector": ".linkedin-preview.mobile",
       "ancestry": [],
-      "line": 1602,
+      "line": 1505,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -15193,7 +12668,7 @@
       "path": "src/ui/ui.css",
       "selector": ".msg-reclassify.open .msg-senti-btns, .msg:hover .msg-senti-btns",
       "ancestry": [],
-      "line": 1222,
+      "line": 1200,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx"
@@ -15210,11 +12685,9 @@
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.msg-senti-btns button.active:1"
     },
@@ -15249,7 +12722,7 @@
       "path": "src/ui/ui.css",
       "selector": ".new-reply-open > span.reply-body",
       "ancestry": [],
-      "line": 1669,
+      "line": 1572,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
@@ -15279,7 +12752,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel-head h2",
       "ancestry": [],
-      "line": 1666,
+      "line": 1569,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/overview/ActiveSequences.tsx",
@@ -15292,7 +12765,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel-head",
       "ancestry": [],
-      "line": 1662,
+      "line": 1565,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/overview/ActiveSequences.tsx",
@@ -15305,7 +12778,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel",
       "ancestry": [],
-      "line": 1661,
+      "line": 1564,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/overview/ActiveSequences.tsx",
@@ -15318,7 +12791,7 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-board",
       "ancestry": [],
-      "line": 1236,
+      "line": 1214,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Pipeline.tsx"
@@ -15330,12 +12803,11 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-card-foot > .ellipsis",
       "ancestry": [],
-      "line": 1463,
+      "line": 1441,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -15350,12 +12822,11 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-card-message .ellipsis",
       "ancestry": [],
-      "line": 1254,
+      "line": 1232,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -15370,12 +12841,11 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-card-message .ellipsis",
       "ancestry": [],
-      "line": 1462,
+      "line": 1440,
       "ordinal": 2,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -15390,10 +12860,9 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal textarea",
       "ancestry": [],
-      "line": 1320,
+      "line": 1298,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -15404,10 +12873,9 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal-actions",
       "ancestry": [],
-      "line": 1321,
+      "line": 1299,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx"
       ],
       "key": "compatibility-selector:|.pipe-modal-actions:1"
@@ -15417,10 +12885,9 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal-head",
       "ancestry": [],
-      "line": 1313,
+      "line": 1291,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -15431,10 +12898,9 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal-overlay",
       "ancestry": [],
-      "line": 1292,
+      "line": 1270,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -15445,10 +12911,9 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal",
       "ancestry": [],
-      "line": 1302,
+      "line": 1280,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -15459,21 +12924,19 @@
       "path": "src/ui/ui.css",
       "selector": ".publish-compatibility-card .badge",
       "ancestry": [],
-      "line": 1643,
+      "line": 1546,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.publish-compatibility-card .badge:1"
     },
@@ -15487,11 +12950,9 @@
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.range-group button.active:1"
     },
@@ -15519,15 +12980,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.reply-body .badge.senti:1"
     },
@@ -15563,7 +13022,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
@@ -15580,15 +13038,13 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.reply-who-top .badge:1"
     },
@@ -15601,7 +13057,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
@@ -15666,15 +13121,12 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -15706,7 +13158,6 @@
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
       ],
@@ -15727,15 +13178,12 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -15767,7 +13215,6 @@
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
       ],
@@ -15778,7 +13225,7 @@
       "path": "src/ui/ui.css",
       "selector": ".runtime-unknown, .archive-unknown, .observation-unsupported, .observation-awaiting_first_sync",
       "ancestry": [],
-      "line": 1569,
+      "line": 1472,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignRuntimeStatus.tsx",
@@ -15887,13 +13334,11 @@
         "src/components/CohortComparisonTable.tsx",
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.segmented-item.active .segmented-count:1"
     },
@@ -15908,13 +13353,11 @@
         "src/components/CohortComparisonTable.tsx",
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.segmented-item.active:1"
     },
@@ -15941,7 +13384,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -15958,7 +13400,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -15975,7 +13416,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -15992,7 +13432,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16009,7 +13448,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16026,7 +13464,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16043,7 +13480,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16060,7 +13496,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16077,7 +13512,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16090,7 +13524,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-add-variation",
       "ancestry": [],
-      "line": 1600,
+      "line": 1503,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -16103,7 +13537,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-add-variation:hover",
       "ancestry": [],
-      "line": 1601,
+      "line": 1504,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -16116,7 +13550,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-comment-thread blockquote.stale",
       "ancestry": [],
-      "line": 1589,
+      "line": 1492,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16128,16 +13562,14 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-editor-tabs button.active",
       "ancestry": [],
-      "line": 1588,
+      "line": 1491,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.sequence-editor-tabs button.active:1"
     },
@@ -16146,16 +13578,14 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-library-switch button.active, .sequence-device-toggle button.active, .sequence-review-tabs button.active",
       "ancestry": [],
-      "line": 1576,
+      "line": 1479,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.sequence-library-switch button.active, .sequence-device-toggle button.active, .sequence-review-tabs button.active:1"
     },
@@ -16164,7 +13594,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-mini-flow span.connection",
       "ancestry": [],
-      "line": 1579,
+      "line": 1482,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16176,7 +13606,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-branch-list label.selected .sequence-publish-branch-letter",
       "ancestry": [],
-      "line": 1637,
+      "line": 1540,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Replies.tsx",
@@ -16189,7 +13619,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-branch-list label.selected > svg",
       "ancestry": [],
-      "line": 1638,
+      "line": 1541,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Replies.tsx",
@@ -16202,7 +13632,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-branch-list label.selected",
       "ancestry": [],
-      "line": 1636,
+      "line": 1539,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Replies.tsx",
@@ -16215,12 +13645,10 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-head .conv-close",
       "ancestry": [],
-      "line": 1604,
+      "line": 1507,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -16231,7 +13659,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.failed .sequence-publish-job-icon",
       "ancestry": [],
-      "line": 1642,
+      "line": 1545,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16243,7 +13671,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.failed",
       "ancestry": [],
-      "line": 1641,
+      "line": 1544,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16255,7 +13683,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.succeeded .sequence-publish-job-icon",
       "ancestry": [],
-      "line": 1640,
+      "line": 1543,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16267,7 +13695,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.succeeded",
       "ancestry": [],
-      "line": 1639,
+      "line": 1542,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16279,7 +13707,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-loading svg, .sequence-publish-submit svg, .sequence-publish-job-strip:not(.succeeded):not(.failed) .sequence-publish-job-icon svg",
       "ancestry": [],
-      "line": 1625,
+      "line": 1528,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16291,7 +13719,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-loading, .sequence-publish-state",
       "ancestry": [],
-      "line": 1612,
+      "line": 1515,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16303,13 +13731,12 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-section-head .link-btn",
       "ancestry": [],
-      "line": 1610,
+      "line": 1513,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -16317,7 +13744,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/FollowUps.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.sequence-publish-section-head .link-btn:1"
@@ -16327,7 +13753,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state > div",
       "ancestry": [],
-      "line": 1630,
+      "line": 1533,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16339,7 +13765,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state > svg",
       "ancestry": [],
-      "line": 1629,
+      "line": 1532,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16351,7 +13777,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state p",
       "ancestry": [],
-      "line": 1632,
+      "line": 1535,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16363,7 +13789,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state strong",
       "ancestry": [],
-      "line": 1631,
+      "line": 1534,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16375,7 +13801,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state",
       "ancestry": [],
-      "line": 1628,
+      "line": 1531,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16387,7 +13813,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state.error > svg",
       "ancestry": [],
-      "line": 1634,
+      "line": 1537,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
@@ -16400,7 +13826,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state.error",
       "ancestry": [],
-      "line": 1633,
+      "line": 1536,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
@@ -16413,16 +13839,14 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.active button > span",
       "ancestry": [],
-      "line": 1607,
+      "line": 1510,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.sequence-publish-steps li.active button > span:1"
     },
@@ -16431,16 +13855,14 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.active button",
       "ancestry": [],
-      "line": 1606,
+      "line": 1509,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.sequence-publish-steps li.active button:1"
     },
@@ -16449,7 +13871,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.complete button > span",
       "ancestry": [],
-      "line": 1609,
+      "line": 1512,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16461,7 +13883,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.complete button",
       "ancestry": [],
-      "line": 1608,
+      "line": 1511,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16473,7 +13895,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.complete:not(:last-child)::after",
       "ancestry": [],
-      "line": 1605,
+      "line": 1508,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16485,7 +13907,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-target.selected",
       "ancestry": [],
-      "line": 1635,
+      "line": 1538,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Replies.tsx",
@@ -16498,7 +13920,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.conflict i, .sequence-save-state.error i",
       "ancestry": [],
-      "line": 1585,
+      "line": 1488,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
@@ -16511,7 +13933,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.conflict, .sequence-save-state.error",
       "ancestry": [],
-      "line": 1583,
+      "line": 1486,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
@@ -16524,7 +13946,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.saved i",
       "ancestry": [],
-      "line": 1581,
+      "line": 1484,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16536,7 +13958,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.saving i",
       "ancestry": [],
-      "line": 1582,
+      "line": 1485,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16548,7 +13970,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-step-icon.connection",
       "ancestry": [],
-      "line": 1591,
+      "line": 1494,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16560,7 +13982,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-step-icon.message",
       "ancestry": [],
-      "line": 1592,
+      "line": 1495,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -16572,7 +13994,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-variation-actions",
       "ancestry": [],
-      "line": 1598,
+      "line": 1501,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -16585,7 +14007,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-variation-grid",
       "ancestry": [],
-      "line": 1597,
+      "line": 1500,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -16598,11 +14020,10 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-version-list article .btn",
       "ancestry": [],
-      "line": 1590,
+      "line": 1493,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -16610,8 +14031,7 @@
         "src/components/conversation/ReplyReviewPanel.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "key": "compatibility-selector:|.sequence-version-list article .btn:1"
     },
@@ -16620,7 +14040,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sk-bubble.in",
       "ancestry": [],
-      "line": 1184,
+      "line": 1162,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -16699,29 +14119,9 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/pages/LeadsExplorer.tsx"
       ],
       "key": "compatibility-selector:|.spin:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sr-only",
-      "ancestry": [],
-      "line": 1470,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/reply-analysis/ComparisonTable.tsx",
-        "src/components/ui/command.tsx",
-        "src/components/ui/dialog.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx",
-        "src/ui/Button.tsx",
-        "src/ui/Field.tsx",
-        "src/ui/Table.tsx"
-      ],
-      "key": "compatibility-selector:|.sr-only:1"
     },
     {
       "kind": "compatibility-selector",
@@ -16743,7 +14143,7 @@
       "path": "src/ui/ui.css",
       "selector": ".substatus-chip, .pipe-stage-select, .pipe-assign-select",
       "ancestry": [],
-      "line": 1261,
+      "line": 1239,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/LeadsExplorer.tsx",
@@ -16761,8 +14161,7 @@
       "consumerCandidates": [
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.table-scroll thead th:1"
     },
@@ -16776,8 +14175,7 @@
       "consumerCandidates": [
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.table-scroll:1"
     },
@@ -16819,7 +14217,7 @@
       "path": "src/ui/ui.css",
       "selector": "td .pipe-stage-select.quiet",
       "ancestry": [],
-      "line": 1279,
+      "line": 1257,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/LeadsExplorer.tsx",
@@ -16852,7 +14250,7 @@
       "path": "src/ui/ui.css",
       "selector": "tr:hover td .pipe-stage-select.quiet, td .pipe-stage-select.quiet:focus-visible",
       "ancestry": [],
-      "line": 1286,
+      "line": 1264,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/LeadsExplorer.tsx",
@@ -16879,7 +14277,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
@@ -16894,7 +14291,6 @@
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/ImportCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/pages/LeadsExplorer.tsx"
       ],
@@ -16902,16 +14298,6 @@
     }
   ],
   "modalRoots": [
-    {
-      "kind": "modal-root",
-      "path": "src/components/CompanyResolutionModal.tsx",
-      "line": 66,
-      "symbol": "CompanyResolutionModal",
-      "tag": "div",
-      "token": "aria-modal",
-      "ordinal": 1,
-      "key": "modal-root:src/components/CompanyResolutionModal.tsx:CompanyResolutionModal:div::1"
-    },
     {
       "kind": "modal-root",
       "path": "src/components/ConversationDrawer.tsx",

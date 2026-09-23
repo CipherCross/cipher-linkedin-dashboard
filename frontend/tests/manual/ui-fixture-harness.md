@@ -40,10 +40,13 @@ the default Leads page and text no-match query, daily series, roster
 projection, saved searches, ICPs and hypotheses (in the route snapshot), the playbook document, and
 an empty coaching-digest list needed by the shell and the route checks so far. Other Leads
 filters and unknown operations return HTTP 501 with an explicit error. The known
-product mutation endpoints (`pipeline`, `import`, `playbook`, `coach`, review,
+product mutation endpoints (`pipeline`, `playbook`, `coach`, review,
 classify, briefing, and notification) are temporary read-only wrappers
 returning HTTP 403. POST requests to identity and dashboard reads also return
-HTTP 403. A scenario switch changes only the temporary scenario file.
+HTTP 403. `/api/import` answers its read actions (contact/company metadata,
+company and contact preview, company search) with synthetic data so the CSV
+Import stages can be walked, and refuses `company_commit` and `contact_commit`
+with HTTP 403. A scenario switch changes only the temporary scenario file.
 
 `--check` does not start a server. It checks the syntax of every generated
 module, verifies that the scenario file contains a real newline, then invokes

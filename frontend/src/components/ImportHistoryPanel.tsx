@@ -1,8 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
+import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
 import { authPost } from '../lib/api'
 import { useToast } from '../lib/ToastContext'
 import { normalizeForDedup, parseLinkedInThread } from '../lib/parseLinkedInThread'
 import type { Lead } from '../lib/types'
+import {
+  Badge, Button, Checkbox, IconButton, InlineError, RadioGroup, TextField, TextareaField,
+} from '../ui'
 
 // Paste → preview → save flow for a LinkedIn thread copied with the mouse.
 // Rendered inside the ConversationDrawer in place of the thread, so the lead
@@ -34,6 +38,20 @@ export interface SaveResult {
   milestones?: Record<string, string>
   milestone_error?: string
 }
+
+// Complete class strings for the three-step progress rail, matching the
+// state-machine styling of the sibling CSV importer (UnifiedApolloCsvImport).
+const STEP_TEXT_CLASS = {
+  active: 'text-app-text',
+  done: 'text-app-text-secondary',
+  todo: 'text-app-text-muted',
+} as const
+
+const STEP_NUMBER_CLASS = {
+  active: 'bg-app-accent border-app-accent text-app-on-accent',
+  done: 'bg-app-success-subtle border-app-success-border text-app-success',
+  todo: 'bg-app-surface-2 border-app-border text-app-text-muted',
+} as const
 
 const normName = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
 
@@ -211,12 +229,25 @@ export function ImportHistoryPanel({
   // Which of the three stages the panel is on, for the numbered step header.
   const step = result ? 3 : blocks ? 2 : 1
   const stepsHeader = (
-    <ol className="flex items-center gap-app-sm list-none mt-0 mx-0 mb-1 p-0 [&_li]:inline-flex [&_li]:items-center [&_li]:gap-1.5 [&_li]:text-[length:var(--text-xs)] [&_li]:font-semibold [&_li]:text-app-text-muted [&_li:not(:last-child)]:after:content-[''] [&_li:not(:last-child)]:after:w-4 [&_li:not(:last-child)]:after:h-px [&_li:not(:last-child)]:after:bg-app-border [&_li:not(:last-child)]:after:ml-0.5">
+    <ol className="flex items-center gap-app-sm list-none mt-0 mx-0 mb-1 p-0" aria-label="Import history progress">
       {['Paste', 'Review', 'Import'].map((label, i) => {
         const n = i + 1
+        const state = n === step ? 'active' : n < step ? 'done' : 'todo'
         return (
-          <li key={label} className={n === step ? 'active' : n < step ? 'done' : ''}>
-            <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-app-surface-2 border border-app-border text-app-text-muted text-[length:var(--text-2xs)]">{n}</span>
+          <li
+            key={label}
+            className={[
+              'inline-flex items-center gap-1.5 text-[length:var(--text-xs)] font-semibold',
+              STEP_TEXT_CLASS[state],
+              i > 0 ? "before:content-[''] before:inline-block before:w-4 before:h-px before:bg-app-border before:mr-1.5" : '',
+            ].filter(Boolean).join(' ')}
+            aria-current={state === 'active' ? 'step' : undefined}
+          >
+            <span
+              className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border text-[length:var(--text-2xs)] ${STEP_NUMBER_CLASS[state]}`}
+            >
+              {state === 'done' ? <CheckCircle2 size={12} aria-hidden="true" /> : n}
+            </span>
             {label}
           </li>
         )
@@ -226,51 +257,53 @@ export function ImportHistoryPanel({
 
   if (result) {
     return (
-      <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5 [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:bg-app-bg [&_textarea]:text-app-text [&_textarea]:border [&_textarea]:border-app-border [&_textarea]:rounded-md [&_textarea]:px-2.5 [&_textarea]:py-app-sm [&_textarea]:text-[length:var(--text-sm)] [&_textarea]:leading-[1.45] [&_textarea]:font-[inherit]">
+      <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5">
         {stepsHeader}
         <div>
           Imported <strong>{result.inserted}</strong> new message{result.inserted === 1 ? '' : 's'}
           {result.skipped > 0 && (
-            <span className="muted"> · {result.skipped} skipped (already saved)</span>
+            <span className="text-app-text-muted"> · {result.skipped} skipped (already saved)</span>
           )}
         </div>
         {result.milestones && (
-          <div className="muted small">
+          <div className="text-app-meta text-app-text-muted">
             Lead milestones set: {Object.keys(result.milestones).join(', ').replace(/_at/g, '')}
           </div>
         )}
         {result.milestone_error && (
-          <div className="banner conv-error">Messages saved, but milestone update failed: {result.milestone_error}</div>
+          <InlineError title="Messages saved, but milestone update failed." message={result.milestone_error} />
         )}
         <div className="flex items-center gap-app-md flex-wrap">
-          <button className="btn-accent" onClick={onClose}>Done</button>
+          <Button variant="primary" onClick={onClose}>Done</Button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5 [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:bg-app-bg [&_textarea]:text-app-text [&_textarea]:border [&_textarea]:border-app-border [&_textarea]:rounded-md [&_textarea]:px-2.5 [&_textarea]:py-app-sm [&_textarea]:text-[length:var(--text-sm)] [&_textarea]:leading-[1.45] [&_textarea]:font-[inherit]">
+    <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5">
       {stepsHeader}
       {!blocks && (
         <>
-          <div className="muted small">
+          <div className="text-app-meta text-app-text-muted">
             Open the conversation on LinkedIn, select the whole thread with the mouse, copy, and
             paste it below. Messages already in the dashboard are detected and skipped.
           </div>
-          <textarea
-            className="min-h-[220px]"
+          <TextareaField
+            label="Paste the LinkedIn thread"
+            labelHidden
+            className="[&_textarea]:min-h-[220px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={'Anastasia Prokopenko   4:15 PM\nHello Igor,\n…'}
             autoFocus
           />
-          {error && <div className="banner conv-error">{error}</div>}
+          {error && <InlineError title="Could not parse the thread." message={error} />}
           <div className="flex items-center gap-app-md flex-wrap">
-            <button className="btn-accent" onClick={parse} disabled={!text.trim()}>
+            <Button variant="primary" onClick={parse} disabled={!text.trim()}>
               Preview
-            </button>
-            <button className="link-btn" onClick={onClose}>Cancel</button>
+            </Button>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
           </div>
         </>
       )}
@@ -278,75 +311,88 @@ export function ImportHistoryPanel({
       {blocks && (
         <>
           {warnings.map((w, i) => (
-            <div className="banner warn" key={i}>{w}</div>
+            <div
+              key={i}
+              className="flex items-start gap-app-sm p-app-md border border-app-warning-border rounded-control bg-app-warning-subtle text-app-warning text-app-table"
+            >
+              <AlertTriangle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+              <span>{w}</span>
+            </div>
           ))}
           {senders.length > 1 && (
-            <div className="flex items-center gap-app-md flex-wrap [&_label]:cursor-pointer small">
-              <span className="muted">Sent by us:</span>
-              {senders.map((s) => (
-                <label key={s}>
-                  <input
-                    type="radio"
-                    name="import-us"
-                    checked={usSender === s}
-                    onChange={() => pickUs(s)}
-                  />{' '}
-                  {s}
-                </label>
-              ))}
-            </div>
+            <RadioGroup
+              legend="Sent by us"
+              name="import-us"
+              row
+              value={usSender}
+              onChange={pickUs}
+              options={senders.map((s) => ({ value: s, label: s }))}
+            />
           )}
           {blocks.map((b) => (
-            <div className={`border border-app-border rounded-md px-2.5 py-app-sm bg-app-bg flex flex-col gap-1.5 [&_input[type=datetime-local]]:self-start [&_input[type=datetime-local]]:px-2.5 [&_input[type=datetime-local]]:py-[5px] [&_input[type=datetime-local]]:text-[length:var(--text-xs)] ${b.include ? '' : 'opacity-50'}`} key={b.key}>
-              <div className="flex items-center gap-app-sm text-[length:var(--text-xs)]">
-                <input
-                  type="checkbox"
+            <div
+              className={`border border-app-border rounded-md px-2.5 py-app-sm bg-app-bg flex flex-col gap-1.5 ${b.include ? '' : 'opacity-50'}`}
+              key={b.key}
+            >
+              <div className="flex items-center gap-app-sm flex-wrap">
+                <Checkbox
+                  label={<span className="sr-only">Include message from {b.sender}</span>}
                   checked={b.include}
                   onChange={(e) => patch(b.key, { include: e.target.checked })}
                   title={isDup(b) ? 'Already saved — check to import anyway' : 'Include in import'}
                 />
-                <button
-                  className={`bg-none border border-app-border rounded-sm px-app-sm py-px text-[length:var(--text-2xs)] cursor-pointer whitespace-nowrap ${b.direction}`}
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => patch(b.key, { direction: b.direction === 'out' ? 'in' : 'out' })}
                   title="Flip who sent this message"
                 >
                   {b.direction === 'out' ? 'Us →' : '← Them'}
-                </button>
-                <span className="muted ellipsis grow" title={b.sender}>{b.sender}</span>
-                {isDup(b) && <span className="import-flag dup">already saved</span>}
-                {b.dateInferred && <span className="import-flag">date guessed</span>}
-                {b.outOfOrder && <span className="import-flag">earlier than previous</span>}
+                </Button>
+                <span className="truncate flex-1 min-w-0 text-app-text-muted" title={b.sender}>{b.sender}</span>
+                {isDup(b) && <Badge tone="neutral">already saved</Badge>}
+                {b.dateInferred && <Badge tone="warning">date guessed</Badge>}
+                {b.outOfOrder && <Badge tone="warning">earlier than previous</Badge>}
                 {/\n\s*\n/.test(b.body) && (
-                  <button className="link-btn" onClick={() => split(b.key)} title="One block per paragraph">
+                  <Button variant="ghost" size="sm" onClick={() => split(b.key)} title="One block per paragraph">
                     Split
-                  </button>
+                  </Button>
                 )}
-                <button className="conv-close" onClick={() => remove(b.key)} aria-label="Remove message">
-                  ✕
-                </button>
+                <IconButton label="Remove message" icon={<X size={18} aria-hidden="true" />} onClick={() => remove(b.key)} />
               </div>
-              <input
+              <TextField
+                label={`Time for the message from ${b.sender}`}
+                labelHidden
                 type="datetime-local"
+                className="max-w-[220px]"
                 value={b.localTime}
                 onChange={(e) => patch(b.key, { localTime: e.target.value })}
               />
-              <textarea
+              <TextareaField
+                label={`Message text from ${b.sender}`}
+                labelHidden
                 value={b.body}
                 rows={Math.min(6, b.body.split('\n').length + 1)}
                 onChange={(e) => patch(b.key, { body: e.target.value })}
               />
             </div>
           ))}
-          {error && <div className="banner conv-error">{error}</div>}
+          {error && <InlineError title="Could not save the messages." message={error} />}
           <div className="flex items-center gap-app-md flex-wrap">
-            <button className="btn-accent" onClick={save} disabled={saving || included.length === 0}>
+            <Button
+              variant="primary"
+              onClick={save}
+              loading={saving}
+              loadingLabel="Saving the messages"
+              disabled={included.length === 0}
+            >
               {saving ? 'Saving…' : `Save ${included.length} message${included.length === 1 ? '' : 's'}`}
-            </button>
-            <span className="muted small grow">
+            </Button>
+            <span className="text-app-meta text-app-text-muted flex-1">
               {dupCount > 0 ? `${dupCount} already saved` : ''}
             </span>
-            <button
-              className="link-btn"
+            <Button
+              variant="ghost"
               onClick={() => {
                 if (edited && !window.confirm('Discard your edits and go back to the paste step? Direction, time and split changes will be lost.')) return
                 setBlocks(null)
@@ -355,10 +401,10 @@ export function ImportHistoryPanel({
               disabled={saving}
             >
               Back
-            </button>
-            <button className="link-btn" onClick={onClose} disabled={saving}>
+            </Button>
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
               Cancel
-            </button>
+            </Button>
           </div>
         </>
       )}

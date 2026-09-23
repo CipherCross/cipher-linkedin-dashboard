@@ -30,7 +30,11 @@ export function bridge(handler) {
       if (Array.isArray(value)) headers.set(key, value.join(', '))
       else if (value != null) headers.set(key, value)
     }
-    const body = chunks.length ? Buffer.concat(chunks) : undefined
+    // Vercel's Node runtime may already have consumed the stream into req.body.
+    let body = chunks.length ? Buffer.concat(chunks) : undefined
+    if (!body && req.body !== undefined && req.body !== null) {
+      body = Buffer.from(typeof req.body === 'string' || Buffer.isBuffer(req.body) ? req.body : JSON.stringify(req.body))
+    }
     const request = new Request('http://127.0.0.1:' + ${JSON.stringify(port)} + (req.url || '/'), {
       method: req.method,
       headers,
@@ -47,6 +51,7 @@ export function bridge(handler) {
 const identityEntry = `import { identityFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(identityFixture)\n`
 const activityEntry = `import { activityFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(activityFixture)\n`
 const controlEntry = `import { fixtureControl } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(fixtureControl)\n`
+const importEntry = `import { importFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(importFixture)\n`
 const readOnlyEntry = `import { mutationRefusal } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(mutationRefusal)\n`
 const viteConfig = `
 import { defineConfig } from 'vite'
@@ -80,7 +85,8 @@ await writeFile(join(api, 'bridge.mjs'), bridge)
 await writeFile(join(api, 'identity.mjs'), identityEntry)
 await writeFile(join(api, 'activity-daily.mjs'), activityEntry)
 await writeFile(join(api, 'ui-fixture.mjs'), controlEntry)
-for (const name of ['pipeline', 'import', 'playbook', 'coach', 'review-digest', 'classify', 'briefing', 'notify-replies']) {
+await writeFile(join(api, 'import.mjs'), importEntry)
+for (const name of ['pipeline', 'playbook', 'coach', 'review-digest', 'classify', 'briefing', 'notify-replies']) {
   await writeFile(join(api, `${name}.mjs`), readOnlyEntry)
 }
 await writeFile(join(root, 'vite.config.mjs'), viteConfig)
@@ -102,7 +108,7 @@ if (checkOnly) {
     assert.equal(await readFile(join(root, 'fixture-scenario'), 'utf8'), 'populated-admin\n')
     process.env.UI_FIXTURE_SCENARIO = 'populated-admin'
     process.env.UI_FIXTURE_STATE_FILE = join(root, 'fixture-scenario')
-    const { identityFixture, activityFixture, fixtureControl, mutationRefusal } = await import(join(api, 'ui-fixture-api.mjs'))
+    const { identityFixture, activityFixture, fixtureControl, mutationRefusal, importFixture } = await import(join(api, 'ui-fixture-api.mjs'))
     const request = (path, method = 'GET') => new Request(`http://127.0.0.1:${port}${path}`, { method })
     const body = async (response) => ({ status: response.status, json: await response.json() })
     const admin = await body(await identityFixture(request('/api/identity?op=session.current')))
@@ -139,6 +145,11 @@ if (checkOnly) {
     assert.equal((await activityFixture(request('/api/activity-daily?op=dashboard.bootstrap', 'POST'))).status, 403)
     assert.equal((await identityFixture(request('/api/identity?op=session.signOut', 'POST'))).status, 403)
     assert.equal((await mutationRefusal()).status, 403)
+    await fixtureControl(request('/api/ui-fixture?scenario=populated-admin'))
+    const importPost = (payload) => importFixture(new Request(`http://127.0.0.1:${port}/api/import`, { method: 'POST', body: JSON.stringify(payload) }))
+    assert.equal((await importPost({ action: 'contact_metadata' })).status, 200)
+    assert.equal((await importPost({ action: 'company_commit', rows: [] })).status, 403)
+    assert.equal((await importPost({ action: 'contact_commit', rows: [] })).status, 403)
     console.log('UI fixture check passed: generated modules, scenario state, identity, reads, and mutation refusal')
   } finally {
     await rm(root, { recursive: true, force: true })

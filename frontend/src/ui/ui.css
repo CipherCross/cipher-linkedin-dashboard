@@ -1150,28 +1150,6 @@ tr.row-clickable:focus-visible,
 /* A warm, amber-accented .card: solid panel with a faint warning tint + thicker
  * left rule, so it reads as a gentle data-completeness nudge (reusing the same
  * --warning tokens as the sentiment/briefing accents). */
-.import-callout {
-  margin-bottom: var(--space-8);
-  border-color: var(--warning-border);
-  border-left: 3px solid var(--warning);
-  background: var(--warning-subtle);
-}
-.import-callout-row.row-clickable:hover { background: var(--surface-3); }
-.import-callout-row.row-clickable:focus-visible {
-  outline: 2px solid var(--focus-ring); outline-offset: -2px;
-}
-.import-steps li.active { color: var(--text); }
-.import-steps li.active .import-step-n {
-  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
-}
-.import-steps li.done { color: var(--text-secondary); }
-.import-steps li.done .import-step-n {
-  background: var(--success-subtle); border-color: var(--success-border); color: var(--success);
-}
-.import-block-head .grow { flex: 1; min-width: 0; }
-.import-dir.out { color: var(--accent); border-color: var(--accent-border); }
-.import-dir.in { color: var(--success); border-color: var(--success-border); }
-.import-foot .grow { flex: 1; }
 
 /* --- Empty states -------------------------------------------------------- */
 .empty-state {
@@ -1466,84 +1444,9 @@ td .pipe-stage-select.quiet:focus-visible {
   .follow-item-message > .muted:last-child { display: none; }
 }
 
-/* --- Apollo CSV Contact import ------------------------------------------- */
-.sr-only {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
-}
-.csv-import-steps li.active {
-  color: var(--text);
-  border-color: var(--accent-border);
-  background: var(--accent-subtle);
-}
-.csv-import-steps li.active > span {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-}
-.csv-import-steps li.done { color: var(--success); }
-.csv-import-steps li.done > span {
-  border-color: var(--success-border);
-  background: var(--success-subtle);
-}
+.btn.danger { color: var(--danger); border-color: var(--danger-border); }
 
-.csv-error-banner,
-.csv-inline-error,
-.csv-warning-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--danger-border);
-  border-radius: var(--radius-md);
-  background: var(--danger-subtle);
-  color: var(--danger);
-  padding: 9px 12px;
-  font-size: var(--text-sm);
-}
-.csv-inline-error { justify-content: space-between; }
-
-.csv-setup-card,
-.csv-upload-card,
-.csv-mapping-card,
-.csv-company-actions,
-.csv-preview-card,
-.csv-results-card,
-.csv-result-hero { margin-bottom: var(--space-7); }
-.csv-setup-card h2,
-.csv-mapping-card h2,
-.csv-company-actions h2,
-.csv-preview-card h2,
-.csv-result-hero h2 { margin-bottom: 4px; }
-.csv-map-row.locked { background: var(--surface-2); color: var(--text-secondary); }
-.csv-summary-card.success { border-left-color: var(--success); }
-.csv-summary-card.warning { border-left-color: var(--warning); }
-.csv-summary-card.danger { border-left-color: var(--danger); }
-.csv-summary-card.muted { border-left-color: var(--text-muted); color: var(--text); }
-.csv-status.ready,
-.csv-status.created { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
-.csv-status.company_action { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
-.csv-status.invalid,
-.csv-status.failed { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
-.csv-status.duplicate,
-.csv-status.skipped { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); }.csv-company-modal .pipe-modal-head { align-items: flex-start; }.csv-company-option-main .small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}.btn.danger { color: var(--danger); border-color: var(--danger-border); }
 .btn.danger:hover:not(:disabled) { background: var(--danger-subtle); border-color: var(--danger); }
-
-@media (max-width: 700px) {
-  .csv-company-action-row > .btn,
-  .csv-company-action-row > .csv-row-actions { grid-column: 2; width: fit-content; flex-wrap: wrap; }
-  .csv-import-footer .btn { width: 100%; }
-}
 
 /* --- Authentication: AuthCard.tsx owns its utilities; the spinner keyframes
  * stay shared (the sequence publish strip reuses them). */

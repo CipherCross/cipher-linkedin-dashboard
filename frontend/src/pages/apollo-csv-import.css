@@ -1,10 +1,7 @@
-/* Variant carriers and the two grids a modifier reshapes.
- *
- * `.csv-upload-card` takes `.disabled`, `.csv-resolution` takes `.success` /
- * `.skipped`, and both `.csv-map-row` and `.csv-company-action-row` change
- * their own grid AND a child's visibility at one breakpoint. Utilities have no
- * specificity to resolve a variant against.
- */
+/* ui-exception(csv-import-grids): the dashed drop zone and its disabled
+ * variant, plus two row grids that change their own columns AND hide a child
+ * at one breakpoint. Utilities have no specificity to resolve a variant
+ * against. verify: CSV Import stages 1–3 at 1280/1440/1920. */
 .csv-upload-card {
   min-height: 260px;
   display: flex;
@@ -18,20 +15,7 @@
 .csv-upload-card > svg { color: var(--accent); }
 .csv-upload-card h2 { margin: 0; }
 .csv-upload-card p { max-width: 600px; margin: 0 0 4px; line-height: 1.55; }
-.csv-upload-card.disabled > svg { color: var(--text-muted); }
-
-.csv-resolution {
-  width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-  padding: 2px 7px;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-}
-.csv-resolution.success { color: var(--success); background: var(--success-subtle); }
-.csv-resolution.skipped { color: var(--text-muted); background: var(--surface-2); }
+.csv-upload-card[data-disabled] > svg { color: var(--text-muted); }
 
 .csv-map-row {
   display: grid;
@@ -45,7 +29,6 @@
 .csv-map-row:last-child { border-bottom: 0; }
 .csv-map-row > span:nth-child(2) { text-align: center; color: var(--text-muted); }
 .csv-map-row strong { color: var(--danger); }
-.csv-map-row select { width: 100%; }
 
 .csv-company-action-row {
   display: grid;

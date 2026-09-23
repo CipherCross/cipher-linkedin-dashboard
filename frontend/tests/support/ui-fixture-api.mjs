@@ -380,6 +380,35 @@ export async function fixtureControl(request) {
   return json({ ok: true, scenario: next })
 }
 
+const FIXTURE_COMPANY = { id: 'recFixture0000001', name: 'Fixture Labs', website: 'https://fixture.test', linkedin: '' }
+
+/**
+ * CSV import endpoint: metadata, previews and company search are reads and get
+ * synthetic answers; both commit actions are writes and are refused, so the
+ * browser can walk stages 1–4 without any path to Airtable.
+ */
+export async function importFixture(request) {
+  const scenario = await currentScenario()
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture import read failure' }, 503)
+  const body = await request.json().catch(() => ({}))
+  const metadata = { source: 'apollo', mappingVersion: 1, addedBy: ['Fixture Admin'], limits: { maxRows: 500, maxFileBytes: 5000000 } }
+  if (body.action === 'contact_metadata' || body.action === 'company_metadata') return json(metadata)
+  if (body.action === 'company_search') return json({ companies: [FIXTURE_COMPANY] })
+  if (body.action === 'company_preview') {
+    const rows = Array.isArray(body.rows) ? body.rows : []
+    const results = rows.map((row, index) => index === 0
+      ? { rowNumber: row.rowNumber, status: 'company_action', reason: 'name_match', suggestions: [FIXTURE_COMPANY], canCreate: true }
+      : { rowNumber: row.rowNumber, status: 'ready', canCreate: true })
+    return json({ results, counts: {} })
+  }
+  if (body.action === 'contact_preview') {
+    const rows = Array.isArray(body.rows) ? body.rows : []
+    return json({ results: rows.map((row) => ({ rowNumber: row.rowNumber, status: 'ready', company: FIXTURE_COMPANY, matchMethod: 'resolved' })), counts: {} })
+  }
+  return mutationRefusal()
+}
+
 export function mutationRefusal() {
   return json({ error: 'Local fixture is read-only; mutation was refused' }, 403)
 }

@@ -177,3 +177,31 @@ Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720
 Known and left (flagged as a separate task, not a presentation defect): selecting a hypothesis writes `?h=`, and `DataContext` restarts the route snapshot on any query change outside Replies/Sentiment. The page flashes to the skeleton and remounts, so closing the viewer returns focus to `<body>`. Fixing it touches DataContext state, which this programme excludes.
 
 Next: Phase 5 — CSV import workflow (UnifiedApolloCsvImport, CompanyResolutionModal, ImportHistoryPanel, import callouts), fixture-only mutation checks.
+
+## Phase 5 — accepted (2026-09-23)
+
+CSV import workflow. The orchestrator did `UnifiedApolloCsvImport` and `CompanyResolutionModal`; a Sonnet worker did `ImportHistoryPanel` and `ImportCalloutCard`, reviewed and corrected by the orchestrator.
+
+- **Importer** — every stage is a `Panel` + `SectionHeader` (`Stage`), and each primary action sits in a sticky `StageActions` bar. Status words are `Badge`s through one `STATUS_TONE` map. The step list uses complete-string state classes and `aria-current="step"`; its active/done styling had already been lost, because the `.csv-import-steps` class was removed in an earlier pass while its CSS stayed. "Added by" is a required `SelectField`. Metadata loading uses `UpdatingNote`; metadata failure and write failure use `InlineError` (Retry / Dismiss). The contacts table is `TableFrame`/`Table` ("Contacts to import", local scroll 560px). Busy buttons use `Button loading`. The state machine, handlers, payloads, retries and file semantics are unchanged; the native file input stays hidden behind Choose CSV under the existing `native-file-input-csv` exception. The file-map and company-action grids and the dashed drop zone stay route CSS under `ui-exception(csv-import-grids)`.
+- **CompanyResolutionModal** — the last hand-built modal in this family is now the shared `Dialog`; its private document Escape listener is removed and Dialog owns Escape. It has a labelled search `TextField` that gets initial focus, `UpdatingNote` while searching, `InlineError` on failure, and option rows as `Button`s. The Cancel/Skip labels and plural wording are unchanged.
+- **ImportHistoryPanel** — canonical `Button`/`IconButton`/`Checkbox`/`RadioGroup`/`TextField`/`TextareaField`/`Badge`/`InlineError`; the three-step rail uses complete-string state maps. Parse, dedup and save behaviour and the dirty "Back" confirm are unchanged.
+- **ImportCalloutCard deleted** — it has had no consumer since `e24b1d3` ("Simplify home…"), so it was removed with its new test rather than kept converted. Its helper `blindSpotLeads` in `lib/leads.ts` is now also unused; it is domain logic, so it is left for Phase 12's dead-code pass.
+- **CSS** — all `.csv-*` rules removed from `ui.css` (none had a consumer); the `.import-*` callout, step and dir rules removed; `import-history.css` and its import deleted. The duplicate `!important` `.sr-only` in `ui.css` was removed: `reset.css` owns it, Tailwind generates it, and the duplicate made every `sr-only` count as a compatibility token. In doing that, the adjacent `.btn.danger` rule that was glued onto the same line was restored.
+- **Fixture** — `/api/import` answers metadata, previews and company search with synthetic data and refuses `company_commit`/`contact_commit` with 403. The bridge now falls back to `req.body`, because Vercel's Node runtime pre-consumes POST streams, so every fixture POST body used to arrive empty. `--check` asserts both commit refusals. The stale `/tmp/linkedin-ui-fixture-*` roots (a stopped server skips its cleanup) were deleted.
+
+Tests: new `csvImportStates` (5: metadata failure + retry, step `aria-current` and upload gating, picker Dialog name/Escape/skip, contact skip/restore, company-write failure keeps the stage and dismisses) and `importHistoryPanel` (9); the existing `unifiedApolloCsvImport` (3 flows) is unchanged and green. Mutation checks: making the picker's `onRequestClose` a no-op fails `csvImportStates`; the worker disabled the Back guard and `importHistoryPanel` failed.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 93 files / 1,399 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 222 → 187; compatibility tokens 1,008 → 838; selectors 354 → 321; **modal roots 5 → 4**; Phase 5 files have zero raw controls, compatibility tokens and modal roots); fixture `--check` passed; `git diff --check` passed. Production gzip JS 653,507 (+0.4% vs Phase 0), CSS 38,438 (−2,427 vs Phase 0).
+
+Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720 / 1440×900 / 1920×1080**; the fixture refuses both commits, so no write path exists:
+
+| Surface | Result at all three viewports |
+| --- | --- |
+| Stage 1 → 2 → 3 | step `aria-current` moves Set up → Review file → Companies; gutters 24/32/32; no text under 13px; no overflow-x |
+| Stage 3 sticky actions | Process Companies bar in view (bottom 706 of 720 at 1280) |
+| Company picker | 640px Dialog "Choose the Airtable company", focus on the search field; choosing a result closes it, records "Use Fixture Labs · fill blank fields", returns focus to "Choose existing", unresolved count → 0 |
+| Process Companies (refused) | InlineError "Local fixture is read-only…" with Dismiss; stays on stage 3 |
+
+**Open, not caused by this phase — Phase 7 entry blocker:** opening the conversation drawer from a Leads row in the fixture intermittently freezes the page (DevTools `Runtime.callFunctionOn` times out; one debugger pause landed in React's `dispatchContinuousEvent`). It reproduces at `38d139b`, before any redesign change, at `17fe04d` and at `9971aee`, so it predates this programme. Because of it, `ImportHistoryPanel` (rendered only inside the drawer) has unit coverage but no browser pass yet. Phase 7 owns `ConversationDrawer` and must diagnose this before accepting the drawer.
+
+Next: Phase 6 — Leads (wide-list reference), Follow-ups, Review: tables, filters (adopt `FilterDialog`), empty/error states, follow-up panels; first result y≤340 at 1280, Follow-ups primary action reachable at 1280, local wide scroll.

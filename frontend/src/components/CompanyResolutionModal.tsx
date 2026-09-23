@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Building2, Search, X } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import type { AirtableCompany } from '../lib/importApi'
 import { searchAirtableCompanies } from '../lib/importApi'
+import { Button, Dialog, InlineError, TextField, UpdatingNote } from '../ui'
 
 export function CompanyResolutionModal({
   sourceCompany,
@@ -24,14 +25,6 @@ export function CompanyResolutionModal({
   const [results, setResults] = useState<AirtableCompany[]>(suggestions)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -61,81 +54,73 @@ export function CompanyResolutionModal({
     }
   }, [query, suggestions])
 
+  const plural = subjectLabel === 'company' ? 'companies' : 'leads'
   return (
-    <div className="pipe-modal-overlay" onClick={onClose}>
-      <div
-        className="pipe-modal w-[min(720px,100%)] max-h-[min(760px,calc(100vh-40px))]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="csv-company-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="pipe-modal-head">
-          <div>
-            <div id="csv-company-title">Choose the Airtable company</div>
-            <div className="muted small">
-              Apollo company: <strong>{sourceCompany || 'Unnamed company'}</strong>
-              {' · '}
-              {affectedRows}{' '}
-              {affectedRows === 1 ? subjectLabel : subjectLabel === 'company' ? 'companies' : 'leads'}
+    <Dialog
+      title="Choose the Airtable company"
+      description={<>
+        Apollo company: <strong>{sourceCompany || 'Unnamed company'}</strong>
+        {' · '}
+        {affectedRows}{' '}
+        {affectedRows === 1 ? subjectLabel : plural}
+      </>}
+      closeLabel="Close company picker"
+      onRequestClose={onClose}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" onClick={onSkip}>
+          Skip {affectedRows === 1 ? `this ${subjectLabel}` : `all ${affectedRows} ${plural}`}
+        </Button>
+      </>}
+    >
+      <div className="flex flex-col gap-app-md">
+        <TextField
+          label="Search Airtable companies"
+          labelHidden
+          type="search"
+          value={query}
+          placeholder="Search by company name, website, or LinkedIn"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+
+        {error && <InlineError title="Could not search Airtable." message={error} />}
+
+        <div className="min-h-[180px] flex flex-col gap-1.5" aria-busy={busy || undefined}>
+          {busy && (
+            <div className="min-h-[180px] flex items-center justify-center">
+              <UpdatingNote>Searching Airtable…</UpdatingNote>
             </div>
-          </div>
-          <button className="conv-close" onClick={onClose} aria-label="Close company picker">
-            <X size={16} />
-          </button>
-        </div>
-
-        <label className="flex items-center gap-app-sm px-2.5 border border-app-border rounded-md bg-app-surface-2 focus-within:border-app-accent focus-within:shadow-[0_0_0_3px_var(--accent-subtle)] [&_input]:flex-1 [&_input]:border-0 [&_input]:pl-0 [&_input]:bg-transparent [&_input]:shadow-none!">
-          <Search size={16} aria-hidden="true" />
-          <input
-            autoFocus
-            type="search"
-            value={query}
-            placeholder="Search by company name, website, or LinkedIn"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-
-        {error && <div className="csv-inline-error" role="alert">{error}</div>}
-
-        <div className="min-h-[180px] max-h-[440px] overflow-y-auto flex flex-col gap-[6px]" aria-busy={busy}>
-          {busy && <div className="muted small min-h-[180px] flex flex-col items-center justify-center gap-[5px] text-center [&_svg]:text-app-text-muted">Searching Airtable…</div>}
+          )}
           {!busy && results.length === 0 && (
-            <div className="min-h-[180px] flex flex-col items-center justify-center gap-[5px] text-center [&_svg]:text-app-text-muted">
-              <Building2 size={24} aria-hidden="true" />
+            <div className="min-h-[180px] flex flex-col items-center justify-center gap-1 text-center">
+              <Building2 size={24} aria-hidden="true" className="text-app-text-muted" />
               <div>No matching Companies found.</div>
-              <div className="muted small">
-                Try the company’s domain or LinkedIn URL, or skip {affectedRows === 1 ? `this ${subjectLabel}` : `these ${subjectLabel === 'company' ? 'companies' : 'leads'}`}.
+              <div className="text-app-meta text-app-text-muted">
+                Try the company’s domain or LinkedIn URL, or skip {affectedRows === 1 ? `this ${subjectLabel}` : `these ${plural}`}.
               </div>
             </div>
           )}
           {!busy &&
             results.map((company) => (
-              <button
-                type="button"
-                className="w-full grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2.5 items-center text-left p-2.5 border border-app-border rounded-md bg-app-surface-2 text-app-text cursor-pointer hover:border-app-accent-border hover:bg-app-surface-3 [&>svg]:text-app-accent"
+              <Button
                 key={company.id}
+                variant="secondary"
+                block
+                className="h-auto min-h-control py-2.5 grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2.5 items-center text-left font-normal"
                 onClick={() => onSelect(company)}
               >
-                <Building2 size={18} aria-hidden="true" />
+                <Building2 size={18} aria-hidden="true" className="text-app-accent" />
                 <span className="min-w-0 flex flex-col gap-0.5">
                   <strong>{company.name || 'Unnamed company'}</strong>
-                  <span className="muted small">
+                  <span className="text-app-meta text-app-text-muted truncate">
                     {[company.website, company.linkedin].filter(Boolean).join(' · ') || 'No website or LinkedIn stored'}
                   </span>
                 </span>
-                <span className="text-app-accent text-[length:var(--text-xs)] font-semibold">Select</span>
-              </button>
+                <span className="text-app-accent text-app-meta font-semibold">Select</span>
+              </Button>
             ))}
         </div>
-
-        <div className="pipe-modal-actions">
-          <button className="btn ghost sm" onClick={onClose}>Cancel</button>
-          <button className="btn danger sm" onClick={onSkip}>
-            Skip {affectedRows === 1 ? `this ${subjectLabel}` : `all ${affectedRows} ${subjectLabel === 'company' ? 'companies' : 'leads'}`}
-          </button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
