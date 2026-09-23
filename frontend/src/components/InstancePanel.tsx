@@ -6,13 +6,15 @@ import { ago } from '../lib/format'
 import { freshnessLevel } from '../lib/freshness'
 import type { FreshnessLevel } from '../lib/freshness'
 import { Avatar } from './Avatar'
-import { EmptyState } from '../ui'
+import { EmptyState, Panel, SectionHeader, StatusText, type Tone } from '../ui'
 import { InstanceConfigEditor } from './InstanceConfigEditor'
 
 const STRIP_RUNS = 14
 
 // Stale accounts are the reason to open this page, so surface them first.
 const TIER_ORDER: Record<FreshnessLevel, number> = { stale: 0, warn: 1, ok: 2 }
+
+const FRESHNESS_TONE: Record<FreshnessLevel, Tone> = { ok: 'success', warn: 'warning', stale: 'danger' }
 
 export function InstancePanel({ instances, runs = [] }: { instances: Instance[]; runs?: SyncRun[] }) {
   const sorted = [...instances].sort((a, b) => {
@@ -24,8 +26,8 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
     return ta - tb
   })
   return (
-    <div className="card">
-      <h2>Accounts</h2>
+    <Panel>
+      <SectionHeader title="Accounts" />
       <div className="flex flex-col gap-app-md">
         {sorted.map((inst) => {
           const level = freshnessLevel(inst.last_sync_at)
@@ -34,12 +36,15 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
               <div className="flex gap-2.5 items-center">
                 <Avatar inst={inst} size={34} />
                 <div style={{ minWidth: 0 }}>
-                  <Link className="row-link" to={`/account/${encodeURIComponent(inst.id)}`}>
+                  <Link
+                    className="text-app-text no-underline transition-colors hover:text-app-accent hover:underline"
+                    to={`/account/${encodeURIComponent(inst.id)}`}
+                  >
                     {instanceName(inst)}
                   </Link>
                   {inst.account_url && (
                     <a
-                      className="li-link"
+                      className="inline-block ml-2 px-[5px] rounded-sm bg-[var(--linkedin)] text-[var(--linkedin-fg)] text-[length:var(--text-2xs)] font-bold no-underline leading-4 align-text-bottom hover:bg-[var(--linkedin-hover)]"
                       href={inst.account_url}
                       target="_blank"
                       rel="noreferrer"
@@ -48,11 +53,15 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
                       in
                     </a>
                   )}
-                  <div className="muted small">
+                  <div>
                     {/* ok/warn/stale mirror the header SyncChip. */}
-                    <span className={`dot inline ${level}`} />
-                    {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
-                    {inst.agent_version && ` · agent v${inst.agent_version}`}
+                    <StatusText
+                      tone={FRESHNESS_TONE[level]}
+                      icon={<span className="size-[7px] rounded-full bg-current" aria-hidden="true" />}
+                    >
+                      {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
+                      {inst.agent_version && ` · agent v${inst.agent_version}`}
+                    </StatusText>
                   </div>
                 </div>
               </div>
@@ -69,7 +78,7 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
           />
         )}
       </div>
-    </div>
+    </Panel>
   )
 }
 

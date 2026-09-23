@@ -5,6 +5,7 @@ import { useToast } from '../lib/ToastContext'
 import { instanceName } from '../lib/leads'
 import { authPost } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
+import { Button, SelectField, TextField, TextareaField, useDirtyGuard } from '../ui'
 
 // Per-instance config editor for the Health page. Writes the `config` override
 // blob via /api/pipeline (action `set_instance_config`); the sync agent merges
@@ -65,6 +66,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   // this guard, a background refetch (every 5 min) leaves the form on its initial
   // snapshot, and saving would silently overwrite any newer config.
   const [dirty, setDirty] = useState(false)
+  const { guard, prompt } = useDirtyGuard(dirty && !busy)
 
   // Re-seed the form when the underlying config changes (another save, or a sync
   // updated config_updated_at) — but only when there are no unsaved edits.
@@ -91,10 +93,10 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty])
 
-  // Closing with unsaved edits confirms, then resets to the last-saved baseline
-  // so reopening doesn't resurrect the discarded changes.
+  // Closing with unsaved edits asks first (Keep editing / Discard changes);
+  // discarding resets to the last-saved baseline so reopening doesn't
+  // resurrect it.
   const close = () => {
-    if (dirty && !window.confirm('Discard unsaved config changes?')) return
     const c = (inst.config ?? {}) as Record<string, unknown>
     setText(initText(c))
     setBool(initBool(c))
@@ -197,23 +199,25 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
     const hasConfig = cfg && Object.keys(cfg).length > 0
     return (
       <div className="pl-11">
-        <button
-          className="link-btn"
-          onClick={() => setOpen(true)}
-          disabled={!isAdmin}
-          title={isAdmin ? 'Edit remote config' : 'Admin access required'}
-        >
-          {isAdmin ? 'Configure' : 'Admin only'}
-        </button>
-        {' · '}
-        <button className="link-btn" onClick={() => setViewRaw((v) => !v)}>
-          {viewRaw ? 'Hide raw' : 'View raw'}
-        </button>
-        {pending && <span className="text-app-text-muted text-[length:var(--text-xs)]"> · pending next sync</span>}
+        <div className="flex items-center gap-app-sm flex-wrap">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setOpen(true)}
+            disabled={!isAdmin}
+            title={isAdmin ? 'Edit remote config' : 'Admin access required'}
+          >
+            {isAdmin ? 'Configure' : 'Admin only'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setViewRaw((v) => !v)}>
+            {viewRaw ? 'Hide raw' : 'View raw'}
+          </Button>
+          {pending && <span className="text-app-meta text-app-text-muted">pending next sync</span>}
+        </div>
         {viewRaw && (
           // The literal stored override blob (not the editor's reconstructed
           // view) so the true persisted config is auditable at a glance.
-          <pre className="mt-app-sm mx-0 mb-0 p-2.5 border border-app-border rounded-md bg-app-bg font-mono text-[length:var(--text-xs)] text-app-text-secondary whitespace-pre-wrap [word-break:break-word] max-h-80 overflow-y-auto">
+          <pre className="mt-app-sm mx-0 mb-0 p-2.5 border border-app-border rounded-md bg-app-bg font-mono text-app-meta text-app-text-secondary whitespace-pre-wrap [word-break:break-word] max-h-80 overflow-y-auto">
             {hasConfig
               ? JSON.stringify(cfg, null, 2)
               : 'No online config — this notebook runs on its local config.yaml.'}
@@ -224,46 +228,42 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   }
 
   return (
-    <div className="p-2.5 ml-11 border border-app-border rounded-md bg-app-bg flex flex-col gap-2.5">
+    <div className="p-app-md border border-app-border rounded-md bg-app-bg flex flex-col gap-app-md">
       {raw ? (
-        <label className="flex flex-col gap-[3px] [&_textarea]:font-mono">
-          <span className="text-app-text-muted text-[length:var(--text-2xs)]">Raw config (JSON)</span>
-          <textarea
-            value={rawText}
-            spellCheck={false}
-            rows={Math.min(20, Math.max(6, rawText.split('\n').length + 1))}
-            onChange={(e) => { setDirty(true); setRawText(e.target.value) }}
-          />
-        </label>
+        <TextareaField
+          label="Raw config (JSON)"
+          value={rawText}
+          spellCheck={false}
+          rows={Math.min(20, Math.max(6, rawText.split('\n').length + 1))}
+          onChange={(e) => { setDirty(true); setRawText(e.target.value) }}
+          className="[&_textarea]:font-mono"
+        />
       ) : (
-        <div className="grid grid-cols-2 gap-x-app-md gap-y-app-sm">
+        <div className="grid grid-cols-1 gap-app-sm">
           {TEXT_FIELDS.map((f) => (
-            <label className="flex flex-col gap-[3px]" key={f.key}>
-              <span className="text-app-text-muted text-[length:var(--text-2xs)]">{f.label}</span>
-              <input
-                type="text"
-                value={text[f.key]}
-                placeholder={f.placeholder}
-                onChange={(e) => { setDirty(true); setText({ ...text, [f.key]: e.target.value }) }}
-              />
-            </label>
+            <TextField
+              key={f.key}
+              label={f.label}
+              value={text[f.key]}
+              placeholder={f.placeholder}
+              onChange={(e) => { setDirty(true); setText({ ...text, [f.key]: e.target.value }) }}
+            />
           ))}
           {BOOL_FIELDS.map((f) => (
-            <label className="flex flex-col gap-[3px]" key={f.key}>
-              <span className="text-app-text-muted text-[length:var(--text-2xs)]">{f.label}</span>
-              <select
-                value={bool[f.key]}
-                onChange={(e) => { setDirty(true); setBool({ ...bool, [f.key]: e.target.value as Tri }) }}
-              >
-                <option value="default">Default (local)</option>
-                <option value="on">On</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
+            <SelectField
+              key={f.key}
+              label={f.label}
+              value={bool[f.key]}
+              onChange={(e) => { setDirty(true); setBool({ ...bool, [f.key]: e.target.value as Tri }) }}
+            >
+              <option value="default">Default (local)</option>
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </SelectField>
           ))}
 
           {Object.keys(passthrough()).length > 0 && (
-            <div className="muted small">
+            <div className="text-app-meta text-app-text-muted">
               + {Object.keys(passthrough()).join(', ')} (edit via Advanced)
             </div>
           )}
@@ -271,17 +271,18 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
       )}
 
       <div className="flex items-center gap-app-md flex-wrap">
-        <button className="btn-accent" onClick={save} disabled={busy}>
+        <Button variant="primary" size="sm" loading={busy} onClick={() => void save()}>
           {busy ? 'Saving…' : 'Save'}
-        </button>
-        <button className="link-btn" onClick={toggleRaw} disabled={busy}>
+        </Button>
+        <Button variant="secondary" size="sm" onClick={toggleRaw} disabled={busy}>
           {raw ? 'Structured' : 'Advanced (raw JSON)'}
-        </button>
-        <button className="link-btn" onClick={close} disabled={busy}>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => guard(close)} disabled={busy}>
           Close
-        </button>
-        {msg && <span className="small text-danger">{msg}</span>}
+        </Button>
+        {msg && <span className="text-app-meta text-app-danger" role="alert">{msg}</span>}
       </div>
+      {prompt}
     </div>
   )
 }

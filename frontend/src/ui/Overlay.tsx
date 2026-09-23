@@ -1,4 +1,4 @@
-import { useCallback, useId } from 'react'
+import { useCallback, useId, useRef } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
@@ -26,7 +26,8 @@ export interface DialogProps {
   footer?: ReactNode
   footerNote?: ReactNode
   onRequestClose: () => void
-  /** Where focus lands on open. Defaults to the first focusable element. */
+  /** Where focus lands on open. Defaults to the first control in the body,
+   *  then to the first focusable element (Close) when the body has none. */
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Where focus returns on close. Defaults to the element focused at open. */
   finalFocusRef?: RefObject<HTMLElement | null>
@@ -40,6 +41,8 @@ export interface DialogProps {
   busyMessage?: string
 }
 
+const BODY_FOCUS_TARGETS = 'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+
 export function Dialog({
   title, description, children, footer, footerNote, onRequestClose,
   initialFocusRef, finalFocusRef, placement = 'center', size = 'md',
@@ -51,7 +54,13 @@ export function Dialog({
     (next: boolean) => { if (!next && !busy) onRequestClose() },
     [busy, onRequestClose],
   )
-  const initialFocus = useCallback(() => initialFocusRef?.current ?? true, [initialFocusRef])
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const initialFocus = useCallback(
+    () => initialFocusRef?.current
+      ?? bodyRef.current?.querySelector<HTMLElement>(BODY_FOCUS_TARGETS)
+      ?? true,
+    [initialFocusRef],
+  )
   const finalFocus = useCallback(() => finalFocusRef?.current ?? true, [finalFocusRef])
 
   return (
@@ -76,7 +85,7 @@ export function Dialog({
                 render={<IconButton className="ui-dialog__close" label={closeLabel} icon={<X size={20} aria-hidden="true" />} />}
               />
             </div>
-            <div className="ui-dialog__body">{children}</div>
+            <div className="ui-dialog__body" ref={bodyRef}>{children}</div>
             {(footer || footerNote) && (
               <div className="ui-dialog__footer">
                 {footerNote && <span className="ui-dialog__footer-note">{footerNote}</span>}

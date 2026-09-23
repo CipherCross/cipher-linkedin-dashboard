@@ -61,7 +61,7 @@ export function NeonActivity() {
   const totalEvents = activity.reduce((sum, row) => sum + row.cnt, 0)
 
   return (
-    <div className="page">
+    <>
       <PageHeader
         title="Daily activity"
         breadcrumb={[{ label: 'Diagnostics' }]}
@@ -114,12 +114,12 @@ export function NeonActivity() {
                 signed-in subject is what lets an operator configure it — it is
                 the viewer's own id, not anyone else's. Goes away with the
                 bridge itself in S17. */}
-            <p className="muted">
+            <p className="text-app-text-muted">
               Signed-in identity subject: <code>{user?.id ?? 'unknown'}</code>
             </p>
           </>
         ) : (
-          <p className="muted" data-testid="neon-activity-summary">
+          <p className="text-app-text-muted" data-testid="neon-activity-summary">
             {activity.length.toLocaleString()} rows over {pages} page
             {pages === 1 ? '' : 's'} · {totalEvents.toLocaleString()} events
             {elapsedMs === null ? '' : ` · ${elapsedMs} ms`}
@@ -133,6 +133,6 @@ export function NeonActivity() {
         from={range.from}
         to={range.to}
       />
-    </div>
+    </>
   )
 }

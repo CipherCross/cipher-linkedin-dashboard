@@ -226,6 +226,12 @@ describe('Dialog contract', () => {
     expect(close.getAttribute('aria-describedby')).toBe(reason.id)
   })
 
+  it('focuses the first control in the body by default, not Close', async () => {
+    render(<Dialog title="Invite" onRequestClose={() => {}}><input aria-label="Name" /></Dialog>)
+    await frame()
+    expect(document.activeElement).toBe(screen.getByLabelText('Name'))
+  })
+
   it('moves focus to the requested control on open', async () => {
     function Harness() {
       const target = useRef<HTMLInputElement>(null)

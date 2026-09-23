@@ -230,7 +230,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -257,7 +256,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -299,7 +297,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -326,7 +323,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -357,8 +353,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -385,18 +379,15 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/NeonActivity.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -455,7 +446,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -496,7 +486,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -610,7 +599,6 @@
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/KpiCards.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
@@ -629,13 +617,11 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/Review.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -682,7 +668,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -776,8 +761,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -801,7 +784,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -811,7 +793,6 @@
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -843,8 +824,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -868,7 +847,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -878,7 +856,6 @@
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -919,20 +896,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-95f7568d2db2",
-      "kind": "compatibility-selector",
-      "selector": ".auth-error",
-      "ruleKey": "compatibility-selector:|.auth-error:1",
-      "consumerCandidates": [
-        "src/pages/Team.tsx"
-      ],
-      "owner": "src/pages/Team.tsx",
-      "destination": "src/pages/Team.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 3"
-    },
-    {
       "id": "compatibility-rule-3b3d3a19e1c8",
       "kind": "compatibility-selector",
       "selector": ".badge",
@@ -947,13 +910,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -977,13 +938,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1007,13 +966,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1037,13 +994,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1067,13 +1022,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1097,13 +1050,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1127,13 +1078,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1157,13 +1106,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1187,13 +1134,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1217,13 +1162,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1247,43 +1190,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/CampaignRuntimeStatus.tsx",
-      "destination": "src/components/CampaignRuntimeStatus.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-dfb64087954b",
-      "kind": "compatibility-selector",
-      "selector": ".badge.status-ok",
-      "ruleKey": "compatibility-selector:|.badge.status-ok:1",
-      "consumerCandidates": [
-        "src/components/CampaignRuntimeStatus.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/ImportCalloutCard.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/SearchLibrary.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1307,13 +1218,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1346,7 +1255,6 @@
         "src/pages/Playbook.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1413,7 +1321,6 @@
         "src/components/LeadNotesPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -1457,8 +1364,7 @@
       "selector": ".btn-accent",
       "ruleKey": "compatibility-selector:|.btn-accent:1",
       "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx"
+        "src/components/ImportHistoryPanel.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -1472,8 +1378,7 @@
       "selector": ".btn-accent:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.btn-accent:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx"
+        "src/components/ImportHistoryPanel.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -1491,7 +1396,6 @@
         "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1501,7 +1405,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1520,7 +1423,6 @@
         "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/SentimentTrendChart.tsx",
@@ -1533,7 +1435,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1552,7 +1453,6 @@
         "src/components/CompanyResolutionModal.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1562,7 +1462,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1589,7 +1488,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1616,7 +1514,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1643,7 +1540,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1670,7 +1566,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1697,7 +1592,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1724,7 +1618,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1751,7 +1644,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1778,7 +1670,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1805,7 +1696,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1832,7 +1722,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1859,7 +1748,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1897,13 +1785,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1995,7 +1881,6 @@
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/KpiCards.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
@@ -2014,13 +1899,11 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/Review.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -2713,13 +2596,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -2827,8 +2708,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -2852,7 +2731,6 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
@@ -2862,7 +2740,6 @@
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -3110,8 +2987,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -3138,18 +3013,15 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/NeonActivity.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -3206,8 +3078,7 @@
       "selector": ".dot",
       "ruleKey": "compatibility-selector:|.dot:1",
       "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/InstancePanel.tsx"
+        "src/components/AccountCard.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
       "destination": "src/components/AccountCard.tsx",
@@ -3221,8 +3092,7 @@
       "selector": ".dot.inline",
       "ruleKey": "compatibility-selector:|.dot.inline:1",
       "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/InstancePanel.tsx"
+        "src/components/AccountCard.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
       "destination": "src/components/AccountCard.tsx",
@@ -3236,8 +3106,7 @@
       "selector": ".dot.ok",
       "ruleKey": "compatibility-selector:|.dot.ok:1",
       "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/InstancePanel.tsx"
+        "src/components/AccountCard.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
       "destination": "src/components/AccountCard.tsx",
@@ -3252,25 +3121,6 @@
       "ruleKey": "compatibility-selector:|.dot.stale:1",
       "consumerCandidates": [
         "src/components/AccountCard.tsx",
-        "src/components/InstancePanel.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "owner": "src/components/AccountCard.tsx",
-      "destination": "src/components/AccountCard.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-708afa3a0f20",
-      "kind": "compatibility-selector",
-      "selector": ".dot.warn",
-      "ruleKey": "compatibility-selector:|.dot.warn:1",
-      "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstancePanel.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
@@ -3403,7 +3253,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -3554,7 +3403,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -3805,7 +3653,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -3850,7 +3697,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -4087,8 +3933,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -4115,18 +3959,15 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/NeonActivity.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -4889,8 +4730,7 @@
       "ruleKey": "compatibility-selector:|.li-link:1",
       "consumerCandidates": [
         "src/components/AccountCard.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/InstancePanel.tsx"
+        "src/components/ConversationDrawer.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
       "destination": "src/components/AccountCard.tsx",
@@ -4905,8 +4745,7 @@
       "ruleKey": "compatibility-selector:|.li-link:hover:1",
       "consumerCandidates": [
         "src/components/AccountCard.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/InstancePanel.tsx"
+        "src/components/ConversationDrawer.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
       "destination": "src/components/AccountCard.tsx",
@@ -4924,7 +4763,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -4954,7 +4792,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -4984,7 +4821,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -5124,7 +4960,6 @@
         "src/components/CampaignTable.tsx",
         "src/components/CohortComparisonTable.tsx",
         "src/components/LeadsAddedTable.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -5363,13 +5198,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -5428,13 +5261,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -5503,13 +5334,11 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -5517,20 +5346,6 @@
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-af5916ba5e19",
-      "kind": "compatibility-selector",
-      "selector": ".role-badge.admin",
-      "ruleKey": "compatibility-selector:|.role-badge.admin:1",
-      "consumerCandidates": [
-        "src/pages/Team.tsx"
-      ],
-      "owner": "src/pages/Team.tsx",
-      "destination": "src/pages/Team.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 3"
     },
     {
       "id": "compatibility-rule-f0deec905a7e",
@@ -5560,7 +5375,6 @@
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LeadsAddedTable.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/ActiveSequences.tsx",
@@ -5585,7 +5399,6 @@
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LeadsAddedTable.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/ActiveSequences.tsx",
@@ -5622,8 +5435,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -5650,18 +5461,15 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/NeonActivity.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -5694,8 +5502,6 @@
         "src/components/Heatmap.tsx",
         "src/components/ImportCalloutCard.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
-        "src/components/InstancePanel.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
@@ -5722,18 +5528,15 @@
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
         "src/pages/FollowUps.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/LeadsExplorer.tsx",
-        "src/pages/NeonActivity.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SearchLibrary.tsx",
         "src/pages/SentimentAnalysis.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -6037,7 +5840,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -6624,7 +6426,6 @@
       "selector": ".sequence-publish-loading, .sequence-publish-state",
       "ruleKey": "compatibility-selector:|.sequence-publish-loading, .sequence-publish-state:1",
       "consumerCandidates": [
-        "src/pages/Health.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6643,7 +6444,6 @@
         "src/components/FollowUpCalloutCard.tsx",
         "src/components/FollowUpPanel.tsx",
         "src/components/ImportHistoryPanel.tsx",
-        "src/components/InstanceConfigEditor.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
@@ -6669,7 +6469,6 @@
       "selector": ".sequence-publish-state > div",
       "ruleKey": "compatibility-selector:|.sequence-publish-state > div:1",
       "consumerCandidates": [
-        "src/pages/Health.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6684,7 +6483,6 @@
       "selector": ".sequence-publish-state > svg",
       "ruleKey": "compatibility-selector:|.sequence-publish-state > svg:1",
       "consumerCandidates": [
-        "src/pages/Health.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6699,7 +6497,6 @@
       "selector": ".sequence-publish-state p",
       "ruleKey": "compatibility-selector:|.sequence-publish-state p:1",
       "consumerCandidates": [
-        "src/pages/Health.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6714,7 +6511,6 @@
       "selector": ".sequence-publish-state strong",
       "ruleKey": "compatibility-selector:|.sequence-publish-state strong:1",
       "consumerCandidates": [
-        "src/pages/Health.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6729,7 +6525,6 @@
       "selector": ".sequence-publish-state",
       "ruleKey": "compatibility-selector:|.sequence-publish-state:1",
       "consumerCandidates": [
-        "src/pages/Health.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -6745,7 +6540,6 @@
       "ruleKey": "compatibility-selector:|.sequence-publish-state.error > svg:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -6762,7 +6556,6 @@
       "ruleKey": "compatibility-selector:|.sequence-publish-state.error:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -6876,7 +6669,6 @@
       "ruleKey": "compatibility-selector:|.sequence-save-state.conflict i, .sequence-save-state.error i:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -6893,7 +6685,6 @@
       "ruleKey": "compatibility-selector:|.sequence-save-state.conflict, .sequence-save-state.error:1",
       "consumerCandidates": [
         "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Playbook.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
@@ -7007,7 +6798,6 @@
         "src/pages/Hypotheses.tsx",
         "src/pages/Icp.tsx",
         "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -7159,62 +6949,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-f2541b9631f8",
-      "kind": "compatibility-selector",
-      "selector": ".status-dot-label.active > span",
-      "ruleKey": "compatibility-selector:|.status-dot-label.active > span:1",
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/DateRangePicker.tsx",
-      "destination": "src/components/DateRangePicker.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-35bc6bc633f4",
-      "kind": "compatibility-selector",
-      "selector": ".status-dot-label.active",
-      "ruleKey": "compatibility-selector:|.status-dot-label.active:1",
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/ImportHistoryPanel.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/DateRangePicker.tsx",
-      "destination": "src/components/DateRangePicker.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-7c49c313577f",
-      "kind": "compatibility-selector",
-      "selector": ".status-dot-label.inactive",
-      "ruleKey": "compatibility-selector:|.status-dot-label.inactive:1",
-      "consumerCandidates": [
-        "src/pages/Team.tsx"
-      ],
-      "owner": "src/pages/Team.tsx",
-      "destination": "src/pages/Team.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 3"
-    },
-    {
       "id": "compatibility-rule-101ec03da029",
       "kind": "compatibility-selector",
       "selector": ".substatus-chip, .pipe-stage-select, .pipe-assign-select",
@@ -7238,7 +6972,6 @@
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
@@ -7257,119 +6990,11 @@
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Health.tsx",
         "src/pages/Hypotheses.tsx",
         "src/pages/UnifiedApolloCsvImport.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
       "destination": "src/components/AddBatchesTable.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-50fd67aa747f",
-      "kind": "compatibility-selector",
-      "selector": ".table-scroll.tall",
-      "ruleKey": "compatibility-selector:|.table-scroll.tall:1",
-      "consumerCandidates": [
-        "src/components/AddBatchesTable.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/Health.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/AddBatchesTable.tsx",
-      "destination": "src/components/AddBatchesTable.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-b50c3ba5b365",
-      "kind": "compatibility-selector",
-      "selector": ".team-actions .btn + .btn",
-      "ruleKey": "compatibility-selector:|.team-actions .btn + .btn:1",
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/CompanyResolutionModal.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Hypotheses.tsx",
-        "src/pages/Icp.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/pages/Team.tsx",
-        "src/pages/UnifiedApolloCsvImport.tsx"
-      ],
-      "owner": "src/components/ErrorBoundary.tsx",
-      "destination": "src/components/ErrorBoundary.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-91272a7c004a",
-      "kind": "compatibility-selector",
-      "selector": ".text-danger",
-      "ruleKey": "compatibility-selector:|.text-danger:1",
-      "consumerCandidates": [
-        "src/components/InstanceConfigEditor.tsx",
-        "src/pages/Health.tsx"
-      ],
-      "owner": "src/components/InstanceConfigEditor.tsx",
-      "destination": "src/components/InstanceConfigEditor.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-0ea53cdf69aa",
-      "kind": "compatibility-selector",
-      "selector": ".uptime-tick.error",
-      "ruleKey": "compatibility-selector:|.uptime-tick.error:1",
-      "consumerCandidates": [
-        "src/components/InstancePanel.tsx",
-        "src/components/conversation/ConversationThread.tsx",
-        "src/pages/Health.tsx",
-        "src/pages/Playbook.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "owner": "src/components/InstancePanel.tsx",
-      "destination": "src/components/InstancePanel.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-2d1c43acc008",
-      "kind": "compatibility-selector",
-      "selector": ".uptime-tick.ok",
-      "ruleKey": "compatibility-selector:|.uptime-tick.ok:1",
-      "consumerCandidates": [
-        "src/components/InstancePanel.tsx"
-      ],
-      "owner": "src/components/InstancePanel.tsx",
-      "destination": "src/components/InstancePanel.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-a28ab292d14a",
-      "kind": "compatibility-selector",
-      "selector": ".uptime-tick.running",
-      "ruleKey": "compatibility-selector:|.uptime-tick.running:1",
-      "consumerCandidates": [
-        "src/components/InstancePanel.tsx"
-      ],
-      "owner": "src/components/InstancePanel.tsx",
-      "destination": "src/components/InstancePanel.tsx",
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 12"

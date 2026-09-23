@@ -49,7 +49,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, UserPlus } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ShieldCheck, UserPlus, Users } from 'lucide-react'
 import { authPost } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 import { useData } from '../lib/DataContext'
@@ -63,7 +64,10 @@ import {
 import { teamAdminWritesAllowed } from '../lib/rosterWrites'
 import { useToast } from '../lib/ToastContext'
 import type { TeamMember } from '../lib/types'
-import { Button, PageHeader } from '../ui'
+import {
+  Badge, Button, Checkbox, Dialog, EmptyState, InlineError, PageHeader, Panel, SelectField,
+  StatusText, Table, TableFrame, TextField, UpdatingNote, useDirtyGuard,
+} from '../ui'
 
 async function responseBody(response: Response): Promise<Record<string, unknown>> {
   return (await response.json().catch(() => ({}))) as Record<string, unknown>
@@ -204,6 +208,8 @@ function IdentityTeam() {
   const activeCount = members.filter((row) => row.active).length
   const adminCount = members.filter((row) => row.role === 'admin' && row.active).length
 
+  const inviteDirty = inviteName.trim() !== '' || inviteEmail.trim() !== '' || inviteRole !== 'member'
+
   return (
     <>
       <PageHeader
@@ -216,179 +222,81 @@ function IdentityTeam() {
         )}
       />
 
-      <div className="team-summary card">
-        <div>
-          <span className="metric-value">{activeCount}</span>
-          <span className="metric-label">Active teammates</span>
-        </div>
-        <div>
-          <span className="metric-value">{members.length}</span>
-          <span className="metric-label">Directory entries</span>
-        </div>
-        <div>
-          <span className="metric-value">{adminCount}</span>
-          <span className="metric-label">Active admins</span>
-        </div>
-      </div>
+      <TeamSummary loading={loading} items={[
+        { label: 'Active teammates', value: activeCount },
+        { label: 'Directory entries', value: members.length },
+        { label: 'Active admins', value: adminCount },
+      ]} />
 
-      {loadError && (
-        <div className="card auth-error" role="alert">
-          {loadError}
-        </div>
-      )}
+      {loadError && <InlineError title={loadError} />}
 
       {inviteOpen && isAdmin && (
-        <section className="card team-form" aria-label="Add teammate">
-          <div className="team-form-head">
-            <div>
-              <h2>Add teammate</h2>
-              <p className="muted small">
-                Creates the account and its team membership in one transaction,
-                then emails them a one-time link for setting their own password.
-              </p>
-            </div>
-            <button className="btn ghost sm" type="button" onClick={resetInvite}>Cancel</button>
-          </div>
-          <div className="team-form-grid">
-            <label>
-              Name
-              <input
-                value={inviteName}
-                maxLength={100}
-                onChange={(event) => setInviteName(event.target.value)}
-                placeholder="Teammate name"
-              />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
-                placeholder="name@company.com"
-              />
-            </label>
-            <label>
-              Role
-              <select
-                value={inviteRole}
-                onChange={(event) => setInviteRole(event.target.value as 'member' | 'admin')}
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-          </div>
-          <button
-            className="btn accent"
-            type="button"
-            disabled={inviteBusy || !inviteName.trim() || !inviteEmail.trim()}
-            onClick={() => void submitInvite()}
-          >
-            {inviteBusy ? 'Adding…' : 'Add teammate'}
-          </button>
-        </section>
+        <InviteDialog
+          title="Add teammate"
+          description="Creates the account and its team membership in one transaction, then emails them a one-time link for setting their own password."
+          submitLabel={inviteBusy ? 'Adding…' : 'Add teammate'}
+          busy={inviteBusy}
+          canSubmit={Boolean(inviteName.trim() && inviteEmail.trim())}
+          dirty={inviteDirty}
+          onSubmit={() => void submitInvite()}
+          onCancel={resetInvite}
+        >
+          <TextField
+            label="Name"
+            value={inviteName}
+            maxLength={100}
+            onChange={(event) => setInviteName(event.target.value)}
+            placeholder="Teammate name"
+          />
+          <TextField
+            label="Email"
+            type="email"
+            value={inviteEmail}
+            onChange={(event) => setInviteEmail(event.target.value)}
+            placeholder="name@company.com"
+          />
+          <RoleSelect label="Role" value={inviteRole} onChange={setInviteRole} />
+        </InviteDialog>
       )}
 
-      <section className="card team-table-wrap">
-        <table className="team-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email / login</th>
-              <th>Role</th>
-              <th>Status</th>
-              {isAdmin && <th aria-label="Actions" />}
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((row) => {
-              const editing = editingUserId === row.userId
-              const isCurrent = currentMember?.id === row.id
-              return (
-                <tr key={row.userId}>
-                  <td>
-                    <span className="team-name">
-                      {row.name}
-                      {isCurrent && <span className="badge">You</span>}
-                    </span>
-                  </td>
-                  <td>
-                    <div>{row.email || <span className="muted">No login email</span>}</div>
-                    <div className="muted small">Login enabled</div>
-                  </td>
-                  <td>
-                    {editing ? (
-                      <select
-                        value={editRole}
-                        onChange={(event) => setEditRole(event.target.value as 'member' | 'admin')}
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : (
-                      <span className={`role-badge ${row.role}`}>
-                        {row.role === 'admin' && <ShieldCheck size={13} />}
-                        {row.role}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {editing ? (
-                      <label className="team-active-toggle">
-                        <input
-                          type="checkbox"
-                          checked={editActive}
-                          onChange={(event) => setEditActive(event.target.checked)}
-                        />
-                        Active
-                      </label>
-                    ) : (
-                      <span className={`status-dot-label ${row.active ? 'active' : 'inactive'}`}>
-                        <span aria-hidden="true" />
-                        {row.active ? 'Active' : 'Inactive'}
-                      </span>
-                    )}
-                  </td>
-                  {isAdmin && (
-                    <td className="team-actions">
-                      {editing ? (
-                        <>
-                          <button
-                            className="btn accent sm"
-                            disabled={editBusy}
-                            onClick={() => void saveEdit(row)}
-                          >
-                            {editBusy ? 'Saving…' : 'Save'}
-                          </button>
-                          <button
-                            className="btn ghost sm"
-                            disabled={editBusy}
-                            onClick={() => setEditingUserId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <button className="btn ghost sm" onClick={() => beginEdit(row)}>
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              )
-            })}
-            {!loading && members.length === 0 && (
-              <tr>
-                <td colSpan={isAdmin ? 5 : 4} className="muted">
-                  No teammates to show.
+      <MemberTable
+        showActions={isAdmin}
+        loading={loading}
+        empty={members.length === 0}
+      >
+        {members.map((row) => {
+          const editing = editingUserId === row.userId
+          const isCurrent = currentMember?.id === row.id
+          return (
+            <tr key={row.userId}>
+              <td><MemberName name={row.name} current={isCurrent} /></td>
+              <td><MemberLogin email={row.email} detail="Login enabled" /></td>
+              <td>
+                {editing
+                  ? <RoleSelect label={`Role for ${row.name}`} labelHidden value={editRole} onChange={setEditRole} />
+                  : <RoleMark role={row.role} />}
+              </td>
+              <td>
+                {editing
+                  ? <Checkbox label="Active" checked={editActive} onChange={(event) => setEditActive(event.target.checked)} />
+                  : <ActiveMark active={row.active} />}
+              </td>
+              {isAdmin && (
+                <td className="text-right whitespace-nowrap">
+                  <RowEditActions
+                    name={row.name}
+                    editing={editing}
+                    busy={editBusy}
+                    onEdit={() => beginEdit(row)}
+                    onSave={() => void saveEdit(row)}
+                    onCancel={() => setEditingUserId(null)}
+                  />
                 </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+              )}
+            </tr>
+          )
+        })}
+      </MemberTable>
     </>
   )
 }
@@ -511,6 +419,9 @@ function SupabaseTeam() {
     }
   }
 
+  const inviteDirty = existingId !== '' || inviteName.trim() !== '' || inviteEmail.trim() !== '' || inviteRole !== 'member'
+  const showActions = isAdmin && canManage
+
   return (
     <>
       <PageHeader
@@ -526,189 +437,260 @@ function SupabaseTeam() {
         )}
       />
 
-      <div className="team-summary card">
-        <div>
-          <span className="metric-value">{members.filter((member) => member.active).length}</span>
-          <span className="metric-label">Active teammates</span>
-        </div>
-        <div>
-          <span className="metric-value">{members.filter(hasLogin).length}</span>
-          <span className="metric-label">Login-enabled</span>
-        </div>
-        <div>
-          <span className="metric-value">
-            {members.filter((member) => member.role === 'admin' && member.active && hasLogin(member)).length}
-          </span>
-          <span className="metric-label">Active admins</span>
-        </div>
-      </div>
+      <TeamSummary items={[
+        { label: 'Active teammates', value: members.filter((member) => member.active).length },
+        { label: 'Login-enabled', value: members.filter(hasLogin).length },
+        { label: 'Active admins', value: members.filter((member) => member.role === 'admin' && member.active && hasLogin(member)).length },
+      ]} />
 
       {inviteOpen && isAdmin && canManage && (
-        <section className="card team-form" aria-label="Invite teammate">
-          <div className="team-form-head">
-            <div>
-              <h2>Invite teammate</h2>
-              <p className="muted small">
-                Link an assignment-only teammate or create a new directory entry.
-              </p>
-            </div>
-            <button className="btn ghost sm" type="button" onClick={resetInvite}>Cancel</button>
-          </div>
-          <div className="team-form-grid">
-            <label>
-              Existing teammate
-              <select value={existingId} onChange={(event) => chooseExisting(event.target.value)}>
-                <option value="">Create new</option>
-                {assignmentOnly.map((member) => (
-                  <option key={member.id} value={member.id}>{member.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Name
-              <input
-                value={inviteName}
-                maxLength={100}
-                onChange={(event) => setInviteName(event.target.value)}
-                placeholder="Teammate name"
-              />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
-                placeholder="name@company.com"
-              />
-            </label>
-            <label>
-              Role
-              <select
-                value={inviteRole}
-                onChange={(event) => setInviteRole(event.target.value as 'member' | 'admin')}
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-          </div>
-          <button
-            className="btn accent"
-            type="button"
-            disabled={inviteBusy || !inviteName.trim() || !inviteEmail.trim()}
-            onClick={() => void submitInvite()}
-          >
-            {inviteBusy ? 'Sending…' : 'Send invitation'}
-          </button>
-        </section>
+        <InviteDialog
+          title="Invite teammate"
+          description="Link an assignment-only teammate or create a new directory entry."
+          submitLabel={inviteBusy ? 'Sending…' : 'Send invitation'}
+          busy={inviteBusy}
+          canSubmit={Boolean(inviteName.trim() && inviteEmail.trim())}
+          dirty={inviteDirty}
+          onSubmit={() => void submitInvite()}
+          onCancel={resetInvite}
+        >
+          <SelectField label="Existing teammate" value={existingId} onChange={(event) => chooseExisting(event.target.value)}>
+            <option value="">Create new</option>
+            {assignmentOnly.map((member) => (
+              <option key={member.id} value={member.id}>{member.name}</option>
+            ))}
+          </SelectField>
+          <TextField
+            label="Name"
+            value={inviteName}
+            maxLength={100}
+            onChange={(event) => setInviteName(event.target.value)}
+            placeholder="Teammate name"
+          />
+          <TextField
+            label="Email"
+            type="email"
+            value={inviteEmail}
+            onChange={(event) => setInviteEmail(event.target.value)}
+            placeholder="name@company.com"
+          />
+          <RoleSelect label="Role" value={inviteRole} onChange={setInviteRole} />
+        </InviteDialog>
       )}
 
-      <section className="card team-table-wrap">
-        <table className="team-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email / login</th>
-              <th>Role</th>
-              <th>Status</th>
-              {isAdmin && canManage && <th aria-label="Actions" />}
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((teamMember) => {
-              const editing = editingId === teamMember.id
-              // Only when both sides of the comparison are in one id space.
-              // `currentMember` is the Supabase authenticator's row; on the Neon
-              // roster the same integer names somebody else, so no badge at all
-              // beats a badge on the wrong person.
-              const isCurrent = canManage && currentMember?.id === teamMember.id
-              return (
-                <tr key={teamMember.id}>
-                  <td>
-                    {editing ? (
-                      <input
-                        value={editName}
-                        maxLength={100}
-                        onChange={(event) => setEditName(event.target.value)}
-                      />
-                    ) : (
-                      <span className="team-name">
-                        {teamMember.name}
-                        {isCurrent && <span className="badge">You</span>}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <div>{teamMember.email || <span className="muted">No login email</span>}</div>
-                    <div className="muted small">
-                      {hasLogin(teamMember) ? 'Login enabled' : 'Assignment only'}
-                    </div>
-                  </td>
-                  <td>
-                    {editing ? (
-                      <select
-                        value={editRole}
-                        onChange={(event) => setEditRole(event.target.value as 'member' | 'admin')}
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : (
-                      <span className={`role-badge ${teamMember.role}`}>
-                        {teamMember.role === 'admin' && <ShieldCheck size={13} />}
-                        {teamMember.role}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {editing ? (
-                      <label className="team-active-toggle">
-                        <input
-                          type="checkbox"
-                          checked={editActive}
-                          onChange={(event) => setEditActive(event.target.checked)}
-                        />
-                        Active
-                      </label>
-                    ) : (
-                      <span className={`status-dot-label ${teamMember.active ? 'active' : 'inactive'}`}>
-                        <span aria-hidden="true" />
-                        {teamMember.active ? 'Active' : 'Inactive'}
-                      </span>
-                    )}
-                  </td>
-                  {isAdmin && canManage && (
-                    <td className="team-actions">
-                      {editing ? (
-                        <>
-                          <button className="btn accent sm" disabled={editBusy} onClick={() => void saveEdit()}>
-                            {editBusy ? 'Saving…' : 'Save'}
-                          </button>
-                          <button className="btn ghost sm" disabled={editBusy} onClick={() => setEditingId(null)}>
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <button className="btn ghost sm" onClick={() => beginEdit(teamMember)}>
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              )
-            })}
-            {members.length === 0 && (
-              <tr>
-                <td colSpan={isAdmin && canManage ? 5 : 4} className="muted">
-                  No teammates to show.
+      <MemberTable showActions={showActions} loading={false} empty={members.length === 0}>
+        {members.map((teamMember) => {
+          const editing = editingId === teamMember.id
+          // Only when both sides of the comparison are in one id space.
+          // `currentMember` is the Supabase authenticator's row; on the Neon
+          // roster the same integer names somebody else, so no badge at all
+          // beats a badge on the wrong person.
+          const isCurrent = canManage && currentMember?.id === teamMember.id
+          return (
+            <tr key={teamMember.id}>
+              <td>
+                {editing ? (
+                  <TextField
+                    label={`Name for ${teamMember.name}`}
+                    labelHidden
+                    value={editName}
+                    maxLength={100}
+                    onChange={(event) => setEditName(event.target.value)}
+                  />
+                ) : (
+                  <MemberName name={teamMember.name} current={isCurrent} />
+                )}
+              </td>
+              <td>
+                <MemberLogin
+                  email={teamMember.email}
+                  detail={hasLogin(teamMember) ? 'Login enabled' : 'Assignment only'}
+                />
+              </td>
+              <td>
+                {editing
+                  ? <RoleSelect label={`Role for ${teamMember.name}`} labelHidden value={editRole} onChange={setEditRole} />
+                  : <RoleMark role={teamMember.role} />}
+              </td>
+              <td>
+                {editing
+                  ? <Checkbox label="Active" checked={editActive} onChange={(event) => setEditActive(event.target.checked)} />
+                  : <ActiveMark active={teamMember.active} />}
+              </td>
+              {showActions && (
+                <td className="text-right whitespace-nowrap">
+                  <RowEditActions
+                    name={teamMember.name}
+                    editing={editing}
+                    busy={editBusy}
+                    onEdit={() => beginEdit(teamMember)}
+                    onSave={() => void saveEdit()}
+                    onCancel={() => setEditingId(null)}
+                  />
                 </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+              )}
+            </tr>
+          )
+        })}
+      </MemberTable>
     </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Presentation shared by both paths. Each receives values and callbacks from
+// its path's state; none of them owns a draft, a request or an id.
+// ---------------------------------------------------------------------------
+
+type Role = 'member' | 'admin'
+
+/** While the roster is still loading the counts are unknown, not zero. */
+function TeamSummary({ items, loading = false }: { items: { label: string; value: number }[]; loading?: boolean }) {
+  return (
+    <Panel className="mb-app-xl">
+      <dl className="m-0 grid grid-cols-3 gap-app-xl max-[700px]:grid-cols-1">
+        {items.map((item) => (
+          <div className="flex flex-col-reverse gap-app-xs" key={item.label}>
+            <dt className="text-app-meta text-app-text-muted">{item.label}</dt>
+            <dd className="m-0 text-app-kpi font-semibold tabular-nums">{loading ? '—' : item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Panel>
+  )
+}
+
+function InviteDialog({
+  title, description, submitLabel, busy, canSubmit, dirty, onSubmit, onCancel, children,
+}: {
+  title: string
+  description: string
+  submitLabel: string
+  busy: boolean
+  canSubmit: boolean
+  dirty: boolean
+  onSubmit: () => void
+  onCancel: () => void
+  children: ReactNode
+}) {
+  const { guard, prompt } = useDirtyGuard(dirty && !busy)
+  return (
+    <>
+      <Dialog
+        title={title}
+        description={description}
+        onRequestClose={() => guard(onCancel)}
+        busy={busy}
+        busyMessage="Wait for the invitation to finish before closing."
+        footer={<>
+          <Button variant="secondary" disabled={busy} onClick={() => guard(onCancel)}>Cancel</Button>
+          <Button variant="primary" loading={busy} disabled={!canSubmit} onClick={onSubmit}>{submitLabel}</Button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-app-lg max-[700px]:grid-cols-1">{children}</div>
+      </Dialog>
+      {prompt}
+    </>
+  )
+}
+
+function RoleSelect({ label, labelHidden, value, onChange }: {
+  label: string
+  labelHidden?: boolean
+  value: Role
+  onChange: (role: Role) => void
+}) {
+  return (
+    <SelectField label={label} labelHidden={labelHidden} value={value} onChange={(event) => onChange(event.target.value as Role)}>
+      <option value="member">Member</option>
+      <option value="admin">Admin</option>
+    </SelectField>
+  )
+}
+
+function MemberTable({ showActions, loading, empty, children }: {
+  showActions: boolean
+  loading: boolean
+  empty: boolean
+  children: ReactNode
+}) {
+  return (
+    <TableFrame scrollLabel="Team members" className="min-w-0">
+      <Table caption="Team members" className="min-w-[720px]">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Email / login</th>
+            <th scope="col">Role</th>
+            <th scope="col">Status</th>
+            {showActions && <th scope="col" aria-label="Actions" />}
+          </tr>
+        </thead>
+        <tbody>
+          {children}
+          {loading && empty && (
+            <tr><td colSpan={showActions ? 5 : 4}><UpdatingNote>Loading teammates…</UpdatingNote></td></tr>
+          )}
+          {!loading && empty && (
+            <tr>
+              <td colSpan={showActions ? 5 : 4}>
+                <EmptyState icon={Users} title="No teammates to show" />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </Table>
+    </TableFrame>
+  )
+}
+
+function MemberName({ name, current }: { name: string; current: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-app-sm font-semibold">
+      {name}
+      {current && <Badge tone="info">You</Badge>}
+    </span>
+  )
+}
+
+function MemberLogin({ email, detail }: { email: string | null | undefined; detail: string }) {
+  return (
+    <>
+      <div>{email || <span className="text-app-text-muted">No login email</span>}</div>
+      <div className="text-app-meta text-app-text-muted">{detail}</div>
+    </>
+  )
+}
+
+function RoleMark({ role }: { role: Role }) {
+  return role === 'admin'
+    ? <Badge tone="accent" icon={<ShieldCheck size={14} aria-hidden="true" />}>Admin</Badge>
+    : <Badge>Member</Badge>
+}
+
+function ActiveMark({ active }: { active: boolean }) {
+  return (
+    <StatusText tone={active ? 'success' : 'neutral'} icon={<span className="size-[7px] rounded-full bg-current" aria-hidden="true" />}>
+      {active ? 'Active' : 'Inactive'}
+    </StatusText>
+  )
+}
+
+function RowEditActions({ name, editing, busy, onEdit, onSave, onCancel }: {
+  name: string
+  editing: boolean
+  busy: boolean
+  onEdit: () => void
+  onSave: () => void
+  onCancel: () => void
+}) {
+  if (!editing) {
+    return <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${name}`}>Edit</Button>
+  }
+  return (
+    <span className="inline-flex gap-app-sm">
+      <Button variant="primary" size="sm" loading={busy} onClick={onSave}>{busy ? 'Saving…' : 'Save'}</Button>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>
+    </span>
   )
 }

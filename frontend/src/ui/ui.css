@@ -798,7 +798,6 @@ tr:last-child td { border-bottom: none; }
 /* fixed-width sort-direction glyph so toggling sort never reflows the column */
 .sort-ind { display: inline-block; width: 12px; text-align: center; color: var(--text-muted); }
 .table-scroll { max-height: 420px; overflow-y: auto; overflow-x: auto; }
-.table-scroll.tall { max-height: calc(100vh - 300px); min-height: 320px; }
 /* No bottom fade: a clipped last row is announced by the scrollbar and by the
  * row count in the toolbar, not by making the row unreadable. */
 /* header stays put while the body scrolls (border-collapse drops the th border
@@ -814,9 +813,7 @@ tr:last-child td { border-bottom: none; }
 @media (max-width: 680px) {
 }
 .error-cell-btn.open { white-space: pre-wrap; word-break: break-word; }
-.uptime-tick.ok { background: var(--success); }
-.uptime-tick.error { background: var(--danger); }
-.uptime-tick.running { background: var(--warning); }.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
 .dot.stale { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
 .dot.inline { display: inline-block; margin-right: 8px; }
@@ -877,7 +874,6 @@ tr:last-child td { border-bottom: none; }
   white-space: nowrap;
 }
 .badge.risk { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
-.badge.status-ok { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
 .badge.status-error { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
 .badge.status-running { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
 
@@ -1251,7 +1247,6 @@ tr.row-clickable:focus-visible,
 .conv-close { display: inline-flex; align-items: center; justify-content: center; }
 .msg-reclassify.open .msg-senti-btns,
 .msg:hover .msg-senti-btns { display: flex; }/* --- Inline-style cleanup: warn dot, error banner, danger text, disabled day --- */
-.dot.warn { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
 
 .banner.error {
   background: var(--danger-subtle);
@@ -1259,7 +1254,6 @@ tr.row-clickable:focus-visible,
   color: var(--danger);
 }
 
-.text-danger { color: var(--danger); }
 
 .drp-day.disabled { opacity: 0.3; cursor: not-allowed; }
 .drp-day.disabled:hover { background: none; }
@@ -1657,16 +1651,6 @@ td .pipe-stage-select.quiet:focus-visible {
 
 /* --- Authentication: AuthCard.tsx owns its utilities; the spinner keyframes
  * stay shared (the sequence publish strip reuses them). */
-/* Team's inline-error alert still uses this; it moves with Team in Phase 3. */
-.auth-error {
-  padding: var(--space-md);
-  border: 1px solid var(--danger-border);
-  border-radius: var(--radius-control);
-  background: var(--danger-subtle);
-  color: var(--danger);
-  font-size: var(--text-table);
-  line-height: var(--leading-table);
-}
 @keyframes auth-spin { to { transform: rotate(360deg); } }
 
 /* --- Authenticated identity --------------------------------------------- */
@@ -1684,11 +1668,6 @@ td .pipe-stage-select.quiet:focus-visible {
 }
 .identity-chip strong { color: var(--text); font-weight: 600; }
 .identity-chip.compact { width: fit-content; min-height: 30px; padding-block: 5px; }
-.role-badge.admin { color: var(--purple); border-color: var(--purple-border); background: var(--purple-subtle); }
-.status-dot-label.active { color: var(--success); }
-.status-dot-label.active > span { background: var(--success); }
-.status-dot-label.inactive { color: var(--text-muted); }
-.team-actions .btn + .btn { margin-left: 6px; }
 
 .campaign-runtime.compact { gap: 2px; }
 .runtime-unknown, .archive-unknown, .observation-unsupported,

@@ -55,7 +55,6 @@
 @import './pages/replies-inbox.css' layer(app);
 @import './pages/sentiment-analysis.css' layer(app);
 @import './components/overview/overview.css' layer(app);
-@import './pages/team.css' layer(app);
 @import './pages/campaign-detail.css' layer(app);
 @import './components/instance-panel.css' layer(app);
 @import './pages/sequence-builder.css' layer(app);

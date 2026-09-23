@@ -1,2 +1,8 @@
+/* ui-exception(health-uptime-strip): a 14-run strip of fixed 6px ticks whose
+ * colour and height encode each run's status; utilities would need a class map
+ * per status for no gain. verify: Health accounts panel at 1280/1440/1920. */
 .uptime-tick { width: 6px; height: 16px; border-radius: var(--radius-xs); background: var(--surface-3); }
+.uptime-tick.ok { background: var(--success); }
+.uptime-tick.error { background: var(--danger); }
+.uptime-tick.running { background: var(--warning); }
 /* Per-instance online config editor (Health page) */

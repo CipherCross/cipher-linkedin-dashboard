@@ -109,3 +109,39 @@ Browser evidence — **local synthetic fixture, headless Chrome, side by side ag
 Not exercised in a browser: the sign-in form itself (the fixture has no signed-out identity state; covered by `shellAccess`), password reset screen (covered by `resetPasswordScreen`), and the screen-level ErrorBoundary.
 
 Next: Phase 3 — Team first (reference directory/table/row-action/dialog), then Health and Neon Activity.
+
+## Phase 3 — accepted (2026-09-23)
+
+Team (reference, by the orchestrator), then Health and Neon Activity (Sonnet worker, reviewed and corrected by the orchestrator).
+
+- **Team** — the directory/table/row-action/dialog reference. The summary is a `Panel` holding a `<dl>`. It shows "—" instead of "0" while the identity roster loads, the confidently-wrong zero the page header warns about. The inline invite card became `InviteDialog`: `Dialog`, `TextField`/`SelectField`, busy while submitting, `useDirtyGuard` on Escape/backdrop/Cancel. The roster is `TableFrame`/`Table` ("Team members"). Role and status use `Badge`/`StatusText`, and "You" is a `Badge`. Row edit stays inline, with labelled `SelectField`/`Checkbox`/`TextField` and `Button`s; Edit is named per row ("Edit Max Member"). Load failure is `InlineError`, empty is `EmptyState`, loading is `UpdatingNote`. Handlers, admin gates, id spaces and the retired Supabase writer (`teamAdminWritesAllowed` always false) are unchanged. `team.css` deleted; `.auth-error`, `.role-badge.admin`, `.status-dot-label.*` and `.team-actions .btn + .btn` removed from `ui.css`.
+- **Health**:
+  - The Monday-briefing `<details>` flyout became a header `Button` that opens a `Dialog`. It is admin-gated, busy while posting, and has a footer Done/Regenerate and post; the endpoint and states are unchanged.
+  - Publishing compatibility and recent sync runs are `Panel`/`SectionHeader`/`TableFrame`/`Table`. Status and canary use `Badge` tones, and the failed-compatibility read is `InlineError` with `EmptyState` for no probes. The error cell is a ghost `Button` disclosure.
+  - `InstancePanel` uses `Panel`/`StatusText`.
+  - `InstanceConfigEditor` uses `TextField`/`SelectField`/`TextareaField`/`Button`. Its `window.confirm` became `useDirtyGuard`; the `beforeunload` guard is kept. It is single-column after browser review: the two-column layout clipped selects to "Defau" in the 300px rail.
+  - The uptime strip stays contextual CSS in `instance-panel.css` under `ui-exception(health-uptime-strip)`.
+- **Neon Activity** — dropped a redundant nested `.page` wrapper (it rendered inside Layout's `.page`, doubling padding) and its last `muted` classes.
+- **Shared Dialog** — the default initial focus is now the first control in the body, falling back to Close. Team's invite opens on Name and Leads' Filters on Campaign; before, both opened on Close. There is a new `uiPrimitives` case for this.
+- Dead shared selectors deleted after grep: `.badge.status-ok`, `.text-danger`, `.dot.warn`, `.table-scroll.tall`.
+
+Tests: new `teamPage` (9), `healthPage` (7), `neonActivityPage`. Mutation checks: showing Add teammate to a member fails `teamPage`; removing Health's briefing admin gate fails `healthPage`.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 88 files / 1,357 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 332 → 297, compatibility tokens 1,438 → 1,332, selectors 404 → 391; Phase 3 files now have zero raw controls, zero compatibility tokens, zero modal roots); fixture `--check` passed; `git diff --check` passed. Production gzip JS 652,863 (+0.3% vs Phase 0), CSS 40,059 (−806 vs Phase 0).
+
+Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720 / 1440×900 / 1920×1080**, no writes:
+
+| Surface | Result at all three viewports |
+| --- | --- |
+| Team admin | Add teammate + per-row Edit; 5 columns; gutters 24/32/32; no overflow-x; smallest text 13px |
+| Team member | no Add teammate, no Edit, no Actions column |
+| Team invite dialog | opens centered with focus on Name; typed draft + Escape → "Discard unsaved changes?"; Keep editing keeps the draft; Discard closes and returns focus to Add teammate |
+| Team row edit | Role select, Active checkbox, Save, Cancel in a 72px row |
+| Health admin / member / empty | admin: Publishing compatibility (fixture read refused → InlineError), Recent sync runs (EmptyState), Accounts; member: no compatibility panel, "Admin only" config; empty: "No accounts registered" |
+| Health briefing dialog | Close / Done / Regenerate and post; Escape returns focus to Monday briefing |
+| Health config editor | dirty Close → "Discard unsaved changes?"; single-column fields 224px wide in the rail |
+| Neon Activity | h1 + section; fixture has no activity op, so its failure state (InlineError with Retry) is what renders |
+
+Known and left: the account avatar's initials render at 12.92px (Avatar scales them from its 34px size, unchanged from HEAD) — Avatar belongs to Phase 12. Neon Activity's populated/empty rendering is covered by `neonActivityPage` only; the fixture does not implement its read.
+
+Next: Phase 4 — SearchLibrary first (list + dirty-form reference), then Playbook, ICP, Hypotheses (four hand-built dialogs).
