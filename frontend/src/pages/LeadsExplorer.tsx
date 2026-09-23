@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  ChevronDown, ChevronRight, Columns3, Download, Filter, GraduationCap, Loader2, SearchX, Sparkles,
+  ChevronDown, ChevronRight, Columns3, Download, Filter, GraduationCap, SearchX, Sparkles,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -15,9 +15,11 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { authFetch } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 import {
-  AccountIdentity, ActiveFilters, Button, Dialog, EmptyState, FilterCount, InlineError, LinkButton,
-  PageHeader, Panel, SelectField, TableFrame, TableToolbar, Tabs, TextField, Toolbar,
+  AccountIdentity, ActiveFilters, Badge, Button, EmptyState, FilterCount, FilterDialog, InlineError,
+  LinkButton, PageHeader, Panel, Select, SelectField, SortHeader, StatusText, Table, TableFrame,
+  TableToolbar, Tabs, TextField, Toolbar, UpdatingNote,
 } from '../ui'
+import type { Tone } from '../ui'
 import { COPY } from '../ui/labels'
 import { LeadMilestoneBadge, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
 import { LostReasonModal } from '../components/LostReasonModal'
@@ -40,6 +42,7 @@ import {
   followUpKey,
   followUpStateMap,
 } from '../lib/followUps'
+import type { FollowUpBucket } from '../lib/followUps'
 
 const PAGE_SIZE = 50
 
@@ -92,6 +95,14 @@ const SHEET_FILTER_KEYS = [
 
 // The "replied within" window options (days). '' / absent = any time.
 const REPLIED_DAYS = new Set(['7', '30', '90'])
+
+/* Due-date urgency, in the same words as the Follow-ups queue. */
+const FOLLOW_UP_TONE: Record<FollowUpBucket, Tone> = {
+  overdue: 'danger',
+  today: 'warning',
+  upcoming: 'accent',
+  unscheduled: 'neutral',
+}
 
 export function LeadsExplorer() {
   const { isAdmin } = useAuth()
@@ -641,8 +652,14 @@ export function LeadsExplorer() {
     next.delete('page')
     setParams(next, { replace: true })
   }
-  const sortInd = (key: SortKey) => (
-    <span className="sort-ind">{key === sortKey ? (sortAsc ? '↑' : '↓') : ''}</span>
+  const sortHeader = (key: SortKey, label: string) => (
+    <SortHeader
+      key={key}
+      label={label}
+      active={key === sortKey}
+      direction={sortAsc ? 'asc' : 'desc'}
+      onSort={() => onSort(key)}
+    />
   )
 
   const exportCsv = async () => {
@@ -744,18 +761,16 @@ export function LeadsExplorer() {
       </Toolbar>
 
       {filterDraft && (
-        <Dialog
-          title={COPY.filters}
+        <FilterDialog
           description="These apply on top of the search and the account selected on the page. Nothing changes until you apply."
-          onRequestClose={() => setFilterDraft(null)}
-          footerNote={draftFilterCount ? `${draftFilterCount} filter${draftFilterCount === 1 ? '' : 's'} selected` : 'No filters selected'}
-          footer={<>
-            <Button variant="ghost" onClick={clearDraftFilters}>{COPY.clearAll}</Button>
-            <Button variant="secondary" onClick={() => setFilterDraft(null)}>{COPY.cancel}</Button>
-            <Button variant="primary" onClick={applyFilters}>{COPY.apply}</Button>
-          </>}
+          selectedCount={draftFilterCount}
+          onClearAll={clearDraftFilters}
+          onCancel={() => setFilterDraft(null)}
+          onApply={applyFilters}
         >
-          <div className="grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
+          {/* An end sheet is one column wide: ten stacked selects read top to
+              bottom instead of wrapping into a grid the sheet cannot hold. */}
+          <div className="flex flex-col gap-app-lg">
             <SelectField label="Campaign" value={filterDraft.camp} onChange={(e) => setDraftFilter('camp', e.target.value)}>
               <option value="all">All campaigns</option>
               {campaignOptions.map((c) => (
@@ -827,7 +842,7 @@ export function LeadsExplorer() {
               ))}
             </SelectField>
           </div>
-        </Dialog>
+        </FilterDialog>
       )}
 
       <ActiveFilters
@@ -876,12 +891,17 @@ export function LeadsExplorer() {
 
       <TableFrame
         scrollLabel="Leads"
-        className="leads-table-frame"
+        // The results are the page's content: the table takes the remaining
+        // viewport rather than a fixed slab, so the first row stays high and
+        // the last is reachable by the frame's own scrollbar.
+        className="[&_.ui-table-scroll]:max-h-[calc(100vh-360px)] [&_.ui-table-scroll]:min-h-[280px]"
+        scrollRef={scrollRef}
+        busy={serverLoading}
         toolbar={
           <TableToolbar
             count={<>
-              {serverLoading && <Loader2 size={14} className="spin" aria-hidden="true" />}
               {num(resultCount)} of {num(allLeadCount)} leads
+              {serverLoading && <> <UpdatingNote /></>}
             </>}
             actions={<>
               <Button
@@ -913,34 +933,25 @@ export function LeadsExplorer() {
           />
         }
         hint={pages > 1 ? (
-          <div className="flex justify-center items-center gap-app-lg pt-app-md">
+          <div className="flex justify-center items-center gap-app-lg">
             <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => goPage(page - 1)}>← Previous</Button>
-            <span className="muted">Page {page + 1} of {pages}</span>
+            <span>Page {page + 1} of {pages}</span>
             <Button variant="secondary" size="sm" disabled={page >= pages - 1} onClick={() => goPage(page + 1)}>Next →</Button>
           </div>
         ) : undefined}
       >
-        <div ref={scrollRef}>
-        <table className="ui-table">
+        <Table caption="Leads">
           <thead>
             <tr>
-              <th scope="col" className="sortable" onClick={() => onSort('full_name')}>
-                Lead{sortInd('full_name')}
-              </th>
+              {sortHeader('full_name', 'Lead')}
               {showDetailColumns && <th scope="col">Headline</th>}
               <th scope="col">Account / campaign</th>
               <th scope="col">Milestone</th>
               <th scope="col">Pipeline</th>
               {showDetailColumns && <th scope="col">Age</th>}
               {showDetailColumns && <th scope="col">Gender</th>}
-              <th scope="col" className="sortable" onClick={() => onSort('next_follow_up_date')}>
-                Next follow-up{sortInd('next_follow_up_date')}
-              </th>
-              {dateColumns.map((c) => (
-                <th scope="col" key={c.key} className="sortable" onClick={() => onSort(c.key)}>
-                  {c.label}{sortInd(c.key)}
-                </th>
-              ))}
+              {sortHeader('next_follow_up_date', 'Next follow-up')}
+              {dateColumns.map((c) => sortHeader(c.key, c.label))}
             </tr>
           </thead>
           <tbody>
@@ -953,22 +964,34 @@ export function LeadsExplorer() {
               const reachedIntent = conversationIntents.get(
                 leadKey(l.instance_id, l.profile_url),
               )?.highest
+              const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
+              const name = l.full_name || 'lead'
               return (
               <tr
                 key={l.id}
-                className="row-clickable"
-                tabIndex={0}
-                role="button"
-                aria-label={`Open conversation with ${l.full_name || 'lead'}`}
+                className="group/row relative cursor-pointer"
+                // The pointer path: a click anywhere on the row that is not one
+                // of its own controls opens the conversation. The keyboard path
+                // is the row's button below.
                 onClick={() => openConversation(l)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    openConversation(l)
-                  }
-                }}
               >
                 <td onClick={(e) => e.stopPropagation()}>
+                  {/* ui-exception(leads-row-open): the row's open action. A real
+                      button laid over the whole row so Tab reaches it and its
+                      focus ring outlines the row, but it ignores the pointer, so
+                      the links, the stage select and every tooltip underneath
+                      keep working. verify: Tab to a row, Enter opens the
+                      conversation, focus returns to it on close. */}
+                  <button
+                    type="button"
+                    data-row-open=""
+                    className="absolute inset-0 z-0 p-0 border-0 bg-transparent pointer-events-none focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
+                    aria-label={`Open conversation with ${name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openConversation(l)
+                    }}
+                  />
                   <LeadReplyIdentity
                     lead={l}
                     reply={reply}
@@ -976,13 +999,13 @@ export function LeadsExplorer() {
                     showSnippet={replyActive}
                   />
                   {l.replied_at && <Link
-                    className="row-link small"
+                    className="text-app-meta text-app-text-secondary no-underline hover:text-app-accent hover:underline"
                     to={`/replies?view=all&scope=all&thread=${encodeURIComponent(`${l.instance_id}|${l.profile_url}`)}`}
                     onClick={(e) => e.stopPropagation()}
                   >Open in Replies</Link>}
                 </td>
                 {showDetailColumns && (
-                  <td className="muted ellipsis" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
+                  <td className="max-w-[240px] truncate text-app-text-muted" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 )}
                 <td>
                   <AccountIdentity
@@ -993,8 +1016,14 @@ export function LeadsExplorer() {
                 </td>
                 <td><LeadMilestoneBadge lead={l} /></td>
                 <td onClick={(e) => e.stopPropagation()}>
-                  <select
-                    className={`pipe-stage-select${l.pipeline_stage ? '' : ' quiet'}`}
+                  <Select
+                    aria-label={`Pipeline stage for ${name}`}
+                    className={[
+                      'relative z-10 w-auto max-w-[180px] min-h-control-sm text-app-meta truncate',
+                      // An unset stage rests as quiet text: a bordered "—" on
+                      // every row made the emptiest column the heaviest one.
+                      l.pipeline_stage ? '' : 'bg-transparent border-transparent text-app-text-muted group-hover/row:bg-app-surface-2 group-hover/row:border-app-border focus-visible:bg-app-surface-2 focus-visible:border-app-border',
+                    ].filter(Boolean).join(' ')}
                     value={l.pipeline_stage ?? ''}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
@@ -1009,36 +1038,34 @@ export function LeadsExplorer() {
                     {PIPELINE_STAGES.map((s) => (
                       <option key={s.id} value={s.id}>{s.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </td>
-                {showDetailColumns && <td className="muted col-age">{ageRange(l) ?? '—'}</td>}
-                {showDetailColumns && <td className="col-gender"><GenderCell lead={l} /></td>}
-                <td className="col-follow-up">
-                  {(() => {
-                    const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
-                    return activeFollowUp(followState) ? (
-                      <span className={`follow-due ${followUpBucket(followState)}`}>
-                        {followUpDueLabel(followState)}
-                      </span>
-                    ) : (
-                      <span className="muted">—</span>
-                    )
-                  })()}
+                {showDetailColumns && <td className="whitespace-nowrap tabular-nums text-app-text-muted">{ageRange(l) ?? '—'}</td>}
+                {showDetailColumns && <td className="whitespace-nowrap"><GenderCell lead={l} /></td>}
+                <td className="whitespace-nowrap">
+                  {activeFollowUp(followState) ? (
+                    <Badge tone={FOLLOW_UP_TONE[followUpBucket(followState)]}>
+                      {followUpDueLabel(followState)}
+                    </Badge>
+                  ) : (
+                    <span className="text-app-text-muted">—</span>
+                  )}
                 </td>
                 {dateColumns.map((c) => (
-                  <td key={c.key} className="muted col-date">
+                  <td key={c.key} className="whitespace-nowrap text-app-text-muted">
                     {shortDate(l[c.key] as string | null)}
                   </td>
                 ))}
               </tr>
               )
             })}
-            {pageRows.length === 0 && (
+            {pageRows.length === 0 && !serverLoading && (
               <tr>
                 <td colSpan={colSpan}>
                   <EmptyState
+                    kind={activeFilters.length > 0 ? 'no-match' : 'empty'}
                     icon={SearchX}
-                    title="No leads match these filters"
+                    title={activeFilters.length > 0 ? 'No leads match these filters' : 'No leads yet'}
                     hint={
                       activeFilters.length > 0
                         ? 'Adjust or clear the filters to see more leads.'
@@ -1054,25 +1081,35 @@ export function LeadsExplorer() {
               </tr>
             )}
           </tbody>
-        </table>
-        </div>
+        </Table>
       </TableFrame>
 
       {/* Coaching is an aid, not the work. It used to sit between the page
           title and the filters; collapsed and below the results, it costs the
           first row no vertical space. */}
       <Panel className="mb-app-xl">
-        <button data-digest="toggle" className="flex items-center gap-app-sm w-full bg-none border-none text-app-text text-[length:var(--text-base)] font-semibold cursor-pointer p-0 text-left" onClick={() => setDigestOpen((o) => !o)}>
-          {digestOpen
-            ? <ChevronDown size={18} className="coach-digest-caret" aria-hidden="true" />
-            : <ChevronRight size={18} className="coach-digest-caret" aria-hidden="true" />}
+        <Button
+          variant="ghost"
+          data-digest="toggle"
+          className="w-full justify-start px-0 text-left"
+          aria-expanded={digestOpen}
+          aria-controls="leads-coaching-digest"
+          icon={digestOpen
+            ? <ChevronDown size={18} className="shrink-0 text-app-text-muted" aria-hidden="true" />
+            : <ChevronRight size={18} className="shrink-0 text-app-text-muted" aria-hidden="true" />}
+          onClick={() => setDigestOpen((o) => !o)}
+        >
           <GraduationCap size={18} className="text-app-accent shrink-0" aria-hidden="true" />
-          Your coaching digest
-          <span className="muted small">— recurring habits to fix for more replies</span>
-        </button>
+          <span className="font-semibold text-app-text">Your coaching digest</span>
+          <span className="text-app-meta font-normal text-app-text-muted">— recurring habits to fix for more replies</span>
+        </Button>
         {digestOpen && (
-          <div data-digest="body" className="mt-app-md flex flex-col gap-app-lg">
-            {digestErr && <div className="banner">{digestErr}</div>}
+          <div id="leads-coaching-digest" data-digest="body" className="mt-app-md flex flex-col gap-app-lg">
+            {digestErr && (
+              <div data-digest="error">
+                <InlineError title="The coaching digest is unavailable." message={digestErr} />
+              </div>
+            )}
             {data.instances.map((instance) => {
               const d = digests[instance.id]
               return (
@@ -1088,22 +1125,22 @@ export function LeadsExplorer() {
                       {d ? 'Refresh' : 'Generate'}
                     </Button>
                     {d?.computed_at && (
-                      <span className="muted small">· {shortDate(d.computed_at)}</span>
+                      <span className="text-app-meta text-app-text-muted">· {shortDate(d.computed_at)}</span>
                     )}
                   </div>
-                  {d?.summary && <div className="mt-1.5 leading-[1.5] small">{d.summary}</div>}
+                  {d?.summary && <div className="mt-1.5 text-app-meta">{d.summary}</div>}
                   {d?.patterns?.length ? (
-                    <ul data-digest="patterns" className="mt-app-sm mx-0 mb-0 pl-0 list-none flex flex-col gap-1.5 leading-[1.45] small">
+                    <ul data-digest="patterns" className="mt-app-sm mx-0 mb-0 pl-0 list-none flex flex-col gap-1.5 text-app-meta">
                       {d.patterns.map((pattern, i) => (
                         <li key={i}>
-                          <span className="badge senti obj">{pattern.count}×</span> {pattern.issue} — {pattern.advice}
+                          <Badge tone="warning">{pattern.count}×</Badge> {pattern.issue} — {pattern.advice}
                         </li>
                       ))}
                     </ul>
                   ) : d ? (
-                    <div className="muted small">No recurring patterns yet.</div>
+                    <div className="text-app-meta text-app-text-muted">No recurring patterns yet.</div>
                   ) : (
-                    <div className="muted small">
+                    <div className="text-app-meta text-app-text-muted">
                       Not generated yet — Generate to analyse this account's open threads.
                     </div>
                   )}
@@ -1136,17 +1173,17 @@ export function LeadsExplorer() {
  *  not blank — a lead with no inference yet shows an em-dash. */
 function GenderCell({ lead }: { lead: Lead }) {
   const g = lead.gender
-  if (!g) return <span className="muted">—</span>
+  if (!g) return <span className="text-app-text-muted">—</span>
   const short = GENDER_SHORT[g as Gender]
   if (lead.demo_model === 'manual')
     return (
-      <span className="gender-cell manual" title="Reviewed by an SDR">
-        {short} ✓
-      </span>
+      <StatusText tone="success" title="Reviewed by an SDR">
+        <span className="font-semibold tabular-nums">{short} ✓</span>
+      </StatusText>
     )
   const conf = lead.gender_confidence != null ? Math.round(lead.gender_confidence * 100) : null
   return (
-    <span className="gender-cell muted" title="inferred by AI — click to confirm">
+    <span className="tabular-nums text-app-text-muted" title="inferred by AI — click to confirm">
       {short}
       {conf != null ? ` ·${conf}%` : ''}
     </span>

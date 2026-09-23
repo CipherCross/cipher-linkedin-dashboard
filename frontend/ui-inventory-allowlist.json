@@ -111,6 +111,17 @@
       "reason": "Hypothesis name in the comparison table: a real button stretched over the row so the row stays clickable while keyboard activation goes through a button, not <tr onClick>.",
       "verification": "Tab to the name, Enter opens the viewer; row actions stay separate; hypothesesPage.",
       "removeByPhase": null
+    },
+    {
+      "id": "leads-row-open",
+      "kind": "raw-control",
+      "path": "src/pages/LeadsExplorer.tsx",
+      "symbol": "LeadsExplorer",
+      "tag": "button",
+      "owner": "frontend/leads",
+      "reason": "The Leads row's open action: a real button laid over the row with pointer-events off, so Tab reaches it and its focus ring outlines the row while the links, stage select and tooltips beneath keep working. Replaces <tr role=\"button\"> around other controls.",
+      "verification": "Tab to a row, Enter opens the conversation, focus returns to it on close; leadsExplorerPage.",
+      "removeByPhase": null
     }
   ]
 }

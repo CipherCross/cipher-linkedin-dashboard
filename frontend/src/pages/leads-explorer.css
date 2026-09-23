@@ -1,9 +1,0 @@
-.col-date { white-space: nowrap; }
-.coach-digest-caret { color: var(--muted); width: 12px; }
-svg.coach-digest-caret { width: auto; flex-shrink: 0; }
-.col-age { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.col-gender { white-space: nowrap; }
-.gender-cell { font-variant-numeric: tabular-nums; }
-.col-follow-up { white-space: nowrap; }
-.gender-cell.manual { color: var(--success); font-weight: 600; }
-.leads-table-frame .pager { padding: 0; }

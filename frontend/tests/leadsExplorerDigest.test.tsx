@@ -118,7 +118,7 @@ const expand = async () => {
   })
 }
 
-const panelBanner = () => document.querySelector('[data-digest="body"] .banner')
+const panelBanner = () => document.querySelector('[data-digest="body"] [data-digest="error"]')
 
 afterEach(cleanup)
 

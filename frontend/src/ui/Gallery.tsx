@@ -21,9 +21,10 @@ import {
   AccountIdentity, ActiveFilters, Badge, Button, Checkbox, Dialog, EmptyState, FilterCount,
   FilterDialog, IconButton, InitialsBadge, InlineError, LinkButton, PageHeader, Panel, RadioGroup,
   SaveStatus, SectionHeader,
-  SegmentedControl, SelectField, StatusText, Table, TableFrame, TableToolbar, Tabs,
+  SegmentedControl, SelectField, SortHeader, StatusText, Table, TableFrame, TableToolbar, Tabs,
   TextField, TextareaField, Toolbar, UpdatingNote, businessTimeLabelled, analyticsDate,
 } from './index'
+import { FollowUpRow } from '../components/FollowUpRow'
 
 /**
  * Dev-only reference for the UI standard: every primitive in every state, plus
@@ -399,10 +400,10 @@ export function Gallery() {
                 <Table caption="Leads">
                   <thead>
                     <tr>
-                      <th scope="col">Lead</th>
+                      <SortHeader label="Lead" active={false} direction="asc" onSort={() => {}} />
                       <th scope="col">Account / campaign</th>
                       <th scope="col">Milestone</th>
-                      <th scope="col">Latest activity</th>
+                      <SortHeader label="Latest activity" active direction="desc" onSort={() => {}} />
                     </tr>
                   </thead>
                   <tbody>
@@ -487,32 +488,32 @@ export function Gallery() {
                 title="Work queue row"
                 description="Four zones on one line while they fit, then the message and the actions drop to a second row. The primary action is never clipped and never dense."
               />
-              <div className="follow-list">
+              {/* The route's own row component, so this is the real markup. */}
+              <Panel as="div" className="p-0 overflow-hidden">
                 {PEOPLE.slice(0, 2).map((person, index) => (
-                  <article className="follow-item" key={index}>
-                    <button className="follow-item-open" type="button">
-                      <span className="follow-item-main">
-                        <span className="follow-item-name">{person.name ?? 'Unknown contact'}</span>
-                        <span className="muted small ellipsis">{person.campaign}</span>
-                      </span>
-                    </button>
-                    <div className="follow-item-context">
-                      <span className="follow-due overdue">Overdue by {index + 3} days</span>
-                      <span className="muted small ellipsis">{person.account}</span>
-                    </div>
-                    <div className="follow-item-message">
-                      <span className="follow-direction in">Them</span>
-                      <span className="ellipsis">Thanks — could you send the detail across?</span>
-                      <span className="muted small">{analyticsDate('2026-09-13T01:54:00Z')}</span>
-                    </div>
-                    <div className="follow-item-actions">
-                      <a className="link-btn" href="#top">LinkedIn</a>
-                      <a className="link-btn" href="#top">Review in Replies</a>
-                      <Button variant="primary">Open follow-up</Button>
-                    </div>
-                  </article>
+                  <FollowUpRow
+                    key={index}
+                    avatar={<InitialsBadge name={person.name} />}
+                    name={person.name ?? 'Unknown contact'}
+                    subtitle={person.campaign}
+                    dueLabel={`Overdue by ${index + 3} days`}
+                    dueTone="danger"
+                    owner="Mykyta Shevchenko"
+                    campaigns={person.campaign}
+                    account={person.account}
+                    message={{
+                      direction: 'in',
+                      body: 'Thanks — could you send the detail across?',
+                      snippet: 'Thanks — could you send the detail across?',
+                      sentAt: '2026-09-13T01:54:00Z',
+                      timeLabel: analyticsDate('2026-09-13T01:54:00Z'),
+                    }}
+                    linkedinHref="#top"
+                    repliesTo="/replies"
+                    onOpen={() => {}}
+                  />
                 ))}
-              </div>
+              </Panel>
             </Panel>
 
             <Panel>

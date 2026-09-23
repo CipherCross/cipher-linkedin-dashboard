@@ -149,6 +149,38 @@ function messageRows(scenario) {
   }]
 }
 
+/* One overdue follow-up on the fixture lead, owned by the admin, so the
+ * Follow-ups queue and the Leads "Next follow-up" column render populated. */
+function followUpStateRows(scenario) {
+  if (isEmpty(scenario)) return []
+  return [{
+    instance_id: instance.id,
+    profile_url: 'https://example.test/fixture-lead',
+    next_follow_up_date: '2026-09-20',
+    owner_id: 1,
+    revision: 1,
+    last_event_id: null,
+    last_mutation_id: null,
+    created_at: '2026-09-19T09:00:00.000Z',
+    updated_at: '2026-09-19T09:00:00.000Z',
+    updated_by: 'Fixture Admin',
+    archived_at: null,
+  }]
+}
+
+function latestMessageRows(scenario) {
+  if (isEmpty(scenario)) return []
+  return [{
+    instance_id: instance.id,
+    profile_url: 'https://example.test/fixture-lead',
+    message_id: 1,
+    direction: 'in',
+    body: 'Thanks for reaching out — happy to chat.',
+    sent_at: '2026-09-21T12:00:00.000Z',
+    source: 'fixture',
+  }]
+}
+
 function savedSearchRows(scenario) {
   if (isEmpty(scenario)) return []
   const row = (id, name, platform, extra = {}) => ({
@@ -205,9 +237,9 @@ function snapshot(scenario) {
     annotations: [],
     steps: [],
     syncRuns: [],
-    followUpStates: [],
-    latestConversationMessages: [],
-    followUpsAvailable: false,
+    followUpStates: followUpStateRows(scenario),
+    latestConversationMessages: latestMessageRows(scenario),
+    followUpsAvailable: true,
     savedSearches: savedSearchRows(scenario),
     ...strategyRows(scenario),
     campaignSequenceContext: null,

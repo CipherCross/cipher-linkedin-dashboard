@@ -3,36 +3,6 @@
   "generatedFrom": "ui-inventory.mjs",
   "entries": [
     {
-      "id": "compatibility-rule-7790e5d0aa38",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item",
-      "ruleKey": "compatibility-selector:@container (max-width: 1079px)|.follow-item:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-04f4feb837c1",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item",
-      "ruleKey": "compatibility-selector:@container (max-width: 620px)|.follow-item:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-6e2968eb5c84",
       "kind": "compatibility-selector",
       "selector": "to",
@@ -218,8 +188,6 @@
       "selector": ".sequence-step-actions .btn svg",
       "ruleKey": "compatibility-selector:@media (max-width: 1180px)|.sequence-step-actions .btn svg:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -240,8 +208,6 @@
       "selector": ".sequence-step-actions .btn",
       "ruleKey": "compatibility-selector:@media (max-width: 1180px)|.sequence-step-actions .btn:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -252,80 +218,6 @@
       ],
       "owner": "src/components/ErrorBoundary.tsx",
       "destination": "src/components/ErrorBoundary.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-adf7dc78125a",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-message > .muted:last-child",
-      "ruleKey": "compatibility-selector:@media (max-width: 700px)|.follow-item-message > .muted:last-child:1",
-      "consumerCandidates": [
-        "src/components/AccountCard.tsx",
-        "src/components/AddBatchesTable.tsx",
-        "src/components/CampaignCompareTable.tsx",
-        "src/components/CampaignRuntimeStatus.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/ConversationDrawer.tsx",
-        "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/Funnel.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/LagHistogram.tsx",
-        "src/components/LeadAdditionsChart.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
-        "src/components/MessageSequence.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
-        "src/components/WarmupChart.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ConversationThread.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/GlobalSummary.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/components/reply-analysis/ComparisonTable.tsx",
-        "src/components/reply-analysis/ReasonBars.tsx",
-        "src/components/reply-analysis/WeeklyTrendChart.tsx",
-        "src/components/reply-analysis/WorkflowBuckets.tsx",
-        "src/pages/AccountDetail.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/pages/SentimentAnalysis.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx",
-        "src/ui/Toolbar.tsx"
-      ],
-      "owner": "src/App.tsx",
-      "destination": "src/App.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-aab2ad07f6dc",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-message",
-      "ruleKey": "compatibility-selector:@media (max-width: 700px)|.follow-item-message:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
       "verification": "Inventory candidate report and route visual acceptance.",
       "removeByPhase": "Phase 12"
@@ -351,8 +243,6 @@
       "selector": ".sequence-editor-topbar .btn",
       "ruleKey": "compatibility-selector:@media (max-width: 700px)|.sequence-editor-topbar .btn:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -387,8 +277,6 @@
       "selector": ".sequence-step-actions .btn",
       "ruleKey": "compatibility-selector:@media (max-width: 700px)|.sequence-step-actions .btn:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -469,7 +357,6 @@
       "selector": ".two-col, .compare-grid",
       "ruleKey": "compatibility-selector:@media (max-width: 860px)|.two-col, .compare-grid:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
@@ -502,20 +389,16 @@
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/KpiCards.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
@@ -524,7 +407,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
         "src/pages/Review.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
@@ -558,9 +440,7 @@
       "selector": ".sidebar, .mobile-header, .drp, .btn, .overview-section-toggle .overview-section-chevron, .skip-link, .conv-drawer",
       "ruleKey": "compatibility-selector:@media print|.sidebar, .mobile-header, .drp, .btn, .overview-section-toggle .overview-section-chevron, .skip-link, .conv-drawer:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/Layout.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
@@ -651,22 +531,17 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
@@ -680,8 +555,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
@@ -706,22 +579,17 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
@@ -735,8 +603,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
@@ -793,7 +659,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -816,7 +681,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -839,7 +703,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -862,7 +725,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -885,7 +747,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -908,7 +769,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -931,7 +791,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -954,7 +813,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -977,7 +835,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1000,7 +857,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1023,7 +879,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1046,7 +901,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1061,9 +915,7 @@
       "selector": ".banner > .btn",
       "ruleKey": "compatibility-selector:|.banner > .btn:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1071,7 +923,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/ErrorBoundary.tsx",
@@ -1087,10 +938,8 @@
       "ruleKey": "compatibility-selector:|.banner > span:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/pages/Chat.tsx"
       ],
       "owner": "src/pages/Chat.tsx",
       "destination": "src/pages/Chat.tsx",
@@ -1105,10 +954,8 @@
       "ruleKey": "compatibility-selector:|.banner:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/pages/Chat.tsx"
       ],
       "owner": "src/pages/Chat.tsx",
       "destination": "src/pages/Chat.tsx",
@@ -1123,11 +970,9 @@
       "ruleKey": "compatibility-selector:|.banner.error:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -1143,10 +988,8 @@
       "ruleKey": "compatibility-selector:|.banner.warn:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -1185,8 +1028,6 @@
       "selector": ".btn, .btn-accent",
       "ruleKey": "compatibility-selector:|.btn, .btn-accent:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1207,8 +1048,6 @@
       "selector": ".btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .segmented-item:active, .navlink:active",
       "ruleKey": "compatibility-selector:|.btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .segmented-item:active, .navlink:active:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/SentimentTrendChart.tsx",
@@ -1232,8 +1071,6 @@
       "selector": ".btn:disabled, .btn-accent:disabled",
       "ruleKey": "compatibility-selector:|.btn:disabled, .btn-accent:disabled:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1254,8 +1091,6 @@
       "selector": ".btn:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.btn:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1276,8 +1111,6 @@
       "selector": ".btn.accent",
       "ruleKey": "compatibility-selector:|.btn.accent:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1298,8 +1131,6 @@
       "selector": ".btn.accent:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.btn.accent:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1320,8 +1151,6 @@
       "selector": ".btn.danger",
       "ruleKey": "compatibility-selector:|.btn.danger:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1342,8 +1171,6 @@
       "selector": ".btn.danger",
       "ruleKey": "compatibility-selector:|.btn.danger:2",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1364,8 +1191,6 @@
       "selector": ".btn.danger:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.btn.danger:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1386,8 +1211,6 @@
       "selector": ".btn.danger:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.btn.danger:hover:not(:disabled):2",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1408,8 +1231,6 @@
       "selector": ".btn.ghost",
       "ruleKey": "compatibility-selector:|.btn.ghost:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1430,8 +1251,6 @@
       "selector": ".btn.ghost:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.btn.ghost:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1452,8 +1271,6 @@
       "selector": ".btn.sm",
       "ruleKey": "compatibility-selector:|.btn.sm:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1474,8 +1291,6 @@
       "selector": ".btn[aria-pressed='true']",
       "ruleKey": "compatibility-selector:|.btn[aria-pressed='true']:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -1495,9 +1310,7 @@
       "kind": "compatibility-selector",
       "selector": ".campaign-runtime.compact",
       "ruleKey": "compatibility-selector:|.campaign-runtime.compact:1",
-      "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx"
-      ],
+      "consumerCandidates": [],
       "owner": "src/components/FollowUpPanel.tsx",
       "destination": "src/components/FollowUpPanel.tsx",
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
@@ -1518,7 +1331,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -1578,11 +1390,8 @@
       "selector": ".card-head",
       "ruleKey": "compatibility-selector:|.card-head:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/Heatmap.tsx",
-        "src/components/LeadsAddedTable.tsx",
-        "src/components/SentimentTrendChart.tsx",
-        "src/components/TemplateComparison.tsx"
+        "src/components/SentimentTrendChart.tsx"
       ],
       "owner": "src/components/Heatmap.tsx",
       "destination": "src/components/Heatmap.tsx",
@@ -1602,20 +1411,16 @@
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/KpiCards.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/LeadsVelocityChart.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
@@ -1624,7 +1429,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
         "src/pages/Review.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
@@ -1845,8 +1649,7 @@
       "selector": ".cmp-avg td",
       "ruleKey": "compatibility-selector:|.cmp-avg td:1",
       "consumerCandidates": [
-        "src/components/CampaignCompareTable.tsx",
-        "src/components/LeadsAddedTable.tsx"
+        "src/components/CampaignCompareTable.tsx"
       ],
       "owner": "src/components/CampaignCompareTable.tsx",
       "destination": "src/components/CampaignCompareTable.tsx",
@@ -1890,7 +1693,6 @@
       "selector": ".cmp-chip button",
       "ruleKey": "compatibility-selector:|.cmp-chip button:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
@@ -1905,7 +1707,6 @@
       "selector": ".cmp-chip button:hover",
       "ruleKey": "compatibility-selector:|.cmp-chip button:hover:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
@@ -1920,7 +1721,6 @@
       "selector": ".cmp-chip",
       "ruleKey": "compatibility-selector:|.cmp-chip:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
@@ -1935,7 +1735,6 @@
       "selector": ".cmp-chips",
       "ruleKey": "compatibility-selector:|.cmp-chips:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
@@ -1951,7 +1750,6 @@
       "ruleKey": "compatibility-selector:|.cmp-warn:1",
       "consumerCandidates": [
         "src/components/CampaignCompareTable.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/MessageSequence.tsx"
       ],
       "owner": "src/components/CampaignCompareTable.tsx",
@@ -1961,40 +1759,11 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-e20e6b31b14c",
-      "kind": "compatibility-selector",
-      "selector": ".cohort-rate",
-      "ruleKey": "compatibility-selector:|.cohort-rate:1",
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx"
-      ],
-      "owner": "src/components/CohortComparisonTable.tsx",
-      "destination": "src/components/CohortComparisonTable.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 9"
-    },
-    {
-      "id": "compatibility-rule-a0f4d0eec0f0",
-      "kind": "compatibility-selector",
-      "selector": ".cohort-rate.maturing",
-      "ruleKey": "compatibility-selector:|.cohort-rate.maturing:1",
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx"
-      ],
-      "owner": "src/components/CohortComparisonTable.tsx",
-      "destination": "src/components/CohortComparisonTable.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 9"
-    },
-    {
       "id": "compatibility-rule-6bc028ab0cec",
       "kind": "compatibility-selector",
       "selector": ".compare-grid",
       "ruleKey": "compatibility-selector:|.compare-grid:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
@@ -2196,7 +1965,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -2212,7 +1980,6 @@
       "ruleKey": "compatibility-selector:|.conv-error:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
@@ -2222,31 +1989,12 @@
       "removeByPhase": "Phase 7"
     },
     {
-      "id": "compatibility-rule-9a57f7bbbac5",
-      "kind": "compatibility-selector",
-      "selector": ".conv-follow-btn.active",
-      "ruleKey": "compatibility-selector:|.conv-follow-btn.active:1",
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "owner": "src/components/DateRangePicker.tsx",
-      "destination": "src/components/DateRangePicker.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-48c4c0fb1453",
       "kind": "compatibility-selector",
       "selector": ".conv-pipeline-controls .filter-field",
       "ruleKey": "compatibility-selector:|.conv-pipeline-controls .filter-field:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
@@ -2425,11 +2173,8 @@
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Replies.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -2444,16 +2189,12 @@
       "ruleKey": "compatibility-selector:|.empty-state-action .link-btn:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -2504,7 +2245,6 @@
       "ruleKey": "compatibility-selector:|.filter-field select:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
@@ -2520,7 +2260,6 @@
       "ruleKey": "compatibility-selector:|.filter-field:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
@@ -2536,7 +2275,6 @@
       "ruleKey": "compatibility-selector:|.filter-label:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LostReasonModal.tsx"
       ],
       "owner": "src/components/ConversationDrawer.tsx",
@@ -2546,106 +2284,13 @@
       "removeByPhase": "Phase 7"
     },
     {
-      "id": "compatibility-rule-38c150d8771f",
-      "kind": "compatibility-selector",
-      "selector": ".follow-actions-grid .btn:first-child",
-      "ruleKey": "compatibility-selector:|.follow-actions-grid .btn:first-child:1",
-      "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/LeadNotesPanel.tsx",
-        "src/components/LostReasonModal.tsx",
-        "src/components/conversation/ConversationActionPanel.tsx",
-        "src/components/conversation/ReplyReviewPanel.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "owner": "src/components/ErrorBoundary.tsx",
-      "destination": "src/components/ErrorBoundary.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-04463881412b",
-      "kind": "compatibility-selector",
-      "selector": ".follow-current-date.overdue",
-      "ruleKey": "compatibility-selector:|.follow-current-date.overdue:1",
-      "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-0dfd0fba828a",
-      "kind": "compatibility-selector",
-      "selector": ".follow-current.active",
-      "ruleKey": "compatibility-selector:|.follow-current.active:1",
-      "consumerCandidates": [
-        "src/components/DateRangePicker.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/Heatmap.tsx",
-        "src/components/LeadsVelocityChart.tsx",
-        "src/components/RateVolumeScatter.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "owner": "src/components/DateRangePicker.tsx",
-      "destination": "src/components/DateRangePicker.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-ed5edf039b2e",
-      "kind": "compatibility-selector",
-      "selector": ".follow-direction, .pipe-msg-dir",
-      "ruleKey": "compatibility-selector:|.follow-direction, .pipe-msg-dir:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-61eba65bb52f",
-      "kind": "compatibility-selector",
-      "selector": ".follow-direction.in, .pipe-msg-dir.in",
-      "ruleKey": "compatibility-selector:|.follow-direction.in, .pipe-msg-dir.in:1",
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-fa2471ad0195",
       "kind": "compatibility-selector",
       "selector": ".follow-due, .pipe-follow-due",
       "ruleKey": "compatibility-selector:|.follow-due, .pipe-follow-due:1",
       "consumerCandidates": [
-        "src/components/FollowUpCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Pipeline.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -2659,12 +2304,8 @@
       "selector": ".follow-due.overdue, .pipe-follow-due.overdue",
       "ruleKey": "compatibility-selector:|.follow-due.overdue, .pipe-follow-due.overdue:1",
       "consumerCandidates": [
-        "src/components/FollowUpCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Pipeline.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -2678,12 +2319,8 @@
       "selector": ".follow-due.today, .pipe-follow-due.today",
       "ruleKey": "compatibility-selector:|.follow-due.today, .pipe-follow-due.today:1",
       "consumerCandidates": [
-        "src/components/FollowUpCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Pipeline.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -2697,356 +2334,8 @@
       "selector": ".follow-due.upcoming, .pipe-follow-due.upcoming",
       "ruleKey": "compatibility-selector:|.follow-due.upcoming, .pipe-follow-due.upcoming:1",
       "consumerCandidates": [
-        "src/components/FollowUpCalloutCard.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-2f16dc2e3c7e",
-      "kind": "compatibility-selector",
-      "selector": ".follow-event.completed .follow-event-dot",
-      "ruleKey": "compatibility-selector:|.follow-event.completed .follow-event-dot:1",
-      "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx"
-      ],
-      "owner": "src/components/FollowUpPanel.tsx",
-      "destination": "src/components/FollowUpPanel.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 6"
-    },
-    {
-      "id": "compatibility-rule-a789dd1bd3b6",
-      "kind": "compatibility-selector",
-      "selector": ".follow-event.scheduled .follow-event-dot, .follow-event.rescheduled .follow-event-dot",
-      "ruleKey": "compatibility-selector:|.follow-event.scheduled .follow-event-dot, .follow-event.rescheduled .follow-event-dot:1",
-      "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx"
-      ],
-      "owner": "src/components/FollowUpPanel.tsx",
-      "destination": "src/components/FollowUpPanel.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 6"
-    },
-    {
-      "id": "compatibility-rule-69673245aa52",
-      "kind": "compatibility-selector",
-      "selector": ".follow-event.skipped .follow-event-dot, .follow-event.canceled .follow-event-dot",
-      "ruleKey": "compatibility-selector:|.follow-event.skipped .follow-event-dot, .follow-event.canceled .follow-event-dot:1",
-      "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx"
-      ],
-      "owner": "src/components/FollowUpPanel.tsx",
-      "destination": "src/components/FollowUpPanel.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 6"
-    },
-    {
-      "id": "compatibility-rule-f8de61489679",
-      "kind": "compatibility-selector",
-      "selector": ".follow-group",
-      "ruleKey": "compatibility-selector:|.follow-group:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx"
-      ],
-      "owner": "src/pages/FollowUps.tsx",
-      "destination": "src/pages/FollowUps.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 6"
-    },
-    {
-      "id": "compatibility-rule-4f99fcfa72a7",
-      "kind": "compatibility-selector",
-      "selector": ".follow-group.overdue .follow-item",
-      "ruleKey": "compatibility-selector:|.follow-group.overdue .follow-item:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-d14946015824",
-      "kind": "compatibility-selector",
-      "selector": ".follow-group.today .follow-item",
-      "ruleKey": "compatibility-selector:|.follow-group.today .follow-item:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-b5e111e2e2db",
-      "kind": "compatibility-selector",
-      "selector": ".follow-history-head .link-btn",
-      "ruleKey": "compatibility-selector:|.follow-history-head .link-btn:1",
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/AccountDetail.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/components/InstanceConfigEditor.tsx",
-      "destination": "src/components/InstanceConfigEditor.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-f1ce36e51f50",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item + .follow-item",
-      "ruleKey": "compatibility-selector:|.follow-item + .follow-item:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-caaa3638a3c0",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-actions .link-btn",
-      "ruleKey": "compatibility-selector:|.follow-item-actions .link-btn:1",
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/ActiveSequences.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/AccountDetail.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/components/InstanceConfigEditor.tsx",
-      "destination": "src/components/InstanceConfigEditor.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-26dc6305c4d9",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-actions",
-      "ruleKey": "compatibility-selector:|.follow-item-actions:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-cbc022462f86",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-actions",
-      "ruleKey": "compatibility-selector:|.follow-item-actions:2",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-96a07a4a7760",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-context",
-      "ruleKey": "compatibility-selector:|.follow-item-context:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-8a02be378e8b",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-context",
-      "ruleKey": "compatibility-selector:|.follow-item-context:2",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-cb3efa1b7f0c",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-main",
-      "ruleKey": "compatibility-selector:|.follow-item-main:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-79078f1aaf50",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-message",
-      "ruleKey": "compatibility-selector:|.follow-item-message:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-4aac1ca780d5",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-message",
-      "ruleKey": "compatibility-selector:|.follow-item-message:2",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-e3c6fe537d1c",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-name",
-      "ruleKey": "compatibility-selector:|.follow-item-name:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-e3bfd376e91c",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-open",
-      "ruleKey": "compatibility-selector:|.follow-item-open:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-d2533ed895a9",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-open",
-      "ruleKey": "compatibility-selector:|.follow-item-open:2",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-264dcbd60dc5",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item-open:hover .follow-item-name",
-      "ruleKey": "compatibility-selector:|.follow-item-open:hover .follow-item-name:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-a9937a5bfcca",
-      "kind": "compatibility-selector",
-      "selector": ".follow-item",
-      "ruleKey": "compatibility-selector:|.follow-item:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "owner": "src/ui/Gallery.tsx",
-      "destination": "src/ui/Gallery.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
-      "id": "compatibility-rule-f8c9fc0a5461",
-      "kind": "compatibility-selector",
-      "selector": ".follow-list",
-      "ruleKey": "compatibility-selector:|.follow-list:1",
-      "consumerCandidates": [
-        "src/pages/FollowUps.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Pipeline.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -3066,22 +2355,17 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
@@ -3098,8 +2382,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
@@ -3175,7 +2457,6 @@
       "selector": ".icon-only-btn.danger:hover:not(:disabled)",
       "ruleKey": "compatibility-selector:|.icon-only-btn.danger:hover:not(:disabled):1",
       "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -3190,8 +2471,6 @@
       "selector": ".identity-chip strong",
       "ruleKey": "compatibility-selector:|.identity-chip strong:1",
       "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
-        "src/pages/FollowUps.tsx",
         "src/pages/Pipeline.tsx"
       ],
       "owner": "src/pages/Pipeline.tsx",
@@ -3206,8 +2485,6 @@
       "selector": ".identity-chip",
       "ruleKey": "compatibility-selector:|.identity-chip:1",
       "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
-        "src/pages/FollowUps.tsx",
         "src/pages/Pipeline.tsx"
       ],
       "owner": "src/pages/Pipeline.tsx",
@@ -3222,8 +2499,6 @@
       "selector": ".identity-chip.compact",
       "ruleKey": "compatibility-selector:|.identity-chip.compact:1",
       "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
-        "src/pages/FollowUps.tsx",
         "src/pages/Pipeline.tsx"
       ],
       "owner": "src/pages/Pipeline.tsx",
@@ -3238,7 +2513,6 @@
       "selector": ".kpi-delta",
       "ruleKey": "compatibility-selector:|.kpi-delta:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/KpiCards.tsx"
       ],
       "owner": "src/components/CohortComparisonTable.tsx",
@@ -3253,7 +2527,6 @@
       "selector": ".kpi-delta.down",
       "ruleKey": "compatibility-selector:|.kpi-delta.down:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/KpiCards.tsx"
       ],
       "owner": "src/components/CohortComparisonTable.tsx",
@@ -3268,7 +2541,6 @@
       "selector": ".kpi-delta.flat",
       "ruleKey": "compatibility-selector:|.kpi-delta.flat:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/KpiCards.tsx"
       ],
       "owner": "src/components/CohortComparisonTable.tsx",
@@ -3283,7 +2555,6 @@
       "selector": ".kpi-delta.maturing",
       "ruleKey": "compatibility-selector:|.kpi-delta.maturing:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/KpiCards.tsx"
       ],
       "owner": "src/components/CohortComparisonTable.tsx",
@@ -3298,7 +2569,6 @@
       "selector": ".kpi-delta.up",
       "ruleKey": "compatibility-selector:|.kpi-delta.up:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/KpiCards.tsx"
       ],
       "owner": "src/components/CohortComparisonTable.tsx",
@@ -3505,21 +2775,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-dbd0ccca1d5b",
-      "kind": "compatibility-selector",
-      "selector": ".leads-table-frame .ui-table-scroll",
-      "ruleKey": "compatibility-selector:|.leads-table-frame .ui-table-scroll:1",
-      "consumerCandidates": [
-        "src/pages/LeadsExplorer.tsx",
-        "src/ui/Table.tsx"
-      ],
-      "owner": "src/ui/Table.tsx",
-      "destination": "src/ui/Table.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 12"
-    },
-    {
       "id": "compatibility-rule-a0e9592884cd",
       "kind": "compatibility-selector",
       "selector": ".li-link",
@@ -3556,16 +2811,12 @@
       "ruleKey": "compatibility-selector:|.link-btn:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -3580,16 +2831,12 @@
       "ruleKey": "compatibility-selector:|.link-btn:disabled:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -3604,16 +2851,12 @@
       "ruleKey": "compatibility-selector:|.link-btn:hover:not(:disabled):1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -3627,7 +2870,6 @@
       "selector": ".linkedin-connection-preview small.warn",
       "ruleKey": "compatibility-selector:|.linkedin-connection-preview small.warn:1",
       "consumerCandidates": [
-        "src/components/FollowUpPanel.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/pages/SequenceBuilder.tsx",
@@ -3688,8 +2930,7 @@
       "selector": ".msg.in .msg-bubble",
       "ruleKey": "compatibility-selector:|.msg.in .msg-bubble:1",
       "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/ui/Gallery.tsx"
+        "src/components/ConversationDrawer.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -3703,8 +2944,7 @@
       "selector": ".msg.in",
       "ruleKey": "compatibility-selector:|.msg.in:1",
       "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/ui/Gallery.tsx"
+        "src/components/ConversationDrawer.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -3736,8 +2976,6 @@
         "src/components/AddBatchesTable.tsx",
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/AddBatchesTable.tsx",
@@ -3814,11 +3052,8 @@
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Replies.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -3835,11 +3070,8 @@
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Replies.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -3856,11 +3088,8 @@
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/RateVolumeScatter.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
-        "src/pages/Replies.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/Replies.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -3943,6 +3172,35 @@
       "removeByPhase": "Phase 11"
     },
     {
+      "id": "compatibility-rule-59a49a1e70a7",
+      "kind": "compatibility-selector",
+      "selector": ".pipe-msg-dir",
+      "ruleKey": "compatibility-selector:|.pipe-msg-dir:1",
+      "consumerCandidates": [
+        "src/pages/Pipeline.tsx"
+      ],
+      "owner": "src/pages/Pipeline.tsx",
+      "destination": "src/pages/Pipeline.tsx",
+      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
+      "verification": "Inventory candidate report and route visual acceptance.",
+      "removeByPhase": "Phase 8"
+    },
+    {
+      "id": "compatibility-rule-6f404349acd3",
+      "kind": "compatibility-selector",
+      "selector": ".pipe-msg-dir.in",
+      "ruleKey": "compatibility-selector:|.pipe-msg-dir.in:1",
+      "consumerCandidates": [
+        "src/components/ConversationDrawer.tsx",
+        "src/pages/Pipeline.tsx"
+      ],
+      "owner": "src/pages/Pipeline.tsx",
+      "destination": "src/pages/Pipeline.tsx",
+      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
+      "verification": "Inventory candidate report and route visual acceptance.",
+      "removeByPhase": "Phase 8"
+    },
+    {
       "id": "compatibility-rule-b645b3e7e9b9",
       "kind": "compatibility-selector",
       "selector": ".publish-compatibility-card .badge",
@@ -3956,7 +3214,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -4012,7 +3269,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -4055,8 +3311,7 @@
       "ruleKey": "compatibility-selector:|.reply-row.row-clickable:hover:1",
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4078,7 +3333,6 @@
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/CampaignRuntimeStatus.tsx",
@@ -4094,8 +3348,7 @@
       "ruleKey": "compatibility-selector:|.row-clickable:1",
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4113,12 +3366,10 @@
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
@@ -4137,12 +3388,10 @@
         "src/components/CampaignCompareTable.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/ConversationDrawer.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/AccountCard.tsx",
@@ -4163,22 +3412,17 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
@@ -4195,8 +3439,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
@@ -4222,22 +3464,17 @@
         "src/components/CampaignRuntimeStatus.tsx",
         "src/components/CampaignTable.tsx",
         "src/components/CohortChart.tsx",
-        "src/components/CohortComparisonTable.tsx",
         "src/components/ConversationDrawer.tsx",
         "src/components/DeployedSequence.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/Funnel.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LagHistogram.tsx",
         "src/components/LeadAdditionsChart.tsx",
         "src/components/LeadNotesPanel.tsx",
-        "src/components/LeadsAddedTable.tsx",
         "src/components/MessageSequence.tsx",
         "src/components/RateVolumeScatter.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/Sparkline.tsx",
-        "src/components/TemplateComparison.tsx",
         "src/components/WarmupChart.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
         "src/components/conversation/ConversationThread.tsx",
@@ -4254,8 +3491,6 @@
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
         "src/pages/Chat.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx",
         "src/pages/Replies.tsx",
         "src/pages/SentimentAnalysis.tsx",
@@ -4325,9 +3560,7 @@
       "kind": "compatibility-selector",
       "selector": ".seg-dot.obj",
       "ruleKey": "compatibility-selector:|.seg-dot.obj:1",
-      "consumerCandidates": [
-        "src/pages/LeadsExplorer.tsx"
-      ],
+      "consumerCandidates": [],
       "owner": "src/pages/LeadsExplorer.tsx",
       "destination": "src/pages/LeadsExplorer.tsx",
       "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
@@ -4364,7 +3597,6 @@
       "selector": ".segmented-item",
       "ruleKey": "compatibility-selector:|.segmented-item:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
@@ -4380,7 +3612,6 @@
       "selector": ".segmented-item:hover",
       "ruleKey": "compatibility-selector:|.segmented-item:hover:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
@@ -4396,7 +3627,6 @@
       "selector": ".segmented-item.active .segmented-count",
       "ruleKey": "compatibility-selector:|.segmented-item.active .segmented-count:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LeadsVelocityChart.tsx",
@@ -4417,7 +3647,6 @@
       "selector": ".segmented-item.active",
       "ruleKey": "compatibility-selector:|.segmented-item.active:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/DateRangePicker.tsx",
         "src/components/Heatmap.tsx",
         "src/components/LeadsVelocityChart.tsx",
@@ -4438,7 +3667,6 @@
       "selector": ".segmented",
       "ruleKey": "compatibility-selector:|.segmented:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
         "src/components/SentimentTrendChart.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
@@ -4457,8 +3685,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4475,8 +3702,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4493,8 +3719,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4511,8 +3736,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4529,8 +3753,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4547,8 +3770,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4565,8 +3787,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4583,8 +3804,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4601,8 +3821,7 @@
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/components/overview/NewReplies.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/overview/NewReplies.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -4856,16 +4075,12 @@
       "ruleKey": "compatibility-selector:|.sequence-publish-section-head .link-btn:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpCalloutCard.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
         "src/components/overview/ActiveSequences.tsx",
         "src/components/overview/NewReplies.tsx",
         "src/pages/AccountDetail.tsx",
         "src/pages/CampaignDetail.tsx",
-        "src/pages/FollowUps.tsx",
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
+        "src/pages/SequenceBuilder.tsx"
       ],
       "owner": "src/components/InstanceConfigEditor.tsx",
       "destination": "src/components/InstanceConfigEditor.tsx",
@@ -5188,8 +4403,6 @@
       "selector": ".sequence-version-list article .btn",
       "ruleKey": "compatibility-selector:|.sequence-version-list article .btn:1",
       "consumerCandidates": [
-        "src/components/CohortComparisonTable.tsx",
-        "src/components/FollowUpPanel.tsx",
         "src/components/LeadNotesPanel.tsx",
         "src/components/LostReasonModal.tsx",
         "src/components/conversation/ConversationActionPanel.tsx",
@@ -5210,8 +4423,7 @@
       "selector": ".sk-bubble.in",
       "ruleKey": "compatibility-selector:|.sk-bubble.in:1",
       "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/ui/Gallery.tsx"
+        "src/components/ConversationDrawer.tsx"
       ],
       "owner": "src/ui/Gallery.tsx",
       "destination": "src/ui/Gallery.tsx",
@@ -5250,8 +4462,7 @@
       "ruleKey": "compatibility-selector:|.sort-ind:1",
       "consumerCandidates": [
         "src/components/CampaignCompareTable.tsx",
-        "src/components/CampaignTable.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/CampaignTable.tsx"
       ],
       "owner": "src/components/CampaignCompareTable.tsx",
       "destination": "src/components/CampaignCompareTable.tsx",
@@ -5265,8 +4476,7 @@
       "selector": ".sortable",
       "ruleKey": "compatibility-selector:|.sortable:1",
       "consumerCandidates": [
-        "src/components/CampaignCompareTable.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/CampaignCompareTable.tsx"
       ],
       "owner": "src/components/CampaignCompareTable.tsx",
       "destination": "src/components/CampaignCompareTable.tsx",
@@ -5280,8 +4490,7 @@
       "selector": ".sortable:hover",
       "ruleKey": "compatibility-selector:|.sortable:hover:1",
       "consumerCandidates": [
-        "src/components/CampaignCompareTable.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/CampaignCompareTable.tsx"
       ],
       "owner": "src/components/CampaignCompareTable.tsx",
       "destination": "src/components/CampaignCompareTable.tsx",
@@ -5296,9 +4505,7 @@
       "ruleKey": "compatibility-selector:|.spin:1",
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
-        "src/components/FollowUpPanel.tsx",
-        "src/pages/Chat.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/pages/Chat.tsx"
       ],
       "owner": "src/pages/Chat.tsx",
       "destination": "src/pages/Chat.tsx",
@@ -5312,10 +4519,8 @@
       "selector": ".stack",
       "ruleKey": "compatibility-selector:|.stack:1",
       "consumerCandidates": [
-        "src/components/TemplateComparison.tsx",
         "src/pages/AccountDetail.tsx",
-        "src/pages/CampaignDetail.tsx",
-        "src/pages/Review.tsx"
+        "src/pages/CampaignDetail.tsx"
       ],
       "owner": "src/components/TemplateComparison.tsx",
       "destination": "src/components/TemplateComparison.tsx",
@@ -5329,7 +4534,6 @@
       "selector": ".substatus-chip, .pipe-stage-select, .pipe-assign-select",
       "ruleKey": "compatibility-selector:|.substatus-chip, .pipe-stage-select, .pipe-assign-select:1",
       "consumerCandidates": [
-        "src/pages/LeadsExplorer.tsx",
         "src/pages/Pipeline.tsx"
       ],
       "owner": "src/pages/Pipeline.tsx",
@@ -5410,21 +4614,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-e706af177262",
-      "kind": "compatibility-selector",
-      "selector": "td .pipe-stage-select.quiet",
-      "ruleKey": "compatibility-selector:|td .pipe-stage-select.quiet:1",
-      "consumerCandidates": [
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
       "id": "compatibility-rule-d97108329212",
       "kind": "compatibility-selector",
       "selector": "th, td",
@@ -5449,21 +4638,6 @@
       "removeByPhase": "Phase 12"
     },
     {
-      "id": "compatibility-rule-425c34471bcb",
-      "kind": "compatibility-selector",
-      "selector": "tr:hover td .pipe-stage-select.quiet, td .pipe-stage-select.quiet:focus-visible",
-      "ruleKey": "compatibility-selector:|tr:hover td .pipe-stage-select.quiet, td .pipe-stage-select.quiet:focus-visible:1",
-      "consumerCandidates": [
-        "src/pages/LeadsExplorer.tsx",
-        "src/pages/Pipeline.tsx"
-      ],
-      "owner": "src/pages/Pipeline.tsx",
-      "destination": "src/pages/Pipeline.tsx",
-      "reason": "Retained until its application consumer family moves to the canonical contract. Candidate paths are class-token references; contextual selector matching still requires review.",
-      "verification": "Inventory candidate report and route visual acceptance.",
-      "removeByPhase": "Phase 8"
-    },
-    {
       "id": "compatibility-rule-9b22640a01fb",
       "kind": "compatibility-selector",
       "selector": "tr:last-child td",
@@ -5482,8 +4656,7 @@
       "ruleKey": "compatibility-selector:|tr.row-clickable:focus-visible, .reply-row.row-clickable:focus-visible:1",
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",
@@ -5498,8 +4671,7 @@
       "ruleKey": "compatibility-selector:|tr.row-clickable:hover:1",
       "consumerCandidates": [
         "src/components/CampaignTable.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/LeadsExplorer.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "owner": "src/components/ImportCalloutCard.tsx",
       "destination": "src/components/ImportCalloutCard.tsx",

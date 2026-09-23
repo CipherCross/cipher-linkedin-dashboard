@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { CalendarCheck2, ExternalLink, UserRound } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { CalendarCheck2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { LeadAvatar } from '../components/Avatar'
+import { FollowUpRow } from '../components/FollowUpRow'
 import { useConversation } from '../lib/ConversationContext'
 import { useData } from '../lib/DataContext'
 import {
@@ -17,13 +18,14 @@ import {
 import { accountLabeller } from '../lib/leads'
 import { replyDate, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { useFollowUpActions } from '../lib/useFollowUpActions'
-import { Button, PageHeader, SectionHeader, SelectField, TextField, Toolbar, EmptyState } from '../ui'
+import { Badge, EmptyState, PageHeader, Panel, SectionHeader, SelectField, TextField, Toolbar } from '../ui'
+import type { Tone } from '../ui'
 import type { FollowUpBucket, FollowUpWorkItem } from '../lib/followUps'
 
-const GROUPS: Array<{ id: Exclude<FollowUpBucket, 'unscheduled'>; label: string }> = [
-  { id: 'overdue', label: 'Overdue' },
-  { id: 'today', label: 'Today' },
-  { id: 'upcoming', label: 'Upcoming' },
+const GROUPS: Array<{ id: Exclude<FollowUpBucket, 'unscheduled'>; label: string; tone: Tone }> = [
+  { id: 'overdue', label: 'Overdue', tone: 'danger' },
+  { id: 'today', label: 'Today', tone: 'warning' },
+  { id: 'upcoming', label: 'Upcoming', tone: 'accent' },
 ]
 
 /** Open the full manual-review surface without changing the follow-up state. */
@@ -141,19 +143,20 @@ export function FollowUps() {
         title="Follow-ups"
         description="One daily queue per LinkedIn conversation. Due dates are Madrid business days."
         actions={
-          <span className="identity-chip" title="Audit identity comes from your login">
-            Working as <strong>{actor}</strong>
+          <span className="text-app-meta text-app-text-muted" title="Audit identity comes from your login">
+            Working as <strong className="text-app-text font-semibold">{actor}</strong>
           </span>
         }
       />
 
       {!data.followUpsAvailable ? (
-        <EmptyState
-          className="card"
-          icon={CalendarCheck2}
-          title="Follow-ups need a database upgrade"
-          hint="Apply migration 046, then refresh this page. The rest of the dashboard remains available."
-        />
+        <Panel>
+          <EmptyState
+            icon={CalendarCheck2}
+            title="Follow-ups need a database upgrade"
+            hint="Apply migration 046, then refresh this page. The rest of the dashboard remains available."
+          />
+        </Panel>
       ) : (
         <>
           {/* Search plus the owner scope stay on the page; account and campaign
@@ -193,28 +196,30 @@ export function FollowUps() {
           </Toolbar>
 
           {visible.length === 0 ? (
-            <EmptyState
-              className="card"
-              icon={CalendarCheck2}
-              title={items.length ? 'No follow-ups match these filters' : 'No follow-ups scheduled'}
-              hint={
-                items.length
-                  ? 'Try another owner, account, campaign, or search.'
-                  : 'Open a lead conversation and schedule its first follow-up.'
-              }
-            />
+            <Panel>
+              <EmptyState
+                kind={items.length ? 'no-match' : 'empty'}
+                icon={CalendarCheck2}
+                title={items.length ? 'No follow-ups match these filters' : 'No follow-ups scheduled'}
+                hint={
+                  items.length
+                    ? 'Try another owner, account, campaign, or search.'
+                    : 'Open a lead conversation and schedule its first follow-up.'
+                }
+              />
+            </Panel>
           ) : (
             <div className="flex flex-col gap-app-2xl">
               {GROUPS.map((group) => {
                 const rows = grouped.get(group.id) ?? []
                 if (!rows.length) return null
                 return (
-                  <section className={`follow-group ${group.id}`} key={group.id}>
+                  <section key={group.id}>
                     <SectionHeader
                       title={group.label}
-                      actions={<span className="inline-flex items-center justify-center min-w-[26px] h-6 px-app-sm rounded-pill bg-app-surface-2 text-app-text-secondary text-app-meta font-semibold tabular-nums">{rows.length}</span>}
+                      actions={<Badge>{rows.length}</Badge>}
                     />
-                    <div className="follow-list">
+                    <Panel as="div" className="p-0 overflow-hidden">
                       {rows.map((item) => {
                         const lead = item.representative
                         const message = latest.get(item.key)
@@ -222,80 +227,35 @@ export function FollowUps() {
                           lead.full_name ??
                           lead.profile_url.replace('https://www.linkedin.com/in/', '')
                         return (
-                          <article className="follow-item" key={item.key}>
-                            <button
-                              type="button"
-                              className="follow-item-open"
-                              onClick={() => openConversation(lead, { mode: 'follow_up' })}
-                              aria-label={`Open follow-up for ${name}`}
-                            >
-                              <LeadAvatar lead={lead} size={40} />
-                              <span className="follow-item-main">
-                                <span className="follow-item-name">{name}</span>
-                                <span className="muted small ellipsis">
-                                  {[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
-                                </span>
-                              </span>
-                            </button>
-                            <div className="follow-item-context">
-                              <span className={`follow-due ${group.id}`}>
-                                {followUpDueLabel(item.state)}
-                              </span>
-                              <span className="inline-flex items-center gap-app-xs text-app-meta">
-                                <UserRound size={13} aria-hidden="true" />
-                                {ownerName(item.state.owner_id)}
-                              </span>
-                              <span className="muted small ellipsis" title={campaignSummary(item.leads, campaignName)}>
-                                {campaignSummary(item.leads, campaignName)}
-                              </span>
-                              <span className="muted small">{accountLabel(item.state.instance_id)}</span>
-                            </div>
-                            <div className="follow-item-message">
-                              {message ? (
-                                <>
-                                  <span className={`follow-direction ${message.direction}`}>
-                                    {message.direction === 'in' ? 'Them' : 'Us'}
-                                  </span>
-                                  <span className="ellipsis" title={message.body}>
-                                    {messageSnippet(message.body)}
-                                  </span>
-                                  <time className="muted small" dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyDate(message.sent_at)}</time>
-                                </>
-                              ) : (
-                                <span className="muted small">No message history</span>
-                              )}
-                            </div>
-                            {/* One primary action per row; the two rarer links
-                                sit beside it as quiet links, not as competing
-                                buttons. */}
-                            <div className="follow-item-actions">
-                              <a className="link-btn" href={lead.profile_url} target="_blank" rel="noreferrer">
-                                LinkedIn <ExternalLink size={14} aria-hidden="true" />
-                              </a>
-                              <Link
-                                className="link-btn"
-                                to={followUpRepliesHref(
-                                  item.state.instance_id,
-                                  item.state.profile_url,
-                                  message?.direction === 'in' ? message.message_id : null,
-                                )}
-                              >
-                                Review in Replies
-                              </Link>
-                              {/* The row's one primary action keeps the full
-                                  control height; the dense variant is for the
-                                  quiet links beside it, not for this. */}
-                              <Button
-                                variant="primary"
-                                onClick={() => openConversation(lead, { mode: 'follow_up' })}
-                              >
-                                Open follow-up
-                              </Button>
-                            </div>
-                          </article>
+                          <FollowUpRow
+                            key={item.key}
+                            avatar={<LeadAvatar lead={lead} size={40} />}
+                            name={name}
+                            subtitle={[lead.headline, lead.company].filter(Boolean).join(' · ') || '—'}
+                            dueLabel={followUpDueLabel(item.state)}
+                            dueTone={group.tone}
+                            owner={ownerName(item.state.owner_id)}
+                            campaigns={campaignSummary(item.leads, campaignName)}
+                            account={accountLabel(item.state.instance_id)}
+                            message={message ? {
+                              direction: message.direction === 'in' ? 'in' : 'out',
+                              body: message.body,
+                              snippet: messageSnippet(message.body),
+                              sentAt: message.sent_at,
+                              timeLabel: replyDate(message.sent_at),
+                              timeTitle: REPLY_TIME_ZONE_LABEL,
+                            } : null}
+                            linkedinHref={lead.profile_url}
+                            repliesTo={followUpRepliesHref(
+                              item.state.instance_id,
+                              item.state.profile_url,
+                              message?.direction === 'in' ? message.message_id : null,
+                            )}
+                            onOpen={() => openConversation(lead, { mode: 'follow_up' })}
+                          />
                         )
                       })}
-                    </div>
+                    </Panel>
                   </section>
                 )
               })}

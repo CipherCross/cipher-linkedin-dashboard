@@ -4,7 +4,6 @@ import {
   CalendarClock,
   CheckCircle2,
   History,
-  Loader2,
   RotateCcw,
   SkipForward,
   UserRound,
@@ -24,6 +23,7 @@ import {
 } from '../lib/followUps'
 import { supabase } from '../lib/supabase'
 import { useFollowUpActions } from '../lib/useFollowUpActions'
+import { Button, InlineError, Panel, SelectField, TextField, TextareaField } from '../ui'
 import type { FollowUpEvent, Lead } from '../lib/types'
 
 type FormMode = 'overview' | 'schedule' | 'reschedule' | 'reassign' | 'complete' | 'skip' | 'cancel'
@@ -35,6 +35,18 @@ const EVENT_LABEL: Record<FollowUpEvent['event_kind'], string> = {
   completed: 'Completed',
   skipped: 'Skipped',
   canceled: 'Canceled',
+}
+
+// Complete class strings, so Tailwind's source scan sees them — the timeline
+// dot is the one place colour stands for an event kind, and it always sits
+// beside the kind's own word (`EVENT_LABEL`), never alone.
+const EVENT_DOT_TONE: Record<FollowUpEvent['event_kind'], string> = {
+  scheduled: 'bg-app-accent',
+  rescheduled: 'bg-app-accent',
+  reassigned: 'bg-app-text-muted',
+  completed: 'bg-app-success',
+  skipped: 'bg-app-warning',
+  canceled: 'bg-app-warning',
 }
 
 /** One "load more" step. Both paths ask for the same page size, so the panel
@@ -227,13 +239,12 @@ export function FollowUpPanel({
 
   if (!data?.followUpsAvailable) {
     return (
-      <div className="follow-panel">
-        <div className="follow-panel-head">
-          <button className="link-btn" onClick={onBack}>← Conversation</button>
-        </div>
-        <div className="banner warn">
-          Apply database migration 046 to enable follow-up tracking.
-        </div>
+      <div className="flex-1 min-h-0 overflow-y-auto p-app-lg flex flex-col gap-app-md">
+        <Button variant="ghost" size="sm" onClick={onBack}>← Conversation</Button>
+        <InlineError
+          title="Follow-up tracking unavailable"
+          message="Apply database migration 046 to enable follow-up tracking."
+        />
       </div>
     )
   }
@@ -242,72 +253,85 @@ export function FollowUpPanel({
   const nextDateMin = mode === 'complete' || mode === 'skip'
     ? nextBusinessDate()
     : businessDateKey()
+  const submitDisabled =
+    busy ||
+    (mode === 'skip' && !reason.trim()) ||
+    ((mode === 'schedule' || mode === 'reassign') && !ownerId) ||
+    ((mode === 'schedule' || mode === 'reschedule') && !date) ||
+    ((mode === 'complete' || mode === 'skip') && !!date && !ownerId)
+  const submitLabel = mode === 'complete' ? 'Mark completed' :
+    mode === 'skip' ? 'Skip with reason' :
+      mode === 'cancel' ? 'Cancel follow-up' :
+        mode === 'reassign' ? 'Save owner' :
+          mode === 'reschedule' ? 'Save new date' : 'Schedule'
 
   return (
-    <div className="follow-panel">
-      <div className="follow-panel-head">
-        <button className="link-btn" onClick={onBack}>← Conversation</button>
-        <span className="follow-panel-title"><CalendarCheck2 size={16} /> Follow-up</span>
+    <div className="flex-1 min-h-0 overflow-y-auto p-app-lg flex flex-col gap-app-lg">
+      <div className="flex items-center justify-between gap-app-sm">
+        <Button variant="ghost" size="sm" onClick={onBack}>← Conversation</Button>
+        <span className="inline-flex items-center gap-app-xs font-semibold text-app-text">
+          <CalendarCheck2 size={16} aria-hidden="true" /> Follow-up
+        </span>
       </div>
 
-      <div className="identity-chip compact" title="Audit identity comes from your login">
-        Working as <strong>{actions.actor}</strong>
+      <div className="text-app-meta text-app-text-muted" title="Audit identity comes from your login">
+        Working as <strong className="text-app-text font-semibold">{actions.actor}</strong>
       </div>
 
-      <section className={`follow-current ${active ? 'active' : 'inactive'}`}>
+      <Panel>
         {active && state ? (
-          <>
-            <div>
-              <div className="filter-label">Next follow-up</div>
-              <div className={`follow-current-date ${state.next_follow_up_date! < businessDateKey() ? 'overdue' : ''}`}>
+          <div className="flex items-start justify-between gap-app-md">
+            <div className="flex flex-col gap-app-xs">
+              <div className="text-app-meta text-app-text-muted">Next follow-up</div>
+              <div className={`text-app-body font-bold ${state.next_follow_up_date! < businessDateKey() ? 'text-app-danger' : 'text-app-text'}`}>
                 {followUpDueLabel(state)}
               </div>
-              <div className="muted small">{formatCalendarDate(state.next_follow_up_date!)}</div>
+              <div className="text-app-meta text-app-text-muted">{formatCalendarDate(state.next_follow_up_date!)}</div>
             </div>
-            <div className="follow-current-owner">
-              <UserRound size={14} />
+            <div className="inline-flex items-center gap-app-xs text-app-table shrink-0">
+              <UserRound size={14} aria-hidden="true" />
               <span>{owner?.name ?? 'Unassigned'}</span>
             </div>
-          </>
+          </div>
         ) : (
-          <div>
-            <div className="follow-current-date">No follow-up scheduled</div>
-            <div className="muted small">Create the next action for this LinkedIn conversation.</div>
+          <div className="flex flex-col gap-app-xs">
+            <div className="text-app-body font-bold text-app-text">No follow-up scheduled</div>
+            <div className="text-app-meta text-app-text-muted">Create the next action for this LinkedIn conversation.</div>
           </div>
         )}
-      </section>
+      </Panel>
 
       {mode === 'overview' && (
-        <div className="follow-actions-grid">
+        <div className="flex flex-wrap gap-app-sm">
           {active ? (
             <>
-              <button className="btn accent" onClick={() => resetForm('complete')}>
-                <CheckCircle2 size={15} /> Complete
-              </button>
-              <button className="btn" onClick={() => resetForm('reschedule')}>
-                <CalendarClock size={15} /> Reschedule
-              </button>
-              <button className="btn" onClick={() => resetForm('reassign')}>
-                <UserRound size={15} /> Reassign
-              </button>
-              <button className="btn" onClick={() => resetForm('skip')}>
-                <SkipForward size={15} /> Skip
-              </button>
-              <button className="btn danger" onClick={() => resetForm('cancel')}>
-                <XCircle size={15} /> Cancel
-              </button>
+              <Button variant="primary" icon={<CheckCircle2 size={15} aria-hidden="true" />} onClick={() => resetForm('complete')}>
+                Complete
+              </Button>
+              <Button variant="secondary" icon={<CalendarClock size={15} aria-hidden="true" />} onClick={() => resetForm('reschedule')}>
+                Reschedule
+              </Button>
+              <Button variant="secondary" icon={<UserRound size={15} aria-hidden="true" />} onClick={() => resetForm('reassign')}>
+                Reassign
+              </Button>
+              <Button variant="secondary" icon={<SkipForward size={15} aria-hidden="true" />} onClick={() => resetForm('skip')}>
+                Skip
+              </Button>
+              <Button variant="danger" icon={<XCircle size={15} aria-hidden="true" />} onClick={() => resetForm('cancel')}>
+                Cancel
+              </Button>
             </>
           ) : (
-            <button className="btn accent" onClick={() => resetForm('schedule')}>
-              <CalendarCheck2 size={15} /> Schedule follow-up
-            </button>
+            <Button variant="primary" icon={<CalendarCheck2 size={15} aria-hidden="true" />} onClick={() => resetForm('schedule')}>
+              Schedule follow-up
+            </Button>
           )}
         </div>
       )}
 
       {mode !== 'overview' && (
-        <section className="follow-form">
-          <div className="follow-form-title">
+        <section className="flex flex-col gap-app-md">
+          <div className="font-bold text-app-text">
             {mode === 'schedule' && 'Schedule follow-up'}
             {mode === 'reschedule' && 'Choose a new date'}
             {mode === 'reassign' && 'Change task owner'}
@@ -317,143 +341,137 @@ export function FollowUpPanel({
           </div>
 
           {(mode === 'complete' || mode === 'skip') && (
-            <div className="follow-import-nudge">
+            <div className="flex flex-col items-start gap-app-xs p-app-md rounded-control border border-app-border bg-app-surface-2">
               <div>
-                <strong>Did you send or receive new messages?</strong>
-                <div className="muted small">Import the LinkedIn history before recording the outcome.</div>
+                <strong className="text-app-text">Did you send or receive new messages?</strong>
+                <div className="text-app-meta text-app-text-muted">Import the LinkedIn history before recording the outcome.</div>
               </div>
-              <button
-                className="link-btn"
-                onClick={() => onImport(mode as 'complete' | 'skip')}
-              >
+              <Button variant="ghost" size="sm" onClick={() => onImport(mode as 'complete' | 'skip')}>
                 Import history
-              </button>
+              </Button>
             </div>
           )}
 
           {(mode === 'skip' || mode === 'cancel') && (
-            <label className="filter-field">
-              <span className="filter-label">
-                Reason {mode === 'skip' ? '(required)' : '(optional)'}
-              </span>
-              <textarea
-                value={reason}
-                maxLength={1000}
-                rows={3}
-                placeholder={mode === 'skip' ? 'Why is this being skipped?' : 'Why cancel this task?'}
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </label>
+            <TextareaField
+              label="Reason"
+              required={mode === 'skip'}
+              value={reason}
+              maxLength={1000}
+              rows={3}
+              placeholder={mode === 'skip' ? 'Why is this being skipped?' : 'Why cancel this task?'}
+              onChange={(event) => setReason(event.target.value)}
+            />
           )}
 
           {(mode === 'schedule' || mode === 'reschedule') && (
-            <label className="filter-field">
-              <span className="filter-label">Date</span>
-              <input
-                type="date"
-                value={date}
-                min={businessDateKey()}
-                onChange={(event) => setDate(event.target.value)}
-              />
-            </label>
+            <TextField
+              type="date"
+              label="Date"
+              required
+              value={date}
+              min={businessDateKey()}
+              onChange={(event) => setDate(event.target.value)}
+            />
           )}
 
           {(mode === 'complete' || mode === 'skip') && (
-            <label className="filter-field">
-              <span className="filter-label">Next follow-up (optional)</span>
-              <input
-                type="date"
-                value={date}
-                min={nextDateMin}
-                onChange={(event) => setDate(event.target.value)}
-              />
-            </label>
+            <TextField
+              type="date"
+              label="Next follow-up (optional)"
+              value={date}
+              min={nextDateMin}
+              onChange={(event) => setDate(event.target.value)}
+            />
           )}
 
           {(mode === 'schedule' || mode === 'reassign' || ((mode === 'complete' || mode === 'skip') && date)) && (
-            <label className="filter-field">
-              <span className="filter-label">Owner</span>
-              <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
-                <option value="">Choose owner…</option>
-                {activeMembers.map((member) => (
-                  <option key={member.id} value={String(member.id)}>{member.name}</option>
-                ))}
-              </select>
-              {actions.memberWritesBlockedReason && (
-                <span className="muted small">{actions.memberWritesBlockedReason}</span>
-              )}
-            </label>
+            <SelectField
+              label="Owner"
+              required={mode === 'schedule' || mode === 'reassign'}
+              value={ownerId}
+              help={actions.memberWritesBlockedReason ?? undefined}
+              onChange={(event) => setOwnerId(event.target.value)}
+            >
+              <option value="">Choose owner…</option>
+              {activeMembers.map((member) => (
+                <option key={member.id} value={String(member.id)}>{member.name}</option>
+              ))}
+            </SelectField>
           )}
 
-          {error && <div className="banner conv-error">{error}</div>}
+          {error && <InlineError title="Couldn't save this follow-up." message={error} />}
 
-          <div className="follow-form-actions">
-            <button className="btn" disabled={busy} onClick={() => setMode('overview')}>
+          <div className="flex justify-end gap-app-sm">
+            <Button variant="secondary" disabled={busy} onClick={() => setMode('overview')}>
               Back
-            </button>
-            <button
-              className={`btn ${mode === 'cancel' ? 'danger' : 'accent'}`}
-              disabled={
-                busy ||
-                (mode === 'skip' && !reason.trim()) ||
-                ((mode === 'schedule' || mode === 'reassign') && !ownerId) ||
-                ((mode === 'schedule' || mode === 'reschedule') && !date) ||
-                ((mode === 'complete' || mode === 'skip') && !!date && !ownerId)
-              }
+            </Button>
+            <Button
+              variant={mode === 'cancel' ? 'danger' : 'primary'}
+              loading={busy}
+              loadingLabel={`${submitLabel}…`}
+              disabled={submitDisabled}
               onClick={() => void submit()}
             >
-              {busy && <Loader2 size={14} className="spin" />}
-              {mode === 'complete' ? 'Mark completed' :
-                mode === 'skip' ? 'Skip with reason' :
-                  mode === 'cancel' ? 'Cancel follow-up' :
-                    mode === 'reassign' ? 'Save owner' :
-                      mode === 'reschedule' ? 'Save new date' : 'Schedule'}
-            </button>
+              {submitLabel}
+            </Button>
           </div>
         </section>
       )}
 
-      <section className="follow-history">
-        <div className="follow-history-head">
-          <span><History size={15} /> History</span>
-          <button className="link-btn" onClick={() => setHistoryVersion((version) => version + 1)}>
-            <RotateCcw size={12} /> Refresh
-          </button>
+      <section className="flex flex-col gap-app-md pt-app-lg border-t border-app-border">
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-app-xs font-semibold text-app-text">
+            <History size={15} aria-hidden="true" /> History
+          </span>
+          <Button variant="ghost" size="sm" icon={<RotateCcw size={12} aria-hidden="true" />} onClick={() => setHistoryVersion((version) => version + 1)}>
+            Refresh
+          </Button>
         </div>
-        {historyError && <div className="banner conv-error">{historyError}</div>}
-        {!events.length && !historyLoading && (
-          <div className="muted small">No follow-up history yet.</div>
+        {historyError && (
+          <InlineError
+            title="Could not load follow-up history."
+            message={historyError}
+            onRetry={() => setHistoryVersion((version) => version + 1)}
+            busy={historyLoading}
+          />
         )}
-        <div className="follow-timeline">
-          {events.map((event) => (
-            <div className={`follow-event ${event.event_kind}`} key={event.id}>
-              <span className="follow-event-dot" aria-hidden="true" />
+        {!events.length && !historyLoading && (
+          <p className="m-0 text-app-meta text-app-text-muted">No follow-up history yet.</p>
+        )}
+        <div className="flex flex-col">
+          {events.map((event, index) => (
+            <div className="relative grid grid-cols-[14px_1fr] gap-app-sm pb-app-md" key={event.id}>
+              <span className={`relative z-10 mt-[3px] w-[11px] h-[11px] rounded-full ${EVENT_DOT_TONE[event.event_kind]}`} aria-hidden="true" />
+              {index < events.length - 1 && (
+                <span className="absolute left-[5px] top-[11px] bottom-0 w-px bg-app-border" aria-hidden="true" />
+              )}
               <div>
-                <div className="follow-event-title">
+                <div className="text-app-table font-semibold">
                   {EVENT_LABEL[event.event_kind]}
                   {event.new_due_date ? ` · ${formatCalendarDate(event.new_due_date)}` : ''}
                 </div>
                 {event.event_kind === 'rescheduled' && event.previous_due_date && (
-                  <div className="muted small">
+                  <div className="text-app-meta text-app-text-muted">
                     From {formatCalendarDate(event.previous_due_date)}
                   </div>
                 )}
                 {event.event_kind === 'reassigned' && (
-                  <div className="muted small">
+                  <div className="text-app-meta text-app-text-muted">
                     {event.previous_owner_name ?? 'Unassigned'} → {event.new_owner_name ?? 'Unassigned'}
                   </div>
                 )}
-                {event.reason && <div className="small follow-event-reason">{event.reason}</div>}
-                <div className="muted small">
+                {event.reason && <div className="text-app-table whitespace-pre-wrap my-app-xs">{event.reason}</div>}
+                <div className="text-app-meta text-app-text-muted">
                   {event.actor} · {new Date(event.occurred_at).toLocaleString()}
                 </div>
               </div>
             </div>
           ))}
         </div>
-        {historyLoading && <div className="muted small">Loading history…</div>}
+        {historyLoading && <p className="m-0 text-app-meta text-app-text-muted">Loading history…</p>}
         {hasMore && !historyLoading && (
-          <button className="link-btn" onClick={() => void loadHistory(true)}>Load more</button>
+          <Button variant="ghost" size="sm" onClick={() => void loadHistory(true)}>Load more</Button>
         )}
       </section>
     </div>

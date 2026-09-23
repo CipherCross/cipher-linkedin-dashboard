@@ -17,6 +17,7 @@
  *   - a dialog traps focus, closes on Escape, and returns focus to its trigger;
  *   - a busy dialog refuses every close path and says why;
  *   - a filter dialog changes nothing until Apply;
+ *   - a sortable column is a keyboard button and its header states the sort;
  *   - a duplicate person name carries what tells them apart;
  *   - a business time says Madrid and an analytics date says UTC.
  */
@@ -30,6 +31,7 @@ import { Tabs } from '../src/ui/Tabs'
 import { Dialog, FilterDialog } from '../src/ui/Overlay'
 import { EmptyState, SaveStatus } from '../src/ui/States'
 import { ActiveFilters } from '../src/ui/Toolbar'
+import { SortHeader, Table } from '../src/ui/Table'
 import { useRef, useState } from 'react'
 import { Inbox } from 'lucide-react'
 import { disambiguate, initialsOf, UNKNOWN_PERSON_LABEL } from '../src/ui/Identity'
@@ -359,6 +361,27 @@ describe('state presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(onRemove).toHaveBeenCalledTimes(1)
     expect(onClearAll).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SortHeader', () => {
+  it('is a button inside the header cell, and only the active column carries aria-sort', () => {
+    const onSort = vi.fn()
+    render(
+      <Table caption="Leads">
+        <thead>
+          <tr>
+            <SortHeader label="Lead" active direction="asc" onSort={onSort} />
+            <SortHeader label="Replied" active={false} direction="asc" onSort={onSort} />
+          </tr>
+        </thead>
+      </Table>,
+    )
+    const lead = screen.getByRole('columnheader', { name: 'Lead' })
+    expect(lead.getAttribute('aria-sort')).toBe('ascending')
+    expect(screen.getByRole('columnheader', { name: 'Replied' }).hasAttribute('aria-sort')).toBe(false)
+    fireEvent.click(within(lead).getByRole('button', { name: 'Lead' }))
+    expect(onSort).toHaveBeenCalledTimes(1)
   })
 })
 

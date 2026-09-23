@@ -205,3 +205,76 @@ Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720
 **Open, not caused by this phase — Phase 7 entry blocker:** opening the conversation drawer from a Leads row in the fixture intermittently freezes the page (DevTools `Runtime.callFunctionOn` times out; one debugger pause landed in React's `dispatchContinuousEvent`). It reproduces at `38d139b`, before any redesign change, at `17fe04d` and at `9971aee`, so it predates this programme. Because of it, `ImportHistoryPanel` (rendered only inside the drawer) has unit coverage but no browser pass yet. Phase 7 owns `ConversationDrawer` and must diagnose this before accepting the drawer.
 
 Next: Phase 6 — Leads (wide-list reference), Follow-ups, Review: tables, filters (adopt `FilterDialog`), empty/error states, follow-up panels; first result y≤340 at 1280, Follow-ups primary action reachable at 1280, local wide scroll.
+
+## Phase 6 — accepted (2026-09-23)
+
+Search/list operations: Leads, Follow-ups, Review. The orchestrator did the shared `SortHeader` and Leads (the wide-list reference); two Sonnet workers did Follow-ups (with `FollowUpPanel`) and Review (with its three private tables), reviewed and corrected by the orchestrator.
+
+- **Shared contracts**
+  - New `SortHeader` in `src/ui/Table.tsx`: a `<th>` carrying `aria-sort`, whose label is a real button with a ↕/↑/↓ mark. The route still owns the key, the direction and the click. It is pinned in `uiPrimitives` and shown in the Gallery's list composition. `CampaignTable`, `CampaignCompareTable`, Overview's `ov-sortable` and Hypotheses' `sortHead` still use their own headers; they move in Phases 9 and 12.
+  - `TableFrame` gains `scrollRef` and `busy` (`aria-busy` on the scroll region).
+- **Leads**
+  - Filters now use `FilterDialog`: end-placed, 560px, one column. The draft/Apply/Cancel handlers are unchanged. Clear all edits only the draft.
+  - The table is `Table` with `SortHeader` on the six sortable columns.
+  - Rows are no longer `<tr role="button" tabIndex=0>` wrapped around a link, a select and a second link. A row keeps its pointer click. Keyboard and screen-reader users reach it through a real button laid over the row with `pointer-events: none` (`ui-exception(leads-row-open)`, allowlisted). Its focus ring outlines the row, while the links, the stage select and every tooltip underneath keep working.
+  - The per-row pipeline select is the canonical `Select`, now named "Pipeline stage for <name>". It had no accessible name before. It keeps its quiet unset look through utilities.
+  - The follow-up due date is a `Badge`, using the same tones as the Follow-ups queue. Gender uses `StatusText`.
+  - The coaching digest toggle is a `Button` with `aria-expanded`/`aria-controls`. Its error slot is an `InlineError` (test handle `data-digest="error"`, replacing `.banner`). Pattern counts are `Badge`s.
+  - Two small fixes. Paging now scrolls the table back to the top; it used to call `scrollTo` on a non-scrolling wrapper. On the server path, a refetch shows `UpdatingNote` instead of flashing "No leads match".
+  - Empty and no-match are distinguished ("No leads yet" / "No leads match these filters").
+  - `leads-explorer.css` is deleted; the table-height rule is now an arbitrary-variant utility on the frame.
+- **Follow-ups**
+  - The row is a presentational `FollowUpRow` component. The route formats every value and owns the handlers; the Gallery renders the same component, so the reference can't drift from the page.
+  - Due badge tone per bucket; Them/Us as `StatusText`; LinkedIn and Review in Replies as `ExternalLinkButton`/`LinkButton` (ghost, sm); "Open follow-up" is the one primary action at 44px.
+  - The four zones wrap instead of clipping.
+  - Empty states say `empty` or `no-match`.
+- **FollowUpPanel** (inside the drawer)
+  - All 13 raw buttons, 2 date inputs, the select and the textarea are canonical fields and buttons.
+  - The mutation error is an `InlineError` above the actions and keeps the draft. The history read error is an `InlineError` with Retry.
+  - Submit uses `Button loading`.
+  - The Skip reason is labelled "Reason", marked required. Every mode, handler, disabled expression and `min` date is unchanged.
+- **FollowUpCalloutCard deleted** — zero importers.
+- **Review**
+  - The cohort, template and leads-added sections are each `Panel` + `SectionHeader` + `TableFrame`/`Table`.
+  - The metric toggle is a `SegmentedControl`; the template picker is a `SelectField`; chip removal is an `IconButton`; the WoW delta is a `Badge`.
+  - The worker had added a click-to-sort to "Leads added"; the orchestrator reverted it to the original fixed order, and the test now pins that it is not sortable.
+  - A doubled gap between adjacent panels (`.ui-panel + .ui-panel` margin plus the flex gap) was fixed on the route.
+  - Left for Phase 9, byte-identical: the P3 KPI tiles (`kpi-*`, shared with Overview), `SentimentTrendChart`, and `MessageSequence`'s legacy card.
+- **CSS**
+  - `follow-up-panel.css` and its import deleted.
+  - Removed from `ui.css`, all with zero consumers: every `.follow-panel/-current/-actions-grid/-form/-history/-timeline/-event`, `.follow-group/-list/-item*/-direction`, `.cohort-rate`, `.conv-follow-btn`, and `td .pipe-stage-select.quiet`. Their orphaned comments went with them.
+  - `.follow-due`/`.pipe-follow-due`, `.pipe-stage-select`, `.identity-chip`, `.row-clickable`, `.sortable`/`.sort-ind` stay for Pipeline, the campaign workspace and the analytics tables.
+- **Fixture** — the populated scenarios now carry one overdue follow-up and its latest message, with `followUpsAvailable: true`, so Follow-ups and the Leads follow-up column render populated. `--check` still passes.
+
+Tests: new `leadsExplorerPage` (6), `followUpsPage` (8), `followUpPanel` (7), `reviewPage` (6), plus one `SortHeader` case in `uiPrimitives`. `leadsExplorerDigest` now uses the `data-digest="error"` handle; `panelReadBranches` is unchanged and green. Mutation checks:
+- Committing sheet filters on change, and dropping the page reset on Apply, fail two `leadsExplorerPage` tests.
+- Removing the Skip-reason disabled condition fails `followUpPanel`.
+- Forcing the default owner to `all` fails `followUpsPage`.
+- Removing the Send to Slack disabled condition fails `reviewPage`.
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 97 files / 1,429 tests passed; `typecheck:api` passed after typing one test mock; `ui:inventory` passed after update. Inventory movement:
+
+| Count | Before | After |
+| --- | --- | --- |
+| Raw controls | 187 | 159 |
+| Allowlisted | 6 | 7 |
+| Compatibility tokens | 838 | 637 |
+| Selectors | 321 | 286 |
+
+Modal roots stay at 4. The Phase 6 files have zero raw controls and zero compatibility tokens, except the allowlisted row button and the Phase-9-owned KPI tile tokens in `Review.tsx`. Fixture `--check` passed; `git diff --check` passed. Production gzip JS 655,486 (+0.7% vs Phase 0), CSS 37,803 (−3,062 vs Phase 0). TSX +538/−517 and CSS +20/−196 lines.
+
+Browser evidence — **local synthetic fixture, headless Chrome, exact 1280×720 / 1440×900 / 1920×1080**:
+
+| Surface | Result |
+| --- | --- |
+| Leads default | first result top **y=336** at all three (≤340); no page overflow-x; the table scrolls locally at 1280 |
+| Leads keyboard | row button covers the row; focus ring solid; Enter opens the conversation drawer |
+| Leads filter sheet | 560px end sheet (720–1280), focus on Campaign, Apply visible at 704/720; Escape returns focus to Filters |
+| Follow-ups | "Open follow-up" right edge 1243 inside a 1255 row at 1280 (1395/1407, 1831/1843); 44px tall; unchanged with injected long name/campaign/message; no overflow-x |
+| FollowUpPanel in the drawer | every control inside the 560px drawer; no horizontal scroll; Skip → "Skip with reason" disabled until a reason, textarea labelled "Reason" and `required` |
+| Review / Leads Added | no overflow-x; no text under 13px; header actions fit; five sections evenly spaced after the gap fix |
+| Gallery | Compositions shows two `FollowUpRow`s and the list table's `SortHeader`s |
+
+**Open, Phase 7:** the conversation drawer never returns focus to its trigger on close; it has no focus-return code, before or after this phase. Moving it onto the shared Dialog in Phase 7 fixes that. The intermittent drawer freeze recorded in Phase 5 did not reproduce in any of this phase's runs, but it is still Phase 7's entry check.
+
+Next: Phase 7 — Replies and the conversation modal (Replies, ConversationDrawer and its child panels, LostReasonModal on the shared Dialog).

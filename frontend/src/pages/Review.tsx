@@ -18,7 +18,9 @@ import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
 import { num } from '../lib/format'
-import { Button, LinkButton, PageHeader, SectionHeader, SegmentedControl, SelectField, Tabs, EmptyState } from '../ui'
+import {
+  Button, LinkButton, PageHeader, Panel, SectionHeader, SegmentedControl, SelectField, Tabs, EmptyState,
+} from '../ui'
 
 const WEEK_OPTIONS = [8, 12, 16]
 const DEFAULT_WEEKS = 12
@@ -130,15 +132,17 @@ export function Review() {
       {tab === 'leads-added' ? (
         <LeadsAddedTable campaigns={rangedAdded} instances={data.instances} />
       ) : !anyInvited ? (
-        <div className="card">
+        <Panel>
           <EmptyState
             icon={ClipboardCheck}
             title="Nothing to review yet"
             hint="Cohort comparisons appear here once your accounts have sent invites."
           />
-        </div>
+        </Panel>
       ) : (
-        <div className="stack">
+        <div className="flex flex-col gap-app-xl mb-app-xl [&>*]:mt-0">
+          {/* The gap alone spaces the sections; `.ui-panel + .ui-panel` would
+              add its own margin on top of it between two adjacent panels. */}
           {intentOutcomes && <P3OutcomeSummary metrics={intentOutcomes} weeks={weeks} />}
           <CohortComparisonTable data={cohortData} instances={data.instances} />
           <TemplateComparison

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Download, CalendarRange } from 'lucide-react'
 import type { Instance } from '../lib/types'
-import { EmptyState } from '../ui'
+import {
+  Badge, Button, EmptyState, Panel, SectionHeader, SegmentedControl, Table, TableFrame,
+} from '../ui'
 import { downloadCsv, instanceName, toCsv } from '../lib/leads'
 import {
   SMALL_COHORT, cellAcceptRate, cellPositiveShare, cellReplyRate, reviewCsvRows,
@@ -77,36 +79,33 @@ export function CohortComparisonTable({
   const colSpan = data.weeks.length + 1
 
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>Cohort comparison — by invite week</h2>
-        <div className="flex items-center gap-app-sm flex-wrap">
-          <div className="segmented" role="tablist" aria-label="Metric">
-            {METRICS.map((m) => (
-              <button
-                key={m.id}
-                className={`segmented-item ${metric === m.id ? 'active' : ''}`}
-                role="tab"
-                aria-selected={metric === m.id}
-                onClick={() => setMetric(m.id)}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <button className="btn sm" onClick={exportCsv} disabled={data.rows.length === 0}>
-            <Download size={14} /> Export CSV
-          </button>
-        </div>
-      </div>
+    <Panel>
+      <SectionHeader
+        title="Cohort comparison — by invite week"
+        actions={<>
+          <SegmentedControl label="Metric" value={metric} onChange={setMetric} items={METRICS} />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={14} aria-hidden="true" />}
+            onClick={exportCsv}
+            disabled={data.rows.length === 0}
+          >
+            Export CSV
+          </Button>
+        </>}
+      />
 
-      <div className="flex overflow-x-auto [&>table]:flex-[0_0_auto]">
-        <table className="min-w-[640px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
+      <TableFrame scrollLabel="Cohort comparison by invite week">
+        <Table
+          caption="Cohort comparison by invite week"
+          className="min-w-[640px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+        >
           <thead>
             <tr>
-              <th className="sticky left-0 z-[1] bg-app-surface max-w-[220px] overflow-hidden text-ellipsis">Campaign</th>
+              <th scope="col" className="sticky left-0 z-[1] bg-app-surface max-w-[220px] overflow-hidden text-ellipsis">Campaign</th>
               {data.weeks.map((w) => (
-                <th key={w} className="num">{shortDate(w)}</th>
+                <th key={w} scope="col" className="ui-table__num">{shortDate(w)}</th>
               ))}
             </tr>
           </thead>
@@ -126,10 +125,10 @@ export function CohortComparisonTable({
               </tr>
             )}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableFrame>
 
-      <div className="muted small mt-app-md">
+      <p className="text-app-meta text-app-text-muted mt-app-md">
         Cohort = the week the invite went out. A cohort's rates stay greyed as
         “still maturing” until {maturity.acceptWeeks}w (accept) / {maturity.replyWeeks}w
         (reply) after its Monday; WoW ▲/▼ (percentage points) compare only matured
@@ -137,8 +136,8 @@ export function CohortComparisonTable({
         {maturity.thin
           ? 'Lag sample too thin — using fixed 2w / 4w thresholds.'
           : `Observed p90 lag: accept ${fmtDays(maturity.p90Accept)}, reply ${fmtDays(maturity.p90Reply)} (last 90 days).`}
-      </div>
-    </div>
+      </p>
+    </Panel>
   )
 }
 
@@ -187,29 +186,36 @@ function prevMaturedRate(row: CohortRow, weeks: string[], week: string, metric: 
 function Cell({
   cell, prevRate, metric,
 }: { cell: CohortCell | undefined; prevRate: number | null; metric: Metric }) {
-  if (!cell || cell.invites === 0) return <td className="num muted">—</td>
+  if (!cell || cell.invites === 0) return <td className="ui-table__num text-app-text-muted">—</td>
 
   if (metric === 'invites') {
-    return <td className="num">{cell.invites.toLocaleString('en-US')}</td>
+    return <td className="ui-table__num">{cell.invites.toLocaleString('en-US')}</td>
   }
 
   const rate = rateOf(cell, metric)
-  if (rate == null) return <td className="num muted">—</td>
+  if (rate == null) return <td className="ui-table__num text-app-text-muted">—</td>
 
   const matured = isMatured(cell, metric)
   const small = cell.invites < SMALL_COHORT
   const delta = matured && prevRate != null ? Math.round((rate - prevRate) * 10) / 10 : null
 
   return (
-    <td className="num">
-      <span className={matured ? 'cohort-rate' : 'cohort-rate maturing'} title={maturingTitle(matured)}>
+    <td className="ui-table__num">
+      <span
+        className={matured ? 'tabular-nums' : 'tabular-nums text-app-text-muted opacity-[0.65] cursor-help'}
+        title={maturingTitle(matured)}
+      >
         {rate.toFixed(1)}%
-        {small && <span className="cmp-warn" title={`Only ${cell.invites} invites — rate is noisy`}> ⚠</span>}
+        {small && <span className="text-app-warning cursor-help" title={`Only ${cell.invites} invites — rate is noisy`}> ⚠</span>}
       </span>
       {delta != null && delta !== 0 && (
-        <span className={`kpi-delta ${delta > 0 ? 'up' : 'down'} ml-1.5 px-[5px]`} title="vs prior matured cohort (pct points)">
+        <Badge
+          tone={delta > 0 ? 'success' : 'danger'}
+          className="ml-1.5"
+          title="vs prior matured cohort (pct points)"
+        >
           {delta > 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}
-        </span>
+        </Badge>
       )}
     </td>
   )
