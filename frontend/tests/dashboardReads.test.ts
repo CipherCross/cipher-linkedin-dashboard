@@ -128,9 +128,9 @@ describe('the read vocabulary', () => {
     expect(called).toEqual(allowlisted)
   })
 
-  it('names thirty-three reads including the three narrow Overview contracts', () => {
-    expect(Object.values(READ_OPS)).toHaveLength(33)
-    expect(new Set(Object.values(READ_OPS)).size).toBe(33)
+  it('names thirty-four reads including the three narrow Overview contracts and the campaign preview', () => {
+    expect(Object.values(READ_OPS)).toHaveLength(34)
+    expect(new Set(Object.values(READ_OPS)).size).toBe(34)
   })
 
   it('does not treat the flag lookup as a read', () => {
@@ -515,6 +515,8 @@ describe('the dashboard load', () => {
       READ_OPS.overviewPerformance,
       READ_OPS.overviewAccountCampaigns,
       READ_OPS.overviewSummary,
+      // Read only when the operator opens a campaign preview on Overview.
+      READ_OPS.campaignPreview,
       READ_OPS.routeSnapshot,
       READ_OPS.sequenceHub,
       READ_OPS.leadsSearchPage,

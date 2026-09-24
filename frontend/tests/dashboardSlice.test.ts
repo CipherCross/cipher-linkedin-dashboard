@@ -91,6 +91,7 @@ import {
   overviewPerformanceOperation,
   overviewAccountCampaignsOperation,
   overviewSummaryOperation,
+  campaignPreviewOperation,
   syncRecentRunsOperation,
 } from '../api/_lib/data/operations/dashboard.js'
 import {
@@ -175,6 +176,7 @@ const READ_SLICE = [
   [DASHBOARD_OPERATIONS.overviewPerformance, overviewPerformanceOperation],
   [DASHBOARD_OPERATIONS.overviewAccountCampaigns, overviewAccountCampaignsOperation],
   [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
+  [DASHBOARD_OPERATIONS.campaignPreview, campaignPreviewOperation],
   [ROUTE_SNAPSHOT_OPERATION, routeSnapshotInspectable],
   [SEQUENCE_HUB_OPERATION, sequenceHubOperation],
   [ACTIVITY_OPERATIONS.dailySeries, dailySeriesOperation],
@@ -247,7 +249,7 @@ const ROSTER_READING = [
 ] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists thirty-six reads and no more', () => {
+  it('allowlists thirty-seven reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -261,6 +263,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
     expect([...READ_OPERATION_NAMES].sort()).toEqual([
       'activity.dailySeries',
       'annotations.timeline',
+      'campaign.preview',
       'campaigns.performance',
       'campaigns.sequenceSteps',
       'coach.playbook',

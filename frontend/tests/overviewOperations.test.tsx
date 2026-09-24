@@ -21,6 +21,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 const fetchPerformance = vi.fn()
 const fetchCampaigns = vi.fn()
 const fetchSystem = vi.fn()
+const fetchPreview = vi.fn()
 const resolvePath = vi.fn()
 let data: DashboardData
 
@@ -30,7 +31,22 @@ vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonOverviewSystemTotals: (...args: unknown[]) => fetchSystem(...args),
   fetchNeonOverviewPerformance: (...args: unknown[]) => fetchPerformance(...args),
   fetchNeonOverviewAccountCampaigns: (...args: unknown[]) => fetchCampaigns(...args),
+  fetchNeonCampaignPreview: (...args: unknown[]) => fetchPreview(...args),
+  resolvePhotoPath: async () => 'disabled',
 }))
+
+const previewPayload = () => ({
+  campaign: { campaign_id: 'one:1', campaign_name: 'Campaign 1', instance_id: 'one' },
+  leads: [{
+    lead: { id: 'lead-1', instance_id: 'one', campaign_id: 'one:1', profile_url: 'https://linkedin.com/in/ada', full_name: 'Ada Lovelace', company: 'Engines Ltd' },
+    reply: { body: 'Yes, send me the deck.', sent_at: '2026-09-21T12:00:00.000Z', sentiment: 'positive', reason: null },
+    highestIntent: 'p3',
+  }],
+  steps: [
+    { step_index: 0, step_label: null, step_type: 'InvitePerson', template_body: 'Hi {firstName}' },
+    { step_index: 1, step_label: null, step_type: 'MessageToPerson', template_body: 'Thanks for connecting.' },
+  ],
+})
 
 const totals = (over: Record<string, number> = {}) => ({
   leads: 100, invited: 100, connected: 40, messaged: 30, replied: 10,
@@ -88,6 +104,7 @@ beforeEach(() => {
   fetchSystem.mockReset().mockResolvedValue(system())
   fetchPerformance.mockReset().mockResolvedValue(performance())
   fetchCampaigns.mockReset().mockResolvedValue(accountCampaigns())
+  fetchPreview.mockReset()
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
@@ -334,7 +351,8 @@ describe('Overview section chrome (Phase 9)', () => {
     await waitFor(() => expect(within(panel).queryByText('Updating…')).toBeNull())
   })
 
-  it('opens a campaign through a real link, with no focusable pseudo-button rows', async () => {
+  it('opens a campaign preview instead of navigating, and reads nothing until asked', async () => {
+    fetchPreview.mockResolvedValue(previewPayload())
     render(
       <MemoryRouter initialEntries={['/']}>
         <Routes>
@@ -345,13 +363,45 @@ describe('Overview section chrome (Phase 9)', () => {
     )
     const table = await screen.findByRole('table', { name: 'Campaign comparison' })
     expect(table.querySelector('tr[tabindex], tr[role="button"]')).toBeNull()
-    const link = within(table).getByRole('link', { name: 'Campaign 1' })
-    expect(link.getAttribute('href')).toBe('/campaign/one%3A1')
-    // Selecting a row never navigates.
+    expect(fetchPreview).not.toHaveBeenCalled()
+    // Selecting a row neither navigates nor opens the preview.
     fireEvent.click(within(table).getByRole('checkbox', { name: 'Select Campaign 1' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(fetchPreview).not.toHaveBeenCalled()
+
+    fireEvent.click(within(table).getByRole('button', { name: 'Preview Campaign 1' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Campaign 1' })
+    expect(fetchPreview).toHaveBeenCalledTimes(1)
+    expect(fetchPreview.mock.calls[0][0]).toBe('one:1')
+    expect(await within(dialog).findByText('Yes, send me the deck.')).toBeTruthy()
+    expect(within(dialog).getByText('Connection request')).toBeTruthy()
+    expect(within(dialog).getByText('Message 1')).toBeTruthy()
+    expect(within(dialog).getByText('Hi {firstName}')).toBeTruthy()
     expect(screen.queryByText('Campaign page')).toBeNull()
-    fireEvent.click(link)
+
+    const details = within(dialog).getByRole('link', { name: 'View campaign details' })
+    expect(details.getAttribute('href')).toBe('/campaign/one%3A1')
+    fireEvent.click(details)
     expect(await screen.findByText('Campaign page')).toBeTruthy()
+  })
+
+  it('keeps a failed preview open with Retry, and reopens a loaded one without reading again', async () => {
+    fetchPreview.mockRejectedValueOnce(new Error('campaign.preview: request failed (500)'))
+    fetchPreview.mockResolvedValue(previewPayload())
+    renderOverview()
+    const table = await screen.findByRole('table', { name: 'Campaign comparison' })
+    fireEvent.click(within(table).getByRole('button', { name: 'Preview Campaign 1' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Campaign 1' })
+    expect(await within(dialog).findByText('Could not load this campaign preview.')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Retry' }))
+    expect(await within(dialog).findByText('Yes, send me the deck.')).toBeTruthy()
+    expect(fetchPreview).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[0])
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(within(table).getByRole('button', { name: 'Preview Campaign 1' }))
+    expect(await screen.findByText('Yes, send me the deck.')).toBeTruthy()
+    expect(fetchPreview).toHaveBeenCalledTimes(2)
   })
 
   it('sorts the account table from a column-header button', async () => {

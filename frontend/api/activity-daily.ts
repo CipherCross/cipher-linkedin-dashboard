@@ -933,6 +933,10 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     operation: DASHBOARD_OPERATIONS.overviewSummary,
     ranged: true,
   },
+  [DASHBOARD_OPERATIONS.campaignPreview]: {
+    operation: DASHBOARD_OPERATIONS.campaignPreview,
+    params: (url) => ({ campaignId: readRequiredText(url, 'campaign_id') }),
+  },
   [ROUTE_SNAPSHOT_OPERATION]: {
     operation: ROUTE_SNAPSHOT_OPERATION,
     params: (url) => {

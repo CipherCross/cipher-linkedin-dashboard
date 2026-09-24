@@ -63,7 +63,7 @@ import type {
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
   OverviewAccountCampaigns, OverviewPerformance, OverviewSystemTotals,
-  LeadsSearchPage, SequenceHubSnapshot,
+  LeadsSearchPage, SequenceHubSnapshot, CampaignPreview,
 } from './types'
 
 /**
@@ -89,6 +89,7 @@ export const READ_OPS = {
   overviewPerformance: 'overview.performance',
   overviewAccountCampaigns: 'overview.accountCampaigns',
   overviewSummary: 'overview.summary',
+  campaignPreview: 'campaign.preview',
   sequenceHub: 'sequences.hub',
   routeSnapshot: 'dashboard.routeSnapshot',
   dailySeries: 'activity.dailySeries',
@@ -784,6 +785,25 @@ export async function fetchNeonOverviewAccountCampaigns(
     if (!row) throw new Error(`${READ_OPS.overviewAccountCampaigns}: response contained no campaigns row`)
     return row
   })
+}
+
+/** One campaign's preview, read only after the operator opens it — never part
+ *  of the Overview bootstrap. A missing campaign is an error, not an empty
+ *  preview, so the dialog offers Retry instead of claiming there is nothing. */
+export async function fetchNeonCampaignPreview(
+  campaignId: string,
+  fetchImpl: ApiFetch = authFetch,
+  signal?: AbortSignal,
+): Promise<CampaignPreview> {
+  const page = await readPage<Omit<CampaignPreview, 'campaign'> & { campaign: CampaignPreview['campaign'] | null }>(
+    READ_OPS.campaignPreview,
+    { campaign_id: campaignId, limit: 1 },
+    fetchImpl,
+    signal,
+  )
+  const row = page.items[0]
+  if (!row?.campaign) throw new Error(`${READ_OPS.campaignPreview}: campaign not found`)
+  return { ...row, campaign: row.campaign }
 }
 
 /** Bounded union of managed sequences, direct campaigns, deployments and reply previews. */

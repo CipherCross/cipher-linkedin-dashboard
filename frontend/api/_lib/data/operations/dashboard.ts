@@ -63,6 +63,8 @@ export const DASHBOARD_OPERATIONS = {
   overviewAccountCampaigns: 'overview.accountCampaigns',
   /** Exact route-level aggregates for Overview; never returns raw lead/message rows. */
   overviewSummary: 'overview.summary',
+  /** One campaign's latest five replies and synced copy; read only when the preview opens. */
+  campaignPreview: 'campaign.preview',
   /** Every notebook/account this team syncs, with its health fields. */
   instancesOverview: 'instances.overview',
   /** Per-campaign funnel totals and rates — the topline table. */
@@ -636,6 +638,110 @@ export const overviewAccountCampaignsOperation: NeonQueryOperation<OverviewAccou
     values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
   }),
   mapRow: (row: NeonRow): OverviewAccountCampaignsRow => row.account_campaigns as OverviewAccountCampaignsRow,
+}
+
+// ---------------------------------------------------------------------------
+// campaign.preview
+// ---------------------------------------------------------------------------
+
+export interface CampaignPreviewParams {
+  readonly campaignId: string
+  readonly [key: string]: string | null
+}
+
+/** Leads are the full lead row (`to_jsonb(l) - 'updated_at'`, as the route
+ *  snapshots return it) so the preview can open the ordinary Conversation
+ *  Drawer without a second read. */
+export interface CampaignPreviewRow {
+  readonly campaign: {
+    readonly campaign_id: string
+    readonly campaign_name: string
+    readonly instance_id: string
+  } | null
+  readonly leads: readonly unknown[]
+  readonly steps: readonly unknown[]
+}
+
+/**
+ * One statement for the Campaign comparison preview.
+ *
+ * Replies: the latest *displayable* inbound message per conversation of this
+ * campaign's leads — a null/blank row (an intent-only or media message) cannot
+ * take one of the five slots. Every conversation join carries `instance_id`:
+ * `profile_url` alone names two different threads in a multi-account team.
+ * Order is newest reply, then `replied_at`, then normalised profile URL, then
+ * lead id, so ties are total.
+ *
+ * Sequence: only `campaign_steps`, the rows synced from Linked Helper, and only
+ * copy-bearing steps with a non-blank template. Builder snapshots are not read.
+ */
+const CAMPAIGN_PREVIEW_SQL = `WITH target_campaign AS MATERIALIZED (
+  SELECT c.id, c.name, c.instance_id
+    FROM public.campaigns c
+   WHERE c.id = $1
+), campaign_leads AS MATERIALIZED (
+  SELECT l.*
+    FROM public.leads l
+    JOIN target_campaign c ON c.id = l.campaign_id AND c.instance_id = l.instance_id
+), latest_inbound AS (
+  SELECT DISTINCT ON (m.instance_id, m.profile_url)
+         m.instance_id, m.profile_url, m.id, m.body, m.sent_at, m.sentiment, m.reason
+    FROM public.messages m
+    JOIN campaign_leads l ON l.instance_id = m.instance_id AND l.profile_url = m.profile_url
+   WHERE m.direction = 'in'
+     AND m.body IS NOT NULL
+     AND btrim(m.body) <> ''
+   ORDER BY m.instance_id, m.profile_url, m.sent_at DESC, m.id DESC
+), highest_intent AS (
+  SELECT m.instance_id, m.profile_url,
+         CASE max(CASE m.intent_level WHEN 'p3' THEN 3 WHEN 'p2' THEN 2 WHEN 'p1' THEN 1 END)
+           WHEN 3 THEN 'p3' WHEN 2 THEN 'p2' WHEN 1 THEN 'p1'
+         END AS intent
+    FROM public.messages m
+    JOIN campaign_leads l ON l.instance_id = m.instance_id AND l.profile_url = m.profile_url
+   WHERE m.direction = 'in'
+     AND m.intent_level IS NOT NULL
+   GROUP BY m.instance_id, m.profile_url
+), reply_rows AS (
+  SELECT jsonb_build_object(
+           'lead', to_jsonb(l) - 'updated_at',
+           'reply', jsonb_build_object(
+             'body', li.body, 'sent_at', li.sent_at,
+             'sentiment', li.sentiment, 'reason', li.reason
+           ),
+           'highestIntent', hi.intent
+         ) AS row,
+         li.sent_at, l.replied_at, lower(btrim(l.profile_url)) AS profile_key, l.id
+    FROM campaign_leads l
+    JOIN latest_inbound li ON li.instance_id = l.instance_id AND li.profile_url = l.profile_url
+    LEFT JOIN highest_intent hi ON hi.instance_id = l.instance_id AND hi.profile_url = l.profile_url
+   ORDER BY li.sent_at DESC, l.replied_at DESC NULLS LAST, lower(btrim(l.profile_url)), l.id
+   LIMIT 5
+), sequence_rows AS (
+  SELECT s.step_index,
+         jsonb_build_object(
+           'step_index', s.step_index, 'step_label', s.step_label,
+           'step_type', s.step_type, 'template_body', s.template_body
+         ) AS row
+    FROM public.campaign_steps s
+    JOIN target_campaign c ON c.id = s.campaign_id
+   WHERE s.step_type IN ('InvitePerson', 'MessageToPerson')
+     AND s.template_body IS NOT NULL
+     AND btrim(s.template_body) <> ''
+)
+SELECT jsonb_build_object(
+  'campaign', (SELECT jsonb_build_object('campaign_id', id, 'campaign_name', name, 'instance_id', instance_id) FROM target_campaign),
+  'leads', COALESCE((SELECT jsonb_agg(row ORDER BY sent_at DESC, replied_at DESC NULLS LAST, profile_key, id) FROM reply_rows), '[]'::jsonb),
+  'steps', COALESCE((SELECT jsonb_agg(row ORDER BY step_index) FROM sequence_rows), '[]'::jsonb)
+) AS payload`
+
+export const campaignPreviewOperation: NeonQueryOperation<CampaignPreviewRow, CampaignPreviewParams> = {
+  build: ({ params }) => ({
+    text: CAMPAIGN_PREVIEW_SQL,
+    values: [params?.campaignId ?? null],
+  }),
+  mapRow: (row: NeonRow): CampaignPreviewRow =>
+    (row.payload as CampaignPreviewRow | undefined) ?? { campaign: null, leads: [], steps: [] },
 }
 
 // ---------------------------------------------------------------------------

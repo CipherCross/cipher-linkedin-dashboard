@@ -183,6 +183,34 @@ function latestMessageRows(scenario) {
 
 /* The drawer's thread for the fixture lead: our first message, their reply,
  * and one imported message so the edit/delete controls render. */
+/* The preview shows the real fixture lead first, then four synthetic replies so
+ * the five-row limit, a long unbroken reply and multi-line copy are all visible. */
+function campaignPreview(scenario) {
+  const [lead] = leadRows(scenario)
+  const extra = [
+    ['Jordan Sample', 'Sample Systems', 'Not right now, maybe next quarter.', 'neutral', null],
+    ['Casey Example', 'Example Group', 'Could you send more detail on pricing and how onboarding works for a 40-person sales team?\nWe are evaluating two other vendors this month.', 'positive', 'p3'],
+    ['Riley Demo', 'Demo & Co', 'Please remove me from your list.', 'negative', null],
+    ['Morgan Placeholder', 'Placeholder Inc', 'Sure — here is our deck: https://example.test/a-very-long-unbroken-link-that-should-wrap-inside-the-dialog-instead-of-widening-it', 'positive', 'p2'],
+  ].map(([name, company, body, sentiment, intent], i) => ({
+    lead: { ...lead, id: `fixture-preview-lead-${i}`, full_name: name, company, profile_url: `https://example.test/preview-${i}` },
+    reply: { body, sent_at: `2026-09-2${Math.max(0, 1 - i) || 0}T0${8 - i}:15:00.000Z`, sentiment, reason: null },
+    highestIntent: intent,
+  }))
+  return {
+    campaign: { campaign_id: campaign.campaign_id, campaign_name: campaign.campaign_name, instance_id: instance.id },
+    leads: [
+      { lead, reply: { body: 'Thanks for reaching out — happy to chat.', sent_at: '2026-09-21T12:00:00.000Z', sentiment: 'positive', reason: null }, highestIntent: 'p2' },
+      ...extra,
+    ],
+    steps: [
+      { step_index: 0, step_label: 'Invite', step_type: 'InvitePerson', template_body: 'Hi {firstName} — saw your work at {companyName}. Would love to connect.' },
+      { step_index: 2, step_label: 'Message', step_type: 'MessageToPerson', template_body: 'Thanks for connecting, {firstName}.\n\nQuick question: how does your team run follow-ups today?' },
+      { step_index: 4, step_label: 'Message', step_type: 'MessageToPerson', template_body: 'Following up — worth a 15-minute call next week?' },
+    ],
+  }
+}
+
 function threadRows(scenario) {
   if (isEmpty(scenario)) return []
   const base = { sentiment: null, reason: null, classified_model: null, intent_level: null, intent_reason: null, intent_classified_model: null }
@@ -593,6 +621,10 @@ export async function activityFixture(request) {
         lifetime_acceptance_rate: 100, lifetime_reply_rate: 100,
       }],
     }]))
+  }
+  if (op === 'campaign.preview') {
+    if (url.searchParams.get('campaign_id') !== campaign.campaign_id || isEmpty(scenario)) return json(page([{ campaign: null, leads: [], steps: [] }]))
+    return json(page([campaignPreview(scenario)]))
   }
   if (op === 'leads.searchPage') {
     // Keep this first list smoke exact and small. Other filter semantics remain

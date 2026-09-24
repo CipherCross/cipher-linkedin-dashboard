@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { EyeOff, SearchX } from 'lucide-react'
 import {
   Area,
@@ -14,6 +13,10 @@ import {
 import { AXIS, GRID, NO_ANIM, SERIES, TOOLTIP } from '../chartTheme'
 import { DateRangePicker } from '../DateRangePicker'
 import { Skeleton } from '../Skeleton'
+import { RowOpenButton } from '../RowOpenButton'
+import { CampaignPreviewDialog } from './CampaignPreviewDialog'
+import { useCampaignPreview } from '../../lib/campaignPreview'
+import { useConversation } from '../../lib/ConversationContext'
 import type { DateRange } from '../../lib/leads'
 import { accountLabeller } from '../../lib/leads'
 import { comparisonLabel, num, pct, rate, shortDate } from '../../lib/format'
@@ -264,7 +267,8 @@ function CampaignComparison({
   accountLabel: (id: string) => string
   instances: Instance[]
 }) {
-  const navigate = useNavigate()
+  const preview = useCampaignPreview()
+  const { openConversation } = useConversation()
   const [showArchived, setShowArchived] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(readHiddenCampaignIds)
@@ -332,7 +336,11 @@ function CampaignComparison({
     setSelectedIds(new Set())
   }
 
-  const open = (campaign: CampaignMetrics) => navigate(`/campaign/${encodeURIComponent(campaign.campaign_id)}`)
+  const open = (campaign: CampaignMetrics) => preview.open({
+    campaignId: campaign.campaign_id,
+    campaignName: campaign.campaign_name,
+    instanceId: campaign.instance_id,
+  })
   const toggleOne = (id: string) => setSelectedIds((current) => {
     const next = new Set(current)
     if (next.has(id)) next.delete(id)
@@ -387,9 +395,17 @@ function CampaignComparison({
               {pageRows.map((campaign) => {
                 const instance = instanceFor(campaign.instance_id)
                 return (
-                  // The name cell's link is the keyboard and screen-reader path;
-                  // the row click is a pointer convenience for the same URL.
-                  <tr key={campaign.campaign_id} className="cursor-pointer" onClick={() => open(campaign)}>
+                  // The row opens the campaign preview. RowOpenButton is the keyboard
+                  // and screen-reader path; a pointer click focuses it first so the
+                  // dialog returns focus to this row when it closes.
+                  <tr
+                    key={campaign.campaign_id}
+                    className="relative cursor-pointer"
+                    onClick={(event) => {
+                      event.currentTarget.querySelector<HTMLButtonElement>('[data-row-open]')?.focus({ preventScroll: true })
+                      open(campaign)
+                    }}
+                  >
                     <td className="ui-table__select" onClick={(event) => event.stopPropagation()}>
                       <Checkbox
                         label={<span className="sr-only">Select {campaign.campaign_name}</span>}
@@ -400,14 +416,9 @@ function CampaignComparison({
                     <td>
                       <AccountCell instance={instance} fallback={accountLabel(campaign.instance_id)} />
                     </td>
-                    <td className="max-w-[260px] overflow-hidden text-ellipsis" title={campaign.campaign_name}>
-                      <Link
-                        className="text-app-text no-underline hover:text-app-accent hover:underline"
-                        to={`/campaign/${encodeURIComponent(campaign.campaign_id)}`}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {campaign.campaign_name}
-                      </Link>
+                    <td className="max-w-[260px] overflow-hidden text-ellipsis text-app-text" title={campaign.campaign_name}>
+                      <RowOpenButton label={`Preview ${campaign.campaign_name}`} onOpen={() => open(campaign)} />
+                      {campaign.campaign_name}
                     </td>
                     <td className="ui-table__num">{num(campaign.invites_sent)}</td>
                     <td className="ui-table__num">{rate(campaign.lifetime_acceptance_rate)}</td>
@@ -430,6 +441,15 @@ function CampaignComparison({
           <Button variant="secondary" size="sm" disabled={pageIndex + 1 >= pages} onClick={() => setPage(pageIndex + 1)}>Next campaigns</Button>
         </span>
       </div>
+      {preview.state.status !== 'closed' && (
+        <CampaignPreviewDialog
+          state={preview.state}
+          accountName={accountLabel(preview.state.instanceId)}
+          onClose={preview.close}
+          onRetry={preview.retry}
+          onOpenLead={(lead) => openConversation(lead)}
+        />
+      )}
     </div>
   )
 }

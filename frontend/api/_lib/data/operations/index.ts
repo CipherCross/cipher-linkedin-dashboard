@@ -55,6 +55,7 @@ import {
   overviewPerformanceOperation,
   overviewSystemTotalsOperation,
   overviewSummaryOperation,
+  campaignPreviewOperation,
   syncRecentRunsOperation,
 } from './dashboard.js'
 import {
@@ -373,6 +374,8 @@ export {
   type OverviewFunnelRow,
   type OverviewIntentMetricsRow,
   type OverviewSummaryRow,
+  type CampaignPreviewRow,
+  type CampaignPreviewParams,
   type OverviewPerformanceRow,
   type OverviewTotalsRow,
   type SyncRunRow,
@@ -446,6 +449,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewPerformance, overviewPerformanceOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewAccountCampaigns, overviewAccountCampaignsOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation)
+  registry.registerQuery(DASHBOARD_OPERATIONS.campaignPreview, campaignPreviewOperation)
   registry.registerQuery(ROUTE_SNAPSHOT_OPERATION, routeSnapshotOperation)
   registry.registerQuery(SEQUENCE_HUB_OPERATION, sequenceHubOperation)
 
@@ -885,6 +889,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   DASHBOARD_OPERATIONS.overviewPerformance,
   DASHBOARD_OPERATIONS.overviewAccountCampaigns,
   DASHBOARD_OPERATIONS.overviewSummary,
+  DASHBOARD_OPERATIONS.campaignPreview,
   ROUTE_SNAPSHOT_OPERATION,
   SEQUENCE_HUB_OPERATION,
   DASHBOARD_OPERATIONS.instancesOverview,

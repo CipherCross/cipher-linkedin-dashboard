@@ -160,3 +160,92 @@
   .overview .ov-rate { margin: 0; }
   .overview .ov-details { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ---- Campaign preview dialog ---------------------------------------------
+ * xl dialog, one scrolling body. Replies take the wider column because each
+ * row carries identity, time and a full reply; the sequence column is copy
+ * only. Below 960px of dialog width the columns stack, replies first. */
+.campaign-preview__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-xl);
+  align-items: start;
+}
+@container (max-width: 960px) {
+  .campaign-preview__grid { grid-template-columns: minmax(0, 1fr); }
+}
+.campaign-preview .ui-dialog__body { container-type: inline-size; }
+.campaign-preview__count { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+.campaign-preview__empty { margin: 0; color: var(--text-muted); font-size: var(--text-table); line-height: var(--leading-table); }
+
+.campaign-preview__replies {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.campaign-preview__reply {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.campaign-preview__reply + .campaign-preview__reply { border-top: 1px solid var(--border); }
+.campaign-preview__reply:hover { background: var(--surface-2); }
+.campaign-preview__reply-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.campaign-preview__time {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  white-space: nowrap;
+}
+/* Full reply, never truncated; aligned under the name (30px avatar + 9px gap
+ * in LeadReplyIdentity). Long unbroken tokens wrap instead of widening the page. */
+.campaign-preview__body {
+  margin: 0 0 0 39px;
+  color: var(--text-secondary);
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.campaign-preview__sequence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+.campaign-preview__sequence li { display: flex; flex-direction: column; gap: var(--space-xs); }
+.campaign-preview__step {
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  font-weight: 600;
+}
+.campaign-preview__copy {
+  margin: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.campaign-preview__skeleton { display: flex; flex-direction: column; gap: var(--space-lg); margin-top: var(--space-md); }

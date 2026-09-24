@@ -84,6 +84,27 @@ export interface CampaignStep {
   current_count: number
 }
 
+/** The lazy Campaign comparison preview: at most five latest displayable
+ *  replies and the synced copy-bearing sequence steps. */
+export interface CampaignPreviewLead {
+  lead: Lead
+  reply: { body: string; sent_at: string; sentiment: Sentiment | null; reason: string | null }
+  highestIntent: ReplyIntent | null
+}
+
+export interface CampaignPreviewStep {
+  step_index: number
+  step_label: string | null
+  step_type: string | null
+  template_body: string
+}
+
+export interface CampaignPreview {
+  campaign: { campaign_id: string; campaign_name: string; instance_id: string }
+  leads: CampaignPreviewLead[]
+  steps: CampaignPreviewStep[]
+}
+
 export interface CampaignMetrics {
   campaign_id: string
   campaign_name: string
