@@ -4,559 +4,7 @@
     "revision": "38d139b",
     "root": "frontend/src"
   },
-  "rawControls": [
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 869,
-      "symbol": "BranchBuilder",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BranchBuilder:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 876,
-      "symbol": "BranchBuilder",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BranchBuilder:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 889,
-      "symbol": "BranchBuilder",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BranchBuilder:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 905,
-      "symbol": "BranchBuilder",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BranchBuilder:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 884,
-      "symbol": "BranchBuilder",
-      "tag": "input",
-      "nativeType": "",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BranchBuilder:input::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 895,
-      "symbol": "BranchBuilder",
-      "tag": "select",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BranchBuilder:select::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 801,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 802,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 803,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 804,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 806,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 5,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::5"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 834,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 6,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::6"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 843,
-      "symbol": "BuildCanvas",
-      "tag": "button",
-      "ordinal": 7,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:BuildCanvas:button::7"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 605,
-      "symbol": "CommentComposer",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentComposer:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 612,
-      "symbol": "CommentComposer",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentComposer:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 613,
-      "symbol": "CommentComposer",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentComposer:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 610,
-      "symbol": "CommentComposer",
-      "tag": "textarea",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentComposer:textarea::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1048,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1049,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1072,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1072,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1075,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 5,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::5"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1075,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 6,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::6"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1089,
-      "symbol": "CommentsPanel",
-      "tag": "button",
-      "ordinal": 7,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:button::7"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1053,
-      "symbol": "CommentsPanel",
-      "tag": "input",
-      "nativeType": "checkbox",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:input:checkbox:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1071,
-      "symbol": "CommentsPanel",
-      "tag": "textarea",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:CommentsPanel:textarea::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 542,
-      "symbol": "handle",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:handle:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 575,
-      "symbol": "handle",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:handle:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 945,
-      "symbol": "PreviewPanel",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PreviewPanel:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 946,
-      "symbol": "PreviewPanel",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PreviewPanel:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1009,
-      "symbol": "PreviewPanel",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PreviewPanel:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 953,
-      "symbol": "PreviewPanel",
-      "tag": "select",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PreviewPanel:select::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 961,
-      "symbol": "PreviewPanel",
-      "tag": "select",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PreviewPanel:select::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1225,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1235,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1249,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1276,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1328,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 5,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::5"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1328,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 6,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::6"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1329,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 7,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::7"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1329,
-      "symbol": "PublishWizard",
-      "tag": "button",
-      "ordinal": 8,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:button::8"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1283,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "checkbox",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:checkbox:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1293,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "checkbox",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:checkbox:2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1294,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "checkbox",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:checkbox:3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1298,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "number",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:number:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1299,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "number",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:number:2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1300,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "number",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:number:3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1257,
-      "symbol": "PublishWizard",
-      "tag": "input",
-      "nativeType": "radio",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:radio:1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1513,
-      "symbol": "SequenceEditor",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceEditor:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1526,
-      "symbol": "SequenceEditor",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceEditor:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1527,
-      "symbol": "SequenceEditor",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceEditor:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1528,
-      "symbol": "SequenceEditor",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceEditor:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1482,
-      "symbol": "SequenceEditor",
-      "tag": "input",
-      "nativeType": "",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceEditor:input::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 692,
-      "symbol": "VariationEditor",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 702,
-      "symbol": "VariationEditor",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 705,
-      "symbol": "VariationEditor",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 720,
-      "symbol": "VariationEditor",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 686,
-      "symbol": "VariationEditor",
-      "tag": "input",
-      "nativeType": "",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:input::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 734,
-      "symbol": "VariationEditor",
-      "tag": "select",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:select::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 708,
-      "symbol": "VariationEditor",
-      "tag": "textarea",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:VariationEditor:textarea::1"
-    }
-  ],
+  "rawControls": [],
   "allowlistedRawControls": [
     {
       "kind": "raw-control",
@@ -641,6 +89,28 @@
     },
     {
       "kind": "raw-control",
+      "path": "src/pages/SequenceBuilder.tsx",
+      "line": 1348,
+      "symbol": "PublishWizard",
+      "tag": "input",
+      "nativeType": "checkbox",
+      "allowlistId": "publish-branch-tile",
+      "ordinal": 1,
+      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:checkbox:1"
+    },
+    {
+      "kind": "raw-control",
+      "path": "src/pages/SequenceBuilder.tsx",
+      "line": 1319,
+      "symbol": "PublishWizard",
+      "tag": "input",
+      "nativeType": "radio",
+      "allowlistId": "publish-target-card",
+      "ordinal": 1,
+      "key": "raw-control:src/pages/SequenceBuilder.tsx:PublishWizard:input:radio:1"
+    },
+    {
+      "kind": "raw-control",
       "path": "src/pages/UnifiedApolloCsvImport.tsx",
       "line": 577,
       "symbol": "UnifiedApolloCsvImport",
@@ -694,7 +164,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 493,
+      "line": 525,
       "symbol": "ConversationDrawer",
       "token": "badge",
       "ordinal": 1,
@@ -703,7 +173,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 500,
+      "line": 532,
       "symbol": "ConversationDrawer",
       "token": "badge",
       "ordinal": 2,
@@ -712,7 +182,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 503,
+      "line": 535,
       "symbol": "ConversationDrawer",
       "token": "badge",
       "ordinal": 3,
@@ -721,7 +191,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 862,
+      "line": 901,
       "symbol": "ConversationDrawer",
       "token": "badge",
       "ordinal": 4,
@@ -730,7 +200,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 901,
+      "line": 940,
       "symbol": "ConversationDrawer",
       "token": "badge",
       "ordinal": 5,
@@ -739,7 +209,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 493,
+      "line": 525,
       "symbol": "ConversationDrawer",
       "token": "senti",
       "ordinal": 1,
@@ -748,7 +218,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 503,
+      "line": 535,
       "symbol": "ConversationDrawer",
       "token": "senti",
       "ordinal": 2,
@@ -757,7 +227,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 862,
+      "line": 901,
       "symbol": "ConversationDrawer",
       "token": "senti",
       "ordinal": 3,
@@ -766,7 +236,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/components/ConversationDrawer.tsx",
-      "line": 901,
+      "line": 940,
       "symbol": "ConversationDrawer",
       "token": "senti",
       "ordinal": 4,
@@ -901,155 +371,11 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 869,
-      "symbol": "BranchBuilder",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 876,
-      "symbol": "BranchBuilder",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 905,
-      "symbol": "BranchBuilder",
-      "token": "btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 872,
-      "symbol": "BranchBuilder",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 881,
-      "symbol": "BranchBuilder",
-      "token": "card",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:card::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 889,
-      "symbol": "BranchBuilder",
-      "token": "danger",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:danger::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 889,
-      "symbol": "BranchBuilder",
-      "token": "icon-only-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:icon-only-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 863,
-      "symbol": "BranchBuilder",
-      "token": "sequence-section-intro",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BranchBuilder:sequence-section-intro::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 801,
-      "symbol": "BuildCanvas",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 802,
-      "symbol": "BuildCanvas",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 806,
-      "symbol": "BuildCanvas",
-      "token": "danger",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:danger::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 803,
-      "symbol": "BuildCanvas",
-      "token": "icon-only-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:icon-only-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 804,
-      "symbol": "BuildCanvas",
-      "token": "icon-only-btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:icon-only-btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 806,
-      "symbol": "BuildCanvas",
-      "token": "icon-only-btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:icon-only-btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 834,
-      "symbol": "BuildCanvas",
-      "token": "sequence-add-variation",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:sequence-add-variation::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
       "line": 800,
       "symbol": "BuildCanvas",
       "token": "sequence-step-actions",
       "ordinal": 1,
       "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:sequence-step-actions::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 792,
-      "symbol": "BuildCanvas",
-      "token": "sequence-step-icon",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:sequence-step-icon::1"
     },
     {
       "kind": "compatibility-token",
@@ -1072,151 +398,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 801,
-      "symbol": "BuildCanvas",
-      "token": "sm",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:sm::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 802,
-      "symbol": "BuildCanvas",
-      "token": "sm",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:BuildCanvas:sm::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 612,
-      "symbol": "CommentComposer",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 613,
-      "symbol": "CommentComposer",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 605,
-      "symbol": "CommentComposer",
-      "token": "conv-close",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:conv-close::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 608,
-      "symbol": "CommentComposer",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 603,
-      "symbol": "CommentComposer",
-      "token": "pipe-modal-head",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:pipe-modal-head::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 601,
-      "symbol": "CommentComposer",
-      "token": "pipe-modal-overlay",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:pipe-modal-overlay::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 602,
-      "symbol": "CommentComposer",
-      "token": "pipe-modal",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentComposer:pipe-modal::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1048,
-      "symbol": "CommentsPanel",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1049,
-      "symbol": "CommentsPanel",
-      "token": "active",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:active::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1072,
-      "symbol": "CommentsPanel",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
       "line": 1089,
-      "symbol": "CommentsPanel",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1072,
-      "symbol": "CommentsPanel",
-      "token": "link-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:link-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1075,
-      "symbol": "CommentsPanel",
-      "token": "link-btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:link-btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1075,
-      "symbol": "CommentsPanel",
-      "token": "link-btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:link-btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1061,
       "symbol": "CommentsPanel",
       "token": "sequence-comment-thread",
       "ordinal": 1,
@@ -1225,16 +407,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1047,
-      "symbol": "CommentsPanel",
-      "token": "sequence-review-tabs",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:sequence-review-tabs::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1083,
+      "line": 1117,
       "symbol": "CommentsPanel",
       "token": "sequence-version-list",
       "ordinal": 1,
@@ -1243,61 +416,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1072,
-      "symbol": "CommentsPanel",
-      "token": "sm",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:sm::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1089,
-      "symbol": "CommentsPanel",
-      "token": "sm",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:sm::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1063,
-      "symbol": "CommentsPanel",
-      "token": "stale",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:CommentsPanel:stale::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 945,
-      "symbol": "PreviewPanel",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 946,
-      "symbol": "PreviewPanel",
-      "token": "active",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:active::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 950,
-      "symbol": "PreviewPanel",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 993,
+      "line": 1008,
       "symbol": "PreviewPanel",
       "token": "linkedin-connection-preview",
       "ordinal": 1,
@@ -1306,169 +425,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 975,
-      "symbol": "PreviewPanel",
-      "token": "linkedin-preview",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:linkedin-preview::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 944,
-      "symbol": "PreviewPanel",
-      "token": "sequence-device-toggle",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:sequence-device-toggle::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 938,
-      "symbol": "PreviewPanel",
-      "token": "sequence-section-intro",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:sequence-section-intro::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 996,
-      "symbol": "PreviewPanel",
-      "token": "warn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PreviewPanel:warn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1234,
-      "symbol": "PublishWizard",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1249,
-      "symbol": "PublishWizard",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1328,
-      "symbol": "PublishWizard",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1328,
-      "symbol": "PublishWizard",
-      "token": "btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1329,
-      "symbol": "PublishWizard",
-      "token": "btn",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:btn::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1329,
-      "symbol": "PublishWizard",
-      "token": "btn",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:btn::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1234,
-      "symbol": "PublishWizard",
-      "token": "complete",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:complete::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1225,
-      "symbol": "PublishWizard",
-      "token": "conv-close",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:conv-close::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1249,
-      "symbol": "PublishWizard",
-      "token": "error",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:error::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1315,
-      "symbol": "PublishWizard",
-      "token": "error",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:error::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1276,
-      "symbol": "PublishWizard",
-      "token": "link-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:link-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1216,
-      "symbol": "PublishWizard",
-      "token": "pipe-modal-overlay",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:pipe-modal-overlay::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1217,
-      "symbol": "PublishWizard",
-      "token": "pipe-modal",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:pipe-modal::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1282,
-      "symbol": "PublishWizard",
-      "token": "selected",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:selected::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1284,
+      "line": 1349,
       "symbol": "PublishWizard",
       "token": "sequence-publish-branch-letter",
       "ordinal": 1,
@@ -1477,7 +434,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1278,
+      "line": 1342,
       "symbol": "PublishWizard",
       "token": "sequence-publish-branch-list",
       "ordinal": 1,
@@ -1486,25 +443,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1218,
-      "symbol": "PublishWizard",
-      "token": "sequence-publish-head",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sequence-publish-head::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1248,
-      "symbol": "PublishWizard",
-      "token": "sequence-publish-loading",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sequence-publish-loading::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1245,
+      "line": 1297,
       "symbol": "PublishWizard",
       "token": "sequence-publish-section-head",
       "ordinal": 1,
@@ -1513,7 +452,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1274,
+      "line": 1336,
       "symbol": "PublishWizard",
       "token": "sequence-publish-section-head",
       "ordinal": 2,
@@ -1522,7 +461,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1307,
+      "line": 1377,
       "symbol": "PublishWizard",
       "token": "sequence-publish-section-head",
       "ordinal": 3,
@@ -1531,34 +470,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1249,
-      "symbol": "PublishWizard",
-      "token": "sequence-publish-state",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sequence-publish-state::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1250,
-      "symbol": "PublishWizard",
-      "token": "sequence-publish-state",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sequence-publish-state::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1315,
-      "symbol": "PublishWizard",
-      "token": "sequence-publish-state",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sequence-publish-state::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1228,
+      "line": 1280,
       "symbol": "PublishWizard",
       "token": "sequence-publish-steps",
       "ordinal": 1,
@@ -1567,16 +479,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1329,
-      "symbol": "PublishWizard",
-      "token": "sequence-publish-submit",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sequence-publish-submit::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1256,
+      "line": 1317,
       "symbol": "PublishWizard",
       "token": "sequence-publish-target",
       "ordinal": 1,
@@ -1585,101 +488,11 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1249,
-      "symbol": "PublishWizard",
-      "token": "sm",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:PublishWizard:sm::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 531,
-      "symbol": "SaveIndicator",
-      "token": "sequence-save-state",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SaveIndicator:sequence-save-state::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1526,
-      "symbol": "SequenceEditor",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1527,
-      "symbol": "SequenceEditor",
-      "token": "active",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:active::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1528,
-      "symbol": "SequenceEditor",
-      "token": "active",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:active::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1513,
-      "symbol": "SequenceEditor",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1469,
-      "symbol": "SequenceEditor",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1525,
-      "symbol": "SequenceEditor",
-      "token": "sequence-editor-tabs",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:sequence-editor-tabs::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1475,
+      "line": 1541,
       "symbol": "SequenceEditor",
       "token": "sequence-editor-topbar",
       "ordinal": 1,
       "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:sequence-editor-topbar::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1519,
-      "symbol": "SequenceEditor",
-      "token": "sequence-publish-job-icon",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:sequence-publish-job-icon::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1518,
-      "symbol": "SequenceEditor",
-      "token": "sequence-publish-job-strip",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceEditor:sequence-publish-job-strip::1"
     },
     {
       "kind": "compatibility-token",
@@ -1707,51 +520,6 @@
       "token": "sequence-mini-flow",
       "ordinal": 1,
       "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:sequence-mini-flow::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 724,
-      "symbol": "VariationEditor",
-      "token": "char-warning",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:VariationEditor:char-warning::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 692,
-      "symbol": "VariationEditor",
-      "token": "danger",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:VariationEditor:danger::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 692,
-      "symbol": "VariationEditor",
-      "token": "icon-only-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:VariationEditor:icon-only-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 720,
-      "symbol": "VariationEditor",
-      "token": "link-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:VariationEditor:link-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 724,
-      "symbol": "VariationEditor",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:VariationEditor:muted::1"
     },
     {
       "kind": "compatibility-token",
@@ -1797,15 +565,6 @@
       "token": "muted",
       "ordinal": 4,
       "key": "compatibility-token:src/ui/Gallery.tsx:Gallery:muted::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/ui/Gallery.tsx",
-      "line": 527,
-      "symbol": "Gallery",
-      "token": "sequence-add-variation",
-      "ordinal": 1,
-      "key": "compatibility-token:src/ui/Gallery.tsx:Gallery:sequence-add-variation::1"
     },
     {
       "kind": "compatibility-token",
@@ -1915,7 +674,7 @@
       "ancestry": [
         "@keyframes auth-spin"
       ],
-      "line": 1003,
+      "line": 858,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes auth-spin|to:1"
@@ -1927,7 +686,7 @@
       "ancestry": [
         "@keyframes conv-slide-in"
       ],
-      "line": 921,
+      "line": 818,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes conv-slide-in|from:1"
@@ -1939,34 +698,10 @@
       "ancestry": [
         "@keyframes conv-slide-in"
       ],
-      "line": 921,
+      "line": 818,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes conv-slide-in|to:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": "to",
-      "ancestry": [
-        "@keyframes sequence-pulse"
-      ],
-      "line": 1014,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:@keyframes sequence-pulse|to:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": "to",
-      "ancestry": [
-        "@keyframes sequence-shimmer"
-      ],
-      "line": 1007,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:@keyframes sequence-shimmer|to:1"
     },
     {
       "kind": "compatibility-selector",
@@ -1975,7 +710,7 @@
       "ancestry": [
         "@keyframes skeleton-shimmer"
       ],
-      "line": 738,
+      "line": 737,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes skeleton-shimmer|100%:1"
@@ -1987,7 +722,7 @@
       "ancestry": [
         "@keyframes toast-in"
       ],
-      "line": 935,
+      "line": 830,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes toast-in|from:1"
@@ -1999,125 +734,10 @@
       "ancestry": [
         "@keyframes toast-in"
       ],
-      "line": 936,
+      "line": 831,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes toast-in|to:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-step-actions .btn svg",
-      "ancestry": [
-        "@media (max-width: 1180px)"
-      ],
-      "line": 1075,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 1180px)|.sequence-step-actions .btn svg:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-step-actions .btn",
-      "ancestry": [
-        "@media (max-width: 1180px)"
-      ],
-      "line": 1074,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 1180px)|.sequence-step-actions .btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-add-variation",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1085,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.sequence-add-variation:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-editor-topbar .btn",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1081,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.sequence-editor-topbar .btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-library-hero, .sequence-section-intro",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1079,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.sequence-library-hero, .sequence-section-intro:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-step-actions .btn",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1082,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.sequence-step-actions .btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-variation-actions",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1084,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.sequence-variation-actions:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-variation-grid",
-      "ancestry": [
-        "@media (max-width: 700px)"
-      ],
-      "line": 1083,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 700px)|.sequence-variation-grid:1"
     },
     {
       "kind": "compatibility-selector",
@@ -2126,7 +746,7 @@
       "ancestry": [
         "@media (prefers-reduced-motion: reduce)"
       ],
-      "line": 945,
+      "line": 838,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media (prefers-reduced-motion: reduce)|*, *::before, *::after:1"
@@ -2138,10 +758,9 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1102,
+      "line": 875,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:@media print|.card:1"
@@ -2153,7 +772,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1103,
+      "line": 876,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|.glass, .glass--strong:1"
@@ -2161,17 +780,16 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".sidebar, .mobile-header, .drp, .btn, .overview-section-toggle .overview-section-chevron, .skip-link",
+      "selector": ".sidebar, .mobile-header, .drp, .overview-section-toggle .overview-section-chevron, .skip-link",
       "ancestry": [
         "@media print"
       ],
-      "line": 1100,
+      "line": 873,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/components/Layout.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/Layout.tsx"
       ],
-      "key": "compatibility-selector:@media print|.sidebar, .mobile-header, .drp, .btn, .overview-section-toggle .overview-section-chevron, .skip-link:1"
+      "key": "compatibility-selector:@media print|.sidebar, .mobile-header, .drp, .overview-section-toggle .overview-section-chevron, .skip-link:1"
     },
     {
       "kind": "compatibility-selector",
@@ -2180,7 +798,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1104,
+      "line": 877,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|[hidden]:1"
@@ -2192,7 +810,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1099,
+      "line": 872,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|body:1"
@@ -2204,7 +822,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1101,
+      "line": 874,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|main:1"
@@ -2214,7 +832,7 @@
       "path": "src/ui/ui.css",
       "selector": ":where(textarea)",
       "ancestry": [],
-      "line": 682,
+      "line": 681,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|:where(textarea):1"
@@ -2224,7 +842,7 @@
       "path": "src/ui/ui.css",
       "selector": ".account-card-cap .small",
       "ancestry": [],
-      "line": 903,
+      "line": 816,
       "ordinal": 1,
       "consumerCandidates": [
         "src/ui/Gallery.tsx"
@@ -2236,7 +854,7 @@
       "path": "src/ui/ui.css",
       "selector": ".account-card-spark .small",
       "ancestry": [],
-      "line": 903,
+      "line": 816,
       "ordinal": 1,
       "consumerCandidates": [
         "src/ui/Gallery.tsx"
@@ -2248,7 +866,7 @@
       "path": "src/ui/ui.css",
       "selector": ".active-sequence-list, .new-reply-list",
       "ancestry": [],
-      "line": 1093,
+      "line": 866,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.active-sequence-list, .new-reply-list:1"
@@ -2258,7 +876,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge",
       "ancestry": [],
-      "line": 747,
+      "line": 746,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2272,7 +890,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-alert",
       "ancestry": [],
-      "line": 1093,
+      "line": 866,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2286,7 +904,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-ok",
       "ancestry": [],
-      "line": 1095,
+      "line": 868,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2300,7 +918,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-watch",
       "ancestry": [],
-      "line": 1094,
+      "line": 867,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2314,7 +932,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.risk",
       "ancestry": [],
-      "line": 759,
+      "line": 758,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2328,7 +946,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.source-external",
       "ancestry": [],
-      "line": 1096,
+      "line": 869,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2342,7 +960,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-accepted",
       "ancestry": [],
-      "line": 790,
+      "line": 789,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2356,7 +974,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-invited",
       "ancestry": [],
-      "line": 789,
+      "line": 788,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2370,7 +988,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-queued",
       "ancestry": [],
-      "line": 788,
+      "line": 787,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2384,7 +1002,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-replied",
       "ancestry": [],
-      "line": 791,
+      "line": 790,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2398,7 +1016,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.status-error",
       "ancestry": [],
-      "line": 760,
+      "line": 759,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2412,7 +1030,7 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.status-running",
       "ancestry": [],
-      "line": 761,
+      "line": 760,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -2424,214 +1042,11 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".btn-accent",
-      "ancestry": [],
-      "line": 852,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.btn-accent:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn-accent:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 853,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.btn-accent:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn, .btn-accent",
-      "ancestry": [],
-      "line": 801,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn, .btn-accent:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn:active:not(:disabled), .btn-accent:active:not(:disabled), .navlink:active",
-      "ancestry": [],
-      "line": 939,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn:active:not(:disabled), .btn-accent:active:not(:disabled), .navlink:active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn:disabled, .btn-accent:disabled",
-      "ancestry": [],
-      "line": 825,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn:disabled, .btn-accent:disabled:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 824,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.accent",
-      "ancestry": [],
-      "line": 828,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.accent:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.accent:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 833,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.accent:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.danger",
-      "ancestry": [],
-      "line": 838,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.danger:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.danger",
-      "ancestry": [],
-      "line": 997,
-      "ordinal": 2,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.danger:2"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.danger:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 839,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.danger:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.danger:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 999,
-      "ordinal": 2,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.danger:hover:not(:disabled):2"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.ghost",
-      "ancestry": [],
-      "line": 835,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.ghost:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.ghost:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 836,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.ghost:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn.sm",
-      "ancestry": [],
-      "line": 842,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn.sm:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".btn[aria-pressed='true']",
-      "ancestry": [],
-      "line": 844,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.btn[aria-pressed='true']:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".campaign-source .badge",
-      "ancestry": [],
-      "line": 1071,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
-      ],
-      "key": "compatibility-selector:|.campaign-source .badge:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".card",
       "ancestry": [],
-      "line": 697,
+      "line": 696,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.card:1"
@@ -2639,21 +1054,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".char-warning",
-      "ancestry": [],
-      "line": 1026,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.char-warning:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".chat-md code",
       "ancestry": [],
-      "line": 900,
+      "line": 813,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2666,7 +1069,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md p",
       "ancestry": [],
-      "line": 896,
+      "line": 809,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2679,7 +1082,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md p:last-child",
       "ancestry": [],
-      "line": 897,
+      "line": 810,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2692,7 +1095,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md pre code",
       "ancestry": [],
-      "line": 902,
+      "line": 815,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2705,7 +1108,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md pre",
       "ancestry": [],
-      "line": 901,
+      "line": 814,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2718,7 +1121,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md table",
       "ancestry": [],
-      "line": 898,
+      "line": 811,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2731,7 +1134,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md th, .chat-md td",
       "ancestry": [],
-      "line": 899,
+      "line": 812,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2744,7 +1147,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md",
       "ancestry": [],
-      "line": 895,
+      "line": 808,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -2757,7 +1160,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-msg.user",
       "ancestry": [],
-      "line": 960,
+      "line": 853,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx"
@@ -2767,59 +1170,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".conv-close",
-      "ancestry": [],
-      "line": 922,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.conv-close:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".conv-close",
-      "ancestry": [],
-      "line": 963,
-      "ordinal": 2,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.conv-close:2"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".conv-demographics .badge",
-      "ancestry": [],
-      "line": 995,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
-      ],
-      "key": "compatibility-selector:|.conv-demographics .badge:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".deployment-advanced .ui-field",
-      "ancestry": [],
-      "line": 1107,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.deployment-advanced .ui-field:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".dot",
       "ancestry": [],
-      "line": 716,
+      "line": 715,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.dot:1"
@@ -2829,7 +1182,7 @@
       "path": "src/ui/ui.css",
       "selector": ".dot.inline",
       "ancestry": [],
-      "line": 719,
+      "line": 718,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.dot.inline:1"
@@ -2839,7 +1192,7 @@
       "path": "src/ui/ui.css",
       "selector": ".dot.ok",
       "ancestry": [],
-      "line": 717,
+      "line": 716,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.dot.ok:1"
@@ -2849,11 +1202,9 @@
       "path": "src/ui/ui.css",
       "selector": ".dot.stale",
       "ancestry": [],
-      "line": 718,
+      "line": 717,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.dot.stale:1"
     },
     {
@@ -2861,31 +1212,17 @@
       "path": "src/ui/ui.css",
       "selector": ".drp-presets button.active",
       "ancestry": [],
-      "line": 695,
+      "line": 694,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.drp-presets button.active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".empty-state-action .link-btn",
-      "ancestry": [],
-      "line": 934,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.empty-state-action .link-btn:1"
     },
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
       "selector": ".empty-state",
       "ancestry": [],
-      "line": 931,
+      "line": 826,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.empty-state:1"
@@ -2895,7 +1232,7 @@
       "path": "src/ui/ui.css",
       "selector": ".filter-bar",
       "ancestry": [],
-      "line": 779,
+      "line": 778,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.filter-bar:1"
@@ -2903,129 +1240,19 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".icon-btn svg, .icon-only-btn svg",
+      "selector": ".navlink:active",
       "ancestry": [],
-      "line": 877,
+      "line": 834,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.icon-btn svg, .icon-only-btn svg:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".icon-btn, .icon-only-btn",
-      "ancestry": [],
-      "line": 856,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.icon-btn, .icon-only-btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".icon-btn:disabled, .icon-only-btn:disabled",
-      "ancestry": [],
-      "line": 874,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.icon-btn:disabled, .icon-only-btn:disabled:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".icon-btn:hover:not(:disabled), .icon-only-btn:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 872,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.icon-btn:hover:not(:disabled), .icon-only-btn:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".icon-only-btn.danger:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 876,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.icon-only-btn.danger:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".link-btn",
-      "ancestry": [],
-      "line": 907,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.link-btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".link-btn:disabled",
-      "ancestry": [],
-      "line": 919,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.link-btn:disabled:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".link-btn:hover:not(:disabled)",
-      "ancestry": [],
-      "line": 918,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.link-btn:hover:not(:disabled):1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".linkedin-connection-preview small.warn",
-      "ancestry": [],
-      "line": 1030,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.linkedin-connection-preview small.warn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".linkedin-preview.mobile",
-      "ancestry": [],
-      "line": 1029,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.linkedin-preview.mobile:1"
+      "consumerCandidates": [],
+      "key": "compatibility-selector:|.navlink:active:1"
     },
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
       "selector": ".new-reply-open > span.reply-body",
       "ancestry": [],
-      "line": 1096,
+      "line": 869,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.new-reply-open > span.reply-body:1"
@@ -3035,7 +1262,7 @@
       "path": "src/ui/ui.css",
       "selector": ".num",
       "ancestry": [],
-      "line": 715,
+      "line": 714,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.num:1"
@@ -3045,7 +1272,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel-head h2",
       "ancestry": [],
-      "line": 1093,
+      "line": 866,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.overview-panel-head h2:1"
@@ -3055,7 +1282,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel-head",
       "ancestry": [],
-      "line": 1089,
+      "line": 862,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.overview-panel-head:1"
@@ -3065,7 +1292,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel",
       "ancestry": [],
-      "line": 1088,
+      "line": 861,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.overview-panel:1"
@@ -3073,71 +1300,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".pipe-modal textarea",
-      "ancestry": [],
-      "line": 994,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.pipe-modal textarea:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".pipe-modal-head",
-      "ancestry": [],
-      "line": 987,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.pipe-modal-head:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".pipe-modal-overlay",
-      "ancestry": [],
-      "line": 966,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.pipe-modal-overlay:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".pipe-modal",
-      "ancestry": [],
-      "line": 976,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.pipe-modal:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".publish-compatibility-card .badge",
-      "ancestry": [],
-      "line": 1070,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/components/ConversationDrawer.tsx",
-        "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
-      ],
-      "key": "compatibility-selector:|.publish-compatibility-card .badge:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".reply-body .badge.senti",
       "ancestry": [],
-      "line": 878,
+      "line": 792,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3151,7 +1316,7 @@
       "path": "src/ui/ui.css",
       "selector": ".reply-body",
       "ancestry": [],
-      "line": 881,
+      "line": 794,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.reply-body:1"
@@ -3161,7 +1326,7 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link",
       "ancestry": [],
-      "line": 741,
+      "line": 740,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.row-link:1"
@@ -3171,7 +1336,7 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link:hover",
       "ancestry": [],
-      "line": 742,
+      "line": 741,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.row-link:hover:1"
@@ -3181,10 +1346,9 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link.muted",
       "ancestry": [],
-      "line": 743,
+      "line": 742,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
       ],
@@ -3195,10 +1359,9 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link.muted:hover",
       "ancestry": [],
-      "line": 744,
+      "line": 743,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
       ],
@@ -3209,7 +1372,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.auto",
       "ancestry": [],
-      "line": 769,
+      "line": 768,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3223,7 +1386,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.neg",
       "ancestry": [],
-      "line": 768,
+      "line": 767,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3237,7 +1400,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.neu",
       "ancestry": [],
-      "line": 766,
+      "line": 765,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3251,7 +1414,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.obj",
       "ancestry": [],
-      "line": 765,
+      "line": 764,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3265,7 +1428,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.p1",
       "ancestry": [],
-      "line": 770,
+      "line": 769,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3279,7 +1442,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.p2",
       "ancestry": [],
-      "line": 771,
+      "line": 770,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3293,7 +1456,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.p3",
       "ancestry": [],
-      "line": 772,
+      "line": 771,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3307,7 +1470,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.pos",
       "ancestry": [],
-      "line": 764,
+      "line": 763,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3321,7 +1484,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.ref",
       "ancestry": [],
-      "line": 767,
+      "line": 766,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3333,481 +1496,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".sequence-add-variation",
-      "ancestry": [],
-      "line": 1027,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-add-variation:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-add-variation:hover",
-      "ancestry": [],
-      "line": 1028,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-add-variation:hover:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-comment-thread blockquote.stale",
-      "ancestry": [],
-      "line": 1016,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-comment-thread blockquote.stale:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-device-toggle button.active, .sequence-review-tabs button.active",
-      "ancestry": [],
-      "line": 1004,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-device-toggle button.active, .sequence-review-tabs button.active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-editor-tabs button.active",
-      "ancestry": [],
-      "line": 1015,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-editor-tabs button.active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-mini-flow span.connection",
-      "ancestry": [],
-      "line": 1006,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-mini-flow span.connection:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-branch-list label.selected .sequence-publish-branch-letter",
-      "ancestry": [],
-      "line": 1064,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-branch-list label.selected .sequence-publish-branch-letter:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-branch-list label.selected > svg",
-      "ancestry": [],
-      "line": 1065,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-branch-list label.selected > svg:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-branch-list label.selected",
-      "ancestry": [],
-      "line": 1063,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-branch-list label.selected:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-head .conv-close",
-      "ancestry": [],
-      "line": 1031,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-head .conv-close:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-job-strip.failed .sequence-publish-job-icon",
-      "ancestry": [],
-      "line": 1069,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-job-strip.failed .sequence-publish-job-icon:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-job-strip.failed",
-      "ancestry": [],
-      "line": 1068,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-job-strip.failed:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-job-strip.succeeded .sequence-publish-job-icon",
-      "ancestry": [],
-      "line": 1067,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-job-strip.succeeded .sequence-publish-job-icon:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-job-strip.succeeded",
-      "ancestry": [],
-      "line": 1066,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-job-strip.succeeded:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-loading svg, .sequence-publish-submit svg, .sequence-publish-job-strip:not(.succeeded):not(.failed) .sequence-publish-job-icon svg",
-      "ancestry": [],
-      "line": 1052,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-loading svg, .sequence-publish-submit svg, .sequence-publish-job-strip:not(.succeeded):not(.failed) .sequence-publish-job-icon svg:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-loading, .sequence-publish-state",
-      "ancestry": [],
-      "line": 1039,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-loading, .sequence-publish-state:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-section-head .link-btn",
-      "ancestry": [],
-      "line": 1037,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-section-head .link-btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state > div",
-      "ancestry": [],
-      "line": 1057,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state > div:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state > svg",
-      "ancestry": [],
-      "line": 1056,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state > svg:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state p",
-      "ancestry": [],
-      "line": 1059,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state p:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state strong",
-      "ancestry": [],
-      "line": 1058,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state strong:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state",
-      "ancestry": [],
-      "line": 1055,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state.error > svg",
-      "ancestry": [],
-      "line": 1061,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state.error > svg:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-state.error",
-      "ancestry": [],
-      "line": 1060,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-state.error:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-steps li.active button > span",
-      "ancestry": [],
-      "line": 1034,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-steps li.active button > span:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-steps li.active button",
-      "ancestry": [],
-      "line": 1033,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-steps li.active button:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-steps li.complete button > span",
-      "ancestry": [],
-      "line": 1036,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-steps li.complete button > span:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-steps li.complete button",
-      "ancestry": [],
-      "line": 1035,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-steps li.complete button:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-steps li.complete:not(:last-child)::after",
-      "ancestry": [],
-      "line": 1032,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-steps li.complete:not(:last-child)::after:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-publish-target.selected",
-      "ancestry": [],
-      "line": 1062,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-publish-target.selected:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-save-state.conflict i, .sequence-save-state.error i",
-      "ancestry": [],
-      "line": 1012,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-save-state.conflict i, .sequence-save-state.error i:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-save-state.conflict, .sequence-save-state.error",
-      "ancestry": [],
-      "line": 1010,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-save-state.conflict, .sequence-save-state.error:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-save-state.saved i",
-      "ancestry": [],
-      "line": 1008,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-save-state.saved i:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-save-state.saving i",
-      "ancestry": [],
-      "line": 1009,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-save-state.saving i:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-step-icon.connection",
-      "ancestry": [],
-      "line": 1018,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-step-icon.connection:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-step-icon.message",
-      "ancestry": [],
-      "line": 1019,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-step-icon.message:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-variation-actions",
-      "ancestry": [],
-      "line": 1025,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-variation-actions:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-variation-grid",
-      "ancestry": [],
-      "line": 1024,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx",
-        "src/ui/Gallery.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-variation-grid:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sequence-version-list article .btn",
-      "ancestry": [],
-      "line": 1017,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-version-list article .btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".skeleton::after",
       "ancestry": [],
-      "line": 729,
+      "line": 728,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.skeleton::after:1"
@@ -3817,7 +1508,7 @@
       "path": "src/ui/ui.css",
       "selector": ".skeleton",
       "ancestry": [],
-      "line": 721,
+      "line": 720,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.skeleton:1"
@@ -3825,29 +1516,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".sortable",
-      "ancestry": [],
-      "line": 846,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.sortable:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".sortable:hover",
-      "ancestry": [],
-      "line": 847,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.sortable:hover:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": "select",
       "ancestry": [],
-      "line": 683,
+      "line": 682,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|select:1"
@@ -3857,7 +1528,7 @@
       "path": "src/ui/ui.css",
       "selector": "select",
       "ancestry": [],
-      "line": 686,
+      "line": 685,
       "ordinal": 2,
       "consumerCandidates": [],
       "key": "compatibility-selector:|select:2"
@@ -3867,7 +1538,7 @@
       "path": "src/ui/ui.css",
       "selector": "tbody tr",
       "ancestry": [],
-      "line": 708,
+      "line": 707,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|tbody tr:1"
@@ -3877,7 +1548,7 @@
       "path": "src/ui/ui.css",
       "selector": "th, td",
       "ancestry": [],
-      "line": 707,
+      "line": 706,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|th, td:1"
@@ -3887,7 +1558,7 @@
       "path": "src/ui/ui.css",
       "selector": "th",
       "ancestry": [],
-      "line": 709,
+      "line": 708,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|th:1"
@@ -3897,34 +1568,13 @@
       "path": "src/ui/ui.css",
       "selector": "tr:last-child td",
       "ancestry": [],
-      "line": 714,
+      "line": 713,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|tr:last-child td:1"
     }
   ],
-  "modalRoots": [
-    {
-      "kind": "modal-root",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 602,
-      "symbol": "CommentComposer",
-      "tag": "div",
-      "token": "aria-modal",
-      "ordinal": 1,
-      "key": "modal-root:src/pages/SequenceBuilder.tsx:CommentComposer:div::1"
-    },
-    {
-      "kind": "modal-root",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1217,
-      "symbol": "PublishWizard",
-      "tag": "div",
-      "token": "aria-modal",
-      "ordinal": 1,
-      "key": "modal-root:src/pages/SequenceBuilder.tsx:PublishWizard:div::1"
-    }
-  ],
+  "modalRoots": [],
   "sourceCounts": {
     "tsx": {
       "files": 110,

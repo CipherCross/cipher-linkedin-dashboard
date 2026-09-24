@@ -425,10 +425,15 @@ function sequenceRecords(scenario) {
   const document = {
     version: 1,
     steps: [
-      { id: 'step-connection', kind: 'connection', variations: [{ id: 'v1', label: 'Variation 1', text: 'Hi {first_name} — saw your work at {company}.' }] },
+      { id: 'step-connection', kind: 'connection', variations: [{ id: 'v1', label: 'Variation 1', text: 'Hi {firstName} — saw your work at {companyName}.' }] },
       { id: 'step-1', kind: 'message', variations: [{ id: 'v2', label: 'Variation 1', text: 'Thanks for connecting. One question about your outreach.' }, { id: 'v3', label: 'Variation 2', text: 'Quick one: how do you run follow-ups today?' }] },
+      { id: 'step-2', kind: 'message', variations: [{ id: 'v4', label: 'Variation 1', text: 'Following up, {firstName} — worth a 15-minute call?' }] },
     ],
-    branches: [],
+    branches: [
+      { id: 'branch-a', name: 'A', selections: { 'step-connection': 'v1', 'step-1': 'v2', 'step-2': 'v4' } },
+      { id: 'branch-b', name: 'B', selections: { 'step-connection': 'v1', 'step-1': 'v3', 'step-2': 'v4' } },
+    ],
+    sampleData: { firstName: 'Alex', companyName: 'Northstar Labs', jobTitle: 'VP of Product', senderName: 'You' },
   }
   const base = {
     document, created_by: 'fixture-member', created_by_name: 'Fixture Admin', updated_by: 'fixture-member',
@@ -450,7 +455,65 @@ export async function playbookFixture(request) {
     if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture read failure' }, 503)
     return json({ sequences: sequenceRecords(scenario) })
   }
+  if (request.method === 'POST' && READ_ACTIONS.has(action)) {
+    if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture read failure' }, 503)
+    if (action === 'get_sequence') {
+      let id = null
+      try { id = (await request.clone().json())?.id ?? null } catch { /* not JSON */ }
+      const detail = sequenceDetail(scenario, id)
+      return detail ? json(detail) : json({ error: 'Sequence not found' }, 404)
+    }
+    if (action === 'list_sequence_publish_targets') return json({ targets: isEmpty(scenario) ? [] : publishTargets() })
+    return json({ jobs: [] })
+  }
   return mutationRefusal()
+}
+
+/* Reads the editor makes on open and in the publish wizard. Save, comment and
+ * publish stay refused, so the editor's error branches are what render. */
+const READ_ACTIONS = new Set(['get_sequence', 'list_sequence_publish_targets', 'list_sequence_publish_jobs'])
+
+function sequenceDetail(scenario, id) {
+  const sequence = sequenceRecords(scenario).find((record) => record.id === id)
+  if (!sequence) return null
+  const version = (revision, name) => ({
+    id: revision, sequence_id: sequence.id, revision, name, document: sequence.document,
+    saved_by: 'fixture-member', saved_by_name: 'Fixture Admin', saved_at: STAMP.updated_at,
+  })
+  const thread = (id, extra) => ({
+    id, sequence_id: sequence.id, created_by: 'fixture-member', created_by_name: 'Fixture Admin',
+    resolved_at: null, resolved_by: null, resolved_by_name: null, ...STAMP, ...extra,
+  })
+  const message = (id, body) => ({ id, author_id: 'fixture-member', author_name: 'Fixture Admin', body, created_at: STAMP.updated_at })
+  return {
+    sequence,
+    versions: [version(sequence.revision, sequence.name), version(sequence.revision - 1, `${sequence.name} (draft)`)],
+    comments: [
+      thread('fixture-thread-1', {
+        step_id: 'step-1', variation_id: 'v2', anchor: { start: 0, end: 20, quote: 'Thanks for connecting' },
+        messages: [message(1, 'Open with something specific to them instead.')],
+      }),
+      thread('fixture-thread-2', {
+        step_id: null, variation_id: null, anchor: null,
+        resolved_at: STAMP.updated_at, resolved_by: 'fixture-member', resolved_by_name: 'Fixture Admin',
+        messages: [message(2, 'Three steps is the right length.')],
+      }),
+    ],
+  }
+}
+
+function publishTargets() {
+  const target = (instance, machine, compatible, extra = {}) => ({
+    instance_id: instance, machine_key: machine,
+    account_snapshot: compatible ? {
+      account_id: `${instance}-account`, account_name: 'Fixture Sender', sender_name: 'Fixture Sender',
+      workspace_id: 'fixture-workspace', lh_version: '5.14', compatibility_profile: 'linked-helper-v1',
+    } : {},
+    capability_snapshot: {}, compatible, compatibility_error_code: compatible ? null : 'version_not_supported',
+    probed_at: STAMP.updated_at, measured_lh_version: '5.14', compatibility_state: compatible ? 'approved' : 'rejected',
+    ...extra,
+  })
+  return [target('notebook-1', 'fixture-notebook-1', true), target('notebook-2', 'fixture-notebook-2', false)]
 }
 
 export async function setFixtureScenario(next) {

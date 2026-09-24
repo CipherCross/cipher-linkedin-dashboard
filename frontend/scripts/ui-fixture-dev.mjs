@@ -151,6 +151,13 @@ if (checkOnly) {
     const post = (path, payload) => new Request(`http://127.0.0.1:${port}${path}`, { method: 'POST', body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } })
     assert.equal((await body(await playbookFixture(post('/api/playbook', { action: 'list_sequences' })))).json.sequences.length, 2)
     assert.equal((await playbookFixture(post('/api/playbook', { action: 'set_archived', id: 'fixture-sequence', archived: true }))).status, 403)
+    const detail = (await body(await playbookFixture(post('/api/playbook', { action: 'get_sequence', id: 'fixture-sequence' })))).json
+    assert.equal(detail.sequence.id, 'fixture-sequence')
+    assert.ok(detail.sequence.document.branches.length >= 1 && detail.versions.length >= 2 && detail.comments.length >= 1)
+    assert.equal((await playbookFixture(post('/api/playbook', { action: 'get_sequence', id: 'missing' }))).status, 404)
+    assert.equal((await body(await playbookFixture(post('/api/playbook', { action: 'list_sequence_publish_targets' })))).json.targets.length, 2)
+    assert.equal((await playbookFixture(post('/api/playbook', { action: 'save_sequence', id: 'fixture-sequence' }))).status, 403)
+    assert.equal((await playbookFixture(post('/api/playbook', { action: 'create_sequence_publish_job', sequence_id: 'fixture-sequence' }))).status, 403)
     assert.equal((await body(await activityFixture(request('/api/activity-daily?op=sequences.hub')))).json.items[0].items.length, 2)
     await fixtureControl(request('/api/ui-fixture?scenario=populated-admin'))
     const importPost = (payload) => importFixture(new Request(`http://127.0.0.1:${port}/api/import`, { method: 'POST', body: JSON.stringify(payload) }))

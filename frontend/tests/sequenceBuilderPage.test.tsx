@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { createSequenceDocument, type SequenceDetail, type SequenceRecord } from '../src/lib/sequenceBuilder'
+import {
+  addBranch, addVariation, createSequenceDocument,
+  type SequenceDetail, type SequenceRecord, type SequenceVersion,
+} from '../src/lib/sequenceBuilder'
 
 const getSequence = vi.fn()
 const saveSequence = vi.fn()
@@ -175,6 +178,113 @@ describe('Sequence Builder autosave', () => {
     await screen.findByText('This sequence changed in another session.', {}, { timeout: 2_500 })
     expect((screen.getByRole('textbox', { name: 'Sequence name' }) as HTMLInputElement).value).toBe('My local draft')
     expect(screen.getByRole('button', { name: 'Load newer version' })).toBeDefined()
+  })
+})
+
+describe('Sequence Editor on canonical contracts (Phase 11)', () => {
+  it('shows the save status text through unsaved and saving, then saved', async () => {
+    let resolveSave: () => void = () => {}
+    saveSequence.mockImplementationOnce((input: { name: string }) => new Promise((resolve) => {
+      resolveSave = () => resolve(record({ name: input.name, revision: 2 }))
+    }))
+    renderEditor()
+    const name = await screen.findByRole('textbox', { name: 'Sequence name' })
+    fireEvent.change(name, { target: { value: 'New founder sequence' } })
+    expect(screen.getByText('Unsaved changes')).toBeTruthy()
+
+    await waitFor(() => expect(screen.getByText('Saving…')).toBeTruthy(), { timeout: 2_500 })
+    resolveSave()
+    await waitFor(() => expect(screen.getByText('All changes saved')).toBeTruthy())
+  })
+
+  it('shows "Save failed" when autosave rejects for a reason other than a conflict', async () => {
+    saveSequence.mockRejectedValueOnce(new Error('network down'))
+    renderEditor()
+    const name = await screen.findByRole('textbox', { name: 'Sequence name' })
+    fireEvent.change(name, { target: { value: 'Oops' } })
+    await waitFor(() => expect(screen.getByText('Save failed')).toBeTruthy(), { timeout: 2_500 })
+  })
+
+  it('switches sections with the mode tabs, shows the branch count, and the device toggle switches state', async () => {
+    renderEditor()
+    await screen.findByRole('textbox', { name: 'Sequence name' })
+    const tablist = screen.getByRole('tablist', { name: 'Sequence sections' })
+    expect(within(tablist).getByRole('tab', { name: /Build/ })).toBeTruthy()
+    expect(within(tablist).getByRole('tab', { name: /Branches/ }).textContent).toContain('0')
+
+    fireEvent.click(within(tablist).getByRole('tab', { name: /Preview/ }))
+    expect(await screen.findByText('LinkedIn preview')).toBeTruthy()
+
+    const deviceGroup = screen.getByRole('radiogroup', { name: 'Preview device' })
+    const mobile = within(deviceGroup).getByRole('radio', { name: /Mobile/ })
+    expect(mobile.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(mobile)
+    expect(mobile.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('updates the document when a branch path changes, and "Preview branch" prepares that branch', async () => {
+    const base = createSequenceDocument()
+    const withVariation = addVariation(base, base.steps[1].id)
+    const branched = addBranch(withVariation)
+    getSequence.mockResolvedValue({ sequence: record({ document: branched }), versions: [], comments: [] })
+
+    renderEditor()
+    await screen.findByRole('textbox', { name: 'Sequence name' })
+    fireEvent.click(screen.getByRole('tab', { name: /Branches/ }))
+
+    const secondVariationId = branched.steps[1].variations[1].id
+    const pathSelect = screen.getByLabelText(/^Message 1/)
+    fireEvent.change(pathSelect, { target: { value: secondVariationId } })
+
+    await waitFor(() => expect(saveSequence).toHaveBeenCalled(), { timeout: 2_500 })
+    const lastCall = saveSequence.mock.calls.at(-1)?.[0] as { document: typeof branched }
+    expect(lastCall.document.branches[0].selections[branched.steps[1].id]).toBe(secondVariationId)
+
+    fireEvent.click(screen.getByRole('button', { name: /Preview branch A/ }))
+    expect(await screen.findByText('LinkedIn preview')).toBeTruthy()
+    expect((screen.getByLabelText('Prepared branch') as HTMLSelectElement).value).toBe(branched.branches[0].id)
+  })
+
+  it('renders drag handles as sortable buttons, disabling the connection step handle', async () => {
+    renderEditor()
+    await screen.findByRole('textbox', { name: 'Sequence name' })
+
+    const stepHandles = screen.getAllByRole('button', { name: 'Drag message step' })
+    expect(stepHandles).toHaveLength(2)
+    for (const handle of stepHandles) expect(handle.getAttribute('aria-roledescription')).toBe('sortable')
+    expect(stepHandles.filter((handle) => (handle as HTMLButtonElement).disabled)).toHaveLength(1)
+
+    const variationHandles = screen.getAllByRole('button', { name: 'Drag variation' })
+    expect(variationHandles.length).toBeGreaterThan(0)
+    expect(variationHandles[0].getAttribute('aria-roledescription')).toBe('sortable')
+  })
+
+  it('opens the review panel and lists version history with a restore action', async () => {
+    const versions: SequenceVersion[] = [
+      {
+        id: -2, sequence_id: '22222222-2222-4222-8222-222222222222', revision: 2,
+        name: 'Founder outreach v2', document: createSequenceDocument(),
+        saved_by: '11111111-1111-4111-8111-111111111111', saved_by_name: 'Alex',
+        saved_at: '2026-08-28T10:00:00.000Z',
+      },
+      {
+        id: -1, sequence_id: '22222222-2222-4222-8222-222222222222', revision: 1,
+        name: 'Founder outreach', document: createSequenceDocument(),
+        saved_by: '11111111-1111-4111-8111-111111111111', saved_by_name: 'Alex',
+        saved_at: '2026-08-27T10:00:00.000Z',
+      },
+    ]
+    getSequence.mockResolvedValue({ sequence: record(), versions, comments: [] })
+
+    renderEditor()
+    await screen.findByRole('textbox', { name: 'Sequence name' })
+    fireEvent.click(screen.getByRole('button', { name: /Comments & history/ }))
+
+    const panel = screen.getByRole('radiogroup', { name: 'Review panel' })
+    fireEvent.click(within(panel).getByRole('radio', { name: /History/ }))
+
+    expect(screen.getByText('Founder outreach v2')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Restore as new version' })).toHaveLength(1)
   })
 })
 

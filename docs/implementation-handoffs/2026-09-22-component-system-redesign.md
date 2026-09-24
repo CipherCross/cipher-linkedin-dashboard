@@ -544,3 +544,99 @@ Browser (fixture, `shell` mode, 1280×720):
 Gate: build passed; `npm run test` 104 files / 1,482 tests passed; `typecheck:api` passed; `ui:inventory` passed (unchanged: 60 raw controls, 135 tokens, 163 selectors).
 
 Noted, not changed: Import history is disabled until the thread has loaded, including the second read that manual-review mode triggers. It dedupes against the loaded messages, so this is intentional.
+
+## Phase 11 — Sequence editor and publish workflow (2026-09-24, awaiting review)
+
+The editor below the Hub: header and save state, mode tabs, step and variation controls, branches, preview, the review rail, and the app's last two hand-built modals. Two Sonnet workers did it in parallel on the same file: one did `CommentComposer` and `PublishWizard`, the other the rest. The orchestrator reviewed both diffs, did the fixture, the CSS moves and pruning, the allowlist and the visual fixes below. **State ownership did not move.** The autosave timer, revisions, conflict handling, DnD sensors and `dragEnd`, branch selections, preview selection, publish readiness and snapshot are all byte-identical in their original roots.
+
+- **Dialogs (both are now the shared `Dialog`; modal roots 2 → 0)**
+  - `CommentComposer`: small dialog titled "Add comment", with the target as its description. It has a labelled `TextareaField` "Comment", which is where focus starts. Add comment uses `Button loading`. While the request is in flight, `busy` refuses Escape, the backdrop and Close, and says why. A refused save keeps the dialog and the text.
+  - `PublishWizard`: 880px dialog, "Publish campaign" · "<name> · revision N", Close named "Close publish campaign".
+    - The old modal refused only a backdrop click and a disabled Close while queueing; Escape wasn't handled at all. Now all three go through the Dialog. While busy they are refused with an announced message that also describes the disabled Close.
+    - The step status text is the `footerNote`; Cancel/Back/Continue/Queue are `Button`s with unchanged disabled expressions, and Queue uses `loading`.
+    - Step rail: ghost `Button`s with `aria-current="step"` and `data-state="complete"` instead of `active`/`complete` classes.
+    - Loading → a `role="status"` line; read failure → `InlineError` with "Try again"; no destinations → `EmptyState`; review preview error → `InlineError`; the setup validation callout gains `role="alert"`.
+    - Readiness is a `Badge`. Visit/Follow are `Checkbox`es (the fake switch track is gone). Delay inputs are the `Input` primitive with identical attributes. Select all/Clear all is a ghost `Button`.
+    - The destination cards and branch tiles keep their rich label around a visually hidden native radio/checkbox. They are allowlisted as `publish-target-card` and `publish-branch-tile`, with `ui-exception` comments.
+    - The decorative Send tile and the "Linked Helper" eyebrow in the header are gone. The ≤700px bottom-sheet variant went with the hand-built modal (the app is PC-only).
+- **Editor chrome**
+  - Compact document header, still sticky: Back, the name as the canonical `Input` (text-lg, semibold), "Edited by", `SaveStatus` (presentational; `SaveIndicator` deleted, and the local `SaveState` type is the one from `src/ui`), then Comment, Comments & history and Publish, all unchanged.
+  - The conflict banner is an `InlineError` with "Load newer version". Build/Branches/Preview are `Tabs` with the branch count. "Could not open sequence" is an `InlineError` plus the existing Back button; no retry was added.
+- **Canvas**
+  - Step actions: `Button sm` for Comment and Make CR; `IconButton` for move up/down and remove (danger).
+  - Both drag handles are `IconButton`s receiving dnd-kit's attributes and listeners unchanged (`aria-roledescription="sortable"`; the connection step's handle stays disabled).
+  - Variation: name `Input`; token and emoji inserters are `Button sm` (`font-normal`); the body is the `Textarea` primitive, now named "Variation text" (it had no accessible name); Comment is a ghost `Button`; the character count uses conditional utilities; "Move to" is a label around the `Select`.
+  - Add variation is a ghost `Button` and Add message a secondary `Button`. Their dashed accent treatment is gone.
+- **Branches / Preview / Review rail**
+  - Branches: `SectionHeader` with the eyebrow kept; `EmptyState` + "Create branch A"; branch cards are `Panel`s with `Input`, `IconButton` and `Select`s.
+  - Preview: `SectionHeader`; the device toggle is a `SegmentedControl` ("Preview device"); controls are `SelectField`s in a `Panel`. The LinkedIn frame is still the documented colour/type exception, now keyed on `data-device`/`data-warn`. Its fake send `<button>` is an `aria-hidden` span.
+  - Review rail: Comments/History is a `SegmentedControl` ("Review panel"); "Show resolved" is a `Checkbox`; the empty state is `EmptyState`; thread state moved to `data-resolved`/`data-stale`; replies use a `Textarea` named "Reply" and `Button`s.
+- **Orchestrator fixes on top of the workers** (all found in the browser):
+  - `Tabs`/`SegmentedControl` labels given as icon + text stacked the icon above the word. Each label is now wrapped in an inline-flex span. The primitives were not changed.
+  - "Move to" wrapped onto two lines.
+  - The publish rail's focus ring was clipped by the dialog body's `overflow: hidden`, so it is now drawn inset.
+  - Two hook classes left with no rule (`linkedin-preview`, `sequence-publish-job-icon`) failed `unknownClasses` and were dropped.
+  - The Gallery's "Add variation" reference is now the same ghost `Button`.
+  - A test's closure-assigned `let` narrowed to `never` under `typecheck:api`.
+- **Publish job strip (changed on purpose)**
+  - The old CSS matched `.succeeded`, but the status is `success`, so a successful job never turned green and its check icon span. Success is now green and static.
+  - `failed`, `partial_failure` and `conflict` are red, matching the alert icon they already showed. Only the in-progress loader spins.
+- **CSS**
+  - Moved from the `ui.css` compatibility block to `sequence-builder.css`, all still in use: `.sequence-variation-grid`/`-actions` (and their 700px rules), `.sequence-mini-flow span.connection`, `@keyframes sequence-shimmer`, `.deployment-advanced .ui-field`.
+  - Removed from `ui.css`, each with zero consumers by exact class-token grep over `src/**/*.ts(x)` (template literals checked by hand):
+    - every `.btn*` and `.btn-accent*`, `.icon-btn`/`.icon-only-btn*`, `.link-btn*`, `.sortable*`, both `.conv-close` rules, `.pipe-modal*`, `.char-warning`, `.empty-state-action .link-btn`, `.conv-demographics .badge`, `.publish-compatibility-card .badge`, `.campaign-source .badge`, and the dead `.btn` in the print hide list;
+    - every editor `sequence-*` state rule (`save-state`, `editor-tabs`, `device-toggle`/`review-tabs`, `step-icon`, `comment-thread .stale`, `version-list .btn`, `add-variation`, `publish-head/-steps/-state/-loading/-target.selected/-branch-list .selected/-job-strip`, the spinner clause), `.linkedin-preview.mobile` and `small.warn`;
+    - the 1180px and 700px `.sequence-step-actions .btn`, `.sequence-editor-topbar .btn` and `.sequence-library-hero`/`.sequence-section-intro` rules.
+  - Also removed from `sequence-builder.css`, all dead after the conversion: `.sequence-device-toggle`, `-review-tabs`, `-editor-tabs`, `-empty-state`, `-save-state`, `-conflict-banner`, `-drag-handle`/`-variation-drag`, `-section-intro`, `-branch-empty`, `-comment-compose`, `-publish-overlay/-modal/-head*/-readiness/-switch*/-validation/-footer*/-submit`, plus their media overrides.
+  - `ui.css` 1,107 → 878 lines.
+- **Fixture**
+  - `/api/playbook` now answers the editor's reads: `get_sequence` (3 steps, 2 branches, 2 versions, one open anchored thread and one resolved), `list_sequence_publish_targets` (one ready and one rejected notebook) and `list_sequence_publish_jobs` (empty).
+  - Save, comment and publish stay refused, so the browser checks exercise the refused and error branches.
+  - The fixture document gained `sampleData` and the real `{firstName}`/`{companyName}` tokens. `--check` asserts the detail, a 404, the targets, and the refusals.
+
+Tests: new `sequenceEditorDialogs` (8): both dialogs cover focus-in, Escape through `onRequestClose`, busy refusal of Escape/backdrop/Close with the message, and focus return to the trigger. `sequenceBuilderPage` gains 6 editor cases: SaveStatus dirty→saving→saved, "Save failed", tabs + count + device radiogroup, branch selection feeds the save payload and "Preview branch" prepares it, sortable handles with the connection handle disabled, and the review rail + restore. `sequencePublishWizard` is unchanged and green. Mutation checks, each observed failing and then restored:
+- the workers' eleven (no `busy` on either dialog, a no-op `onRequestClose`, a disabled textarea for initial focus, a hardcoded SaveStatus, a masked error, a dropped tab count, a no-op device switch, a dropped branch-selection key, an empty Preview-branch click, an enabled connection handle, an off-by-one restore);
+- plus the orchestrator's re-run of the PublishWizard `busy` removal.
+
+Gate (from `frontend/`, build first):
+- build passed;
+- `npm run test` 105 files / 1,494 tests: 1,493 pass, and 1 fails — `supabaseClient` "is built when both values are usable". That test fails identically on a clean worktree of `9ac7dbe`: this machine runs Node 20, which has no native WebSocket for the Supabase client. It is environmental and unrelated.
+- `typecheck:api` passed;
+- `ui:inventory` passed after a reviewed `--update`;
+- fixture `--check` passed; `git diff --check` passed.
+
+| Count | Before | After |
+| --- | --- | --- |
+| Raw controls | 60 | 0 |
+| Allowlisted | 9 | 11 |
+| Compatibility tokens | 135 | 37 |
+| Selectors | 163 | 75 |
+| Modal roots | 2 | 0 |
+
+No selector-ledger entry is still due by Phase 11. Bundle, measured on this machine before and after the phase (Node 20; the absolute numbers differ from the earlier phases' machine): production JS 601,293 → 601,265 gzip, CSS 32,942 → 30,939 (−2,003). TS/TSX +596/−600 lines (+197 for the new suite); CSS +41/−325.
+
+Browser evidence — **local synthetic fixture, `chrome-headless-shell` 154 in `headless: 'shell'` mode, exact 1280×720 / 1440×900 / 1920×1080**:
+
+| Surface | Result at all three |
+| --- | --- |
+| Header | sticky (the name input stays at y=13 after scrolling 900px, and SaveStatus stays visible); "All changes saved"; tabs "Build · Branches 2 · Preview"; page overflow-x 0; no control under 32px and no text under 13px outside the LinkedIn frame |
+| Comment dialog | Enter on Comment opens "Add comment" with focus in the textarea; Escape closes it and focus returns to Comment; a refused submit keeps the dialog and the text and shows the refusal toast |
+| Publish dialog | 880px; footer inside the viewport (bottom 695/720, 803/900, 893/1080); Ready and Not-ready destinations both visible; Continue → Setup → Review. With the publish request held: Escape and Close are refused, the busy message is shown and describes the disabled Close. Once released, the refusal toast shows and the dialog stays; Escape then closes it and focus returns to Publish |
+| Tabs / Branches | ArrowRight moves the tab and focus to Branches; cards A and B with 6 selects; "Preview branch B" opens Preview with "Branch B" prepared |
+| Preview | device radiogroup; the frame is 722/780 wide on web and 390 on mobile after ArrowRight |
+| Review rail | "Review panel" radiogroup; one open thread (the resolved one is hidden) |
+| Reorder | keyboard (Space, ArrowDown, Space) moves a variation, and focus stays on its handle. "Move step up" reorders the steps. Pointer drag moves a variation to the other step. The resulting autosave is refused → "Save failed", and Publish is disabled |
+
+**Found, not fixed (pre-existing, identical on `9ac7dbe`):** dragging a *step* by its handle does nothing, whether by pointer or by keyboard. Step and variation sortables share one `DndContext` with `closestCenter`, so a step always lands over a variation droppable ("dropped over droppable area v3"), and `dragEnd` finds no step index and ignores it. Move up/down is the working path. The likely fix is a collision filter that only considers droppables of the active item's type. It is a behaviour change, so it was left for a decision.
+
+**Changed on purpose, for review:**
+- the publish dialog's Escape now works (and is refused while busy);
+- the comment dialog refuses close while its request is in flight;
+- the Visit/Follow switches became checkboxes;
+- the job strip's success tint now shows;
+- the name field has the canonical border;
+- the dashed Add variation/Add message styling is gone.
+
+**Environment notes:** the previous machine's puppeteer path and `vercel` CLI are absent on this Mac. The browser run used `puppeteer-core` and `chrome-headless-shell` installed in the session scratchpad, and the fixture ran with a scratchpad-local `vercel` 59 on PATH. Chrome 153 no longer has the old headless mode, so `chrome-headless-shell` is how `headless: 'shell'` works now.
+
+Next: Phase 12 — compatibility deletion, documentation and full acceptance.

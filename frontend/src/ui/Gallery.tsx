@@ -524,7 +524,7 @@ export function Gallery() {
                 </div>
               </div>
               <div className="sequence-variation-actions">
-                <button className="sequence-add-variation" type="button"><Plus size={18} /><span>Add variation</span></button>
+                <Button variant="ghost" icon={<Plus size={18} aria-hidden="true" />} className="font-normal">Add variation</Button>
               </div>
             </Panel>
           </div>

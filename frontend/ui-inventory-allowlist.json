@@ -75,8 +75,8 @@
       "symbol": "Sidebar",
       "tag": "button",
       "owner": "frontend/navigation",
-      "reason": "Quick Navigation trigger presented as a search field with its \u2318K hint; it opens the command dialog rather than performing an action.",
-      "verification": "Click and \u2318K open Quick Navigation; focus returns to the trigger on close.",
+      "reason": "Quick Navigation trigger presented as a search field with its ⌘K hint; it opens the command dialog rather than performing an action.",
+      "verification": "Click and ⌘K open Quick Navigation; focus returns to the trigger on close.",
       "removeByPhase": null
     },
     {
@@ -143,6 +143,30 @@
       "owner": "frontend/replies",
       "reason": "A message in the Replies thread is selectable for review; the whole bubble (sender, time, body, status) is the button, which Button cannot render, and aria-pressed marks the selected one.",
       "verification": "Tab through the thread, Enter/Space selects a message, the selected bubble carries aria-pressed=\"true\"; repliesInboxComponents.",
+      "removeByPhase": null
+    },
+    {
+      "id": "publish-target-card",
+      "kind": "raw-control",
+      "path": "src/pages/SequenceBuilder.tsx",
+      "symbol": "PublishWizard",
+      "tag": "input",
+      "nativeType": "radio",
+      "owner": "frontend/sequences",
+      "reason": "A publishing destination is a rich card (initial, account name, machine, LH2 version, contract fingerprints, readiness badge, unavailable reason) that RadioGroup options cannot hold; the card label wraps a visually hidden native radio so arrow keys, disabled targets and the checked state stay native.",
+      "verification": "Arrow keys move between ready destinations, unavailable ones are skipped and stay visible with their reason, the selected card is marked data-selected; sequencePublishWizard.",
+      "removeByPhase": null
+    },
+    {
+      "id": "publish-branch-tile",
+      "kind": "raw-control",
+      "path": "src/pages/SequenceBuilder.tsx",
+      "symbol": "PublishWizard",
+      "tag": "input",
+      "nativeType": "checkbox",
+      "owner": "frontend/sequences",
+      "reason": "A branch tile carries a letter tile, branch and campaign name and a check mark in a three-column grid that the Checkbox row cannot lay out; the tile label wraps a visually hidden native checkbox.",
+      "verification": "Tab to each tile, Space toggles it, the footer count and Continue follow the selection; sequencePublishWizard.",
       "removeByPhase": null
     }
   ]
