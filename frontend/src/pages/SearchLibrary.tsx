@@ -196,7 +196,7 @@ export function SearchLibrary() {
         title="Searches"
         description="Shared sourcing recipes for Apollo, Sales Navigator, esun and others — copy the boolean query and paste it into the platform."
         actions={
-          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setEditing('new')}>
+          <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={() => setEditing('new')}>
             New search
           </Button>
         }
@@ -298,13 +298,13 @@ function SearchCard({
       title={s.name}
       archived={s.archived}
       actions={<>
-        <IconButton label="Edit this search" icon={<Pencil size={20} aria-hidden="true" />} onClick={onEdit} />
+        <IconButton label="Edit this search" icon={<Pencil aria-hidden="true" />} onClick={onEdit} />
         <IconButton
           label={s.archived ? 'Restore this search' : 'Archive this search'}
           icon={s.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
           onClick={onArchive}
         />
-        <IconButton label="Delete this search" tone="danger" icon={<Trash2 size={20} aria-hidden="true" />} onClick={onDelete} />
+        <IconButton label="Delete this search" tone="danger" icon={<Trash2 aria-hidden="true" />} onClick={onDelete} />
       </>}
       footer={<>{s.author ? `${s.author} · ` : ''}updated {shortDate(s.updated_at)}</>}
     >
@@ -315,7 +315,7 @@ function SearchCard({
       {s.boolean_query && (
         <div className="flex items-start gap-app-sm bg-app-surface-2 border border-app-border rounded-control px-2.5 py-app-sm">
           <code className="flex-1 min-w-0 whitespace-pre-wrap [word-break:break-word] font-mono text-app-meta text-app-text">{s.boolean_query}</code>
-          <Button variant="secondary" size="sm" icon={<Copy size={16} aria-hidden="true" />} onClick={onCopy}>
+          <Button variant="secondary" size="sm" icon={<Copy aria-hidden="true" />} onClick={onCopy}>
             Copy
           </Button>
         </div>
@@ -511,7 +511,7 @@ function SearchEditor({
               variant="secondary"
               size="sm"
               className="self-start"
-              icon={<Copy size={16} aria-hidden="true" />}
+              icon={<Copy aria-hidden="true" />}
               onClick={copyQuery}
               disabled={!draft.boolean_query.trim()}
             >
@@ -571,7 +571,7 @@ function SearchEditor({
                 <IconButton
                   label={`Remove filter ${i + 1}`}
                   tone="danger"
-                  icon={<X size={20} aria-hidden="true" />}
+                  icon={<X aria-hidden="true" />}
                   onClick={() =>
                     set('filterRows', draft.filterRows.filter((_, idx) => idx !== i))
                   }
@@ -582,7 +582,7 @@ function SearchEditor({
               variant="ghost"
               size="sm"
               className="self-start"
-              icon={<Plus size={16} aria-hidden="true" />}
+              icon={<Plus aria-hidden="true" />}
               onClick={() =>
                 set('filterRows', [
                   ...draft.filterRows,

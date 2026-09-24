@@ -99,12 +99,13 @@ literal `@import "tailwindcss"`, and the split form breaks `init` and every
 | Separator / meaningful control border | `#D0D5DD` / `#7A8699` — the difference is deliberate |
 | Success / warning / danger | `#067647` / `#92400E` / `#B42318` |
 | Purple | Referral only — the one reply meaning with no status hue of its own |
-| Body and controls | 16/24, weight 400; labels and actions 500–600 |
+| Body | 16/24, weight 400 |
+| Controls (button, input, select) | 14/20 labels and values, weight 400; button labels 600. Small button 13/18 |
 | Table content / metadata | 14/20 / 13/18. **13px is a floor.** |
 | Page title / section / subsection | 28/36 · 20/28 · 16/24, weight 600 |
 | KPI | 32/40, weight 600, tabular numerals |
 | Space scale | 4, 8, 12, 16, 24, 32, 48, 64 (1–2px only for borders and icon alignment) |
-| Control height | 44px; icon button 44×44 around a 20px glyph |
+| Control height | 36px default · 28px small (`size="sm"`, in-row only); icon button 32×32 around a 16px glyph; 16px glyph in a button, 14px in a small one. See **Controls** below |
 | Table rows | 52px single line, 68px identity + secondary line |
 | Radius | 8 controls · 12 cards · 16 dialogs; pill for badges and chips only |
 | Elevation | Cards have **no** shadow. One soft shadow, and only on popup / dialog / drawer. |
@@ -112,6 +113,29 @@ literal `@import "tailwindcss"`, and the split form breaks `init` and every
 
 Contrast is checked on the surfaces the colours are actually used on; the
 computed ratios are in the header comment of `tokens.css`.
+
+### Controls
+
+Sizing is pointer-first, because the product is PC-only. The 44px figure in
+Apple's iOS guidance and WCAG 2.5.5 (AAA) is a fingertip target; for a pointer,
+Apple's own table gives macOS a 28×28pt default (20pt minimum), Material 3's
+40dp button drops 4dp per density step and recommends density for tables and
+long forms, and the binding floor is WCAG 2.2 2.5.8 (AA): 24×24 CSS px.
+
+| Token | Value | Grounding |
+|---|---|---|
+| `--control-height` | 36px, 12px inline padding | Material 3's 40dp minus one density step; shadcn default |
+| `--control-height-sm` | 28px, 8px inline padding | macOS default control target; Primer small |
+| `--icon-hit` | 32×32 | Material 3 XS; Primer medium |
+| `--icon-glyph` / `--icon-glyph-sm` | 16px / 14px | Icon-to-label gap 8px (4px small), as in Material 3 |
+
+- Glyph size is owned by the primitive: `.ui-btn > svg` and `.ui-icon-btn > svg`
+  size every direct icon, so call sites pass no `size` to a button's icon. A
+  deliberately smaller glyph (a chip's remove ×) sets a utility class on the icon.
+- Inputs and selects share `--control-height` and `--control-text`, so a button
+  and a select in one toolbar are the same height and type size.
+- Nothing interactive goes below 24px. The chip remove buttons (24px circle,
+  16px inline ×) rely on 2.5.8's spacing exception.
 
 ### What is not allowed
 

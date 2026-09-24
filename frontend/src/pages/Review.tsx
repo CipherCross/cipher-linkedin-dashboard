@@ -280,7 +280,7 @@ function SendToSlackButton({ digest }: { digest: DigestPayload | null }) {
   return (
     <Button
       variant="secondary"
-      icon={<Send size={18} aria-hidden="true" />}
+      icon={<Send aria-hidden="true" />}
       onClick={send}
       loading={busy}
       loadingLabel="Sending the digest to Slack"

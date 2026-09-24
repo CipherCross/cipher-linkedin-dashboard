@@ -188,7 +188,7 @@ export function Hypotheses() {
         title="Hypotheses"
         description="Group campaigns under an ICP to test a go-to-market hypothesis and compare results."
         actions={
-          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setEditing('new')}>
+          <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={() => setEditing('new')}>
             New hypothesis
           </Button>
         }
@@ -269,7 +269,7 @@ export function Hypotheses() {
                       <span className="inline-flex">
                         <IconButton
                           label={`Edit ${r.hyp.name}`}
-                          icon={<Pencil size={20} aria-hidden="true" />}
+                          icon={<Pencil aria-hidden="true" />}
                           onClick={() => setEditing(r.hyp)}
                         />
                         <IconButton
@@ -280,7 +280,7 @@ export function Hypotheses() {
                         <IconButton
                           label={`Delete ${r.hyp.name}`}
                           tone="danger"
-                          icon={<Trash2 size={20} aria-hidden="true" />}
+                          icon={<Trash2 aria-hidden="true" />}
                           onClick={() => del(r.hyp)}
                         />
                       </span>
@@ -418,7 +418,7 @@ function HypothesisViewer({
       footer={<>
         <CopyButton text={hypToText(hyp, icp?.name ?? null, breakdown, searches)} title="Copy all fields" />
         <Button variant="secondary" onClick={onClose}>Close</Button>
-        <Button variant="primary" icon={<Pencil size={16} aria-hidden="true" />} onClick={onEdit}>
+        <Button variant="primary" icon={<Pencil aria-hidden="true" />} onClick={onEdit}>
           Edit hypothesis
         </Button>
       </>}

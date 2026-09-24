@@ -82,7 +82,7 @@ export function TemplateComparison({
               {columns.length > 1 && (
                 <IconButton
                   label={`Remove ${c.campaign_name}`}
-                  icon={<X size={12} aria-hidden="true" />}
+                  icon={<X aria-hidden="true" />}
                   onClick={() => setSelected(effective.filter((x) => x !== c.campaign_id))}
                   className="!w-5 !h-5"
                 />

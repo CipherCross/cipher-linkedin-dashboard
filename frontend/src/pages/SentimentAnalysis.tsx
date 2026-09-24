@@ -215,7 +215,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
       title="Sentiment analysis"
       description="Manual review of replies, the reasons behind them, and the conversations still open."
       context={<span className="text-app-text-muted text-app-meta">Period is sliced in UTC · reminders run on Madrid time</span>}
-      actions={<Button variant="secondary" icon={<RefreshCw size={18} aria-hidden="true" />} onClick={() => setRefresh((value) => value + 1)} loading={loading} loadingLabel="Refreshing analytics">{COPY.refresh}</Button>}
+      actions={<Button variant="secondary" icon={<RefreshCw aria-hidden="true" />} onClick={() => setRefresh((value) => value + 1)} loading={loading} loadingLabel="Refreshing analytics">{COPY.refresh}</Button>}
     />
 
     <Panel className="flex items-end flex-wrap gap-app-lg mb-app-lg [&_.ui-field]:min-w-[220px]" aria-label="Analytics filters">
@@ -233,7 +233,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
         <option value="">All accounts</option>
         {(data?.instances ?? []).map((item) => <option value={item.id} key={item.id}>{displayAccount(item.id)}</option>)}
       </SelectField>
-      <Button variant="ghost"  icon={<Filter size={18} aria-hidden="true" />} aria-expanded={moreFilters} onClick={() => setMoreFilters(true)}>More filters</Button>
+      <Button variant="ghost"  icon={<Filter aria-hidden="true" />} aria-expanded={moreFilters} onClick={() => setMoreFilters(true)}>More filters</Button>
     </Panel>
 
     {moreFilters && <Dialog

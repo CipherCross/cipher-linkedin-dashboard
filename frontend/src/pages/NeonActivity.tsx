@@ -71,7 +71,7 @@ export function NeonActivity() {
         description="A diagnostic read-only slice used to check the application read path end to end. The dashboard's own pages read the same data through their own routes."
         context={<Badge tone="neutral">Diagnostic</Badge>}
         actions={
-          <Button variant="secondary" icon={<RefreshCw size={18} aria-hidden="true" />} onClick={() => void load()} loading={loading} loadingLabel="Reloading">
+          <Button variant="secondary" icon={<RefreshCw aria-hidden="true" />} onClick={() => void load()} loading={loading} loadingLabel="Reloading">
             {COPY.refresh}
           </Button>
         }

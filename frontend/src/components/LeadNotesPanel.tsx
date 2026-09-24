@@ -157,7 +157,7 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
                   className="ml-auto"
                   tone="danger"
                   label="Delete note"
-                  icon={<Trash2 size={16} aria-hidden="true" />}
+                  icon={<Trash2 aria-hidden="true" />}
                   onClick={() => remove(n)}
                 />
               </div>

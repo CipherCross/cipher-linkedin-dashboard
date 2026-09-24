@@ -567,7 +567,7 @@ export function UnifiedApolloCsvImport() {
         title="Apollo CSV import"
         description="One Apollo People export creates the missing Airtable Companies first, then links and imports the Contacts."
         actions={(document || companyPreview || contactOutcomes) && (
-          <Button variant="secondary" icon={<RotateCcw size={18} aria-hidden="true" />} onClick={reset} disabled={busy}>
+          <Button variant="secondary" icon={<RotateCcw aria-hidden="true" />} onClick={reset} disabled={busy}>
             Start over
           </Button>
         )}
@@ -639,7 +639,7 @@ export function UnifiedApolloCsvImport() {
           </p>
           <Button
             variant="primary"
-            icon={<Upload size={18} aria-hidden="true" />}
+            icon={<Upload aria-hidden="true" />}
             disabled={!addedBy || metadataBusy || !!metadataError}
             onClick={() => fileRef.current?.click()}
           >
@@ -673,7 +673,7 @@ export function UnifiedApolloCsvImport() {
             </div>
           </dl>
           <StageActions summary={<><strong>{companies.length}</strong> Companies will be processed before <strong>{contacts.length}</strong> Contacts.</>}>
-            <Button variant="primary" icon={<Search size={18} aria-hidden="true" />} loading={busy} onClick={() => void startCompanyPreview()}>
+            <Button variant="primary" icon={<Search aria-hidden="true" />} loading={busy} onClick={() => void startCompanyPreview()}>
               Preview Companies
             </Button>
           </StageActions>
@@ -718,7 +718,7 @@ export function UnifiedApolloCsvImport() {
                             Create new
                           </Button>
                         )}
-                        <Button size="sm" icon={<Search size={16} aria-hidden="true" />} onClick={() => setOpenAccountId(company.accountId)}>
+                        <Button size="sm" icon={<Search aria-hidden="true" />} onClick={() => setOpenAccountId(company.accountId)}>
                           Choose existing
                         </Button>
                       </div>
@@ -734,7 +734,7 @@ export function UnifiedApolloCsvImport() {
           </>}>
             <Button
               variant="primary"
-              icon={<Upload size={18} aria-hidden="true" />}
+              icon={<Upload aria-hidden="true" />}
               loading={busy}
               disabled={unresolvedCompanies.length > 0}
               onClick={() => void commitCompanyStage()}
@@ -790,7 +790,7 @@ export function UnifiedApolloCsvImport() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              icon={<SkipForward size={16} aria-hidden="true" />}
+                              icon={<SkipForward aria-hidden="true" />}
                               onClick={() => setSkippedContacts((current) => {
                                 const next = new Set(current)
                                 next.has(contact.rowNumber) ? next.delete(contact.rowNumber) : next.add(contact.rowNumber)
@@ -809,7 +809,7 @@ export function UnifiedApolloCsvImport() {
             </TableFrame>
           </Stage>
           <StageActions summary={<><strong>{(contactCounts.ready ?? 0) - skippedContacts.size}</strong> Contacts ready to create.</>}>
-            <Button variant="primary" icon={<Users size={18} aria-hidden="true" />} loading={busy} onClick={() => void commitContactStage()}>
+            <Button variant="primary" icon={<Users aria-hidden="true" />} loading={busy} onClick={() => void commitContactStage()}>
               Import Contacts
             </Button>
           </StageActions>
@@ -827,22 +827,22 @@ export function UnifiedApolloCsvImport() {
           )}
           <StageActions summary={failedCompanies ? 'Retry starts again from fresh Company state.' : failedContacts ? 'Retry rechecks Contacts before writing.' : 'All importable rows were processed.'}>
             <Button
-              icon={<Download size={18} aria-hidden="true" />}
+              icon={<Download aria-hidden="true" />}
               onClick={() => downloadUnifiedImportResults(document.fileName, contacts, companies, companyOutcomes, contactOutcomes)}
             >
               Download report
             </Button>
             {failedCompanies && (
-              <Button variant="primary" icon={<RefreshCw size={18} aria-hidden="true" />} loading={busy} onClick={() => void retryFromAirtable()}>
+              <Button variant="primary" icon={<RefreshCw aria-hidden="true" />} loading={busy} onClick={() => void retryFromAirtable()}>
                 Retry import
               </Button>
             )}
             {!failedCompanies && failedContacts && (
-              <Button variant="primary" icon={<RefreshCw size={18} aria-hidden="true" />} loading={busy} onClick={() => void retryContacts()}>
+              <Button variant="primary" icon={<RefreshCw aria-hidden="true" />} loading={busy} onClick={() => void retryContacts()}>
                 Retry Contacts
               </Button>
             )}
-            <Button variant="ghost" icon={<RotateCcw size={18} aria-hidden="true" />} onClick={reset} disabled={busy}>New import</Button>
+            <Button variant="ghost" icon={<RotateCcw aria-hidden="true" />} onClick={reset} disabled={busy}>New import</Button>
           </StageActions>
         </Stage>
       )}

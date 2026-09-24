@@ -261,7 +261,7 @@ export function Chat() {
         title="Chat"
         description="Ask Claude about your campaign data. It reads the dashboard's own data and shows you the query behind each answer."
         actions={messages.length > 0 && (
-          <Button variant="secondary" icon={<Plus size={18} aria-hidden="true" />} onClick={newChat}>
+          <Button variant="secondary" icon={<Plus aria-hidden="true" />} onClick={newChat}>
             New chat
           </Button>
         )}
@@ -312,7 +312,7 @@ export function Chat() {
           <Button
             variant="secondary"
             size="sm"
-            icon={<ArrowDown size={14} aria-hidden="true" />}
+            icon={<ArrowDown aria-hidden="true" />}
             className="absolute left-1/2 -translate-x-1/2 bottom-[78px] z-[2] rounded-full bg-app-surface-3 border-app-border-strong shadow-[var(--shadow-overlay)] hover:border-app-accent-border hover:text-app-accent"
             onClick={jumpToLatest}
           >
@@ -346,7 +346,7 @@ export function Chat() {
           {busy ? (
             <IconButton
               label="Stop generating"
-              icon={<Square size={15} fill="currentColor" aria-hidden="true" />}
+              icon={<Square fill="currentColor" aria-hidden="true" />}
               className="bg-app-danger text-app-on-accent hover:opacity-90"
               onClick={() => stop()}
             />
@@ -354,7 +354,7 @@ export function Chat() {
             <IconButton
               type="submit"
               label="Send"
-              icon={<Send size={16} aria-hidden="true" />}
+              icon={<Send aria-hidden="true" />}
               className="bg-app-accent text-app-on-accent hover:bg-app-accent-hover"
               disabled={!input.trim()}
             />

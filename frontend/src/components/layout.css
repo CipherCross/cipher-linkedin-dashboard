@@ -375,8 +375,8 @@
   z-index: 35;
   align-items: center;
   gap: 7px;
-  min-height: 36px;
-  padding: 7px 10px;
+  min-height: var(--control-height);
+  padding: 0 var(--control-pad-x);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-1);

@@ -336,7 +336,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         <LinkButton to="/sentiment-analysis" variant="ghost">Sentiment analysis</LinkButton>
         <Button
           variant="secondary"
-          icon={<RefreshCw size={18} aria-hidden="true" />}
+          icon={<RefreshCw aria-hidden="true" />}
           onClick={() => confirmNavigation(inbox.refresh)}
           loading={inbox.loading}
           loadingLabel="Refreshing replies"
@@ -366,7 +366,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         </SelectField>
         <Button
           variant="secondary"
-          icon={<Filter size={18} aria-hidden="true" />}
+          icon={<Filter aria-hidden="true" />}
           aria-expanded={filtersOpen}
           onClick={openFilters}
         >{COPY.filters}<FilterCount count={activeFilterCount} /></Button>
@@ -425,7 +425,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     {scopeLabel && <div className="replies-drill-banner" role="status">
       <span>From analytics · {inbox.scope.from ?? 'start'} — {inbox.scope.to ?? 'today'} · {scopeLabel}</span>
       <Link to={analyticsBack}>Back to the report</Link>
-      <IconButton label="Clear the analytics filter" icon={<X size={20} aria-hidden="true" />} onClick={clearMetric} />
+      <IconButton label="Clear the analytics filter" icon={<X aria-hidden="true" />} onClick={clearMetric} />
     </div>}
 
     {inbox.stale && <div className="replies-stale" role="status">
@@ -452,7 +452,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-          <IconButton label="Clear the search" icon={<X size={18} aria-hidden="true" />} onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }} />
+          <IconButton label="Clear the search" icon={<X aria-hidden="true" />} onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }} />
         </div>
         {inbox.loading && !inbox.items.length ? <div className="replies-loading" role="status" aria-busy="true">Loading replies…</div>
           : inbox.error && !hasData ? <div className="replies-error" role="alert"><AlertCircle size={20} aria-hidden="true" />{inbox.error}<Button variant="secondary" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button></div>

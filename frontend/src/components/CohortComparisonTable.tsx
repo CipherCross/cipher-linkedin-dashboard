@@ -87,7 +87,7 @@ export function CohortComparisonTable({
           <Button
             variant="secondary"
             size="sm"
-            icon={<Download size={14} aria-hidden="true" />}
+            icon={<Download aria-hidden="true" />}
             onClick={exportCsv}
             disabled={data.rows.length === 0}
           >

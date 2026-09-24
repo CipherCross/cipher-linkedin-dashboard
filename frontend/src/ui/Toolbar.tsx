@@ -47,7 +47,7 @@ export function ActiveFilters({
             className="ui-active-filter__remove"
             onClick={filter.onRemove}
             label={`Remove filter ${filter.label}: ${filter.value}`}
-            icon={<X size={14} aria-hidden="true" />}
+            icon={<X className="size-3.5" aria-hidden="true" />}
           />
         </span>
       ))}

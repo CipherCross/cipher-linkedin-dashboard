@@ -365,7 +365,7 @@ export function ImportHistoryPanel({
                     Split
                   </Button>
                 )}
-                <IconButton label="Remove message" icon={<X size={18} aria-hidden="true" />} onClick={() => remove(b.key)} />
+                <IconButton label="Remove message" icon={<X aria-hidden="true" />} onClick={() => remove(b.key)} />
               </div>
               <TextField
                 label={`Time for the message from ${b.sender}`}

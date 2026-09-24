@@ -80,7 +80,7 @@ export function Gallery() {
           breadcrumb={[{ label: 'Internal' }, { label: 'UI standard' }]}
           description="Every shared primitive in every state, at the sizes and contrast the product ships. Dev-only — this route does not exist in a production build."
           context={<Badge tone="neutral">Light · PC only · English</Badge>}
-          actions={<Button variant="primary" icon={<Plus size={18} />}>Primary action</Button>}
+          actions={<Button variant="primary" icon={<Plus />}>Primary action</Button>}
         />
 
         <Tabs
@@ -131,15 +131,15 @@ export function Gallery() {
               <SectionHeader title="Buttons" description="44px tall. Loading keeps the width; disabled states say why elsewhere." />
               <div className="ui-gallery__row">
                 <Button variant="primary">Primary</Button>
-                <Button variant="secondary" icon={<RefreshCw size={18} />}>Secondary</Button>
+                <Button variant="secondary" icon={<RefreshCw />}>Secondary</Button>
                 <Button variant="ghost">Ghost</Button>
-                <Button variant="danger" icon={<Trash2 size={18} />}>Danger</Button>
+                <Button variant="danger" icon={<Trash2 />}>Danger</Button>
                 <Button variant="primary" loading loadingLabel="Saving">Save</Button>
                 <Button variant="primary" disabled>Disabled</Button>
                 <Button variant="secondary" aria-pressed>Pressed</Button>
-                <LinkButton to="/" variant="secondary" icon={<ArrowRight size={18} />}>Link button</LinkButton>
-                <IconButton label="Download" icon={<Download size={20} />} bordered />
-                <IconButton label="Delete" icon={<Trash2 size={20} />} tone="danger" />
+                <LinkButton to="/" variant="secondary" icon={<ArrowRight />}>Link button</LinkButton>
+                <IconButton label="Download" icon={<Download />} bordered />
+                <IconButton label="Delete" icon={<Trash2 />} tone="danger" />
               </div>
               <div className="ui-gallery__row" style={{ marginTop: 'var(--space-md)' }}>
                 <Button size="sm" variant="secondary">Dense · in-row only</Button>
@@ -273,7 +273,7 @@ export function Gallery() {
               <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
                 <Button variant="secondary" onClick={() => setDialogOpen(true)}>Open dialog</Button>
                 <Button variant="secondary" onClick={() => setBusyDialogOpen(true)}>Open busy dialog</Button>
-                <Button variant="secondary" icon={<Filter size={18} aria-hidden="true" />} onClick={() => setFilterDraft({ ...appliedFilters })}>
+                <Button variant="secondary" icon={<Filter aria-hidden="true" />} onClick={() => setFilterDraft({ ...appliedFilters })}>
                   Filters<FilterCount count={Object.values(appliedFilters).filter((value) => value !== 'all').length} />
                 </Button>
               </div>
@@ -348,7 +348,7 @@ export function Gallery() {
             <Toolbar>
               <TextField className="ui-toolbar__search" label="Search leads" labelHidden type="search" placeholder="Name, headline, company…" />
               <SelectField label="Account" labelHidden defaultValue="all"><option value="all">All accounts</option></SelectField>
-              <Button variant="secondary" icon={<Filter size={18} />}>Filters</Button>
+              <Button variant="secondary" icon={<Filter />}>Filters</Button>
             </Toolbar>
             <Tabs
               label="Filter leads by reply sentiment"
@@ -358,7 +358,7 @@ export function Gallery() {
             />
             <TableFrame
               scrollLabel="Leads"
-              toolbar={<TableToolbar count="4 of 1,284 leads" actions={<Button size="sm" variant="ghost" icon={<Download size={16} />}>Export</Button>} />}
+              toolbar={<TableToolbar count="4 of 1,284 leads" actions={<Button size="sm" variant="ghost" icon={<Download />}>Export</Button>} />}
             >
               <Table caption="Leads">
                 <thead>
@@ -388,7 +388,7 @@ export function Gallery() {
               <SectionHeader
                 title="Filtered list"
                 description="Search plus one selector stay on the page; everything else is in the sheet."
-                actions={<Button variant="secondary" icon={<Filter size={18} />}>Filters<FilterCount count={3} /></Button>}
+                actions={<Button variant="secondary" icon={<Filter />}>Filters<FilterCount count={3} /></Button>}
               />
               <Toolbar>
                 <TextField className="ui-toolbar__search" label="Search leads" labelHidden placeholder="Search leads…" />
@@ -408,7 +408,7 @@ export function Gallery() {
               />
               <TableFrame
                 scrollLabel="Leads"
-                toolbar={<TableToolbar count="4 of 1,284 leads" actions={<Button size="sm" variant="ghost" icon={<Download size={16} />}>Export</Button>} />}
+                toolbar={<TableToolbar count="4 of 1,284 leads" actions={<Button size="sm" variant="ghost" icon={<Download />}>Export</Button>} />}
                 hint="Scroll inside the table for the remaining columns."
               >
                 <Table caption="Leads">
@@ -537,7 +537,7 @@ export function Gallery() {
                 </div>
               </div>
               <div className="sequence-variation-actions">
-                <Button variant="ghost" icon={<Plus size={18} aria-hidden="true" />} className="font-normal">Add variation</Button>
+                <Button variant="ghost" icon={<Plus aria-hidden="true" />} className="font-normal">Add variation</Button>
               </div>
             </Panel>
           </div>
@@ -587,7 +587,7 @@ function WidgetTier() {
 
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button variant="secondary" icon={<MoreHorizontal size={18} />}>Menu</Button>}
+              render={<Button variant="secondary" icon={<MoreHorizontal />}>Menu</Button>}
             />
             <DropdownMenuContent>
               <DropdownMenuItem>Export CSV</DropdownMenuItem>

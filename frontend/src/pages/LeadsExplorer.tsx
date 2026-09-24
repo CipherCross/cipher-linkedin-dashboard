@@ -755,7 +755,7 @@ export function LeadsExplorer() {
         </SelectField>
         <Button
           variant="secondary"
-          icon={<Filter size={18} aria-hidden="true" />}
+          icon={<Filter aria-hidden="true" />}
           aria-expanded={filtersOpen}
           onClick={openFilters}
         >{COPY.filters}<FilterCount count={sheetFilterCount} /></Button>
@@ -908,7 +908,7 @@ export function LeadsExplorer() {
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<Columns3 size={16} aria-hidden="true" />}
+                icon={<Columns3 aria-hidden="true" />}
                 aria-pressed={showDetailColumns}
                 onClick={() => setFilter('cols', showDetailColumns ? '' : 'all')}
               >{showDetailColumns ? 'Fewer columns' : 'More columns'}</Button>
@@ -916,7 +916,7 @@ export function LeadsExplorer() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={<Sparkles size={16} aria-hidden="true" />}
+                  icon={<Sparkles aria-hidden="true" />}
                   onClick={updateDemographics}
                   loading={updatingDemographics}
                   title="Process the next fair batch of name-based gender evaluations"
@@ -925,7 +925,7 @@ export function LeadsExplorer() {
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<Download size={16} aria-hidden="true" />}
+                icon={<Download aria-hidden="true" />}
                 onClick={() => void exportCsv()}
                 disabled={resultCount === 0}
                 loading={exporting}

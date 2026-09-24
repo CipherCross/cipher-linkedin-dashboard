@@ -187,7 +187,7 @@ export function Icp() {
         title="ICPs"
         description="Ideal Customer Profiles — company criteria, keywords and buyer personas that hypotheses target."
         actions={
-          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setEditing('new')}>
+          <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={() => setEditing('new')}>
             New ICP
           </Button>
         }
@@ -298,13 +298,13 @@ function IcpCard({
       onOpen={onView}
       archived={icp.archived}
       actions={<>
-        <IconButton label="Edit" icon={<Pencil size={20} aria-hidden="true" />} onClick={onEdit} />
+        <IconButton label="Edit" icon={<Pencil aria-hidden="true" />} onClick={onEdit} />
         <IconButton
           label={icp.archived ? 'Restore' : 'Archive'}
           icon={icp.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
           onClick={onArchive}
         />
-        <IconButton label="Delete" tone="danger" icon={<Trash2 size={20} aria-hidden="true" />} onClick={onDelete} />
+        <IconButton label="Delete" tone="danger" icon={<Trash2 aria-hidden="true" />} onClick={onDelete} />
       </>}
       footer={<>
         {personaCount} persona{personaCount === 1 ? '' : 's'} · {industryCount} industr
@@ -492,7 +492,7 @@ function IcpViewer({
       footer={<>
         <CopyButton text={icpToText(icp, personas, industries)} title="Copy all fields" />
         <Button variant="secondary" onClick={onClose}>Close</Button>
-        <Button variant="primary" icon={<Pencil size={16} aria-hidden="true" />} onClick={onEdit}>
+        <Button variant="primary" icon={<Pencil aria-hidden="true" />} onClick={onEdit}>
           Edit ICP
         </Button>
       </>}
@@ -861,7 +861,7 @@ function IcpEditor({
                   <IconButton
                     label="Remove persona"
                     tone="danger"
-                    icon={<X size={20} aria-hidden="true" />}
+                    icon={<X aria-hidden="true" />}
                     onClick={() => set('personas', draft.personas.filter((x) => x._key !== p._key))}
                   />
                 </div>
@@ -897,7 +897,7 @@ function IcpEditor({
               variant="ghost"
               size="sm"
               className="self-start"
-              icon={<Plus size={16} aria-hidden="true" />}
+              icon={<Plus aria-hidden="true" />}
               onClick={() =>
                 set('personas', [
                   ...draft.personas,
@@ -931,7 +931,7 @@ function IcpEditor({
                   <IconButton
                     label="Remove industry"
                     tone="danger"
-                    icon={<X size={20} aria-hidden="true" />}
+                    icon={<X aria-hidden="true" />}
                     onClick={() => set('industries', draft.industries.filter((y) => y._key !== x._key))}
                   />
                 </div>
@@ -948,7 +948,7 @@ function IcpEditor({
               variant="ghost"
               size="sm"
               className="self-start"
-              icon={<Plus size={16} aria-hidden="true" />}
+              icon={<Plus aria-hidden="true" />}
               onClick={() =>
                 set('industries', [
                   ...draft.industries,

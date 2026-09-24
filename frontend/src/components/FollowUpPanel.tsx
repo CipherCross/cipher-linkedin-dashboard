@@ -305,24 +305,24 @@ export function FollowUpPanel({
         <div className="flex flex-wrap gap-app-sm">
           {active ? (
             <>
-              <Button variant="primary" icon={<CheckCircle2 size={15} aria-hidden="true" />} onClick={() => resetForm('complete')}>
+              <Button variant="primary" icon={<CheckCircle2 aria-hidden="true" />} onClick={() => resetForm('complete')}>
                 Complete
               </Button>
-              <Button variant="secondary" icon={<CalendarClock size={15} aria-hidden="true" />} onClick={() => resetForm('reschedule')}>
+              <Button variant="secondary" icon={<CalendarClock aria-hidden="true" />} onClick={() => resetForm('reschedule')}>
                 Reschedule
               </Button>
-              <Button variant="secondary" icon={<UserRound size={15} aria-hidden="true" />} onClick={() => resetForm('reassign')}>
+              <Button variant="secondary" icon={<UserRound aria-hidden="true" />} onClick={() => resetForm('reassign')}>
                 Reassign
               </Button>
-              <Button variant="secondary" icon={<SkipForward size={15} aria-hidden="true" />} onClick={() => resetForm('skip')}>
+              <Button variant="secondary" icon={<SkipForward aria-hidden="true" />} onClick={() => resetForm('skip')}>
                 Skip
               </Button>
-              <Button variant="danger" icon={<XCircle size={15} aria-hidden="true" />} onClick={() => resetForm('cancel')}>
+              <Button variant="danger" icon={<XCircle aria-hidden="true" />} onClick={() => resetForm('cancel')}>
                 Cancel
               </Button>
             </>
           ) : (
-            <Button variant="primary" icon={<CalendarCheck2 size={15} aria-hidden="true" />} onClick={() => resetForm('schedule')}>
+            <Button variant="primary" icon={<CalendarCheck2 aria-hidden="true" />} onClick={() => resetForm('schedule')}>
               Schedule follow-up
             </Button>
           )}
@@ -424,7 +424,7 @@ export function FollowUpPanel({
           <span className="inline-flex items-center gap-app-xs font-semibold text-app-text">
             <History size={15} aria-hidden="true" /> History
           </span>
-          <Button variant="ghost" size="sm" icon={<RotateCcw size={12} aria-hidden="true" />} onClick={() => setHistoryVersion((version) => version + 1)}>
+          <Button variant="ghost" size="sm" icon={<RotateCcw aria-hidden="true" />} onClick={() => setHistoryVersion((version) => version + 1)}>
             Refresh
           </Button>
         </div>

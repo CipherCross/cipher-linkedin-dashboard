@@ -216,7 +216,7 @@ function IdentityTeam() {
         title="Team"
         description="Everyone can view the directory. Admins manage login access and roles."
         actions={isAdmin && (
-          <Button variant="primary" icon={<UserPlus size={18} aria-hidden="true" />} onClick={() => setInviteOpen(true)}>
+          <Button variant="primary" icon={<UserPlus aria-hidden="true" />} onClick={() => setInviteOpen(true)}>
             Add teammate
           </Button>
         )}
@@ -431,7 +431,7 @@ function SupabaseTeam() {
           : 'Read-only directory: this dashboard is reading the team from the application API, '
             + 'whose member ids are not the ones the team writer resolves. Every member here can sign in.'}
         actions={isAdmin && canManage && (
-          <Button variant="primary" icon={<UserPlus size={18} aria-hidden="true" />} onClick={() => setInviteOpen(true)}>
+          <Button variant="primary" icon={<UserPlus aria-hidden="true" />} onClick={() => setInviteOpen(true)}>
             Invite teammate
           </Button>
         )}

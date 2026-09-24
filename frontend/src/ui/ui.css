@@ -12,12 +12,12 @@
   justify-content: center;
   gap: var(--space-sm);
   min-height: var(--control-height);
-  padding: 0 var(--space-lg);
+  padding: 0 var(--control-pad-x);
   border-radius: var(--radius-control);
   border: 1px solid transparent;
   font-family: inherit;
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
+  font-size: var(--control-text);
+  line-height: var(--control-leading);
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
@@ -43,7 +43,15 @@
 
 /* Dense variant for controls that sit inside a table row or a chip strip. It is
  * never used for a page's primary action. */
-.ui-btn--sm { min-height: var(--control-height-sm); padding: 0 var(--space-md); font-size: var(--text-table); }
+.ui-btn--sm { min-height: var(--control-height-sm); padding: 0 var(--control-pad-x-sm); gap: var(--space-xs); font-size: var(--control-text-sm); }
+
+/* The glyph size belongs to the button, not to each call site: a lucide icon's
+ * width/height attributes lose to these, and a utility class on the icon itself
+ * (`className="size-3"`) still wins because utilities are the later layer. */
+.ui-btn > svg,
+.ui-icon-btn > svg { width: var(--icon-glyph); height: var(--icon-glyph); flex-shrink: 0; }
+.ui-btn--sm > svg { width: var(--icon-glyph-sm); height: var(--icon-glyph-sm); }
+.ui-btn--sm .ui-btn__spinner { width: var(--icon-glyph-sm); height: var(--icon-glyph-sm); }
 .ui-btn--block { width: 100%; }
 
 /* `aria-pressed` toggles read as pressed, not as "selected-looking hover". */
@@ -52,7 +60,7 @@
 /* The label keeps its width while a spinner replaces the leading icon, so a
  * pending button never reflows the row it sits in. */
 .ui-btn__spinner {
-  width: 16px; height: 16px; flex-shrink: 0;
+  width: var(--icon-glyph); height: var(--icon-glyph); flex-shrink: 0;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
@@ -190,8 +198,8 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
   font-family: inherit;
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
+  font-size: var(--control-text);
+  line-height: var(--control-leading);
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 .ui-textarea { padding: var(--space-md); min-height: 120px; resize: vertical; }
@@ -231,7 +239,7 @@
 .ui-checkbox__copy, .ui-radio__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ui-checkbox__hint, .ui-radio__hint { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
 .ui-radio-group { display: flex; flex-direction: column; border: 0; margin: 0; padding: 0; }
-/* Each option is already a 44px row, so wrapped lines need no extra gap. */
+/* Each option is already a control-height row, so wrapped lines need no extra gap. */
 .ui-radio-group--row { flex-direction: row; flex-wrap: wrap; gap: 0 var(--space-lg); }
 .ui-radio-group > legend { padding: 0; font-size: var(--text-table); font-weight: 600; color: var(--text); }
 

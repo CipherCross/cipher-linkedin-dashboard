@@ -247,7 +247,7 @@ export function CampaignDetail() {
                 ) : (
                   <IconButton
                     label={`Remove ${c.campaign_name}`}
-                    icon={<X size={16} aria-hidden="true" />}
+                    icon={<X aria-hidden="true" />}
                     onClick={() => writeCompare(compareIds.filter((x) => x !== c.campaign_id))}
                     className="size-8 -my-1 -mr-2"
                   />
@@ -425,7 +425,7 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
         <Button
           variant="primary"
           size="sm"
-          icon={<Save size={14} aria-hidden="true" />}
+          icon={<Save aria-hidden="true" />}
           disabled={!dirty}
           loading={saving}
           onClick={() => void save()}

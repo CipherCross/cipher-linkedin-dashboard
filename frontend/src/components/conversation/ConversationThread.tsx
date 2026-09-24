@@ -50,7 +50,7 @@ export function ConversationThread({
   return (
     <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain] px-app-xl py-app-lg" aria-label="Conversation" ref={scrollRef}>
       {olderCursor && <div className="flex justify-center mb-app-md">
-        <Button variant="ghost" size="sm" icon={<ArrowUp size={14} aria-hidden="true" />} onClick={onLoadOlder} disabled={loading}>Load older messages</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowUp aria-hidden="true" />} onClick={onLoadOlder} disabled={loading}>Load older messages</Button>
       </div>}
       {messages.map((message) => {
         const day = replyDateKey(message.sent_at)
@@ -89,7 +89,7 @@ export function ConversationThread({
         )
       })}
       {newerCursor && <div className="flex justify-center mb-app-md">
-        <Button variant="ghost" size="sm" icon={<ArrowDown size={14} aria-hidden="true" />} onClick={onLoadNewer} disabled={loading}>Load newer messages</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowDown aria-hidden="true" />} onClick={onLoadNewer} disabled={loading}>Load newer messages</Button>
       </div>}
     </div>
   )

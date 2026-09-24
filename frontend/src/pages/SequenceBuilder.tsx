@@ -285,7 +285,7 @@ function SequenceLibrary() {
         title="Sequences"
         description="The last observed Linked Helper state on every notebook. Runtime, publishing and sync health stay separate readings."
         actions={
-          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={create} loading={creating} loadingLabel="Creating a sequence">
+          <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={create} loading={creating} loadingLabel="Creating a sequence">
             New sequence
           </Button>
         }
@@ -303,7 +303,7 @@ function SequenceLibrary() {
         />
         <div className="ui-toolbar__spacer" />
         {view === 'deployments' && (
-          <Button variant="secondary" icon={<Filter size={18} aria-hidden="true" />} onClick={() => setFilterDraft(filters)}>
+          <Button variant="secondary" icon={<Filter aria-hidden="true" />} onClick={() => setFilterDraft(filters)}>
             Filters<FilterCount count={appliedFilterCount} />
           </Button>
         )}
@@ -462,7 +462,7 @@ function SequenceLibrary() {
                 hint={query ? 'Try another name or message fragment.' : 'Connection request, follow-ups and variations all stay together.'}
                 action={query
                   ? <Button variant="secondary" onClick={() => setQuery('')}>Clear search</Button>
-                  : !showArchived && <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={create} loading={creating} loadingLabel="Creating a sequence">New sequence</Button>}
+                  : !showArchived && <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={create} loading={creating} loadingLabel="Creating a sequence">New sequence</Button>}
               />
             </Panel>
           ) : (
@@ -531,7 +531,7 @@ function SortableStepShell({ step, children }: { step: SequenceStep; children: (
   const handle = (
     <IconButton
       label="Drag message step"
-      icon={<GripVertical size={17} aria-hidden="true" />}
+      icon={<GripVertical aria-hidden="true" />}
       disabled={step.kind === 'connection'}
       className="cursor-grab touch-none"
       {...sortable.attributes}
@@ -562,7 +562,7 @@ function SortableVariationShell({
   const handle = (
     <IconButton
       label="Drag variation"
-      icon={<GripVertical size={15} aria-hidden="true" />}
+      icon={<GripVertical aria-hidden="true" />}
       className="cursor-grab touch-none"
       {...sortable.attributes}
       {...sortable.listeners}
@@ -687,7 +687,7 @@ function VariationEditor({
         <IconButton
           tone="danger"
           label="Remove variation"
-          icon={<Trash2 size={14} aria-hidden="true" />}
+          icon={<Trash2 aria-hidden="true" />}
           onClick={() => onDocument(removeVariation(document, step.id, variation.id))}
         />
       </header>
@@ -811,12 +811,12 @@ function BuildCanvas({
                     </div>
                     <span className="sequence-step-meta">{step.variations.length} variation{step.variations.length === 1 ? '' : 's'}</span>
                     <div className="sequence-step-actions">
-                      <Button size="sm" variant="secondary" icon={<MessageCircle size={13} aria-hidden="true" />} onClick={() => onComment({ stepId: step.id, variationId: null, anchor: null, label: stepTitle(document, step.id) })}>Comment</Button>
-                      {step.kind === 'message' && <Button size="sm" variant="secondary" icon={<UserRoundPlus size={13} aria-hidden="true" />} onClick={() => onDocument(makeConnectionStep(document, step.id))}>Make CR</Button>}
-                      <IconButton label="Move step up" icon={<ArrowUp size={14} aria-hidden="true" />} disabled={index <= 1} onClick={() => onDocument(moveMessageStep(document, step.id, -1))} />
-                      <IconButton label="Move step down" icon={<ArrowDown size={14} aria-hidden="true" />} disabled={index === 0 || index === document.steps.length - 1} onClick={() => onDocument(moveMessageStep(document, step.id, 1))} />
+                      <Button size="sm" variant="secondary" icon={<MessageCircle aria-hidden="true" />} onClick={() => onComment({ stepId: step.id, variationId: null, anchor: null, label: stepTitle(document, step.id) })}>Comment</Button>
+                      {step.kind === 'message' && <Button size="sm" variant="secondary" icon={<UserRoundPlus aria-hidden="true" />} onClick={() => onDocument(makeConnectionStep(document, step.id))}>Make CR</Button>}
+                      <IconButton label="Move step up" icon={<ArrowUp aria-hidden="true" />} disabled={index <= 1} onClick={() => onDocument(moveMessageStep(document, step.id, -1))} />
+                      <IconButton label="Move step down" icon={<ArrowDown aria-hidden="true" />} disabled={index === 0 || index === document.steps.length - 1} onClick={() => onDocument(moveMessageStep(document, step.id, 1))} />
                       {stepHandle}
-                      {step.kind === 'message' && <IconButton tone="danger" label="Remove step" icon={<Trash2 size={14} aria-hidden="true" />} onClick={() => onDocument(removeStep(document, step.id))} />}
+                      {step.kind === 'message' && <IconButton tone="danger" label="Remove step" icon={<Trash2 aria-hidden="true" />} onClick={() => onDocument(removeStep(document, step.id))} />}
                     </div>
                   </header>
 
@@ -844,7 +844,7 @@ function BuildCanvas({
                         grid cell: as a cell it claimed half the row and left
                         a single variation editing in ~460px. */}
                     <div className="sequence-variation-actions">
-                      <Button variant="ghost" icon={<Plus size={18} aria-hidden="true" />} className="font-normal" onClick={() => onDocument(addVariation(document, step.id))}>
+                      <Button variant="ghost" icon={<Plus aria-hidden="true" />} className="font-normal" onClick={() => onDocument(addVariation(document, step.id))}>
                         Add variation
                       </Button>
                     </div>
@@ -855,7 +855,7 @@ function BuildCanvas({
           ))}
           <Button
             variant="secondary"
-            icon={<Plus size={18} aria-hidden="true" />}
+            icon={<Plus aria-hidden="true" />}
             className="self-center w-[min(320px,100%)] justify-center"
             onClick={() => onDocument(addMessageStep(document))}
           >
@@ -883,7 +883,7 @@ function BranchBuilder({
         title="Build A/B/C branches"
         description="Choose one variation from every step. These branches are prepared sequences, not live traffic experiments."
         actions={
-          <Button variant="primary" icon={<Plus size={15} aria-hidden="true" />} onClick={() => onDocument(addBranch(document))}>Add branch</Button>
+          <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={() => onDocument(addBranch(document))}>Add branch</Button>
         }
       />
       {document.branches.length === 0 ? (
@@ -892,7 +892,7 @@ function BranchBuilder({
             icon={Split}
             title="No branches yet"
             hint="Add A, B and C after you have explored a few message variations."
-            action={<Button variant="secondary" icon={<Plus size={15} aria-hidden="true" />} onClick={() => onDocument(addBranch(document))}>Create branch A</Button>}
+            action={<Button variant="secondary" icon={<Plus aria-hidden="true" />} onClick={() => onDocument(addBranch(document))}>Create branch A</Button>}
           />
         </Panel>
       ) : (
@@ -906,7 +906,7 @@ function BranchBuilder({
                   onChange={(event) => onDocument(updateBranch(document, branch.id, { name: event.target.value }))}
                   aria-label="Branch name"
                 />
-                <IconButton tone="danger" label="Remove branch" icon={<Trash2 size={15} aria-hidden="true" />} onClick={() => onDocument(removeBranch(document, branch.id))} />
+                <IconButton tone="danger" label="Remove branch" icon={<Trash2 aria-hidden="true" />} onClick={() => onDocument(removeBranch(document, branch.id))} />
               </header>
               <div className="sequence-branch-path">
                 {document.steps.map((step) => (
@@ -922,7 +922,7 @@ function BranchBuilder({
                   </label>
                 ))}
               </div>
-              <Button block icon={<Eye size={14} aria-hidden="true" />} onClick={() => onPreview(branch.id)}>Preview branch {branch.name}</Button>
+              <Button block icon={<Eye aria-hidden="true" />} onClick={() => onPreview(branch.id)}>Preview branch {branch.name}</Button>
             </Panel>
           ))}
         </div>
@@ -1133,7 +1133,7 @@ function CommentsPanel({
               <span>v{version.revision}{index === 0 && <b>Current</b>}</span>
               <strong>{version.name}</strong>
               <small>{version.saved_by_name} · {formatUpdated(version.saved_at)}</small>
-              {index > 0 && <Button size="sm" variant="secondary" icon={<RotateCcw size={13} aria-hidden="true" />} onClick={() => onRestore(version)}>Restore as new version</Button>}
+              {index > 0 && <Button size="sm" variant="secondary" icon={<RotateCcw aria-hidden="true" />} onClick={() => onRestore(version)}>Restore as new version</Button>}
             </article>
           ))}
         </div>
@@ -1279,7 +1279,7 @@ export function PublishWizard({
         ) : (
           <Button
             variant="primary"
-            icon={<Send size={14} aria-hidden="true" />}
+            icon={<Send aria-hidden="true" />}
             loading={busy}
             loadingLabel="Queueing…"
             disabled={!preview.length || Boolean(previewError)}
@@ -1585,7 +1585,7 @@ function SequenceEditor({ id }: { id: string }) {
       <header className="sequence-editor-topbar">
         <IconButton
           label="Back to sequences"
-          icon={<ArrowLeft size={20} aria-hidden="true" />}
+          icon={<ArrowLeft aria-hidden="true" />}
           onClick={() => navigate('/sequences')}
         />
         <div className="sequence-name-field">
@@ -1602,12 +1602,12 @@ function SequenceEditor({ id }: { id: string }) {
         <SaveStatus state={saveState} />
         <Button
           variant="secondary"
-          icon={<MessageCircle size={18} aria-hidden="true" />}
+          icon={<MessageCircle aria-hidden="true" />}
           onClick={() => setCommentTarget({ stepId: null, variationId: null, anchor: null, label: 'Whole sequence' })}
         >Comment</Button>
         <Button
           variant="secondary"
-          icon={<PanelRight size={18} aria-hidden="true" />}
+          icon={<PanelRight aria-hidden="true" />}
           aria-pressed={reviewOpen}
           onClick={() => setReviewOpen((open) => !open)}
         >
@@ -1616,7 +1616,7 @@ function SequenceEditor({ id }: { id: string }) {
         {isAdmin && (
           <Button
             variant="primary"
-            icon={<Laptop size={18} aria-hidden="true" />}
+            icon={<Laptop aria-hidden="true" />}
             disabled={saveState !== 'saved'}
             title={saveState === 'saved' ? 'Publish this saved sequence' : 'Wait for the latest changes to save'}
             onClick={() => setPublishOpen(true)}

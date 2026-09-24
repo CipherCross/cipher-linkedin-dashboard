@@ -160,7 +160,7 @@ export function Layout() {
         variant="secondary"
         size="sm"
         className="desktop-nav-restore"
-        icon={<PanelLeftOpen size={18} aria-hidden="true" />}
+        icon={<PanelLeftOpen aria-hidden="true" />}
         onClick={() => {
           setSidebarHidden(false)
           requestAnimationFrame(() => {
@@ -360,14 +360,14 @@ function Sidebar({
             className="side-hide"
             onClick={onHide}
             label="Hide navigation"
-            icon={<PanelLeftClose size={20} aria-hidden="true" />}
+            icon={<PanelLeftClose aria-hidden="true" />}
           />
           <IconButton
             ref={mobileCloseRef}
             className="side-mobile-close"
             onClick={onClose}
             label="Close navigation"
-            icon={<X size={20} aria-hidden="true" />}
+            icon={<X aria-hidden="true" />}
           />
         </div>
 
@@ -400,7 +400,7 @@ function Sidebar({
             </span>
             <IconButton
               label="Sign out"
-              icon={<LogOut size={20} aria-hidden="true" />}
+              icon={<LogOut aria-hidden="true" />}
               onClick={() => void signOut()}
             />
           </div>

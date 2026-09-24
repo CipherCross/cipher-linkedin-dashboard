@@ -101,7 +101,7 @@ export function Chip({ tone = 'include', children, onRemove, removeLabel }: {
         <IconButton
           className="size-4 border-0 rounded-sm text-app-text-muted hover:text-app-text"
           label={removeLabel ?? 'Remove'}
-          icon={<X size={12} aria-hidden="true" />}
+          icon={<X className="size-3" aria-hidden="true" />}
           onClick={onRemove}
         />
       )}

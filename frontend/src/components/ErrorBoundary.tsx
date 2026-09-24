@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-2.5 font-mono text-[length:var(--text-xs)] text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
           <div className="flex gap-2.5 mt-0.5">
-            <Button variant="primary" icon={<RotateCw size={16} aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
+            <Button variant="primary" icon={<RotateCw aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
               Try again
             </Button>
           </div>
@@ -65,7 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-2.5 font-mono text-[length:var(--text-xs)] text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
           <div className="flex gap-2.5 mt-0.5">
-            <Button variant="primary" icon={<RotateCw size={16} aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
+            <Button variant="primary" icon={<RotateCw aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
               Try again
             </Button>
             <Button onClick={() => window.location.reload()}>

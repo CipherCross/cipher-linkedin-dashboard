@@ -165,10 +165,20 @@
   --tracking-caps: 0.06em;
 
   /* ---- Controls / rows --------------------------------------------------- */
-  --control-height: 44px;
-  --control-height-sm: 36px;   /* dense in-row controls; never a primary action */
-  --icon-hit: 44px;
-  --icon-glyph: 20px;
+  /* Pointer-first sizing (PC only). macOS's default control target is 28pt and
+   * Material's 40dp button loses 4dp per density step; touch-era 44px is the
+   * AAA target for fingers, not for a mouse. Nothing here goes below WCAG 2.2
+   * 2.5.8's 24px. See docs/ui-standard.md "Controls". */
+  --control-height: 36px;
+  --control-height-sm: 28px;   /* dense in-row controls; never a primary action */
+  --control-text: 14px;        /* labels and values inside every control */
+  --control-leading: 20px;
+  --control-text-sm: 13px;
+  --control-pad-x: 12px;
+  --control-pad-x-sm: 8px;
+  --icon-hit: 32px;
+  --icon-glyph: 16px;          /* icon inside a button or icon button */
+  --icon-glyph-sm: 14px;       /* icon inside a small button */
   --row-height: 52px;          /* single-line table row */
   --row-height-identity: 68px; /* identity + secondary line */
 

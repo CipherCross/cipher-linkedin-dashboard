@@ -119,7 +119,7 @@ export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'cla
   className?: string
 }
 
-/** 44×44 hit area around a 20px glyph, per the product target size. */
+/** `--icon-hit` (32×32) around an `--icon-glyph` (16px) icon — the pointer-first target in docs/ui-standard.md. */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
   { label, icon, bordered, tone = 'default', loading, className = '', disabled, type, ...rest },
   ref,

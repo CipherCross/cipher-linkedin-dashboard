@@ -118,8 +118,8 @@ export function ReplyReviewPanel({ message, review, saving, error, onSave, onSav
       />}
       {error && <div className="replies-inline-error" role="alert">{error}</div>}
       {!externalActions && <div className="flex gap-app-sm">
-        <Button variant="primary" type="submit" icon={<Save size={16} aria-hidden="true" />} disabled={saving} loading={saving} loadingLabel={COPY.saving}>{COPY.save}</Button>
-        {onSaveAndNext && <Button variant="secondary" type="submit" data-next="true" icon={<Save size={16} aria-hidden="true" />} disabled={saving}>{COPY.saveAndNext}</Button>}
+        <Button variant="primary" type="submit" icon={<Save aria-hidden="true" />} disabled={saving} loading={saving} loadingLabel={COPY.saving}>{COPY.save}</Button>
+        {onSaveAndNext && <Button variant="secondary" type="submit" data-next="true" icon={<Save aria-hidden="true" />} disabled={saving}>{COPY.saveAndNext}</Button>}
       </div>}
       {review?.reviewed_at && <div className="replies-review-meta"><Check size={14} aria-hidden="true" /> Review saved · {replyTime(review.reviewed_at, true)}</div>}
       {/* The panel is always offered and the audit is fetched when it is opened.

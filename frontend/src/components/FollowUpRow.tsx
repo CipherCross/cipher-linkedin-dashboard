@@ -93,7 +93,7 @@ export function FollowUpRow({
           href={linkedinHref}
           target="_blank"
           rel="noreferrer"
-          icon={<ExternalLink size={14} aria-hidden="true" />}
+          icon={<ExternalLink aria-hidden="true" />}
         >
           LinkedIn
         </ExternalLinkButton>

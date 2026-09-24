@@ -70,7 +70,7 @@ export function Health() {
         actions={isAdmin && (
           <Button
             variant="secondary"
-            icon={<Megaphone size={18} aria-hidden="true" />}
+            icon={<Megaphone aria-hidden="true" />}
             onClick={() => setBriefingOpen(true)}
           >
             Monday briefing

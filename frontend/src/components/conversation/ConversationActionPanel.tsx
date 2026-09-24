@@ -85,6 +85,6 @@ export function ConversationActionPanel({ workflow, members = [], inboundRevisio
     />}
     {!removingDnc && !reason && <Button variant="ghost" size="sm" onClick={() => setReason(' ')}>Add a comment</Button>}
     {error && <div className="replies-inline-error" role="alert">{error}</div>}
-    {!externalActions && <Button variant="primary" icon={<Check size={16} aria-hidden="true" />} disabled={saving || invalid} loading={saving} loadingLabel={COPY.saving} onClick={submit}>Save next step</Button>}
+    {!externalActions && <Button variant="primary" icon={<Check aria-hidden="true" />} disabled={saving || invalid} loading={saving} loadingLabel={COPY.saving} onClick={submit}>Save next step</Button>}
   </section>
 }

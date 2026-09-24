@@ -546,7 +546,7 @@ export function ConversationDrawer({
             href={lead.profile_url}
             target="_blank"
             rel="noreferrer"
-            icon={<ExternalLink size={14} aria-hidden="true" />}
+            icon={<ExternalLink aria-hidden="true" />}
           >
             LinkedIn
           </ExternalLinkButton>
@@ -579,7 +579,7 @@ export function ConversationDrawer({
               variant="secondary"
               size="sm"
               className="ml-auto"
-              icon={<CalendarCheck2 size={14} aria-hidden="true" />}
+              icon={<CalendarCheck2 aria-hidden="true" />}
               aria-pressed={followUpOpen}
               onClick={() => discardAnd(() => {
                 setImportOpen(false)
@@ -821,36 +821,32 @@ export function ConversationDrawer({
                     {editing?.id === m.id ? (
                       <>
                         <IconButton
-                          className="size-8"
                           label="Save message"
-                          icon={<Check size={16} aria-hidden="true" />}
+                          icon={<Check aria-hidden="true" />}
                           loading={savingEdit}
                           disabled={!editing.body.trim()}
                           onClick={() => void editMessage(m)}
                         />
                         <IconButton
-                          className="size-8"
                           label="Cancel editing"
-                          icon={<X size={16} aria-hidden="true" />}
+                          icon={<X aria-hidden="true" />}
                           disabled={savingEdit}
                           onClick={() => setEditing(null)}
                         />
                       </>
                     ) : (
                       <IconButton
-                        className="size-8"
                         data-edit-for={m.id}
                         label="Edit imported message"
-                        icon={<Pencil size={16} aria-hidden="true" />}
+                        icon={<Pencil aria-hidden="true" />}
                         disabled={busyRow}
                         onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
                       />
                     )}
                     <IconButton
-                      className="size-8"
                       tone="danger"
                       label="Delete imported message"
-                      icon={<Trash2 size={16} aria-hidden="true" />}
+                      icon={<Trash2 aria-hidden="true" />}
                       loading={deleting === m.id}
                       disabled={busyRow}
                       onClick={() => deleteMessage(m)}

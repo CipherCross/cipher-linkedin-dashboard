@@ -108,7 +108,7 @@ export function Dialog({
               <BaseDialog.Close
                 disabled={busy}
                 aria-describedby={busy ? busyId : undefined}
-                render={<IconButton className="ui-dialog__close" label={closeLabel} icon={<X size={20} aria-hidden="true" />} />}
+                render={<IconButton className="ui-dialog__close" label={closeLabel} icon={<X aria-hidden="true" />} />}
               />
             </div>
             <div className={bodyClassName ? `ui-dialog__body ${bodyClassName}` : 'ui-dialog__body'} ref={bodyRef}>{children}</div>
