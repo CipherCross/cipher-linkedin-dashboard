@@ -23,6 +23,17 @@ describe('Replies Inbox conversation UI', () => {
     expect(select).toHaveBeenCalledWith(inbound)
     expect(older).toHaveBeenCalled()
   })
+  it('colours a reviewed sentiment with the shared sentiment tone', () => {
+    const reviewed = (sentiment: 'neutral' | 'referral', id: number): ReplyThreadMessage => ({
+      ...inbound, id,
+      review: { sentiment, reason_ids: [] } as unknown as ReplyThreadMessage['review'],
+    })
+    render(<ConversationThread messages={[reviewed('neutral', 11), reviewed('referral', 12)]} selectedMessageId={null} onSelectMessage={vi.fn()} />)
+    // Neutral is `info` on every other reply surface; the thread used to grey it out.
+    expect(screen.getByText('Neutral').className).toContain('ui-badge--info')
+    expect(screen.getByText('Referral').className).toContain('ui-badge--purple')
+  })
+
   it('keeps negative validation visible and supports multi-reason checks', () => {
     const save = vi.fn()
     render(<ReplyReviewPanel message={inbound} review={null} onSave={save} />)

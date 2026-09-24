@@ -641,7 +641,7 @@ Browser evidence — **local synthetic fixture, `chrome-headless-shell` 154 in `
 
 Next: Phase 12 — compatibility deletion, documentation and full acceptance.
 
-## Phase 12 — compatibility deletion, documentation and full acceptance (2026-09-24, awaiting review)
+## Phase 12 — compatibility deletion, documentation and full acceptance (2026-09-24, accepted after the review below)
 
 The orchestrator did this phase alone; no workers. Two product decisions were the user's, both made at the start:
 - reply chips move to `Badge` with a new `purple` tone (for Referral);
@@ -683,7 +683,7 @@ The orchestrator did this phase alone; no workers. Two product decisions were th
 - **Docs:**
   - `docs/ui-standard.md`: where things live, the purple tone and the domain tone owners, the inventory with a table of all 11 named exceptions, the checks, the template-literal consumer-grep caveat and the `headless: 'shell'` note;
   - `CLAUDE.md` no longer calls `styles.css` a shrinking legacy sheet.
-- **Left in place on purpose** (dead before the redesign, or domain logic rather than UI compatibility): `blindSpotLeads`, `accountStats`, `activeSequences`/`draftSequences`/`sequenceHref`/`sequenceAccounts` (their last UI consumers were deleted in Phases 6–9), plus the CSV download helpers, `acceptLagP90`/`replyLagP90`, `SEQUENCE_PUBLISH_TERMINAL` and `reviewDraftForMessage`. `src/lib/utils.ts` stays: it is the shadcn generator's target.
+- **Left in place on purpose** (dead before the redesign, or domain logic rather than UI compatibility; the dead ones were deleted in the review below): `blindSpotLeads`, `accountStats`, `activeSequences`/`draftSequences`/`sequenceHref`/`sequenceAccounts` (their last UI consumers were deleted in Phases 6–9), plus the CSV download helpers, `acceptLagP90`/`replyLagP90`, `SEQUENCE_PUBLISH_TERMINAL` and `reviewDraftForMessage`. `src/lib/utils.ts` stays: it is the shadcn generator's target.
 
 Tests (5 new): `stepAwareCollision` ×2, the editor's h1, the editor error heading, and the exception markers (plus the no-marker assertion). The Campaign/Account not-found and Account header assertions were tightened. Mutation checks, each observed failing and then restored:
 - no step filter;
@@ -719,5 +719,56 @@ Browser evidence — **full matrix, local synthetic fixture, `chrome-headless-sh
 - The step-drag fix, keyboard and pointer: Space + ArrowUp moves step 3 above step 2 (1280/1440), and pointer drag reorders steps at all three sizes. At 1920, three ArrowUps overshoot onto the connection step and the drop is correctly refused. Variation drag is unchanged.
 
 A long single-browser run crashed Chrome after ~150 visits, which is resource exhaustion. The matrix therefore launches a fresh browser per scenario and viewport; the isolated repro of the "hang" rendered normally.
+
+Next: Phase 13 — production release (separately authorised).
+
+## Phases 11–12 review (2026-09-24)
+
+The orchestrator reviewed the Phase 11 and 12 diffs (Volodymyr's sessions) against the spec and fixed what it found. One Sonnet worker did the dead-code deletion; the orchestrator reviewed its diff.
+
+- **Publish status strip had its own tone logic.** The editor's latest-publish strip coloured `partial_failure` and `conflict` red. The Hub badge shows the same statuses in amber, because `publishStatusTone` (the single owner since Phase 10) calls them warnings.
+  - The strip is now a presentational `PublishJobStrip` driven by `publishStatusTone`: success green, warning amber, failed red, in progress keeps the accent with a spinner.
+  - The strip was also never coloured before the redesign. Its old CSS keyed on `.succeeded`/`.failed`, and the status value is `success`, so neither class ever matched.
+- **Conversation thread sentiment chip was a second colour owner.** `ConversationThread` hand-coded sentiment colours in a nested ternary. It showed Neutral in grey through the orphaned `.sentiment-neutral`/`.sentiment-auto` rule in `replies-inbox.css`; every other reply surface shows it as `info`.
+  - It is now a `Badge` with `SENTIMENT_META[sentiment].tone`, and the rule is deleted.
+  - The stale `SENTIMENT_META` comment ("`cls` maps to the `.senti.*` colours") is corrected.
+- **Dead code deleted** (grep-verified zero consumers in `src`, `api`, `tests` and `scripts`; −248 lines):
+  - `leads.ts`: `accountStats`/`AccountStats`, `blindSpotLeads`/`BlindSpotLead`/`WARM_SENTIMENTS`;
+  - `sequenceHub.ts`: `activeSequences`, `draftSequences`, `sequenceHref`, `sequenceAccounts`, `RankedSequence`, `recencyOf`;
+  - `review.ts`: `acceptLagP90`, `replyLagP90`;
+  - `useReplyReviewActions.ts`: `reviewDraftForMessage`;
+  - `sequenceBuilder.ts`: `SEQUENCE_PUBLISH_TERMINAL`;
+  - `csvImport.ts`: `downloadImportResults`, `downloadCompanyImportResults`.
+  Kept, with consumers: `toCsv`, `downloadCsv`, `downloadUnifiedImportResults`.
+- **Checked and fine:**
+  - CommentComposer focus lands in the textarea (the Dialog focuses the first body field);
+  - PublishWizard keeps its busy close refusal;
+  - the step-aware collision only narrows step drags;
+  - the `Badge` tone mapping keeps every Phase 12 colour.
+
+Tests (+6): `sequencePublishStrip.test.tsx` (5 statuses → tone, label, background) and a thread-chip case in `repliesInboxComponents`. Mutation checks, each observed failing and then restored:
+- the strip with the old red-for-conflict mapping (2 cases fail);
+- the thread greying Neutral out again (1 fails).
+
+**List-start rule (spec, Definition of done), measured on the fixture with `headless: 'shell'`.** First result top, identical at 1280×720, 1440×900 and 1920×1080 except Replies:
+
+| Route | First result top (px) |
+| --- | --- |
+| Leads | 336 |
+| Pipeline | 254 |
+| Follow-ups | 214 |
+| Replies | 267 at 1280, 283 wider |
+| Playbook | 271 |
+| Searches | 292 |
+| ICP | 185 |
+| Hypotheses | 295 |
+| Sequences | 295 |
+| Team | 286 |
+
+All are ≤340. Review, Health, Neon Activity, Overview and the detail pages are report pages, not list routes; their first table sits under KPI/summary sections by design.
+
+Gate: build passed; `typecheck:api` passed; `ui:inventory` passed (0 / 11 allowlisted / 0 / 0 / 0; production JS 655,292, CSS 30,143, −10,722 vs Phase 0).
+
+`npm run test`: 106 files / 1,508 tests. Under full-suite parallel load one `uiInventory` mutation test can exceed vitest's 5 s timeout; it takes ~450 ms alone and passes in isolation.
 
 Next: Phase 13 — production release (separately authorised).

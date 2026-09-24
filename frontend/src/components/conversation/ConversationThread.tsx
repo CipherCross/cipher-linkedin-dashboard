@@ -2,7 +2,8 @@ import { useLayoutEffect, useRef } from 'react'
 import { ArrowDown, ArrowUp, MessageCircle } from 'lucide-react'
 import { replyDateKey, replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
 import { SENTIMENT_LABELS, type ReplyThreadMessage } from '../../lib/replyReview'
-import { Button } from '../../ui'
+import { SENTIMENT_META } from '../../lib/leads'
+import { Badge, Button } from '../../ui'
 
 export interface ConversationThreadProps {
   messages: ReplyThreadMessage[]
@@ -80,19 +81,7 @@ export function ConversationThread({
               <span className="replies-message-meta"><span>{inbound ? inboundName : outboundName}</span><time dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(message.sent_at)}</time></span>
               <span className="text-app-table whitespace-pre-wrap [word-break:break-word]">{message.body || '—'}</span>
               {inbound && <span className="replies-message-footer">
-                {review?.sentiment ? <span className={'py-0.5 px-app-sm border rounded-pill text-[length:var(--text-meta)] font-semibold ' + (
-                  review.sentiment === 'positive'
-                    ? 'bg-app-success-subtle border-app-success-border text-app-success'
-                    : review.sentiment === 'negative'
-                      ? 'bg-app-danger-subtle border-app-danger-border text-app-danger'
-                      : review.sentiment === 'objection'
-                        ? 'bg-app-warning-subtle border-app-warning-border text-app-warning'
-                        : review.sentiment === 'referral'
-                          ? 'bg-[var(--purple-subtle)] border-[var(--purple-border)] text-[var(--purple)]'
-                          : review.sentiment === 'neutral'
-                            ? 'sentiment-neutral'
-                            : 'sentiment-auto'
-                )}>{SENTIMENT_LABELS[review.sentiment]}</span> : <span className="text-app-warning text-app-meta font-semibold">Unreviewed</span>}
+                {review?.sentiment ? <Badge tone={SENTIMENT_META[review.sentiment].tone}>{SENTIMENT_LABELS[review.sentiment]}</Badge> : <span className="text-app-warning text-app-meta font-semibold">Unreviewed</span>}
                 {review?.reason_ids?.length ? <span className="text-app-text-muted text-app-meta">{review.reason_ids.length === 1 ? '1 reason' : `${review.reason_ids.length} reasons`}</span> : null}
               </span>}
             </button>

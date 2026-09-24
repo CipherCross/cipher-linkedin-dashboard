@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
-  draftFromReview, needsAutoResetConfirmation, newMutationId, saveReplyReview, setReplyWorkflow,
-  validateReview, type ReplyReview, type ReplyReviewDraft, type ReplyWorkflowMutation,
+  needsAutoResetConfirmation, newMutationId, saveReplyReview, setReplyWorkflow,
+  validateReview, type ReplyReviewDraft, type ReplyWorkflowMutation,
   type SaveReplyReviewResult,
 } from './replyReview'
 
@@ -105,8 +105,4 @@ export function useReplyReviewActions(onSaved?: () => void): ReplyReviewActions 
 
   const clearError = useCallback(() => { setError(null); setConflict(null) }, [])
   return { saving, error, conflict, saveReview, saveWorkflow, clearError }
-}
-
-export function reviewDraftForMessage(review: ReplyReview | null | undefined): ReplyReviewDraft {
-  return draftFromReview(review)
 }

@@ -118,11 +118,6 @@ export const SEQUENCE_PUBLISH_STATUS_LABEL: Record<SequencePublishStatus, string
   failed: 'Failed',
 }
 
-/** Terminal jobs never change again — the UI stops polling once it sees one. */
-export const SEQUENCE_PUBLISH_TERMINAL: ReadonlySet<string> = new Set<SequencePublishStatus>([
-  'success', 'partial_failure', 'conflict', 'failed',
-])
-
 /** Badge tone for a publish job's status: settled good, settled with problems,
  *  failed, or still moving through the notebook. */
 export function publishStatusTone(status: string): 'success' | 'warning' | 'danger' | 'info' {

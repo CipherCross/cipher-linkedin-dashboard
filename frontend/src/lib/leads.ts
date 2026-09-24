@@ -47,11 +47,11 @@ export function accountLabeller(
 export const leadKey = (instance_id: string, profile_url: string) =>
   `${instance_id}|${profile_url}`
 
-/** Sentiment display metadata, shared by LeadsExplorer and the conversation
- *  drawer. `cls` maps to the `.senti.*` colours in styles.css. */
 /** Badge tone for a reply chip. The domain owns the meaning; `Badge` owns the look. */
 export type ReplyChipTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'purple'
 
+/** Sentiment display metadata, shared by every reply surface (leads, the
+ *  conversation drawer and thread, Replies). */
 export const SENTIMENT_META: Record<Sentiment, { label: string; tone: ReplyChipTone }> = {
   positive: { label: 'Positive', tone: 'success' },
   objection: { label: 'Objection', tone: 'warning' },
@@ -669,84 +669,6 @@ export function rangeTotals(
     }
   }
   return { leads: leads.length, invites, accepted, replies, positive, acceptedOfInvited, repliedOfConnected }
-}
-
-export interface AccountStats extends Totals {
-  acceptPct: string
-  replyPct: string
-}
-
-/** Totals for one account's leads scoped to `r`, with display-ready rates
- *  (acceptance of invites in range, replies of accepted in range). */
-export function accountStats(
-  leads: Lead[],
-  r: DateRange,
-  latest?: Map<string, ReplyInfo>,
-): AccountStats {
-  const t = rangeTotals(leads, r, latest)
-  const pct = (a: number, b: number) => (b > 0 ? ((100 * a) / b).toFixed(1) + '%' : '—')
-  // Rate numerators are the constrained counts (connected-with-invite,
-  // replied-with-connect) to match campaign_metrics view (migrations 019/030);
-  // denominators stay the in-range totals.
-  return {
-    ...t,
-    acceptPct: pct(t.acceptedOfInvited, t.invites),
-    replyPct: pct(t.repliedOfConnected, t.accepted),
-  }
-}
-
-const WARM_SENTIMENTS: Sentiment[] = ['objection', 'referral']
-
-/** A warm-reply lead whose thread has no manually-imported messages, so what
- *  happened after the reply is invisible — an "import history" candidate. */
-export interface BlindSpotLead {
-  lead: Lead
-  reply: ReplyInfo
-}
-
-/** Leads whose conversation reached P2/P3 (or has a referral/objection) but
- *  whose thread (by leadKey) carries ZERO manually-imported messages
- *  (messages.source === 'manual', counted across both directions). LH2 stops
- *  capturing once the SDR takes the thread over by hand, so these warm threads
- *  are sync-only — their post-reply state is unknown until the SDR imports the
- *  history. Sorted by follow-up priority (P3 > P2 > objection > referral), then
- *  newest reply first. Reuses latestRepliesByLead (`messages` must be sorted
- *  desc, as DataContext fetches them). */
-export function blindSpotLeads(leads: Lead[], messages: Message[]): BlindSpotLead[] {
-  const latest = latestRepliesByLead(messages)
-  const manualKeys = new Set<string>()
-  for (const m of messages) {
-    if (m.source === 'manual') manualKeys.add(leadKey(m.instance_id, m.profile_url))
-  }
-  const priority = (r: ReplyInfo) => {
-    if (r.highest_intent === 'p3') return 0
-    if (r.highest_intent === 'p2') return 1
-    if (r.sentiment === 'objection') return 2
-    if (r.sentiment === 'referral') return 3
-    // Migration-lag compatibility before the historical intent backfill drains.
-    if (!r.highest_intent && r.sentiment === 'positive') return 4
-    return 99
-  }
-  const out: BlindSpotLead[] = []
-  for (const l of leads) {
-    const k = leadKey(l.instance_id, l.profile_url)
-    const reply = latest.get(k)
-    if (!reply) continue
-    const warm =
-      reply.highest_intent === 'p2' ||
-      reply.highest_intent === 'p3' ||
-      (!!reply.sentiment && WARM_SENTIMENTS.includes(reply.sentiment)) ||
-      (!reply.highest_intent && reply.sentiment === 'positive')
-    if (!warm) continue
-    if (manualKeys.has(k)) continue
-    out.push({ lead: l, reply })
-  }
-  out.sort(
-    (a, b) =>
-      priority(a.reply) - priority(b.reply) ||
-      b.reply.sent_at.localeCompare(a.reply.sent_at),
-  )
-  return out
 }
 
 /** Per-campaign metrics computed from raw leads scoped to `r`, shaped like the

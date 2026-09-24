@@ -1408,6 +1408,36 @@ export function PublishWizard({
   )
 }
 
+/** The editor's latest-publish strip, in the same tone as the Hub's status
+ *  badge: `publishStatusTone` owns the meaning; `info` keeps the base accent. */
+const PUBLISH_STRIP_TONE: Record<ReturnType<typeof publishStatusTone>, { strip: string; icon: string }> = {
+  success: { strip: 'border-app-success-border bg-app-success-subtle', icon: 'text-app-success' },
+  warning: { strip: 'border-app-warning-border bg-app-warning-subtle', icon: 'text-app-warning' },
+  danger: { strip: 'border-app-danger-border bg-app-danger-subtle', icon: 'text-app-danger' },
+  info: { strip: '', icon: 'text-app-accent' },
+}
+
+export function PublishJobStrip({ job }: { job: SequencePublishJob }) {
+  const tone = publishStatusTone(job.status)
+  return (
+    <section
+      className={`sequence-publish-job-strip ${PUBLISH_STRIP_TONE[tone].strip}`}
+      data-tone={tone}
+      aria-label="Latest campaign publishing status"
+    >
+      <span className={`size-7 grid place-items-center rounded-[8px] bg-app-surface ${PUBLISH_STRIP_TONE[tone].icon}`}>
+        {tone === 'success'
+          ? <CheckCircle2 size={17} aria-hidden="true" />
+          : tone === 'info'
+            ? <LoaderCircle size={17} aria-hidden="true" className="animate-spin" />
+            : <AlertCircle size={17} aria-hidden="true" />}
+      </span>
+      <div><strong>{publishStatusLabel(job.status)}</strong><small>{job.target_machine_key} · revision {job.sequence_revision}</small>{job.replaces_job_id && <small>Replacement for job {job.replaces_job_id.slice(0, 8)}</small>}{job.replaced_by_job_id && <small>Replaced by job {job.replaced_by_job_id.slice(0, 8)}</small>}</div>
+      <span>{job.branches.length} {job.branches.length === 1 ? 'campaign' : 'campaigns'}</span>
+    </section>
+  )
+}
+
 function SequenceEditor({ id }: { id: string }) {
   const navigate = useNavigate()
   const toast = useToast()
@@ -1603,35 +1633,7 @@ function SequenceEditor({ id }: { id: string }) {
         />
       )}
 
-      {isAdmin && publishJobs.length > 0 && (
-        <section
-          className={[
-            'sequence-publish-job-strip',
-            publishJobs[0].status === 'success'
-              ? 'border-app-success-border bg-app-success-subtle'
-              : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status)
-                ? 'border-app-danger-border bg-app-danger-subtle'
-                : '',
-          ].filter(Boolean).join(' ')}
-          aria-label="Latest campaign publishing status"
-        >
-          <span className={`size-7 grid place-items-center rounded-[8px] bg-app-surface ${
-            publishJobs[0].status === 'success'
-              ? 'text-app-success'
-              : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status)
-                ? 'text-app-danger'
-                : 'text-app-accent'
-          }`}>
-            {publishJobs[0].status === 'success'
-              ? <CheckCircle2 size={17} aria-hidden="true" />
-              : ['partial_failure', 'conflict', 'failed'].includes(publishJobs[0].status)
-                ? <AlertCircle size={17} aria-hidden="true" />
-                : <LoaderCircle size={17} aria-hidden="true" className="animate-spin" />}
-          </span>
-          <div><strong>{publishStatusLabel(publishJobs[0].status)}</strong><small>{publishJobs[0].target_machine_key} · revision {publishJobs[0].sequence_revision}</small>{publishJobs[0].replaces_job_id && <small>Replacement for job {publishJobs[0].replaces_job_id.slice(0, 8)}</small>}{publishJobs[0].replaced_by_job_id && <small>Replaced by job {publishJobs[0].replaced_by_job_id.slice(0, 8)}</small>}</div>
-          <span>{publishJobs[0].branches.length} {publishJobs[0].branches.length === 1 ? 'campaign' : 'campaigns'}</span>
-        </section>
-      )}
+      {isAdmin && publishJobs.length > 0 && <PublishJobStrip job={publishJobs[0]} />}
 
       <Tabs
         label="Sequence sections"

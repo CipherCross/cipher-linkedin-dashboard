@@ -1,6 +1,5 @@
 import type { SequenceHubDeployment, SequenceHubItem } from './types'
 import { publishStatusLabel } from './sequenceBuilder'
-import { sequenceHasOperationalDeployment } from './campaignRuntime'
 
 /**
  * Reading the Sequence Hub snapshot the way the Overview needs it.
@@ -60,61 +59,4 @@ export function sequenceAttention(item: SequenceHubItem, now = Date.now()): Sequ
     if (worst.level === 'alert') break
   }
   return worst
-}
-
-/** Newest signal a card can be sorted by: a reply if there is one, else the edit. */
-function recencyOf(item: SequenceHubItem): string {
-  return item.latest_reply?.sent_at ?? item.updated_at ?? ''
-}
-
-export interface RankedSequence {
-  item: SequenceHubItem
-  attention: SequenceAttention
-}
-
-/**
- * Sequences that are deployed somewhere, worst state first.
- *
- * A managed sequence with no deployment is a draft, not something that is
- * running — it belongs in the "continue a draft" action, not in a list whose
- * heading promises what is live.
- */
-export function activeSequences(
-  items: readonly SequenceHubItem[],
-  now = Date.now(),
-): RankedSequence[] {
-  return items
-    .filter((item) => !item.archived && sequenceHasOperationalDeployment(item.deployments))
-    .map((item) => ({ item, attention: sequenceAttention(item, now) }))
-    .sort((left, right) => {
-      const byLevel = RANK[left.attention.level] - RANK[right.attention.level]
-      if (byLevel !== 0) return byLevel
-      return recencyOf(right.item).localeCompare(recencyOf(left.item))
-    })
-}
-
-/** Managed sequences nobody has published yet, most recently edited first. */
-export function draftSequences(items: readonly SequenceHubItem[]): SequenceHubItem[] {
-  return items
-    .filter((item) => item.kind === 'managed' && !item.archived && item.deployment_count === 0)
-    .sort((left, right) => (right.updated_at ?? '').localeCompare(left.updated_at ?? ''))
-}
-
-/** Where a hub card should open. External items have no Builder document yet. */
-export function sequenceHref(item: SequenceHubItem): string {
-  if (item.sequence_document_id) return `/sequences/${encodeURIComponent(item.sequence_document_id)}`
-  const campaign = item.deployments[0]?.campaign_id
-  return campaign ? `/campaign/${encodeURIComponent(campaign)}` : '/sequences'
-}
-
-/** The accounts a sequence is deployed to, deduped and in card order. */
-export function sequenceAccounts(item: SequenceHubItem): string[] {
-  const seen = new Set<string>()
-  const names: string[] = []
-  for (const deployment of item.deployments) {
-    if (seen.has(deployment.instance_id)) continue
-    seen.add(deployment.instance_id)
-    names.push(deployment.account_name ?? deployment.instance_id)
-  }
-  return names
 }

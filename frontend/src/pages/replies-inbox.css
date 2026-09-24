@@ -171,8 +171,6 @@
   color: var(--text-muted); font-size: var(--text-meta);
 }
 
-.sentiment-neutral, .sentiment-auto { background: var(--surface-2); border-color: var(--border); color: var(--text-secondary); }
-
 /* ---- Inspector ----------------------------------------------------------- */
 .replies-review-panel, .replies-action-panel { padding: var(--space-lg); }
 .replies-action-panel { border-top: 1px solid var(--border); }

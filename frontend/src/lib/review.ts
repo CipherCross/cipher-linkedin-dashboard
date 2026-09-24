@@ -56,19 +56,6 @@ function lagDays(leads: Lead[], to: keyof Lead): number[] {
   return out
 }
 
-/** p90 of (connected_at − invited_at) in days, over leads invited in the last 90
- *  days. Mirrors ACCEPT_LAG_SQL. Null when nobody has accepted in the window. */
-export function acceptLagP90(leads: Lead[]): number | null {
-  return percentileCont(lagDays(leads, 'connected_at'), 0.9)
-}
-
-/** p90 of (replied_at − invited_at) in days, over leads invited in the last 90
- *  days. The reply lag is longer than the accept lag — replies keep arriving weeks
- *  after the invite. Null when nobody has replied in the window. */
-export function replyLagP90(leads: Lead[]): number | null {
-  return percentileCont(lagDays(leads, 'replied_at'), 0.9)
-}
-
 export interface MaturityInfo {
   /** Full weeks after its Monday a cohort must age before its ACCEPT rate is trusted. */
   acceptWeeks: number
