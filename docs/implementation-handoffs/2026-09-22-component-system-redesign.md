@@ -390,3 +390,67 @@ Browser evidence — **local synthetic fixture, headless Chrome `shell` mode, ex
 | Campaign row keyboard | Enter on the row button opens the drawer; Escape returns focus to "Open conversation with Alex Fixture" |
 
 Next: Phase 9 — the analytics and detail family (Overview, AccountDetail, CampaignDetail performance/sequence presentation, SentimentAnalysis, KPI/funnel/chart/table components, DateRangePicker integration).
+
+## Phase 9 — accepted (2026-09-24)
+
+The analytics and detail family: Overview, Account detail, Campaign detail (Performance and Sequence tabs), Sentiment analysis, the KPI/funnel/chart/table components and DateRangePicker. The orchestrator did Overview (the analytics reference), DateRangePicker, the chart palette, the KPI tile, the CSS pruning and the Panel spacing fix. Three Sonnet workers did Campaign detail, Account detail and Sentiment analysis; the orchestrator reviewed every diff.
+
+- **Dead code removed.** `overview/ActiveSequences`, `overview/NewReplies`, `overview/GlobalSummary` and `AccountCard` had no consumer anywhere.
+- **Overview**
+  - The three sections are `Panel` + `SectionHeader` with their controls as header actions. The three independent reads and ranges, the one-way campaigns latch and the cohort denominators are unchanged.
+  - "Refreshing…" → `UpdatingNote`. It shows only when the *same* range is re-read. A range change still drops the old numbers for a skeleton, because old data is never shown under a new scope label. Tests pin both.
+  - The account select is a `SelectField` (its name is still "Performance account"). Sort headers are `SortHeader`. The page checkboxes are `Checkbox` with screen-reader-only labels.
+  - Campaign-comparison rows were `<tr tabIndex=0 onClick onKeyDown>`. Now the campaign name is a real `Link`, which is the keyboard and screen-reader path, and the row keeps a pointer click to the same URL. This "row that navigates" pattern is the Phase 9 reference; Account detail's campaign table uses it too.
+  - The empty and all-removed states are `EmptyState` `empty` / `no-match`.
+  - `overview.css` shrank from 362 to 164 lines. It no longer restyles tables (`.overview table/th/td`, `.ov-sortable`, the `.overview .ui-table` override, the dead `.drp*` rules); only the KPI tile, chart and loading layouts remain. The legend dot had `color` but no background, so it had never been visible; it now carries the series colour. A stretched Invited tile got `align-content: start`.
+- **DateRangePicker** — the trigger is a secondary `Button` (through Base UI `render`). The presets are ghost `Button`s with `aria-pressed` on the selected one.
+- **Chart palette has one owner.** `chartTheme.tsx` gains `SENTIMENT_SERIES`, `INTENT_SERIES`, `REVIEW_SERIES`, `REASON_SERIES`, `GENDER_SERIES` and `SERIES.annotation`/`safeBand`/`limit`. Every local colour map (SentimentTrendChart, WeeklyTrendChart, SentimentDistributionChart, CampaignDetail's gender map, the Overview chart) now imports them. The reply-analysis hexes became tokens, which is an intentional hue change; a test fails on any hex literal returning. WeeklyTrendChart also moves to the shared `GRID`/`AXIS`/`TOOLTIP` (no more dashed grid).
+- **KPI tiles have one owner.** Review and the Gallery hand-built `card kpi` tiles. They now use `KpiTile`/`KpiGrid` (new `src/components/KpiTile.tsx`), the same shell KpiCards uses. It is a separate module on purpose: importing KpiCards for a plain tile dragged the sparkline and velocity charts into Review's graph and merged two chunks.
+- **Campaign detail (worker)**
+  - The compare chips' × is an `IconButton`. The orchestrator raised it from the worker's 20px to 32px.
+  - The briefing editor is `TextareaField` + a primary `Button` with `loading`. The Analyze `<details>` is a `Panel`.
+  - CampaignCompareTable is on `TableFrame`/`Table`/`SortHeader`, with identical sort behaviour. AddBatchesTable is on `TableFrame`/`Table`.
+  - RateVolumeScatter's range buttons → `SegmentedControl`. CampaignRuntimeStatus's chips → `Badge`, with the runtime-vs-provenance distinction and labels unchanged. `campaign-detail.css` is gone.
+- **Account detail (worker)**
+  - CampaignTable is on `Panel`/`TableFrame`/`Table`/`SortHeader`/`Select`, with the navigating-row pattern. Archived is shown as `Badge` "Archived" / "No" / `Badge` "Unknown".
+  - KpiCards and LeadsVelocityChart are on utilities, and the delta chip is a `Badge`. Heatmap and LeadsVelocityChart modes → `SegmentedControl`. Funnel is on `Panel` + utilities, and `funnel.css` is gone.
+  - The orchestrator moved "Added this week" into the same gap stack as the charts; it had been touching the next panel.
+- **Sentiment analysis (worker)**
+  - The comparison table is on `TableFrame`/`Table`. SentimentTrendChart's two pseudo-tablists (one with no roles, one with mismatched `tab` roles) → `SegmentedControl`. "Show every reason" → ghost `Button`.
+  - A real bug was fixed: a same-filter refresh hid every result (`visibleResult && !loading`) and showed no loading panel either, so the page went blank. Results now stay under `aria-busy` with an `UpdatingNote`. They are still keyed by filter, so a filter change never shows old data.
+  - The fixture gains `replies.analytics`.
+- **Panel spacing primitive fix.** `.ui-panel + .ui-panel { margin-top }` also applied inside flex and grid parents that set their own gap. Stacked panels sat 48px apart, and the second column of every two-column panel grid dropped 24px, visible on Campaign Performance, Sentiment, Health and Account. The rule is now `:not(.flex, .grid, .inline-flex, .inline-grid) > .ui-panel + .ui-panel`. `cssCascade` pins it, and the mutation back to the bare selector fails. Review's local `[&>*]:mt-0` workaround from Phase 6 is now redundant but harmless.
+- **Bundle naming.** The UI inventory matches chunks by hash-free name. The shared recharts core chunk was named after its first module: `generateCategoricalChart` in Phase 0, then `chartTheme` once every chart imported the palette. That read as 636 → 102,113 bytes of "growth" for what was a rename.
+  - `manualChunks` was tried and rejected: it pulled `react-dom`/`react` into the manual chunk and made the entry preload it.
+  - The fix is naming only. `vite.config.ts` `chunkFileNames` pins that chunk to its Phase 0 name, so its budget check stays live: 101,322 → 102,150, within budget, and not preloaded by the entry.
+- **CSS** — removed from `ui.css`, all with zero consumers after this phase: `.card-head`, `.segmented`/`.segmented-item*`, `.row-clickable*`, `.stack`, `.cmp-chips`/`.cmp-chip*`/`.cmp-bar*`/`.cmp-warn`/`.cmp-avg`, `.compare-grid`, `.two-col`, `.sort-ind`, `.table-scroll*`, `.range-group*`, `.ellipsis`, every `.kpi*`, `.campaign-table-filters*` (`.deployment-filters` kept for SequenceBuilder), `.archive-yes`/`.archive-unknown`, `.runtime-unknown`/`.observation-*`, `.campaign-runtime.compact`, `.li-link`, `.seg-dot*`, `.hot-leads-title`, `.error-cell-btn`, `.sparkline-empty`, plus the orphaned comments they left. `ui.css` went from 1,336 to 1,161 lines.
+
+Tests: new `campaignDetailPage`, `accountDetailPage` (6) and `sentimentAnalysisPage`. `overviewOperations` gains 4:
+- scope change drops old numbers, while the other two sections stay unbusy with their own ranges;
+- a same-range re-read shows Updating over the current answer;
+- the campaign opens through a real link and no `tr[tabindex]` exists;
+- account-table sort from the header button.
+
+`cssCascade` gains the Panel-stacking rule. Mutation checks, each observed failing and then restored:
+- no UpdatingNote;
+- a `tabIndex` back on the row;
+- a checkbox click that navigates;
+- the bare panel selector;
+- plus each worker's own (no-op sort, broken not-found guard, no-op retry, a reintroduced hex).
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 103 files / 1,466 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 104 → 75; allowlisted 9; compatibility tokens 476 → 174; selectors 242 → 185; modal roots 2). Fixture `--check` passed; `git diff --check` passed. Production gzip JS 655,270 (+0.7% vs Phase 0; +603 vs Phase 8), CSS 33,599 (−7,266 vs Phase 0). TS/TSX +932/−1,126 and CSS +52/−435 lines.
+
+Browser evidence — **local synthetic fixture, headless Chrome `shell` mode, exact 1280×720 / 1440×900 / 1920×1080**:
+
+| Surface | Result at all three |
+| --- | --- |
+| Overview | three named sections, none busy at rest; both tables captioned, `aria-sort` on the active column, no focusable rows, one campaign link per row; legend dots visible in the series colours; page overflow-x 0 |
+| Account detail | breadcrumb + identity header; KPI tiles; one gap stack (24px between every panel); Heatmap metric radiogroup; campaign table named, 10 sort headers, name link → `/campaign/…` |
+| Campaign detail | Performance: funnel beside weekly cohorts, top-aligned (16px column gap), then activity and Analyze; Sequence: provenance, message sequence and a labelled briefing textbox; overflow-x 0 |
+| Sentiment analysis | period / trend / compare radiogroups; named comparison table; populated from the new fixture op; overflow-x 0 |
+| Review, Health | Review's P3 tiles on the shared KpiTile; Health's side-by-side panels now top-aligned |
+| Keyboard | Performance date range: Enter opens its calendar dialog, Escape returns focus to the trigger; Enter on the Overview and Account campaign links navigates; ArrowRight on the Heatmap metric moves both selection and focus |
+
+Not covered by the fixture: an Overview read failure in the browser (covered by `overviewOperations`), and Sentiment analysis's empty scenarios.
+
+Next: Phase 10 — Chat and the Sequence Hub.

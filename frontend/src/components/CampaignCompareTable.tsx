@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { CampaignMetrics, Instance } from '../lib/types'
 import { instanceName } from '../lib/leads'
+import { Panel, SectionHeader, SortHeader, Table, TableFrame } from '../ui'
+import { SERIES } from './chartTheme'
 
 /** Fewer leads than this and the rates are too noisy to trust. */
 const SMALL_SAMPLE = 30
@@ -60,83 +62,94 @@ export function CampaignCompareTable({
       setSortAsc(key === 'campaign_name')
     }
   }
-  const sortInd = (key: SortKey) => (
-    <span className="sort-ind">{key === sortKey ? (sortAsc ? '↑' : '↓') : ''}</span>
-  )
-  const head = (key: SortKey, label: string, cls = '') => (
-    <th className={`sortable ${cls}`} onClick={() => onSort(key)}>{label}{sortInd(key)}</th>
+  const sortHeader = (key: SortKey, label: string, numeric = false) => (
+    <SortHeader
+      label={label}
+      active={key === sortKey}
+      direction={sortAsc ? 'asc' : 'desc'}
+      onSort={() => onSort(key)}
+      className={numeric ? 'ui-table__num' : undefined}
+    />
   )
 
   return (
-    <div className="card">
-      <h2>Campaign comparison</h2>
-      <table>
-        <thead>
-          <tr>
-            {head('campaign_name', 'Campaign')}
-            <th>Account</th>
-            {head('total_leads', 'Leads', 'num')}
-            {head('invites_sent', 'Invites', 'num')}
-            {head('accepted', 'Accepted', 'num')}
-            {head('acceptance_rate', 'Accept %', 'num')}
-            {head('replies', 'Replies', 'num')}
-            {head('reply_rate', 'Reply %', 'num')}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((c) => {
-            const small = c.total_leads < SMALL_SAMPLE
-            return (
-              <tr key={c.campaign_id}>
-                <td>
-                  <Link className="row-link" to={`/campaign/${encodeURIComponent(c.campaign_id)}`}>
-                    {c.campaign_name}
-                  </Link>
-                  {small && (
-                    <span className="cmp-warn" title={`Only ${c.total_leads} leads — rates are unreliable`}> ⚠</span>
-                  )}
-                </td>
-                <td className="muted">{instanceName(instances.find((i) => i.id === c.instance_id), c.instance_id)}</td>
-                <td className="num">{c.total_leads.toLocaleString('en-US')}</td>
-                <td className="num">{c.invites_sent.toLocaleString('en-US')}</td>
-                <td className="num">{c.accepted.toLocaleString('en-US')}</td>
-                <td className="num">{rateCell(c.acceptance_rate, maxAccept, 'var(--success)')}</td>
-                <td className="num">{c.replies.toLocaleString('en-US')}</td>
-                <td className="num">{rateCell(c.reply_rate, maxReply, 'var(--warning)')}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-        {campaigns.length > 1 && (
-          <tfoot>
-            <tr className="cmp-avg">
-              <td>Average</td>
-              <td />
-              <td className="num">{Math.round(avg.leads).toLocaleString('en-US')}</td>
-              <td className="num">{Math.round(avg.invites).toLocaleString('en-US')}</td>
-              <td className="num">{Math.round(avg.accepted).toLocaleString('en-US')}</td>
-              <td className="num">{fmtRate(avg.accept)}</td>
-              <td className="num">{Math.round(avg.replies).toLocaleString('en-US')}</td>
-              <td className="num">{fmtRate(avg.reply)}</td>
+    <Panel>
+      <SectionHeader title="Campaign comparison" />
+      <TableFrame scrollLabel="Campaign comparison">
+        <Table caption="Campaign comparison">
+          <thead>
+            <tr>
+              {sortHeader('campaign_name', 'Campaign')}
+              <th scope="col">Account</th>
+              {sortHeader('total_leads', 'Leads', true)}
+              {sortHeader('invites_sent', 'Invites', true)}
+              {sortHeader('accepted', 'Accepted', true)}
+              {sortHeader('acceptance_rate', 'Accept %', true)}
+              {sortHeader('replies', 'Replies', true)}
+              {sortHeader('reply_rate', 'Reply %', true)}
             </tr>
-          </tfoot>
-        )}
-      </table>
-      <div className="muted small">
+          </thead>
+          <tbody>
+            {rows.map((c) => {
+              const small = c.total_leads < SMALL_SAMPLE
+              return (
+                <tr key={c.campaign_id}>
+                  <td>
+                    <Link
+                      className="text-app-text no-underline hover:text-app-accent hover:underline"
+                      to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
+                    >
+                      {c.campaign_name}
+                    </Link>
+                    {small && (
+                      <span className="text-app-warning cursor-help" title={`Only ${c.total_leads} leads — rates are unreliable`}> ⚠</span>
+                    )}
+                  </td>
+                  <td className="text-app-text-muted">{instanceName(instances.find((i) => i.id === c.instance_id), c.instance_id)}</td>
+                  <td className="ui-table__num">{c.total_leads.toLocaleString('en-US')}</td>
+                  <td className="ui-table__num">{c.invites_sent.toLocaleString('en-US')}</td>
+                  <td className="ui-table__num">{c.accepted.toLocaleString('en-US')}</td>
+                  <td className="ui-table__num">{rateCell(c.acceptance_rate, maxAccept, SERIES.accepted)}</td>
+                  <td className="ui-table__num">{c.replies.toLocaleString('en-US')}</td>
+                  <td className="ui-table__num">{rateCell(c.reply_rate, maxReply, SERIES.reply)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          {campaigns.length > 1 && (
+            <tfoot>
+              <tr className="[&>td]:border-t [&>td]:border-app-border [&>td]:text-app-text-muted [&>td]:font-semibold">
+                <td>Average</td>
+                <td />
+                <td className="ui-table__num">{Math.round(avg.leads).toLocaleString('en-US')}</td>
+                <td className="ui-table__num">{Math.round(avg.invites).toLocaleString('en-US')}</td>
+                <td className="ui-table__num">{Math.round(avg.accepted).toLocaleString('en-US')}</td>
+                <td className="ui-table__num">{fmtRate(avg.accept)}</td>
+                <td className="ui-table__num">{Math.round(avg.replies).toLocaleString('en-US')}</td>
+                <td className="ui-table__num">{fmtRate(avg.reply)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </Table>
+      </TableFrame>
+      <p className="text-app-meta text-app-text-muted mt-app-md">
         ⚠ = under {SMALL_SAMPLE} leads, rate is noisy. Averages are
         pooled (totals ÷ totals), not a mean of the per-campaign rates.
-      </div>
-    </div>
+      </p>
+    </Panel>
   )
 }
 
 function rateCell(rate: number | null, max: number, color: string) {
-  if (rate == null) return <span className="muted">—</span>
+  if (rate == null) return <span className="text-app-text-muted">—</span>
   return (
     <div className="flex flex-col items-end gap-[3px]">
       <span className="tabular-nums">{rate.toFixed(1)}%</span>
-      <div className="cmp-bar">
-        <span style={{ width: `${Math.min(100, (100 * rate) / max)}%`, background: color }} />
+      <div className="w-[72px] h-[5px] bg-app-surface-2 rounded-[var(--radius-xs)] overflow-hidden">
+        <span
+          className="block h-full rounded-[var(--radius-xs)]"
+          style={{ width: `${Math.min(100, (100 * rate) / max)}%`, background: color }}
+        />
       </div>
     </div>
   )

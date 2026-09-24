@@ -8,20 +8,14 @@ import {
   INTENT_TREND_BUCKETS, TREND_BUCKETS, intentTrend, sentimentTrend,
 } from '../lib/review'
 import type { IntentTrendBucket, TrendBucket } from '../lib/review'
-import { AXIS, BAR_CURSOR, ChartEmpty, GRID, TOOLTIP, dateTick, legendText } from './chartTheme'
+import {
+  AXIS, BAR_CURSOR, ChartEmpty, GRID, INTENT_SERIES, SENTIMENT_SERIES, TOOLTIP, dateTick, legendText,
+} from './chartTheme'
+import { Panel, SectionHeader, SegmentedControl } from '../ui'
 
-// Bucket → the `.senti.*` colour it wears everywhere else, so a sentiment is the
-// same hue on the trend as on the reply badges. `unclassified` is a neutral grey.
-const BUCKET_COLOR: Record<TrendBucket, string> = {
-  positive: 'var(--success)',
-  objection: 'var(--warning)',
-  neutral: 'var(--info)',
-  referral: 'var(--purple)',
-  negative: 'var(--danger)',
-  auto: 'var(--text-muted)',
-  unclassified: 'var(--border-strong)',
-}
-
+// Labels only — the colours themselves come from chartTheme's shared
+// `SENTIMENT_SERIES`/`INTENT_SERIES` so a sentiment/intent is the same hue on
+// the trend as on the reply badges and everywhere else in the app.
 const BUCKET_LABEL: Record<TrendBucket, string> = {
   positive: SENTIMENT_META.positive.label,
   objection: SENTIMENT_META.objection.label,
@@ -30,14 +24,6 @@ const BUCKET_LABEL: Record<TrendBucket, string> = {
   negative: SENTIMENT_META.negative.label,
   auto: SENTIMENT_META.auto.label,
   unclassified: 'Unclassified',
-}
-
-const INTENT_COLOR: Record<IntentTrendBucket, string> = {
-  p1: 'var(--info)',
-  p2: 'var(--warning)',
-  p3: 'var(--success)',
-  no_intent: 'var(--text-muted)',
-  unclassified: 'var(--border-strong)',
 }
 
 const INTENT_LABEL: Record<IntentTrendBucket, string> = {
@@ -72,42 +58,24 @@ export function SentimentTrendChart({
   const hasData = chartData.some((d) => d.total > 0)
 
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>Reply classification trend</h2>
-        <div className="segmented" role="tablist" aria-label="Classification dimension">
-          <button
-            className={`segmented-item ${dimension === 'intent' ? 'active' : ''}`}
-            onClick={() => setDimension('intent')}
-          >
-            P1–P3 intent
-          </button>
-          <button
-            className={`segmented-item ${dimension === 'sentiment' ? 'active' : ''}`}
-            onClick={() => setDimension('sentiment')}
-          >
-            Sentiment
-          </button>
-        </div>
-        <div className="segmented" role="tablist" aria-label="Scale">
-          <button
-            className={`segmented-item ${mode === 'counts' ? 'active' : ''}`}
-            role="tab"
-            aria-selected={mode === 'counts'}
-            onClick={() => setMode('counts')}
-          >
-            Counts
-          </button>
-          <button
-            className={`segmented-item ${mode === 'share' ? 'active' : ''}`}
-            role="tab"
-            aria-selected={mode === 'share'}
-            onClick={() => setMode('share')}
-          >
-            Share
-          </button>
-        </div>
-      </div>
+    <Panel>
+      <SectionHeader
+        title="Reply classification trend"
+        actions={<>
+          <SegmentedControl
+            label="Classification dimension"
+            value={dimension}
+            onChange={setDimension}
+            items={[{ id: 'intent', label: 'P1–P3 intent' }, { id: 'sentiment', label: 'Sentiment' }] as Array<{ id: Dimension; label: string }>}
+          />
+          <SegmentedControl
+            label="Scale"
+            value={mode}
+            onChange={setMode}
+            items={[{ id: 'counts', label: 'Counts' }, { id: 'share', label: 'Share' }] as Array<{ id: Mode; label: string }>}
+          />
+        </>}
+      />
 
       {!hasData ? (
         <ChartEmpty label="No replies in this window" />
@@ -141,8 +109,8 @@ export function SentimentTrendChart({
                 stackId="s"
                 fill={
                   dimension === 'intent'
-                    ? INTENT_COLOR[b as IntentTrendBucket]
-                    : BUCKET_COLOR[b as TrendBucket]
+                    ? INTENT_SERIES[b]
+                    : SENTIMENT_SERIES[b]
                 }
                 maxBarSize={34}
                 isAnimationActive={false}
@@ -152,11 +120,11 @@ export function SentimentTrendChart({
         </ResponsiveContainer>
       )}
 
-      <div className="muted small">
+      <div className="text-app-text-muted text-app-meta">
         Inbound replies bucketed by the week they landed. Synced message times are
         LH2 action-run times (they can lag the real message by hours or days), so the
         weekly split is approximate.
       </div>
-    </div>
+    </Panel>
   )
 }

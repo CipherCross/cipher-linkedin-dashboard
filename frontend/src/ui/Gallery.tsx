@@ -25,6 +25,7 @@ import {
   TextField, TextareaField, Toolbar, UpdatingNote, businessTimeLabelled, analyticsDate,
 } from './index'
 import { FollowUpRow } from '../components/FollowUpRow'
+import { KpiGrid, KpiTile } from '../components/KpiTile'
 
 /**
  * Dev-only reference for the UI standard: every primitive in every state, plus
@@ -447,15 +448,11 @@ export function Gallery() {
                 </SelectField>
                 <span className="muted small">Both controls are 44px — the date trigger is not a smaller species.</span>
               </div>
-              <div className="kpi-grid">
+              <KpiGrid>
                 {[['Invites sent', '1,284'], ['Connected', '512'], ['Replied', '146'], ['P3 · Buying intent', '0']].map(([label, value]) => (
-                  <div className="card kpi" key={label}>
-                    <div className="kpi-top"><span className="kpi-label">{label}</span></div>
-                    <div className="kpi-value">{value}</div>
-                    <div className="kpi-sub">UTC day boundaries · recent cohorts still maturing</div>
-                  </div>
+                  <KpiTile key={label} label={label} value={value} sub="UTC day boundaries · recent cohorts still maturing" />
                 ))}
-              </div>
+              </KpiGrid>
               <p className="muted small" style={{ marginTop: 'var(--space-md)' }}>
                 Zero here means no reviewed conversation reached P3 in this window — not that the metric is unavailable.
               </p>

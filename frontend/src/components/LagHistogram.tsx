@@ -1,6 +1,7 @@
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import { Panel, SectionHeader } from '../ui'
 import { AXIS, BAR_CURSOR, ChartEmpty, GRID, TOOLTIP } from './chartTheme'
 
 const BUCKETS: Array<{ label: string; max: number }> = [
@@ -26,16 +27,16 @@ export function LagHistogram({
 
   if (lags.length === 0) {
     return (
-      <div className="card">
-        <h2>{title}</h2>
+      <Panel>
+        <SectionHeader title={title} />
         <ChartEmpty height={240} label="No timing data yet" />
-      </div>
+      </Panel>
     )
   }
 
   return (
-    <div className="card">
-      <h2>{title}</h2>
+    <Panel>
+      <SectionHeader title={title} />
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={counts} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
           <CartesianGrid {...GRID} vertical={false} />
@@ -45,10 +46,10 @@ export function LagHistogram({
           <Bar dataKey="count" name="Leads" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
-      <div className="muted small">
+      <div className="text-app-text-muted text-app-meta">
         Median {median!.toFixed(1)} days · {lags.length} leads
       </div>
-    </div>
+    </Panel>
   )
 }
 

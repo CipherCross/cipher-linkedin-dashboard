@@ -340,6 +340,46 @@ function analyticsTotals(scenario, search) {
   }
 }
 
+/* Sentiment analysis (op=replies.analytics): every message in the fixture is
+ * the one positive, reviewed reply, so the page renders its populated path —
+ * metrics, the weekly trend and the account/campaign comparison all non-zero —
+ * on `populated-*` scenarios, and its `!hasDialogues` empty state on
+ * `empty-*` ones. Real accuracy against `filters.from`/`to` is not the point;
+ * this only has to satisfy `parseAnalytics`'s shape. */
+function repliesAnalytics(scenario) {
+  const messages = messageRows(scenario)
+  const total = messages.length
+  const positive = messages.filter((m) => m.sentiment === 'positive').length
+  const met = (numerator, denominator = total) => ({ numerator, denominator, rate: denominator ? numerator / denominator : null })
+  const zero = met(0, total)
+  return {
+    coverage: {
+      dialogues: met(total), messages: met(total), full_dialogues: met(total),
+      unreviewed_dialogues: zero, latest_unreviewed: zero, only_auto: zero,
+      weekly_volume: met(total), unreviewed_intent: zero, legacy_ai: zero,
+    },
+    sentiment: {
+      positive: met(positive), neutral: zero, negative: zero, objection: zero, referral: zero, auto: zero,
+      business_rate: zero,
+    },
+    reasons: {},
+    weekly_trend: total === 0 ? [] : [{
+      week: messages[0].sent_at.slice(0, 10),
+      messages: total,
+      reviewed: total,
+      coverage: met(total),
+      volume: met(total),
+      sentiment: { positive, neutral: 0, negative: 0, objection: 0, referral: 0, auto: 0 },
+    }],
+    workflow: { needs_confirmation: zero, resolved: met(positive) },
+    comparison: isEmpty(scenario) ? [] : [
+      { kind: 'account', id: instance.id, name: instance.label, volume: total, coverage: met(total), neg_objection: zero },
+      { kind: 'campaign', id: campaign.campaign_id, name: campaign.campaign_name, volume: total, coverage: met(total), neg_objection: zero },
+    ],
+    dataset_at: '2026-09-22T08:00:00.000Z',
+  }
+}
+
 export async function setFixtureScenario(next) {
   const allowed = new Set(['populated-admin', 'populated-member', 'empty-admin', 'empty-member', 'error', 'read-error'])
   if (!allowed.has(next)) return false
@@ -438,6 +478,7 @@ export async function activityFixture(request) {
     }]))
   }
   if (op === 'activity.dailySeries') return json(page([]))
+  if (op === 'replies.analytics') return json(page([repliesAnalytics(scenario)]))
   if (op === 'coaching.digests') return json(page([]))
   if (op === 'coach.playbook') {
     return json(page(isEmpty(scenario) ? [] : [{

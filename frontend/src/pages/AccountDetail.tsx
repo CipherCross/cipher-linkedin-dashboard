@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { FileQuestion } from 'lucide-react'
 import { useData } from '../lib/DataContext'
 import {
@@ -14,7 +14,7 @@ import { WarmupChart } from '../components/WarmupChart'
 import { Heatmap } from '../components/Heatmap'
 import { CampaignTable } from '../components/CampaignTable'
 import { Avatar } from '../components/Avatar'
-import { PageHeader, Panel, SectionHeader, EmptyState } from '../ui'
+import { LinkButton, PageHeader, Panel, SectionHeader, EmptyState } from '../ui'
 
 export function AccountDetail() {
   const { id } = useParams<{ id: string }>()
@@ -70,13 +70,14 @@ export function AccountDetail() {
   const inst = data.instances.find((i) => i.id === id)
   if (!inst) {
     return (
-      <EmptyState
-        className="card"
-        icon={FileQuestion}
-        title="Account not found"
-        hint="This LinkedIn account may not have synced yet, or the link is out of date."
-        action={<Link className="link-btn" to="/">Back to overview</Link>}
-      />
+      <Panel>
+        <EmptyState
+          icon={FileQuestion}
+          title="Account not found"
+          hint="This LinkedIn account may not have synced yet, or the link is out of date."
+          action={<LinkButton to="/">Back to overview</LinkButton>}
+        />
+      </Panel>
     )
   }
   const campaigns = data.campaigns.filter((c) => c.instance_id === inst.id)
@@ -96,10 +97,15 @@ export function AccountDetail() {
           </span>
         }
         context={
-          <span className="muted small">
+          <span className="text-app-text-muted text-app-meta">
             {inst.account_url && (
               <>
-                <a className="row-link muted" href={inst.account_url} target="_blank" rel="noreferrer">
+                <a
+                  className="text-app-text-muted no-underline hover:text-app-accent hover:underline"
+                  href={inst.account_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   LinkedIn profile ↗
                 </a>
                 {' · '}
@@ -123,36 +129,35 @@ export function AccountDetail() {
         intentPrev={kpis.intentPrev}
       />
 
-      <Panel>
-        <SectionHeader
-          title="Added this week"
-          actions={<strong className="tabular">{num(addedThisWeek)} / {WEEKLY_ADD_LIMIT}</strong>}
-        />
-        {/* A meter is data, so it keeps its status hue — and it is always read
-            out in words underneath, never by colour alone. */}
-        <div
-          className="h-2.5 mt-app-md mb-app-sm rounded-pill overflow-hidden [&>span]:block [&>span]:h-full [&>span]:rounded-[inherit] [&>span]:transition-[width]"
-          role="meter"
-          aria-valuenow={addedThisWeek}
-          aria-valuemin={0}
-          aria-valuemax={WEEKLY_ADD_LIMIT}
-          aria-label="Leads added this week against the weekly limit"
-          style={{ background: `var(--${capTone}-subtle)` }}
-        >
-          <span
-            style={{
-              width: `${Math.min(100, addedFrac * 100)}%`,
-              background: `var(--${capTone})`,
-            }}
+      <div className="flex flex-col gap-app-xl">
+        <Panel>
+          <SectionHeader
+            title="Added this week"
+            actions={<strong className="tabular">{num(addedThisWeek)} / {WEEKLY_ADD_LIMIT}</strong>}
           />
-        </div>
-        <div className="muted small">
-          {remaining > 0 ? `${num(remaining)} more can be added this week` : 'Weekly add limit reached'}
-          {' · '}~200/week keeps the account safe.
-        </div>
-      </Panel>
-
-      <div className="stack">
+          {/* A meter is data, so it keeps its status hue — and it is always read
+              out in words underneath, never by colour alone. */}
+          <div
+            className="h-2.5 mt-app-md mb-app-sm rounded-pill overflow-hidden [&>span]:block [&>span]:h-full [&>span]:rounded-[inherit] [&>span]:transition-[width]"
+            role="meter"
+            aria-valuenow={addedThisWeek}
+            aria-valuemin={0}
+            aria-valuemax={WEEKLY_ADD_LIMIT}
+            aria-label="Leads added this week against the weekly limit"
+            style={{ background: `var(--${capTone}-subtle)` }}
+          >
+            <span
+              style={{
+                width: `${Math.min(100, addedFrac * 100)}%`,
+                background: `var(--${capTone})`,
+              }}
+            />
+          </div>
+          <div className="text-app-text-muted text-app-meta">
+            {remaining > 0 ? `${num(remaining)} more can be added this week` : 'Weekly add limit reached'}
+            {' · '}~200/week keeps the account safe.
+          </div>
+        </Panel>
         <WarmupChart leads={leads} />
         <Heatmap leads={leads} />
         <CampaignTable

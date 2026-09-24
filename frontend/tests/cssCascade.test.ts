@@ -169,3 +169,20 @@ describe('built CSS', () => {
     expect(built).not.toMatch(/\.dark\s*\{\s*--background/)
   })
 })
+
+describe('Panel stacking', () => {
+  // Measured in Phase 9: the sibling margin applied inside flex and grid
+  // parents that already set a gap, so stacked panels sat 48px apart and the
+  // second panel of a two-column grid dropped 24px below the first.
+  const ui = readFileSync(join(__dirname, '../src/ui/ui.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  it('adds the sibling margin only outside flex and grid parents', () => {
+    const rules = [...ui.matchAll(/([^{}]*\.ui-panel\s*\+\s*\.ui-panel[^{}]*)\{([^}]*)\}/g)]
+    const withMargin = rules.filter(([, , body]) => /margin-top/.test(body))
+    expect(withMargin.length).toBe(1)
+    const selector = withMargin[0][1].trim()
+    for (const parent of ['.flex', '.grid', '.inline-flex', '.inline-grid']) {
+      expect(selector).toContain(parent)
+    }
+    expect(selector).toMatch(/^:not\(/)
+  })
+})

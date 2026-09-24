@@ -13,7 +13,55 @@ export const SERIES = {
   reply: 'var(--warning)',
   lead: 'var(--text-muted)',
   added: 'var(--purple)',
+  /** Reference marks: a campaign annotation line, a safe band, a hard cap. */
+  annotation: 'var(--purple)',
+  safeBand: 'var(--success)',
+  limit: 'var(--danger)',
 } as const
+
+/** Reply sentiment, keyed by the `lib/replyReview` sentiment ids plus the two
+ *  workflow buckets the analysis page shows beside them. The same hue means
+ *  the same sentiment on Review, Sentiment analysis and every other chart. */
+export const SENTIMENT_SERIES: Readonly<Record<string, string>> = {
+  positive: 'var(--success)',
+  objection: 'var(--warning)',
+  neutral: 'var(--info)',
+  referral: 'var(--purple)',
+  negative: 'var(--danger)',
+  auto: 'var(--text-muted)',
+  latest_unreviewed: 'var(--chart-cat-amber)',
+  unreviewed: 'var(--chart-cat-amber)',
+  only_auto: 'var(--chart-cat-pink)',
+  unclassified: 'var(--border-strong)',
+}
+
+/** Reply intent levels (P1 polite positive → P3 buying intent). */
+export const INTENT_SERIES: Readonly<Record<string, string>> = {
+  p1: 'var(--info)',
+  p2: 'var(--warning)',
+  p3: 'var(--success)',
+  no_intent: 'var(--text-muted)',
+  unclassified: 'var(--border-strong)',
+}
+
+/** Review workflow: reviewed vs still waiting for a human. */
+export const REVIEW_SERIES = {
+  reviewed: 'var(--success)',
+  unreviewed: 'var(--chart-cat-amber)',
+} as const
+
+/** Ordered hues for ranked reasons (top reason first). */
+export const REASON_SERIES = [
+  'var(--danger)', 'var(--warning)', 'var(--purple)', 'var(--success)', 'var(--text-muted)',
+] as const
+
+/** Inferred gender split. */
+export const GENDER_SERIES: Readonly<Record<string, string>> = {
+  female: 'var(--purple)',
+  male: 'var(--accent)',
+  unknown: 'var(--text-muted)',
+  pending: 'var(--border)',
+}
 
 /** Categorical hues for per-item charts (one bubble/slice per campaign).
  *  Drawn from the theme's --chart-cat-* tokens so they match the palette's

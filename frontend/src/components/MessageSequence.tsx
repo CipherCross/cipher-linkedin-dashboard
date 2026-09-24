@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { CampaignStep } from '../lib/types'
 import { num } from '../lib/format'
+import { Button, Panel, SectionHeader } from '../ui'
+import { SERIES } from './chartTheme'
 
 const SMALL_SAMPLE = 30
 
@@ -25,15 +27,15 @@ type Group = { kind: 'primary'; step: CampaignStep; i: number } | { kind: 'auto'
 export function MessageSequence({ steps }: { steps: CampaignStep[] }) {
   if (steps.length === 0) {
     return (
-      <div className="card">
-        <h2>Message sequence</h2>
-        <div className="muted small">
+      <Panel>
+        <SectionHeader title="Message sequence" />
+        <div className="text-app-text-muted text-app-meta">
           No message steps synced for this campaign yet — they appear after a
           sync from an agent on v1.4.0+ (the per-step data is read straight from
           Linked Helper). A campaign with only invites and no follow-up messages
           will also show nothing here.
         </div>
-      </div>
+      </Panel>
     )
   }
 
@@ -54,8 +56,8 @@ export function MessageSequence({ steps }: { steps: CampaignStep[] }) {
   })
 
   return (
-    <div className="card">
-      <h2>Campaign sequence — invite &amp; message funnel</h2>
+    <Panel>
+      <SectionHeader title="Campaign sequence — invite & message funnel" />
       <div className="flex flex-col gap-app-lg">
         {groups.map((g, gi) =>
           g.kind === 'primary' ? (
@@ -65,13 +67,13 @@ export function MessageSequence({ steps }: { steps: CampaignStep[] }) {
           ),
         )}
       </div>
-      <div className="muted small" style={{ marginTop: 12 }}>
+      <div className="text-app-text-muted text-app-meta mt-app-md">
         Reply % = of people who received that step, how many replied next
         (replies only attach to invite/message steps; the rest are warm-up).
         “Here now” = leads whose furthest step is this one. Sequence reflects the
         campaign’s latest version; steps removed in a later edit aren’t counted.
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -100,7 +102,7 @@ function PrimaryStep({
         <span className="font-semibold">{s.step_label || `Step ${s.step_index + 1}`}</span>
         <span className="text-[length:var(--text-2xs)] text-app-text-muted border border-app-border rounded-pill px-app-sm py-px">{TYPE_LABEL[s.step_type ?? ''] ?? s.step_type}</span>
         {small && (
-          <span className="cmp-warn" title={`Only ${s.sent_count} sent — reply rate is noisy`}>⚠</span>
+          <span className="text-app-warning cursor-help" title={`Only ${s.sent_count} sent — reply rate is noisy`}>⚠</span>
         )}
       </div>
 
@@ -118,15 +120,18 @@ function PrimaryStep({
         <span><strong>{num(s.replied_count)}</strong> replied</span>
         {replyRate != null && (
           <span className="inline-flex items-center gap-[7px] text-app-warning">
-            <span className="cmp-bar" style={{ width: 56 }}>
-              <span style={{ width: `${Math.min(100, replyRate)}%`, background: 'var(--warning)' }} />
+            <span className="inline-block w-14 h-[5px] bg-app-surface-2 rounded-[var(--radius-xs)] overflow-hidden">
+              <span
+                className="block h-full rounded-[var(--radius-xs)]"
+                style={{ width: `${Math.min(100, replyRate)}%`, background: SERIES.reply }}
+              />
             </span>
             {replyRate.toFixed(1)}%
           </span>
         )}
-        <span className="text-[length:var(--text-xs)] muted">{num(s.current_count)} here now</span>
+        <span className="text-[length:var(--text-xs)] text-app-text-muted">{num(s.current_count)} here now</span>
         {dropFromPrev != null && dropFromPrev > 0 && (
-          <span className="text-[length:var(--text-xs)] muted">−{dropFromPrev.toFixed(0)}% from prev</span>
+          <span className="text-[length:var(--text-xs)] text-app-text-muted">−{dropFromPrev.toFixed(0)}% from prev</span>
         )}
       </div>
 
@@ -149,13 +154,19 @@ function AutoGroup({ steps }: { steps: Indexed[] }) {
 
   return (
     <div className="ml-[9px] border-l-2 border-dashed border-app-border-strong pt-0.5 pb-0.5 pl-[18px]">
-      <button className="inline-flex items-center gap-[7px] bg-none border-none py-0.5 px-0 cursor-pointer text-app-text-muted text-[length:var(--text-xs)] font-semibold transition-colors hover:text-app-text [&_svg]:shrink-0" onClick={() => setOpen((o) => !o)}>
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="!min-h-0 !px-1 !py-0.5 text-[length:var(--text-xs)] font-semibold"
+      >
         <span className="text-app-text-secondary">
           {steps.length} automation step{steps.length === 1 ? '' : 's'}
         </span>
-        {here > 0 && <span className="muted small">· {num(here)} here now</span>}
-      </button>
+        {here > 0 && <span className="text-app-text-muted text-app-meta">· {num(here)} here now</span>}
+      </Button>
       {open && (
         <div className="flex flex-col gap-1.5 mt-app-sm">
           {steps.map(({ step }) => (
@@ -168,7 +179,7 @@ function AutoGroup({ steps }: { steps: Indexed[] }) {
                 {TYPE_LABEL[step.step_type ?? ''] ?? step.step_type ?? '—'}
               </span>
               {step.current_count > 0 && (
-                <span className="muted small">{num(step.current_count)} here now</span>
+                <span className="text-app-text-muted text-app-meta">{num(step.current_count)} here now</span>
               )}
             </div>
           ))}

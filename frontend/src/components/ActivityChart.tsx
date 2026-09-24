@@ -3,6 +3,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts'
 import type { Annotation, DailyActivity } from '../lib/types'
+import { Panel, SectionHeader } from '../ui'
 import { AXIS, ChartEmpty, GRID, SERIES as HUE, TOOLTIP, dateTick, legendText } from './chartTheme'
 
 const SERIES = [
@@ -54,8 +55,8 @@ export function ActivityChart({
   }
 
   return (
-    <div className="card">
-      <h2>{title}</h2>
+    <Panel>
+      <SectionHeader title={title} />
       {data.length === 0 ? (
         <ChartEmpty height={240} label="No activity in this range" />
       ) : (
@@ -72,11 +73,11 @@ export function ActivityChart({
               <ReferenceLine
                 key={a.id}
                 x={a.noted_at}
-                stroke="var(--purple)"
+                stroke={HUE.annotation}
                 strokeDasharray="4 4"
                 label={{
                   value: a.note.length > 24 ? a.note.slice(0, 23) + '…' : a.note,
-                  fill: 'var(--purple)', fontSize: 10, position: 'insideTopLeft', angle: -90,
+                  fill: HUE.annotation, fontSize: 10, position: 'insideTopLeft', angle: -90,
                   dx: -4, dy: 8,
                 }}
               />
@@ -97,6 +98,6 @@ export function ActivityChart({
         </AreaChart>
       </ResponsiveContainer>
       )}
-    </div>
+    </Panel>
   )
 }

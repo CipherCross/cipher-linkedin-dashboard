@@ -21,107 +21,50 @@
   overflow: visible;
 }
 
-.overview h1, .overview h2, .overview h3, .overview p { margin-top: 0; }
-
-
-.overview .ov-muted { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
-.overview .ov-caption { margin: var(--space-xs) 0 var(--space-lg); color: var(--text-muted); font-size: var(--text-meta); }
-
 /* ---- Sections ------------------------------------------------------------
- * Two visible levels only: page → section. A section is one white panel; the
- * KPI tiles and the table rows inside it do not get a second frame each. */
-.overview > .ov-summary,
-.overview > .ov-panel {
-  margin-bottom: var(--space-xl);
-  padding: var(--space-xl);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--surface-1);
-}
-.overview .ov-panel h2,
-.overview > .ov-summary h2 {
-  margin-bottom: 0;
-  font-size: var(--text-section);
-  line-height: var(--leading-section);
-  font-weight: 600;
-}
-
-/* The period is stated once per section, in its header — not repeated inside
- * every tile, which is where five "All time" captions came from. */
+ * Each section is one shared Panel with a SectionHeader; the KPI tiles and
+ * table rows inside it do not get a second frame each. The period is stated
+ * once per section, in its header — not repeated inside every tile. */
 .overview .ov-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-lg);
   margin: 0;
 }
-.overview .ov-total {
-  min-width: 0;
-  padding: 0;
-}
+.overview .ov-total { min-width: 0; }
 .overview .ov-total span { color: var(--text-muted); font-size: var(--text-meta); }
-.overview .ov-total strong {
+.overview .ov-total strong,
+.overview .ov-metric strong,
+.overview .ov-rate strong,
+.overview .ov-details strong {
   display: block;
-  margin: var(--space-sm) 0 2px;
   color: var(--text);
   font-size: var(--text-kpi);
   line-height: var(--leading-kpi);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.overview .ov-total small { color: var(--text-muted); font-size: var(--text-meta); }
-.overview .ov-total small { display: block; min-height: var(--leading-meta); line-height: var(--leading-meta); }
-
-/* ---- Controls ------------------------------------------------------------ */
-.overview .ov-controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--space-md); flex-wrap: wrap; }
-.overview .ov-controls > label {
-  display: flex;
-  flex: 0 1 auto;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 200px;
-  color: var(--text);
-  font-size: var(--text-table);
-  line-height: var(--leading-table);
-  font-weight: 600;
-}
-.overview .ov-controls > label:has(.drp) { min-width: 240px; }
-.overview .ov-controls select { width: 100%; }
-
-/* DateRangePicker inside a section: it may paint over the section below. */
-.overview .drp { position: relative; z-index: 2; width: 100%; }
-.overview .drp-trigger { width: 100%; justify-content: flex-start; }
-.overview .drp-trigger .drp-caret { margin-left: auto; }
-.overview .drp-pop { z-index: 50; width: min(390px, calc(100vw - 24px)); }
-.overview .ov-panel:has(.drp-pop:not([hidden])) { z-index: 20; }
+.overview .ov-total strong { margin: var(--space-sm) 0 2px; }
+.overview .ov-total small { display: block; min-height: var(--leading-meta); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
 
 /* ---- Performance chart --------------------------------------------------- */
 .overview .ov-performance { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--space-2xl); }
-.overview .ov-metric { display: grid; grid-template-columns: 10px auto; gap: 2px var(--space-sm); align-items: center; }
-/* The legend dot carries a series colour that the chart also uses, so it is
- * data, not decoration — but it gets no glow. */
+.overview .ov-metric { display: grid; grid-template-columns: 10px auto; gap: 2px var(--space-sm); align-items: center; align-content: start; }
+/* The legend dot carries the series colour the chart also uses, so it is data,
+ * not decoration. */
 .overview .ov-dot { width: 10px; height: 10px; border-radius: 50%; }
-.overview .ov-metric strong {
-  grid-column: 2;
-  font-size: var(--text-kpi);
-  line-height: var(--leading-kpi);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.overview .ov-metric label { color: var(--text-muted); font-size: var(--text-meta); }
-/* The comparison line is the last child only on Invited; Connected and First
- * replies add a conversion <small> after it. Place every non-dot span in the
- * text column so the line never falls into the 10px legend column. */
-.overview .ov-metric > span:not(.ov-dot) { grid-column: 2; min-width: 0; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
-.overview .ov-metric small { grid-column: 2; min-width: 0; color: var(--text); font-size: var(--text-meta); line-height: var(--leading-meta); }
+.overview .ov-metric strong { grid-column: 2; }
+/* Connected and First replies add a conversion <small> after the comparison
+ * line. Every non-dot child sits in the text column so none falls into the
+ * 10px legend column. */
+.overview .ov-metric > :not(.ov-dot) { grid-column: 2; min-width: 0; }
+.overview .ov-metric > span:not(.ov-dot) { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+.overview .ov-metric small { color: var(--text); font-size: var(--text-meta); line-height: var(--leading-meta); }
 .overview .ov-metric small b { font-weight: 500; }
+.overview .ov-metric .ov-metric__label { grid-column: 2; }
 
 .overview .ov-plot { display: block; width: 100%; height: 280px; min-height: 280px; overflow: visible; }
 .overview .ov-plot > div { min-height: 280px; }
-.overview .ov-plot text { fill: var(--text-muted); font-family: inherit; font-size: var(--text-meta); }
-.overview .ov-plot .recharts-line-curve { stroke-width: 2.5px; }
-.overview .ov-plot .recharts-cartesian-grid line { stroke: var(--chart-grid); }
-.overview .ov-plot line { stroke: var(--chart-grid); }
-.overview #ov-point { min-height: 20px; margin-top: var(--space-sm); color: var(--text-muted); font-size: var(--text-meta); }
 
 .overview .ov-rates { padding-left: var(--space-xl); border-left: 1px solid var(--border); }
 .overview .ov-rates h3 {
@@ -133,31 +76,13 @@
   text-transform: uppercase;
 }
 .overview .ov-rate { margin-bottom: var(--space-xl); }
-.overview .ov-rate label, .overview .ov-rate small { color: var(--text-muted); font-size: var(--text-meta); }
-.overview .ov-rate strong {
-  display: block;
-  margin: 2px 0;
-  font-size: var(--text-kpi);
-  line-height: var(--leading-kpi);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
+.overview .ov-rate span { color: var(--text-muted); font-size: var(--text-meta); }
+.overview .ov-rate strong { margin: 2px 0; }
 
-/* ---- Account / campaign table -------------------------------------------- */
-.overview .ov-tablewrap {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-}
-.overview .ov-account-frame { margin: 0; }
+/* ---- Account / campaign tables -------------------------------------------
+ * Both are the shared Table; only their minimum widths and the compact
+ * comparison density are this route's. */
 .overview .ov-account-frame .ui-table { min-width: 720px; }
-.overview .ov-campaign-comparison { margin-top: var(--space-xl); }
-.overview .ov-campaign-comparison h3 {
-  margin: 0 0 var(--space-md);
-  font-size: var(--text-subsection);
-  line-height: var(--leading-body);
-  font-weight: 600;
-}
 .overview .ov-campaign-frame .ui-table { min-width: 1020px; }
 .overview .ov-campaign-frame .ui-table th,
 .overview .ov-campaign-frame .ui-table td {
@@ -165,7 +90,6 @@
   white-space: nowrap;
   font-size: var(--text-meta);
 }
-.overview .ov-campaign-frame .ui-table th { font-size: var(--text-meta); }
 .overview .ov-campaign-frame .ui-table th:nth-child(2),
 .overview .ov-campaign-frame .ui-table td:nth-child(2) { width: 176px; }
 .overview .ov-campaign-frame .ui-table th:nth-child(3),
@@ -173,119 +97,9 @@
 .overview .ov-campaign-frame .ui-identity { min-width: 152px; gap: var(--space-sm); }
 .overview .ov-campaign-frame .ui-identity__avatar,
 .overview .ov-campaign-frame .ov-avatar { width: 28px; height: 28px; }
-.overview .ov-select-cell { width: 44px; min-width: 44px; padding-right: var(--space-sm) !important; text-align: center !important; }
-.overview .ov-select-cell input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
-.overview .ov-campaign-row { cursor: pointer; }
-.overview .ov-campaign-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.overview .ov-sortable button {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.overview .ov-sortable button::after { content: '↕'; margin-left: var(--space-xs); color: var(--text-muted); }
-.overview .ov-sortable[aria-sort='ascending'] button::after { content: '↑'; color: var(--accent); }
-.overview .ov-sortable[aria-sort='descending'] button::after { content: '↓'; color: var(--accent); }
-.overview table {
-  width: 100%;
-  min-width: 720px;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--text-table);
-  line-height: var(--leading-table);
-}
-.overview th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: var(--space-md);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-1);
-  color: var(--text-secondary);
-  font-size: var(--text-meta);
-  font-weight: 600;
-  text-align: right;
-}
-.overview th:first-child, .overview td:first-child { text-align: left; }
-.overview th[aria-sort] button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: var(--control-height-sm);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-/* The arrow is a fixed-width glyph so toggling a sort never reflows a column. */
-.overview th[aria-sort] button::after { content: '↕'; opacity: .5; font-size: var(--text-meta); }
-.overview th[aria-sort='ascending'] button::after { content: '↑'; opacity: 1; color: var(--accent); }
-.overview th[aria-sort='descending'] button::after { content: '↓'; opacity: 1; color: var(--accent); }
-.overview th[aria-sort] button:hover { color: var(--accent); }
-.overview th small { display: block; margin-top: 2px; color: var(--text-muted); font-size: var(--text-meta); font-weight: 400; }
-.overview td {
-  height: var(--row-height);
-  padding: var(--space-md);
-  border-bottom: 1px solid var(--border);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.overview tbody tr:last-child td { border-bottom: 0; }
-.overview tbody tr:hover { background: var(--surface-2); }
-
-/* Overview used to own the legacy table styling above. The campaign
- * comparison is built from the shared table primitives, so restore their
- * left-aligned headers and numeric-cell contract at this route's specificity. */
-.overview .ui-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-table);
-  line-height: var(--leading-table);
-}
-.overview .ui-table th,
-.overview .ui-table td {
-  padding: var(--space-md) var(--space-lg);
-  text-align: left;
-  vertical-align: middle;
-  border-bottom: 1px solid var(--border);
-}
-.overview .ui-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--surface-1);
-  color: var(--text-secondary);
-  font-size: var(--text-meta);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.overview .ui-table .ui-table__num { text-align: right; font-variant-numeric: tabular-nums; }
-
-.overview .ov-name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  min-height: var(--control-height);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-}
-.overview .ov-name:hover { color: var(--accent-hover); }
-.overview .ov-name small { display: block; color: var(--text-muted); font-size: var(--text-meta); font-weight: 400; }
+.overview .ov-select-cell { width: 44px; min-width: 44px; }
+.overview .ov-select-cell .ui-checkbox { justify-content: center; }
+.overview .ov-select-cell .ui-checkbox input { margin: 0; }
 .overview .ov-avatar {
   display: flex;
   align-items: center;
@@ -297,35 +111,30 @@
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--text-meta);
 }
 .overview .ov-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* ---- Account drill-in ----------------------------------------------------- */
 .overview .ov-details { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-lg); margin: var(--space-lg) 0; }
-.overview .ov-details strong {
-  display: block;
-  font-size: var(--text-kpi);
-  line-height: var(--leading-kpi);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
 .overview .ov-details span { color: var(--text-muted); font-size: var(--text-meta); }
 
-
 /* ---- Loading -------------------------------------------------------------
- * Skeletons match the final layout, and a *refresh* keeps the section's
- * heading and controls in place with a visible "Refreshing…" note instead. */
+ * Skeletons match the final layout; a *refresh* keeps the section's heading
+ * and controls in place with an UpdatingNote instead. */
 .overview .ov-loading-card { pointer-events: none; }
 .overview .ov-loading-card .skeleton + .skeleton { margin-top: var(--space-sm); }
-/* The System totals skeleton must reserve the same box as the filled cell —
- * the label's 24px line box, the 32/40 count with its margins, and the
- * explanatory line — or the rates shift the page down when they arrive. */
+/* The System totals skeleton reserves the same box as the filled cell — the
+ * label's line box, the count with its margins, and the explanatory line — so
+ * the page does not shift down when the totals arrive. */
 .overview .ov-summary-grid.ov-loading-grid .ov-loading-card {
   min-height: calc(24px + var(--space-sm) + var(--leading-kpi) + 2px + var(--leading-meta));
 }
 .overview .ov-summary-grid.ov-loading-grid .ov-loading-card .skeleton:nth-child(3) { margin-top: 2px; }
+.overview .ov-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
 .overview .ov-loading-table-head,
 .overview .ov-loading-table-row {
   display: grid;
@@ -352,11 +161,4 @@
   .overview .ov-rates h3 { width: 100%; margin: 0; }
   .overview .ov-rate { margin: 0; }
   .overview .ov-details { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-@media (forced-colors: active) {
-  .overview > .ov-summary,
-  .overview > .ov-panel,
-  .overview .ov-tablewrap { background: Canvas; border: 1px solid CanvasText; }
-  .overview .ov-muted, .overview .ov-caption { color: CanvasText; }
 }

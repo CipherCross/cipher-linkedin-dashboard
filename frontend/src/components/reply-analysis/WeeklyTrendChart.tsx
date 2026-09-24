@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { REASON_LABELS, SENTIMENT_LABELS } from '../../lib/replyReview'
 import type { AnalyticsMetric } from './MetricCard'
+import { AXIS, BAR_CURSOR, GRID, NO_ANIM, REASON_SERIES, REVIEW_SERIES, SENTIMENT_SERIES, TOOLTIP } from '../chartTheme'
 import { UI_LOCALE } from '../../ui/datetime'
 
 export interface WeeklyTrendRow {
@@ -15,12 +16,11 @@ export interface WeeklyTrendRow {
 
 export type WeeklyTrendMode = 'sentiment' | 'reasons' | 'coverage'
 
-const SENTIMENT_COLORS: Record<string, string> = {
-  positive: '#38b27d', neutral: '#8792a8', negative: '#e16b71',
-  objection: '#e9a447', referral: '#8d7bea', auto: '#6d788c',
-  latest_unreviewed: '#d79a49', only_auto: '#b36bce',
-}
-const REASON_COLORS = ['#e16b71', '#e9a447', '#8d7bea', '#38b27d', '#6d788c']
+/** Order for the sentiment mode's stacked bars — the same set `SENTIMENT_SERIES`
+ *  colours, kept as its own list because the mode also needs an ordering, not
+ *  just a palette (`Object.keys` on a shared theme map would also pull in
+ *  `unreviewed`/`unclassified`, which this dimension never reports). */
+const SENTIMENT_TREND_KEYS = ['positive', 'neutral', 'negative', 'objection', 'referral', 'auto', 'latest_unreviewed', 'only_auto'] as const
 
 function count(value: unknown): number {
   if (value && typeof value === 'object') return Number((value as { numerator?: unknown }).numerator ?? 0) || 0
@@ -43,7 +43,7 @@ export function weeklySeries(rows: readonly WeeklyTrendRow[], mode: WeeklyTrendM
   const reasonTotals = new Map<string, number>()
   rows.forEach((row) => Object.entries(record(row.reasons ?? row.reason_counts)).forEach(([key, value]) => reasonTotals.set(key, (reasonTotals.get(key) ?? 0) + count(value))))
   const topReasons = [...reasonTotals].filter(([, total]) => total > 0).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([key]) => key)
-  const keys = mode === 'sentiment' ? Object.keys(SENTIMENT_COLORS)
+  const keys = mode === 'sentiment' ? [...SENTIMENT_TREND_KEYS]
     : mode === 'reasons' ? topReasons : ['reviewed', 'pending']
   const chartRows = rows.map((row) => {
     const values: Record<string, string | number> = { week: weekLabel(row.week) }
@@ -63,22 +63,22 @@ export function WeeklyTrendChart({
   mode: WeeklyTrendMode
   linkFor: (row: WeeklyTrendRow) => string | null
 }) {
-  if (!rows.length) return <p className="muted">No inbound messages in this period.</p>
+  if (!rows.length) return <p className="text-app-text-muted">No inbound messages in this period.</p>
   const { keys, chartRows } = weeklySeries(rows, mode)
   const label = (key: string) => mode === 'sentiment' ? (SENTIMENT_LABELS as Record<string, string>)[key] ?? (key === 'latest_unreviewed' ? 'Unreviewed' : 'Automated replies only')
     : mode === 'reasons' ? (REASON_LABELS as Record<string, string>)[key] ?? key
       : key === 'reviewed' ? 'Reviewed' : 'Unreviewed'
   return <div >
-    <p className="muted small">{mode === 'coverage' ? 'Messages by week' : 'Conversations by week'} · the current week may still be incomplete</p>
-    {keys.length === 0 ? <p className="muted">No reasons recorded in this period yet.</p> : <div className="min-h-[260px] min-w-0 w-full" role="img" aria-label="Weekly trend">
+    <p className="text-app-text-muted text-app-meta">{mode === 'coverage' ? 'Messages by week' : 'Conversations by week'} · the current week may still be incomplete</p>
+    {keys.length === 0 ? <p className="text-app-text-muted">No reasons recorded in this period yet.</p> : <div className="min-h-[260px] min-w-0 w-full" role="img" aria-label="Weekly trend">
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={chartRows} margin={{ top: 8, right: 8, bottom: 12, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-          <Tooltip formatter={(value, name) => [Number(value).toLocaleString(UI_LOCALE), label(String(name))]} />
+          <CartesianGrid {...GRID} vertical={false} />
+          <XAxis dataKey="week" {...AXIS} />
+          <YAxis allowDecimals={false} {...AXIS} />
+          <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} formatter={(value, name) => [Number(value).toLocaleString(UI_LOCALE), label(String(name))]} />
           <Legend formatter={(value) => label(String(value))} />
-          {keys.map((key, index) => <Bar key={key} dataKey={key} stackId={mode === 'reasons' ? undefined : 'total'} fill={mode === 'sentiment' ? SENTIMENT_COLORS[key] : mode === 'reasons' ? REASON_COLORS[index % REASON_COLORS.length] : key === 'reviewed' ? '#38b27d' : '#d79a49'} />)}
+          {keys.map((key, index) => <Bar key={key} {...NO_ANIM} dataKey={key} stackId={mode === 'reasons' ? undefined : 'total'} fill={mode === 'sentiment' ? SENTIMENT_SERIES[key] : mode === 'reasons' ? REASON_SERIES[index % REASON_SERIES.length] : key === 'reviewed' ? REVIEW_SERIES.reviewed : REVIEW_SERIES.unreviewed} />)}
         </BarChart>
       </ResponsiveContainer>
     </div>}

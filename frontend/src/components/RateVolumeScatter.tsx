@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import type { CampaignMetrics } from '../lib/types'
 import { num } from '../lib/format'
+import { Panel, SectionHeader, SegmentedControl } from '../ui'
 import { AXIS, CATEGORICAL as PALETTE, GRID } from './chartTheme'
 
 type Metric = 'reply' | 'accept'
@@ -47,14 +48,21 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
   const showLabels = points.length <= 3
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between [&_h2]:mb-0">
-        <h2>Quality vs volume</h2>
-        <div className="range-group">
-          <button className={metric === 'reply' ? 'active' : ''} onClick={() => setMetric('reply')}>Reply %</button>
-          <button className={metric === 'accept' ? 'active' : ''} onClick={() => setMetric('accept')}>Accept %</button>
-        </div>
-      </div>
+    <Panel>
+      <SectionHeader
+        title="Quality vs volume"
+        actions={
+          <SegmentedControl
+            label="Metric"
+            value={metric}
+            onChange={setMetric}
+            items={[
+              { id: 'reply', label: 'Reply %' },
+              { id: 'accept', label: 'Accept %' },
+            ]}
+          />
+        }
+      />
       <ResponsiveContainer width="100%" height={320}>
         <ScatterChart margin={{ top: 16, right: 24, left: -8, bottom: 8 }}>
           <CartesianGrid {...GRID} />
@@ -99,16 +107,16 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', maxWidth: 220 }}
             >
               <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.color, display: 'inline-block', flexShrink: 0 }} />
-              <span className="ellipsis" style={{ maxWidth: 200 }}>{p.name}</span>
+              <span className="overflow-hidden text-ellipsis whitespace-nowrap" style={{ maxWidth: 200 }}>{p.name}</span>
             </span>
           ))}
         </div>
       )}
-      <div className="muted small">
+      <p className="text-app-meta text-app-text-muted mt-app-md">
         Bubble size = lead volume. Up-and-right = strong rate on a real sample;
         up-and-left = high rate but few leads, so treat with caution.
-      </div>
-    </div>
+      </p>
+    </Panel>
   )
 }
 

@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import type { Lead } from '../lib/types'
 import { weekRange, weekStart } from '../lib/leads'
+import { Panel, SectionHeader } from '../ui'
 import { AXIS, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick, legendText } from './chartTheme'
 
 interface Cohort {
@@ -37,8 +38,8 @@ export function CohortChart({ leads, weeks = 16 }: { leads: Lead[]; weeks?: numb
     })
 
   return (
-    <div className="card">
-      <h2>Weekly invite cohorts</h2>
+    <Panel>
+      <SectionHeader title="Weekly invite cohorts" />
       {data.length === 0 ? (
         <ChartEmpty label="No invites sent yet" />
       ) : (
@@ -57,9 +58,9 @@ export function CohortChart({ leads, weeks = 16 }: { leads: Lead[]; weeks?: numb
         </ComposedChart>
       </ResponsiveContainer>
       )}
-      <div className="muted small">
+      <div className="text-app-text-muted text-app-meta">
         Cohort = week the invite was sent. Recent weeks are still maturing.
       </div>
-    </div>
+    </Panel>
   )
 }

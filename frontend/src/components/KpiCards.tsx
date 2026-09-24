@@ -7,8 +7,11 @@ import type { CampaignMetrics, DailyActivity, Lead } from '../lib/types'
 import type { DateRange, ReplyIntentMetrics, Totals } from '../lib/leads'
 import { rangeToParam } from '../lib/leads'
 import { num, pct } from '../lib/format'
+import { Badge } from '../ui'
+import type { Tone } from '../ui'
 import { Sparkline } from './Sparkline'
 import { LeadsVelocityChart } from './LeadsVelocityChart'
+import { KPI_TILE, KpiGrid } from './KpiTile'
 import type { LeadsVelocitySummary } from './LeadsVelocityChart'
 
 interface Props {
@@ -104,23 +107,25 @@ export function KpiCards({
   const showSpark = !!(activity && range)
 
   return (
-    <div className="kpi-grid">
+    <KpiGrid>
       {cards.map((c) => {
         const Icon = c.icon
         const body = (
           <>
-            <div className="kpi-top">
-              <span className="kpi-label"><Icon size={14} strokeWidth={2} /> {c.label}</span>
+            <div className="flex items-center justify-between gap-app-sm">
+              <span className="inline-flex items-center gap-app-xs min-w-0 text-app-text-muted text-app-meta [&>svg]:shrink-0">
+                <Icon size={14} strokeWidth={2} /> {c.label}
+              </span>
               {c.cur !== undefined && c.prevCount !== undefined && (
                 <Delta cur={c.cur} prev={c.prevCount} maturing={c.maturing} />
               )}
             </div>
-            <div className="kpi-value">{num(c.value)}</div>
+            <div className="text-app-kpi font-semibold tabular-nums tracking-[-0.02em]">{num(c.value)}</div>
             {/* Sub + spark are always rendered (spacer when absent) so every
                 tile shares one anatomy and the values align across the row. */}
-            <div className="kpi-sub">{c.sub ?? ' '}</div>
+            <div className="text-app-text-secondary text-app-meta">{c.sub ?? ' '}</div>
             {showSpark && (
-              <div className="kpi-spark">
+              <div className="mt-auto pt-1.5">
                 {c.event ? (
                   <Sparkline
                     activity={activity!}
@@ -137,16 +142,22 @@ export function KpiCards({
           </>
         )
         return c.to ? (
-          <Link className="card kpi text-inherit no-underline cursor-pointer transition-[border-color] hover:border-app-accent" key={c.key} to={c.to}>{body}</Link>
+          <Link
+            className={`${KPI_TILE} flex-1 basis-[220px] text-inherit no-underline cursor-pointer transition-[border-color] hover:border-app-accent`}
+            key={c.key}
+            to={c.to}
+          >
+            {body}
+          </Link>
         ) : (
-          <div className="card kpi" key={c.key}>{body}</div>
+          <div className={`${KPI_TILE} flex-1 basis-[220px]`} key={c.key}>{body}</div>
         )
       })}
       {intent && <IntentGroup intent={intent} intentPrev={intentPrev} />}
       {(velocityLeads || velocitySummary) && (
         <LeadsVelocityChart leads={velocityLeads} summary={velocitySummary} />
       )}
-    </div>
+    </KpiGrid>
   )
 }
 
@@ -183,9 +194,11 @@ function IntentGroup({ intent, intentPrev }: { intent: ReplyIntentMetrics; inten
     },
   ]
   return (
-    <div className="card kpi flex-[2_1_420px] max-w-full">
-      <div className="kpi-top">
-        <span className="kpi-label"><Sparkles size={14} strokeWidth={2} /> Reply intent</span>
+    <div className={`${KPI_TILE} flex-[2_1_420px] max-w-full`}>
+      <div className="flex items-center justify-between gap-app-sm">
+        <span className="inline-flex items-center gap-app-xs min-w-0 text-app-text-muted text-app-meta [&>svg]:shrink-0">
+          <Sparkles size={14} strokeWidth={2} /> Reply intent
+        </span>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-x-app-lg gap-y-app-md mt-app-xs">
         {rows.map((r) => (
@@ -208,11 +221,15 @@ function IntentGroup({ intent, intentPrev }: { intent: ReplyIntentMetrics; inten
 /** Range-over-range change chip. Green up / red down for volume metrics; a
  *  neutral "maturing" style for reply metrics whose recent counts are still
  *  arriving (per the cohort-lag guidance — a dip there isn't necessarily real). */
+const DELTA_TONE: Record<'up' | 'down' | 'flat' | 'maturing', Tone> = {
+  up: 'success', down: 'danger', flat: 'neutral', maturing: 'info',
+}
+
 function Delta({ cur, prev, maturing }: { cur: number; prev: number; maturing?: boolean }) {
   if (prev === 0 && cur === 0) return null
   const isNew = prev === 0
   const dir = cur > prev ? 'up' : cur < prev ? 'down' : 'flat'
-  const cls = maturing ? 'maturing' : dir
+  const tone = DELTA_TONE[maturing ? 'maturing' : dir]
   const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '→'
   const change = isNew ? null : Math.abs(Math.round(((cur - prev) / prev) * 100))
   const title = maturing
@@ -225,9 +242,9 @@ function Delta({ cur, prev, maturing }: { cur: number; prev: number; maturing?: 
     : change! >= 200 ? `${arrow} ×${(cur / prev).toFixed(1)}`
     : `${arrow} ${change}%`
   return (
-    <span className={`kpi-delta ${cls}`} title={title}>
+    <Badge tone={tone} title={title} className={`shrink-0 tabular-nums${maturing ? ' cursor-help' : ''}`}>
       {text}
-    </span>
+    </Badge>
   )
 }
 

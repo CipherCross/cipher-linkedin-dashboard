@@ -9,6 +9,9 @@ import {
   parseCampaignRuntimeStatus,
 } from '../lib/campaignRuntime'
 import { CampaignRuntimeStatusView } from './CampaignRuntimeStatus'
+import {
+  Badge, Panel, SectionHeader, Select, SortHeader, Table, TableFrame,
+} from '../ui'
 
 interface Props {
   campaigns: CampaignMetrics[]
@@ -65,79 +68,87 @@ export function CampaignTable({ campaigns, instances, title = 'Campaigns' }: Pro
       setSortAsc(key === 'campaign_name')
     }
   }
-  const sortInd = (key: SortKey) => (
-    <span className="sort-ind">{key === sortKey ? (sortAsc ? '↑' : '↓') : ''}</span>
-  )
-  const head = (key: SortKey, text: string, cls = '') => (
-    <th className={`sortable ${cls}`.trim()} onClick={() => onSort(key)}>{text}{sortInd(key)}</th>
-  )
+  const sortProps = (key: SortKey) => ({
+    active: sortKey === key,
+    direction: (sortAsc ? 'asc' : 'desc') as 'asc' | 'desc',
+    onSort: () => onSort(key),
+  })
 
   const open = (id: string) => navigate(`/campaign/${encodeURIComponent(id)}`)
 
   return (
-    <div className="card">
-      <div className="flex items-start justify-between gap-[18px] mb-app-md max-[720px]:flex-col [&_h2]:m-0">
-        <h2>{title}</h2>
-        <div className="campaign-table-filters" aria-label="Campaign filters">
-          <label>
-            <span>Status</span>
-            <select aria-label="Filter campaigns by runtime status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="any">All statuses</option>
-              {CAMPAIGN_RUNTIME_STATUSES.map((status) => (
-                <option key={status} value={status}>{campaignRuntimeLabel(status)}</option>
-              ))}
-              <option value="unknown">Unknown</option>
-            </select>
-          </label>
-          <label>
-            <span>Archive</span>
-            <select aria-label="Filter campaigns by archive state" value={archiveFilter} onChange={(event) => setArchiveFilter(event.target.value as typeof archiveFilter)}>
-              <option value="current">Current</option>
-              <option value="all">All</option>
-              <option value="archived">Archived</option>
-            </select>
-          </label>
-        </div>
-      </div>
-      <div className="table-scroll">
-        <table>
+    <Panel>
+      <SectionHeader
+        title={title}
+        actions={
+          <div className="flex flex-wrap items-end gap-app-md" aria-label="Campaign filters">
+            <label className="grid gap-1 text-app-meta text-app-text-secondary">
+              <span>Status</span>
+              <Select
+                aria-label="Filter campaigns by runtime status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                <option value="any">All statuses</option>
+                {CAMPAIGN_RUNTIME_STATUSES.map((status) => (
+                  <option key={status} value={status}>{campaignRuntimeLabel(status)}</option>
+                ))}
+                <option value="unknown">Unknown</option>
+              </Select>
+            </label>
+            <label className="grid gap-1 text-app-meta text-app-text-secondary">
+              <span>Archive</span>
+              <Select
+                aria-label="Filter campaigns by archive state"
+                value={archiveFilter}
+                onChange={(event) => setArchiveFilter(event.target.value as typeof archiveFilter)}
+              >
+                <option value="current">Current</option>
+                <option value="all">All</option>
+                <option value="archived">Archived</option>
+              </Select>
+            </label>
+          </div>
+        }
+      />
+      <TableFrame scrollLabel={`${title} table`}>
+        <Table caption={title}>
           <thead>
             <tr>
-              {head('campaign_name', 'Campaign')}
-              <th>Account</th>
-              {head('runtime_status', 'Linked Helper status')}
-              {head('is_archived', 'Archived')}
-              {head('total_leads', 'Leads', 'num')}
-              {head('invites_sent', 'Invites', 'num')}
-              {head('accepted', 'Accepted', 'num')}
-              {head('acceptance_rate', 'Accept %', 'num')}
-              {head('replies', 'Replies', 'num')}
-              {head('reply_rate', 'Reply %', 'num')}
-              {head('last_activity_at', 'Last activity')}
+              <SortHeader label="Campaign" {...sortProps('campaign_name')} />
+              <th scope="col">Account</th>
+              <SortHeader label="Linked Helper status" {...sortProps('runtime_status')} />
+              <SortHeader label="Archived" {...sortProps('is_archived')} />
+              <SortHeader label="Leads" className="ui-table__num" {...sortProps('total_leads')} />
+              <SortHeader label="Invites" className="ui-table__num" {...sortProps('invites_sent')} />
+              <SortHeader label="Accepted" className="ui-table__num" {...sortProps('accepted')} />
+              <SortHeader label="Accept %" className="ui-table__num" {...sortProps('acceptance_rate')} />
+              <SortHeader label="Replies" className="ui-table__num" {...sortProps('replies')} />
+              <SortHeader label="Reply %" className="ui-table__num" {...sortProps('reply_rate')} />
+              <SortHeader label="Last activity" {...sortProps('last_activity_at')} />
             </tr>
           </thead>
           <tbody>
             {rows.map((c) => (
               <tr
                 key={c.campaign_id}
-                className="row-clickable"
-                tabIndex={0}
-                role="button"
-                aria-label={`Open campaign ${c.campaign_name}`}
+                className="cursor-pointer hover:bg-app-surface-3"
+                // The pointer path; the keyboard/screen-reader path is the
+                // campaign-name link in the first cell.
                 onClick={() => open(c.campaign_id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    open(c.campaign_id)
-                  }
-                }}
               >
                 <td>
-                  <div className="ellipsis" title={c.campaign_name}>{c.campaign_name}</div>
-                </td>
-                <td className="muted">
                   <Link
-                    className="row-link muted"
+                    className="block overflow-hidden text-ellipsis whitespace-nowrap text-app-text no-underline hover:text-app-accent hover:underline"
+                    to={`/campaign/${encodeURIComponent(c.campaign_id)}`}
+                    title={c.campaign_name}
+                  >
+                    {c.campaign_name}
+                  </Link>
+                </td>
+                <td className="text-app-text-muted">
+                  <Link
+                    className="text-app-text-muted no-underline hover:text-app-accent hover:underline"
                     to={`/account/${encodeURIComponent(c.instance_id)}`}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -147,28 +158,28 @@ export function CampaignTable({ campaigns, instances, title = 'Campaigns' }: Pro
                 <td><CampaignRuntimeStatusView campaign={c} compact showArchive={false} /></td>
                 <td>
                   {c.is_archived === true
-                    ? <span className="badge archive-yes">Archived</span>
+                    ? <Badge tone="neutral">Archived</Badge>
                     : c.is_archived === false
-                      ? <span className="muted small">No</span>
-                      : <span className="badge archive-unknown">Unknown</span>}
+                      ? <span className="text-app-text-muted text-app-meta">No</span>
+                      : <Badge tone="warning">Unknown</Badge>}
                 </td>
-                <td className="num">{num(c.total_leads)}</td>
-                <td className="num">{num(c.invites_sent)}</td>
-                <td className="num">{num(c.accepted)}</td>
-                <td className="num">{rate(c.acceptance_rate)}</td>
-                <td className="num">{num(c.replies)}</td>
-                <td className="num">{rate(c.reply_rate)}</td>
-                <td className="muted">{ago(c.last_activity_at)}</td>
+                <td className="ui-table__num">{num(c.total_leads)}</td>
+                <td className="ui-table__num">{num(c.invites_sent)}</td>
+                <td className="ui-table__num">{num(c.accepted)}</td>
+                <td className="ui-table__num">{rate(c.acceptance_rate)}</td>
+                <td className="ui-table__num">{num(c.replies)}</td>
+                <td className="ui-table__num">{rate(c.reply_rate)}</td>
+                <td className="text-app-text-muted">{ago(c.last_activity_at)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={11} className="muted">
+              <tr><td colSpan={11} className="text-app-text-muted">
                 {campaigns.length === 0 ? 'No campaigns synced yet.' : 'No campaigns match these filters.'}
               </td></tr>
             )}
           </tbody>
-        </table>
-      </div>
-    </div>
+        </Table>
+      </TableFrame>
+    </Panel>
   )
 }

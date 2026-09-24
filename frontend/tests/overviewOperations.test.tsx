@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Overview } from '../src/pages/Overview'
 import type { DashboardData, OverviewAccountCampaigns, OverviewPerformance, OverviewSystemTotals } from '../src/lib/types'
@@ -286,5 +286,81 @@ describe('Campaign comparison client-only controls', () => {
     expect(fetchSystem).toHaveBeenCalledTimes(1)
     expect(fetchPerformance).toHaveBeenCalledTimes(1)
     expect(fetchCampaigns).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Overview section chrome (Phase 9)', () => {
+  it('replaces only the section whose range changed, never showing its old numbers under the new range', async () => {
+    renderOverview()
+    await screen.findByRole('heading', { name: 'Campaign comparison' })
+    const next = deferred<OverviewPerformance>()
+    fetchPerformance.mockReturnValueOnce(next.promise)
+    fireEvent.click(screen.getByRole('button', { name: 'Performance date range' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Past 30 days' }))
+    const panel = screen.getByRole('region', { name: 'Performance' })
+    await waitFor(() => expect(panel.getAttribute('aria-busy')).toBe('true'))
+    expect(within(panel).getByRole('status', { name: 'Loading performance analytics' })).toBeTruthy()
+    expect(within(panel).queryByText('+25.0% vs previous 7 days')).toBeNull()
+    // Heading and controls stay put; the other two sections are untouched.
+    expect(within(panel).getByRole('combobox', { name: 'Performance account' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'System totals' }).getAttribute('aria-busy')).toBe('false')
+    expect(screen.getByRole('region', { name: 'Account analytics' }).getAttribute('aria-busy')).toBe('false')
+    expect(screen.getByText('100.0% of invited')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'System totals date range' }).textContent).toContain('All time')
+    expect(screen.getByRole('button', { name: 'Account analytics date range' }).textContent).toContain('Lifetime')
+    next.resolve(performance({ current: { invited: 31, connected: 2, replied: 1 } }))
+    await waitFor(() => expect(panel.getAttribute('aria-busy')).toBe('false'))
+    expect(within(panel).getByText('31')).toBeTruthy()
+  })
+
+  it('says Updating… over the current answer when the same range is read again', async () => {
+    // Range A loads, range B fails, and returning to A re-reads A while A's
+    // answer — still the right scope — stays on screen.
+    renderOverview()
+    await screen.findByRole('heading', { name: 'Campaign comparison' })
+    fetchPerformance.mockRejectedValueOnce(new Error('performance down'))
+    fireEvent.click(screen.getByRole('button', { name: 'Performance date range' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Past 30 days' }))
+    expect(await screen.findByText('Performance analytics could not load.')).toBeTruthy()
+    const again = deferred<OverviewPerformance>()
+    fetchPerformance.mockReturnValueOnce(again.promise)
+    fireEvent.click(screen.getByRole('button', { name: 'Performance date range' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Past 7 days' }))
+    const panel = screen.getByRole('region', { name: 'Performance' })
+    await waitFor(() => expect(within(panel).getByText('Updating…')).toBeTruthy())
+    expect(panel.getAttribute('aria-busy')).toBe('true')
+    expect(within(panel).getByText('+25.0% vs previous 7 days')).toBeTruthy()
+    again.resolve(performance())
+    await waitFor(() => expect(within(panel).queryByText('Updating…')).toBeNull())
+  })
+
+  it('opens a campaign through a real link, with no focusable pseudo-button rows', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Overview />} />
+          <Route path="/campaign/:id" element={<p>Campaign page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const table = await screen.findByRole('table', { name: 'Campaign comparison' })
+    expect(table.querySelector('tr[tabindex], tr[role="button"]')).toBeNull()
+    const link = within(table).getByRole('link', { name: 'Campaign 1' })
+    expect(link.getAttribute('href')).toBe('/campaign/one%3A1')
+    // Selecting a row never navigates.
+    fireEvent.click(within(table).getByRole('checkbox', { name: 'Select Campaign 1' }))
+    expect(screen.queryByText('Campaign page')).toBeNull()
+    fireEvent.click(link)
+    expect(await screen.findByText('Campaign page')).toBeTruthy()
+  })
+
+  it('sorts the account table from a column-header button', async () => {
+    renderOverview()
+    const table = await screen.findByRole('table', { name: 'Account analytics' })
+    const invited = within(table).getByRole('columnheader', { name: 'Invited' })
+    expect(invited.getAttribute('aria-sort')).toBe('descending')
+    fireEvent.click(within(invited).getByRole('button', { name: 'Invited' }))
+    expect(invited.getAttribute('aria-sort')).toBe('ascending')
+    expect(within(table).getByRole('columnheader', { name: 'Account' }).hasAttribute('aria-sort')).toBe(false)
   })
 })

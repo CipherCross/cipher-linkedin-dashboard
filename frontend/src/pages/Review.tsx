@@ -14,6 +14,7 @@ import { TemplateComparison } from '../components/TemplateComparison'
 import { SentimentTrendChart } from '../components/SentimentTrendChart'
 import { LeadsAddedTable } from '../components/LeadsAddedTable'
 import { DateRangePicker } from '../components/DateRangePicker'
+import { KpiGrid, KpiTile } from '../components/KpiTile'
 import { buildDigest, cohortRows } from '../lib/review'
 import type { DigestPayload } from '../lib/review'
 import type { Instance } from '../lib/types'
@@ -248,15 +249,9 @@ function P3OutcomeSummary({
         title={`P3 outcomes · last ${weeks} weeks`}
         description="Unique conversations · attributed to the first P3"
       />
-      <div className="kpi-grid">
-        {cells.map((cell) => (
-          <div className="card kpi" key={cell.key}>
-            <div className="kpi-top"><span className="kpi-label">{cell.label}</span></div>
-            <div className="kpi-value">{cell.value}</div>
-            <div className="kpi-sub">{cell.sub}</div>
-          </div>
-        ))}
-      </div>
+      <KpiGrid>
+        {cells.map((cell) => <KpiTile key={cell.key} label={cell.label} value={cell.value} sub={cell.sub} />)}
+      </KpiGrid>
     </section>
   )
 }

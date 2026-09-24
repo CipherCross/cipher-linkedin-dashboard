@@ -4,6 +4,7 @@ import { num, pct } from '../lib/format'
 import { useData } from '../lib/DataContext'
 import { leadKey } from '../lib/leads'
 import { PIPELINE_CHECKPOINTS, checkpointCount, reachByPerson } from '../lib/pipeline'
+import { Panel, SectionHeader } from '../ui'
 
 /** One continuous vertical funnel. The automated milestones (Leads → Invited →
  *  Accepted → Replied), computed client-side from lead timestamps, flow straight
@@ -165,8 +166,8 @@ export function Funnel({
   }
 
   return (
-    <div className="card">
-      <h3 className="card-title">Funnel</h3>
+    <Panel>
+      <SectionHeader level="subsection" title="Funnel" />
       <div className="flex flex-col gap-app-xs">
         {rows.map((s, i) => (
           <Fragment key={s.key}>
@@ -189,9 +190,15 @@ export function Funnel({
                   <span className="text-app-text-muted">{s.verb}</span>
                 </div>
               ))}
-            <div className={`funnel-row${s.pipeline ? ' funnel-row--pipeline' : ''}`}>
+            <div className="grid grid-cols-[72px_1fr_auto] items-center gap-2.5">
               <span className="text-app-text-muted text-[length:var(--text-xs)]">{s.label}</span>
-              <div className="funnel-track">
+              <div
+                className={`h-[18px] rounded-sm overflow-hidden ${
+                  s.pipeline
+                    ? 'bg-app-surface-3 shadow-[inset_2px_0_0_var(--border-strong)]'
+                    : 'bg-app-surface-2'
+                }`}
+              >
                 <div
                   className="h-full rounded-sm transition-[width] duration-300 print:[print-color-adjust:exact]"
                   style={{ width: barWidth(s.count, s.pipeline), background: s.color }}
@@ -204,7 +211,7 @@ export function Funnel({
       </div>
 
       <div className="flex flex-wrap justify-between items-baseline gap-app-sm mt-app-md">
-        <span className="muted small">
+        <span className="text-app-text-muted text-app-meta">
           {num(pending)} invites still pending (sent, not yet accepted)
           {preExisting > 0 &&
             ` · ${num(preExisting)} existing connections (never invited) excluded`}
@@ -217,6 +224,6 @@ export function Funnel({
           </span>
         )}
       </div>
-    </div>
+    </Panel>
   )
 }

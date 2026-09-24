@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import type { Lead } from '../lib/types'
 import { lastWeeks, weekStart } from '../lib/leads'
+import { Panel, SectionHeader } from '../ui'
 import { AXIS, BAR_CURSOR, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 /** Invites per calendar week vs LinkedIn's ~100–200/week safe zone.
@@ -21,16 +22,16 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
 
   if (peak === 0) {
     return (
-      <div className="card">
-        <h2>Invite volume per week (warm-up / limit tracker)</h2>
+      <Panel>
+        <SectionHeader title="Invite volume per week (warm-up / limit tracker)" />
         <ChartEmpty height={240} label="No invites in the last 12 weeks" />
-      </div>
+      </Panel>
     )
   }
 
   return (
-    <div className="card">
-      <h2>Invite volume per week (warm-up / limit tracker)</h2>
+    <Panel>
+      <SectionHeader title="Invite volume per week (warm-up / limit tracker)" />
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
           <CartesianGrid {...GRID} vertical={false} />
@@ -38,17 +39,17 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
           <YAxis {...AXIS} allowDecimals={false}
             domain={[0, Math.max(220, Math.ceil(peak * 1.15))]} />
           <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} labelFormatter={dateTick} />
-          <ReferenceArea y1={100} y2={200} fill="var(--success)" fillOpacity={0.07} />
-          <ReferenceLine y={200} stroke="var(--danger)" strokeDasharray="4 4"
-            label={{ value: '~200/wk cap', fill: 'var(--danger)', fontSize: 11, position: 'insideTopRight' }} />
+          <ReferenceArea y1={100} y2={200} fill={SERIES.safeBand} fillOpacity={0.07} />
+          <ReferenceLine y={200} stroke={SERIES.limit} strokeDasharray="4 4"
+            label={{ value: '~200/wk cap', fill: SERIES.limit, fontSize: 11, position: 'insideTopRight' }} />
           <Bar dataKey="invites" name="Invites" fill={SERIES.invite} radius={[3, 3, 0, 0]}
             maxBarSize={28} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
-      <div className="muted small">
+      <div className="text-app-text-muted text-app-meta">
         Green band ≈ LinkedIn&apos;s typical safe range (100–200 invites/week) for a
         warmed-up account. Ramp gradually toward it for new accounts.
       </div>
-    </div>
+    </Panel>
   )
 }

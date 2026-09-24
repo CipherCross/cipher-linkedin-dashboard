@@ -4,6 +4,7 @@ import {
 import type { Lead } from '../lib/types'
 import { addedByDay, dayRange, weekRange, weekStart } from '../lib/leads'
 import { num } from '../lib/format'
+import { Panel, SectionHeader } from '../ui'
 import { AXIS, BAR_CURSOR, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 /** When and how many leads were queued into the campaign(s): counts of
@@ -33,8 +34,8 @@ export function LeadAdditionsChart({
   const data = axis.map((date) => ({ date, added: buckets.get(date) ?? 0 }))
 
   return (
-    <div className="card">
-      <h2>{daily ? 'Leads added per day' : 'Leads added per week'}</h2>
+    <Panel>
+      <SectionHeader title={daily ? 'Leads added per day' : 'Leads added per week'} />
       {data.length === 0 ? (
         <ChartEmpty label="No leads with a known add date in this range" />
       ) : (
@@ -49,11 +50,11 @@ export function LeadAdditionsChart({
         </BarChart>
       </ResponsiveContainer>
       )}
-      <div className="muted small">
+      <div className="text-app-text-muted text-app-meta">
         {daily ? 'Day' : 'Week'} the lead was queued into the campaign.
         {undated > 0 &&
           ` ${num(undated)} lead${undated === 1 ? '' : 's'} with no known add date not shown.`}
       </div>
-    </div>
+    </Panel>
   )
 }

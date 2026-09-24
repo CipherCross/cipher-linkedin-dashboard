@@ -3,6 +3,7 @@ import { Calendar as CalendarIcon, ChevronDown } from 'lucide-react'
 import type { DateRange } from '../lib/leads'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { Calendar } from './ui/calendar'
+import { Button } from '../ui'
 
 /**
  * A preset list beside a two-month calendar, in a popover.
@@ -66,28 +67,31 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             aria-label={ariaLabel}
-            className="inline-flex items-center gap-app-sm min-h-control bg-[var(--panel)] text-app-text border border-app-border rounded-control px-app-md text-app-body cursor-pointer transition-[border-color] hover:border-app-accent"
+            className="font-normal"
+            icon={<CalendarIcon className="text-app-text-muted" size={16} aria-hidden />}
           >
-            <CalendarIcon className="text-app-text-muted" size={14} aria-hidden />
             {rangeButtonLabel(value)}
-            <ChevronDown className="text-app-text-muted ml-0.5" size={14} aria-hidden />
-          </button>
+            <ChevronDown className="text-app-text-muted" size={16} aria-hidden />
+          </Button>
         }
       />
       <PopoverContent aria-label={`${ariaLabel} calendar`} className="w-auto max-w-[min(520px,calc(100vw-32px))] flex flex-row items-start gap-app-md p-app-md">
-        <ul className="shrink-0 list-none m-0 p-app-sm border-r border-app-border flex flex-col gap-0.5 min-w-[132px] [&_button]:w-full [&_button]:text-left [&_button]:bg-none [&_button]:border-none [&_button]:text-app-text [&_button]:px-app-md [&_button]:py-app-sm [&_button]:rounded-sm [&_button]:text-[length:var(--text-sm)] [&_button]:cursor-pointer [&_button]:whitespace-nowrap [&_button]:transition-[background,color] [&_button:hover]:bg-app-surface-3">
+        <ul className="shrink-0 list-none m-0 p-app-sm border-r border-app-border flex flex-col gap-0.5 min-w-[132px]">
           {presets.map((p) => (
             <li key={p.id}>
-              <button
-                type="button"
-                className={value.id === p.id ? 'active' : ''}
+              <Button
+                variant="ghost"
+                size="sm"
+                block
+                aria-pressed={value.id === p.id}
+                className="justify-start font-normal whitespace-nowrap aria-pressed:bg-app-accent-subtle aria-pressed:text-app-accent aria-pressed:font-semibold"
                 onClick={() => { onChange(p); setOpen(false) }}
               >
                 {p.label}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

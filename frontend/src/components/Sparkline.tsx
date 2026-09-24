@@ -1,4 +1,5 @@
 import type { DailyActivity } from '../lib/types'
+import { SERIES } from './chartTheme'
 
 /** Tiny inline activity sparkline: one bar per day of `event_type` counts,
  *  no axes. Days with no activity render as gaps; the range is padded so two
@@ -24,7 +25,7 @@ export function Sparkline({
     byDay.set(a.day, (byDay.get(a.day) ?? 0) + a.cnt)
   }
   if (byDay.size === 0) {
-    return <div className="flex-1 py-app-sm muted small">no activity in range</div>
+    return <div className="flex-1 py-app-sm text-app-text-muted text-app-meta">no activity in range</div>
   }
 
   const days = [...byDay.keys()].sort()
@@ -60,7 +61,7 @@ export function Sparkline({
             y={height - (height * c) / max}
             width={Math.max(barW - 0.5, 0.75)}
             height={(height * c) / max}
-            fill="var(--accent)"
+            fill={SERIES.invite}
             opacity={0.85}
           />
         ) : null,

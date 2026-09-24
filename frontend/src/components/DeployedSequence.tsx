@@ -1,4 +1,5 @@
 import type { CampaignSequenceContext } from '../lib/types'
+import { Panel, SectionHeader } from '../ui'
 
 /** One entry of the compiled chain that was actually sent to Linked Helper. */
 interface DeployedAction {
@@ -26,33 +27,33 @@ export function DeployedSequence({ context }: { context: CampaignSequenceContext
 
   if (actions.length === 0) {
     return (
-      <div className="card">
-        <h2>Deployed sequence</h2>
-        <div className="muted small">
+      <Panel>
+        <SectionHeader title="Deployed sequence" />
+        <div className="text-app-text-muted text-app-meta">
           {context.lineage === 'explicit_link'
             ? 'This campaign was linked to a sequence by hand, so there is no publish snapshot to show. The synced Linked Helper steps below are the record of what is running.'
             : 'No compiled action chain was stored for this deployment.'}
         </div>
-      </div>
+      </Panel>
     )
   }
 
   return (
-    <div className="card deployed-sequence">
-      <div className="mb-app-md [&_h2]:m-0">
-        <h2>Deployed sequence</h2>
-        <div className="muted small">
+    <Panel className="deployed-sequence">
+      <SectionHeader
+        title="Deployed sequence"
+        description={<>
           Exactly what was published to Linked Helper
           {context.sequence_revision != null ? ` from revision ${context.sequence_revision}` : ''}
           {context.branch_letter ? ` · branch ${context.branch_letter}` : ''}.
-        </div>
-      </div>
+        </>}
+      />
       <ol className="m-0 p-0 list-none flex flex-col gap-app-sm">
         {actions.map((action, index) => (
           <li key={index} data-deployed="step" className={`border border-app-border rounded-md px-app-md py-[9px] bg-app-surface-2 deployed-step-${action.kind}`}>
             <div className="flex items-baseline gap-app-sm flex-wrap">
               <span data-deployed="label" className="font-semibold text-[length:var(--text-xs)]">{action.label}</span>
-              {action.detail && <span className="muted small">{action.detail}</span>}
+              {action.detail && <span className="text-app-text-muted text-app-meta">{action.detail}</span>}
             </div>
             {action.body && (
               <p data-deployed="body" className="mt-[7px] mx-0 mb-0 whitespace-pre-wrap leading-[1.5] text-[length:var(--text-sm)]">
@@ -64,7 +65,7 @@ export function DeployedSequence({ context }: { context: CampaignSequenceContext
           </li>
         ))}
       </ol>
-    </div>
+    </Panel>
   )
 }
 

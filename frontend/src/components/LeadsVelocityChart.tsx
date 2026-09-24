@@ -4,10 +4,13 @@ import { TrendingUp } from 'lucide-react'
 import type { Lead } from '../lib/types'
 import { weekStart } from '../lib/leads'
 import { num } from '../lib/format'
+import { SegmentedControl } from '../ui'
+import type { TabItem } from '../ui'
 import { SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 const WINDOWS = [4, 8, 12] as const
 type WindowWeeks = (typeof WINDOWS)[number]
+const WINDOW_ITEMS: TabItem<string>[] = WINDOWS.map((w) => ({ id: String(w), label: `${w}w` }))
 
 export interface LeadsVelocitySummary {
   buckets: Array<{ week: string; added: number }>
@@ -81,25 +84,29 @@ export function LeadsVelocityChart({
     : undefined
 
   return (
-    <div className="card kpi" title={title}>
-      <div className="kpi-top">
-        <span className="kpi-label"><TrendingUp size={14} strokeWidth={2} /> Leads velocity</span>
-        <span className="shrink-0 inline-flex gap-0.5 [&_button]:bg-none [&_button]:border-none [&_button]:text-app-text-muted [&_button]:text-app-meta [&_button]:font-semibold [&_button]:tabular-nums [&_button]:min-h-control-sm [&_button]:px-app-sm [&_button]:rounded-pill [&_button]:cursor-pointer [&_button]:transition-[background,color] [&_button:hover]:text-app-text [&_button:hover]:bg-app-surface-2" title="Rolling window (complete Mon–Sun weeks; the current week shows on the trend line but isn't averaged)">
-          {WINDOWS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              className={w === weeks ? 'active' : undefined}
-              onClick={() => setWeeks(w)}
-            >
-              {w}w
-            </button>
-          ))}
+    <div
+      className="flex flex-col gap-app-xs min-w-0 bg-app-surface border border-app-border rounded-card p-app-lg flex-1 basis-[220px]"
+      title={title}
+    >
+      <div className="flex items-center justify-between gap-app-sm">
+        <span className="inline-flex items-center gap-app-xs min-w-0 text-app-text-muted text-app-meta [&>svg]:shrink-0">
+          <TrendingUp size={14} strokeWidth={2} /> Leads velocity
+        </span>
+        <span
+          className="shrink-0"
+          title="Rolling window (complete Mon–Sun weeks; the current week shows on the trend line but isn't averaged)"
+        >
+          <SegmentedControl
+            label="Rolling window"
+            items={WINDOW_ITEMS}
+            value={String(weeks)}
+            onChange={(v) => setWeeks(Number(v) as WindowWeeks)}
+          />
         </span>
       </div>
-      <div className="kpi-value">{num(avg)}</div>
-      <div className="kpi-sub">per week · last {weeks} full weeks</div>
-      <div className="kpi-spark">
+      <div className="text-app-kpi font-semibold tabular-nums tracking-[-0.02em]">{num(avg)}</div>
+      <div className="text-app-text-secondary text-app-meta">per week · last {weeks} full weeks</div>
+      <div className="mt-auto pt-1.5">
         <ResponsiveContainer width="100%" height={28}>
           <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
             {/* Hidden but still gives Tooltip a "week" dataKey to look the label up

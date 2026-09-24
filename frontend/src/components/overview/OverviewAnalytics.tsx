@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { EyeOff, SearchX } from 'lucide-react'
 import {
   Area,
   CartesianGrid,
@@ -10,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { AXIS, GRID, NO_ANIM, SERIES, TOOLTIP } from '../chartTheme'
 import { DateRangePicker } from '../DateRangePicker'
 import { Skeleton } from '../Skeleton'
 import type { DateRange } from '../../lib/leads'
@@ -27,11 +29,17 @@ import {
   AccountIdentity,
   Button,
   Checkbox,
+  EmptyState,
   InlineError,
   InitialsBadge,
+  Panel,
+  SectionHeader,
+  SelectField,
+  SortHeader,
   Table,
   TableFrame,
   TableToolbar,
+  UpdatingNote,
 } from '../../ui'
 
 type Props = {
@@ -71,7 +79,8 @@ const zeroTotals = () => ({
 })
 const zeroCohort = (): OverviewCohortTotals => ({ leads: 0, invited: 0, connected: 0, messaged: 0, replied: 0 })
 const metricLabels = { invited: 'Invited', connected: 'Connected', replied: 'First replies' } as const
-const chartColors = { invited: 'var(--accent)', connected: 'var(--success)', replied: 'var(--warning)' } as const
+const chartColors = { invited: SERIES.invite, connected: SERIES.accepted, replied: SERIES.reply } as const
+const MUTED = 'text-app-text-muted text-app-meta'
 
 function SystemTotalsLoading() {
   return (
@@ -231,14 +240,16 @@ function compareValue(campaign: CampaignMetrics, key: CampaignSortKey, accountLa
   }
 }
 
-function sortableHeader(key: CampaignSortKey, label: string, sort: SortState, onSort: (key: CampaignSortKey) => void) {
-  const active = sort.key === key
+function sortableHeader(key: CampaignSortKey, label: string, sort: SortState, onSort: (key: CampaignSortKey) => void, numeric = false) {
   return (
-    <th className="ov-sortable" {...(active ? { 'aria-sort': sort.direction === 'asc' ? 'ascending' : 'descending' } : {})}>
-      <button type="button" onClick={() => onSort(key)} aria-label={`${label}, ${active ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'not sorted'}`}>
-        {label}
-      </button>
-    </th>
+    <SortHeader
+      key={key}
+      label={label}
+      active={sort.key === key}
+      direction={sort.direction}
+      onSort={() => onSort(key)}
+      className={numeric ? 'ui-table__num' : undefined}
+    />
   )
 }
 
@@ -321,9 +332,17 @@ function CampaignComparison({
     setSelectedIds(new Set())
   }
 
+  const open = (campaign: CampaignMetrics) => navigate(`/campaign/${encodeURIComponent(campaign.campaign_id)}`)
+  const toggleOne = (id: string) => setSelectedIds((current) => {
+    const next = new Set(current)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+
   return (
-    <div className="ov-campaign-comparison">
-      <h3>Campaign comparison</h3>
+    <div className="mt-app-xl">
+      <SectionHeader level="subsection" title="Campaign comparison" />
       <TableFrame
         className="ov-campaign-frame"
         scrollLabel="Campaign comparison table"
@@ -339,48 +358,57 @@ function CampaignComparison({
         )}
       >
         {apiEmpty ? (
-          <p className="min-h-[120px] flex items-center justify-center flex-col gap-app-md m-0 p-app-xl text-app-text-muted text-center">No campaigns are available for this scope.</p>
+          <EmptyState icon={SearchX} title="No campaigns are available for this scope." />
         ) : clientEmpty ? (
-          <div className="min-h-[120px] flex items-center justify-center flex-col gap-app-md m-0 p-app-xl text-app-text-muted text-center">
-            <p>{showHidden ? 'No removed campaigns match this scope.' : 'All campaigns are removed from comparison.'}</p>
-          </div>
+          <EmptyState
+            kind="no-match"
+            icon={EyeOff}
+            title={showHidden ? 'No removed campaigns match this scope.' : 'All campaigns are removed from comparison.'}
+            hint={showHidden ? undefined : 'Show removed in the toolbar brings them back.'}
+          />
         ) : (
-          <Table  caption="Campaign comparison">
+          <Table caption="Campaign comparison">
             <thead>
               <tr>
-                <th className="ov-select-cell"><input type="checkbox" aria-label="Select all campaigns on this page" checked={allPageSelected} onChange={togglePage} /></th>
+                <th className="ov-select-cell" scope="col">
+                  <Checkbox label={<span className="sr-only">Select all campaigns on this page</span>} checked={allPageSelected} onChange={togglePage} />
+                </th>
                 {sortableHeader('account', 'Account', sort, setSortKey)}
                 {sortableHeader('campaign', 'Campaign', sort, setSortKey)}
-                {sortableHeader('invited', 'Invited', sort, setSortKey)}
-                {sortableHeader('acceptance', 'Acceptance rate', sort, setSortKey)}
-                {sortableHeader('reply', 'Reply rate', sort, setSortKey)}
-                {sortableHeader('connected', 'Connected', sort, setSortKey)}
-                {sortableHeader('first_messages', 'First messages', sort, setSortKey)}
-                {sortableHeader('first_replies', 'First replies', sort, setSortKey)}
+                {sortableHeader('invited', 'Invited', sort, setSortKey, true)}
+                {sortableHeader('acceptance', 'Acceptance rate', sort, setSortKey, true)}
+                {sortableHeader('reply', 'Reply rate', sort, setSortKey, true)}
+                {sortableHeader('connected', 'Connected', sort, setSortKey, true)}
+                {sortableHeader('first_messages', 'First messages', sort, setSortKey, true)}
+                {sortableHeader('first_replies', 'First replies', sort, setSortKey, true)}
               </tr>
             </thead>
             <tbody>
               {pageRows.map((campaign) => {
                 const instance = instanceFor(campaign.instance_id)
                 return (
-                  <tr
-                    key={campaign.campaign_id}
-                    className="ov-campaign-row"
-                    tabIndex={0}
-                    aria-label={`Open ${campaign.campaign_name}`}
-                    onClick={() => navigate(`/campaign/${encodeURIComponent(campaign.campaign_id)}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        navigate(`/campaign/${encodeURIComponent(campaign.campaign_id)}`)
-                      }
-                    }}
-                  >
-                    <td className="ov-select-cell" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`Select ${campaign.campaign_name}`} checked={selectedIds.has(campaign.campaign_id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(campaign.campaign_id)) next.delete(campaign.campaign_id); else next.add(campaign.campaign_id); return next })} /></td>
+                  // The name cell's link is the keyboard and screen-reader path;
+                  // the row click is a pointer convenience for the same URL.
+                  <tr key={campaign.campaign_id} className="cursor-pointer" onClick={() => open(campaign)}>
+                    <td className="ov-select-cell" onClick={(event) => event.stopPropagation()}>
+                      <Checkbox
+                        label={<span className="sr-only">Select {campaign.campaign_name}</span>}
+                        checked={selectedIds.has(campaign.campaign_id)}
+                        onChange={() => toggleOne(campaign.campaign_id)}
+                      />
+                    </td>
                     <td>
                       <AccountCell instance={instance} fallback={accountLabel(campaign.instance_id)} />
                     </td>
-                    <td className="max-w-[260px] overflow-hidden text-ellipsis" title={campaign.campaign_name}>{campaign.campaign_name}</td>
+                    <td className="max-w-[260px] overflow-hidden text-ellipsis" title={campaign.campaign_name}>
+                      <Link
+                        className="text-app-text no-underline hover:text-app-accent hover:underline"
+                        to={`/campaign/${encodeURIComponent(campaign.campaign_id)}`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {campaign.campaign_name}
+                      </Link>
+                    </td>
                     <td className="ui-table__num">{num(campaign.invites_sent)}</td>
                     <td className="ui-table__num">{rate(campaign.lifetime_acceptance_rate)}</td>
                     <td className="ui-table__num">{rate(campaign.lifetime_reply_rate)}</td>
@@ -394,11 +422,11 @@ function CampaignComparison({
           </Table>
         )}
       </TableFrame>
-      <div className="flex justify-between gap-app-md flex-wrap mt-app-xl text-app-text-muted text-app-meta mt-app-md">
+      <div className={`flex justify-between items-center gap-app-md flex-wrap mt-app-md ${MUTED}`}>
         <span>{displayed.length} campaigns</span>
-        <span>
-          <Button variant="secondary" size="sm" disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>Previous campaigns</Button>{' '}
-          Page {pageIndex + 1} of {pages}{' '}
+        <span className="flex items-center gap-app-sm">
+          <Button variant="secondary" size="sm" disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>Previous campaigns</Button>
+          Page {pageIndex + 1} of {pages}
           <Button variant="secondary" size="sm" disabled={pageIndex + 1 >= pages} onClick={() => setPage(pageIndex + 1)}>Next campaigns</Button>
         </span>
       </div>
@@ -464,14 +492,15 @@ export function OverviewAnalytics({
     }
     setAccountPage(0)
   }
-  const accountSortHeader = (key: typeof accountSort, label: string) => {
-    const active = accountSort === key
-    return (
-      <th className="ov-sortable" {...(active ? { 'aria-sort': accountSortDirection === 'asc' ? 'ascending' : 'descending' } : {})}>
-        <button type="button" onClick={() => setAccountSortKey(key)} aria-label={`${label}, ${active ? accountSortDirection === 'asc' ? 'ascending' : 'descending' : 'not sorted'}`}>{label}</button>
-      </th>
-    )
-  }
+  const accountSortHeader = (key: typeof accountSort, label: string) => (
+    <SortHeader
+      label={label}
+      active={accountSort === key}
+      direction={accountSortDirection}
+      onSort={() => setAccountSortKey(key)}
+      className={key === 'name' ? undefined : 'ui-table__num'}
+    />
+  )
   const today = new Date().toISOString().slice(0, 10)
   const incompleteToday = range.to === today
   const incompleteAccountToday = accountRange.to === today
@@ -484,16 +513,22 @@ export function OverviewAnalytics({
 
   useEffect(() => setAccountPage((current) => Math.min(current, accountPages - 1)), [accountPages])
 
+  const accountDescription = `${account === 'all' ? '' : 'Campaigns · '}${accountRange.label} counts and rates${accountRange.from || accountRange.to ? ' · UTC' : ''}${incompleteAccountToday ? ' · Today is in progress' : ''}`
+
   return (
     <>
-      <section className="ov-summary" aria-labelledby="overview-system-title" aria-busy={systemLoading}>
-        <div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg">
-          <div><h2 id="overview-system-title">System totals</h2><p className="ov-muted">{systemSubtitle}</p></div>
-          <div className="ov-controls">
-            <label className="ov-muted">Dates<DateRangePicker ariaLabel="System totals date range" presets={presets} value={systemRange} onChange={onSystemRangeChange} /></label>
-            {systemLoading && system && <span className="ov-muted" role="status">Refreshing…</span>}
-          </div>
-        </div>
+      <Panel aria-labelledby="overview-system-title" aria-busy={systemLoading}>
+        <SectionHeader
+          id="overview-system-title"
+          title="System totals"
+          description={systemSubtitle}
+          actions={(
+            <>
+              {systemLoading && system && <UpdatingNote />}
+              <DateRangePicker ariaLabel="System totals date range" presets={presets} value={systemRange} onChange={onSystemRangeChange} />
+            </>
+          )}
+        />
         {systemLoading && !system ? <SystemTotalsLoading /> : systemError ? (
           <InlineError title="System totals could not load." detail={systemError} onRetry={onSystemRetry} />
         ) : system ? (
@@ -509,17 +544,31 @@ export function OverviewAnalytics({
             ))}
           </div>
         ) : null}
-      </section>
+      </Panel>
 
-      <section className="ov-panel" aria-labelledby="overview-performance-title" aria-busy={performanceLoading}>
-        <div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg">
-          <div><h2 id="overview-performance-title">Performance</h2><p className="ov-muted">{range.label} · UTC{incompleteToday ? ' · Today is in progress' : ''}</p></div>
-          <div className="ov-controls">
-            <label className="ov-muted">Account<select aria-label="Performance account" value={account} onChange={(event) => onAccountChange(event.target.value)}><option value="all">All accounts</option>{instances.map((instance) => <option key={instance.id} value={instance.id}>{accountLabel(instance.id)}</option>)}</select></label>
-            {performanceLoading && performance && <span className="ov-muted" role="status">Refreshing…</span>}
-            <label className="ov-muted">Dates<DateRangePicker ariaLabel="Performance date range" presets={presets} value={range} onChange={onRangeChange} /></label>
-          </div>
-        </div>
+      <Panel aria-labelledby="overview-performance-title" aria-busy={performanceLoading}>
+        <SectionHeader
+          id="overview-performance-title"
+          title="Performance"
+          description={`${range.label} · UTC${incompleteToday ? ' · Today is in progress' : ''}`}
+          actions={(
+            <>
+              {performanceLoading && performance && <UpdatingNote />}
+              <SelectField
+                label="Account"
+                labelHidden
+                aria-label="Performance account"
+                className="min-w-[200px]"
+                value={account}
+                onChange={(event) => onAccountChange(event.target.value)}
+              >
+                <option value="all">All accounts</option>
+                {instances.map((instance) => <option key={instance.id} value={instance.id}>{accountLabel(instance.id)}</option>)}
+              </SelectField>
+              <DateRangePicker ariaLabel="Performance date range" presets={presets} value={range} onChange={onRangeChange} />
+            </>
+          )}
+        />
         {performanceLoading && !performance ? <PerformanceLoading /> : performanceError ? (
           <InlineError title="Performance analytics could not load." detail={performanceError} onRetry={onPerformanceRetry} />
         ) : performance && accountDataAvailable ? (
@@ -528,8 +577,8 @@ export function OverviewAnalytics({
               <div className="flex gap-app-2xl flex-wrap mt-0 mx-0 mb-app-lg">
                 {(['invited', 'connected', 'replied'] as const).map((key) => (
                   <div className="ov-metric" key={key}>
-                    <span className="ov-dot" style={{ color: chartColors[key] }} aria-hidden="true" />
-                    <label>{metricLabels[key]}</label>
+                    <span className="ov-dot" style={{ background: chartColors[key] }} aria-hidden="true" />
+                    <span className="ov-metric__label">{metricLabels[key]}</span>
                     <strong>{num(currentTotals[key])}</strong>
                     <span>{comparisonLabel(currentTotals[key], previousTotals?.[key] ?? null, range)}</span>
                     {key === 'connected' && <small>Acceptance <b>{pct(selectedCohort.connected, selectedCohort.invited)}</b></small>}
@@ -540,54 +589,123 @@ export function OverviewAnalytics({
               <div className="ov-plot" role="img" aria-label={`${weeklyChart ? 'Weekly' : 'Daily'} invited, connected and first replies for ${range.label}`}>
                 <ResponsiveContainer width="100%" height={280}>
                   <ComposedChart data={chart}>
-                    <Area type="linear" dataKey="invited" stroke="none" fill={chartColors.invited} fillOpacity={0.08} tooltipType="none" isAnimationActive={false} />
-                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11 }} tickFormatter={(day: string) => weeklyChart ? `Week of ${day}` : shortDate(day)} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip labelFormatter={(day) => weeklyChart ? `Week of ${String(day)}` : shortDate(String(day))} contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border-strong)', borderRadius: 10, color: 'var(--text)' }} />
-                    <Line dataKey="invited" name="Invited" stroke={chartColors.invited} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                    <Line dataKey="connected" name="Connected" stroke={chartColors.connected} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                    <Line dataKey="replied" name="First replies" stroke={chartColors.replied} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    <Area type="linear" dataKey="invited" stroke="none" fill={chartColors.invited} fillOpacity={0.08} tooltipType="none" {...NO_ANIM} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="day" {...AXIS} tickFormatter={(day: string) => weeklyChart ? `Week of ${day}` : shortDate(day)} />
+                    <YAxis allowDecimals={false} {...AXIS} />
+                    <Tooltip {...TOOLTIP} labelFormatter={(day) => weeklyChart ? `Week of ${String(day)}` : shortDate(String(day))} />
+                    <Line dataKey="invited" name="Invited" stroke={chartColors.invited} strokeWidth={2.5} dot={false} {...NO_ANIM} />
+                    <Line dataKey="connected" name="Connected" stroke={chartColors.connected} strokeWidth={2.5} dot={false} {...NO_ANIM} />
+                    <Line dataKey="replied" name="First replies" stroke={chartColors.replied} strokeWidth={2.5} dot={false} {...NO_ANIM} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <aside className="ov-rates"><h3>All-time conversion</h3><div className="ov-rate"><label>Acceptance rate</label><strong>{pct(lifetime.connected, lifetime.invited)}</strong></div><div className="ov-rate"><label>Reply rate</label><strong>{pct(lifetime.replied, lifetime.connected)}</strong></div></aside>
+            <aside className="ov-rates" aria-labelledby="overview-rates-title">
+              <h3 id="overview-rates-title">All-time conversion</h3>
+              <div className="ov-rate"><span>Acceptance rate</span><strong>{pct(lifetime.connected, lifetime.invited)}</strong></div>
+              <div className="ov-rate"><span>Reply rate</span><strong>{pct(lifetime.replied, lifetime.connected)}</strong></div>
+            </aside>
           </div>
-        ) : <p role="status" className="ov-muted">{account === 'all' ? 'Performance data unavailable. Try refreshing the performance range.' : 'This account has no performance data for the selected range. Select another account or refresh.'}</p>}
-      </section>
+        ) : <p role="status" className={MUTED}>{account === 'all' ? 'Performance data unavailable. Try refreshing the performance range.' : 'This account has no performance data for the selected range. Select another account or refresh.'}</p>}
+      </Panel>
 
-      <section className="ov-panel" aria-labelledby="overview-account-title" aria-busy={accountCampaignsLoading}>
-        <div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg">
-          <div><h2 id="overview-account-title">{account === 'all' ? 'Account analytics' : `${accountLabel(account)} campaigns`}</h2><p className="ov-muted">{account === 'all' ? `${accountRange.label} counts and rates${accountRange.from || accountRange.to ? ' · UTC' : ''}${incompleteAccountToday ? ' · Today is in progress' : ''}` : `Campaigns · ${accountRange.label} counts and rates${accountRange.from || accountRange.to ? ' · UTC' : ''}${incompleteAccountToday ? ' · Today is in progress' : ''}`}</p></div>
-          <div className="ov-controls">{accountCampaignsLoading && accountCampaigns && <span className="ov-muted" role="status">Refreshing…</span>}<label className="ov-muted">Dates<DateRangePicker ariaLabel="Account analytics date range" presets={accountPresets} value={accountRange} onChange={onAccountRangeChange} /></label>{account !== 'all' && <Button variant="secondary" size="sm" onClick={() => onAccountChange('all')}>← All accounts</Button>}</div>
-        </div>
+      <Panel aria-labelledby="overview-account-title" aria-busy={accountCampaignsLoading}>
+        <SectionHeader
+          id="overview-account-title"
+          title={account === 'all' ? 'Account analytics' : `${accountLabel(account)} campaigns`}
+          description={accountDescription}
+          actions={(
+            <>
+              {accountCampaignsLoading && accountCampaigns && <UpdatingNote />}
+              <DateRangePicker ariaLabel="Account analytics date range" presets={accountPresets} value={accountRange} onChange={onAccountRangeChange} />
+              {account !== 'all' && <Button variant="secondary" size="sm" onClick={() => onAccountChange('all')}>← All accounts</Button>}
+            </>
+          )}
+        />
         {accountCampaignsLoading && !accountCampaigns ? <AccountTableLoading /> : accountCampaignsError ? (
           <InlineError title="Account analytics could not load." detail={accountCampaignsError} onRetry={onAccountCampaignsRetry} />
-        ) : !accountCampaigns ? <p className="ov-muted">Account analytics data is unavailable.</p> : (
+        ) : !accountCampaigns ? <p className={MUTED}>Account analytics data is unavailable.</p> : (
           <>
             {account === 'all' ? (
               <>
                 <TableFrame className="ov-account-frame" scrollLabel="Account analytics table">
                   <Table caption="Account analytics">
-                    <thead><tr>{accountSortHeader('name', 'Account')}{accountSortHeader('invited', 'Invited')}{accountSortHeader('connected', 'Connected')}{accountSortHeader('replied', 'First replies')}<th>Acceptance rate</th><th>Reply rate</th><th>Last sync</th></tr></thead>
+                    <thead>
+                      <tr>
+                        {accountSortHeader('name', 'Account')}
+                        {accountSortHeader('invited', 'Invited')}
+                        {accountSortHeader('connected', 'Connected')}
+                        {accountSortHeader('replied', 'First replies')}
+                        <th scope="col" className="ui-table__num">Acceptance rate</th>
+                        <th scope="col" className="ui-table__num">Reply rate</th>
+                        <th scope="col">Last sync</th>
+                      </tr>
+                    </thead>
                     <tbody>{accountRows.slice(accountPageIndex * 20, accountPageIndex * 20 + 20).map((instance) => {
                       const row = accountCampaigns.accounts.find((item) => item.instance_id === instance.id)
                       const totals = row?.totals ?? zeroTotals()
                       const syncOverdue = !instance.last_sync_at || Date.now() - new Date(instance.last_sync_at).getTime() > 3 * 3_600_000
-                      return <tr key={instance.id}><td><button className="ov-name" type="button" aria-label={accountName(instance, accountLabel(instance.id))} onClick={() => onAccountChange(instance.id)}><AccountCell instance={instance} fallback={accountLabel(instance.id)} /></button></td><td className="ui-table__num">{num(totals.invited)}</td><td className="ui-table__num">{num(totals.connected)}</td><td className="ui-table__num">{num(totals.replied)}</td><td className="ui-table__num">{pct(totals.acceptedOfInvited, totals.invited)}</td><td className="ui-table__num">{pct(totals.repliedOfConnected, totals.connected)}</td><td>{instance.last_sync_at ? <span className={syncOverdue ? 'text-app-danger font-semibold' : undefined} title={new Date(instance.last_sync_at).toLocaleString()}>{syncAgeLabel(instance.last_sync_at)}{syncOverdue && ' · Not OK'}</span> : <span className="text-app-danger font-semibold" title="No successful sync recorded">Unknown · Not OK</span>}</td></tr>
+                      return (
+                        <tr key={instance.id} className="ui-table__row--identity">
+                          <td>
+                            <Button
+                              variant="ghost"
+                              className="px-0 font-normal justify-start"
+                              aria-label={accountName(instance, accountLabel(instance.id))}
+                              onClick={() => onAccountChange(instance.id)}
+                            >
+                              <AccountCell instance={instance} fallback={accountLabel(instance.id)} />
+                            </Button>
+                          </td>
+                          <td className="ui-table__num">{num(totals.invited)}</td>
+                          <td className="ui-table__num">{num(totals.connected)}</td>
+                          <td className="ui-table__num">{num(totals.replied)}</td>
+                          <td className="ui-table__num">{pct(totals.acceptedOfInvited, totals.invited)}</td>
+                          <td className="ui-table__num">{pct(totals.repliedOfConnected, totals.connected)}</td>
+                          <td>{instance.last_sync_at ? <span className={syncOverdue ? 'text-app-danger font-semibold' : undefined} title={new Date(instance.last_sync_at).toLocaleString()}>{syncAgeLabel(instance.last_sync_at)}{syncOverdue && ' · Not OK'}</span> : <span className="text-app-danger font-semibold" title="No successful sync recorded">Unknown · Not OK</span>}</td>
+                        </tr>
+                      )
                     })}</tbody>
                   </Table>
                 </TableFrame>
-                <div className="flex justify-between gap-app-md flex-wrap mt-app-xl text-app-text-muted text-app-meta"><span>{accountRange.label} account counts and rates · rates use invited → connected and connected → replies</span><span>{accountRows.length > 20 && <><Button variant="secondary" size="sm" disabled={accountPageIndex === 0} onClick={() => setAccountPage(accountPageIndex - 1)}>Previous accounts</Button>{' '}Page {accountPageIndex + 1} of {accountPages}{' '}<Button variant="secondary" size="sm" disabled={accountPageIndex + 1 >= accountPages} onClick={() => setAccountPage(accountPageIndex + 1)}>Next accounts</Button>{' · '}</>}Freshness is shown from each account’s last sync</span></div>
+                <div className={`flex justify-between items-center gap-app-md flex-wrap mt-app-md ${MUTED}`}>
+                  <span>{accountRange.label} account counts and rates · rates use invited → connected and connected → replies</span>
+                  <span className="flex items-center gap-app-sm">
+                    {accountRows.length > 20 && (
+                      <>
+                        <Button variant="secondary" size="sm" disabled={accountPageIndex === 0} onClick={() => setAccountPage(accountPageIndex - 1)}>Previous accounts</Button>
+                        Page {accountPageIndex + 1} of {accountPages}
+                        <Button variant="secondary" size="sm" disabled={accountPageIndex + 1 >= accountPages} onClick={() => setAccountPage(accountPageIndex + 1)}>Next accounts</Button>
+                        {' · '}
+                      </>
+                    )}
+                    Freshness is shown from each account’s last sync
+                  </span>
+                </div>
               </>
             ) : selected ? (
-              <div className="mt-app-xl pt-app-lg border-t border-app-border" aria-label={`${accountRange.label} account totals`}><div className="flex items-end justify-between gap-app-lg flex-wrap min-w-0 mb-app-lg"><h3>{accountRange.label} account totals</h3><span className="ov-muted">Selected account{accountRange.from || accountRange.to ? ' · UTC' : ''}</span></div><div className="ov-details">{[['Leads', 'leads'], ['Invited', 'invited'], ['Connected', 'connected'], ['Messaged', 'messaged'], ['Replied', 'replied']].map(([label, key]) => <div key={key}><strong>{num((selectedAccount?.totals ?? zeroTotals())[key as keyof ReturnType<typeof zeroTotals>] as number)}</strong><span>{label}</span></div>)}</div></div>
-            ) : <p role="alert" className="ov-muted">Account not found. <Button variant="ghost" size="sm" onClick={() => onAccountChange('all')}>Back to all accounts</Button></p>}
+              <div className="pt-app-lg border-t border-app-border" aria-label={`${accountRange.label} account totals`}>
+                <SectionHeader
+                  level="subsection"
+                  title={`${accountRange.label} account totals`}
+                  description={`Selected account${accountRange.from || accountRange.to ? ' · UTC' : ''}`}
+                />
+                <div className="ov-details">
+                  {[['Leads', 'leads'], ['Invited', 'invited'], ['Connected', 'connected'], ['Messaged', 'messaged'], ['Replied', 'replied']].map(([label, key]) => (
+                    <div key={key}><strong>{num((selectedAccount?.totals ?? zeroTotals())[key as keyof ReturnType<typeof zeroTotals>] as number)}</strong><span>{label}</span></div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p role="alert" className={MUTED}>
+                Account not found. <Button variant="ghost" size="sm" onClick={() => onAccountChange('all')}>Back to all accounts</Button>
+              </p>
+            )}
             <CampaignComparison campaigns={accountCampaigns.campaigns} account={account} accountLabel={accountLabel} instances={instances} />
           </>
         )}
-      </section>
+      </Panel>
     </>
   )
 }

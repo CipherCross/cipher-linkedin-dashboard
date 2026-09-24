@@ -3,9 +3,19 @@ import {
   campaignObservationHealth,
   campaignRuntimeLabel,
   parseCampaignRuntimeStatus,
+  type CampaignObservationHealth,
   type CampaignRuntimeObservation,
 } from '../lib/campaignRuntime'
 import { ago } from '../lib/format'
+import { Badge } from '../ui'
+import type { Tone } from '../ui'
+
+/** `unsupported` and `awaiting_first_sync` are the two health states the old
+ *  stylesheet actually tinted (warning); `stale` rendered as a plain neutral
+ *  badge, which this keeps rather than inventing a new distinction. */
+function healthTone(health: CampaignObservationHealth): Tone {
+  return health === 'unsupported' || health === 'awaiting_first_sync' ? 'warning' : 'neutral'
+}
 
 export function CampaignRuntimeStatusView({
   campaign,
@@ -43,18 +53,18 @@ export function CampaignRuntimeStatusView({
   ].filter(Boolean).join(', ')
 
   return (
-    <div className={`flex flex-col items-start gap-app-xs min-w-0 ${compact ? 'compact' : ''}`} aria-label={aria}>
+    <div className="flex flex-col items-start gap-app-xs min-w-0" data-compact={compact || undefined} aria-label={aria}>
       <div className="flex flex-wrap items-center gap-[5px]">
-        <span className={`badge runtime-${runtime ?? 'unknown'}`}>{label}</span>
+        <Badge tone={runtime === null ? 'warning' : 'neutral'}>{label}</Badge>
         {showArchive && campaign.is_archived === true && (
-          <span className="badge archive-yes">Archived</span>
+          <Badge tone="accent">Archived</Badge>
         )}
         {showArchive && campaign.is_archived == null && (
-          <span className="badge archive-unknown">Archive unknown</span>
+          <Badge tone="warning">Archive unknown</Badge>
         )}
-        {healthLabel && <span className={`badge observation-${health}`}>{healthLabel}</span>}
+        {healthLabel && <Badge tone={healthTone(health)}>{healthLabel}</Badge>}
       </div>
-      <span className="muted small whitespace-normal" title={campaign.status_source ?? undefined}>
+      <span className="text-app-text-muted text-app-meta whitespace-normal" title={campaign.status_source ?? undefined}>
         {observed}
       </span>
     </div>
