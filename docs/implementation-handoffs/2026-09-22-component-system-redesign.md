@@ -772,3 +772,24 @@ Gate: build passed; `typecheck:api` passed; `ui:inventory` passed (0 / 11 allowl
 `npm run test`: 106 files / 1,508 tests. Under full-suite parallel load one `uiInventory` mutation test can exceed vitest's 5 s timeout; it takes ~450 ms alone and passes in isolation.
 
 Next: Phase 13 — production release (separately authorised).
+
+## Phase 13 — production release (2026-09-24, deployed; signed-in smoke open)
+
+The owner authorised the release on 2026-09-24.
+
+- **What shipped:** `main` was fast-forwarded 2473665 → `50ae2a1` and pushed; the branch `ui/component-system-redesign` was pushed to the same commit.
+  - The range is the 18 redesign commits: the spec, Phases 0–12, the drawer guard, the review fixes and the DataContext remount fix.
+  - Nothing under `frontend/api`, `sync-agent`, `postgres` or `supabase` changed. `package.json` only gains the two `ui:inventory` scripts. No database step is involved.
+- **Deploy:** the git integration built `https://cipher-linkedin-dashboard-6oia02rhz-ciphercross.vercel.app`, which is `● Ready` / production.
+  - It serves `app.ciphercross.dev`, `ciphercross.dev`, `cipher-linkedin-dashboard.vercel.app` and the `-ciphercross`/`-git-main` aliases.
+  - Only this project builds from `main`; `lh2-disposable-uitop` last deployed 43 days ago.
+  - The deployed stylesheet `assets/index-d3h_doL-.css` is byte-identical (sha256) to the local build of `50ae2a1`.
+- **Rollback target:** `https://cipher-linkedin-dashboard-2hlgii18e-ciphercross.vercel.app` (`vercel rollback` to it, or promote it in the dashboard). Frontend only.
+- **Signed-out smoke** (`chrome-headless-shell`, `headless: 'shell'`) at 1280×720, 1440×900 and 1920×1080:
+  - the "Sign in" h1 renders, with the theme light;
+  - no page overflow-x, no text under 13px, zero page errors;
+  - the only HTTP error is the expected signed-out `401` from `session.current`;
+  - `#/ui-gallery` falls through to sign-in.
+- **Request logs since the deploy:** no 5xx. The only error-level lines are the pre-existing `pg` SSL-mode deprecation warning on `/api/import` (notebook ingest traffic).
+- **Open:** the signed-in read-only smoke (shell and role, one route per family, Replies, Sequence editor at all three viewports). The session has no credentials and was not permitted to open production in the browser pane. Production mutation checks stay out of scope.
+
