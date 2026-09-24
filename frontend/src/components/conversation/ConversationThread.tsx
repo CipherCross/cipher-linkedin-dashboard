@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
+import { ArrowDown, ArrowUp, MessageCircle } from 'lucide-react'
 import { replyDateKey, replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
 import { SENTIMENT_LABELS, type ReplyThreadMessage } from '../../lib/replyReview'
 import { Button } from '../../ui'
@@ -104,11 +104,4 @@ export function ConversationThread({
       </div>}
     </div>
   )
-}
-
-export function ThreadScrollHint({ older, newer, onOlder, onNewer }: { older: boolean; newer: boolean; onOlder: () => void; onNewer: () => void }) {
-  return <div className="replies-thread-hints">
-    {older && <Button variant="ghost" size="sm" icon={<ChevronUp size={14} aria-hidden="true" />} onClick={onOlder}>Older</Button>}
-    {newer && <Button variant="ghost" size="sm" icon={<ChevronDown size={14} aria-hidden="true" />} onClick={onNewer}>Newer</Button>}
-  </div>
 }

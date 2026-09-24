@@ -1,4 +1,3 @@
-import type { CampaignRuntimeStatus } from '../lib/types'
 import {
   campaignObservationHealth,
   campaignRuntimeLabel,
@@ -69,8 +68,4 @@ export function CampaignRuntimeStatusView({
       </span>
     </div>
   )
-}
-
-export function runtimeStatusOptionLabel(status: CampaignRuntimeStatus | 'unknown'): string {
-  return status === 'unknown' ? 'Unknown' : campaignRuntimeLabel(status)
 }

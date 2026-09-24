@@ -545,7 +545,7 @@ Gate: build passed; `npm run test` 104 files / 1,482 tests passed; `typecheck:ap
 
 Noted, not changed: Import history is disabled until the thread has loaded, including the second read that manual-review mode triggers. It dedupes against the loaded messages, so this is intentional.
 
-## Phase 11 — Sequence editor and publish workflow (2026-09-24, awaiting review)
+## Phase 11 — accepted (2026-09-24)
 
 The editor below the Hub: header and save state, mode tabs, step and variation controls, branches, preview, the review rail, and the app's last two hand-built modals. Two Sonnet workers did it in parallel on the same file: one did `CommentComposer` and `PublishWizard`, the other the rest. The orchestrator reviewed both diffs, did the fixture, the CSS moves and pruning, the allowlist and the visual fixes below. **State ownership did not move.** The autosave timer, revisions, conflict handling, DnD sensors and `dragEnd`, branch selections, preview selection, publish readiness and snapshot are all byte-identical in their original roots.
 
@@ -640,3 +640,84 @@ Browser evidence — **local synthetic fixture, `chrome-headless-shell` 154 in `
 **Environment notes:** the previous machine's puppeteer path and `vercel` CLI are absent on this Mac. The browser run used `puppeteer-core` and `chrome-headless-shell` installed in the session scratchpad, and the fixture ran with a scratchpad-local `vercel` 59 on PATH. Chrome 153 no longer has the old headless mode, so `chrome-headless-shell` is how `headless: 'shell'` works now.
 
 Next: Phase 12 — compatibility deletion, documentation and full acceptance.
+
+## Phase 12 — compatibility deletion, documentation and full acceptance (2026-09-24, awaiting review)
+
+The orchestrator did this phase alone; no workers. Two product decisions were the user's, both made at the start:
+- reply chips move to `Badge` with a new `purple` tone (for Referral);
+- step drag-and-drop gets fixed.
+
+- **Reply chips on `Badge`**
+  - `Badge` and `StatusText` gain `purple`. `StatusText` also gains the `accent` tone, which it already accepted but had no style for.
+  - The domain owns the tone:
+    - `SENTIMENT_META`, `INTENT_META` and `NEXT_ACTION_META` carry `tone` instead of `cls`;
+    - `SEVERITY_CLS` becomes `SEVERITY_TONE`;
+    - new `STAGE_TONE` and the `ReplyChipTone` type, all in `lib/leads.ts`.
+    The mapping keeps every colour: positive→success, objection→warning, neutral→info, referral→purple, negative→danger, auto→neutral; P1/P2/P3→info/warning/success; stage queued/invited/accepted/replied→neutral/accent/success/warning; risk→danger.
+  - All 8 `badge senti …` sites (conversation drawer ×5, `LeadReplyIdentity` ×4, the campaign workspace's intent chip) and the stage/risk chips are `Badge`s. In `LeadReplyIdentity` the name and its chips share one wrapping flex row, so a wrapped chip is no longer indented.
+- **Step drag fixed (was broken before the redesign).**
+  - `BuildCanvas` uses `stepAwareCollision`: a step drag only considers step droppables. A variation drag keeps every droppable, as before, so it can still land on a step.
+  - Sensors, state and `dragEnd` are unchanged. Dropping on the connection step is still refused.
+- **The `ui.css` compatibility block is gone** (inventory: 75 legacy selectors → 0, 37 legacy token uses → 0). Every rule was either deleted with zero consumers or moved to its owner:
+  - to `styles/base.css` (foundation layer): the element defaults (`:where(textarea)`, the native `select` chevron, table cells), reduced motion, print (`.card` → `.ui-panel`, with the dead `.mobile-header`/`.drp`/`.overview-section-*`/`.glass` removed), and the `conv-slide-in`/`auth-spin` keyframes;
+  - to the `ui.css` primitives section: `.skeleton` (+ shimmer) and `.empty-state`;
+  - to `components/layout.css`: `.navlink:active`;
+  - to a new `components/markdown.css` (Chat and the Playbook preview): `.chat-md`;
+  - deleted: `.card`, `.badge*`, `.senti*`, `.stage-*`, `.status-*`, `.attention-*`, `.source-external`, `.reply-body*`, `.row-link*`, `.dot*`, `.num`, `.filter-bar`, `.drp-presets`, `.overview-panel*`, `.active-sequence-list`/`.new-reply-*`, `.account-card-*`, `@keyframes toast-in` and the inert `.chat-msg.user`. Chat's `chat-msg <role>` class became `data-role`.
+  - `css-parity.mjs` over the 70 moved declarations reported 50 exact matches. All 20 misses were minifier rewrites (`''`→`""`, `inset`→top/right/bottom/left, `translateX`→`translate`, `!important` spacing); every moved block was then confirmed in the built CSS by hand.
+- **More zero-consumer CSS found by a full sweep of every stylesheet**, deleted: `.ui-toolbar__group`, `.ui-popover`, `.ui-stale`, `.quick-nav-dialog kbd`, `.quick-nav-result`/`.active` (Quick Navigation's items are generated `CommandItem`s and never carried those classes), and Replies' `.replies-thread-hints`.
+- **Temporary adapters and dead UI code removed:**
+  - the `--glass-*` token aliases;
+  - the domain-copy `WORKFLOW_ACTION_LABELS`/`WORKFLOW_BUCKET_LABELS` in `src/ui/labels.ts`, which is generic copy only;
+  - `runtimeStatusOptionLabel`;
+  - the reply-analysis `SA_FIGURE`/`SA_GRID_220`/`SA_GRID_260`;
+  - `ThreadScrollHint` and its CSS.
+  `unknownClasses`' dynamic-prefix allowlist shrank from 9 prefixes to the 2 still used (`ui-status--`, `deployed-step-`).
+- **Every exception is named where it lives.** Five allowlisted raw controls had no `ui-exception(<id>)` comment: `native-file-input-csv`, `nav-section-disclosure`, `quick-nav-search-trigger`, `library-card-open` and `hypothesis-row-open`. They have one now. `uiInventory` gains a test that fails if an allowlisted raw control is unmarked, and one that fails if the compatibility marker returns.
+- **Primitive fix:** `Tabs`/`SegmentedControl` items are inline-flex with a 4px gap, so an icon + word label stays on one line; count spacing is unchanged at 8px. Phase 11's per-route wrappers were removed, and the Gallery shows an icon-labelled segmented control and the new tones.
+- **Found by the matrix, fixed:**
+  - the Sequence editor had no `<h1>`. It now has a visually hidden one that follows the name;
+  - Account detail's heading was announced as "FA…" because the avatar initials were part of its accessible name. The avatar is now `aria-hidden`, and the test asserts the exact name;
+  - Campaign/Account "not found" and "Could not open sequence" had no heading. Each now has a breadcrumbed `PageHeader`;
+  - the fixture's Neon Activity read (the one `/api/activity-daily` call with no `op`) answered 400, so the page showed an error. It now returns three daily rows, and `--check` asserts them.
+- **Docs:**
+  - `docs/ui-standard.md`: where things live, the purple tone and the domain tone owners, the inventory with a table of all 11 named exceptions, the checks, the template-literal consumer-grep caveat and the `headless: 'shell'` note;
+  - `CLAUDE.md` no longer calls `styles.css` a shrinking legacy sheet.
+- **Left in place on purpose** (dead before the redesign, or domain logic rather than UI compatibility): `blindSpotLeads`, `accountStats`, `activeSequences`/`draftSequences`/`sequenceHref`/`sequenceAccounts` (their last UI consumers were deleted in Phases 6–9), plus the CSV download helpers, `acceptLagP90`/`replyLagP90`, `SEQUENCE_PUBLISH_TERMINAL` and `reviewDraftForMessage`. `src/lib/utils.ts` stays: it is the shadcn generator's target.
+
+Tests (5 new): `stepAwareCollision` ×2, the editor's h1, the editor error heading, and the exception markers (plus the no-marker assertion). The Campaign/Account not-found and Account header assertions were tightened. Mutation checks, each observed failing and then restored:
+- no step filter;
+- an h1 that ignores the name;
+- a visible avatar in the heading;
+- each of the three not-found headers removed;
+- a renamed exception marker.
+
+Gate (from `frontend/`, build first):
+- build passed;
+- `npm run test` 105 files / 1,500 tests: 1,499 pass. The 1 failure is the environmental `supabaseClient` one (Node 20 lacks WebSocket; it fails identically on `9ac7dbe`).
+- `typecheck:api` passed;
+- `ui:inventory` passed after a reviewed `--update`, and **`ui:inventory --final` passed**;
+- fixture `--check` passed; `git diff --check` passed.
+
+| Count | Phase 11 | Phase 12 |
+| --- | --- | --- |
+| Raw controls | 0 | 0 |
+| Allowlisted (all marked in code) | 11 | 11 |
+| Compatibility tokens | 37 | 0 |
+| Compatibility selectors | 75 | 0 |
+| Modal roots | 0 | 0 |
+
+Bundle on this machine: production JS 601,265 → 601,390 gzip (+125); CSS 30,939 → 30,193 (−746), which is −10,672 against the Phase 0 CSS baseline the `--final` gate checks. TS/TSX +222/−145 and CSS +80/−248 lines. `ui.css` 878 → 673 lines.
+
+Browser evidence — **full matrix, local synthetic fixture, `chrome-headless-shell` 154 in `headless: 'shell'` mode.** 21 routes (including the Gallery, loaded fresh) × 4 scenarios (`populated-admin`, `populated-member`, `empty-admin`, `read-error`) × exact 1280×720 / 1440×900 / 1920×1080 = **252 visits**:
+- **page overflow-x 0 on all 252; zero page errors.**
+- `read-error`: every route shows the shell's read-failure alert, which replaces the route, so there is no route heading there by design.
+- `populated-member`: CSV Import shows "Admin access required".
+- `empty-admin`: `EmptyState` on 12 routes.
+- Every flagged small target was an inline text link (breadcrumbs, table names) or the allowlisted stretched hypothesis row button. The only sub-13px text was avatar initials (the avatar exception) and the LinkedIn preview frame.
+- Re-checked after the heading fixes: all three not-found/error states have their h1 at every viewport, with overflow 0; Neon Activity has no alert.
+- The step-drag fix, keyboard and pointer: Space + ArrowUp moves step 3 above step 2 (1280/1440), and pointer drag reorders steps at all three sizes. At 1920, three ArrowUps overshoot onto the connection step and the drop is correctly refused. Variation drag is unchanged.
+
+A long single-browser run crashed Chrome after ~150 visits, which is resource exhaustion. The matrix therefore launches a fresh browser per scenario and viewport; the isolated repro of the "hang" rendered normally.
+
+Next: Phase 13 — production release (separately authorised).

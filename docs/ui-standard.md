@@ -21,13 +21,17 @@ Three facts frame everything below:
 | `frontend/src/index.css` | **The only CSS entry.** Declares the cascade layers and imports every stylesheet. Nothing else is imported from a component. |
 | `frontend/src/styles/tokens.css` | Every colour, size, radius, space and duration. Nothing else may define one. |
 | `frontend/src/styles/reset.css` | Document base, scrollbars, the one focus ring, `.skip-link`, `.sr-only`. |
-| `frontend/src/styles/base.css` | `.page`, the three heading roles, `.muted` / `.small` / `.controls`. |
-| `frontend/src/ui/` | Shared React primitives and their `ui.css`, which is also the app's shared component CSS. |
+| `frontend/src/styles/base.css` | `.page`, the three heading roles, `.muted` / `.small` / `.controls`, and the element defaults a bare element falls back to (text controls, tables, reduced motion, print, the two shared keyframes). |
+| `frontend/src/ui/` | Shared React primitives and their `ui.css`: primitive CSS, the Gallery, and the load/empty states. There is no compatibility block. |
 | `frontend/src/components/ui/` | shadcn components. Owned by `shadcn add`; edit deliberately, because the CLI rewrites them. |
-| route-local `.css` | One sheet per route, beside its component, imported from `index.css`. |
+| route-local `.css` | One sheet per route or shared composition, beside its owner, imported from `index.css`. `components/markdown.css` (`.chat-md`) is shared by Chat and the Playbook preview. |
 
 `frontend/src/styles.css` is **gone**. It was 4578 lines; its routes took their
-own sheets and its shared remainder went into `ui.css`.
+own sheets and its shared remainder went into a compatibility block at the end of
+`ui.css`. That block was retired in the component-system redesign (Phase 12):
+every rule either reached zero consumers and was deleted, or moved to its owner.
+The legacy spellings (`.btn`, `.link-btn`, `.icon-only-btn`, `.card`, `.badge`,
+`.senti`, `.pipe-modal`) no longer exist; the UI inventory fails if one returns.
 
 ## Cascade layers
 
@@ -94,6 +98,7 @@ literal `@import "tailwindcss"`, and the split form breaks `init` and every
 | Accent / hover | `#2563EB` / `#1D4ED8`, white text on the filled variant |
 | Separator / meaningful control border | `#D0D5DD` / `#7A8699` — the difference is deliberate |
 | Success / warning / danger | `#067647` / `#92400E` / `#B42318` |
+| Purple | Referral only — the one reply meaning with no status hue of its own |
 | Body and controls | 16/24, weight 400; labels and actions 500–600 |
 | Table content / metadata | 14/20 / 13/18. **13px is a floor.** |
 | Page title / section / subsection | 28/36 · 20/28 · 16/24, weight 600 |
@@ -135,7 +140,7 @@ a domain adapter maps values to labels and variants.
 | `Panel` / `SectionHeader` | `surface` or `plain`; two heading levels, `section` and `subsection`. |
 | `Field` and friends | Visible label, wired help and error ids, `aria-invalid`. An error is text with an icon, never colour alone. |
 | `Tabs` / `SegmentedControl` | Tabs switch a section; segmented switches a mode or a period. One tab stop, arrow-key movement. |
-| `Badge` / `StatusText` | Colour always travels with a word. |
+| `Badge` / `StatusText` | Colour always travels with a word. Tones: `neutral` · `accent` · `success` · `warning` · `danger` · `info` · `purple`. The domain owns the tone: `SENTIMENT_META`, `INTENT_META`, `NEXT_ACTION_META`, `SEVERITY_TONE` and `STAGE_TONE` in `lib/leads.ts`, `publishStatusTone` in `lib/sequenceBuilder.ts`. |
 | `AccountIdentity` + `disambiguate` | Name alone when unique, `name · account` when not. An unknown contact is `LinkedIn contact` plus an identifier — never a name invented from a slug. |
 | `TableFrame` / `TableToolbar` / `Table` | Frame, toolbar, local scroll, sticky head. Sorting, paging and filtering stay with the screen. |
 | `Toolbar` / `ActiveFilters` | Search plus one or two primary selectors on the page; everything else in a `FilterDialog`. |
@@ -217,10 +222,43 @@ lock.
 ## Checks
 
 ```bash
-npm run build        # tsc -b && vite build — the only typecheck for src/
-npm run test         # includes the two guards below
+npm run build                          # tsc -b && vite build — the only typecheck for src/
+npm run test                           # includes the guards below
 npm run typecheck:api
+npm run ui:inventory                   # the ratchet; add --final for the release gate
+node scripts/ui-fixture-dev.mjs --check  # the synthetic browser fixture self-test
 ```
+
+### The UI inventory and its exceptions
+
+`scripts/ui-inventory.mjs` walks the TypeScript AST and reports raw controls
+(`button`, `input`, `select`, `textarea`, `table` outside `src/ui`), legacy class
+tokens, hand-built modal roots (`aria-modal`), direct imports of the generated
+widget tier, and production bundle sizes by chunk. It may only ratchet down:
+a new finding fails, a vanished one passes, and `--update` is an explicit
+review step that rewrites `ui-inventory-baseline.json`. At the end of the
+redesign every count is zero except the named exceptions in
+`ui-inventory-allowlist.json`. Each raw-control exception carries a
+`ui-exception(<id>): reason; verify: <suite>` comment beside the element, and
+`tests/uiInventory.test.ts` fails if one is missing:
+
+| Exception | Where | Why it stays raw |
+| --- | --- | --- |
+| `native-file-input-csv` | CSV import | hidden native file input behind the Choose buttons |
+| `nav-section-disclosure` | sidebar | a group disclosure styled as a section title |
+| `quick-nav-search-trigger` | sidebar | a search-field-looking trigger that opens Quick Navigation |
+| `library-card-open` | Search/ICP/Hypothesis libraries | title button stretched over the card |
+| `chip-input-entry` | tag field | the text box inside the framed chip container |
+| `hypothesis-row-open` | Hypotheses | name button stretched over the comparison row |
+| `row-open-button` | Leads, campaign workspace | overlay button that opens a row |
+| `replies-queue-item` | Replies | a rich, selectable queue row |
+| `replies-message-bubble` | conversation thread | a rich, selectable message |
+| `publish-target-card` | publish wizard | a rich destination card around a hidden radio |
+| `publish-branch-tile` | publish wizard | a branch tile around a hidden checkbox |
+
+The four direct imports (Quick Navigation's `Command`, the date range picker's
+`Popover`/`Calendar`, the toast host) are the named compositions over the
+widget tier.
 
 `tests/uiPrimitives.test.tsx` pins behaviour, not appearance — jsdom applies no
 stylesheet, so a CSS assertion there would pass while the page looked wrong.
@@ -238,7 +276,11 @@ there is no linter:
   `className` tokens and diffs them against the built CSS, so a mistyped
   utility fails the build. A regex version was 80% false positives. Its
   allowlist of pre-existing dead class names is a **ratchet**: it may only
-  shrink.
+  shrink. Only two dynamic class prefixes remain (`ui-status--`,
+  `deployed-step-`).
+- **`tests/uiInventory.test.ts`** — the inventory ratchet rejects deliberate
+  mutations, bundle chunks are matched across content hashes, and every
+  allowlisted raw control is marked where it lives.
 
 Two habits the migration earned:
 
@@ -246,6 +288,12 @@ Two habits the migration earned:
   than the output. The minifier reorders `animation` shorthand, rewrites
   `flex: 2 1 420px` to `flex: 2 420px`, and escapes bracket selectors. Parse
   rule blocks instead.
+- A consumer grep for a class must include template literals
+  (`` `skeleton ${className}` ``, `` `ui-btn--${variant}` ``); the inventory's own
+  candidate list misses them, so it is a starting point, not proof.
+- Browser checks run headless Chrome in `headless: 'shell'` mode
+  (`chrome-headless-shell`). The `new` mode stops producing frames while a Mac's
+  display sleeps, which once looked like an app freeze.
 - Tests here have twice used a styling class as a selector handle
   (`.avatar.fallback`, `.deployed-step-label`), so deleting the rule broke the
   test rather than the app. Prefer a `data-*` handle over restoring the class.

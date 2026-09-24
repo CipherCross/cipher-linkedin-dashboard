@@ -140,6 +140,7 @@ if (checkOnly) {
     const noMatch = await body(await activityFixture(request('/api/activity-daily?op=leads.searchPage&q=no-match&page=0&page_size=50')))
     assert.equal(noMatch.json.items[0].total, 0)
     assert.equal((await activityFixture(request('/api/activity-daily?op=unknown'))).status, 501)
+    assert.equal((await body(await activityFixture(request('/api/activity-daily?instance_id=fixture-instance')))).json.activity.length, 3)
     await fixtureControl(request('/api/ui-fixture?scenario=read-error'))
     assert.equal((await identityFixture(request('/api/identity?op=session.current'))).status, 200)
     assert.equal((await activityFixture(request('/api/activity-daily?op=config.readPath'))).status, 200)

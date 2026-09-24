@@ -29,28 +29,6 @@ export const INTENT_STATE_LABELS: Record<string, string> = {
   not_applicable: 'Not applicable',
 }
 
-export const WORKFLOW_ACTION_LABELS: Record<string, string> = {
-  needs_reply: 'Needs reply',
-  follow_up: 'Follow up',
-  awaiting_reply: 'Awaiting reply',
-  resolved: 'Completed',
-  closed_soft: 'Soft close',
-  closed_hard: 'Hard close',
-}
-
-export const WORKFLOW_BUCKET_LABELS: Record<string, string> = {
-  needs_confirmation: 'No next step confirmed',
-  needs_reply: 'Needs reply',
-  follow_up_today: 'Follow-up today',
-  overdue: 'Follow-up overdue',
-  follow_up_later: 'Follow-up later',
-  awaiting_reply: 'Awaiting reply',
-  resolved: 'Completed',
-  closed_soft: 'Soft close',
-  closed_hard: 'Hard close',
-  do_not_contact: 'Do not contact',
-}
-
 /** Copy that appears verbatim in more than one place. */
 export const COPY = {
   replies: 'Replies',

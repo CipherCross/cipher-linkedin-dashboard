@@ -3,8 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { presetRanges } from '../lib/leads'
 import {
-  ArrowRight, Check, CircleAlert, Clock, Download, Filter, Inbox, MoreHorizontal, Plus,
-  RefreshCw, SearchX, Trash2,
+  ArrowRight, Check, CircleAlert, Clock, Download, Filter, Inbox, Laptop, MoreHorizontal, Plus,
+  RefreshCw, SearchX, Smartphone, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '../components/ui/sonner'
@@ -198,6 +198,17 @@ export function Gallery() {
                   ]}
                 />
               </div>
+              <div className="ui-gallery__row">
+                <SegmentedControl
+                  label="Preview device"
+                  value={period === '7d' ? 'web' : 'mobile'}
+                  onChange={(next) => setPeriod(next === 'web' ? '7d' : '28d')}
+                  items={[
+                    { id: 'web', label: <><Laptop size={15} aria-hidden="true" /> Web</> },
+                    { id: 'mobile', label: <><Smartphone size={15} aria-hidden="true" /> Mobile</> },
+                  ]}
+                />
+              </div>
             </Panel>
 
             <Panel>
@@ -208,6 +219,8 @@ export function Gallery() {
                 <Badge tone="success" icon={<Check size={14} />}>Completed</Badge>
                 <Badge tone="warning" icon={<Clock size={14} />}>Follow-up overdue</Badge>
                 <Badge tone="danger" icon={<CircleAlert size={14} />}>Do not contact</Badge>
+                <Badge tone="info">Neutral</Badge>
+                <Badge tone="purple">Referral</Badge>
                 <StatusText tone="success" icon={<Check size={16} />}>Synced 12m ago</StatusText>
                 <StatusText tone="warning" icon={<Clock size={16} />}>Sync aging</StatusText>
               </div>
@@ -519,7 +532,7 @@ export function Gallery() {
                 description="One variation gets the whole writing column; Add variation is an action underneath, not an empty tile of the same size."
               />
               <div className="sequence-variation-grid">
-                <div className="card" style={{ padding: 'var(--space-lg)' }}>
+                <div className="p-app-lg border border-app-border rounded-card bg-app-surface">
                   <TextareaField label="Message" rows={8} defaultValue={'Hi {{first_name}},\n\n…'} />
                 </div>
               </div>

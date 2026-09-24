@@ -29,7 +29,7 @@ const SRC = join(__dirname, '../src')
 const DIST = join(__dirname, '../dist/assets')
 
 /** Class names assembled at runtime from a literal prefix, e.g.
- *  `compatibility-${status}` in Health.tsx. The prefix alone never matches a
+ *  `ui-status--${tone}` in Badge.tsx. The prefix alone never matches a
  *  rule, so it is declared here rather than silently ignored. */
 /**
  * Class names that legitimately have no CSS rule of their own:
@@ -42,10 +42,7 @@ const DIST = join(__dirname, '../dist/assets')
 const NO_RULE_BY_DESIGN = new Set(['group', 'peer', 'toaster', 'cn-toast'])
 
 
-const DYNAMIC_PREFIXES = [
-  'compatibility-', 'deployed-step-', 'observation-', 'publish-', 'runtime-',
-  'source-', 'stage-', 'status-', 'ui-status--',
-]
+const DYNAMIC_PREFIXES = ['deployed-step-', 'ui-status--']
 
 /**
  * Class names applied in JSX that match no CSS rule at all. Every one of these

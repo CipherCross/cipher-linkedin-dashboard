@@ -247,6 +247,7 @@ export function Hypotheses() {
                     style={{ background: selectedId === r.hyp.id ? 'var(--surface-3)' : undefined }}
                   >
                     <td>
+                      {/* ui-exception(hypothesis-row-open): the name button stretched over the row; verify: hypothesesPage */}
                       <button
                         type="button"
                         className="p-0 border-0 bg-transparent text-left font-semibold text-app-text cursor-pointer focus-visible:outline-none after:absolute after:inset-0 after:content-['']"

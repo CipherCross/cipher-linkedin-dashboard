@@ -89,7 +89,8 @@ describe('the account header', () => {
     paint()
     const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(nav).getByRole('link', { name: 'Overview' })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 1, name: /Mykyta/ })).toBeTruthy()
+    // Exact: the avatar's initials must not leak into the heading's name.
+    expect(screen.getByRole('heading', { level: 1, name: 'Mykyta S' })).toBeTruthy()
   })
 })
 
@@ -146,6 +147,7 @@ describe('an unknown account', () => {
     data.value = dataWith([FOUNDERS], [INSTANCE])
     paint('does-not-exist')
     expect(screen.getByText('Account not found')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Account' })).toBeTruthy()
     expect(screen.queryByRole('table')).toBeNull()
     expect(screen.getByRole('link', { name: 'Back to overview' })).toBeTruthy()
   })

@@ -93,8 +93,7 @@
     z-index: 55;
   }
 }
-.quick-nav-trigger kbd,
-.quick-nav-dialog kbd {
+.quick-nav-trigger kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -131,12 +130,6 @@
 @media (min-width: 901px) and (max-width: 1320px) {
   .nav-hidden .page { padding-left: 72px; }
 }
-.quick-nav-result:hover,
-.quick-nav-result.active {
-  border-color: var(--accent-border);
-  background: var(--accent-subtle);
-  color: var(--text);
-}
 .quick-nav-result-icon {
   width: 32px;
   height: 32px;
@@ -148,7 +141,6 @@
   background: var(--surface-2);
   color: var(--text-muted);
 }
-.quick-nav-result.active .quick-nav-result-icon { color: var(--accent); }
 .quick-nav-result-copy {
   min-width: 0;
   flex: 1;
@@ -447,3 +439,6 @@
   font-size: var(--text-2xs);
   text-transform: capitalize;
 }
+
+/* Tactile press feedback on a nav row (snaps back via its transition). */
+.navlink:active { transform: translateY(1px); }

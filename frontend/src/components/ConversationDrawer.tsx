@@ -22,7 +22,7 @@ import { Avatar, LeadAvatar } from './Avatar'
 import { Skeleton } from './Skeleton'
 import {
   INTENT_META, ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META,
-  SEVERITY_CLS,
+  SEVERITY_TONE,
   ageRange, instanceName, leadKey,
 } from '../lib/leads'
 import {
@@ -519,25 +519,23 @@ export function ConversationDrawer({
           ) : (
             <span className="text-app-meta text-app-text-muted">· {accountLabel}</span>
           )}
-          {/* Sentiment and intent keep the domain chip colours every other
-              reply surface uses (referral is purple, which no Badge tone has). */}
           {statusMeta ? (
-            <span
-              className={`badge senti ${statusMeta.cls}`}
+            <Badge
+              tone={statusMeta.tone}
               title={latestReason ?? 'Follows the most recent reply'}
             >
               {statusMeta.label}
-            </span>
+            </Badge>
           ) : (
-            <span className="badge">No reply yet</span>
+            <Badge tone="neutral">No reply yet</Badge>
           )}
           {latestIntentMeta && (
-            <span
-              className={`badge senti ${latestIntentMeta.cls}`}
+            <Badge
+              tone={latestIntentMeta.tone}
               title={latestInbound?.intent_reason ?? 'Commercial intent on latest reply'}
             >
               {latestIntentMeta.short} · {latestIntentMeta.label}
-            </span>
+            </Badge>
           )}
         </div>
 
@@ -898,9 +896,9 @@ export function ConversationDrawer({
         open={coachOpen}
         onToggle={() => setCoachOpen((o) => !o)}
         badges={actionMeta && (
-          <span className={`badge senti ${actionMeta.cls}`} title="Suggested next action">
+          <Badge tone={actionMeta.tone} title="Suggested next action">
             {actionMeta.label}
-          </span>
+          </Badge>
         )}
         actions={
           <Button
@@ -937,9 +935,9 @@ export function ConversationDrawer({
                 <div className="flex flex-col gap-app-sm">
                   {coaching.issues.map((iss, i) => (
                     <div className="flex flex-col items-start gap-[3px] pl-[9px] border-l-2 border-app-border" key={i}>
-                      <span className={`badge senti ${SEVERITY_CLS[iss.severity]}`}>
+                      <Badge tone={SEVERITY_TONE[iss.severity]}>
                         {ISSUE_KIND_LABEL[iss.kind]}
-                      </span>
+                      </Badge>
                       <div>
                         {iss.quote && <div className="italic mb-0.5 [overflow-wrap:anywhere] text-app-text-muted">“{iss.quote}”</div>}
                         <div>{iss.fix}</div>

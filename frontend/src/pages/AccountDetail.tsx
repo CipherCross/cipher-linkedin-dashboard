@@ -70,14 +70,17 @@ export function AccountDetail() {
   const inst = data.instances.find((i) => i.id === id)
   if (!inst) {
     return (
-      <Panel>
-        <EmptyState
-          icon={FileQuestion}
-          title="Account not found"
-          hint="This LinkedIn account may not have synced yet, or the link is out of date."
-          action={<LinkButton to="/">Back to overview</LinkButton>}
-        />
-      </Panel>
+      <>
+        <PageHeader breadcrumb={[{ label: 'Overview', to: '/' }, { label: 'Account' }]} title="Account" />
+        <Panel>
+          <EmptyState
+            icon={FileQuestion}
+            title="Account not found"
+            hint="This LinkedIn account may not have synced yet, or the link is out of date."
+            action={<LinkButton to="/">Back to overview</LinkButton>}
+          />
+        </Panel>
+      </>
     )
   }
   const campaigns = data.campaigns.filter((c) => c.instance_id === inst.id)
@@ -92,7 +95,8 @@ export function AccountDetail() {
         breadcrumb={[{ label: 'Overview', to: '/' }, { label: 'Account' }]}
         title={
           <span className="flex items-center gap-app-lg">
-            <Avatar inst={inst} size={44} />
+            {/* Decorative: the heading's accessible name is the account name alone. */}
+            <span aria-hidden="true"><Avatar inst={inst} size={44} /></span>
             {instanceName(inst)}
           </span>
         }

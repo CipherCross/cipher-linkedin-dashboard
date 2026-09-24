@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
  * hues and meaningless in a screen reader.
  */
 
-export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info'
+export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'purple'
 
 export function Badge({
   tone = 'neutral', icon, children, title, className = '',

@@ -247,5 +247,5 @@ export function LeadsAndRepliesWorkspace({
 
 function IntentBadge({ intent }: { intent: ReplyIntent }) {
   const meta = INTENT_META[intent]
-  return <span className={`badge senti ${meta.cls}`}>{meta.short} · {meta.label}</span>
+  return <Badge tone={meta.tone}>{meta.short} · {meta.label}</Badge>
 }

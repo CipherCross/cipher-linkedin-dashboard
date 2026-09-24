@@ -24,12 +24,5 @@ export const SA_FILL = 'block h-full rounded-[inherit]'
 /** A metric the inbox cannot filter exactly is honestly not a link. */
 export const SA_DISABLED = 'text-app-text-muted cursor-not-allowed'
 
-/** Right-aligned tabular figure at the end of a row. */
-export const SA_FIGURE = 'text-app-table tabular-nums text-right'
-
 /** Both the multi-label note and the formula note. */
 export const SA_NOTE = 'mt-app-lg mx-0 mb-0 pl-app-md border-l-2 border-app-accent'
-
-/** Auto-fitting card grids, at their two different minimums. */
-export const SA_GRID_220 = 'grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(220px,1fr))]'
-export const SA_GRID_260 = 'grid gap-app-md grid-cols-[repeat(auto-fit,minmax(260px,1fr))]'

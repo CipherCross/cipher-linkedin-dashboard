@@ -141,7 +141,7 @@ function Message({ m }: { m: UIMessage }) {
     .join('\n\n')
     .trim()
   return (
-    <div className={`chat-msg ${m.role}`}>
+    <div data-role={m.role}>
       <div className="text-[length:var(--text-2xs)] font-semibold text-app-text-muted uppercase tracking-[var(--tracking-caps)]">{m.role === 'user' ? 'You' : 'Claude'}</div>
       <div className="flex flex-col gap-app-sm max-w-full">
         {m.parts.map((part, i) => {

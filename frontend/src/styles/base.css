@@ -65,3 +65,52 @@ p:last-child { margin-bottom: 0; }
 
 a { color: var(--accent); }
 a:hover { color: var(--accent-hover); }
+
+/* ---- Element defaults ----------------------------------------------------
+ * Moved from ui.css when its compatibility block was retired (Phase 12). Every
+ * product control is a primitive with its own class; these only give a bare
+ * element (markdown tables, the calendar grid, generated widgets) a sane base. */
+:where(textarea) { line-height: 1.5; resize: vertical; }
+select { cursor: pointer; }
+
+/* strip the OS-default control and draw our own muted chevron */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: var(--space-2xl);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23596579' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-md) center;
+}
+
+th, td { padding: var(--space-md); text-align: left; border-bottom: 1px solid var(--border); }
+tbody tr { height: var(--row-height); }
+th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--text-meta);
+}
+tr:last-child td { border-bottom: none; }
+
+/* Shared animation names: the conversation drawer slides in, the auth gate spins. */
+@keyframes conv-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+/* Respect reduced motion for every transition and animation. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  body { background: white !important; color: black !important; }
+  .sidebar, .skip-link { display: none !important; }
+  main { margin: 0 !important; padding: 12px !important; max-width: none !important; }
+  .ui-panel { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
+  [hidden] { display: none !important; }
+}

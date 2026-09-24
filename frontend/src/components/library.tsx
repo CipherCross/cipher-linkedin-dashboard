@@ -54,6 +54,7 @@ export function LibraryCard({
       <div className="flex items-start justify-between gap-app-sm">
         <div className="flex items-center gap-app-sm flex-wrap min-w-0">
           {onOpen ? (
+            /* ui-exception(library-card-open): the title button stretched over the card; verify: searchLibraryPage */
             <button
               type="button"
               data-card-open=""

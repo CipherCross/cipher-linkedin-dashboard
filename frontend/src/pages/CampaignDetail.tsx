@@ -136,14 +136,17 @@ export function CampaignDetail() {
   if (!data) return null
   if (!campaign) {
     return (
-      <Panel>
-        <EmptyState
-          icon={FileQuestion}
-          title="Campaign not found"
-          hint="It may have been removed or belongs to an account that hasn't synced."
-          action={<LinkButton to="/">Back to overview</LinkButton>}
-        />
-      </Panel>
+      <>
+        <PageHeader breadcrumb={[{ label: 'Overview', to: '/' }, { label: 'Campaign' }]} title="Campaign" />
+        <Panel>
+          <EmptyState
+            icon={FileQuestion}
+            title="Campaign not found"
+            hint="It may have been removed or belongs to an account that hasn't synced."
+            action={<LinkButton to="/">Back to overview</LinkButton>}
+          />
+        </Panel>
+      </>
     )
   }
 

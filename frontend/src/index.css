@@ -61,6 +61,7 @@
 @import './components/layout.css' layer(app);
 @import './pages/apollo-csv-import.css' layer(app);
 @import './pages/playbook.css' layer(app);
+@import './components/markdown.css' layer(app);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 

@@ -574,6 +574,7 @@ export function UnifiedApolloCsvImport() {
       />
 
       {/* The native file input stays hidden; the visible Choose buttons open it. */}
+      {/* ui-exception(native-file-input-csv): hidden native file input behind the Choose buttons; verify: unifiedApolloCsvImport */}
       <input
         ref={fileRef}
         className="hidden"

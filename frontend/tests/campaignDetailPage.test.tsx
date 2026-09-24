@@ -136,6 +136,7 @@ describe('an unknown campaign', () => {
     paint('does-not-exist')
 
     expect(screen.getByText('Campaign not found')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Campaign' })).toBeTruthy()
     expect(screen.queryByRole('tablist', { name: 'Campaign section' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Back to overview' })).toBeTruthy()
   })

@@ -5,6 +5,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from '@dnd-kit/core'
 import {
@@ -736,6 +737,18 @@ function VariationEditor({
   )
 }
 
+/* Steps and variations share one DndContext. With closestCenter alone a step
+ * always landed over a variation droppable, which dragEnd ignores, so step
+ * drags did nothing. A step drag now only considers step droppables; a
+ * variation drag keeps every droppable, as before (it may land on a step). */
+export const stepAwareCollision: CollisionDetection = (args) => {
+  if (args.active.data.current?.type !== 'step') return closestCenter(args)
+  return closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((container) => container.data.current?.type === 'step'),
+  })
+}
+
 function BuildCanvas({
   document,
   comments,
@@ -775,7 +788,7 @@ function BuildCanvas({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
+    <DndContext sensors={sensors} collisionDetection={stepAwareCollision} onDragEnd={dragEnd}>
       <SortableContext items={document.steps.slice(1).map((step) => step.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-3">
           {document.steps.map((step, index) => (
@@ -952,8 +965,8 @@ function PreviewPanel({
             value={device}
             onChange={setDevice}
             items={[
-              { id: 'web', label: <span className="inline-flex items-center gap-1.5"><Laptop size={15} aria-hidden="true" /> Web</span> },
-              { id: 'mobile', label: <span className="inline-flex items-center gap-1.5"><Smartphone size={15} aria-hidden="true" /> Mobile</span> },
+              { id: 'web', label: <><Laptop size={15} aria-hidden="true" /> Web</> },
+              { id: 'mobile', label: <><Smartphone size={15} aria-hidden="true" /> Mobile</> },
             ]}
           />
         }
@@ -1065,8 +1078,8 @@ function CommentsPanel({
         value={view}
         onChange={(next) => setView(next as typeof view)}
         items={[
-          { id: 'comments', label: <span className="inline-flex items-center gap-1.5"><MessageCircle size={14} aria-hidden="true" /> Comments</span> },
-          { id: 'history', label: <span className="inline-flex items-center gap-1.5"><History size={14} aria-hidden="true" /> History</span> },
+          { id: 'comments', label: <><MessageCircle size={14} aria-hidden="true" /> Comments</> },
+          { id: 'history', label: <><History size={14} aria-hidden="true" /> History</> },
         ]}
       />
       {view === 'comments' ? (
@@ -1528,9 +1541,10 @@ function SequenceEditor({ id }: { id: string }) {
 
   if (loading) return <div className="max-w-[900px] [margin:30px_auto]"><div className="sequence-card min-h-[300px] cursor-default [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" /></div>
   if (error || !detail || !document) return (
-    <div className="max-w-[640px] [margin:60px_auto] flex flex-col gap-app-lg">
+    <div className="flex flex-col gap-app-lg">
+      <PageHeader breadcrumb={[{ label: 'Sequences', to: '/sequences' }, { label: 'Sequence' }]} title="Sequence" />
       <InlineError title="Could not open sequence" message={error ?? 'Unknown sequence.'} />
-      <Button variant="secondary" onClick={() => navigate('/sequences')}>Back to sequences</Button>
+      <Button variant="secondary" className="self-start" onClick={() => navigate('/sequences')}>Back to sequences</Button>
     </div>
   )
 
@@ -1545,6 +1559,8 @@ function SequenceEditor({ id }: { id: string }) {
           onClick={() => navigate('/sequences')}
         />
         <div className="sequence-name-field">
+          {/* The route's one h1. The visible title is the editable name below. */}
+          <h1 className="sr-only">{name.trim() || 'Untitled sequence'}</h1>
           <Input
             className="w-[min(520px,100%)] py-0 px-app-md border border-app-border-strong bg-app-surface text-[length:var(--text-lg)] font-semibold"
             value={name}
@@ -1622,9 +1638,9 @@ function SequenceEditor({ id }: { id: string }) {
         value={tab}
         onChange={setTab}
         items={[
-          { id: 'build', label: <span className="inline-flex items-center gap-1.5"><MessageCircle size={15} aria-hidden="true" /> Build</span> },
-          { id: 'branches', label: <span className="inline-flex items-center gap-1.5"><Split size={15} aria-hidden="true" /> Branches</span>, count: document.branches.length },
-          { id: 'preview', label: <span className="inline-flex items-center gap-1.5"><Eye size={15} aria-hidden="true" /> Preview</span> },
+          { id: 'build', label: <><MessageCircle size={15} aria-hidden="true" /> Build</> },
+          { id: 'branches', label: <><Split size={15} aria-hidden="true" /> Branches</>, count: document.branches.length },
+          { id: 'preview', label: <><Eye size={15} aria-hidden="true" /> Preview</> },
         ]}
       />
 

@@ -173,14 +173,6 @@
 
 .sentiment-neutral, .sentiment-auto { background: var(--surface-2); border-color: var(--border); color: var(--text-secondary); }
 
-.replies-thread-hints { display: flex; gap: var(--space-sm); justify-content: center; }
-.replies-thread-hints button {
-  display: inline-flex; align-items: center; gap: var(--space-xs);
-  min-height: var(--control-height-sm); padding: 0 var(--space-md);
-  border: 0; background: none; color: var(--accent);
-  font: inherit; font-size: var(--text-meta); font-weight: 600; cursor: pointer;
-}
-
 /* ---- Inspector ----------------------------------------------------------- */
 .replies-review-panel, .replies-action-panel { padding: var(--space-lg); }
 .replies-action-panel { border-top: 1px solid var(--border); }

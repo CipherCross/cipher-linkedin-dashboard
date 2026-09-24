@@ -189,9 +189,10 @@ outbound windowed to 90 days.
 **UI: read `docs/ui-standard.md` before touching anything visual.** One light
 theme (no dark mode, no toggle), PC-only, English-only. Tokens live in
 `src/styles/`, shared primitives in `src/ui/` — use `Button`, `PageHeader`,
-`Field`, `Tabs`, `Dialog`, `TableFrame` rather than a new class. `src/styles.css`
-is the legacy sheet and only shrinks. `#/ui-gallery` in `vite dev` shows every
-primitive in every state.
+`Field`, `Tabs`, `Dialog`, `TableFrame` rather than a new class. There is no
+legacy sheet: `npm run ui:inventory` fails on any raw control, legacy class or
+hand-built modal outside the named exceptions. `#/ui-gallery` in `vite dev` shows
+every primitive in every state.
 
 ### Security posture
 - Invite-only Supabase email/password Auth. An Auth user must be linked through

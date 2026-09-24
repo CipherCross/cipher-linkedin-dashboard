@@ -90,3 +90,20 @@ describe('UI inventory ratchet', () => {
     ])
   })
 })
+
+describe('UI exceptions are named where they live (Phase 12)', () => {
+  it('marks every allowlisted raw control with its ui-exception comment', () => {
+    const allowlist = JSON.parse(readFileSync(join(frontend, 'ui-inventory-allowlist.json'), 'utf8')) as {
+      entries: Array<{ id: string; kind: string; path: string }>
+    }
+    const unmarked = allowlist.entries
+      .filter((entry) => entry.kind === 'raw-control')
+      .filter((entry) => !readFileSync(join(frontend, entry.path), 'utf8').includes(`ui-exception(${entry.id})`))
+      .map((entry) => `${entry.id} (${entry.path})`)
+    expect(unmarked).toEqual([])
+  })
+
+  it('has no compatibility block left in ui.css', () => {
+    expect(readFileSync(join(frontend, 'src/ui/ui.css'), 'utf8')).not.toContain('LEGACY route + component styles.')
+  })
+})

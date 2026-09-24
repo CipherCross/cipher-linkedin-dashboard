@@ -49,7 +49,7 @@ vi.mock('../src/lib/dashboardReads', () => ({
 
 vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: false }) }))
 
-const { SequenceBuilder } = await import('../src/pages/SequenceBuilder')
+const { SequenceBuilder, stepAwareCollision } = await import('../src/pages/SequenceBuilder')
 
 function record(patch: Partial<SequenceRecord> = {}): SequenceRecord {
   return {
@@ -150,6 +150,21 @@ beforeEach(() => {
 })
 
 describe('Sequence Builder autosave', () => {
+  it('keeps a page heading when the sequence cannot be opened', async () => {
+    getSequence.mockRejectedValueOnce(new Error('Sequence not found'))
+    renderEditor()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sequence' })).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toContain('Sequence not found')
+  })
+
+  it('gives the editor one h1 that follows the sequence name', async () => {
+    renderEditor()
+    const name = await screen.findByRole('textbox', { name: 'Sequence name' })
+    expect(screen.getAllByRole('heading', { level: 1 }).map((heading) => heading.textContent)).toEqual([(name as HTMLInputElement).value])
+    fireEvent.change(name, { target: { value: 'Renamed sequence' } })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed sequence')
+  })
+
   it('saves one debounced revision after the name changes', async () => {
     renderEditor()
     const name = await screen.findByRole('textbox', { name: 'Sequence name' })
@@ -396,5 +411,29 @@ describe('Sequences hub on canonical contracts (Phase 10)', () => {
     await waitFor(() => expect(screen.queryByRole('link', { name: 'Founder outreach' })).toBeNull())
     fireEvent.click(within(status).getByRole('radio', { name: /Archived/ }))
     expect(screen.getByRole('link', { name: 'Founder outreach' })).toBeTruthy()
+  })
+})
+
+describe('Sequence step drag collision (Phase 12)', () => {
+  const rect = (top: number) => ({ top, left: 0, width: 400, height: 60, bottom: top + 60, right: 400 })
+  const containers = [
+    { id: 'step-2', data: { current: { type: 'step', stepId: 'step-2' } } },
+    { id: 'v3', data: { current: { type: 'variation', stepId: 'step-2' } } },
+  ]
+  // The variation sits right under the dragged step; the step droppable is far away.
+  const args = (type: 'step' | 'variation') => ({
+    active: { id: 'step-3', data: { current: { type } } },
+    collisionRect: rect(500),
+    droppableRects: new Map([['step-2', rect(100)], ['v3', rect(480)]]),
+    droppableContainers: containers,
+    pointerCoordinates: null,
+  }) as unknown as Parameters<typeof stepAwareCollision>[0]
+
+  it('lets a step drag land only on another step, never on a variation', () => {
+    expect(stepAwareCollision(args('step')).map((collision) => collision.id)).toEqual(['step-2'])
+  })
+
+  it('keeps every droppable for a variation drag, as before', () => {
+    expect(stepAwareCollision(args('variation'))[0].id).toBe('v3')
   })
 })

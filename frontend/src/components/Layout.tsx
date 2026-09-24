@@ -286,6 +286,7 @@ function Sidebar({
         key={section.id}
       >
         {section.collapsible ? (
+          /* ui-exception(nav-section-disclosure): a nav group disclosure styled as a section title; verify: navigation */
           <button
             type="button"
             className={`nav-section-trigger${isOpen ? ' open' : ''}${hasActiveItem ? ' active' : ''}`}
@@ -370,6 +371,7 @@ function Sidebar({
           />
         </div>
 
+        {/* ui-exception(quick-nav-search-trigger): a search-field-looking trigger that opens Quick Navigation; verify: quickNavigation */}
         <button type="button" className="quick-nav-trigger" onClick={onOpenQuickNavigation}>
           <Command size={16} aria-hidden="true" />
           <span>Go to…</span>

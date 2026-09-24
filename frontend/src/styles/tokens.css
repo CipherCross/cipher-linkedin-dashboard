@@ -91,16 +91,6 @@
   /* ---- Overlay scrim ---------------------------------------------------- */
   --overlay: rgba(16, 24, 40, 0.45);
 
-  /* ---- Retired decorative effects ---------------------------------------
-   * The glass layer (translucent tints, backdrop blur, rim highlights, SVG
-   * refraction) is gone. These aliases stay only so that any rule not yet
-   * migrated resolves to a flat, opaque surface instead of breaking. */
-  --glass-tint: var(--surface-1);
-  --glass-tint-strong: var(--surface-1);
-  --glass-blur: 0px;
-  --glass-saturate: 100%;
-  --glass-rim: 0 0 0 0 transparent;
-
   /* ---- Charts ----------------------------------------------------------- */
   --chart-grid: #e4e7ec;
   --chart-bar-cursor: rgba(16, 24, 40, 0.05);

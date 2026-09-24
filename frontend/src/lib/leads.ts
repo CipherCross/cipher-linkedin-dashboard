@@ -49,13 +49,16 @@ export const leadKey = (instance_id: string, profile_url: string) =>
 
 /** Sentiment display metadata, shared by LeadsExplorer and the conversation
  *  drawer. `cls` maps to the `.senti.*` colours in styles.css. */
-export const SENTIMENT_META: Record<Sentiment, { label: string; cls: string }> = {
-  positive: { label: 'Positive', cls: 'pos' },
-  objection: { label: 'Objection', cls: 'obj' },
-  neutral: { label: 'Neutral', cls: 'neu' },
-  referral: { label: 'Referral', cls: 'ref' },
-  negative: { label: 'Negative', cls: 'neg' },
-  auto: { label: 'Auto', cls: 'auto' },
+/** Badge tone for a reply chip. The domain owns the meaning; `Badge` owns the look. */
+export type ReplyChipTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'purple'
+
+export const SENTIMENT_META: Record<Sentiment, { label: string; tone: ReplyChipTone }> = {
+  positive: { label: 'Positive', tone: 'success' },
+  objection: { label: 'Objection', tone: 'warning' },
+  neutral: { label: 'Neutral', tone: 'info' },
+  referral: { label: 'Referral', tone: 'purple' },
+  negative: { label: 'Negative', tone: 'danger' },
+  auto: { label: 'Auto', tone: 'neutral' },
 }
 
 /** Display order by follow-up priority, not alphabetical. */
@@ -69,23 +72,23 @@ export const SENTIMENT_ORDER: Sentiment[] = [
 ]
 
 /** Commercial-intent display metadata. Intent is independent of sentiment. */
-export const INTENT_META: Record<ReplyIntent, { label: string; short: string; cls: string }> = {
-  p1: { label: 'Polite positive', short: 'P1', cls: 'p1' },
-  p2: { label: 'Problem interest', short: 'P2', cls: 'p2' },
-  p3: { label: 'Buying intent', short: 'P3', cls: 'p3' },
+export const INTENT_META: Record<ReplyIntent, { label: string; short: string; tone: ReplyChipTone }> = {
+  p1: { label: 'Polite positive', short: 'P1', tone: 'info' },
+  p2: { label: 'Problem interest', short: 'P2', tone: 'warning' },
+  p3: { label: 'Buying intent', short: 'P3', tone: 'success' },
 }
 
 export const INTENT_ORDER: ReplyIntent[] = ['p3', 'p2', 'p1']
 
-/** Coaching next-action display metadata. `cls` reuses the `.senti.*` colours so
- *  the action badge matches the rest of the UI: attention=obj, good=pos, etc. */
-export const NEXT_ACTION_META: Record<NextAction, { label: string; cls: string }> = {
-  reply: { label: 'Reply now', cls: 'obj' },
-  book_call: { label: 'Book a call', cls: 'pos' },
-  refer: { label: 'Ask for referral', cls: 'ref' },
-  wait: { label: 'Wait', cls: 'neu' },
-  close: { label: 'Close out', cls: 'neg' },
-  none: { label: 'No action', cls: 'auto' },
+/** Coaching next-action display metadata. `tone` reuses the sentiment tones so
+ *  the action badge matches the rest of the UI: attention=objection, good=positive, etc. */
+export const NEXT_ACTION_META: Record<NextAction, { label: string; tone: ReplyChipTone }> = {
+  reply: { label: 'Reply now', tone: 'warning' },
+  book_call: { label: 'Book a call', tone: 'success' },
+  refer: { label: 'Ask for referral', tone: 'purple' },
+  wait: { label: 'Wait', tone: 'info' },
+  close: { label: 'Close out', tone: 'danger' },
+  none: { label: 'No action', tone: 'neutral' },
 }
 
 /** Short human label per coaching issue kind, for the issue chips. */
@@ -101,11 +104,11 @@ export const ISSUE_KIND_LABEL: Record<IssueKind, string> = {
   other: 'Issue',
 }
 
-/** Issue severity → `.senti.*` colour class (high=neg, med=obj, low=neu). */
-export const SEVERITY_CLS: Record<IssueSeverity, string> = {
-  high: 'neg',
-  med: 'obj',
-  low: 'neu',
+/** Issue severity → badge tone (high=danger, med=warning, low=info). */
+export const SEVERITY_TONE: Record<IssueSeverity, ReplyChipTone> = {
+  high: 'danger',
+  med: 'warning',
+  low: 'info',
 }
 
 /** The latest inbound reply (body + its classification) seen per lead. */
@@ -187,6 +190,14 @@ export function stageOf(l: Lead): Stage {
 }
 
 export const stageMeta = (s: Stage) => STAGES.find((x) => x.id === s)!
+
+/** Badge tone per funnel stage (the chart keeps its own `color`). */
+export const STAGE_TONE: Record<Stage, 'neutral' | 'accent' | 'success' | 'warning'> = {
+  queued: 'neutral',
+  invited: 'accent',
+  accepted: 'success',
+  replied: 'warning',
+}
 
 export function daysBetween(a: string | null, b: string | null): number | null {
   if (!a || !b) return null

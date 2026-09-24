@@ -551,6 +551,16 @@ export async function activityFixture(request) {
   if (request.method !== 'GET') return mutationRefusal()
   if (op === 'config.readPath') return json({ readPath: 'neon', photoPath: 'disabled' })
   if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture read failure', operation: op }, 503)
+  // Neon Activity's daily series is the one read with no `op`: it is keyed by instance.
+  if (!op && url.searchParams.get('instance_id')) {
+    const instanceId = url.searchParams.get('instance_id')
+    const activity = isEmpty(scenario) ? [] : [
+      { day: '2026-09-20', instance_id: instanceId, event_type: 'invite', cnt: 12 },
+      { day: '2026-09-20', instance_id: instanceId, event_type: 'reply', cnt: 2 },
+      { day: '2026-09-21', instance_id: instanceId, event_type: 'invite', cnt: 9 },
+    ]
+    return json({ activity, nextCursor: null, hasMore: false })
+  }
   if (!op) return json({ error: 'Missing fixture operation' }, 400)
   const role = activeRole(scenario)
   if (op === 'dashboard.bootstrap') {

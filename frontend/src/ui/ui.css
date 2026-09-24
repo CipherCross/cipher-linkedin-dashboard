@@ -247,6 +247,10 @@
 .ui-tabs::-webkit-scrollbar { display: none; }
 .ui-tab {
   position: relative;
+  /* inline-flex so an icon + word label sits on one line (preflight makes svg block). */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   min-height: var(--control-height);
   padding: 0 var(--space-lg);
   border: 0;
@@ -268,7 +272,8 @@
   background: var(--accent);
 }
 .ui-tab__count,
-.ui-segmented__count { margin-left: var(--space-sm); color: var(--text-muted); font-weight: 500; }
+/* The item's gap supplies --space-xs; together they keep the old --space-sm. */
+.ui-segmented__count { margin-left: calc(var(--space-sm) - var(--space-xs)); color: var(--text-muted); font-weight: 500; }
 
 .ui-segmented {
   display: inline-flex;
@@ -279,6 +284,10 @@
   border-radius: var(--radius-control);
 }
 .ui-segmented__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
   min-height: calc(var(--control-height) - 6px);
   padding: 0 var(--space-md);
   border: 0;
@@ -305,7 +314,6 @@
 }
 .ui-toolbar__search { flex: 1 1 280px; min-width: 220px; max-width: 420px; }
 .ui-toolbar__spacer { flex: 1 1 auto; }
-.ui-toolbar__group { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
 
 .ui-filter-count {
   display: inline-flex;
@@ -387,6 +395,8 @@
 .ui-badge--warning { background: var(--warning-subtle); border-color: var(--warning-border); color: var(--warning); }
 .ui-badge--danger { background: var(--danger-subtle); border-color: var(--danger-border); color: var(--danger); }
 .ui-badge--info { background: var(--info-subtle); border-color: var(--info-border); color: var(--info); }
+/* Referral: the one reply meaning with no status hue of its own. */
+.ui-badge--purple { background: var(--purple-subtle); border-color: var(--purple-border); color: var(--purple); }
 
 .ui-status {
   display: inline-flex;
@@ -400,7 +410,9 @@
 .ui-status--success { color: var(--success); }
 .ui-status--warning { color: var(--warning); }
 .ui-status--danger { color: var(--danger); }
+.ui-status--accent { color: var(--accent); }
 .ui-status--info { color: var(--info); }
+.ui-status--purple { color: var(--purple); }
 
 .ui-identity { display: flex; align-items: center; gap: var(--space-md); min-width: 220px; }
 .ui-identity__copy { min-width: 0; display: flex; flex-direction: column; }
@@ -577,15 +589,6 @@
 }
 .ui-dialog__footer-note { margin-right: auto; font-size: var(--text-meta); color: var(--text-muted); }
 
-.ui-popover {
-  position: absolute;
-  z-index: 40;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-overlay);
-}
-
 /* ---- Loading / Empty / Error --------------------------------------------- */
 /* An area whose data is being replaced keeps its heading and controls and says
  * so — it is never swapped for a skeleton under the new scope's name. */
@@ -603,8 +606,6 @@
 @media (prefers-reduced-motion: reduce) {
   .ui-updating__spinner { animation: none; }
 }
-
-.ui-stale { opacity: 0.6; transition: opacity var(--dur-fast) var(--ease-out); }
 
 .ui-inline-error {
   display: flex;
@@ -645,78 +646,8 @@
 }
 .ui-gallery__ruler { display: flex; flex-direction: column; gap: var(--space-sm); }
 
-/* ===========================================================================
- * Shared app CSS, merged here when src/styles.css was retired.
- *
- * What was left of that file after twenty-four routes took their own sheets
- * was never route CSS: it is the app's shared component layer — form controls,
- * KPI tiles, badges, banners, the nav rail — which is what this file already
- * is. Keeping it as a second "legacy" sheet would have meant two shared sheets
- * with an ordering relationship to remember, so it is one.
- *
- * Rules below are moved verbatim and in their original order, which sits after
- * everything above, exactly as styles.css sat after ui.css in the old import
- * chain. Nothing here is a new declaration.
- * ======================================================================== */
-/* ===========================================================================
- * LEGACY route + component styles.
- *
- * Tokens, reset and the page/heading base now live in `src/styles/`
- * (tokens.css · reset.css · base.css) and shared primitives in `src/ui/`; both
- * are imported ahead of this file from main.tsx. This file is the compatibility
- * entrypoint for rules that have not been migrated yet, and it only ever
- * shrinks. Nothing here may declare a colour, type size or radius that is not a
- * token, and nothing here may re-introduce a second palette or type scale.
- * ======================================================================== */
-/* ---- Form controls -------------------------------------------------------
- * ONE shared box for every text input, textarea and select, so a field looks
- * identical wherever it lives (filter bar, modal, config panel, or a bare
- * <textarea>). Wrapped in :where() → zero specificity, so the handful of
- * intentional per-context overrides further down (chat composer, playbook /
- * import editors, borderless chip input) still win, while any *un*styled
- * control picks up this base instead of falling back to the raw native look
- * (2px inset border, square corners). Inputs sit on --surface-2 per the
- * palette token intent. Checkbox / radio / range / file / color keep native
- * rendering — only text-entry controls are normalised here. */
-:where(textarea) { line-height: 1.5; resize: vertical; }
-select { cursor: pointer; }
-
-/* strip the OS-default control and draw our own muted chevron */
-select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  padding-right: var(--space-2xl);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23596579' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right var(--space-md) center;
-}
-.drp-presets button.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
-
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-7);
-  /* Cards carry no shadow: border + spacing do the separating. Only
-   * popovers / dialogs / drawers may use --shadow-overlay. */
-  box-shadow: none;
-}
-
-th, td { padding: var(--space-md); text-align: left; border-bottom: 1px solid var(--border); }
-tbody tr { height: var(--row-height); }
-th {
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: var(--text-meta);
-}
-tr:last-child td { border-bottom: none; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
-.dot.stale { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
-.dot.inline { display: inline-block; margin-right: 8px; }
-/* --- Skeletons (initial load) -------------------------------------------- */
+/* ---- Load and empty states ---------------------------------------------
+ * The shell's route skeleton (components/Skeleton.tsx) and EmptyState (States.tsx). */
 .skeleton {
   display: block;
   position: relative;
@@ -736,143 +667,7 @@ tr:last-child td { border-bottom: none; }
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
 }
-
-.row-link { color: var(--text); text-decoration: none; transition: color 0.14s ease; }
-.row-link:hover { color: var(--accent); text-decoration: underline; }
-.row-link.muted { color: var(--muted); }
-.row-link.muted:hover { color: var(--accent); }
-
-/* badges — subtle tinted fill, colored text */
-.badge {
-  display: inline-block;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 1px 7px;
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-right: 4px;
-  white-space: nowrap;
-}
-.badge.risk { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
-.badge.status-error { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
-.badge.status-running { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
-
-/* reply sentiment — used on badges and on the filter chips below */
-.senti.pos { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
-.senti.obj { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
-.senti.neu { color: var(--info); background: var(--info-subtle); border-color: var(--info-border); }
-.senti.ref { color: var(--purple); background: var(--purple-subtle); border-color: var(--purple-border); }
-.senti.neg { color: var(--danger); background: var(--danger-subtle); border-color: var(--danger-border); }
-.senti.auto { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
-.senti.p1 { color: var(--info); background: var(--info-subtle); border-color: var(--info-border); }
-.senti.p2 { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
-.senti.p3 { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
-
-/* leads explorer */
-/* `.filter-field` / `.filter-label` are the not-yet-converted call sites of
- * src/ui/Field.tsx. Same box, same label weight, same sizes — a conversion is
- * a pure refactor, and the label is sentence case rather than the old
- * uppercase micro-caps, which rendered at 11px. */
-.filter-bar {
-  display: flex;
-  gap: var(--space-lg);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-lg);
-  align-items: flex-end;
-}
-
-/* stage badges — subtle tinted fill from the status ramp */
-.badge.stage-queued { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); }
-.badge.stage-invited { color: var(--accent); background: var(--accent-subtle); border-color: var(--accent-border); }
-.badge.stage-accepted { color: var(--success); background: var(--success-subtle); border-color: var(--success-border); }
-.badge.stage-replied { color: var(--warning); background: var(--warning-subtle); border-color: var(--warning-border); }
-
-.reply-body .badge.senti { margin-right: 6px; vertical-align: 1px; }
-
-.reply-body {
-  margin-top: 5px;
-  padding: 6px 10px;
-  background: var(--surface-2);
-  border-left: 2px solid var(--border-strong);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--text-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.chat-md { font-size: var(--text-base); line-height: 1.55; overflow-wrap: anywhere; }
-.chat-md p { margin: 0 0 8px; }
-.chat-md p:last-child { margin-bottom: 0; }
-.chat-md table { width: auto; margin: 6px 0; font-size: var(--text-sm); }
-.chat-md th, .chat-md td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
-.chat-md code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: var(--text-sm); }
-.chat-md pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; overflow-x: auto; }
-.chat-md pre code { background: none; padding: 0; }
-.account-card-cap .small { white-space: nowrap; }.account-card-spark .small { white-space: nowrap; }
-
-@keyframes conv-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
-
-/* --- Import-history callout (Overview) ------------------------------------ */
-/* A warm, amber-accented .card: solid panel with a faint warning tint + thicker
- * left rule, so it reads as a gentle data-completeness nudge (reusing the same
- * --warning tokens as the sentiment/briefing accents). */
-
-/* --- Empty states -------------------------------------------------------- */
 .empty-state {
   display: flex; flex-direction: column; align-items: center; text-align: center;
   gap: 8px; padding: 32px 20px; color: var(--text-secondary);
-}@keyframes toast-in {
-  from { opacity: 0; transform: translateX(12px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-/* --- Motion: tactile press feedback (snaps back via each element's transition) */
-.navlink:active { transform: translateY(1px); }
-
-/* Respect reduced-motion for every transition/animation added above */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ======================================================================
-   Wave-2 UX fixes — conversation / reply / chat flows.
-   All additions live here so the section is easy to find and review.
-   ====================================================================== */
-
-/* --- Chat: right-aligned user turns ------------------------------------- */
-/* Mirror the drawer's in/out convention: user turns hug the right edge. */
-.chat-msg.user { align-items: flex-end; }
-
-
-/* --- Authentication: AuthCard.tsx owns its utilities; the spinner keyframes
- * stay shared (AuthContext reuses them). */
-@keyframes auth-spin { to { transform: rotate(360deg); } }
-/* ── Shared leads & replies workspace ───────────────────────────────────── */
-
-.overview-panel { display: flex; flex-direction: column; gap: 12px; }
-.overview-panel-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.overview-panel-head h2 { margin: 0; }.active-sequence-list, .new-reply-list { margin: 0; padding: 0; list-style: none; }.badge.attention-alert { border-color: var(--danger-border); background: var(--danger-subtle); color: var(--danger); }
-.badge.attention-watch { border-color: var(--warning-border); background: var(--warning-subtle); color: var(--warning); }
-.badge.attention-ok { border-color: var(--success-border); background: var(--success-subtle); color: var(--success); }
-.badge.source-external { color: var(--text-muted); }.new-reply-open > span.reply-body { display: -webkit-box; }/* ── DateRangePicker ARIA grid row wrappers ─────────────────────────────── */
-
-@media print {
-  body { background: white !important; color: black !important; }
-  .sidebar, .mobile-header, .drp, .overview-section-toggle .overview-section-chevron, .skip-link { display: none !important; }
-  main { margin: 0 !important; padding: 12px !important; max-width: none !important; }
-  .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
-  .glass, .glass--strong { background: white !important; }
-  [hidden] { display: none !important; }
 }
