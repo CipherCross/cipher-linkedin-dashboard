@@ -54,6 +54,23 @@ interface Props {
 
 export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date range' }: Props) {
   const [open, setOpen] = useState(false)
+  // The half-picked range between the first and second click. react-day-picker's
+  // own range logic can't be used for this: with `min` 0 its first click
+  // returns a complete one-day range, and a click on an existing range extends
+  // it instead of starting over.
+  const [draft, setDraft] = useState<Date | null>(null)
+
+  const onOpenChange = (next: boolean) => {
+    setDraft(null)
+    setOpen(next)
+  }
+
+  const onDayClick = (day: Date) => {
+    if (!draft) { setDraft(day); return }
+    const [from, to] = day < draft ? [day, draft] : [draft, day]
+    onChange(customRange(ymd(from), ymd(to)))
+    onOpenChange(false)
+  }
 
   const selected = useMemo(
     () => ({
@@ -64,22 +81,26 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
   )
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={
           <Button
             variant="secondary"
             aria-label={ariaLabel}
             className="font-normal"
-            icon={<CalendarIcon className="text-app-text-muted" size={16} aria-hidden />}
+            icon={<CalendarIcon className="text-app-text-muted" aria-hidden />}
           >
             {rangeButtonLabel(value)}
             <ChevronDown className="text-app-text-muted" size={16} aria-hidden />
           </Button>
         }
       />
-      <PopoverContent aria-label={`${ariaLabel} calendar`} className="w-auto max-w-[min(520px,calc(100vw-32px))] flex flex-row items-start gap-app-md p-app-md">
-        <ul className="shrink-0 list-none m-0 p-app-sm border-r border-app-border flex flex-col gap-0.5 min-w-[132px]">
+      <PopoverContent
+        aria-label={`${ariaLabel} calendar`}
+        align="end"
+        className="w-auto max-w-[calc(100vw-32px)] flex flex-row items-stretch gap-0 p-0 overflow-hidden rounded-card border border-app-border ring-0 shadow-lg"
+      >
+        <ul className="shrink-0 list-none m-0 p-1.5 bg-app-surface-2 border-r border-app-border flex flex-col gap-px min-w-[120px]">
           {presets.map((p) => (
             <li key={p.id}>
               <Button
@@ -87,8 +108,8 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
                 size="sm"
                 block
                 aria-pressed={value.id === p.id}
-                className="justify-start font-normal whitespace-nowrap aria-pressed:bg-app-accent-subtle aria-pressed:text-app-accent aria-pressed:font-semibold"
-                onClick={() => { onChange(p); setOpen(false) }}
+                className="justify-start font-normal text-app-text-secondary whitespace-nowrap hover:bg-app-surface-3 hover:text-app-text aria-pressed:bg-app-surface aria-pressed:text-app-accent aria-pressed:font-semibold aria-pressed:shadow-sm"
+                onClick={() => { onChange(p); onOpenChange(false) }}
               >
                 {p.label}
               </Button>
@@ -96,17 +117,13 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
           ))}
         </ul>
         <Calendar
+          className="p-2.5"
           mode="range"
           numberOfMonths={1}
           defaultMonth={selected.from}
-          selected={selected.from ? selected : undefined}
-          onSelect={(range) => {
-            // Only commit once both ends exist: a single click is the start of
-            // a range, not a one-day range.
-            if (!range?.from || !range?.to) return
-            onChange(customRange(ymd(range.from), ymd(range.to)))
-            setOpen(false)
-          }}
+          selected={draft ? { from: draft, to: draft } : selected.from ? selected : undefined}
+          onSelect={() => {}}
+          onDayClick={onDayClick}
         />
       </PopoverContent>
     </Popover>

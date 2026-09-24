@@ -91,6 +91,24 @@ describe('DateRangePicker accessibility', () => {
     expect(onChange).toHaveBeenCalledWith(presets[1])
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  it('waits for the second day before committing a custom range', async () => {
+    const onChange = vi.fn()
+    paint(1, onChange)
+    fireEvent.click(screen.getByRole('button', { name: 'Picker 1' }))
+    await settle()
+    const dialog = screen.getByRole('dialog')
+    const day = (n: number) => within(dialog).getAllByRole('button').find((b) => b.textContent === String(n) && !b.closest('[data-outside]'))!
+    // Picked end first: the range is ordered, not rejected.
+    fireEvent.click(day(12))
+    await settle()
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.click(day(3))
+    await settle()
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ id: 'custom', from: '2026-09-03', to: '2026-09-12' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 })
 
 describe('date conversion', () => {
