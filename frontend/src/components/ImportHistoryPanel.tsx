@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
 import { authPost } from '../lib/api'
 import { useToast } from '../lib/ToastContext'
@@ -80,12 +80,16 @@ export function ImportHistoryPanel({
   existing,
   onImported,
   onClose,
+  onDirtyChange,
 }: {
   lead: Lead
   accountName: string | null
   existing: ExistingMsg[] | null
   onImported: (result: SaveResult) => void
   onClose: () => void
+  /** Pasted or parsed text that has not been saved yet — the drawer asks before
+   *  closing over it. */
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const toast = useToast()
   const [text, setText] = useState('')
@@ -100,6 +104,9 @@ export function ImportHistoryPanel({
   // who-is-us) so "Back" can warn before throwing those edits away.
   const [edited, setEdited] = useState(false)
   const nextKey = useRef(0)
+
+  const dirty = result === null && (text.trim() !== '' || blocks !== null)
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
 
   // Dedup identities of what's already stored; recomputed live so edits to a
   // block's body/direction update its "already saved" badge immediately.

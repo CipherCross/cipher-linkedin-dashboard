@@ -13,13 +13,15 @@
  * panels and the Dialog are real.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Lead } from '../src/lib/types'
 
 const fetchNeonThread = vi.fn()
 const setStage = vi.fn(async () => {})
+const capabilities = vi.fn(async (): Promise<unknown> => ({ available: false }))
+const saveReview = vi.fn(async (): Promise<unknown> => null)
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonThread: (...a: unknown[]) => fetchNeonThread(...a),
@@ -32,11 +34,16 @@ vi.mock('../src/lib/replyReview', async () => {
   const actual = await vi.importActual<typeof import('../src/lib/replyReview')>('../src/lib/replyReview')
   return {
     ...actual,
-    defaultReplyReadClient: { ...actual.defaultReplyReadClient, capabilities: vi.fn(async () => ({ available: false })) },
+    defaultReplyReadClient: {
+      ...actual.defaultReplyReadClient,
+      capabilities: () => capabilities(),
+      // Manual-review mode reads the thread through the replies client.
+      thread: async () => ({ messages: await fetchNeonThread() }),
+    },
   }
 })
 vi.mock('../src/lib/useReplyReviewActions', () => ({
-  useReplyReviewActions: () => ({ saving: false, error: null, conflict: null, saveReview: vi.fn() }),
+  useReplyReviewActions: () => ({ saving: false, error: null, conflict: null, saveReview: () => saveReview() }),
 }))
 vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: vi.fn() }))
@@ -91,6 +98,8 @@ afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
   fetchNeonThread.mockResolvedValue(THREAD)
+  capabilities.mockResolvedValue({ available: false })
+  saveReview.mockResolvedValue(null)
 })
 
 describe('the conversation drawer', () => {
@@ -154,5 +163,86 @@ describe('the conversation drawer', () => {
     expect(coach.getAttribute('aria-expanded')).toBe('true')
     expect(document.getElementById(coach.getAttribute('aria-controls')!)).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Notes' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  describe('closing over unsaved work', () => {
+    const prompt = () => screen.queryByRole('dialog', { name: 'Discard unsaved changes?' })
+    // The prompt's own close control is also named Keep editing; use the footer one.
+    const keepEditing = () => fireEvent.click(within(prompt()!).getAllByRole('button', { name: 'Keep editing' }).at(-1)!)
+
+    it('asks before closing over a pasted, unsaved import, and Keep editing keeps it', async () => {
+      await paint()
+      fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+      const paste = screen.getByLabelText(/Paste the LinkedIn thread/)
+      fireEvent.change(paste, { target: { value: 'Ada Lovelace  4:15 PM\nHello' } })
+
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Ada Lovelace' }), { key: 'Escape' })
+      expect(prompt()).not.toBeNull()
+      expect(onClose).not.toHaveBeenCalled()
+      keepEditing()
+      expect(prompt()).toBeNull()
+      expect((screen.getByLabelText(/Paste the LinkedIn thread/) as HTMLTextAreaElement).value).toContain('Hello')
+
+      fireEvent.click(within(screen.getByRole('dialog', { name: 'Ada Lovelace' })).getAllByRole('button', { name: 'Close' })[0])
+      fireEvent.click(within(prompt()!).getByRole('button', { name: 'Discard changes' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('holds a drawer link over unsaved work until Discard, then navigates', async () => {
+      onClose = vi.fn<() => void>()
+      render(
+        <MemoryRouter initialEntries={['/leads']}>
+          <Routes>
+            <Route path="/leads" element={<ConversationDrawer lead={LEAD} onClose={onClose} />} />
+            <Route path="/campaign/:id" element={<p>Campaign page</p>} />
+          </Routes>
+        </MemoryRouter>,
+      )
+      await act(async () => {})
+      fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+      fireEvent.change(screen.getByLabelText(/Paste the LinkedIn thread/), { target: { value: 'Ada Lovelace  4:15 PM\nHello' } })
+      fireEvent.click(screen.getByRole('link', { name: 'notebook-1:1' }))
+      expect(prompt()).not.toBeNull()
+      expect(screen.queryByText('Campaign page')).toBeNull()
+      expect(onClose).not.toHaveBeenCalled()
+      fireEvent.click(within(prompt()!).getByRole('button', { name: 'Discard changes' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(await screen.findByText('Campaign page')).toBeTruthy()
+    })
+
+    it('closes at once when the import view holds nothing', async () => {
+      await paint()
+      fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Ada Lovelace' }), { key: 'Escape' })
+      expect(prompt()).toBeNull()
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('asks before closing or switching views over an edited review, and stops asking once it is saved', async () => {
+      capabilities.mockResolvedValue({ available: true })
+      await paint()
+      await screen.findByRole('group', { name: 'Sentiment' })
+      fireEvent.click(screen.getByRole('radio', { name: 'Neutral' }))
+
+      // Opening Import would unmount the form and drop the edit.
+      fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+      expect(prompt()).not.toBeNull()
+      keepEditing()
+      expect(screen.getByRole('group', { name: 'Sentiment' })).toBeTruthy()
+
+      // A refused save keeps the draft, so closing still asks.
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await act(async () => {})
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Ada Lovelace' }), { key: 'Escape' })
+      expect(prompt()).not.toBeNull()
+      keepEditing()
+
+      saveReview.mockResolvedValue({ review: {} })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await act(async () => {})
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Ada Lovelace' }), { key: 'Escape' })
+      expect(prompt()).toBeNull()
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
   })
 })

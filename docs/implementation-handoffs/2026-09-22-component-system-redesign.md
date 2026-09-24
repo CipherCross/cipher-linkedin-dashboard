@@ -508,3 +508,39 @@ Browser evidence — **local synthetic fixture, headless Chrome `shell` mode, ex
 Not covered in the browser: the fixture has no chat endpoint, so streaming, Stop, Retry and jump-to-latest are covered only by `chatPage` and the unchanged `useChat` wiring.
 
 Next: Phase 11 — the Sequence editor and publish workflow.
+
+## Phase 7 follow-up — conversation drawer asks before discarding (2026-09-24)
+
+Decided by the user: closing the conversation drawer over unsaved work asks **Keep editing / Discard changes**, through the shared `useDirtyGuard`.
+
+- **Unsaved work** means either of:
+  - an import with pasted or parsed text and no successful save yet (`ImportHistoryPanel` gains `onDirtyChange`);
+  - edits to the review form (`ReplyReviewPanel`'s existing `onDirtyChange`), keyed by the inbound message id so a newer reply's fresh form is not mistaken for the edited one.
+  A successful review save clears the flag. A refused or failed save (`saveReview` → `null`) keeps it, so closing still asks.
+- **Guarded paths:**
+  - Escape, the backdrop and Close (the Dialog's `onRequestClose`);
+  - the two in-drawer navigation links (campaign, Open in Replies), where navigation waits for the answer and Discard then closes and navigates;
+  - Import history and the follow-up toggle, which unmount the review form and so used to drop its draft silently.
+- **Unguarded, as before:** Keep editing returns focus to the field, the import's own Cancel/Back stays its explicit discard, and a clean drawer closes at once.
+
+Tests: `conversationDrawer` gains 4:
+- a pasted import: Escape asks, Keep editing keeps the text, Close → Discard closes;
+- a clean import view closes at once;
+- a guarded link holds navigation until Discard;
+- an edited review: the Import switch asks, a refused save still asks, a successful save stops asking.
+
+Five mutations each fail a test:
+- the guard bypassed on close;
+- import never dirty;
+- a successful save not clearing;
+- the Import switch unguarded;
+- the link unguarded.
+
+Browser (fixture, `shell` mode, 1280×720):
+- Escape over a pasted import opens "Discard unsaved changes?" with focus on Keep editing.
+- A second Escape closes only the prompt, with focus back in the textbox and the paste intact.
+- Close → Discard closes the drawer, and focus returns to the row's "Open conversation with Alex Fixture".
+
+Gate: build passed; `npm run test` 104 files / 1,482 tests passed; `typecheck:api` passed; `ui:inventory` passed (unchanged: 60 raw controls, 135 tokens, 163 selectors).
+
+Noted, not changed: Import history is disabled until the thread has loaded, including the second read that manual-review mode triggers. It dedupes against the loaded messages, so this is intentional.

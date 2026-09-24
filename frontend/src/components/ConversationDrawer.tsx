@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Trash2, X,
 } from 'lucide-react'
@@ -38,7 +38,7 @@ import type { Coaching, Gender, Lead, Message } from '../lib/types'
 import type { ReplyReview } from '../lib/replyReview'
 import {
   Badge, Button, Dialog, EmptyState, ExternalLinkButton, IconButton, InlineError, LinkButton,
-  SelectField, Textarea,
+  SelectField, Textarea, useDirtyGuard,
 } from '../ui'
 import { ConversationSection } from './ConversationSection'
 
@@ -106,6 +106,11 @@ export function ConversationDrawer({
   const viewRef = useRef<HTMLDivElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
+  const [importDirty, setImportDirty] = useState(false)
+  // The inbound message whose review form has unsaved edits. Keyed by message
+  // so a newer reply (which remounts the form with a fresh draft) is not
+  // mistaken for the edited one.
+  const [reviewDirtyFor, setReviewDirtyFor] = useState<number | null>(null)
   const replyActions = useReplyReviewActions(() => { setReloadKey((value) => value + 1); refetch() })
   // Identifies the conversation a coach request was issued for, so a slow
   // response can't land on a drawer the user has since switched away from.
@@ -280,6 +285,33 @@ export function ConversationDrawer({
     setCoachLoading(false)
     setCoachOpen(false)
   }, [lead])
+
+  // Unsaved work: a pasted/parsed import that has not been saved, or edits to
+  // the review form. Closing the drawer — Escape, backdrop, Close, or one of
+  // its navigation links — or switching to a view that unmounts the form asks
+  // Keep editing / Discard changes first.
+  const navigate = useNavigate()
+  const latestInboundId = rows
+    ? [...rows].reverse().find((m) => m.direction === 'in' && m.body)?.id ?? null
+    : null
+  const reviewUnsaved = !importOpen && !followUpOpen && reviewDirtyFor !== null && reviewDirtyFor === latestInboundId
+  const { guard, prompt: discardPrompt } = useDirtyGuard((importOpen && importDirty) || reviewUnsaved)
+  const discardAnd = (action: () => void) => guard(() => {
+    setImportDirty(false)
+    setReviewDirtyFor(null)
+    action()
+  })
+  const requestClose = () => discardAnd(onClose)
+  /** A link inside the drawer both navigates and closes it; with unsaved work
+   *  the navigation waits for the answer. */
+  const guardedLinkClick = (to: string) => (event: React.MouseEvent) => {
+    if (!(importOpen && importDirty) && !reviewUnsaved) {
+      onClose()
+      return
+    }
+    event.preventDefault()
+    discardAnd(() => { onClose(); navigate(to) })
+  }
 
   if (!lead) return null
 
@@ -456,7 +488,7 @@ export function ConversationDrawer({
         </span>
       }
       description={identityLine || '—'}
-      onRequestClose={onClose}
+      onRequestClose={requestClose}
       // Focus starts in whatever the drawer opened on: the messages, so the
       // keyboard can scroll the thread at once, or the import / follow-up view.
       initialFocusRef={importOpen || followUpOpen ? viewRef : threadRef}
@@ -468,7 +500,7 @@ export function ConversationDrawer({
           <Link
             className="text-app-meta text-app-text-muted no-underline hover:text-app-accent hover:underline"
             to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
-            onClick={onClose}
+            onClick={guardedLinkClick(`/campaign/${encodeURIComponent(lead.campaign_id)}`)}
           >
             {campaignName}
           </Link>
@@ -525,7 +557,7 @@ export function ConversationDrawer({
               variant="ghost"
               size="sm"
               to={repliesHref(lead, latestInbound?.id ?? null)}
-              onClick={onClose}
+              onClick={guardedLinkClick(repliesHref(lead, latestInbound?.id ?? null))}
             >
               Open in Replies
             </LinkButton>
@@ -537,7 +569,7 @@ export function ConversationDrawer({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setImportOpen(true)}
+              onClick={() => discardAnd(() => setImportOpen(true))}
               disabled={!rows}
               title="Paste a conversation copied from LinkedIn"
             >
@@ -551,11 +583,11 @@ export function ConversationDrawer({
               className="ml-auto"
               icon={<CalendarCheck2 size={14} aria-hidden="true" />}
               aria-pressed={followUpOpen}
-              onClick={() => {
+              onClick={() => discardAnd(() => {
                 setImportOpen(false)
                 setFollowUpReturnAction(undefined)
                 setFollowUpOpen((open) => !open)
-              }}
+              })}
             >
               {activeFollowUp(followUpState)
                 ? followUpDueLabel(followUpState)
@@ -684,6 +716,7 @@ export function ConversationDrawer({
             refetch()
           }}
           onClose={() => setImportOpen(false)}
+          onDirtyChange={setImportDirty}
         />
       )}
 
@@ -843,13 +876,19 @@ export function ConversationDrawer({
           review={latestInbound.review ?? null}
           saving={replyActions.saving}
           error={replyActions.error}
-          onSave={(draft) => replyActions.saveReview({
-            instance_id: lead.instance_id,
-            profile_url: lead.profile_url,
-            message_id: latestInbound.id,
-            expected_review_revision: latestInbound.review?.revision ?? 0,
-            review: draft,
-          })}
+          onDirtyChange={(dirty) => setReviewDirtyFor(dirty ? latestInbound.id : null)}
+          onSave={async (draft) => {
+            const saved = await replyActions.saveReview({
+              instance_id: lead.instance_id,
+              profile_url: lead.profile_url,
+              message_id: latestInbound.id,
+              expected_review_revision: latestInbound.review?.revision ?? 0,
+              review: draft,
+            })
+            // A refused or failed save keeps the draft, and so keeps asking.
+            if (saved) setReviewDirtyFor(null)
+            return saved
+          }}
         />
         </div>
       )}
@@ -935,6 +974,7 @@ export function ConversationDrawer({
       </>
       )}
 
+      {discardPrompt}
       {pendingLost && (
         <LostReasonModal
           leadName={live.full_name}
