@@ -123,6 +123,15 @@ export const SEQUENCE_PUBLISH_TERMINAL: ReadonlySet<string> = new Set<SequencePu
   'success', 'partial_failure', 'conflict', 'failed',
 ])
 
+/** Badge tone for a publish job's status: settled good, settled with problems,
+ *  failed, or still moving through the notebook. */
+export function publishStatusTone(status: string): 'success' | 'warning' | 'danger' | 'info' {
+  if (status === 'success') return 'success'
+  if (status === 'partial_failure' || status === 'conflict') return 'warning'
+  if (status === 'failed') return 'danger'
+  return 'info'
+}
+
 export function publishStatusLabel(status: string): string {
   return SEQUENCE_PUBLISH_STATUS_LABEL[status as SequencePublishStatus]
     ?? status.split('_').join(' ')

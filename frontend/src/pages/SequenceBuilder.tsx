@@ -39,6 +39,7 @@ import {
   Plus,
   RotateCcw,
   Filter,
+  SearchX,
   Send,
   ShieldCheck,
   Smartphone,
@@ -72,6 +73,7 @@ import {
   moveMessageStep,
   moveVariation,
   publishStatusLabel,
+  publishStatusTone,
   removeBranch,
   removeStep,
   removeVariation,
@@ -120,8 +122,8 @@ import {
 import { CampaignRuntimeStatusView } from '../components/CampaignRuntimeStatus'
 import { ago, num } from '../lib/format'
 import {
-  Button, Dialog, FilterCount, IconButton, PageHeader, SelectField, Table, TableFrame,
-  Tabs, TextField, Toolbar,
+  Badge, Button, EmptyState, FilterCount, FilterDialog, IconButton, InlineError, LinkButton,
+  PageHeader, Panel, SegmentedControl, SelectField, Table, TableFrame, Tabs, TextField, Toolbar,
 } from '../ui'
 
 type EditorTab = 'build' | 'branches' | 'preview'
@@ -146,29 +148,41 @@ function formatUpdated(value: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+type DeploymentFilters = {
+  notebook: string
+  runtime: 'any' | CampaignRuntimeStatus | 'unknown'
+  archive: 'current' | 'all' | 'archived'
+  source: string
+  freshness: 'any' | 'fresh' | 'stale' | 'unsupported'
+}
+
+const DEFAULT_DEPLOYMENT_FILTERS: DeploymentFilters = {
+  notebook: 'any', runtime: 'any', archive: 'current', source: 'any', freshness: 'any',
+}
+
+/* Archive defaults to "current", so it only counts as engaged when moved. */
+function deploymentFilterCount(filters: DeploymentFilters): number {
+  return (Object.keys(DEFAULT_DEPLOYMENT_FILTERS) as Array<keyof DeploymentFilters>)
+    .filter((key) => filters[key] !== DEFAULT_DEPLOYMENT_FILTERS[key]).length
+}
+
 function SequenceLibrary() {
   const navigate = useNavigate()
   const toast = useToast()
   const [items, setItems] = useState<SequenceRecord[]>([])
   const [hub, setHub] = useState<SequenceHubSnapshot | null>(null)
   const [view, setView] = useState<'deployments' | 'build'>('deployments')
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hubError, setHubError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  const [notebookFilter, setNotebookFilter] = useState('any')
-  const [runtimeFilter, setRuntimeFilter] = useState<'any' | CampaignRuntimeStatus | 'unknown'>('any')
-  const [archiveFilter, setArchiveFilter] = useState<'current' | 'all' | 'archived'>('current')
-  const [sourceFilter, setSourceFilter] = useState('any')
-  const [freshnessFilter, setFreshnessFilter] = useState<'any' | 'fresh' | 'stale' | 'unsupported'>('any')
+  // Applied filters drive the table; the overlay edits a draft that only
+  // replaces them on Apply, so Cancel/Escape leave the table untouched.
+  const [filters, setFilters] = useState<DeploymentFilters>(DEFAULT_DEPLOYMENT_FILTERS)
+  const [filterDraft, setFilterDraft] = useState<DeploymentFilters | null>(null)
   const [creating, setCreating] = useState(false)
-  /* Archive defaults to "current", so it only counts as engaged when moved. */
-  const deploymentFilterCount = [
-    notebookFilter !== 'any', runtimeFilter !== 'any', archiveFilter !== 'current',
-    sourceFilter !== 'any', freshnessFilter !== 'any',
-  ].filter(Boolean).length
+  const appliedFilterCount = deploymentFilterCount(filters)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -203,22 +217,22 @@ function SequenceLibrary() {
     const needle = query.trim().toLowerCase()
     return (hub?.items ?? []).map((item) => {
       const filtered = item.deployments.filter((deployment) => {
-        if (notebookFilter !== 'any' && deployment.instance_id !== notebookFilter) return false
+        if (filters.notebook !== 'any' && deployment.instance_id !== filters.notebook) return false
         const runtime = parseCampaignRuntimeStatus(deployment.runtime_status) ?? 'unknown'
-        if (runtimeFilter !== 'any' && runtime !== runtimeFilter) return false
-        if (archiveFilter === 'current' && deployment.is_archived !== false) return false
-        if (archiveFilter === 'archived' && deployment.is_archived !== true) return false
-        if (sourceFilter !== 'any' && deployment.status_source !== sourceFilter) return false
+        if (filters.runtime !== 'any' && runtime !== filters.runtime) return false
+        if (filters.archive === 'current' && deployment.is_archived !== false) return false
+        if (filters.archive === 'archived' && deployment.is_archived !== true) return false
+        if (filters.source !== 'any' && deployment.status_source !== filters.source) return false
         const health = campaignObservationHealth(deployment)
-        if (freshnessFilter === 'fresh' && health !== 'fresh') return false
-        if (freshnessFilter === 'stale' && health !== 'stale') return false
-        if (freshnessFilter === 'unsupported' && !['unsupported', 'awaiting_first_sync'].includes(health)) return false
+        if (filters.freshness === 'fresh' && health !== 'fresh') return false
+        if (filters.freshness === 'stale' && health !== 'stale') return false
+        if (filters.freshness === 'unsupported' && !['unsupported', 'awaiting_first_sync'].includes(health)) return false
         if (needle && !`${item.name} ${deployment.campaign_name} ${deployment.account_name ?? ''} ${deployment.instance_id}`.toLowerCase().includes(needle)) return false
         return true
       })
       return { item, deployments: filtered }
     }).filter((group) => group.deployments.length > 0)
-  }, [hub, query, notebookFilter, runtimeFilter, archiveFilter, sourceFilter, freshnessFilter])
+  }, [hub, query, filters])
 
   const notebookOptions = useMemo(() => {
     const names = new Map<string, string>()
@@ -233,6 +247,10 @@ function SequenceLibrary() {
   const sourceOptions = useMemo(() => [...new Set(
     (hub?.items ?? []).flatMap((item) => item.deployments.map((deployment) => deployment.status_source).filter(Boolean)),
   )].sort() as string[], [hub])
+
+  const totalDeployments = hub?.items.reduce((count, item) => count + item.deployments.length, 0) ?? 0
+  const currentCount = items.filter((item) => !item.archived).length
+  const archivedCount = items.length - currentCount
 
   const create = async () => {
     setCreating(true)
@@ -256,6 +274,9 @@ function SequenceLibrary() {
       toast.error(cause instanceof Error ? cause.message : 'Could not update sequence.')
     }
   }
+
+  const setDraft = <K extends keyof DeploymentFilters>(key: K, value: DeploymentFilters[K]) =>
+    setFilterDraft((current) => current && { ...current, [key]: value })
 
   return (
     <div className="sequence-library">
@@ -281,8 +302,8 @@ function SequenceLibrary() {
         />
         <div className="ui-toolbar__spacer" />
         {view === 'deployments' && (
-          <Button variant="secondary" icon={<Filter size={18} aria-hidden="true" />} onClick={() => setFiltersOpen(true)}>
-            Filters<FilterCount count={deploymentFilterCount} />
+          <Button variant="secondary" icon={<Filter size={18} aria-hidden="true" />} onClick={() => setFilterDraft(filters)}>
+            Filters<FilterCount count={appliedFilterCount} />
           </Button>
         )}
       </Toolbar>
@@ -292,33 +313,35 @@ function SequenceLibrary() {
         value={view}
         onChange={(next) => setView(next as typeof view)}
         items={[
-          { id: 'deployments', label: 'Deployments', count: hub?.items.reduce((count, item) => count + item.deployments.length, 0) ?? 0 },
-          { id: 'build', label: 'Build', count: items.filter((item) => !item.archived).length },
+          { id: 'deployments', label: 'Deployments', count: totalDeployments },
+          { id: 'build', label: 'Build', count: currentCount },
         ]}
       />
 
-      {view === 'deployments' && filtersOpen && (
-        <Dialog
+      {view === 'deployments' && filterDraft && (
+        <FilterDialog
           title="Deployment filters"
-          onRequestClose={() => setFiltersOpen(false)}
-          footer={<Button variant="primary" onClick={() => setFiltersOpen(false)}>Done</Button>}
+          selectedCount={deploymentFilterCount(filterDraft)}
+          onClearAll={() => setFilterDraft(DEFAULT_DEPLOYMENT_FILTERS)}
+          onCancel={() => setFilterDraft(null)}
+          onApply={() => { setFilters(filterDraft); setFilterDraft(null) }}
         >
-          <div className="deployment-filters" aria-label="Deployment filters">
-            <SelectField label="Notebook" value={notebookFilter} onChange={(event) => setNotebookFilter(event.target.value)}>
+          <div className="flex flex-col gap-app-lg">
+            <SelectField label="Notebook" value={filterDraft.notebook} onChange={(event) => setDraft('notebook', event.target.value)}>
               <option value="any">All notebooks</option>
               {notebookOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </SelectField>
-            <SelectField label="Runtime" value={runtimeFilter} onChange={(event) => setRuntimeFilter(event.target.value as typeof runtimeFilter)}>
+            <SelectField label="Runtime" value={filterDraft.runtime} onChange={(event) => setDraft('runtime', event.target.value as DeploymentFilters['runtime'])}>
               <option value="any">All statuses</option>
               {CAMPAIGN_RUNTIME_STATUSES.map((status) => <option key={status} value={status}>{campaignRuntimeLabel(status)}</option>)}
               <option value="unknown">Unknown</option>
             </SelectField>
-            <SelectField label="Archive" value={archiveFilter} onChange={(event) => setArchiveFilter(event.target.value as typeof archiveFilter)}>
+            <SelectField label="Archive" value={filterDraft.archive} onChange={(event) => setDraft('archive', event.target.value as DeploymentFilters['archive'])}>
               <option value="current">Current</option>
               <option value="all">All</option>
               <option value="archived">Archived</option>
             </SelectField>
-            <SelectField label="Observation" value={freshnessFilter} onChange={(event) => setFreshnessFilter(event.target.value as typeof freshnessFilter)}>
+            <SelectField label="Observation" value={filterDraft.freshness} onChange={(event) => setDraft('freshness', event.target.value as DeploymentFilters['freshness'])}>
               <option value="any">Any freshness</option>
               <option value="fresh">Fresh</option>
               <option value="stale">Stale</option>
@@ -328,24 +351,38 @@ function SequenceLibrary() {
                 SDR reaches for; it stays available, one disclosure down. */}
             <details className="deployment-advanced">
               <summary>Advanced diagnostics</summary>
-              <SelectField label="Status source" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+              <SelectField label="Status source" value={filterDraft.source} onChange={(event) => setDraft('source', event.target.value)}>
                 <option value="any">All sources</option>
                 {sourceOptions.map((source) => <option key={source} value={source}>{source}</option>)}
               </SelectField>
             </details>
           </div>
-        </Dialog>
+        </FilterDialog>
       )}
 
       {loading ? (
-        <div className="sequence-card-grid" aria-label="Loading sequences">
-          {[0, 1, 2].map((key) => <div key={key} className="sequence-card min-h-[300px] cursor-default [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" />)}
+        <div className="sequence-card-grid" role="status" aria-label="Loading sequences">
+          {[0, 1, 2].map((key) => <div key={key} className="sequence-card min-h-[300px] [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" />)}
         </div>
       ) : view === 'deployments' ? (
         hubError ? (
-          <div className="card sequence-empty-state"><h2>Deployments are not available</h2><p>{hubError}</p><button className="btn" onClick={() => void load()}>Try again</button></div>
+          <InlineError title="Deployments are not available." detail={hubError} onRetry={() => void load()} />
         ) : deployments.length === 0 ? (
-          <div className="card sequence-empty-state"><h2>No deployments match these filters</h2><p>Use All archive states to include campaigns whose archive membership is still unknown.</p></div>
+          <Panel>
+            {totalDeployments > 0 ? (
+              <EmptyState
+                kind="no-match"
+                icon={SearchX}
+                title="No deployments match these filters"
+                hint="Set Archive to All to include campaigns whose archive membership is still unknown."
+                action={(appliedFilterCount > 0 || query) && (
+                  <Button variant="secondary" onClick={() => { setFilters(DEFAULT_DEPLOYMENT_FILTERS); setQuery('') }}>Clear filters</Button>
+                )}
+              />
+            ) : (
+              <EmptyState icon={Split} title="No deployments yet" hint="Campaigns appear here after a notebook syncs them." />
+            )}
+          </Panel>
         ) : (
           /* One table, one header row, a banner row per sequence. Every group
              used to be its own card repeating the same six column headers, so
@@ -353,8 +390,8 @@ function SequenceLibrary() {
           <TableFrame className="mb-app-xl" scrollLabel="Deployments">
             <Table className="deployment-table" caption="Deployments by sequence">
               <thead><tr>
-                <th>Campaign / notebook</th><th>Linked Helper runtime</th><th>Publish</th>
-                <th className="num">Leads</th><th className="num">Replies</th><th>Sync</th>
+                <th scope="col">Campaign / notebook</th><th scope="col">Linked Helper runtime</th><th scope="col">Publish</th>
+                <th scope="col" className="ui-table__num">Leads</th><th scope="col" className="ui-table__num">Replies</th><th scope="col">Sync</th>
               </tr></thead>
               {deployments.map(({ item, deployments: rows }) => (
                 <tbody key={item.id}>
@@ -364,21 +401,36 @@ function SequenceLibrary() {
                         <div>
                           <span className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</span>
                           <span className="text-[length:var(--text-subsection)] font-semibold" id={`deployment-${item.id}`}>{item.name}</span>
-                          <span className="muted small">{rows.length} campaign{rows.length === 1 ? '' : 's'}</span>
+                          <span className="text-app-text-muted text-app-meta">{rows.length} campaign{rows.length === 1 ? '' : 's'}</span>
                         </div>
-                        {item.sequence_document_id && <Link className="link-btn" to={`/sequences/${encodeURIComponent(item.sequence_document_id)}`}>Open builder <ChevronRight size={14} /></Link>}
+                        {item.sequence_document_id && (
+                          <LinkButton
+                            variant="ghost"
+                            size="sm"
+                            to={`/sequences/${encodeURIComponent(item.sequence_document_id)}`}
+                            aria-label={`Open ${item.name} in the builder`}
+                          >
+                            Open builder <ChevronRight size={16} aria-hidden="true" />
+                          </LinkButton>
+                        )}
                       </div>
                     </th>
                   </tr>
                   {rows.map((deployment) => (
                     <tr key={deployment.key}>
-                      <td><div>{deployment.campaign_id
-                        ? <Link className="row-link" to={`/campaign/${encodeURIComponent(deployment.campaign_id)}`}>{deployment.campaign_name}</Link>
-                        : <span>{deployment.campaign_name}</span>}</div><span className="muted small">{deployment.account_name ?? deployment.instance_id} · {deployment.instance_id}</span></td>
+                      <td>
+                        <div>{deployment.campaign_id
+                          ? <Link className="text-app-text no-underline hover:text-app-accent hover:underline" to={`/campaign/${encodeURIComponent(deployment.campaign_id)}`}>{deployment.campaign_name}</Link>
+                          : <span>{deployment.campaign_name}</span>}</div>
+                        <span className="text-app-text-muted text-app-meta">{deployment.account_name ?? deployment.instance_id} · {deployment.instance_id}</span>
+                      </td>
                       <td><CampaignRuntimeStatusView campaign={deployment} compact /></td>
-                      <td>{deployment.publish_status ? <><span className={`badge publish-${deployment.publish_status}`}>{publishStatusLabel(deployment.publish_status)}</span>{deployment.awaiting_sync && <div className="muted small">Awaiting campaign sync</div>}</> : <span className="muted small">External campaign</span>}</td>
-                      <td className="num">{num(deployment.leads)}</td><td className="num">{num(deployment.replies)}</td>
-                      <td className="muted small">{deployment.last_sync_at ? ago(deployment.last_sync_at) : 'Never synced'}</td>
+                      <td>{deployment.publish_status ? <>
+                        <Badge tone={publishStatusTone(deployment.publish_status)}>{publishStatusLabel(deployment.publish_status)}</Badge>
+                        {deployment.awaiting_sync && <div className="text-app-text-muted text-app-meta">Awaiting campaign sync</div>}
+                      </> : <span className="text-app-text-muted text-app-meta">External campaign</span>}</td>
+                      <td className="ui-table__num">{num(deployment.leads)}</td><td className="ui-table__num">{num(deployment.replies)}</td>
+                      <td className="text-app-text-muted text-app-meta">{deployment.last_sync_at ? ago(deployment.last_sync_at) : 'Never synced'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -387,76 +439,82 @@ function SequenceLibrary() {
           </TableFrame>
         )
       ) : error ? (
-        <div className="card sequence-empty-state">
-          <h2>Sequence Builder is not available</h2>
-          <p>{error}</p>
-          <button className="btn" onClick={() => void load()}>Try again</button>
-        </div>
-      ) : visible.length === 0 ? (
-        <div className="card sequence-empty-state">
-          <div className="grid place-items-center size-[58px] rounded-[18px] text-app-accent bg-app-accent-subtle border border-app-accent-border"><MessageSquarePlus size={26} /></div>
-          <h2>{query ? 'No matching sequences' : showArchived ? 'No archived sequences' : 'Start with a blank canvas'}</h2>
-          <p>{query ? 'Try another name or message fragment.' : 'Connection request, follow-ups and variations all stay together.'}</p>
-          {!query && !showArchived && (
-            <button className="btn primary" onClick={create} disabled={creating}><Plus size={15} /> New sequence</button>
-          )}
-        </div>
+        <InlineError title="Sequence Builder is not available." detail={error} onRetry={() => void load()} />
       ) : (
         <>
-        <div className="sequence-library-switch w-fit mb-[14px]" role="group" aria-label="Builder sequence status">
-          <button className={!showArchived ? 'active' : ''} onClick={() => setShowArchived(false)}>Current <span>{items.filter((item) => !item.archived).length}</span></button>
-          <button className={showArchived ? 'active' : ''} onClick={() => setShowArchived(true)}>Archived <span>{items.filter((item) => item.archived).length}</span></button>
-        </div>
-        <div className="sequence-card-grid">
-          {visible.map((item) => {
-            const counts = sequenceCounts(item)
-            return (
-              <article
-                key={item.id}
-                className="sequence-card"
-                tabIndex={0}
-                role="button"
-                onClick={() => navigate(`/sequences/${item.id}`)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') navigate(`/sequences/${item.id}`)
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="size-[38px] grid place-items-center rounded-[11px] text-app-accent bg-app-accent-subtle border border-app-accent-border"><Split size={19} /></div>
-                  <button
-                    className="icon-only-btn"
-                    aria-label={item.archived ? 'Restore sequence' : 'Archive sequence'}
-                    title={item.archived ? 'Restore' : 'Archive'}
-                    onClick={(event) => void archive(event, item)}
-                  >
-                    {item.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-                  </button>
-                </div>
-                <h2>{item.name}</h2>
-                <p className="line-clamp-2 min-h-[42px] m-0 text-app-text-secondary text-[length:var(--text-sm)] leading-[1.55]">{sequencePreviewText(item)}</p>
-                <div className="sequence-mini-flow" aria-hidden="true">
-                  {item.document.steps.slice(0, 5).map((step, index) => (
-                    <span key={step.id} className={step.kind === 'connection' ? 'connection' : ''}>
-                      {index === 0 ? 'CR' : index}
-                      <i>{step.variations.length}</i>
-                    </span>
-                  ))}
-                  {item.document.steps.length > 5 && <b>+{item.document.steps.length - 5}</b>}
-                </div>
-                <div className="sequence-card-counts">
-                  <span>{counts.steps} messages</span>
-                  <span>{counts.variations} variations</span>
-                  <span>{counts.branches} branches</span>
-                </div>
-                <footer>
-                  <span>Edited by {item.updated_by_name}</span>
-                  <span><Clock3 size={12} /> {formatUpdated(item.updated_at)}</span>
-                  <ChevronRight size={16} />
-                </footer>
-              </article>
-            )
-          })}
-        </div></>
+          <SegmentedControl
+            className="mb-app-lg"
+            label="Builder sequence status"
+            value={showArchived ? 'archived' : 'current'}
+            onChange={(next) => setShowArchived(next === 'archived')}
+            items={[
+              { id: 'current', label: 'Current', count: currentCount },
+              { id: 'archived', label: 'Archived', count: archivedCount },
+            ]}
+          />
+          {visible.length === 0 ? (
+            <Panel>
+              <EmptyState
+                kind={query ? 'no-match' : 'empty'}
+                icon={query ? SearchX : MessageSquarePlus}
+                title={query ? 'No matching sequences' : showArchived ? 'No archived sequences' : 'Start with a blank canvas'}
+                hint={query ? 'Try another name or message fragment.' : 'Connection request, follow-ups and variations all stay together.'}
+                action={query
+                  ? <Button variant="secondary" onClick={() => setQuery('')}>Clear search</Button>
+                  : !showArchived && <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={create} loading={creating} loadingLabel="Creating a sequence">New sequence</Button>}
+              />
+            </Panel>
+          ) : (
+            <div className="sequence-card-grid">
+              {visible.map((item) => {
+                const counts = sequenceCounts(item)
+                return (
+                  // The title link is the keyboard and screen-reader path; the
+                  // card click is a pointer convenience for the same URL.
+                  <article key={item.id} className="sequence-card" onClick={() => navigate(`/sequences/${item.id}`)}>
+                    <div className="flex items-center justify-between">
+                      <div className="size-[38px] grid place-items-center rounded-[11px] text-app-accent bg-app-accent-subtle border border-app-accent-border" aria-hidden="true"><Split size={19} /></div>
+                      <IconButton
+                        label={item.archived ? `Restore ${item.name}` : `Archive ${item.name}`}
+                        icon={item.archived ? <ArchiveRestore size={20} aria-hidden="true" /> : <Archive size={20} aria-hidden="true" />}
+                        onClick={(event) => void archive(event, item)}
+                      />
+                    </div>
+                    <h2>
+                      <Link
+                        className="text-app-text no-underline hover:text-app-accent focus-visible:outline-none"
+                        to={`/sequences/${item.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {item.name}
+                      </Link>
+                    </h2>
+                    <p className="line-clamp-2 min-h-[42px] m-0 text-app-text-secondary text-[length:var(--text-sm)] leading-[1.55]">{sequencePreviewText(item)}</p>
+                    <div className="sequence-mini-flow" aria-hidden="true">
+                      {item.document.steps.slice(0, 5).map((step, index) => (
+                        <span key={step.id} className={step.kind === 'connection' ? 'connection' : ''}>
+                          {index === 0 ? 'CR' : index}
+                          <i>{step.variations.length}</i>
+                        </span>
+                      ))}
+                      {item.document.steps.length > 5 && <b>+{item.document.steps.length - 5}</b>}
+                    </div>
+                    <div className="sequence-card-counts">
+                      <span>{counts.steps} messages</span>
+                      <span>{counts.variations} variations</span>
+                      <span>{counts.branches} branches</span>
+                    </div>
+                    <footer>
+                      <span>Edited by {item.updated_by_name}</span>
+                      <span><Clock3 size={12} aria-hidden="true" /> {formatUpdated(item.updated_at)}</span>
+                      <ChevronRight size={16} aria-hidden="true" />
+                    </footer>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

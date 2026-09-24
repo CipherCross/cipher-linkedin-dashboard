@@ -7,89 +7,8 @@
   "rawControls": [
     {
       "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 293,
-      "symbol": "Chat",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/Chat.tsx:Chat:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 331,
-      "symbol": "Chat",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/Chat.tsx:Chat:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 360,
-      "symbol": "Chat",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/Chat.tsx:Chat:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 364,
-      "symbol": "Chat",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/Chat.tsx:Chat:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 344,
-      "symbol": "Chat",
-      "tag": "textarea",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/Chat.tsx:Chat:textarea::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 88,
-      "symbol": "CodeBlock",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/Chat.tsx:CodeBlock:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 60,
-      "symbol": "CopyButton",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/Chat.tsx:CopyButton:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 139,
-      "symbol": "Reasoning",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/Chat.tsx:Reasoning:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/Chat.tsx",
-      "line": 107,
-      "symbol": "ToolCall",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/Chat.tsx:ToolCall:button::1"
-    },
-    {
-      "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 811,
+      "line": 869,
       "symbol": "BranchBuilder",
       "tag": "button",
       "ordinal": 1,
@@ -98,7 +17,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 818,
+      "line": 876,
       "symbol": "BranchBuilder",
       "tag": "button",
       "ordinal": 2,
@@ -107,7 +26,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 831,
+      "line": 889,
       "symbol": "BranchBuilder",
       "tag": "button",
       "ordinal": 3,
@@ -116,7 +35,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 847,
+      "line": 905,
       "symbol": "BranchBuilder",
       "tag": "button",
       "ordinal": 4,
@@ -125,7 +44,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 826,
+      "line": 884,
       "symbol": "BranchBuilder",
       "tag": "input",
       "nativeType": "",
@@ -135,7 +54,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 837,
+      "line": 895,
       "symbol": "BranchBuilder",
       "tag": "select",
       "ordinal": 1,
@@ -144,7 +63,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 743,
+      "line": 801,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 1,
@@ -153,7 +72,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 744,
+      "line": 802,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 2,
@@ -162,7 +81,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 745,
+      "line": 803,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 3,
@@ -171,7 +90,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 746,
+      "line": 804,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 4,
@@ -180,7 +99,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 748,
+      "line": 806,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 5,
@@ -189,7 +108,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 776,
+      "line": 834,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 6,
@@ -198,7 +117,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 785,
+      "line": 843,
       "symbol": "BuildCanvas",
       "tag": "button",
       "ordinal": 7,
@@ -207,7 +126,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 547,
+      "line": 605,
       "symbol": "CommentComposer",
       "tag": "button",
       "ordinal": 1,
@@ -216,7 +135,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 554,
+      "line": 612,
       "symbol": "CommentComposer",
       "tag": "button",
       "ordinal": 2,
@@ -225,7 +144,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 555,
+      "line": 613,
       "symbol": "CommentComposer",
       "tag": "button",
       "ordinal": 3,
@@ -234,7 +153,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 552,
+      "line": 610,
       "symbol": "CommentComposer",
       "tag": "textarea",
       "ordinal": 1,
@@ -243,7 +162,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 990,
+      "line": 1048,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 1,
@@ -252,7 +171,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 991,
+      "line": 1049,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 2,
@@ -261,7 +180,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1014,
+      "line": 1072,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 3,
@@ -270,7 +189,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1014,
+      "line": 1072,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 4,
@@ -279,7 +198,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1017,
+      "line": 1075,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 5,
@@ -288,7 +207,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1017,
+      "line": 1075,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 6,
@@ -297,7 +216,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1031,
+      "line": 1089,
       "symbol": "CommentsPanel",
       "tag": "button",
       "ordinal": 7,
@@ -306,7 +225,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 995,
+      "line": 1053,
       "symbol": "CommentsPanel",
       "tag": "input",
       "nativeType": "checkbox",
@@ -316,7 +235,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1013,
+      "line": 1071,
       "symbol": "CommentsPanel",
       "tag": "textarea",
       "ordinal": 1,
@@ -325,7 +244,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 484,
+      "line": 542,
       "symbol": "handle",
       "tag": "button",
       "ordinal": 1,
@@ -334,7 +253,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 517,
+      "line": 575,
       "symbol": "handle",
       "tag": "button",
       "ordinal": 2,
@@ -343,7 +262,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 887,
+      "line": 945,
       "symbol": "PreviewPanel",
       "tag": "button",
       "ordinal": 1,
@@ -352,7 +271,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 888,
+      "line": 946,
       "symbol": "PreviewPanel",
       "tag": "button",
       "ordinal": 2,
@@ -361,7 +280,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 951,
+      "line": 1009,
       "symbol": "PreviewPanel",
       "tag": "button",
       "ordinal": 3,
@@ -370,7 +289,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 895,
+      "line": 953,
       "symbol": "PreviewPanel",
       "tag": "select",
       "ordinal": 1,
@@ -379,7 +298,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 903,
+      "line": 961,
       "symbol": "PreviewPanel",
       "tag": "select",
       "ordinal": 2,
@@ -388,7 +307,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1167,
+      "line": 1225,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 1,
@@ -397,7 +316,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1177,
+      "line": 1235,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 2,
@@ -406,7 +325,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1191,
+      "line": 1249,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 3,
@@ -415,7 +334,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1218,
+      "line": 1276,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 4,
@@ -424,7 +343,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1270,
+      "line": 1328,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 5,
@@ -433,7 +352,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1270,
+      "line": 1328,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 6,
@@ -442,7 +361,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1271,
+      "line": 1329,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 7,
@@ -451,7 +370,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1271,
+      "line": 1329,
       "symbol": "PublishWizard",
       "tag": "button",
       "ordinal": 8,
@@ -460,7 +379,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1225,
+      "line": 1283,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "checkbox",
@@ -470,7 +389,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1235,
+      "line": 1293,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "checkbox",
@@ -480,7 +399,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1236,
+      "line": 1294,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "checkbox",
@@ -490,7 +409,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1240,
+      "line": 1298,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "number",
@@ -500,7 +419,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1241,
+      "line": 1299,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "number",
@@ -510,7 +429,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1242,
+      "line": 1300,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "number",
@@ -520,7 +439,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1199,
+      "line": 1257,
       "symbol": "PublishWizard",
       "tag": "input",
       "nativeType": "radio",
@@ -530,7 +449,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1455,
+      "line": 1513,
       "symbol": "SequenceEditor",
       "tag": "button",
       "ordinal": 1,
@@ -539,7 +458,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1468,
+      "line": 1526,
       "symbol": "SequenceEditor",
       "tag": "button",
       "ordinal": 2,
@@ -548,7 +467,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1469,
+      "line": 1527,
       "symbol": "SequenceEditor",
       "tag": "button",
       "ordinal": 3,
@@ -557,7 +476,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1470,
+      "line": 1528,
       "symbol": "SequenceEditor",
       "tag": "button",
       "ordinal": 4,
@@ -566,7 +485,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1424,
+      "line": 1482,
       "symbol": "SequenceEditor",
       "tag": "input",
       "nativeType": "",
@@ -576,61 +495,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 346,
-      "symbol": "SequenceLibrary",
-      "tag": "button",
-      "ordinal": 1,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceLibrary:button::1"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 393,
-      "symbol": "SequenceLibrary",
-      "tag": "button",
-      "ordinal": 2,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceLibrary:button::2"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 401,
-      "symbol": "SequenceLibrary",
-      "tag": "button",
-      "ordinal": 3,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceLibrary:button::3"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 407,
-      "symbol": "SequenceLibrary",
-      "tag": "button",
-      "ordinal": 4,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceLibrary:button::4"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 408,
-      "symbol": "SequenceLibrary",
-      "tag": "button",
-      "ordinal": 5,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceLibrary:button::5"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 426,
-      "symbol": "SequenceLibrary",
-      "tag": "button",
-      "ordinal": 6,
-      "key": "raw-control:src/pages/SequenceBuilder.tsx:SequenceLibrary:button::6"
-    },
-    {
-      "kind": "raw-control",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 634,
+      "line": 692,
       "symbol": "VariationEditor",
       "tag": "button",
       "ordinal": 1,
@@ -639,7 +504,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 644,
+      "line": 702,
       "symbol": "VariationEditor",
       "tag": "button",
       "ordinal": 2,
@@ -648,7 +513,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 647,
+      "line": 705,
       "symbol": "VariationEditor",
       "tag": "button",
       "ordinal": 3,
@@ -657,7 +522,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 662,
+      "line": 720,
       "symbol": "VariationEditor",
       "tag": "button",
       "ordinal": 4,
@@ -666,7 +531,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 628,
+      "line": 686,
       "symbol": "VariationEditor",
       "tag": "input",
       "nativeType": "",
@@ -676,7 +541,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 676,
+      "line": 734,
       "symbol": "VariationEditor",
       "tag": "select",
       "ordinal": 1,
@@ -685,7 +550,7 @@
     {
       "kind": "raw-control",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 650,
+      "line": 708,
       "symbol": "VariationEditor",
       "tag": "textarea",
       "ordinal": 1,
@@ -1009,70 +874,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/Chat.tsx",
-      "line": 305,
-      "symbol": "Chat",
-      "token": "banner",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:banner::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 281,
-      "symbol": "Chat",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 360,
-      "symbol": "Chat",
-      "token": "chat-send",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:chat-send::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 364,
-      "symbol": "Chat",
-      "token": "chat-send",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:chat-send::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 287,
-      "symbol": "Chat",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 303,
-      "symbol": "Chat",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 303,
-      "symbol": "Chat",
-      "token": "small",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:Chat:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 161,
+      "line": 150,
       "symbol": "Message",
       "token": "chat-md",
       "ordinal": 1,
@@ -1081,38 +883,11 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/Chat.tsx",
-      "line": 155,
+      "line": 144,
       "symbol": "Message",
       "token": "chat-msg",
       "ordinal": 1,
       "key": "compatibility-token:src/pages/Chat.tsx:Message:chat-msg::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 113,
-      "symbol": "ToolCall",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:ToolCall:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 114,
-      "symbol": "ToolCall",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/Chat.tsx:ToolCall:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/Chat.tsx",
-      "line": 109,
-      "symbol": "ToolCall",
-      "token": "spin",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/Chat.tsx:ToolCall:spin::1"
     },
     {
       "kind": "compatibility-token",
@@ -1126,7 +901,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 811,
+      "line": 869,
       "symbol": "BranchBuilder",
       "token": "btn",
       "ordinal": 1,
@@ -1135,7 +910,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 818,
+      "line": 876,
       "symbol": "BranchBuilder",
       "token": "btn",
       "ordinal": 2,
@@ -1144,7 +919,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 847,
+      "line": 905,
       "symbol": "BranchBuilder",
       "token": "btn",
       "ordinal": 3,
@@ -1153,7 +928,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 814,
+      "line": 872,
       "symbol": "BranchBuilder",
       "token": "card",
       "ordinal": 1,
@@ -1162,7 +937,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 823,
+      "line": 881,
       "symbol": "BranchBuilder",
       "token": "card",
       "ordinal": 2,
@@ -1171,7 +946,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 831,
+      "line": 889,
       "symbol": "BranchBuilder",
       "token": "danger",
       "ordinal": 1,
@@ -1180,7 +955,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 831,
+      "line": 889,
       "symbol": "BranchBuilder",
       "token": "icon-only-btn",
       "ordinal": 1,
@@ -1189,7 +964,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 805,
+      "line": 863,
       "symbol": "BranchBuilder",
       "token": "sequence-section-intro",
       "ordinal": 1,
@@ -1198,7 +973,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 743,
+      "line": 801,
       "symbol": "BuildCanvas",
       "token": "btn",
       "ordinal": 1,
@@ -1207,7 +982,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 744,
+      "line": 802,
       "symbol": "BuildCanvas",
       "token": "btn",
       "ordinal": 2,
@@ -1216,7 +991,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 748,
+      "line": 806,
       "symbol": "BuildCanvas",
       "token": "danger",
       "ordinal": 1,
@@ -1225,7 +1000,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 745,
+      "line": 803,
       "symbol": "BuildCanvas",
       "token": "icon-only-btn",
       "ordinal": 1,
@@ -1234,7 +1009,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 746,
+      "line": 804,
       "symbol": "BuildCanvas",
       "token": "icon-only-btn",
       "ordinal": 2,
@@ -1243,7 +1018,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 748,
+      "line": 806,
       "symbol": "BuildCanvas",
       "token": "icon-only-btn",
       "ordinal": 3,
@@ -1252,7 +1027,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 776,
+      "line": 834,
       "symbol": "BuildCanvas",
       "token": "sequence-add-variation",
       "ordinal": 1,
@@ -1261,7 +1036,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 742,
+      "line": 800,
       "symbol": "BuildCanvas",
       "token": "sequence-step-actions",
       "ordinal": 1,
@@ -1270,7 +1045,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 734,
+      "line": 792,
       "symbol": "BuildCanvas",
       "token": "sequence-step-icon",
       "ordinal": 1,
@@ -1279,7 +1054,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 775,
+      "line": 833,
       "symbol": "BuildCanvas",
       "token": "sequence-variation-actions",
       "ordinal": 1,
@@ -1288,7 +1063,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 753,
+      "line": 811,
       "symbol": "BuildCanvas",
       "token": "sequence-variation-grid",
       "ordinal": 1,
@@ -1297,7 +1072,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 743,
+      "line": 801,
       "symbol": "BuildCanvas",
       "token": "sm",
       "ordinal": 1,
@@ -1306,7 +1081,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 744,
+      "line": 802,
       "symbol": "BuildCanvas",
       "token": "sm",
       "ordinal": 2,
@@ -1315,7 +1090,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 554,
+      "line": 612,
       "symbol": "CommentComposer",
       "token": "btn",
       "ordinal": 1,
@@ -1324,7 +1099,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 555,
+      "line": 613,
       "symbol": "CommentComposer",
       "token": "btn",
       "ordinal": 2,
@@ -1333,7 +1108,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 547,
+      "line": 605,
       "symbol": "CommentComposer",
       "token": "conv-close",
       "ordinal": 1,
@@ -1342,7 +1117,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 550,
+      "line": 608,
       "symbol": "CommentComposer",
       "token": "muted",
       "ordinal": 1,
@@ -1351,7 +1126,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 545,
+      "line": 603,
       "symbol": "CommentComposer",
       "token": "pipe-modal-head",
       "ordinal": 1,
@@ -1360,7 +1135,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 543,
+      "line": 601,
       "symbol": "CommentComposer",
       "token": "pipe-modal-overlay",
       "ordinal": 1,
@@ -1369,7 +1144,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 544,
+      "line": 602,
       "symbol": "CommentComposer",
       "token": "pipe-modal",
       "ordinal": 1,
@@ -1378,7 +1153,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 990,
+      "line": 1048,
       "symbol": "CommentsPanel",
       "token": "active",
       "ordinal": 1,
@@ -1387,7 +1162,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 991,
+      "line": 1049,
       "symbol": "CommentsPanel",
       "token": "active",
       "ordinal": 2,
@@ -1396,7 +1171,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1014,
+      "line": 1072,
       "symbol": "CommentsPanel",
       "token": "btn",
       "ordinal": 1,
@@ -1405,7 +1180,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1031,
+      "line": 1089,
       "symbol": "CommentsPanel",
       "token": "btn",
       "ordinal": 2,
@@ -1414,7 +1189,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1014,
+      "line": 1072,
       "symbol": "CommentsPanel",
       "token": "link-btn",
       "ordinal": 1,
@@ -1423,7 +1198,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1017,
+      "line": 1075,
       "symbol": "CommentsPanel",
       "token": "link-btn",
       "ordinal": 2,
@@ -1432,7 +1207,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1017,
+      "line": 1075,
       "symbol": "CommentsPanel",
       "token": "link-btn",
       "ordinal": 3,
@@ -1441,7 +1216,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1003,
+      "line": 1061,
       "symbol": "CommentsPanel",
       "token": "sequence-comment-thread",
       "ordinal": 1,
@@ -1450,7 +1225,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 989,
+      "line": 1047,
       "symbol": "CommentsPanel",
       "token": "sequence-review-tabs",
       "ordinal": 1,
@@ -1459,7 +1234,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1025,
+      "line": 1083,
       "symbol": "CommentsPanel",
       "token": "sequence-version-list",
       "ordinal": 1,
@@ -1468,7 +1243,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1014,
+      "line": 1072,
       "symbol": "CommentsPanel",
       "token": "sm",
       "ordinal": 1,
@@ -1477,7 +1252,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1031,
+      "line": 1089,
       "symbol": "CommentsPanel",
       "token": "sm",
       "ordinal": 2,
@@ -1486,7 +1261,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1005,
+      "line": 1063,
       "symbol": "CommentsPanel",
       "token": "stale",
       "ordinal": 1,
@@ -1495,7 +1270,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 887,
+      "line": 945,
       "symbol": "PreviewPanel",
       "token": "active",
       "ordinal": 1,
@@ -1504,7 +1279,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 888,
+      "line": 946,
       "symbol": "PreviewPanel",
       "token": "active",
       "ordinal": 2,
@@ -1513,7 +1288,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 892,
+      "line": 950,
       "symbol": "PreviewPanel",
       "token": "card",
       "ordinal": 1,
@@ -1522,7 +1297,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 935,
+      "line": 993,
       "symbol": "PreviewPanel",
       "token": "linkedin-connection-preview",
       "ordinal": 1,
@@ -1531,7 +1306,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 917,
+      "line": 975,
       "symbol": "PreviewPanel",
       "token": "linkedin-preview",
       "ordinal": 1,
@@ -1540,7 +1315,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 886,
+      "line": 944,
       "symbol": "PreviewPanel",
       "token": "sequence-device-toggle",
       "ordinal": 1,
@@ -1549,7 +1324,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 880,
+      "line": 938,
       "symbol": "PreviewPanel",
       "token": "sequence-section-intro",
       "ordinal": 1,
@@ -1558,7 +1333,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 938,
+      "line": 996,
       "symbol": "PreviewPanel",
       "token": "warn",
       "ordinal": 1,
@@ -1567,7 +1342,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1176,
+      "line": 1234,
       "symbol": "PublishWizard",
       "token": "active",
       "ordinal": 1,
@@ -1576,7 +1351,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1191,
+      "line": 1249,
       "symbol": "PublishWizard",
       "token": "btn",
       "ordinal": 1,
@@ -1585,7 +1360,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1270,
+      "line": 1328,
       "symbol": "PublishWizard",
       "token": "btn",
       "ordinal": 2,
@@ -1594,7 +1369,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1270,
+      "line": 1328,
       "symbol": "PublishWizard",
       "token": "btn",
       "ordinal": 3,
@@ -1603,7 +1378,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1271,
+      "line": 1329,
       "symbol": "PublishWizard",
       "token": "btn",
       "ordinal": 4,
@@ -1612,7 +1387,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1271,
+      "line": 1329,
       "symbol": "PublishWizard",
       "token": "btn",
       "ordinal": 5,
@@ -1621,7 +1396,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1176,
+      "line": 1234,
       "symbol": "PublishWizard",
       "token": "complete",
       "ordinal": 1,
@@ -1630,7 +1405,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1167,
+      "line": 1225,
       "symbol": "PublishWizard",
       "token": "conv-close",
       "ordinal": 1,
@@ -1639,7 +1414,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1191,
+      "line": 1249,
       "symbol": "PublishWizard",
       "token": "error",
       "ordinal": 1,
@@ -1648,7 +1423,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1257,
+      "line": 1315,
       "symbol": "PublishWizard",
       "token": "error",
       "ordinal": 2,
@@ -1657,7 +1432,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1218,
+      "line": 1276,
       "symbol": "PublishWizard",
       "token": "link-btn",
       "ordinal": 1,
@@ -1666,7 +1441,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1158,
+      "line": 1216,
       "symbol": "PublishWizard",
       "token": "pipe-modal-overlay",
       "ordinal": 1,
@@ -1675,7 +1450,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1159,
+      "line": 1217,
       "symbol": "PublishWizard",
       "token": "pipe-modal",
       "ordinal": 1,
@@ -1684,7 +1459,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1224,
+      "line": 1282,
       "symbol": "PublishWizard",
       "token": "selected",
       "ordinal": 1,
@@ -1693,7 +1468,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1226,
+      "line": 1284,
       "symbol": "PublishWizard",
       "token": "sequence-publish-branch-letter",
       "ordinal": 1,
@@ -1702,7 +1477,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1220,
+      "line": 1278,
       "symbol": "PublishWizard",
       "token": "sequence-publish-branch-list",
       "ordinal": 1,
@@ -1711,7 +1486,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1160,
+      "line": 1218,
       "symbol": "PublishWizard",
       "token": "sequence-publish-head",
       "ordinal": 1,
@@ -1720,7 +1495,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1190,
+      "line": 1248,
       "symbol": "PublishWizard",
       "token": "sequence-publish-loading",
       "ordinal": 1,
@@ -1729,7 +1504,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1187,
+      "line": 1245,
       "symbol": "PublishWizard",
       "token": "sequence-publish-section-head",
       "ordinal": 1,
@@ -1738,7 +1513,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1216,
+      "line": 1274,
       "symbol": "PublishWizard",
       "token": "sequence-publish-section-head",
       "ordinal": 2,
@@ -1747,7 +1522,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1249,
+      "line": 1307,
       "symbol": "PublishWizard",
       "token": "sequence-publish-section-head",
       "ordinal": 3,
@@ -1756,7 +1531,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1191,
+      "line": 1249,
       "symbol": "PublishWizard",
       "token": "sequence-publish-state",
       "ordinal": 1,
@@ -1765,7 +1540,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1192,
+      "line": 1250,
       "symbol": "PublishWizard",
       "token": "sequence-publish-state",
       "ordinal": 2,
@@ -1774,7 +1549,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1257,
+      "line": 1315,
       "symbol": "PublishWizard",
       "token": "sequence-publish-state",
       "ordinal": 3,
@@ -1783,7 +1558,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1170,
+      "line": 1228,
       "symbol": "PublishWizard",
       "token": "sequence-publish-steps",
       "ordinal": 1,
@@ -1792,7 +1567,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1271,
+      "line": 1329,
       "symbol": "PublishWizard",
       "token": "sequence-publish-submit",
       "ordinal": 1,
@@ -1801,7 +1576,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1198,
+      "line": 1256,
       "symbol": "PublishWizard",
       "token": "sequence-publish-target",
       "ordinal": 1,
@@ -1810,7 +1585,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1191,
+      "line": 1249,
       "symbol": "PublishWizard",
       "token": "sm",
       "ordinal": 1,
@@ -1819,7 +1594,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 473,
+      "line": 531,
       "symbol": "SaveIndicator",
       "token": "sequence-save-state",
       "ordinal": 1,
@@ -1828,7 +1603,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1468,
+      "line": 1526,
       "symbol": "SequenceEditor",
       "token": "active",
       "ordinal": 1,
@@ -1837,7 +1612,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1469,
+      "line": 1527,
       "symbol": "SequenceEditor",
       "token": "active",
       "ordinal": 2,
@@ -1846,7 +1621,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1470,
+      "line": 1528,
       "symbol": "SequenceEditor",
       "token": "active",
       "ordinal": 3,
@@ -1855,7 +1630,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1455,
+      "line": 1513,
       "symbol": "SequenceEditor",
       "token": "btn",
       "ordinal": 1,
@@ -1864,7 +1639,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1411,
+      "line": 1469,
       "symbol": "SequenceEditor",
       "token": "card",
       "ordinal": 1,
@@ -1873,7 +1648,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1467,
+      "line": 1525,
       "symbol": "SequenceEditor",
       "token": "sequence-editor-tabs",
       "ordinal": 1,
@@ -1882,7 +1657,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1417,
+      "line": 1475,
       "symbol": "SequenceEditor",
       "token": "sequence-editor-topbar",
       "ordinal": 1,
@@ -1891,7 +1666,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1461,
+      "line": 1519,
       "symbol": "SequenceEditor",
       "token": "sequence-publish-job-icon",
       "ordinal": 1,
@@ -1900,7 +1675,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1460,
+      "line": 1518,
       "symbol": "SequenceEditor",
       "token": "sequence-publish-job-strip",
       "ordinal": 1,
@@ -1909,97 +1684,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 407,
-      "symbol": "SequenceLibrary",
-      "token": "active",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:active::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 408,
-      "symbol": "SequenceLibrary",
-      "token": "active",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:active::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 379,
-      "symbol": "SequenceLibrary",
-      "token": "badge",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:badge::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 346,
-      "symbol": "SequenceLibrary",
-      "token": "btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 393,
-      "symbol": "SequenceLibrary",
-      "token": "btn",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:btn::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 401,
-      "symbol": "SequenceLibrary",
-      "token": "btn",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:btn::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 346,
-      "symbol": "SequenceLibrary",
-      "token": "card",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:card::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 348,
-      "symbol": "SequenceLibrary",
-      "token": "card",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:card::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 390,
-      "symbol": "SequenceLibrary",
-      "token": "card",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:card::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 396,
-      "symbol": "SequenceLibrary",
-      "token": "card",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:card::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 439,
+      "line": 495,
       "symbol": "SequenceLibrary",
       "token": "connection",
       "ordinal": 1,
@@ -2008,7 +1693,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 329,
+      "line": 352,
       "symbol": "SequenceLibrary",
       "token": "deployment-advanced",
       "ordinal": 1,
@@ -2017,133 +1702,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 306,
-      "symbol": "SequenceLibrary",
-      "token": "deployment-filters",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:deployment-filters::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 426,
-      "symbol": "SequenceLibrary",
-      "token": "icon-only-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:icon-only-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 369,
-      "symbol": "SequenceLibrary",
-      "token": "link-btn",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:link-btn::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 367,
-      "symbol": "SequenceLibrary",
-      "token": "muted",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:muted::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 377,
-      "symbol": "SequenceLibrary",
-      "token": "muted",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:muted::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 379,
-      "symbol": "SequenceLibrary",
-      "token": "muted",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:muted::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 379,
-      "symbol": "SequenceLibrary",
-      "token": "muted",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:muted::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 381,
-      "symbol": "SequenceLibrary",
-      "token": "muted",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:muted::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 357,
-      "symbol": "SequenceLibrary",
-      "token": "num",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:num::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 357,
-      "symbol": "SequenceLibrary",
-      "token": "num",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:num::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 380,
-      "symbol": "SequenceLibrary",
-      "token": "num",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:num::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 380,
-      "symbol": "SequenceLibrary",
-      "token": "num",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:num::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 376,
-      "symbol": "SequenceLibrary",
-      "token": "row-link",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:row-link::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 406,
-      "symbol": "SequenceLibrary",
-      "token": "sequence-library-switch",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:sequence-library-switch::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 437,
+      "line": 493,
       "symbol": "SequenceLibrary",
       "token": "sequence-mini-flow",
       "ordinal": 1,
@@ -2152,52 +1711,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 367,
-      "symbol": "SequenceLibrary",
-      "token": "small",
-      "ordinal": 1,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:small::1"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 377,
-      "symbol": "SequenceLibrary",
-      "token": "small",
-      "ordinal": 2,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:small::2"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 379,
-      "symbol": "SequenceLibrary",
-      "token": "small",
-      "ordinal": 3,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:small::3"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 379,
-      "symbol": "SequenceLibrary",
-      "token": "small",
-      "ordinal": 4,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:small::4"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 381,
-      "symbol": "SequenceLibrary",
-      "token": "small",
-      "ordinal": 5,
-      "key": "compatibility-token:src/pages/SequenceBuilder.tsx:SequenceLibrary:small::5"
-    },
-    {
-      "kind": "compatibility-token",
-      "path": "src/pages/SequenceBuilder.tsx",
-      "line": 666,
+      "line": 724,
       "symbol": "VariationEditor",
       "token": "char-warning",
       "ordinal": 1,
@@ -2206,7 +1720,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 634,
+      "line": 692,
       "symbol": "VariationEditor",
       "token": "danger",
       "ordinal": 1,
@@ -2215,7 +1729,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 634,
+      "line": 692,
       "symbol": "VariationEditor",
       "token": "icon-only-btn",
       "ordinal": 1,
@@ -2224,7 +1738,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 662,
+      "line": 720,
       "symbol": "VariationEditor",
       "token": "link-btn",
       "ordinal": 1,
@@ -2233,7 +1747,7 @@
     {
       "kind": "compatibility-token",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 666,
+      "line": 724,
       "symbol": "VariationEditor",
       "token": "muted",
       "ordinal": 1,
@@ -2401,7 +1915,7 @@
       "ancestry": [
         "@keyframes auth-spin"
       ],
-      "line": 1052,
+      "line": 1003,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes auth-spin|to:1"
@@ -2413,7 +1927,7 @@
       "ancestry": [
         "@keyframes conv-slide-in"
       ],
-      "line": 952,
+      "line": 921,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes conv-slide-in|from:1"
@@ -2425,7 +1939,7 @@
       "ancestry": [
         "@keyframes conv-slide-in"
       ],
-      "line": 952,
+      "line": 921,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes conv-slide-in|to:1"
@@ -2437,7 +1951,7 @@
       "ancestry": [
         "@keyframes sequence-pulse"
       ],
-      "line": 1068,
+      "line": 1014,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes sequence-pulse|to:1"
@@ -2449,7 +1963,7 @@
       "ancestry": [
         "@keyframes sequence-shimmer"
       ],
-      "line": 1061,
+      "line": 1007,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes sequence-shimmer|to:1"
@@ -2461,22 +1975,10 @@
       "ancestry": [
         "@keyframes skeleton-shimmer"
       ],
-      "line": 765,
+      "line": 738,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes skeleton-shimmer|100%:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": "to",
-      "ancestry": [
-        "@keyframes spin"
-      ],
-      "line": 909,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:@keyframes spin|to:1"
     },
     {
       "kind": "compatibility-selector",
@@ -2485,7 +1987,7 @@
       "ancestry": [
         "@keyframes toast-in"
       ],
-      "line": 966,
+      "line": 935,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes toast-in|from:1"
@@ -2497,7 +1999,7 @@
       "ancestry": [
         "@keyframes toast-in"
       ],
-      "line": 967,
+      "line": 936,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@keyframes toast-in|to:1"
@@ -2509,7 +2011,7 @@
       "ancestry": [
         "@media (max-width: 1180px)"
       ],
-      "line": 1129,
+      "line": 1075,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -2523,7 +2025,7 @@
       "ancestry": [
         "@media (max-width: 1180px)"
       ],
-      "line": 1128,
+      "line": 1074,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -2537,7 +2039,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1139,
+      "line": 1085,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -2552,7 +2054,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1135,
+      "line": 1081,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -2566,7 +2068,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1133,
+      "line": 1079,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -2580,7 +2082,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1136,
+      "line": 1082,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -2594,7 +2096,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1138,
+      "line": 1084,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -2609,7 +2111,7 @@
       "ancestry": [
         "@media (max-width: 700px)"
       ],
-      "line": 1137,
+      "line": 1083,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -2620,39 +2122,11 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".deployment-filters select",
-      "ancestry": [
-        "@media (max-width: 720px)"
-      ],
-      "line": 1056,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 720px)|.deployment-filters select:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".deployment-filters",
-      "ancestry": [
-        "@media (max-width: 720px)"
-      ],
-      "line": 1055,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:@media (max-width: 720px)|.deployment-filters:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": "*, *::before, *::after",
       "ancestry": [
         "@media (prefers-reduced-motion: reduce)"
       ],
-      "line": 977,
+      "line": 945,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media (prefers-reduced-motion: reduce)|*, *::before, *::after:1"
@@ -2664,10 +2138,9 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1156,
+      "line": 1102,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -2680,7 +2153,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1157,
+      "line": 1103,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|.glass, .glass--strong:1"
@@ -2692,7 +2165,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1154,
+      "line": 1100,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/Layout.tsx",
@@ -2707,7 +2180,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1158,
+      "line": 1104,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|[hidden]:1"
@@ -2719,7 +2192,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1153,
+      "line": 1099,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|body:1"
@@ -2731,7 +2204,7 @@
       "ancestry": [
         "@media print"
       ],
-      "line": 1155,
+      "line": 1101,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:@media print|main:1"
@@ -2741,7 +2214,7 @@
       "path": "src/ui/ui.css",
       "selector": ":where(textarea)",
       "ancestry": [],
-      "line": 678,
+      "line": 682,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|:where(textarea):1"
@@ -2751,11 +2224,9 @@
       "path": "src/ui/ui.css",
       "selector": ".account-card-cap .small",
       "ancestry": [],
-      "line": 934,
+      "line": 903,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
-        "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.account-card-cap .small:1"
@@ -2765,11 +2236,9 @@
       "path": "src/ui/ui.css",
       "selector": ".account-card-spark .small",
       "ancestry": [],
-      "line": 934,
+      "line": 903,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
-        "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
       ],
       "key": "compatibility-selector:|.account-card-spark .small:1"
@@ -2779,7 +2248,7 @@
       "path": "src/ui/ui.css",
       "selector": ".active-sequence-list, .new-reply-list",
       "ancestry": [],
-      "line": 1147,
+      "line": 1093,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.active-sequence-list, .new-reply-list:1"
@@ -2789,13 +2258,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge",
       "ancestry": [],
-      "line": 774,
+      "line": 747,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge:1"
     },
@@ -2804,13 +2272,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-alert",
       "ancestry": [],
-      "line": 1147,
+      "line": 1093,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.attention-alert:1"
     },
@@ -2819,13 +2286,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-ok",
       "ancestry": [],
-      "line": 1149,
+      "line": 1095,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.attention-ok:1"
     },
@@ -2834,13 +2300,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.attention-watch",
       "ancestry": [],
-      "line": 1148,
+      "line": 1094,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.attention-watch:1"
     },
@@ -2849,13 +2314,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.risk",
       "ancestry": [],
-      "line": 786,
+      "line": 759,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.risk:1"
     },
@@ -2864,13 +2328,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.source-external",
       "ancestry": [],
-      "line": 1150,
+      "line": 1096,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.source-external:1"
     },
@@ -2879,13 +2342,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-accepted",
       "ancestry": [],
-      "line": 817,
+      "line": 790,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-accepted:1"
     },
@@ -2894,13 +2356,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-invited",
       "ancestry": [],
-      "line": 816,
+      "line": 789,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-invited:1"
     },
@@ -2909,13 +2370,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-queued",
       "ancestry": [],
-      "line": 815,
+      "line": 788,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-queued:1"
     },
@@ -2924,13 +2384,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.stage-replied",
       "ancestry": [],
-      "line": 818,
+      "line": 791,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.stage-replied:1"
     },
@@ -2939,13 +2398,12 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.status-error",
       "ancestry": [],
-      "line": 787,
+      "line": 760,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.status-error:1"
     },
@@ -2954,85 +2412,21 @@
       "path": "src/ui/ui.css",
       "selector": ".badge.status-running",
       "ancestry": [],
-      "line": 788,
+      "line": 761,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.badge.status-running:1"
     },
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".banner > .btn",
-      "ancestry": [],
-      "line": 716,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.banner > .btn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".banner > span",
-      "ancestry": [],
-      "line": 715,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.banner > span:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".banner",
-      "ancestry": [],
-      "line": 701,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.banner:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".banner.error",
-      "ancestry": [],
-      "line": 1004,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.banner.error:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".banner.warn",
-      "ancestry": [],
-      "line": 718,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx",
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.banner.warn:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".btn-accent",
       "ancestry": [],
-      "line": 879,
+      "line": 852,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.btn-accent:1"
@@ -3042,7 +2436,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn-accent:hover:not(:disabled)",
       "ancestry": [],
-      "line": 880,
+      "line": 853,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.btn-accent:hover:not(:disabled):1"
@@ -3052,7 +2446,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn, .btn-accent",
       "ancestry": [],
-      "line": 828,
+      "line": 801,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3062,22 +2456,21 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .navlink:active",
+      "selector": ".btn:active:not(:disabled), .btn-accent:active:not(:disabled), .navlink:active",
       "ancestry": [],
-      "line": 970,
+      "line": 939,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
         "src/pages/SequenceBuilder.tsx"
       ],
-      "key": "compatibility-selector:|.btn:active:not(:disabled), .btn-accent:active:not(:disabled), .chat-send:active:not(:disabled), .navlink:active:1"
+      "key": "compatibility-selector:|.btn:active:not(:disabled), .btn-accent:active:not(:disabled), .navlink:active:1"
     },
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
       "selector": ".btn:disabled, .btn-accent:disabled",
       "ancestry": [],
-      "line": 852,
+      "line": 825,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3089,7 +2482,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn:hover:not(:disabled)",
       "ancestry": [],
-      "line": 851,
+      "line": 824,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3101,7 +2494,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.accent",
       "ancestry": [],
-      "line": 855,
+      "line": 828,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3113,7 +2506,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.accent:hover:not(:disabled)",
       "ancestry": [],
-      "line": 860,
+      "line": 833,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3125,7 +2518,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.danger",
       "ancestry": [],
-      "line": 865,
+      "line": 838,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3137,7 +2530,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.danger",
       "ancestry": [],
-      "line": 1046,
+      "line": 997,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3149,7 +2542,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.danger:hover:not(:disabled)",
       "ancestry": [],
-      "line": 866,
+      "line": 839,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3161,7 +2554,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.danger:hover:not(:disabled)",
       "ancestry": [],
-      "line": 1048,
+      "line": 999,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3173,7 +2566,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.ghost",
       "ancestry": [],
-      "line": 862,
+      "line": 835,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3185,7 +2578,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.ghost:hover:not(:disabled)",
       "ancestry": [],
-      "line": 863,
+      "line": 836,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3197,7 +2590,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn.sm",
       "ancestry": [],
-      "line": 869,
+      "line": 842,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3209,7 +2602,7 @@
       "path": "src/ui/ui.css",
       "selector": ".btn[aria-pressed='true']",
       "ancestry": [],
-      "line": 871,
+      "line": 844,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3221,13 +2614,12 @@
       "path": "src/ui/ui.css",
       "selector": ".campaign-source .badge",
       "ancestry": [],
-      "line": 1125,
+      "line": 1071,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.campaign-source .badge:1"
     },
@@ -3236,10 +2628,9 @@
       "path": "src/ui/ui.css",
       "selector": ".card",
       "ancestry": [],
-      "line": 724,
+      "line": 697,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx"
       ],
@@ -3250,7 +2641,7 @@
       "path": "src/ui/ui.css",
       "selector": ".char-warning",
       "ancestry": [],
-      "line": 1080,
+      "line": 1026,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3262,7 +2653,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md code",
       "ancestry": [],
-      "line": 931,
+      "line": 900,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3275,7 +2666,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md p",
       "ancestry": [],
-      "line": 927,
+      "line": 896,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3288,7 +2679,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md p:last-child",
       "ancestry": [],
-      "line": 928,
+      "line": 897,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3301,7 +2692,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md pre code",
       "ancestry": [],
-      "line": 933,
+      "line": 902,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3314,7 +2705,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md pre",
       "ancestry": [],
-      "line": 932,
+      "line": 901,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3327,7 +2718,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md table",
       "ancestry": [],
-      "line": 929,
+      "line": 898,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3340,7 +2731,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md th, .chat-md td",
       "ancestry": [],
-      "line": 930,
+      "line": 899,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3353,7 +2744,7 @@
       "path": "src/ui/ui.css",
       "selector": ".chat-md",
       "ancestry": [],
-      "line": 926,
+      "line": 895,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx",
@@ -3364,57 +2755,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".chat-msg.user .chat-body",
-      "ancestry": [],
-      "line": 925,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.chat-msg.user .chat-body:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".chat-msg.user .chat-body",
-      "ancestry": [],
-      "line": 994,
-      "ordinal": 2,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.chat-msg.user .chat-body:2"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".chat-msg.user .chat-msg-actions",
-      "ancestry": [],
-      "line": 999,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.chat-msg.user .chat-msg-actions:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".chat-msg.user .chat-role",
-      "ancestry": [],
-      "line": 993,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.chat-msg.user .chat-role:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".chat-msg.user",
       "ancestry": [],
-      "line": 992,
+      "line": 960,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/Chat.tsx"
@@ -3426,7 +2769,7 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-close",
       "ancestry": [],
-      "line": 953,
+      "line": 922,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3438,7 +2781,7 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-close",
       "ancestry": [],
-      "line": 1002,
+      "line": 963,
       "ordinal": 2,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3450,13 +2793,12 @@
       "path": "src/ui/ui.css",
       "selector": ".conv-demographics .badge",
       "ancestry": [],
-      "line": 1044,
+      "line": 995,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.conv-demographics .badge:1"
     },
@@ -3465,7 +2807,7 @@
       "path": "src/ui/ui.css",
       "selector": ".deployment-advanced .ui-field",
       "ancestry": [],
-      "line": 1161,
+      "line": 1107,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3475,45 +2817,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".deployment-filters label",
-      "ancestry": [],
-      "line": 1053,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.deployment-filters label:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".deployment-filters select",
-      "ancestry": [],
-      "line": 1054,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.deployment-filters select:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".deployment-filters",
-      "ancestry": [],
-      "line": 1052,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.deployment-filters:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".dot",
       "ancestry": [],
-      "line": 743,
+      "line": 716,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.dot:1"
@@ -3523,7 +2829,7 @@
       "path": "src/ui/ui.css",
       "selector": ".dot.inline",
       "ancestry": [],
-      "line": 746,
+      "line": 719,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.dot.inline:1"
@@ -3533,7 +2839,7 @@
       "path": "src/ui/ui.css",
       "selector": ".dot.ok",
       "ancestry": [],
-      "line": 744,
+      "line": 717,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.dot.ok:1"
@@ -3543,7 +2849,7 @@
       "path": "src/ui/ui.css",
       "selector": ".dot.stale",
       "ancestry": [],
-      "line": 745,
+      "line": 718,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3553,69 +2859,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".drp-day",
-      "ancestry": [],
-      "line": 692,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.drp-day:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".drp-day:hover",
-      "ancestry": [],
-      "line": 697,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.drp-day:hover:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".drp-day.between",
-      "ancestry": [],
-      "line": 698,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.drp-day.between:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".drp-day.disabled",
-      "ancestry": [],
-      "line": 1011,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.drp-day.disabled:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".drp-day.disabled:hover",
-      "ancestry": [],
-      "line": 1012,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.drp-day.disabled:hover:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
-      "selector": ".drp-day.edge",
-      "ancestry": [],
-      "line": 699,
-      "ordinal": 1,
-      "consumerCandidates": [],
-      "key": "compatibility-selector:|.drp-day.edge:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".drp-presets button.active",
       "ancestry": [],
-      "line": 691,
+      "line": 695,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3627,7 +2873,7 @@
       "path": "src/ui/ui.css",
       "selector": ".empty-state-action .link-btn",
       "ancestry": [],
-      "line": 965,
+      "line": 934,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3639,7 +2885,7 @@
       "path": "src/ui/ui.css",
       "selector": ".empty-state",
       "ancestry": [],
-      "line": 962,
+      "line": 931,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.empty-state:1"
@@ -3649,7 +2895,7 @@
       "path": "src/ui/ui.css",
       "selector": ".filter-bar",
       "ancestry": [],
-      "line": 806,
+      "line": 779,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.filter-bar:1"
@@ -3659,7 +2905,7 @@
       "path": "src/ui/ui.css",
       "selector": ".icon-btn svg, .icon-only-btn svg",
       "ancestry": [],
-      "line": 904,
+      "line": 877,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3671,7 +2917,7 @@
       "path": "src/ui/ui.css",
       "selector": ".icon-btn, .icon-only-btn",
       "ancestry": [],
-      "line": 883,
+      "line": 856,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3683,7 +2929,7 @@
       "path": "src/ui/ui.css",
       "selector": ".icon-btn:disabled, .icon-only-btn:disabled",
       "ancestry": [],
-      "line": 901,
+      "line": 874,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3695,7 +2941,7 @@
       "path": "src/ui/ui.css",
       "selector": ".icon-btn:hover:not(:disabled), .icon-only-btn:hover:not(:disabled)",
       "ancestry": [],
-      "line": 899,
+      "line": 872,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3707,7 +2953,7 @@
       "path": "src/ui/ui.css",
       "selector": ".icon-only-btn.danger:hover:not(:disabled)",
       "ancestry": [],
-      "line": 903,
+      "line": 876,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3719,7 +2965,7 @@
       "path": "src/ui/ui.css",
       "selector": ".link-btn",
       "ancestry": [],
-      "line": 938,
+      "line": 907,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3731,7 +2977,7 @@
       "path": "src/ui/ui.css",
       "selector": ".link-btn:disabled",
       "ancestry": [],
-      "line": 950,
+      "line": 919,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3743,7 +2989,7 @@
       "path": "src/ui/ui.css",
       "selector": ".link-btn:hover:not(:disabled)",
       "ancestry": [],
-      "line": 949,
+      "line": 918,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3755,7 +3001,7 @@
       "path": "src/ui/ui.css",
       "selector": ".linkedin-connection-preview small.warn",
       "ancestry": [],
-      "line": 1084,
+      "line": 1030,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3767,7 +3013,7 @@
       "path": "src/ui/ui.css",
       "selector": ".linkedin-preview.mobile",
       "ancestry": [],
-      "line": 1083,
+      "line": 1029,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3779,7 +3025,7 @@
       "path": "src/ui/ui.css",
       "selector": ".new-reply-open > span.reply-body",
       "ancestry": [],
-      "line": 1150,
+      "line": 1096,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.new-reply-open > span.reply-body:1"
@@ -3789,11 +3035,9 @@
       "path": "src/ui/ui.css",
       "selector": ".num",
       "ancestry": [],
-      "line": 742,
+      "line": 715,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.num:1"
     },
     {
@@ -3801,7 +3045,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel-head h2",
       "ancestry": [],
-      "line": 1147,
+      "line": 1093,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.overview-panel-head h2:1"
@@ -3811,7 +3055,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel-head",
       "ancestry": [],
-      "line": 1143,
+      "line": 1089,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.overview-panel-head:1"
@@ -3821,7 +3065,7 @@
       "path": "src/ui/ui.css",
       "selector": ".overview-panel",
       "ancestry": [],
-      "line": 1142,
+      "line": 1088,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.overview-panel:1"
@@ -3831,7 +3075,7 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal textarea",
       "ancestry": [],
-      "line": 1043,
+      "line": 994,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3843,7 +3087,7 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal-head",
       "ancestry": [],
-      "line": 1036,
+      "line": 987,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3855,7 +3099,7 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal-overlay",
       "ancestry": [],
-      "line": 1015,
+      "line": 966,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3867,7 +3111,7 @@
       "path": "src/ui/ui.css",
       "selector": ".pipe-modal",
       "ancestry": [],
-      "line": 1025,
+      "line": 976,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -3879,13 +3123,12 @@
       "path": "src/ui/ui.css",
       "selector": ".publish-compatibility-card .badge",
       "ancestry": [],
-      "line": 1124,
+      "line": 1070,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.publish-compatibility-card .badge:1"
     },
@@ -3894,13 +3137,12 @@
       "path": "src/ui/ui.css",
       "selector": ".reply-body .badge.senti",
       "ancestry": [],
-      "line": 905,
+      "line": 878,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
         "src/components/leads-and-replies/LeadReplyIdentity.tsx",
-        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx",
-        "src/pages/SequenceBuilder.tsx"
+        "src/components/leads-and-replies/LeadsAndRepliesWorkspace.tsx"
       ],
       "key": "compatibility-selector:|.reply-body .badge.senti:1"
     },
@@ -3909,7 +3151,7 @@
       "path": "src/ui/ui.css",
       "selector": ".reply-body",
       "ancestry": [],
-      "line": 911,
+      "line": 881,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.reply-body:1"
@@ -3919,11 +3161,9 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link",
       "ancestry": [],
-      "line": 768,
+      "line": 741,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.row-link:1"
     },
     {
@@ -3931,11 +3171,9 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link:hover",
       "ancestry": [],
-      "line": 769,
+      "line": 742,
       "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
+      "consumerCandidates": [],
       "key": "compatibility-selector:|.row-link:hover:1"
     },
     {
@@ -3943,10 +3181,9 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link.muted",
       "ancestry": [],
-      "line": 770,
+      "line": 743,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -3958,10 +3195,9 @@
       "path": "src/ui/ui.css",
       "selector": ".row-link.muted:hover",
       "ancestry": [],
-      "line": 771,
+      "line": 744,
       "ordinal": 1,
       "consumerCandidates": [
-        "src/pages/Chat.tsx",
         "src/pages/SequenceBuilder.tsx",
         "src/ui/Gallery.tsx",
         "src/ui/Toolbar.tsx"
@@ -3973,7 +3209,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.auto",
       "ancestry": [],
-      "line": 796,
+      "line": 769,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -3987,7 +3223,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.neg",
       "ancestry": [],
-      "line": 795,
+      "line": 768,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4001,7 +3237,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.neu",
       "ancestry": [],
-      "line": 793,
+      "line": 766,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4015,7 +3251,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.obj",
       "ancestry": [],
-      "line": 792,
+      "line": 765,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4029,7 +3265,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.p1",
       "ancestry": [],
-      "line": 797,
+      "line": 770,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4043,7 +3279,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.p2",
       "ancestry": [],
-      "line": 798,
+      "line": 771,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4057,7 +3293,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.p3",
       "ancestry": [],
-      "line": 799,
+      "line": 772,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4071,7 +3307,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.pos",
       "ancestry": [],
-      "line": 791,
+      "line": 764,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4085,7 +3321,7 @@
       "path": "src/ui/ui.css",
       "selector": ".senti.ref",
       "ancestry": [],
-      "line": 794,
+      "line": 767,
       "ordinal": 1,
       "consumerCandidates": [
         "src/components/ConversationDrawer.tsx",
@@ -4099,7 +3335,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-add-variation",
       "ancestry": [],
-      "line": 1081,
+      "line": 1027,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -4112,7 +3348,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-add-variation:hover",
       "ancestry": [],
-      "line": 1082,
+      "line": 1028,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -4125,7 +3361,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-comment-thread blockquote.stale",
       "ancestry": [],
-      "line": 1070,
+      "line": 1016,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4135,9 +3371,21 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
+      "selector": ".sequence-device-toggle button.active, .sequence-review-tabs button.active",
+      "ancestry": [],
+      "line": 1004,
+      "ordinal": 1,
+      "consumerCandidates": [
+        "src/pages/SequenceBuilder.tsx"
+      ],
+      "key": "compatibility-selector:|.sequence-device-toggle button.active, .sequence-review-tabs button.active:1"
+    },
+    {
+      "kind": "compatibility-selector",
+      "path": "src/ui/ui.css",
       "selector": ".sequence-editor-tabs button.active",
       "ancestry": [],
-      "line": 1069,
+      "line": 1015,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4147,21 +3395,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".sequence-library-switch button.active, .sequence-device-toggle button.active, .sequence-review-tabs button.active",
-      "ancestry": [],
-      "line": 1057,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/SequenceBuilder.tsx"
-      ],
-      "key": "compatibility-selector:|.sequence-library-switch button.active, .sequence-device-toggle button.active, .sequence-review-tabs button.active:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": ".sequence-mini-flow span.connection",
       "ancestry": [],
-      "line": 1060,
+      "line": 1006,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4173,7 +3409,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-branch-list label.selected .sequence-publish-branch-letter",
       "ancestry": [],
-      "line": 1118,
+      "line": 1064,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4185,7 +3421,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-branch-list label.selected > svg",
       "ancestry": [],
-      "line": 1119,
+      "line": 1065,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4197,7 +3433,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-branch-list label.selected",
       "ancestry": [],
-      "line": 1117,
+      "line": 1063,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4209,7 +3445,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-head .conv-close",
       "ancestry": [],
-      "line": 1085,
+      "line": 1031,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4221,7 +3457,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.failed .sequence-publish-job-icon",
       "ancestry": [],
-      "line": 1123,
+      "line": 1069,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4233,7 +3469,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.failed",
       "ancestry": [],
-      "line": 1122,
+      "line": 1068,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4245,7 +3481,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.succeeded .sequence-publish-job-icon",
       "ancestry": [],
-      "line": 1121,
+      "line": 1067,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4257,7 +3493,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-job-strip.succeeded",
       "ancestry": [],
-      "line": 1120,
+      "line": 1066,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4269,7 +3505,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-loading svg, .sequence-publish-submit svg, .sequence-publish-job-strip:not(.succeeded):not(.failed) .sequence-publish-job-icon svg",
       "ancestry": [],
-      "line": 1106,
+      "line": 1052,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4281,7 +3517,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-loading, .sequence-publish-state",
       "ancestry": [],
-      "line": 1093,
+      "line": 1039,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4293,7 +3529,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-section-head .link-btn",
       "ancestry": [],
-      "line": 1091,
+      "line": 1037,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4305,7 +3541,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state > div",
       "ancestry": [],
-      "line": 1111,
+      "line": 1057,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4317,7 +3553,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state > svg",
       "ancestry": [],
-      "line": 1110,
+      "line": 1056,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4329,7 +3565,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state p",
       "ancestry": [],
-      "line": 1113,
+      "line": 1059,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4341,7 +3577,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state strong",
       "ancestry": [],
-      "line": 1112,
+      "line": 1058,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4353,7 +3589,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state",
       "ancestry": [],
-      "line": 1109,
+      "line": 1055,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4365,7 +3601,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state.error > svg",
       "ancestry": [],
-      "line": 1115,
+      "line": 1061,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4377,7 +3613,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-state.error",
       "ancestry": [],
-      "line": 1114,
+      "line": 1060,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4389,7 +3625,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.active button > span",
       "ancestry": [],
-      "line": 1088,
+      "line": 1034,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4401,7 +3637,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.active button",
       "ancestry": [],
-      "line": 1087,
+      "line": 1033,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4413,7 +3649,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.complete button > span",
       "ancestry": [],
-      "line": 1090,
+      "line": 1036,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4425,7 +3661,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.complete button",
       "ancestry": [],
-      "line": 1089,
+      "line": 1035,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4437,7 +3673,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-steps li.complete:not(:last-child)::after",
       "ancestry": [],
-      "line": 1086,
+      "line": 1032,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4449,7 +3685,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-publish-target.selected",
       "ancestry": [],
-      "line": 1116,
+      "line": 1062,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4461,7 +3697,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.conflict i, .sequence-save-state.error i",
       "ancestry": [],
-      "line": 1066,
+      "line": 1012,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4473,7 +3709,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.conflict, .sequence-save-state.error",
       "ancestry": [],
-      "line": 1064,
+      "line": 1010,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4485,7 +3721,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.saved i",
       "ancestry": [],
-      "line": 1062,
+      "line": 1008,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4497,7 +3733,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-save-state.saving i",
       "ancestry": [],
-      "line": 1063,
+      "line": 1009,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4509,7 +3745,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-step-icon.connection",
       "ancestry": [],
-      "line": 1072,
+      "line": 1018,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4521,7 +3757,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-step-icon.message",
       "ancestry": [],
-      "line": 1073,
+      "line": 1019,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4533,7 +3769,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-variation-actions",
       "ancestry": [],
-      "line": 1079,
+      "line": 1025,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -4546,7 +3782,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-variation-grid",
       "ancestry": [],
-      "line": 1078,
+      "line": 1024,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx",
@@ -4559,7 +3795,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sequence-version-list article .btn",
       "ancestry": [],
-      "line": 1071,
+      "line": 1017,
       "ordinal": 1,
       "consumerCandidates": [
         "src/pages/SequenceBuilder.tsx"
@@ -4571,7 +3807,7 @@
       "path": "src/ui/ui.css",
       "selector": ".skeleton::after",
       "ancestry": [],
-      "line": 756,
+      "line": 729,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.skeleton::after:1"
@@ -4581,7 +3817,7 @@
       "path": "src/ui/ui.css",
       "selector": ".skeleton",
       "ancestry": [],
-      "line": 748,
+      "line": 721,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.skeleton:1"
@@ -4591,7 +3827,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sortable",
       "ancestry": [],
-      "line": 873,
+      "line": 846,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.sortable:1"
@@ -4601,7 +3837,7 @@
       "path": "src/ui/ui.css",
       "selector": ".sortable:hover",
       "ancestry": [],
-      "line": 874,
+      "line": 847,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|.sortable:hover:1"
@@ -4609,21 +3845,9 @@
     {
       "kind": "compatibility-selector",
       "path": "src/ui/ui.css",
-      "selector": ".spin",
-      "ancestry": [],
-      "line": 910,
-      "ordinal": 1,
-      "consumerCandidates": [
-        "src/pages/Chat.tsx"
-      ],
-      "key": "compatibility-selector:|.spin:1"
-    },
-    {
-      "kind": "compatibility-selector",
-      "path": "src/ui/ui.css",
       "selector": "select",
       "ancestry": [],
-      "line": 679,
+      "line": 683,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|select:1"
@@ -4633,7 +3857,7 @@
       "path": "src/ui/ui.css",
       "selector": "select",
       "ancestry": [],
-      "line": 682,
+      "line": 686,
       "ordinal": 2,
       "consumerCandidates": [],
       "key": "compatibility-selector:|select:2"
@@ -4643,7 +3867,7 @@
       "path": "src/ui/ui.css",
       "selector": "tbody tr",
       "ancestry": [],
-      "line": 735,
+      "line": 708,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|tbody tr:1"
@@ -4653,7 +3877,7 @@
       "path": "src/ui/ui.css",
       "selector": "th, td",
       "ancestry": [],
-      "line": 734,
+      "line": 707,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|th, td:1"
@@ -4663,7 +3887,7 @@
       "path": "src/ui/ui.css",
       "selector": "th",
       "ancestry": [],
-      "line": 736,
+      "line": 709,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|th:1"
@@ -4673,7 +3897,7 @@
       "path": "src/ui/ui.css",
       "selector": "tr:last-child td",
       "ancestry": [],
-      "line": 741,
+      "line": 714,
       "ordinal": 1,
       "consumerCandidates": [],
       "key": "compatibility-selector:|tr:last-child td:1"
@@ -4683,7 +3907,7 @@
     {
       "kind": "modal-root",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 544,
+      "line": 602,
       "symbol": "CommentComposer",
       "tag": "div",
       "token": "aria-modal",
@@ -4693,7 +3917,7 @@
     {
       "kind": "modal-root",
       "path": "src/pages/SequenceBuilder.tsx",
-      "line": 1159,
+      "line": 1217,
       "symbol": "PublishWizard",
       "tag": "div",
       "token": "aria-modal",

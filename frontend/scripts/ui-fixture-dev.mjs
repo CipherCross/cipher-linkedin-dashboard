@@ -53,6 +53,7 @@ const activityEntry = `import { activityFixture } from './ui-fixture-api.mjs'; i
 const controlEntry = `import { fixtureControl } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(fixtureControl)\n`
 const importEntry = `import { importFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(importFixture)\n`
 const readOnlyEntry = `import { mutationRefusal } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(mutationRefusal)\n`
+const playbookEntry = `import { playbookFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(playbookFixture)\n`
 const viteConfig = `
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -86,7 +87,8 @@ await writeFile(join(api, 'identity.mjs'), identityEntry)
 await writeFile(join(api, 'activity-daily.mjs'), activityEntry)
 await writeFile(join(api, 'ui-fixture.mjs'), controlEntry)
 await writeFile(join(api, 'import.mjs'), importEntry)
-for (const name of ['pipeline', 'playbook', 'coach', 'review-digest', 'classify', 'briefing', 'notify-replies']) {
+await writeFile(join(api, 'playbook.mjs'), playbookEntry)
+for (const name of ['pipeline', 'coach', 'review-digest', 'classify', 'briefing', 'notify-replies']) {
   await writeFile(join(api, `${name}.mjs`), readOnlyEntry)
 }
 await writeFile(join(root, 'vite.config.mjs'), viteConfig)
@@ -108,7 +110,7 @@ if (checkOnly) {
     assert.equal(await readFile(join(root, 'fixture-scenario'), 'utf8'), 'populated-admin\n')
     process.env.UI_FIXTURE_SCENARIO = 'populated-admin'
     process.env.UI_FIXTURE_STATE_FILE = join(root, 'fixture-scenario')
-    const { identityFixture, activityFixture, fixtureControl, mutationRefusal, importFixture } = await import(join(api, 'ui-fixture-api.mjs'))
+    const { identityFixture, activityFixture, fixtureControl, mutationRefusal, importFixture, playbookFixture } = await import(join(api, 'ui-fixture-api.mjs'))
     const request = (path, method = 'GET') => new Request(`http://127.0.0.1:${port}${path}`, { method })
     const body = async (response) => ({ status: response.status, json: await response.json() })
     const admin = await body(await identityFixture(request('/api/identity?op=session.current')))
@@ -145,6 +147,11 @@ if (checkOnly) {
     assert.equal((await activityFixture(request('/api/activity-daily?op=dashboard.bootstrap', 'POST'))).status, 403)
     assert.equal((await identityFixture(request('/api/identity?op=session.signOut', 'POST'))).status, 403)
     assert.equal((await mutationRefusal()).status, 403)
+    await fixtureControl(request('/api/ui-fixture?scenario=populated-admin'))
+    const post = (path, payload) => new Request(`http://127.0.0.1:${port}${path}`, { method: 'POST', body: JSON.stringify(payload), headers: { 'content-type': 'application/json' } })
+    assert.equal((await body(await playbookFixture(post('/api/playbook', { action: 'list_sequences' })))).json.sequences.length, 2)
+    assert.equal((await playbookFixture(post('/api/playbook', { action: 'set_archived', id: 'fixture-sequence', archived: true }))).status, 403)
+    assert.equal((await body(await activityFixture(request('/api/activity-daily?op=sequences.hub')))).json.items[0].items.length, 2)
     await fixtureControl(request('/api/ui-fixture?scenario=populated-admin'))
     const importPost = (payload) => importFixture(new Request(`http://127.0.0.1:${port}/api/import`, { method: 'POST', body: JSON.stringify(payload) }))
     assert.equal((await importPost({ action: 'contact_metadata' })).status, 200)

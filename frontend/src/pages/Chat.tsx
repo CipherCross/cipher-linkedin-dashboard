@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  ArrowDown, Check, ChevronDown, ChevronRight, Copy, Database, Loader2, Plus, RotateCw,
+  ArrowDown, Check, ChevronDown, ChevronRight, Database, Loader2, Plus,
   Send, Sparkles, Square, X,
 } from 'lucide-react'
 import { authFetch } from '../lib/api'
-import { Button, PageHeader } from '../ui'
+import { Button, IconButton, InlineError, PageHeader, Panel, Textarea } from '../ui'
 import { COPY } from '../ui/labels'
+import { CopyButton } from '../components/CopyButton'
 
 const SUGGESTIONS = [
   'Why did the recent spike in invites not produce the same reply count as a month ago?',
@@ -45,49 +46,18 @@ interface SqlOutput {
   truncated?: boolean
 }
 
-function CopyButton({ text, label, className }: { text: string; label?: boolean; className?: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard blocked — nothing useful to show */
-    }
-  }
-  return (
-    <button
-      type="button"
-      className={`inline-flex items-center gap-[5px] bg-none border-none px-1.5 py-0.5 cursor-pointer text-app-text-muted text-[length:var(--text-xs)] rounded-sm transition-[color,background] hover:text-app-text hover:bg-app-surface-2 ${className ?? ''}`}
-      onClick={copy}
-      title={copied ? 'Copied' : 'Copy'}
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-      {label && <span>{copied ? 'Copied' : 'Copy'}</span>}
-    </button>
-  )
-}
-
 // Code fences get their own copy button; the pre text is read off the DOM at
-// click time so we don't reconstruct the string from markdown AST nodes.
+// click time so we don't reconstruct the string from markdown AST nodes —
+// CopyButton's thunk form defers that read until the click happens.
 function CodeBlock({ children }: { children?: ReactNode }) {
   const ref = useRef<HTMLPreElement>(null)
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(ref.current?.innerText ?? '')
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard blocked */
-    }
-  }
   return (
     <div className="relative">
-      <button type="button" className="inline-flex items-center gap-[5px] bg-none border-none px-1.5 py-0.5 cursor-pointer text-app-text-muted text-[length:var(--text-xs)] rounded-sm transition-[color,background] hover:text-app-text hover:bg-app-surface-2 absolute top-1.5 right-1.5 z-[1] !p-[3px] bg-app-surface-2 border border-app-border hover:bg-app-surface-3" onClick={copy} title={copied ? 'Copied' : 'Copy code'}>
-        {copied ? <Check size={12} /> : <Copy size={12} />}
-      </button>
+      <CopyButton
+        text={() => ref.current?.innerText ?? ''}
+        title="Copy code"
+        className="absolute top-1.5 right-1.5 z-[1] bg-app-surface-2 border border-app-border hover:bg-app-surface-3"
+      />
       <pre ref={ref}>{children}</pre>
     </div>
   )
@@ -95,6 +65,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
 function ToolCall({ part }: { part: any }) {
   const [open, setOpen] = useState(false)
+  const contentId = useId()
   const name: string = (part.type as string).replace(/^tool-/, '')
   const running = part.state === 'input-streaming' || part.state === 'input-available'
   const failed = part.state === 'output-error'
@@ -102,20 +73,30 @@ function ToolCall({ part }: { part: any }) {
   const out = part.output as SqlOutput | string | undefined
   const rowCount = typeof out === 'object' && out ? out.rowCount : undefined
 
+  const edgeColor = failed ? 'border-l-app-danger' : running ? 'border-l-app-warning' : 'border-l-app-accent-border'
+  const iconColor = failed ? 'text-app-danger' : running ? 'text-app-warning' : 'text-app-success'
+
   return (
-    <div className={`chat-tool ${failed ? 'failed' : running ? 'running' : ''}`}>
-      <button className="flex gap-app-sm items-center w-full bg-none border-none text-app-text px-app-md py-app-sm cursor-pointer text-[length:var(--text-sm)] text-left" onClick={() => setOpen(!open)}>
-        <span className="chat-tool-icon inline-flex shrink-0 text-app-success">
-          {running ? <Loader2 size={13} className="spin" /> : failed ? <X size={13} /> : <Check size={13} />}
+    <div className={`border border-app-border border-l-2 ${edgeColor} rounded-md bg-app-surface-2 text-[length:var(--text-sm)]`}>
+      <Button
+        variant="ghost"
+        block
+        className="justify-start gap-app-sm text-app-text px-app-md py-app-sm text-[length:var(--text-sm)] font-normal rounded-none"
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={() => setOpen(!open)}
+      >
+        <span className={`inline-flex shrink-0 ${iconColor}`}>
+          {running ? <Loader2 size={13} className="animate-spin" /> : failed ? <X size={13} /> : <Check size={13} />}
         </span>
         <Database size={13} className="text-app-text-muted shrink-0" />
         <span className="font-semibold text-app-accent whitespace-nowrap">{name}</span>
-        {part.input?.purpose && <span className="muted">{part.input.purpose}</span>}
-        {rowCount != null && <span className="muted">{rowCount} rows</span>}
+        {part.input?.purpose && <span className="text-app-text-muted">{part.input.purpose}</span>}
+        {rowCount != null && <span className="text-app-text-muted">{rowCount} rows</span>}
         {open ? <ChevronDown size={14} className="ml-auto text-app-text-muted shrink-0" /> : <ChevronRight size={14} className="ml-auto text-app-text-muted shrink-0" />}
-      </button>
+      </Button>
       {open && (
-        <div className="border-t border-app-border px-app-md py-app-sm flex flex-col gap-app-sm [&_pre]:m-0 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [&_pre]:max-h-[260px] [&_pre]:overflow-y-auto [&_pre]:text-app-text-secondary [&_pre]:text-[length:var(--text-xs)]">
+        <div id={contentId} className="border-t border-app-border px-app-md py-app-sm flex flex-col gap-app-sm [&_pre]:m-0 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [&_pre]:max-h-[260px] [&_pre]:overflow-y-auto [&_pre]:text-app-text-secondary [&_pre]:text-[length:var(--text-xs)]">
           {sql && <pre>{sql}</pre>}
           {failed && <pre className="text-app-danger">{String(part.errorText ?? 'failed')}</pre>}
           {!failed && out != null && (
@@ -133,14 +114,22 @@ function ToolCall({ part }: { part: any }) {
 
 function Reasoning({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
+  const contentId = useId()
   if (!text.trim()) return null
   return (
     <div className="border border-dashed border-app-border rounded-md bg-transparent text-[length:var(--text-sm)]">
-      <button className="flex gap-app-sm items-center w-full bg-none border-none text-app-text px-app-md py-app-sm cursor-pointer text-[length:var(--text-sm)] text-left" onClick={() => setOpen(!open)}>
+      <Button
+        variant="ghost"
+        block
+        className="justify-start gap-app-sm text-app-text px-app-md py-app-sm text-[length:var(--text-sm)] font-normal rounded-none"
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={() => setOpen(!open)}
+      >
         <span className="text-app-text-muted font-semibold italic">Thinking</span>
         {open ? <ChevronDown size={14} className="ml-auto text-app-text-muted shrink-0" /> : <ChevronRight size={14} className="ml-auto text-app-text-muted shrink-0" />}
-      </button>
-      {open && <div className="border-t border-dashed border-app-border px-app-md py-app-sm text-app-text-muted whitespace-pre-wrap text-[length:var(--text-sm)] max-h-[220px] overflow-y-auto">{text}</div>}
+      </Button>
+      {open && <div id={contentId} className="border-t border-dashed border-app-border px-app-md py-app-sm text-app-text-muted whitespace-pre-wrap text-[length:var(--text-sm)] max-h-[220px] overflow-y-auto">{text}</div>}
     </div>
   )
 }
@@ -175,7 +164,7 @@ function Message({ m }: { m: UIMessage }) {
         })}
         {m.role === 'assistant' && assistantText && (
           <div className="flex">
-            <CopyButton text={assistantText} label  />
+            <CopyButton text={assistantText} showLabel />
           </div>
         )}
       </div>
@@ -278,21 +267,26 @@ export function Chat() {
         )}
       />
 
-      <div className="card flex flex-col h-[calc(100vh-190px)] min-h-[420px] p-0 overflow-hidden relative">
+      <Panel className="flex flex-col h-[calc(100vh-190px)] min-h-[420px] p-0 overflow-hidden relative">
         <div className="flex-1 overflow-y-auto p-[18px] flex flex-col gap-app-lg" ref={scrollRef} onScroll={onScroll}>
           {messages.length === 0 && (
             <div className="flex flex-col items-center text-center gap-2.5 m-auto max-w-[560px] py-app-sm px-0">
               <div className="inline-flex items-center justify-center w-[52px] h-[52px] rounded-lg bg-app-accent-subtle text-app-accent mb-0.5"><Sparkles size={26} /></div>
               <div className="text-[length:var(--text-lg)] font-semibold tracking-[-0.01em]">Ask about your campaign data</div>
-              <div className="text-[length:var(--text-sm)] leading-[1.5] max-w-[460px] muted">
+              <div className="text-[length:var(--text-sm)] leading-[1.5] max-w-[460px] text-app-text-muted">
                 Funnels, cohorts, per-account and per-step performance. Claude only
                 reads — it never changes your data. Try one of these:
               </div>
               <div className="grid grid-cols-2 max-[560px]:grid-cols-1 gap-2.5 w-full mt-app-sm">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} className="bg-app-surface-2 border border-app-border text-app-text-secondary rounded-md px-[13px] py-[11px] text-[length:var(--text-sm)] leading-[1.4] text-left cursor-pointer transition-[border-color,color,background] hover:border-app-accent-border hover:text-app-text hover:bg-app-surface-3" onClick={() => submit(s)}>
+                  <Button
+                    key={s}
+                    variant="secondary"
+                    className="h-auto justify-start whitespace-normal text-left font-normal bg-app-surface-2 border-app-border text-app-text-secondary px-[13px] py-[11px] text-[length:var(--text-sm)] leading-[1.4] hover:border-app-accent-border hover:text-app-text hover:bg-app-surface-3"
+                    onClick={() => submit(s)}
+                  >
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -300,38 +294,30 @@ export function Chat() {
           {messages.map((m) => (
             <Message key={m.id} m={m} />
           ))}
-          {status === 'submitted' && <div className="muted small pl-0.5">Thinking…</div>}
+          {status === 'submitted' && <div className="text-app-text-muted text-app-meta pl-0.5">Thinking…</div>}
           {error && (
-            <div className="banner text-app-danger" role="alert">
-              <span>
-                {looksLikeServerError(error)
-                  ? 'Chat is not available right now. This is a server-side configuration problem, not something you can fix from here — the exact reason is in the details below.'
-                  : `Request failed${error.message ? `: ${error.message}` : ''}.`}
-              </span>
-              {looksLikeServerError(error) && error.message && (
-                <details className="basis-full [&>summary]:min-h-control-sm [&>summary]:text-app-text-secondary [&>summary]:text-app-meta [&>summary]:cursor-pointer [&_pre]:mt-app-sm [&_pre]:mx-0 [&_pre]:mb-0 [&_pre]:p-app-md [&_pre]:rounded-control [&_pre]:bg-[var(--code-bg)] [&_pre]:font-mono [&_pre]:text-app-meta [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]">
-                  <summary>Details</summary>
-                  <pre>{error.message}</pre>
-                </details>
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<RotateCw size={16} aria-hidden="true" />}
-                onClick={() => regenerate()}
-                disabled={busy}
-              >
-                {COPY.retry}
-              </Button>
-            </div>
+            <InlineError
+              title={looksLikeServerError(error)
+                ? 'Chat is not available right now. This is a server-side configuration problem, not something you can fix from here — the exact reason is in the details below.'
+                : `Request failed${error.message ? `: ${error.message}` : ''}.`}
+              detail={looksLikeServerError(error) ? error.message : undefined}
+              onRetry={() => regenerate()}
+              retryLabel={COPY.retry}
+              busy={busy}
+            />
           )}
         </div>
 
         {showJump && (
-          <button className="absolute left-1/2 -translate-x-1/2 bottom-[78px] z-[2] inline-flex items-center gap-1.5 px-app-md py-1.5 text-[length:var(--text-xs)] font-semibold text-app-text bg-app-surface-3 border border-app-border-strong rounded-full shadow-[var(--shadow-overlay)] cursor-pointer hover:border-app-accent-border hover:text-app-accent" type="button" onClick={jumpToLatest}>
-            <ArrowDown size={14} />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<ArrowDown size={14} aria-hidden="true" />}
+            className="absolute left-1/2 -translate-x-1/2 bottom-[78px] z-[2] rounded-full bg-app-surface-3 border-app-border-strong shadow-[var(--shadow-overlay)] hover:border-app-accent-border hover:text-app-accent"
+            onClick={jumpToLatest}
+          >
             Jump to latest
-          </button>
+          </Button>
         )}
 
         <form
@@ -341,9 +327,9 @@ export function Chat() {
             submit(input)
           }}
         >
-          <textarea
+          <Textarea
             ref={inputRef}
-            className="flex-1 bg-app-bg text-app-text border border-app-border rounded-md px-[14px] py-2.5 text-[length:var(--text-base)] font-[inherit] leading-[1.5] resize-none max-h-40 overflow-y-auto focus:border-app-accent focus:outline-none"
+            className="flex-1 min-h-control resize-none max-h-40 overflow-y-auto"
             value={input}
             rows={1}
             onChange={(e) => setInput(e.target.value)}
@@ -354,19 +340,27 @@ export function Chat() {
               }
             }}
             placeholder="Ask anything — Enter to send, Shift+Enter for a new line"
+            aria-label="Message Claude"
             autoFocus
           />
           {busy ? (
-            <button className="chat-send stop inline-flex items-center justify-center shrink-0 w-10 h-10 text-app-on-accent border-none rounded-md cursor-pointer transition-[background,transform] disabled:opacity-50 disabled:cursor-default" type="button" onClick={() => stop()} title="Stop">
-              <Square size={15} fill="currentColor" />
-            </button>
+            <IconButton
+              label="Stop generating"
+              icon={<Square size={15} fill="currentColor" aria-hidden="true" />}
+              className="bg-app-danger text-app-on-accent hover:opacity-90"
+              onClick={() => stop()}
+            />
           ) : (
-            <button className="chat-send inline-flex items-center justify-center shrink-0 w-10 h-10 bg-app-accent text-app-on-accent border-none rounded-md cursor-pointer transition-[background,transform] enabled:hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-default" type="submit" disabled={!input.trim()} title="Send">
-              <Send size={16} />
-            </button>
+            <IconButton
+              type="submit"
+              label="Send"
+              icon={<Send size={16} aria-hidden="true" />}
+              className="bg-app-accent text-app-on-accent hover:bg-app-accent-hover"
+              disabled={!input.trim()}
+            />
           )}
         </form>
-      </div>
+      </Panel>
     </>
   )
 }

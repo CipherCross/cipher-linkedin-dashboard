@@ -3,7 +3,6 @@
    ======================================================================== */
 .sequence-library,
 .sequence-editor-page { max-width: 1540px; margin: 0 auto; }
-.deployment-filters { align-items: end; margin-top: -8px; }
 /* One frame for every group. A sequence is a banner row inside the same table
  * rather than its own card, so the six column headers are written once. */
 .deployment-table { margin: 0; min-width: 850px; }
@@ -20,19 +19,20 @@
 @media (max-width: 720px) {
 .deployment-group-head { align-items: flex-start; }
 }
-.sequence-library-switch,
 .sequence-device-toggle,
 .sequence-review-tabs { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
-.sequence-library-switch button,
 .sequence-device-toggle button,
 .sequence-review-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-sm); min-height: calc(var(--control-height) - 6px); border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); padding: 0 var(--space-md); font: inherit; font-size: var(--text-table); font-weight: 600; cursor: pointer; }
-.sequence-library-switch button span,
 .sequence-editor-tabs button span { display: inline-flex; min-width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-secondary); font-size: var(--text-meta); }
+.sequence-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; padding: 42px; text-align: center; }
+.sequence-empty-state h2 { margin: 14px 0 6px; }
+.sequence-empty-state p { max-width: 520px; margin: 0 0 18px; color: var(--text-muted); }
 .sequence-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.sequence-card { position: relative; display: flex; flex-direction: column; min-height: 300px; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-1); box-shadow: var(--shadow-sm); cursor: pointer; transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast), box-shadow var(--dur-fast); outline: none; overflow: hidden; }
-.sequence-card::after { content: ''; position: absolute; inset: auto -30px -55px auto; width: 150px; height: 150px; border-radius: 50%; background: var(--accent-subtle); filter: blur(12px); pointer-events: none; }
-.sequence-card:hover,
-.sequence-card:focus-visible { transform: translateY(-3px); border-color: var(--accent-border); box-shadow: var(--shadow-overlay); }
+.sequence-card { position: relative; display: flex; flex-direction: column; min-height: 300px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-1); cursor: pointer; transition: border-color var(--dur-fast); }
+.sequence-card:hover { border-color: var(--accent-border); }
+/* The title link is the card's keyboard stop; its focus ring is drawn on the
+ * whole card so the target reads as the card, not a word in it. */
+.sequence-card:has(h2 a:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-color: var(--accent-border); }
 .sequence-card h2 { margin: 18px 0 7px; font-size: var(--text-xl); letter-spacing: -.015em; }
 .sequence-mini-flow { display: flex; align-items: center; gap: 8px; margin: 20px 0 14px; }
 .sequence-mini-flow span { position: relative; display: grid; place-items: center; width: 34px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); font-size: var(--text-2xs); font-weight: 750; }
@@ -43,9 +43,6 @@
 .sequence-card-counts span { padding: 4px 7px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-muted); font-size: var(--text-2xs); }
 .sequence-card footer { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; margin-top: auto; padding-top: 13px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: var(--text-2xs); z-index: 1; }
 .sequence-card footer span:nth-child(2) { display: flex; align-items: center; gap: 4px; }
-.sequence-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; padding: 42px; text-align: center; }
-.sequence-empty-state h2 { margin: 14px 0 6px; }
-.sequence-empty-state p { max-width: 520px; margin: 0 0 18px; color: var(--text-muted); }
 .sequence-editor-page { margin: -2px auto 0; }
 .sequence-editor-topbar { position: sticky; top: 0; z-index: 12; display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; padding: var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-1); box-shadow: none; }
 .sequence-name-field { min-width: 0; flex: 1; }
@@ -373,8 +370,6 @@
 .sequence-publish-submit { min-width: 0; }
 .sequence-publish-action-flow { margin-left: 0; }
 }
-.deployment-filters { display: grid; gap: var(--space-lg); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.deployment-advanced { grid-column: 1 / -1; }
 .deployment-advanced > summary {
   display: flex;
   align-items: center;

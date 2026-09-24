@@ -184,6 +184,10 @@ describe('Sequence Builder autosave', () => {
 const openDeploymentFilters = () => {
   fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
 }
+/** The overlay edits a draft; nothing reaches the table until Apply. */
+const applyDeploymentFilters = () => {
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Deployment filters' })).getByRole('button', { name: 'Apply' }))
+}
 
 describe('Sequences deployments', () => {
   it('starts sequence-first and hides archived or archive-unknown campaigns by default', async () => {
@@ -197,6 +201,7 @@ describe('Sequences deployments', () => {
 
     openDeploymentFilters()
     fireEvent.change(screen.getByLabelText('Archive'), { target: { value: 'all' } })
+    applyDeploymentFilters()
     expect(screen.getByText('Founder B old')).toBeTruthy()
     expect(screen.getByText('Founder B unknown')).toBeTruthy()
     const archivedCampaign = screen.getByText('Founder B old').closest('tr') as HTMLElement
@@ -212,8 +217,74 @@ describe('Sequences deployments', () => {
     fireEvent.change(screen.getByLabelText('Archive'), { target: { value: 'all' } })
     fireEvent.change(screen.getByLabelText('Notebook'), { target: { value: 'notebook-2' } })
     fireEvent.change(screen.getByLabelText('Runtime'), { target: { value: 'completed' } })
+    applyDeploymentFilters()
     expect(screen.getByText('Founder B old')).toBeTruthy()
     expect(screen.queryByText('Founder A')).toBeNull()
     expect(screen.queryByText('Founder B unknown')).toBeNull()
+  })
+})
+
+describe('Sequences hub on canonical contracts (Phase 10)', () => {
+  it('keeps the table unchanged until Apply, and Cancel discards the draft', async () => {
+    renderLibrary()
+    await screen.findByText('Founder A')
+    openDeploymentFilters()
+    fireEvent.change(screen.getByLabelText('Notebook'), { target: { value: 'notebook-2' } })
+    // Still the applied state underneath the open draft.
+    expect(screen.getByText('Founder A')).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Deployment filters' })).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Deployment filters' })).toBeNull()
+    expect(screen.getByText('Founder A')).toBeTruthy()
+    // Reopening starts from the applied values, not the discarded draft.
+    openDeploymentFilters()
+    expect((screen.getByLabelText('Notebook') as HTMLSelectElement).value).toBe('any')
+  })
+
+  it('applies every draft filter at once, and a no-match offers Clear filters', async () => {
+    renderLibrary()
+    await screen.findByText('Founder A')
+    openDeploymentFilters()
+    fireEvent.change(screen.getByLabelText('Notebook'), { target: { value: 'notebook-1' } })
+    fireEvent.change(screen.getByLabelText('Runtime'), { target: { value: 'completed' } })
+    applyDeploymentFilters()
+    expect(screen.getByRole('button', { name: /Filters/ }).textContent).toContain('2')
+    expect(screen.getByText('No deployments match these filters')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByText('Founder A')).toBeTruthy()
+  })
+
+  it('shows a failed deployments read as a retryable error', async () => {
+    fetchNeonSequenceHub.mockReset().mockRejectedValueOnce(new Error('hub down'))
+    renderLibrary()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('hub down')
+    const calls = fetchNeonSequenceHub.mock.calls.length
+    fetchNeonSequenceHub.mockResolvedValue({ items: [] })
+    fireEvent.click(within(alert).getByRole('button', { name: /Retry|Try again/ }))
+    await waitFor(() => expect(fetchNeonSequenceHub.mock.calls.length).toBe(calls + 1))
+  })
+
+  it('opens a Build card through a real link and archives from a named button without opening it', async () => {
+    listSequences.mockReset().mockResolvedValue([record()])
+    const api = await import('../src/lib/sequenceBuilderApi')
+    vi.mocked(api.setSequenceArchived).mockResolvedValue(record({ archived: true }))
+    renderLibrary()
+    await screen.findByText('Founder A')
+    fireEvent.click(screen.getByRole('tab', { name: /Build/ }))
+    const link = await screen.findByRole('link', { name: 'Founder outreach' })
+    expect(link.getAttribute('href')).toBe('/sequences/22222222-2222-4222-8222-222222222222')
+    expect(document.querySelector('article[role="button"], article[tabindex]')).toBeNull()
+    const status = screen.getByRole('radiogroup', { name: 'Builder sequence status' })
+    expect(within(status).getByRole('radio', { name: /Current/ }).getAttribute('aria-checked')).toBe('true')
+    // Each scope says how many sequences it holds.
+    expect(within(status).getByRole('radio', { name: /Current/ }).textContent).toBe('Current1')
+    expect(within(status).getByRole('radio', { name: /Archived/ }).textContent).toBe('Archived0')
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Founder outreach' }))
+    await waitFor(() => expect(api.setSequenceArchived).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222', true))
+    // Archived, so it left the Current view; the page did not navigate away.
+    expect(screen.getByRole('heading', { name: 'Sequences' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Founder outreach' })).toBeNull())
+    fireEvent.click(within(status).getByRole('radio', { name: /Archived/ }))
+    expect(screen.getByRole('link', { name: 'Founder outreach' })).toBeTruthy()
   })
 })

@@ -119,6 +119,7 @@ export function SegmentedControl<T extends string>({
           onClick={() => onChange(item.id)}
         >
           {item.label}
+          {item.count != null && <span className="ui-segmented__count">{item.count}</span>}
         </button>
       ))}
     </div>

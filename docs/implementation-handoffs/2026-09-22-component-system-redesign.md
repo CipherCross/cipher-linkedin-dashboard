@@ -454,3 +454,57 @@ Browser evidence — **local synthetic fixture, headless Chrome `shell` mode, ex
 Not covered by the fixture: an Overview read failure in the browser (covered by `overviewOperations`), and Sentiment analysis's empty scenarios.
 
 Next: Phase 10 — Chat and the Sequence Hub.
+
+## Phase 10 — accepted (2026-09-24)
+
+Chat and the Sequence Hub (the `SequenceLibrary` landing view: Deployments and Build). The editor is untouched; that is Phase 11. A Sonnet worker did Chat, which the orchestrator reviewed. The orchestrator did the hub, the fixture reads, the SegmentedControl count and the CSS pruning.
+
+- **Chat (worker)**
+  - Chat's private copy button and CodeBlock's second copy implementation are gone. Both use the shared `CopyButton`, which gains:
+    - a `text` thunk, because the code-block copy still reads the rendered `<pre>` at click time;
+    - a `showLabel` form (a ghost `Button` whose visible "Copy" word flips to "Copied").
+    The ICP/Hypothesis viewers keep the unchanged icon form.
+  - The tool-call and "Thinking" toggles are ghost `Button`s with `aria-expanded`/`aria-controls`. The suggestions are secondary `Button`s, "Jump to latest" is a secondary `Button`, and the composer is the `Textarea` primitive named "Message Claude".
+  - Send and Stop are `IconButton`s ("Send", "Stop generating") at the composer end. The error banner is `InlineError`, keeping the same server/network copy, the Details disclosure for server errors only, and Retry → `regenerate`.
+  - `chat.css` is deleted; the tool-state borders are conditional utilities.
+  - Streaming, stop, retry, scroll pinning / jump, sessionStorage persistence and New chat are unchanged.
+- **Sequence Hub**
+  - The deployment filters moved from a live-updating `Dialog` to `FilterDialog` with a draft. Apply commits all five filters at once; Cancel, Escape and the backdrop leave the table untouched; Clear all resets only the draft; reopening starts from the applied values. This is the spec's filter-overlay contract, as already used by Leads and Replies. The two existing hub tests now press Apply; their assertions are unchanged.
+  - Read failures (deployments and builder) are `InlineError` with Retry. "No deployments match" is `EmptyState` `no-match` with Clear filters, distinct from `empty` ("No deployments yet"). The Build empty and no-match states are `EmptyState` with New sequence / Clear search.
+  - The deployment table has `scope=col`, `ui-table__num`, a publish-status `Badge` (the tone lives in the domain owner: new `publishStatusTone` in `lib/sequenceBuilder.ts`), "Open builder" as a ghost `LinkButton`, and campaign links on utilities.
+  - The Current/Archived switch (hand-built buttons) → `SegmentedControl` with counts.
+  - Build cards were `<article role="button" tabIndex=0>` wrapping a nested archive `<button>`. Now the title is a real `Link` (the keyboard path, with the focus ring drawn on the whole card via `:has`), the card click is a pointer convenience, and archive is an `IconButton` named "Archive <sequence>" that never opens the card.
+  - The decorative blur blob and hover lift/shadow on the cards are removed (cards carry no decorative shadow).
+- **SegmentedControl** now renders `count`, the same as `Tabs`, with a shared count style. Only the hub passes counts so far.
+- **Fixture** — `sequences.hub` (a managed sequence with a published and a publishing deployment, plus an external flow with an archive-unknown campaign). `/api/playbook` now answers `list_sequences`, a read over POST, with a current and an archived sequence; every other action is still refused. `--check` asserts both.
+- **CSS** — removed, all with zero consumers:
+  - from `ui.css`: `.banner*`, `.spin` + `@keyframes spin`, `.chat-send:active`, three dead `.chat-msg.user .chat-body/.chat-role/.chat-msg-actions` rules, `.drp-day*` (left from the pre-react-day-picker picker), `.deployment-filters*`, `.sequence-library-switch button.active`, and the orphaned comments;
+  - from `sequence-builder.css`: the library switch, the deployment filter grid and `.deployment-advanced` grid placement.
+  `ui.css` went from 1,161 to 1,107 lines.
+
+Tests: new `chatPage` (8). `sequenceBuilderPage` gains 4:
+- Apply-only drafts and Cancel;
+- atomic Apply + no-match Clear filters;
+- a failed hub read shows a retryable alert;
+- the Build card is a real link, with no role=button article, segmented counts, and archive from a named button that neither navigates nor keeps the card in Current.
+
+Mutation checks, each observed failing and then restored:
+- the draft writing straight through to the table;
+- a `tabIndex` back on the card;
+- archive without `stopPropagation`;
+- plus the worker's three (the Copied label not flipping, Shift+Enter sending, `aria-expanded` hardcoded).
+
+Gate (from `frontend/`, build first): build passed; `npm run test` 104 files / 1,478 tests passed; `typecheck:api` passed; `ui:inventory` passed after update (raw controls 75 → 60; allowlisted 9; compatibility tokens 174 → 135; selectors 185 → 163; modal roots 2). Fixture `--check` passed; `git diff --check` passed. Production gzip JS 655,379 (+0.7% vs Phase 0), CSS 32,956 (−7,909 vs Phase 0). TS/TSX +325/−225 and CSS +13/−95 lines.
+
+Browser evidence — **local synthetic fixture, headless Chrome `shell` mode, exact 1280×720 / 1440×900 / 1920×1080**:
+
+| Surface | Result at all three |
+| --- | --- |
+| Hub, Deployments | tabs "Deployments 3 · Build 1"; one captioned table with a group banner row per sequence; Published (success) and Creating paused campaigns (info) badges; archive-unknown campaign hidden by default; overflow-x 0 |
+| Hub, Build | "Builder sequence status" radiogroup; one card; title link → `/sequences/fixture-sequence`; overflow-x 0 |
+| Hub keyboard | Enter on Filters opens the dialog with focus on its first field; a draft change leaves 2 rows; Escape closes it with 2 rows and focus back on Filters; Apply with Archive=All shows 3 rows and "Filters 1"; ArrowRight moves the tab to Build; Tab order is Current → Archive button → card link (ring on the card); Enter opens the editor |
+| Chat | empty state with four suggestion buttons; composer named "Message Claude" with Send at its end; overflow-x 0 |
+
+Not covered in the browser: the fixture has no chat endpoint, so streaming, Stop, Retry and jump-to-latest are covered only by `chatPage` and the unchanged `useChat` wiring.
+
+Next: Phase 11 — the Sequence editor and publish workflow.

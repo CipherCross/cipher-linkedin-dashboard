@@ -380,6 +380,79 @@ function repliesAnalytics(scenario) {
   }
 }
 
+const deployment = (over = {}) => ({
+  key: 'fixture-deployment-1', lineage: 'publish', campaign_id: campaign.campaign_id,
+  campaign_name: campaign.campaign_name, campaign_status: 'active', runtime_status: 'running',
+  is_archived: false, status_observed_at: campaign.status_observed_at, status_source: 'fixture',
+  status_raw: 'running', instance_id: instance.id, account_name: instance.account_name,
+  account_avatar: null, last_sync_at: instance.last_sync_at, sequence_revision: 3, branch_id: null,
+  branch_letter: null, publish_status: 'success', awaiting_sync: false, leads: 1, replies: 1, p3: 0,
+  latest_reply: null, ...over,
+})
+
+function sequenceHub(scenario) {
+  if (isEmpty(scenario)) return { items: [], newestReplies: [] }
+  const item = (over) => ({
+    revision: null, archived: false, branch_count: 0, updated_at: STAMP.updated_at,
+    deployment_count: 1, account_count: 1, leads: 1, replies: 1, p3: 0, latest_reply: null, ...over,
+  })
+  return {
+    items: [
+      item({
+        id: 'managed:fixture-sequence', kind: 'managed', source: 'builder',
+        sequence_document_id: 'fixture-sequence', name: 'Fixture founder sequence', revision: 3,
+        deployments: [deployment(), deployment({
+          key: 'fixture-deployment-2', campaign_id: null, campaign_name: 'Fixture follow-up wave',
+          runtime_status: 'paused', status_raw: 'paused', publish_status: 'publishing', awaiting_sync: true, leads: 0, replies: 0,
+        })],
+        deployment_count: 2,
+      }),
+      item({
+        id: 'external:fixture-lh', kind: 'external', source: 'linked_helper', sequence_document_id: null,
+        name: 'Hand-built Linked Helper flow',
+        deployments: [deployment({
+          key: 'fixture-deployment-3', lineage: 'external', campaign_id: null, campaign_name: 'Old manual campaign',
+          runtime_status: 'completed', status_raw: 'completed', is_archived: null, publish_status: null, leads: 4, replies: 0,
+        })],
+      }),
+    ],
+    newestReplies: [],
+  }
+}
+
+function sequenceRecords(scenario) {
+  if (isEmpty(scenario)) return []
+  const document = {
+    version: 1,
+    steps: [
+      { id: 'step-connection', kind: 'connection', variations: [{ id: 'v1', label: 'Variation 1', text: 'Hi {first_name} — saw your work at {company}.' }] },
+      { id: 'step-1', kind: 'message', variations: [{ id: 'v2', label: 'Variation 1', text: 'Thanks for connecting. One question about your outreach.' }, { id: 'v3', label: 'Variation 2', text: 'Quick one: how do you run follow-ups today?' }] },
+    ],
+    branches: [],
+  }
+  const base = {
+    document, created_by: 'fixture-member', created_by_name: 'Fixture Admin', updated_by: 'fixture-member',
+    updated_by_name: 'Fixture Admin', ...STAMP,
+  }
+  return [
+    { ...base, id: 'fixture-sequence', name: 'Fixture founder sequence', revision: 3, archived: false },
+    { ...base, id: 'fixture-sequence-old', name: 'Retired intro test', revision: 1, archived: true },
+  ]
+}
+
+/** `/api/playbook` is the Sequence Builder's POST endpoint. Listing is a read,
+ *  so the fixture answers it; every other action is still refused. */
+export async function playbookFixture(request) {
+  const scenario = await currentScenario()
+  let action = null
+  try { action = (await request.clone().json())?.action ?? null } catch { /* not JSON */ }
+  if (request.method === 'POST' && action === 'list_sequences') {
+    if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture read failure' }, 503)
+    return json({ sequences: sequenceRecords(scenario) })
+  }
+  return mutationRefusal()
+}
+
 export async function setFixtureScenario(next) {
   const allowed = new Set(['populated-admin', 'populated-member', 'empty-admin', 'empty-member', 'error', 'read-error'])
   if (!allowed.has(next)) return false
@@ -478,6 +551,7 @@ export async function activityFixture(request) {
     }]))
   }
   if (op === 'activity.dailySeries') return json(page([]))
+  if (op === 'sequences.hub') return json(page([sequenceHub(scenario)]))
   if (op === 'replies.analytics') return json(page([repliesAnalytics(scenario)]))
   if (op === 'coaching.digests') return json(page([]))
   if (op === 'coach.playbook') {
