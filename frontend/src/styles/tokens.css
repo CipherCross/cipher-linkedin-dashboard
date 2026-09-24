@@ -184,7 +184,7 @@
 
   /* ---- Layout ------------------------------------------------------------ */
   --sidebar-w: 232px;
-  --nav-row-height: 44px;
+  --nav-row-height: 32px;       /* sidebar row: matches --icon-hit, pointer-first (see ui-standard.md) */
   --page-gutter: 32px;
   --page-max: 1600px;
 

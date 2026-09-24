@@ -207,7 +207,8 @@ wanted. One light theme, still.
 
 ## Layout
 
-- Sidebar 232px, nav rows 44px.
+- Sidebar 232px. Nav rows and section headers 32px (the `--icon-hit` size) with a 16px icon, 8px icon gap, 8px inline padding and 4px between rows; 8px either side of a group divider; a single 48px footer row (32px avatar, name, sync dot, sign out). Values follow shadcn's Sidebar and Primer's NavList; Material's 56dp drawer row is a touch value. The whole rail fits 1280×720 without scrolling, with Strategy open.
+- Sync status is an 8px dot in a 24px target, coloured by the worst account's freshness; a CSS-only tooltip (hover and keyboard focus) carries the words and the oldest sync time — Base UI's positioned tooltip would add ~20 KB gzip to the entry chunk for one element.
 - Page gutters are 24px below 1440px and 32px at 1440px and wider; analytics
   max-width is 1600px.
 - List routes read title → context → toolbar → results. **The first result

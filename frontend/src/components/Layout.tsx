@@ -29,7 +29,7 @@ import { Logo } from './Logo'
 import { PageSkeleton } from './Skeleton'
 import { ErrorBoundary } from './ErrorBoundary'
 import { QuickNavigation } from './QuickNavigation'
-import { Button, IconButton } from '../ui'
+import { Button, IconButton, businessTimeLabelled } from '../ui'
 import { InlineError } from '../ui/States'
 
 export function Layout() {
@@ -127,7 +127,7 @@ export function Layout() {
           <span className="brand-name">Outreach Deck</span>
         </Link>
         <div className="appbar-actions ml-auto flex items-center gap-1.5 shrink-0">
-          {data && <SyncChip instances={data.instances} />}
+          {data && <SyncIndicator instances={data.instances} />}
         </div>
       </div>
 
@@ -311,7 +311,6 @@ function Sidebar({
               className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
             >
               <Icon
-                size={17}
                 className="navlink-icon shrink-0 text-[color-mix(in_srgb,currentColor_82%,transparent)] [.active_&]:text-app-accent"
                 aria-hidden="true"
               />
@@ -353,7 +352,7 @@ function Sidebar({
       <div className="sidebar-inner">
         <div className="side-head">
           <Link to="/" className="brand" aria-label="Outreach Deck — home">
-            <Logo size={26} className="brand-mark" />
+            <Logo size={24} className="brand-mark" />
             <span className="brand-name">Outreach Deck</span>
           </Link>
           <IconButton
@@ -387,24 +386,19 @@ function Sidebar({
         </nav>
 
         <div className="side-footer">
-          <div className="w-full min-w-0 flex items-center gap-2 pb-2">
-            <span
-              className="size-[30px] flex-[0_0_30px] grid place-items-center border border-app-accent-border rounded-full bg-app-accent-subtle text-app-accent text-[length:var(--text-xs)] font-[750]"
-              aria-hidden="true"
-            >
-              {member?.name.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="side-user-copy">
-              <strong>{member?.name}</strong>
-              <span>{member?.role}</span>
-            </span>
-            <IconButton
-              label="Sign out"
-              icon={<LogOut aria-hidden="true" />}
-              onClick={() => void signOut()}
-            />
-          </div>
-          {data && <SyncChip instances={data.instances} />}
+          <span className="side-avatar" aria-hidden="true">
+            {member?.name.slice(0, 1).toUpperCase()}
+          </span>
+          <span className="side-user-copy">
+            <strong>{member?.name}</strong>
+            <span>{member?.role}</span>
+          </span>
+          {data && <SyncIndicator instances={data.instances} />}
+          <IconButton
+            label="Sign out"
+            icon={<LogOut aria-hidden="true" />}
+            onClick={() => void signOut()}
+          />
         </div>
       </div>
     </aside>
@@ -448,13 +442,13 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry: ()
   )
 }
 
-/** Worst-case (least fresh) instance decides the header status. Tiers mirror the
+/** Worst-case (least fresh) instance decides the sync status. Tiers mirror the
  *  Health page: agents run every ~30 min, so <2h is healthy, <24h is aging,
  *  ≥24h (or never synced) is stale. */
 function worstFreshness(
   instances: Instance[],
-): { level: 'ok' | 'warn' | 'stale'; label: string } {
-  if (instances.length === 0) return { level: 'stale', label: 'No accounts' }
+): { level: 'ok' | 'warn' | 'stale'; label: string; lastSync: string | null } {
+  if (instances.length === 0) return { level: 'stale', label: 'No accounts', lastSync: null }
   let worstAge = -1
   let worstTs: string | null = null
   let hasNever = false
@@ -469,22 +463,30 @@ function worstFreshness(
       worstTs = i.last_sync_at
     }
   }
-  if (hasNever) return { level: 'stale', label: 'Sync stale' }
-  const level = freshnessLevel(worstTs)
-  return { level, label: `Synced ${ago(worstTs)}` }
+  if (hasNever) return { level: 'stale', label: 'An account has never synced', lastSync: worstTs }
+  return { level: freshnessLevel(worstTs), label: `Synced ${ago(worstTs)}`, lastSync: worstTs }
 }
 
-function SyncChip({ instances }: { instances: Instance[] }) {
-  const { level, label } = worstFreshness(instances)
+/** A status dot, not a chip: the colour carries the tier at a glance, and the
+ *  tooltip carries the words and the time. The tooltip is CSS-only (shown on
+ *  hover and keyboard focus) because the shell is in the entry chunk; the link's
+ *  accessible name repeats everything it says. */
+function SyncIndicator({ instances }: { instances: Instance[] }) {
+  const { level, label, lastSync } = worstFreshness(instances)
+  const when = lastSync ? businessTimeLabelled(lastSync) : null
+  const scope = instances.length === 1 ? 'Last sync' : `Oldest of ${instances.length} accounts`
   return (
     <Link
       to="/health"
-      className={`sync-chip ${level}`}
-      title="Data freshness — open Sync health"
-      aria-label={`${label} — open Sync health`}
+      className={`sync-indicator ${level}`}
+      aria-label={`${label}${when ? `, oldest sync ${when}` : ''} — open Sync health`}
     >
-      <span className="sync-dot size-[8px] rounded-full shrink-0" aria-hidden="true" />
-      <span >{label}</span>
+      <span className="sync-dot" aria-hidden="true" />
+      <span className="sync-tip" aria-hidden="true">
+        <strong>{label}</strong>
+        {when && <span>{when}</span>}
+        <span className="sync-tip-hint">{scope} · open Sync health</span>
+      </span>
     </Link>
   )
 }

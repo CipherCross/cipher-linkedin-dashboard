@@ -37,6 +37,7 @@ describe('sidebar information architecture', () => {
       'Replies',
       'Pipeline',
       'Leads',
+      'CSV Import',
       'Chat',
     ])
     expect(primary?.collapsible).toBe(false)
