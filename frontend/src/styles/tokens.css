@@ -180,6 +180,8 @@
   --icon-glyph: 16px;          /* icon inside a button or icon button */
   --icon-glyph-sm: 14px;       /* icon inside a small button */
   --row-height: 52px;          /* single-line table row */
+  --row-height-compact: 44px;  /* dense comparison tables: Material 52dp minus two density steps */
+  --checkbox-size: 16px;       /* Primer / shadcn size-4; Material's glyph is 18dp */
   --row-height-identity: 68px; /* identity + secondary line */
 
   /* ---- Layout ------------------------------------------------------------ */

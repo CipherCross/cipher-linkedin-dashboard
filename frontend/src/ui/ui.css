@@ -229,13 +229,20 @@
   align-items: flex-start;
   gap: var(--space-sm);
   min-height: var(--control-height);
-  padding: var(--space-md) 0;
-  font-size: var(--text-body);
-  line-height: var(--leading-body);
+  padding: var(--space-sm) 0;
+  font-size: var(--control-text);
+  line-height: var(--control-leading);
   color: var(--text);
   cursor: pointer;
 }
-.ui-checkbox input, .ui-radio input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); flex-shrink: 0; }
+.ui-checkbox input, .ui-radio input {
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  /* centres the box on the first 20px line of the label */
+  margin: calc((var(--control-leading) - var(--checkbox-size)) / 2) 0 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
 .ui-checkbox__copy, .ui-radio__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ui-checkbox__hint, .ui-radio__hint { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
 .ui-radio-group { display: flex; flex-direction: column; border: 0; margin: 0; padding: 0; }
@@ -504,6 +511,17 @@
 .ui-table tbody tr { height: var(--row-height); }
 .ui-table tbody tr.ui-table__row--identity { height: var(--row-height-identity); }
 .ui-table tbody tr:last-child td { border-bottom: 0; }
+/* A checkbox in a cell is a bare control: the cell already supplies the row's
+ * padding, so the form-row padding and min-height would only stretch the row. */
+.ui-table .ui-checkbox,
+.ui-table .ui-radio { min-height: 0; padding: 0; align-items: center; }
+.ui-table .ui-checkbox input,
+.ui-table .ui-radio input { margin: 0; }
+/* Row-selection column: the box plus 12px either side. */
+.ui-table th.ui-table__select,
+.ui-table td.ui-table__select { width: calc(var(--checkbox-size) + 2 * var(--space-md)); padding-inline: var(--space-md); }
+/* gap 0: the label here is screen-reader only, so the flex gap would pad an empty item. */
+.ui-table__select .ui-checkbox { justify-content: center; gap: 0; }
 .ui-table tbody tr:hover { background: var(--surface-2); }
 .ui-table__num { text-align: right; font-variant-numeric: tabular-nums; }
 .ui-table__sort-button {

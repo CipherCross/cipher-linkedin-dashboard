@@ -97,9 +97,7 @@
 .overview .ov-campaign-frame .ui-identity { min-width: 152px; gap: var(--space-sm); }
 .overview .ov-campaign-frame .ui-identity__avatar,
 .overview .ov-campaign-frame .ov-avatar { width: 28px; height: 28px; }
-.overview .ov-select-cell { width: 44px; min-width: 44px; }
-.overview .ov-select-cell .ui-checkbox { justify-content: center; }
-.overview .ov-select-cell .ui-checkbox input { margin: 0; }
+.overview .ov-campaign-frame .ui-table tbody tr { height: var(--row-height-compact); }
 .overview .ov-avatar {
   display: flex;
   align-items: center;

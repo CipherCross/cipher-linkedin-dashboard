@@ -106,7 +106,8 @@ literal `@import "tailwindcss"`, and the split form breaks `init` and every
 | KPI | 32/40, weight 600, tabular numerals |
 | Space scale | 4, 8, 12, 16, 24, 32, 48, 64 (1–2px only for borders and icon alignment) |
 | Control height | 36px default · 28px small (`size="sm"`, in-row only); icon button 32×32 around a 16px glyph; 16px glyph in a button, 14px in a small one. See **Controls** below |
-| Table rows | 52px single line, 68px identity + secondary line |
+| Table rows | 52px single line, 68px identity + secondary line; 44px in a compact comparison table (`--row-height-compact`) |
+| Checkbox / radio | 16px box. In a form it is a 36px row with a 14/20 label; in a table cell it is bare (no row padding), and a selection column is `ui-table__select` (40px) |
 | Radius | 8 controls · 12 cards · 16 dialogs; pill for badges and chips only |
 | Elevation | Cards have **no** shadow. One soft shadow, and only on popup / dialog / drawer. |
 | Focus | 2px solid accent outline, 2px offset. Never a translucent halo. |

@@ -370,7 +370,7 @@ function CampaignComparison({
           <Table caption="Campaign comparison">
             <thead>
               <tr>
-                <th className="ov-select-cell" scope="col">
+                <th className="ui-table__select" scope="col">
                   <Checkbox label={<span className="sr-only">Select all campaigns on this page</span>} checked={allPageSelected} onChange={togglePage} />
                 </th>
                 {sortableHeader('account', 'Account', sort, setSortKey)}
@@ -390,7 +390,7 @@ function CampaignComparison({
                   // The name cell's link is the keyboard and screen-reader path;
                   // the row click is a pointer convenience for the same URL.
                   <tr key={campaign.campaign_id} className="cursor-pointer" onClick={() => open(campaign)}>
-                    <td className="ov-select-cell" onClick={(event) => event.stopPropagation()}>
+                    <td className="ui-table__select" onClick={(event) => event.stopPropagation()}>
                       <Checkbox
                         label={<span className="sr-only">Select {campaign.campaign_name}</span>}
                         checked={selectedIds.has(campaign.campaign_id)}
