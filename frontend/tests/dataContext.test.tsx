@@ -36,17 +36,18 @@ const fetchNeonBootstrap = vi.fn()
 const fetchNeonRouteSnapshot = vi.fn()
 const resolveReadPath = vi.fn()
 
-vi.mock('../src/lib/dashboardReads', () => ({
-  fetchNeonBootstrap: (...a: unknown[]) => fetchNeonBootstrap(...a),
-  fetchNeonDashboard: (...a: unknown[]) => fetchNeonDashboard(...a),
-  fetchNeonRouteSnapshot: (...a: unknown[]) => fetchNeonRouteSnapshot(...a),
-  routeSnapshotRequest: (hash: string) => {
-    const path = hash.replace(/^#/, '').split('?')[0] || '/'
-    if (path === '/health') return { route: 'health', key: 'health' }
-    return null
-  },
-  resolveReadPath: () => resolveReadPath(),
-}))
+// The route key is the real one: it decides when a snapshot restarts, which is
+// part of what these tests pin. It is a pure function of the hash.
+vi.mock('../src/lib/dashboardReads', async () => {
+  const actual = await vi.importActual<typeof import('../src/lib/dashboardReads')>('../src/lib/dashboardReads')
+  return {
+    fetchNeonBootstrap: (...a: unknown[]) => fetchNeonBootstrap(...a),
+    fetchNeonDashboard: (...a: unknown[]) => fetchNeonDashboard(...a),
+    fetchNeonRouteSnapshot: (...a: unknown[]) => fetchNeonRouteSnapshot(...a),
+    routeSnapshotRequest: actual.routeSnapshotRequest,
+    resolveReadPath: () => resolveReadPath(),
+  }
+})
 
 /**
  * Every PostgREST query the Supabase fetcher builds, answered `{ data: [], error:
@@ -289,6 +290,48 @@ describe('DataProvider dispatch', () => {
 
     act(() => finishSnapshot(neonAnswer('neon')))
     await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
+  })
+})
+
+describe('DataProvider route restarts', () => {
+  const navigate = async (hash: string) => {
+    await act(async () => {
+      window.location.hash = hash
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  it('does not restart the snapshot for a selection-only query parameter', async () => {
+    window.history.replaceState(null, '', '#/hypotheses')
+    resolveReadPath.mockResolvedValue('neon')
+    fetchNeonRouteSnapshot.mockResolvedValue(neonAnswer('neon'))
+
+    paint()
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
+    expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
+
+    await navigate('#/hypotheses?h=7')
+    await navigate('#/hypotheses')
+    expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('phase').textContent).toBe('full')
+    expect(screen.getByTestId('loading').textContent).toBe('false')
+  })
+
+  it('restarts only when a parameter the snapshot reads changes', async () => {
+    window.history.replaceState(null, '', '#/campaign/notebook-1%3A42')
+    resolveReadPath.mockResolvedValue('neon')
+    fetchNeonRouteSnapshot.mockResolvedValue(neonAnswer('neon'))
+
+    paint()
+    await waitFor(() => expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
+
+    await navigate('#/campaign/notebook-1%3A42?tab=performance&range=28d')
+    expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
+
+    await navigate('#/campaign/notebook-1%3A42?tab=performance&cmp=notebook-2%3A7')
+    await waitFor(() => expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(2))
+    expect(fetchNeonRouteSnapshot.mock.calls[1][0]).toMatchObject({ route: 'campaign', compareIds: 'notebook-2:7' })
   })
 })
 

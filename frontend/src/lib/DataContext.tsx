@@ -554,6 +554,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Replies and its report own their query-string reads. Their selections and
   // filters must not restart the shared dashboard snapshot.
   const activeRouteHash = `#${location.pathname}${location.pathname === '/replies' || location.pathname === '/sentiment-analysis' ? '' : location.search}`
+  // The snapshot restarts only when what it reads changes, and its key says
+  // exactly that: the route, a detail id, and Campaign's `cmp` list. Every
+  // other query parameter — a Hypotheses selection (`?h=`), Pipeline or
+  // Follow-ups filters, a tab or range — never reaches the request, so
+  // restarting on it re-read an identical snapshot, dropped the page to its
+  // skeleton and remounted it. `load` reads the current hash through a ref.
+  const routeLoadKey = routeSnapshotRequest(activeRouteHash)?.key ?? `local:${location.pathname || '/'}`
+  const activeRouteHashRef = useRef(activeRouteHash)
+  activeRouteHashRef.current = activeRouteHash
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [phase, setPhase] = useState<'empty' | 'bootstrap' | 'full'>('empty')
@@ -808,9 +817,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // dashboard down.
     const readPath = await resolveReadPath()
     const routeRequest = readPath === 'neon'
-      ? routeSnapshotRequest(activeRouteHash)
+      ? routeSnapshotRequest(activeRouteHashRef.current)
       : null
-    const routeKey = routeRequest?.key ?? `local:${location.pathname || '/'}`
+    const routeKey = routeRequest?.key ?? routeLoadKey
     // Manual refresh and the timer may meet the route's first load. A route
     // payload is complete, so a second request for the same key only adds load
     // and makes the first result stale; coalesce it here.
@@ -978,7 +987,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         inFlightRouteKey.current = null
       }
       if (id === reqId.current) setLoading(false)
-  }, [activeRouteHash, location.pathname, showError, applyPending, applyPendingFollowUps])
+  }, [routeLoadKey, showError, applyPending, applyPendingFollowUps])
 
   // Manual refetch (post-write) always forces a full fetch — a delta could miss
   // a row the caller just changed if updated_at ordering/skew raced the commit.
