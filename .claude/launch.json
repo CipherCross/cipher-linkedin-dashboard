@@ -4,14 +4,37 @@
     {
       "name": "dashboard",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5178", "--strictPort"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5178",
+        "--strictPort"
+      ],
       "port": 5178
     },
     {
       "name": "ui-fixture",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["frontend/scripts/ui-fixture-dev.mjs", "populated-admin"],
+      "runtimeArgs": [
+        "frontend/scripts/ui-fixture-dev.mjs",
+        "populated-admin"
+      ],
       "port": 4300
+    },
+    {
+      "name": "ui-fixture-4301",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "UI_FIXTURE_PORT=4301",
+        "node",
+        "frontend/scripts/ui-fixture-dev.mjs",
+        "populated-admin"
+      ],
+      "port": 4301
     }
   ]
 }

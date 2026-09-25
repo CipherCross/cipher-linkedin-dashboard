@@ -569,6 +569,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const bootstrapReady = useRef(false)
   const bootstrapData = useRef<NeonBootstrap | null>(null)
   const inFlightRouteKey = useRef<string | null>(null)
+  // The route whose snapshot last committed, i.e. the one on screen now.
+  const shownRouteKey = useRef<string | null>(null)
   // Only the most recent load() wins, so a manual refetch can't be clobbered by
   // an in-flight interval load (or vice versa).
   const reqId = useRef(0)
@@ -827,8 +829,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const id = ++reqId.current
     if (readPath === 'neon') {
       inFlightRouteKey.current = routeKey
-      setLoading(true)
-      if (bootstrapReady.current) setPhase('bootstrap')
+      // Only a route whose snapshot is not on screen yet drops to the skeleton.
+      // A refresh of the same route (timer, tab refocus, refetch after a write)
+      // swaps the data in quietly: flipping `loading` here makes Layout unmount
+      // the page, and with it any open conversation drawer and its unsaved text.
+      if (shownRouteKey.current !== routeKey) {
+        setLoading(true)
+        if (bootstrapReady.current) setPhase('bootstrap')
+      }
     }
     if (readPath === 'supabase' && !supabase) {
       showError(
@@ -960,6 +968,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           })
           // Advance the cursor for the next delta (start-time minus overlap).
           cursorRef.current = new Date(startedAt - REFRESH_OVERLAP_MS).toISOString()
+          shownRouteKey.current = routeKey
           setPhase('full')
           if (typeof performance !== 'undefined') {
             performance.mark('dashboard_full_ready')

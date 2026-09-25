@@ -293,6 +293,42 @@ describe('DataProvider dispatch', () => {
   })
 })
 
+describe('DataProvider quiet refresh', () => {
+  it('refreshes the route on screen without dropping it back to the skeleton', async () => {
+    resolveReadPath.mockResolvedValue('neon')
+    fetchNeonRouteSnapshot.mockResolvedValue({
+      instances: [{ id: 'notebook-1', last_sync_at: '2026-08-18T08:00:00.000Z' }],
+      syncRuns: [],
+    })
+
+    paint()
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
+
+    // Hold the refresh open so the in-flight state is observable.
+    let finishSnapshot!: (value: unknown) => void
+    fetchNeonRouteSnapshot.mockImplementation(
+      () => new Promise((resolve) => { finishSnapshot = resolve }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(2))
+
+    // Layout unmounts the page (and any open drawer) on either of these.
+    expect(screen.getByTestId('loading').textContent).toBe('false')
+    expect(screen.getByTestId('phase').textContent).toBe('full')
+
+    await act(async () => {
+      finishSnapshot({
+        instances: [{ id: 'notebook-1', last_sync_at: '2026-08-19T08:00:00.000Z' }],
+        syncRuns: [],
+      })
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('last-sync').textContent).toBe('2026-08-19T08:00:00.000Z')
+    })
+    expect(screen.getByTestId('loading').textContent).toBe('false')
+  })
+})
+
 describe('DataProvider route restarts', () => {
   const navigate = async (hash: string) => {
     await act(async () => {
@@ -329,8 +365,13 @@ describe('DataProvider route restarts', () => {
     await navigate('#/campaign/notebook-1%3A42?tab=performance&range=28d')
     expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(1)
 
+    // Held open: a different snapshot is not on screen yet, so while it loads
+    // the route does drop to the skeleton — unlike a same-route refresh.
+    fetchNeonRouteSnapshot.mockImplementation(() => new Promise(() => {}))
     await navigate('#/campaign/notebook-1%3A42?tab=performance&cmp=notebook-2%3A7')
     await waitFor(() => expect(fetchNeonRouteSnapshot).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('phase').textContent).toBe('bootstrap')
+    expect(screen.getByTestId('loading').textContent).toBe('true')
     expect(fetchNeonRouteSnapshot.mock.calls[1][0]).toMatchObject({ route: 'campaign', compareIds: 'notebook-2:7' })
   })
 })
