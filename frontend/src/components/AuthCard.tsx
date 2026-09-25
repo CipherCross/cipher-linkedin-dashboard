@@ -8,15 +8,15 @@ import { Logo } from './Logo'
  */
 export function AuthCard({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen grid place-items-center p-6 bg-app-bg max-[700px]:p-3.5">
+    <main className="min-h-screen grid place-items-center p-app-xl bg-app-bg max-[700px]:p-card">
       <section
-        className="w-[min(100%,440px)] p-app-2xl border border-app-border rounded-dialog bg-app-surface [box-shadow:var(--shadow-overlay)] max-[700px]:p-5"
+        className="w-[min(100%,440px)] p-app-xl border border-app-border rounded-dialog bg-app-surface [box-shadow:var(--shadow-overlay)] max-[700px]:p-card"
         aria-live="polite"
       >
-        <div className="flex items-center gap-app-md pb-app-xl mb-app-xl border-b border-app-border">
+        <div className="flex items-center gap-app-md pb-card mb-card border-b border-app-border">
           <Logo size={34} className="block rounded-[var(--radius-sm)]" />
           <div>
-            <div className="font-semibold text-[length:var(--text-subsection)]">Outreach Deck</div>
+            <div className="text-app-subsection font-semibold">Outreach Deck</div>
             <div className="mt-0.5 text-app-meta text-app-text-muted">Team dashboard</div>
           </div>
         </div>
@@ -31,7 +31,7 @@ function AuthIntro({ title, children }: { title: ReactNode; children?: ReactNode
   return (
     <div className="flex flex-col gap-app-sm">
       <h1 className="m-0 text-app-page">{title}</h1>
-      {children && <p className="m-0 leading-[1.55] text-app-text-muted">{children}</p>}
+      {children && <p className="m-0 text-app-body text-app-text-muted">{children}</p>}
     </div>
   )
 }

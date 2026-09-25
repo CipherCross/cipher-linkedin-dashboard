@@ -212,7 +212,11 @@ export function Pipeline() {
         The board scrolls sideways. Drag a card to another stage, or open Manage lead on the card.
       </p>
       <div
-        className="flex items-start gap-app-lg overflow-x-auto pb-2 [overscroll-behavior-x:contain]"
+        // Fills the viewport below the chrome: 170px is where the board starts at
+        // every PC width (24 page top + 56 header + 16 + 36 toolbar + 12 + 18
+        // hint + 8), and the page's own 32px bottom gutter stays below it, so
+        // the route never scrolls as a whole. Columns stretch to this height.
+        className="flex items-stretch gap-app-lg h-[calc(100vh-170px-var(--space-2xl))] overflow-x-auto pb-app-sm [overscroll-behavior-x:contain]"
         style={{
           // Full-bleed: escape the centered .page container so columns scroll to
           // the content-area edges instead of clipping at the page's max width.
@@ -229,7 +233,7 @@ export function Pipeline() {
             <section
               key={col.id}
               className={[
-                'flex-none w-[340px] flex flex-col rounded-card bg-app-surface border h-[calc(100vh-240px)]',
+                'flex-none w-[340px] min-h-0 flex flex-col rounded-card bg-app-surface border',
                 dragOver === col.id ? 'border-app-accent bg-app-accent-subtle' : 'border-app-border',
               ].join(' ')}
               // The ONE status accent on this board: a 3px stage stripe along the
@@ -251,12 +255,14 @@ export function Pipeline() {
                 if (id) handleDrop(id, col.id)
               }}
             >
-              <div className="flex items-center gap-app-sm min-h-control px-app-lg py-app-md border-b border-app-border sticky top-0 bg-app-surface">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: col.color }} aria-hidden="true" />
+              {/* Same 12px inset as the cards below, so the title, the count and
+                  the card edges share one line on each side. */}
+              <div className="flex items-center gap-app-sm p-app-md border-b border-app-border">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: col.color }} aria-hidden="true" />
                 <span className="flex-1 text-app-body font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{col.label}</span>
-                <span className="px-app-sm py-0.5 rounded-pill bg-app-surface-2 text-app-text-secondary text-app-meta font-semibold tabular-nums">{num(cards.length)}</span>
+                <Badge className="tabular-nums">{num(cards.length)}</Badge>
               </div>
-              <div className="flex flex-col gap-app-md p-app-md overflow-y-auto">
+              <div className="flex flex-col gap-app-md p-app-md min-h-0 overflow-y-auto">
                 {cards.map((l) => (
                   <PipeCard
                     key={l.id}
@@ -370,14 +376,14 @@ function PipeCard({
 
   return (
     <article
-      className="flex flex-col gap-[7px] p-2.5 border border-app-border rounded-control bg-app-surface cursor-grab active:cursor-grabbing hover:border-app-border-strong"
+      className="flex flex-col gap-app-sm p-app-md border border-app-border rounded-control bg-app-surface cursor-grab active:cursor-grabbing hover:border-app-border-strong"
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
       <Button
         variant="ghost"
-        className="flex-col items-stretch justify-start gap-1.5 min-w-0 w-full h-auto p-0 text-left whitespace-normal font-normal text-app-text"
+        className="flex-col items-stretch justify-start gap-app-sm min-w-0 w-full h-auto p-0 text-left whitespace-normal font-normal text-app-text"
         draggable={false}
         onClick={() => {
           if (draggingRef.current) return
@@ -386,7 +392,7 @@ function PipeCard({
       >
         <span className="flex items-center gap-app-sm min-w-0">
           <LeadAvatar lead={lead} size={32} />
-          <span className="min-w-0 flex flex-col gap-px">
+          <span className="min-w-0 flex flex-col">
             <span className="text-app-table font-semibold truncate">{name}</span>
             <span className="truncate text-app-meta text-app-text-muted">
               {[lead.company, lead.headline].filter(Boolean).join(' · ') || '—'}
@@ -402,7 +408,7 @@ function PipeCard({
           </Badge>
         )}
         {latestMessage && (
-          <span className="flex items-center gap-1.5 min-w-0 text-[length:var(--text-xs)] text-app-text-secondary">
+          <span className="flex items-center gap-app-sm min-w-0 text-app-meta text-app-text-secondary">
             <StatusText tone={latestMessage.direction === 'in' ? 'accent' : 'neutral'}>
               {latestMessage.direction === 'in' ? 'Them' : 'Us'}
             </StatusText>
@@ -418,7 +424,7 @@ function PipeCard({
         </span>
       </Button>
 
-      <div className="flex items-center gap-app-sm mt-app-xs text-app-meta min-h-5">
+      <div className="flex items-center gap-app-sm text-app-meta min-h-5">
         {assigneeName && (
           <span className="inline-flex items-center" title={`Lead owner: ${assigneeName}`}>
             <InitialsAvatar name={assigneeName} size={20} />
@@ -433,7 +439,7 @@ function PipeCard({
       </div>
 
       <details
-        className="border-t border-app-border pt-[5px] [&_summary]:min-h-control-sm [&_summary]:flex [&_summary]:items-center [&_summary]:text-app-text-muted [&_summary]:text-[length:var(--text-2xs)] [&_summary]:font-semibold [&_summary]:cursor-pointer [&_summary]:[list-style-position:inside] [&[open]_summary]:text-app-text-secondary [&[open]_summary]:mb-1.5"
+        className="border-t border-app-border pt-app-xs [&_summary]:min-h-control-sm [&_summary]:flex [&_summary]:items-center [&_summary]:text-app-text-muted [&_summary]:text-app-meta [&_summary]:font-semibold [&_summary]:cursor-pointer [&_summary]:[list-style-position:inside] [&[open]_summary]:text-app-text-secondary"
         draggable={false}
         onMouseDown={stopControl}
         onDragStart={stopControl}
@@ -446,7 +452,7 @@ function PipeCard({
           {substatuses.length > 0 && (
             <Select
               aria-label="Pipeline substatus"
-              className="min-h-control-sm text-app-meta"
+              className="min-h-control-sm pl-app-sm text-app-meta"
               value={lead.pipeline_substatus ?? ''}
               draggable={false}
               onMouseDown={stopControl}
@@ -461,7 +467,7 @@ function PipeCard({
           )}
           <Select
             aria-label="Pipeline stage"
-            className="min-h-control-sm text-app-meta"
+            className="min-h-control-sm pl-app-sm text-app-meta"
             value={isIntake ? '' : currentStage}
             draggable={false}
             onMouseDown={stopControl}
@@ -475,7 +481,7 @@ function PipeCard({
           </Select>
           <Select
             aria-label="Lead owner"
-            className="min-h-control-sm text-app-meta"
+            className="min-h-control-sm pl-app-sm text-app-meta"
             value={String(lead.assigned_to ?? '')}
             draggable={false}
             onMouseDown={stopControl}

@@ -126,7 +126,7 @@ export function Layout() {
           <Logo size={24} className="brand-mark" />
           <span className="brand-name">Outreach Deck</span>
         </Link>
-        <div className="appbar-actions ml-auto flex items-center gap-1.5 shrink-0">
+        <div className="appbar-actions ml-auto flex items-center gap-app-sm shrink-0">
           {data && <SyncIndicator instances={data.instances} />}
         </div>
       </div>
@@ -311,7 +311,7 @@ function Sidebar({
               className={({ isActive }) => (isActive ? 'navlink active' : 'navlink')}
             >
               <Icon
-                className="navlink-icon shrink-0 text-[color-mix(in_srgb,currentColor_82%,transparent)] [.active_&]:text-app-accent"
+                className="navlink-icon shrink-0 text-current/82 [.active_&]:text-app-accent"
                 aria-hidden="true"
               />
               <span >{label}</span>

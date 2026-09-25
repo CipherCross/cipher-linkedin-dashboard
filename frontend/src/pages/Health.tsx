@@ -111,12 +111,12 @@ export function Health() {
       )}
 
       {isAdmin && (
-        <Panel className="mb-app-xl" aria-labelledby="publish-compatibility-title">
+        <Panel className="mb-section" aria-labelledby="publish-compatibility-title">
           <SectionHeader
             id="publish-compatibility-title"
             title={
               <span className="inline-flex items-center gap-app-sm">
-                <FlaskConical size={20} aria-hidden="true" className="text-app-accent" />
+                <FlaskConical size={16} aria-hidden="true" className="text-app-accent" />
                 Publishing compatibility
               </span>
             }
@@ -174,7 +174,7 @@ export function Health() {
                         <td>
                           <Badge tone={canaryTone(target)}>{canaryLabel(target)}</Badge>
                           {target.canary_error_code && (
-                            <div className="text-app-meta text-app-danger mt-1">{target.canary_error_code}</div>
+                            <div className="text-app-meta text-app-danger mt-app-xs">{target.canary_error_code}</div>
                           )}
                         </td>
                         <td>
@@ -187,7 +187,7 @@ export function Health() {
                             {approved ? 'Ready' : 'Blocked'}
                           </Badge>
                           {!approved && (
-                            <div className="text-app-meta text-app-text-muted mt-1">
+                            <div className="text-app-meta text-app-text-muted mt-app-xs">
                               {target.compatibility_state?.replace(/_/g, ' ') || target.compatibility_error_code || 'unknown'}
                             </div>
                           )}
@@ -202,7 +202,7 @@ export function Health() {
         </Panel>
       )}
 
-      <div className="grid grid-cols-[1fr_300px] gap-app-lg mb-app-xl max-[860px]:grid-cols-1 max-[860px]:[&>:last-child]:order-[-1]">
+      <div className="grid grid-cols-[1fr_300px] gap-section max-[860px]:grid-cols-1 max-[860px]:[&>:last-child]:order-[-1]">
         <Panel>
           <SectionHeader title="Recent sync runs" />
           <TableFrame scrollLabel="Recent sync runs" maxHeight="calc(100vh - 300px)">

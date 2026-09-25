@@ -438,10 +438,10 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         <div className="replies-pane-title">
           <div>
             <h2>{inbox.scope.view === 'unreviewed' ? 'Review queue' : 'Conversations'}</h2>
-            <span className="block mt-0.5 text-app-text-muted text-app-meta">{inbox.nextCursor ? `${inbox.items.length} loaded · more available` : `${inbox.items.length} conversation${inbox.items.length === 1 ? '' : 's'}`}</span>
+            <span className="block text-app-text-muted text-app-meta">{inbox.nextCursor ? `${inbox.items.length} loaded · more available` : `${inbox.items.length} conversation${inbox.items.length === 1 ? '' : 's'}`}</span>
           </div>
         </div>
-        <div className="flex items-center gap-app-sm px-app-lg py-app-sm border-b border-app-border flex-[0_0_auto]">
+        <div className="flex items-center gap-app-sm px-app-md py-app-sm border-b border-app-border flex-[0_0_auto]">
           <TextField
             className="flex-1 min-w-0"
             label="Search conversations"
@@ -468,8 +468,8 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
                    queue, Enter selects a row, and the selected row carries
                    aria-current="true". */
                 return <button type="button" key={item.instance_id + '|' + item.profile_url} className="replies-list-item" aria-current={selected ? 'true' : undefined} onClick={() => guardedSelect(item)}>
-                  <span className="replies-list-identity"><InitialsAvatar name={name} size={36} /><span className="flex-1 min-w-0"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="block truncate text-app-text-muted text-app-meta">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
-                  <span className="[display:-webkit-box] my-app-sm mx-0 text-app-text-muted text-app-meta overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
+                  <span className="replies-list-identity"><InitialsAvatar name={name} size={32} /><span className="flex-1 min-w-0"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="block truncate text-app-text-muted text-app-meta">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
+                  <span className="[display:-webkit-box] my-app-xs mx-0 text-app-text-muted text-app-meta overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
                   <span className="replies-list-item-bottom"><span>{accountLabel(item.instance_id)}</span><span>{item.owner_id ? ownerLabel(item.owner_id) : null}{item.action ? ' · ' + ACTION_LABELS[item.action] : ''}</span>{item.pending_count > 0 && <b>{item.pending_count}</b>}</span>
                 </button>
               })}</div>}

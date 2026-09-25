@@ -72,10 +72,10 @@ export function TemplateComparison({
       />
 
       {columns.length > 0 ? (
-        <div className="flex flex-wrap gap-2 mb-app-lg">
+        <div className="flex flex-wrap gap-app-sm mb-group">
           {columns.map((c) => (
             <span
-              className="inline-flex items-center gap-1.5 bg-app-surface border border-app-border rounded-pill py-[5px] px-app-md text-app-body"
+              className="inline-flex items-center gap-app-xs bg-app-surface border border-app-border rounded-pill py-app-xs px-app-md text-app-body"
               key={c.campaign_id}
             >
               {c.campaign_name}
@@ -98,7 +98,7 @@ export function TemplateComparison({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-app-lg max-[860px]:grid-cols-1">
+      <div className="grid grid-cols-2 gap-section max-[860px]:grid-cols-1">
         {columns.map((c) => (
           <TemplateColumn
             key={c.campaign_id}
@@ -147,19 +147,19 @@ function TemplateColumn({
   ]
 
   return (
-    <div className="flex flex-col gap-app-lg">
+    <div className="flex flex-col gap-section">
       <Panel>
         <SectionHeader level="subsection" title={campaign.campaign_name} description={account} />
-        <div className="grid grid-cols-3 gap-2.5 mt-app-md mb-1 mx-0">
+        <div className="grid grid-cols-3 gap-app-sm mt-app-md mb-app-xs mx-0">
           {stats.map((s) => (
-            <div className="bg-app-surface-2 border border-app-border rounded-md p-2.5 text-center" key={s.label}>
-              <div className="text-[length:var(--text-2xl)] font-bold tabular-nums">{s.value}</div>
+            <div className="bg-app-surface-2 border border-app-border rounded-md p-app-md text-center" key={s.label}>
+              <div className="text-app-section font-bold tabular-nums">{s.value}</div>
               <div className="text-app-meta text-app-text-muted">{s.label}</div>
-              <div className="text-app-text-muted mt-[3px] text-[length:var(--text-2xs)] leading-[1.3]">n={s.n.toLocaleString('en-US')} {s.denom} in matured cohorts</div>
+              <div className="text-app-text-muted mt-0.5 text-app-meta">n={s.n.toLocaleString('en-US')} {s.denom} in matured cohorts</div>
             </div>
           ))}
         </div>
-        <div className="text-app-meta text-app-text-muted mt-1">
+        <div className="text-app-meta text-app-text-muted mt-app-xs">
           Pooled over matured cohorts in the last {weeks} weeks
           {pooled.invites > 0 ? ` · ${pooled.invites.toLocaleString('en-US')} invites` : ' · no matured cohorts yet'}.
         </div>

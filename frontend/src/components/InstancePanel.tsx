@@ -28,45 +28,48 @@ export function InstancePanel({ instances, runs = [] }: { instances: Instance[];
   return (
     <Panel>
       <SectionHeader title="Accounts" />
-      <div className="flex flex-col gap-app-md">
+      <div className="flex flex-col gap-group">
         {sorted.map((inst) => {
           const level = freshnessLevel(inst.last_sync_at)
           return (
-            <div className="flex flex-col gap-app-sm [&+&]:border-t [&+&]:border-app-border [&+&]:pt-app-md" key={inst.id}>
-              <div className="flex gap-2.5 items-center">
-                <Avatar inst={inst} size={34} />
-                <div style={{ minWidth: 0 }}>
-                  <Link
-                    className="text-app-text no-underline transition-colors hover:text-app-accent hover:underline"
-                    to={`/account/${encodeURIComponent(inst.id)}`}
+            // Two columns: the avatar, then everything else — so the uptime
+            // strip and the config controls line up under the account name
+            // without an indent sized to the avatar by hand.
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-app-sm gap-y-app-sm [&+&]:border-t [&+&]:border-app-border [&+&]:pt-group" key={inst.id}>
+              <Avatar inst={inst} size={32} />
+              <div className="min-w-0">
+                <Link
+                  className="text-app-text no-underline transition-colors hover:text-app-accent hover:underline"
+                  to={`/account/${encodeURIComponent(inst.id)}`}
+                >
+                  {instanceName(inst)}
+                </Link>
+                {inst.account_url && (
+                  <a
+                    className="inline-block ml-app-sm px-app-xs rounded-sm bg-[var(--linkedin)] text-(--linkedin-fg) text-app-meta font-bold no-underline align-text-bottom hover:bg-[var(--linkedin-hover)]"
+                    href={inst.account_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open LinkedIn profile"
                   >
-                    {instanceName(inst)}
-                  </Link>
-                  {inst.account_url && (
-                    <a
-                      className="inline-block ml-2 px-[5px] rounded-sm bg-[var(--linkedin)] text-[var(--linkedin-fg)] text-[length:var(--text-2xs)] font-bold no-underline leading-4 align-text-bottom hover:bg-[var(--linkedin-hover)]"
-                      href={inst.account_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Open LinkedIn profile"
-                    >
-                      in
-                    </a>
-                  )}
-                  <div>
-                    {/* ok/warn/stale mirror the header SyncChip. */}
-                    <StatusText
-                      tone={FRESHNESS_TONE[level]}
-                      icon={<span className="size-[7px] rounded-full bg-current" aria-hidden="true" />}
-                    >
-                      {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
-                      {inst.agent_version && ` · agent v${inst.agent_version}`}
-                    </StatusText>
-                  </div>
+                    in
+                  </a>
+                )}
+                <div>
+                  {/* ok/warn/stale mirror the header SyncChip. */}
+                  <StatusText
+                    tone={FRESHNESS_TONE[level]}
+                    icon={<span className="size-[7px] rounded-full bg-current" aria-hidden="true" />}
+                  >
+                    {inst.last_sync_at ? `synced ${ago(inst.last_sync_at)}` : 'never synced'}
+                    {inst.agent_version && ` · agent v${inst.agent_version}`}
+                  </StatusText>
                 </div>
               </div>
               <UptimeStrip runs={runs} instanceId={inst.id} />
-              <InstanceConfigEditor inst={inst} />
+              <div className="col-start-2 min-w-0">
+                <InstanceConfigEditor inst={inst} />
+              </div>
             </div>
           )
         })}
@@ -95,7 +98,7 @@ function UptimeStrip({ runs, instanceId }: { runs: SyncRun[]; instanceId: string
   const okCount = recent.filter((r) => r.status === 'ok').length
   return (
     <div
-      className="flex gap-[3px] items-end ml-11"
+      className="col-start-2 flex gap-0.5 items-end"
       role="img"
       aria-label={`Recent sync runs: ${okCount} of ${recent.length} ok`}
       title="Recent sync runs — newest on the right"

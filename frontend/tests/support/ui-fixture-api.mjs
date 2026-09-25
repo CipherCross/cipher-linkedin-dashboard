@@ -31,7 +31,7 @@ const page = (items) => ({ items, nextCursor: null, hasMore: false })
 
 const instance = {
   id: 'fixture-instance',
-  label: 'Fixture account',
+  label: 'Fixture notebook',
   last_sync_at: '2026-09-22T08:00:00.000Z',
   agent_version: 'fixture',
   account_name: 'Fixture account',
@@ -228,7 +228,7 @@ function replyCapabilities(role) {
   return {
     available: true, active: true, manual_ready: true, mode: 'manual',
     members: [{ id: role === 'admin' ? 1 : 2, name: role === 'admin' ? 'Fixture Admin' : 'Fixture Member', active: true }],
-    instances: [{ id: instance.id, label: instance.label }],
+    instances: [{ id: instance.id, label: instance.account_name || instance.label }],
     campaigns: [{ id: campaign.campaign_id, name: campaign.campaign_name, instance_id: instance.id }],
   }
 }

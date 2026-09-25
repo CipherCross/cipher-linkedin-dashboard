@@ -4,7 +4,7 @@ import {
 } from 'recharts'
 import type { Annotation, DailyActivity } from '../lib/types'
 import { Panel, SectionHeader } from '../ui'
-import { AXIS, ChartEmpty, GRID, SERIES as HUE, TOOLTIP, dateTick, legendText } from './chartTheme'
+import { AXIS, CHART_TEXT_SIZE, ChartEmpty, GRID, SERIES as HUE, TOOLTIP, dateTick, legendText } from './chartTheme'
 
 const SERIES = [
   { key: 'invite_sent', label: 'Invites', color: HUE.invite },
@@ -77,7 +77,7 @@ export function ActivityChart({
                 strokeDasharray="4 4"
                 label={{
                   value: a.note.length > 24 ? a.note.slice(0, 23) + '…' : a.note,
-                  fill: HUE.annotation, fontSize: 10, position: 'insideTopLeft', angle: -90,
+                  fill: HUE.annotation, fontSize: CHART_TEXT_SIZE, position: 'insideTopLeft', angle: -90,
                   dx: -4, dy: 8,
                 }}
               />

@@ -125,7 +125,7 @@ export function KpiCards({
                 tile shares one anatomy and the values align across the row. */}
             <div className="text-app-text-secondary text-app-meta">{c.sub ?? ' '}</div>
             {showSpark && (
-              <div className="mt-auto pt-1.5">
+              <div className="mt-auto pt-app-xs">
                 {c.event ? (
                   <Sparkline
                     activity={activity!}

@@ -327,7 +327,7 @@ function SequenceLibrary() {
           onCancel={() => setFilterDraft(null)}
           onApply={() => { setFilters(filterDraft); setFilterDraft(null) }}
         >
-          <div className="flex flex-col gap-app-lg">
+          <div className="flex flex-col gap-group">
             <SelectField label="Notebook" value={filterDraft.notebook} onChange={(event) => setDraft('notebook', event.target.value)}>
               <option value="any">All notebooks</option>
               {notebookOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
@@ -388,7 +388,7 @@ function SequenceLibrary() {
           /* One table, one header row, a banner row per sequence. Every group
              used to be its own card repeating the same six column headers, so
              a 1280px window showed about two of sixty-six deployments. */
-          <TableFrame className="mb-app-xl" scrollLabel="Deployments">
+          <TableFrame className="mb-section" scrollLabel="Deployments">
             <Table className="deployment-table" caption="Deployments by sequence">
               <thead><tr>
                 <th scope="col">Campaign / notebook</th><th scope="col">Linked Helper runtime</th><th scope="col">Publish</th>
@@ -400,8 +400,8 @@ function SequenceLibrary() {
                     <th colSpan={6} scope="colgroup">
                       <div className="deployment-group-head">
                         <div>
-                          <span className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</span>
-                          <span className="text-[length:var(--text-subsection)] font-semibold" id={`deployment-${item.id}`}>{item.name}</span>
+                          <span className="flex items-center gap-app-xs text-app-accent text-app-meta font-[750] tracking-[var(--tracking-caps)] uppercase">{item.kind === 'managed' ? 'Sequence Builder' : 'External Linked Helper'}</span>
+                          <span className="text-app-subsection font-semibold" id={`deployment-${item.id}`}>{item.name}</span>
                           <span className="text-app-text-muted text-app-meta">{rows.length} campaign{rows.length === 1 ? '' : 's'}</span>
                         </div>
                         {item.sequence_document_id && (
@@ -444,7 +444,7 @@ function SequenceLibrary() {
       ) : (
         <>
           <SegmentedControl
-            className="mb-app-lg"
+            className="mb-section"
             label="Builder sequence status"
             value={showArchived ? 'archived' : 'current'}
             onChange={(next) => setShowArchived(next === 'archived')}
@@ -490,7 +490,7 @@ function SequenceLibrary() {
                         {item.name}
                       </Link>
                     </h2>
-                    <p className="line-clamp-2 min-h-[42px] m-0 text-app-text-secondary text-[length:var(--text-sm)] leading-[1.55]">{sequencePreviewText(item)}</p>
+                    <p className="line-clamp-2 min-h-[calc(2*var(--leading-meta))] m-0 text-app-text-secondary text-app-meta">{sequencePreviewText(item)}</p>
                     <div className="sequence-mini-flow" aria-hidden="true">
                       {item.document.steps.slice(0, 5).map((step, index) => (
                         <span key={step.id} className={step.kind === 'connection' ? 'connection' : ''}>
@@ -568,7 +568,7 @@ function SortableVariationShell({
       {...sortable.listeners}
     />
   )
-  return <article ref={sortable.setNodeRef} style={style} className="min-w-0 p-2.5 border border-app-border rounded-[12px] bg-app-surface-2">{children(handle)}</article>
+  return <article ref={sortable.setNodeRef} style={style} className="min-w-0 p-app-md border border-app-border rounded-[12px] bg-app-surface-2">{children(handle)}</article>
 }
 
 export function CommentComposer({
@@ -597,7 +597,7 @@ export function CommentComposer({
       </>}
     >
       {target.anchor && (
-        <blockquote className="mt-2 mb-3 px-[11px] py-[9px] border-l-[3px] border-app-accent rounded-r-[6px] bg-app-accent-subtle text-app-text-secondary">
+        <blockquote className="mt-app-sm mb-app-md px-app-md py-app-sm border-l-[3px] border-app-accent rounded-r-[6px] bg-app-accent-subtle text-app-text-secondary">
           “{target.anchor.quote}”
         </blockquote>
       )}
@@ -683,7 +683,7 @@ function VariationEditor({
           onChange={(event) => onDocument(updateVariation(document, step.id, variation.id, { label: event.target.value }))}
           aria-label="Variation name"
         />
-        <span className="flex items-center gap-[3px] text-app-text-muted text-[length:var(--text-meta)]"><MessageCircle size={13} aria-hidden="true" /> {relevant.length}</span>
+        <span className="flex items-center gap-app-xs text-app-text-muted text-app-meta"><MessageCircle size={13} aria-hidden="true" /> {relevant.length}</span>
         <IconButton
           tone="danger"
           label="Remove variation"
@@ -701,7 +701,7 @@ function VariationEditor({
       </div>
       <Textarea
         ref={textareaRef}
-        className="w-full min-h-[220px] resize-y leading-[1.6] bg-app-surface"
+        className="w-full min-h-[220px] resize-y bg-app-surface"
         value={variation.text}
         onChange={(event) => onDocument(updateVariation(document, step.id, variation.id, { text: event.target.value }))}
         onSelect={captureSelection}
@@ -711,14 +711,14 @@ function VariationEditor({
         rows={7}
         aria-label="Variation text"
       />
-      <div className="flex items-center justify-between pt-[5px]">
+      <div className="flex items-center justify-between pt-app-xs">
         <Button variant="ghost" size="sm" onClick={addSelectionComment}>
           <MessageCircle size={13} aria-hidden="true" />
           {selection && selection.end > selection.start ? 'Comment on selection' : 'Comment'}
         </Button>
-        <span className={overLimit ? 'text-app-warning text-[length:var(--text-2xs)] font-bold' : 'text-app-text-muted'}>{count}{step.kind === 'connection' ? ` / ${CONNECTION_REQUEST_WARNING_LIMIT}` : ''}</span>
+        <span className={overLimit ? 'text-app-warning text-app-meta font-bold' : 'text-app-text-muted'}>{count}{step.kind === 'connection' ? ` / ${CONNECTION_REQUEST_WARNING_LIMIT}` : ''}</span>
       </div>
-      {overLimit && <p className="[margin:5px_0_0] text-app-warning text-[length:var(--text-meta)]">LinkedIn may reject this connection note. This is a warning only.</p>}
+      {overLimit && <p className="mt-app-xs mx-0 mb-0 text-app-warning text-app-meta">LinkedIn may reject this connection note. This is a warning only.</p>}
       {anchors.length > 0 && (
         <div className="sequence-commented-copy" aria-label="Commented text preview">
           {highlighted.map((part, index) => part.highlighted ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>)}
@@ -790,7 +790,7 @@ function BuildCanvas({
   return (
     <DndContext sensors={sensors} collisionDetection={stepAwareCollision} onDragEnd={dragEnd}>
       <SortableContext items={document.steps.slice(1).map((step) => step.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-group">
           {document.steps.map((step, index) => (
             <SortableStepShell key={step.id} step={step}>
               {(stepHandle) => (
@@ -800,13 +800,13 @@ function BuildCanvas({
                       className={
                         step.kind === 'connection'
                           ? 'grid place-items-center size-9 flex-none rounded-[11px] text-app-accent bg-app-accent-subtle border border-app-accent-border'
-                          : 'grid place-items-center size-9 flex-none rounded-[11px] text-[var(--purple)] bg-[var(--purple-subtle)] border border-[var(--purple-border)]'
+                          : 'grid place-items-center size-9 flex-none rounded-[11px] text-(--purple) bg-[var(--purple-subtle)] border border-[var(--purple-border)]'
                       }
                     >
                       {step.kind === 'connection' ? <UserRoundPlus size={17} aria-hidden="true" /> : <MessageCircle size={17} aria-hidden="true" />}
                     </div>
                     <div>
-                      <span className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase">Step {index + 1}</span>
+                      <span className="flex items-center gap-app-xs text-app-accent text-app-meta font-[750] tracking-[var(--tracking-caps)] uppercase">Step {index + 1}</span>
                       <h2>{stepTitle(document, step.id)}</h2>
                     </div>
                     <span className="sequence-step-meta">{step.variations.length} variation{step.variations.length === 1 ? '' : 's'}</span>
@@ -878,7 +878,7 @@ function BranchBuilder({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase"><Split size={14} aria-hidden="true" /> Sequence versions</div>
+      <div className="flex items-center gap-app-xs text-app-accent text-app-meta font-[750] tracking-[var(--tracking-caps)] uppercase"><Split size={14} aria-hidden="true" /> Sequence versions</div>
       <SectionHeader
         title="Build A/B/C branches"
         description="Choose one variation from every step. These branches are prepared sequences, not live traffic experiments."
@@ -896,11 +896,11 @@ function BranchBuilder({
           />
         </Panel>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(330px,100%),1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(330px,100%),1fr))] gap-group">
           {document.branches.map((branch, branchIndex) => (
             <Panel as="article" key={branch.id} className="sequence-branch-card">
               <header>
-                <span className="grid place-items-center size-[34px] rounded-[10px] bg-[var(--purple-subtle)] border border-[var(--purple-border)] text-[var(--purple)] font-extrabold">{branch.name.trim().slice(0, 2) || branchIndex + 1}</span>
+                <span className="grid place-items-center size-[34px] rounded-[10px] bg-[var(--purple-subtle)] border border-[var(--purple-border)] text-(--purple) font-extrabold">{branch.name.trim().slice(0, 2) || branchIndex + 1}</span>
                 <Input
                   value={branch.name}
                   onChange={(event) => onDocument(updateBranch(document, branch.id, { name: event.target.value }))}
@@ -955,7 +955,7 @@ function PreviewPanel({
 
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-app-accent text-[length:var(--text-2xs)] font-[750] tracking-[var(--tracking-caps)] uppercase"><Eye size={14} aria-hidden="true" /> Recipient view</div>
+      <div className="flex items-center gap-app-xs text-app-accent text-app-meta font-[750] tracking-[var(--tracking-caps)] uppercase"><Eye size={14} aria-hidden="true" /> Recipient view</div>
       <SectionHeader
         title="LinkedIn preview"
         description="An approximate rendering for reading the whole flow. LinkedIn can change its UI and limits independently."
@@ -999,11 +999,11 @@ function PreviewPanel({
         </Panel>
         <div
           data-device={device}
-          className="w-[min(780px,100%)] min-h-[620px] my-0 mx-auto [border:1px_solid_#d4d8dd] rounded-[10px] bg-white text-[#191919] [box-shadow:var(--shadow-overlay)] overflow-hidden data-[device=mobile]:w-[min(390px,100%)] data-[device=mobile]:border-[8px] data-[device=mobile]:border-[#24272b] data-[device=mobile]:rounded-[34px]"
+          className="linkedin-preview-frame w-[min(780px,100%)] min-h-[620px] my-0 mx-auto [border:1px_solid_#d4d8dd] rounded-[10px] bg-white [box-shadow:var(--shadow-overlay)] overflow-hidden data-[device=mobile]:w-[min(390px,100%)] data-[device=mobile]:border-[8px] data-[device=mobile]:border-[#24272b] data-[device=mobile]:rounded-[34px]"
         >
           {device === 'mobile' && <div className="w-[120px] h-[20px] my-0 mx-auto [border-radius:0_0_13px_13px] [background:#24272b]" />}
           <div className="linkedin-preview-topbar">
-            <div className="text-[#666] text-[28px] leading-none">‹</div>
+            <div className="linkedin-preview-back">‹</div>
             <div className="linkedin-avatar">A</div>
             <div><strong>{document.sampleData.firstName}</strong><span>{document.sampleData.jobTitle}</span></div>
             <MoreHorizontal size={18} aria-hidden="true" />
@@ -1073,7 +1073,7 @@ function CommentsPanel({
   return (
     <aside className="sequence-review-panel">
       <SegmentedControl
-        className="m-[9px] [&>button]:flex-1"
+        className="m-app-sm [&>button]:flex-1"
         label="Review panel"
         value={view}
         onChange={(next) => setView(next as typeof view)}
@@ -1085,7 +1085,7 @@ function CommentsPanel({
       {view === 'comments' ? (
         <>
           <Checkbox
-            className="[padding:3px_12px_10px]"
+            className="pt-app-xs px-pane pb-app-sm"
             label="Show resolved"
             checked={showResolved}
             onChange={(event) => setShowResolved(event.target.checked)}
@@ -1311,7 +1311,7 @@ export function PublishWizard({
             <div><span>Step 1 of 3</span><h3 id="publish-destination-title">Where should these campaigns go?</h3><p>Choose the LinkedIn account that will own the campaigns in Linked Helper.</p></div>
           </div>
           {loadingTargets && (
-            <div role="status" className="flex items-center gap-2 p-3 border border-app-border rounded-[11px] bg-app-surface-2 text-app-text-muted text-[length:var(--text-sm)]">
+            <div role="status" className="flex items-center gap-app-sm p-app-md border border-app-border rounded-[11px] bg-app-surface-2 text-app-text-muted text-app-meta">
               <LoaderCircle size={20} className="animate-spin" aria-hidden="true" />
               <span>Checking available accounts…</span>
             </div>
@@ -1322,7 +1322,7 @@ export function PublishWizard({
           {!loadingTargets && !targetsError && targets.length === 0 && (
             <EmptyState icon={Laptop} title="No publishing destinations yet" hint="Open Linked Helper on an approved machine and wait for its next sync." />
           )}
-          {!loadingTargets && !targetsError && targets.length > 0 && <div className="grid gap-[9px]">
+          {!loadingTargets && !targetsError && targets.length > 0 && <div className="grid gap-app-sm">
             {targets.map((item) => {
               const normalized = normalizeVerifiedAccountSnapshot(item.account_snapshot, { instanceId: item.instance_id, machineKey: item.machine_key })
               const available = item.compatible && Boolean(normalized)
@@ -1330,7 +1330,7 @@ export function PublishWizard({
               return <label key={item.instance_id} className="sequence-publish-target" data-selected={selected || undefined} data-unavailable={!available || undefined}>
                 {/* ui-exception(publish-target-card): a rich destination card around a hidden native radio; verify: sequencePublishWizard. */}
                 <input type="radio" name="publish-target" value={item.instance_id} checked={selected} disabled={!available} onChange={() => setTargetId(item.instance_id)} />
-                <span className="size-10 grid place-items-center rounded-full bg-app-accent-subtle text-app-accent text-[length:var(--text-md)] font-[780]">{publishAccountName(item).slice(0, 1).toUpperCase()}</span>
+                <span className="size-10 grid place-items-center rounded-full bg-app-accent-subtle text-app-accent text-app-body font-[780]">{publishAccountName(item).slice(0, 1).toUpperCase()}</span>
                 <span className="sequence-publish-target-copy">
                   <strong>{publishAccountName(item)}</strong>
                   <small>{item.machine_key} · {item.instance_id}</small>
@@ -1338,11 +1338,11 @@ export function PublishWizard({
                   <small title={item.contract_fingerprint ?? undefined}>Observed {shortFingerprint(item.contract_fingerprint)}{item.approved_contract_fingerprint ? ` · approved ${shortFingerprint(item.approved_contract_fingerprint)}` : ''}</small>
                 </span>
                 <Badge tone={available ? 'success' : 'warning'} icon={available ? <CheckCircle2 size={13} aria-hidden="true" /> : <AlertCircle size={13} aria-hidden="true" />}>{available ? 'Ready' : 'Not ready'}</Badge>
-                {!available && <small className="[grid-column:2_/_-1] -mt-[5px] text-app-warning text-[length:var(--text-meta)] capitalize">{item.compatibility_error_code ? item.compatibility_error_code.split('_').join(' ') : 'Account details could not be verified'}</small>}
+                {!available && <small className="[grid-column:2_/_-1] -mt-app-xs text-app-warning text-app-meta capitalize">{item.compatibility_error_code ? item.compatibility_error_code.split('_').join(' ') : 'Account details could not be verified'}</small>}
               </label>
             })}
           </div>}
-          {unavailableTargets.length > 0 && <p className="flex items-center gap-1.5 [margin:12px_2px_0] text-app-text-muted text-[length:var(--text-2xs)]"><ShieldCheck size={14} /> Unavailable machines stay visible so you know why they cannot receive a campaign.</p>}
+          {unavailableTargets.length > 0 && <p className="flex items-center gap-app-xs mt-app-md mx-0.5 mb-0 text-app-text-muted text-app-meta"><ShieldCheck size={14} /> Unavailable machines stay visible so you know why they cannot receive a campaign.</p>}
         </section>}
 
         {step === 2 && <section className="sequence-publish-section" aria-labelledby="publish-setup-title">
@@ -1353,7 +1353,7 @@ export function PublishWizard({
             </Button>
           </div>
           <div className="sequence-publish-branch-list">
-            {document.branches.length === 0 && <div className="[grid-column:1_/_-1] flex items-center gap-2 p-3 [border:1px_dashed_var(--warning-border)] rounded-[11px] bg-app-warning-subtle text-app-warning text-[length:var(--text-xs)]"><Split size={18} /><span>No branches configured yet. Add a branch in the Branches tab before publishing.</span></div>}
+            {document.branches.length === 0 && <div className="[grid-column:1_/_-1] flex items-center gap-app-sm p-app-md [border:1px_dashed_var(--warning-border)] rounded-[11px] bg-app-warning-subtle text-app-warning text-app-meta"><Split size={18} /><span>No branches configured yet. Add a branch in the Branches tab before publishing.</span></div>}
             {document.branches.map((branch, index) => {
               const checked = branchIds.includes(branch.id)
               return <label key={branch.id} data-selected={checked || undefined}>
@@ -1366,12 +1366,12 @@ export function PublishWizard({
             })}
           </div>
           <div className="sequence-publish-config-grid">
-            <div className="p-[13px] border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_65%,transparent)]">
+            <div className="p-app-md border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_65%,transparent)]">
               <div className="sequence-publish-config-title"><Laptop size={16} /><div><strong>Profile actions</strong><small>Optional actions before the invite</small></div></div>
               <Checkbox label="Visit profile" hint="Open and extract the profile first" checked={visit} onChange={(event) => setVisit(event.target.checked)} />
               <Checkbox label="Follow profile" hint="Follow before sending the invite" checked={follow} onChange={(event) => setFollow(event.target.checked)} />
             </div>
-            <div className="p-[13px] border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_65%,transparent)]">
+            <div className="p-app-md border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_65%,transparent)]">
               <div className="sequence-publish-config-title"><Clock3 size={16} /><div><strong>Timing</strong><small>Hours between campaign actions</small></div></div>
               <label className="sequence-publish-delay"><span><strong>Before connection request</strong><small>Optional</small></span><Input aria-label="Hours before connection request" type="number" min="1" max="720" placeholder="None" value={preInviteDelay} onChange={(event) => setPreInviteDelay(event.target.value)} /><b>hours</b></label>
               <label className="sequence-publish-delay"><span><strong>After connection</strong><small>Before Message 1</small></span><Input aria-label="Hours after connection" type="number" min="1" max="720" value={inviteDelay} onChange={(event) => setInviteDelay(event.target.value)} /><b>hours</b></label>
@@ -1379,7 +1379,7 @@ export function PublishWizard({
             </div>
           </div>
           {previewError && (
-            <div role="alert" className="mt-[11px] flex items-start gap-[7px] px-[10px] py-[9px] border border-app-warning-border rounded-[9px] bg-app-warning-subtle text-app-warning text-[length:var(--text-xs)]">
+            <div role="alert" className="mt-app-md flex items-start gap-app-sm px-app-md py-app-sm border border-app-warning-border rounded-[9px] bg-app-warning-subtle text-app-warning text-app-meta">
               <AlertCircle size={15} className="shrink-0 mt-px" aria-hidden="true" />
               <span>{previewError}</span>
             </div>
@@ -1395,8 +1395,8 @@ export function PublishWizard({
             <div><span>Campaigns</span><strong>{preview.length}</strong><small>{branchIds.length} selected {branchIds.length === 1 ? 'branch' : 'branches'}</small></div>
             <div><span>Sequence version</span><strong>Revision {sequence.revision}</strong><small>Immutable snapshot</small></div>
           </div>
-          {previewError ? <InlineError title="Preview needs attention" message={previewError} /> : <div className="grid gap-[9px]">
-            {preview.map((campaign) => <article key={campaign.branchId} className="p-3 border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_62%,transparent)]">
+          {previewError ? <InlineError title="Preview needs attention" message={previewError} /> : <div className="grid gap-app-sm">
+            {preview.map((campaign) => <article key={campaign.branchId} className="p-app-md border border-app-border rounded-[13px] [background:color-mix(in_srgb,var(--surface-2)_62%,transparent)]">
               <div className="sequence-publish-preview-head"><span>{campaign.branchLetter}</span><div><strong>{campaign.campaignName}</strong><small>{campaign.actions.length} campaign actions</small></div><CheckCircle2 size={17} /></div>
               <div className="sequence-publish-action-flow">{campaign.actions.map((action, index) => <span key={`${action.type}-${index}`}>{PUBLISH_ACTION_LABELS[action.type] ?? action.type}</span>)}</div>
             </article>)}
@@ -1569,9 +1569,9 @@ function SequenceEditor({ id }: { id: string }) {
     }
   }
 
-  if (loading) return <div className="max-w-[900px] [margin:30px_auto]"><div className="sequence-card min-h-[300px] cursor-default [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" /></div>
+  if (loading) return <div className="max-w-[900px] my-app-2xl mx-auto"><div className="sequence-card min-h-[300px] cursor-default [background:linear-gradient(90deg,var(--surface-1),var(--surface-2),var(--surface-1))] [background-size:200%_100%] animate-[sequence-shimmer_1.4s_infinite]" /></div>
   if (error || !detail || !document) return (
-    <div className="flex flex-col gap-app-lg">
+    <div className="flex flex-col gap-section">
       <PageHeader breadcrumb={[{ label: 'Sequences', to: '/sequences' }, { label: 'Sequence' }]} title="Sequence" />
       <InlineError title="Could not open sequence" message={error ?? 'Unknown sequence.'} />
       <Button variant="secondary" className="self-start" onClick={() => navigate('/sequences')}>Back to sequences</Button>
@@ -1592,7 +1592,7 @@ function SequenceEditor({ id }: { id: string }) {
           {/* The route's one h1. The visible title is the editable name below. */}
           <h1 className="sr-only">{name.trim() || 'Untitled sequence'}</h1>
           <Input
-            className="w-[min(520px,100%)] py-0 px-app-md border border-app-border-strong bg-app-surface text-[length:var(--text-lg)] font-semibold"
+            className="w-[min(520px,100%)] py-0 px-app-md border border-app-border-strong bg-app-surface text-app-section font-semibold"
             value={name}
             onChange={(event) => setName(event.target.value)}
             aria-label="Sequence name"

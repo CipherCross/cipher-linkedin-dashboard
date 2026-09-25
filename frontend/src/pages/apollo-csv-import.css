@@ -8,23 +8,23 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--gap-stack);
   text-align: center;
   border-style: dashed;
 }
 .csv-upload-card > svg { color: var(--accent); }
 .csv-upload-card h2 { margin: 0; }
-.csv-upload-card p { max-width: 600px; margin: 0 0 4px; line-height: 1.55; }
+.csv-upload-card p { max-width: 600px; margin: 0 0 var(--space-xs); line-height: var(--leading-body); }
 .csv-upload-card[data-disabled] > svg { color: var(--text-muted); }
 
 .csv-map-row {
   display: grid;
   grid-template-columns: minmax(150px, .8fr) 24px minmax(220px, 1.2fr);
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: var(--gap-inline);
+  padding: var(--inset-cell-y) var(--inset-cell-x);
   border-bottom: 1px solid var(--border);
-  font-size: var(--text-sm);
+  font-size: var(--text-meta);
 }
 .csv-map-row:last-child { border-bottom: 0; }
 .csv-map-row > span:nth-child(2) { text-align: center; color: var(--text-muted); }
@@ -34,15 +34,15 @@
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 11px 0;
+  gap: var(--gap-inline);
+  padding: var(--inset-cell-y) 0;
   border-bottom: 1px solid var(--border);
 }
 .csv-company-action-row:last-child { border-bottom: 0; }
 .csv-company-action-row > svg { color: var(--warning); }
 
 @media (max-width: 700px) {
-  .csv-map-row { grid-template-columns: 1fr; gap: 5px; }
+  .csv-map-row { grid-template-columns: 1fr; gap: var(--space-xs); }
   .csv-map-row > span:nth-child(2) { display: none; }
   .csv-company-action-row { grid-template-columns: 20px minmax(0, 1fr); }
 }

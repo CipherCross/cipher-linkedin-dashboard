@@ -81,8 +81,8 @@ export function CampaignTable({ campaigns, instances, title = 'Campaigns' }: Pro
       <SectionHeader
         title={title}
         actions={
-          <div className="flex flex-wrap items-end gap-app-md" aria-label="Campaign filters">
-            <label className="grid gap-1 text-app-meta text-app-text-secondary">
+          <div className="flex flex-wrap items-end gap-inline" aria-label="Campaign filters">
+            <label className="grid gap-app-xs text-app-meta text-app-text-secondary">
               <span>Status</span>
               <Select
                 aria-label="Filter campaigns by runtime status"
@@ -96,7 +96,7 @@ export function CampaignTable({ campaigns, instances, title = 'Campaigns' }: Pro
                 <option value="unknown">Unknown</option>
               </Select>
             </label>
-            <label className="grid gap-1 text-app-meta text-app-text-secondary">
+            <label className="grid gap-app-xs text-app-meta text-app-text-secondary">
               <span>Archive</span>
               <Select
                 aria-label="Filter campaigns by archive state"

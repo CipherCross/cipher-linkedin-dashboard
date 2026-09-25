@@ -81,7 +81,7 @@ export function NeonActivity() {
         {/* Was `.filters` in styles.css. The one route that used it; the rule
           * is gone with this change. `[&_.ui-field]` reproduces the descendant
           * min-width without reintroducing a global selector. */}
-        <div className="flex flex-wrap items-end gap-app-lg mb-app-lg [&_.ui-field]:min-w-[220px]">
+        <div className="flex flex-wrap items-end gap-inline mb-group [&_.ui-field]:min-w-[220px]">
           <TextField
             label="Instance"
             value={instanceId}

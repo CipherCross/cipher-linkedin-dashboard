@@ -99,15 +99,15 @@ literal `@import "tailwindcss"`, and the split form breaks `init` and every
 | Separator / meaningful control border | `#D0D5DD` / `#7A8699` — the difference is deliberate |
 | Success / warning / danger | `#067647` / `#92400E` / `#B42318` |
 | Purple | Referral only — the one reply meaning with no status hue of its own |
-| Body | 16/24, weight 400 |
+| Body | 14/20, weight 400. 16/24 (`--text-prose`) only for long-form reading |
 | Controls (button, input, select) | 14/20 labels and values, weight 400; button labels 600. Small button 13/18 |
 | Table content / metadata | 14/20 / 13/18. **13px is a floor.** |
-| Page title / section / subsection | 28/36 · 20/28 · 16/24, weight 600 |
-| KPI | 32/40, weight 600, tabular numerals |
+| Page title / section / subsection | 24/32 · 16/24 · 14/20, weight 600 |
+| KPI | 28/36, weight 600, tabular numerals |
 | Space scale | 4, 8, 12, 16, 24, 32, 48, 64 (1–2px only for borders and icon alignment) |
 | Control height | 36px default · 28px small (`size="sm"`, in-row only); icon button 32×32 around a 16px glyph; 16px glyph in a button, 14px in a small one. See **Controls** below |
-| Table rows | 52px single line, 68px identity + secondary line; 44px in a compact comparison table (`--row-height-compact`) |
-| Checkbox / radio | 16px box. In a form it is a 36px row with a 14/20 label; in a table cell it is bare (no row padding), and a selection column is `ui-table__select` (40px) |
+| Table rows | 44px single line, 56px identity + secondary line; 36px in a compact comparison table (`--row-height-compact`). Cells 8px × 12px |
+| Checkbox / radio | 16px box. In a form it is a 28px row (`--choice-row-height`) with a 14/20 label; in a table cell it is bare (no row padding), and a selection column is `ui-table__select` (40px) |
 | Radius | 8 controls · 12 cards · 16 dialogs; pill for badges and chips only |
 | Elevation | Cards have **no** shadow. One soft shadow, and only on popup / dialog / drawer. |
 | Focus | 2px solid accent outline, 2px offset. Never a translucent halo. |
@@ -137,6 +137,38 @@ long forms, and the binding floor is WCAG 2.2 2.5.8 (AA): 24×24 CSS px.
   and a select in one toolbar are the same height and type size.
 - Nothing interactive goes below 24px. The chip remove buttons (24px circle,
   16px inline ×) rely on 2.5.8's spacing exception.
+
+### Density
+
+Everything is sized for a pointer on a desktop screen, the way Primer, Linear
+and shadcn size theirs: UI text is 14/20, and the space around it is one of a
+handful of named insets and gaps. A surface never picks a raw space step for its
+padding; it takes the token for what it is, so the whole product tightens or
+loosens in `tokens.css` alone.
+
+| Token | Value | Use | Tailwind |
+|---|---|---|---|
+| `--inset-card` | 16px | Panel, card, KPI tile, callout | `p-card` |
+| `--inset-pane` | 12px | Split-pane workspaces, list rows, drawers | `px-pane`, `p-pane` |
+| `--inset-dialog` | 16px | Dialog header and body (footer 12 × 16) | `p-dialog` |
+| `--inset-cell-y` / `-x` | 8 / 12px | Table cells; the row height sets the rest | — |
+| `--pane-head-height` | 52px | A pane or drawer header: title + one meta line | `h-pane-head` |
+| `--gap-section` | 16px | Between the sections of a page, and under the page header and tabs | `gap-section`, `mb-section` |
+| `--gap-group` | 12px | Between groups inside a section; toolbar to results | `gap-group` |
+| `--gap-stack` | 8px | Between the items of one group | `gap-stack` |
+| `--gap-inline` | 8px | Between controls in a row | `gap-inline` |
+
+- Tabs are control-sized: 36px, 14/20 semibold, 12px inline padding.
+- Badges are 20px; filter chips are 28px (`--control-height-sm`).
+- Identity avatars are 32px, 8px from the name.
+- Pane and drawer titles are subsections (14/20); a page's own sections are 16/24.
+- Nothing is sized with a literal. `tests/sizingScale.test.ts` fails on a raw
+  px/rem padding, margin, gap, font-size or line-height in CSS; on Tailwind
+  numeric spacing other than `0`/`0.5` (`gap-2`, `p-4`, `mt-1.5`, `[10px]`); on
+  Tailwind's own type scale (`text-xs` is 12px, under the floor); and on inline
+  `padding`/`fontSize` numbers. Chart libraries that need numbers take them from
+  named constants in `components/chartTheme.tsx`. Out of scope: `tokens.css`,
+  shadcn's generated `components/ui/**`, and the `.linkedin-*` preview.
 
 ### What is not allowed
 

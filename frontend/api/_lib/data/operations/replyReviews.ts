@@ -838,6 +838,11 @@ export const inboundRevisionOperation: NeonQueryOperation<{ instance_id: string;
  * leads GROUP BY c.id` with no filter, so every campaign appears in both, and
  * the order is the one the dropdown already had.
  *
+ * An account is labelled by its LinkedIn name first: the notebook label names
+ * a machine, and on the Replies page the person needs to see which LinkedIn
+ * account a conversation belongs to. The label and then the id are fallbacks
+ * for an instance that has not synced an owner yet.
+ *
  * Both lists come back from one statement as two jsonb arrays rather than as
  * two reads. Each `DataStore` call is its own transaction — `BEGIN`, preamble,
  * statement, `COMMIT` — so against a remote region the round trips cost more
@@ -847,7 +852,7 @@ export const inboundRevisionOperation: NeonQueryOperation<{ instance_id: string;
 const REPLY_REFERENCES_SQL = `SELECT
   coalesce((SELECT jsonb_agg(jsonb_build_object(
               'id', i.id,
-              'label', coalesce(nullif(i.label, ''), nullif(i.account_name, ''), i.id))
+              'label', coalesce(nullif(btrim(i.account_name), ''), nullif(i.label, ''), i.id))
             ORDER BY i.id)
       FROM public.instances i), '[]'::jsonb) AS accounts,
   coalesce((SELECT jsonb_agg(jsonb_build_object(

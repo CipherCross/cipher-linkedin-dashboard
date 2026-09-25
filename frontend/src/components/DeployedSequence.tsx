@@ -50,16 +50,16 @@ export function DeployedSequence({ context }: { context: CampaignSequenceContext
       />
       <ol className="m-0 p-0 list-none flex flex-col gap-app-sm">
         {actions.map((action, index) => (
-          <li key={index} data-deployed="step" className={`border border-app-border rounded-md px-app-md py-[9px] bg-app-surface-2 deployed-step-${action.kind}`}>
+          <li key={index} data-deployed="step" className={`border border-app-border rounded-md px-app-md py-app-sm bg-app-surface-2 deployed-step-${action.kind}`}>
             <div className="flex items-baseline gap-app-sm flex-wrap">
-              <span data-deployed="label" className="font-semibold text-[length:var(--text-xs)]">{action.label}</span>
+              <span data-deployed="label" className="font-semibold text-app-meta">{action.label}</span>
               {action.detail && <span className="text-app-text-muted text-app-meta">{action.detail}</span>}
             </div>
             {action.body && (
-              <p data-deployed="body" className="mt-[7px] mx-0 mb-0 whitespace-pre-wrap leading-[1.5] text-[length:var(--text-sm)]">
+              <p data-deployed="body" className="mt-app-sm mx-0 mb-0 whitespace-pre-wrap text-app-meta">
                 {action.body.map((node, nodeIndex) => (node.type === 'text'
                   ? <span key={nodeIndex}>{node.value}</span>
-                  : <span key={nodeIndex} data-deployed="var" className="rounded-[4px] px-[3px] bg-app-accent-subtle text-app-accent text-[length:var(--text-xs)]">{`{${node.name}}`}</span>))}
+                  : <span key={nodeIndex} data-deployed="var" className="rounded-[4px] px-0.5 bg-app-accent-subtle text-app-accent text-app-meta">{`{${node.name}}`}</span>))}
               </p>
             )}
           </li>

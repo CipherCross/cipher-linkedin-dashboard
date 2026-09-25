@@ -198,8 +198,8 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   if (!open) {
     const hasConfig = cfg && Object.keys(cfg).length > 0
     return (
-      <div className="pl-11">
-        <div className="flex items-center gap-app-sm flex-wrap">
+      <div>
+        <div className="flex items-center gap-inline flex-wrap">
           <Button
             variant="ghost"
             size="sm"
@@ -217,7 +217,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         {viewRaw && (
           // The literal stored override blob (not the editor's reconstructed
           // view) so the true persisted config is auditable at a glance.
-          <pre className="mt-app-sm mx-0 mb-0 p-2.5 border border-app-border rounded-md bg-app-bg font-mono text-app-meta text-app-text-secondary whitespace-pre-wrap [word-break:break-word] max-h-80 overflow-y-auto">
+          <pre className="mt-app-sm mx-0 mb-0 p-app-sm border border-app-border rounded-md bg-app-bg font-mono text-app-meta text-app-text-secondary whitespace-pre-wrap [word-break:break-word] max-h-80 overflow-y-auto">
             {hasConfig
               ? JSON.stringify(cfg, null, 2)
               : 'No online config — this notebook runs on its local config.yaml.'}
@@ -228,7 +228,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
   }
 
   return (
-    <div className="p-app-md border border-app-border rounded-md bg-app-bg flex flex-col gap-app-md">
+    <div className="p-pane border border-app-border rounded-md bg-app-bg flex flex-col gap-group">
       {raw ? (
         <TextareaField
           label="Raw config (JSON)"
@@ -270,7 +270,7 @@ export function InstanceConfigEditor({ inst }: { inst: Instance }) {
         </div>
       )}
 
-      <div className="flex items-center gap-app-md flex-wrap">
+      <div className="flex items-center gap-inline flex-wrap">
         <Button variant="primary" size="sm" loading={busy} onClick={() => void save()}>
           {busy ? 'Saving…' : 'Save'}
         </Button>

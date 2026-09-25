@@ -771,7 +771,7 @@ export function LeadsExplorer() {
         >
           {/* An end sheet is one column wide: ten stacked selects read top to
               bottom instead of wrapping into a grid the sheet cannot hold. */}
-          <div className="flex flex-col gap-app-lg">
+          <div className="flex flex-col gap-group">
             <SelectField label="Campaign" value={filterDraft.camp} onChange={(e) => setDraftFilter('camp', e.target.value)}>
               <option value="all">All campaigns</option>
               {campaignOptions.map((c) => (
@@ -1073,7 +1073,7 @@ export function LeadsExplorer() {
       {/* Coaching is an aid, not the work. It used to sit between the page
           title and the filters; collapsed and below the results, it costs the
           first row no vertical space. */}
-      <Panel className="mb-app-xl">
+      <Panel className="mb-section">
         <Button
           variant="ghost"
           data-digest="toggle"
@@ -1114,9 +1114,9 @@ export function LeadsExplorer() {
                       <span className="text-app-meta text-app-text-muted">· {shortDate(d.computed_at)}</span>
                     )}
                   </div>
-                  {d?.summary && <div className="mt-1.5 text-app-meta">{d.summary}</div>}
+                  {d?.summary && <div className="mt-app-xs text-app-meta">{d.summary}</div>}
                   {d?.patterns?.length ? (
-                    <ul data-digest="patterns" className="mt-app-sm mx-0 mb-0 pl-0 list-none flex flex-col gap-1.5 text-app-meta">
+                    <ul data-digest="patterns" className="mt-app-sm mx-0 mb-0 pl-0 list-none flex flex-col gap-app-xs text-app-meta">
                       {d.patterns.map((pattern, i) => (
                         <li key={i}>
                           <Badge tone="warning">{pattern.count}×</Badge> {pattern.issue} — {pattern.advice}

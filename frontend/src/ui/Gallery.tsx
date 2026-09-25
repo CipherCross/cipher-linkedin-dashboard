@@ -54,7 +54,7 @@ function Swatch({ token, note }: { token: string; note: string }) {
   return (
     <div className="ui-gallery__swatch">
       <div style={{ background: `var(${token})`, height: 40, borderRadius: 6, border: '1px solid var(--border)' }} />
-      <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)' }}>{token}</div>
+      <div style={{ marginTop: 'var(--space-sm)', fontFamily: 'var(--font-mono)' }}>{token}</div>
       <div className="muted">{note}</div>
     </div>
   )
@@ -115,12 +115,12 @@ export function Gallery() {
             </Panel>
 
             <Panel>
-              <SectionHeader title="Type scale" description="Body 16/24 · table 14/20 · metadata 13/18 floor." />
+              <SectionHeader title="Type scale" description="Body, table and controls 14/20 · prose 16/24 · metadata 13/18 floor." />
               <div className="ui-gallery__ruler">
-                <div style={{ font: '600 var(--text-page)/var(--leading-page) var(--font-sans)' }}>Page title — 28/36</div>
-                <div style={{ font: '600 var(--text-section)/var(--leading-section) var(--font-sans)' }}>Section — 20/28</div>
-                <div style={{ font: '600 var(--text-subsection)/var(--leading-body) var(--font-sans)' }}>Subsection — 16/24</div>
-                <div style={{ font: 'var(--text-body)/var(--leading-body) var(--font-sans)' }}>Body — 16/24</div>
+                <div style={{ font: '600 var(--text-page)/var(--leading-page) var(--font-sans)' }}>Page title — 24/32</div>
+                <div style={{ font: '600 var(--text-section)/var(--leading-section) var(--font-sans)' }}>Section — 16/24</div>
+                <div style={{ font: '600 var(--text-subsection)/var(--leading-subsection) var(--font-sans)' }}>Subsection — 14/20</div>
+                <div style={{ font: 'var(--text-body)/var(--leading-body) var(--font-sans)' }}>Body — 14/20</div>
                 <div style={{ font: 'var(--text-table)/var(--leading-table) var(--font-sans)' }}>Table content — 14/20</div>
                 <div className="muted" style={{ font: 'var(--text-meta)/var(--leading-meta) var(--font-sans)' }}>Metadata — 13/18</div>
                 <div className="tabular" style={{ font: '600 var(--text-kpi)/var(--leading-kpi) var(--font-sans)' }}>1,284</div>
@@ -128,7 +128,7 @@ export function Gallery() {
             </Panel>
 
             <Panel>
-              <SectionHeader title="Buttons" description="44px tall. Loading keeps the width; disabled states say why elsewhere." />
+              <SectionHeader title="Buttons" description="36px tall, 28px small. Loading keeps the width; disabled states say why elsewhere." />
               <div className="ui-gallery__row">
                 <Button variant="primary">Primary</Button>
                 <Button variant="secondary" icon={<RefreshCw />}>Secondary</Button>
@@ -459,7 +459,7 @@ export function Gallery() {
                 <SelectField label="Account" labelHidden value="all" onChange={() => {}}>
                   <option value="all">All accounts</option>
                 </SelectField>
-                <span className="muted small">Both controls are 44px — the date trigger is not a smaller species.</span>
+                <span className="muted small">Both controls are 36px — the date trigger is not a smaller species.</span>
               </div>
               <KpiGrid>
                 {[['Invites sent', '1,284'], ['Connected', '512'], ['Replied', '146'], ['P3 · Buying intent', '0']].map(([label, value]) => (

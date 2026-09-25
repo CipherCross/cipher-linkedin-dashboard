@@ -65,7 +65,7 @@ export function ReplyReviewPanel({ message, review, saving, error, onSave, onSav
   return (
     <form id="reply-review-form" className="replies-review-panel" aria-label="Review reply" onSubmit={(event) => { event.preventDefault(); const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLElement | null; submit(submitter?.dataset.next === 'true') }}>
       <div className="replies-panel-heading"><div><h2>Review reply</h2><time className="text-app-text-muted text-app-meta" dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(message.sent_at, true)}</time></div>{review?.provenance === 'legacy_manual' && <span className="replies-legacy-badge">Reviewed by hand earlier</span>}</div>
-      <div className="[display:-webkit-box] mb-app-lg p-app-md border-l-[3px] border-app-accent rounded-control bg-app-surface-2 text-app-table overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">{message.body || '—'}</div>
+      <div className="[display:-webkit-box] mb-app-md py-app-sm px-app-md border-l-[3px] border-app-accent rounded-control bg-app-surface-2 text-app-table overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">{message.body || '—'}</div>
       <RadioGroup
         legend="Sentiment"
         name={sentimentGroupName}
@@ -75,11 +75,11 @@ export function ReplyReviewPanel({ message, review, saving, error, onSave, onSav
         options={REPLY_SENTIMENTS.map((value) => ({ value, label: SENTIMENT_LABELS[value] }))}
         error={errors.sentiment}
       />
-      <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-xs mb-app-lg min-w-0">
+      <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-xs mb-app-sm min-w-0">
         <legend className="mb-app-xs text-app-table font-semibold">Reasons {draft.reason_ids.length ? `· ${draft.reason_ids.length}` : ''}</legend>
         <Button variant="ghost" size="sm" className="self-start" onClick={() => setShowReasons((value) => !value)}>{showReasons ? 'Hide reasons' : 'Add a reason'} {showReasons ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}</Button>
         {showReasons && <div className="flex flex-col">{REPLY_REASON_IDS.map((id) => { const checked = draft.reason_ids.includes(id); return <Checkbox key={id} label={REASON_LABELS[id]} hint={REASON_HELP[id]} checked={checked} onChange={() => set({ reason_ids: checked ? draft.reason_ids.filter((item) => item !== id) : [...draft.reason_ids, id] })} /> })}</div>}
-        {draft.reason_ids.includes('do_not_contact') && <p className="p-app-md border border-app-accent-border rounded-control bg-app-accent-subtle text-app-text text-app-meta" role="status">Dashboard reminders will be cancelled. Stop the Linked Helper campaign separately.</p>}
+        {draft.reason_ids.includes('do_not_contact') && <p className="py-app-sm px-app-md border border-app-accent-border rounded-control bg-app-accent-subtle text-app-text text-app-meta" role="status">Dashboard reminders will be cancelled. Stop the Linked Helper campaign separately.</p>}
         {errors.reason_ids && <p className="replies-form-error">{errors.reason_ids}</p>}
       </fieldset>
       <details className="replies-optional" open={draft.intent_state !== 'unreviewed' ? true : undefined}>

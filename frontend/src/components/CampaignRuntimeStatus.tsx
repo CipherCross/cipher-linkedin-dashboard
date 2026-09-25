@@ -53,7 +53,7 @@ export function CampaignRuntimeStatusView({
 
   return (
     <div className="flex flex-col items-start gap-app-xs min-w-0" data-compact={compact || undefined} aria-label={aria}>
-      <div className="flex flex-wrap items-center gap-[5px]">
+      <div className="flex flex-wrap items-center gap-app-xs">
         <Badge tone={runtime === null ? 'warning' : 'neutral'}>{label}</Badge>
         {showArchive && campaign.is_archived === true && (
           <Badge tone="accent">Archived</Badge>

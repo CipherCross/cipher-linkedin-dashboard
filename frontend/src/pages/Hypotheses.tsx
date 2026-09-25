@@ -257,7 +257,7 @@ export function Hypotheses() {
                       >
                         {r.hyp.name}
                       </button>
-                      {r.hyp.archived && <Badge className="ml-1.5">Archived</Badge>}
+                      {r.hyp.archived && <Badge className="ml-app-sm">Archived</Badge>}
                     </td>
                     <td className="text-app-text-secondary">{r.icpName}</td>
                     <td className="text-right tabular-nums">{num(r.campaigns)}</td>
@@ -413,7 +413,7 @@ function HypothesisViewer({
   return (
     <Dialog
       size="lg"
-      title={<>{hyp.name}{hyp.archived && <Badge className="ml-2">Archived</Badge>}</>}
+      title={<>{hyp.name}{hyp.archived && <Badge className="ml-app-sm">Archived</Badge>}</>}
       onRequestClose={onClose}
       footer={<>
         <CopyButton text={hypToText(hyp, icp?.name ?? null, breakdown, searches)} title="Copy all fields" />
@@ -423,14 +423,14 @@ function HypothesisViewer({
         </Button>
       </>}
     >
-      <div className="flex flex-col gap-app-lg">
+      <div className="flex flex-col gap-group">
         <dl className="m-0 flex flex-col gap-app-md">
           <div className="flex items-start justify-between gap-app-sm">
             <div>
               <dt className="text-app-meta text-app-text-muted">ICP</dt>
               <dd className="m-0 mt-0.5">
                 {icp ? (
-                  <Link to="/icp" className="inline-flex items-center gap-1" onClick={onClose}>
+                  <Link to="/icp" className="inline-flex items-center gap-app-xs" onClick={onClose}>
                     {icp.name}
                     <ExternalLink size={12} aria-hidden="true" />
                   </Link>
@@ -676,8 +676,8 @@ function HypothesisEditor({
           </Button>
         </>}
       >
-        {error && <div className="mb-app-lg"><InlineError title="Could not save the hypothesis." message={error} /></div>}
-        <div className="flex flex-col gap-app-lg">
+        {error && <div className="mb-group"><InlineError title="Could not save the hypothesis." message={error} /></div>}
+        <div className="flex flex-col gap-group">
           <TextField
             label="Name"
             required
@@ -725,7 +725,7 @@ function HypothesisEditor({
                 return (
                   <Checkbox
                     key={c.campaign_id}
-                    className="px-2.5 py-1.5 border-b border-app-border last:border-b-0"
+                    className="px-pane py-app-xs border-b border-app-border last:border-b-0"
                     label={c.campaign_name}
                     hint={acct}
                     checked={draft.campaignIds.includes(c.campaign_id)}
@@ -734,7 +734,7 @@ function HypothesisEditor({
                 )
               })}
               {filteredCampaigns.length === 0 && (
-                <p className="m-0 px-2.5 py-1.5 text-app-meta text-app-text-muted">No campaigns match.</p>
+                <p className="m-0 px-pane py-app-xs text-app-meta text-app-text-muted">No campaigns match.</p>
               )}
             </div>
           </fieldset>
@@ -747,7 +747,7 @@ function HypothesisEditor({
               {savedSearches.map((s) => (
                 <Checkbox
                   key={s.id}
-                  className="px-2.5 py-1.5 border-b border-app-border last:border-b-0"
+                  className="px-pane py-app-xs border-b border-app-border last:border-b-0"
                   label={s.name}
                   hint={s.platform}
                   checked={draft.searchIds.includes(s.id)}
@@ -755,7 +755,7 @@ function HypothesisEditor({
                 />
               ))}
               {savedSearches.length === 0 && (
-                <p className="m-0 px-2.5 py-1.5 text-app-meta text-app-text-muted">No saved searches yet.</p>
+                <p className="m-0 px-pane py-app-xs text-app-meta text-app-text-muted">No saved searches yet.</p>
               )}
             </div>
           </fieldset>

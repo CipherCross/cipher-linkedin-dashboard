@@ -34,7 +34,7 @@ export function ChipInput({
     setText('')
   }
   const box = (inputProps: { id?: string; 'aria-describedby'?: string }) => (
-    <div className="flex flex-wrap items-center gap-1.5 min-h-control p-1.5 rounded-control border border-app-border-strong bg-app-surface focus-within:outline-2 focus-within:outline-app-accent focus-within:outline-offset-1">
+    <div className="flex flex-wrap items-center gap-app-xs min-h-control p-app-xs rounded-control border border-app-border-strong bg-app-surface focus-within:outline-2 focus-within:outline-app-accent focus-within:outline-offset-1">
       {values.map((v) => (
         <Chip key={v} tone={variant} onRemove={() => onChange(values.filter((x) => x !== v))} removeLabel={`Remove ${v}`}>
           {v}
@@ -45,7 +45,7 @@ export function ChipInput({
           Backspace removes, label focuses it. */}
       <input
         {...inputProps}
-        className="flex-1 min-w-[120px] border-0 bg-transparent px-1 py-0.5 text-app-text focus:outline-none"
+        className="flex-1 min-w-[120px] border-0 bg-transparent px-app-xs py-0.5 text-app-text focus:outline-none"
         value={text}
         placeholder={values.length === 0 ? placeholder : ''}
         onChange={(e) => setText(e.target.value)}

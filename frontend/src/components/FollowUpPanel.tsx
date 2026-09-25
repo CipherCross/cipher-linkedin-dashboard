@@ -239,7 +239,7 @@ export function FollowUpPanel({
 
   if (!data?.followUpsAvailable) {
     return (
-      <div className="flex-1 min-h-0 overflow-y-auto p-app-lg flex flex-col gap-app-md">
+      <div className="flex-1 min-h-0 overflow-y-auto p-dialog flex flex-col gap-group">
         <Button variant="ghost" size="sm" onClick={onBack}>← Conversation</Button>
         <InlineError
           title="Follow-up tracking unavailable"
@@ -266,7 +266,7 @@ export function FollowUpPanel({
           mode === 'reschedule' ? 'Save new date' : 'Schedule'
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-app-lg flex flex-col gap-app-lg">
+    <div className="flex-1 min-h-0 overflow-y-auto p-dialog flex flex-col gap-group">
       <div className="flex items-center justify-between gap-app-sm">
         <Button variant="ghost" size="sm" onClick={onBack}>← Conversation</Button>
         <span className="inline-flex items-center gap-app-xs font-semibold text-app-text">
@@ -442,7 +442,7 @@ export function FollowUpPanel({
         <div className="flex flex-col">
           {events.map((event, index) => (
             <div className="relative grid grid-cols-[14px_1fr] gap-app-sm pb-app-md" key={event.id}>
-              <span className={`relative z-10 mt-[3px] w-[11px] h-[11px] rounded-full ${EVENT_DOT_TONE[event.event_kind]}`} aria-hidden="true" />
+              <span className={`relative z-10 mt-app-xs w-[11px] h-[11px] rounded-full ${EVENT_DOT_TONE[event.event_kind]}`} aria-hidden="true" />
               {index < events.length - 1 && (
                 <span className="absolute left-[5px] top-[11px] bottom-0 w-px bg-app-border" aria-hidden="true" />
               )}

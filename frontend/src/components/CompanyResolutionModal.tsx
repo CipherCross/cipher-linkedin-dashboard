@@ -85,14 +85,14 @@ export function CompanyResolutionModal({
 
         {error && <InlineError title="Could not search Airtable." message={error} />}
 
-        <div className="min-h-[180px] flex flex-col gap-1.5" aria-busy={busy || undefined}>
+        <div className="min-h-[180px] flex flex-col gap-app-sm" aria-busy={busy || undefined}>
           {busy && (
             <div className="min-h-[180px] flex items-center justify-center">
               <UpdatingNote>Searching Airtable…</UpdatingNote>
             </div>
           )}
           {!busy && results.length === 0 && (
-            <div className="min-h-[180px] flex flex-col items-center justify-center gap-1 text-center">
+            <div className="min-h-[180px] flex flex-col items-center justify-center gap-app-xs text-center">
               <Building2 size={24} aria-hidden="true" className="text-app-text-muted" />
               <div>No matching Companies found.</div>
               <div className="text-app-meta text-app-text-muted">
@@ -106,7 +106,7 @@ export function CompanyResolutionModal({
                 key={company.id}
                 variant="secondary"
                 block
-                className="h-auto min-h-control py-2.5 grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2.5 items-center text-left font-normal"
+                className="h-auto min-h-control py-app-sm grid grid-cols-[24px_minmax(0,1fr)_auto] gap-inline items-center text-left font-normal"
                 onClick={() => onSelect(company)}
               >
                 <Building2 size={18} aria-hidden="true" className="text-app-accent" />

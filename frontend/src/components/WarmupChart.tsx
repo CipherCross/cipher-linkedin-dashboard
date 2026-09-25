@@ -5,7 +5,7 @@ import {
 import type { Lead } from '../lib/types'
 import { lastWeeks, weekStart } from '../lib/leads'
 import { Panel, SectionHeader } from '../ui'
-import { AXIS, BAR_CURSOR, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
+import { AXIS, BAR_CURSOR, CHART_TEXT_SIZE, ChartEmpty, GRID, SERIES, TOOLTIP, dateTick } from './chartTheme'
 
 /** Invites per calendar week vs LinkedIn's ~100–200/week safe zone.
  *  The main view for ramping a warming-up account safely. */
@@ -41,7 +41,7 @@ export function WarmupChart({ leads }: { leads: Lead[] }) {
           <Tooltip {...TOOLTIP} cursor={BAR_CURSOR} labelFormatter={dateTick} />
           <ReferenceArea y1={100} y2={200} fill={SERIES.safeBand} fillOpacity={0.07} />
           <ReferenceLine y={200} stroke={SERIES.limit} strokeDasharray="4 4"
-            label={{ value: '~200/wk cap', fill: SERIES.limit, fontSize: 11, position: 'insideTopRight' }} />
+            label={{ value: '~200/wk cap', fill: SERIES.limit, fontSize: CHART_TEXT_SIZE, position: 'insideTopRight' }} />
           <Bar dataKey="invites" name="Invites" fill={SERIES.invite} radius={[3, 3, 0, 0]}
             maxBarSize={28} isAnimationActive={false} />
         </BarChart>

@@ -6,7 +6,7 @@ import {
 import type { CampaignMetrics } from '../lib/types'
 import { num } from '../lib/format'
 import { Panel, SectionHeader, SegmentedControl } from '../ui'
-import { AXIS, CATEGORICAL as PALETTE, GRID } from './chartTheme'
+import { AXIS, CATEGORICAL as PALETTE, CHART_TEXT_SIZE, GRID } from './chartTheme'
 
 type Metric = 'reply' | 'accept'
 
@@ -68,16 +68,16 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
           <CartesianGrid {...GRID} />
           <XAxis
             type="number" dataKey="x" name="Leads" {...AXIS}
-            label={{ value: 'Leads (volume)', position: 'insideBottom', offset: -4, fill: 'var(--text-muted)', fontSize: 11 }}
+            label={{ value: 'Leads (volume)', position: 'insideBottom', offset: -4, fill: 'var(--text-muted)', fontSize: CHART_TEXT_SIZE }}
           />
           <YAxis type="number" dataKey="y" name={yLabel} unit="%" {...AXIS} />
           <ZAxis type="number" dataKey="x" range={[80, 600]} />
           {points.length > 1 && (
             <>
               <ReferenceLine x={avgX} stroke="var(--border-strong)" strokeDasharray="4 4"
-                label={{ value: 'avg leads', fill: 'var(--text-muted)', fontSize: 10, position: 'insideTopRight' }} />
+                label={{ value: 'avg leads', fill: 'var(--text-muted)', fontSize: CHART_TEXT_SIZE, position: 'insideTopRight' }} />
               <ReferenceLine y={avgY} stroke="var(--border-strong)" strokeDasharray="4 4"
-                label={{ value: `avg ${yLabel}`, fill: 'var(--text-muted)', fontSize: 10, position: 'insideTopLeft' }} />
+                label={{ value: `avg ${yLabel}`, fill: 'var(--text-muted)', fontSize: CHART_TEXT_SIZE, position: 'insideTopLeft' }} />
             </>
           )}
           <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<PointTooltip metric={metric} />} />
@@ -90,21 +90,20 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
                 dataKey="name"
                 position="top"
                 formatter={truncName}
-                style={{ fill: 'var(--text)', fontSize: 11 }}
+                style={{ fill: 'var(--text)', fontSize: CHART_TEXT_SIZE }}
               />
             )}
           </Scatter>
         </ScatterChart>
       </ResponsiveContainer>
       {!showLabels && points.length > 0 && (
-        <div
-          style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', margin: '8px 0 0' }}
-        >
+        <div className="flex flex-wrap gap-x-app-md gap-y-app-xs mt-app-sm">
           {points.map((p) => (
             <span
               key={p.name}
               title={p.name}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', maxWidth: 220 }}
+              className="inline-flex items-center gap-app-xs text-app-meta text-app-text-secondary"
+              style={{ maxWidth: 220 }}
             >
               <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.color, display: 'inline-block', flexShrink: 0 }} />
               <span className="overflow-hidden text-ellipsis whitespace-nowrap" style={{ maxWidth: 200 }}>{p.name}</span>
@@ -112,7 +111,7 @@ export function RateVolumeScatter({ campaigns }: { campaigns: CampaignMetrics[] 
           ))}
         </div>
       )}
-      <p className="text-app-meta text-app-text-muted mt-app-md">
+      <p className="text-app-meta text-app-text-muted mt-app-sm">
         Bubble size = lead volume. Up-and-right = strong rate on a real sample;
         up-and-left = high rate but few leads, so treat with caution.
       </p>
@@ -133,10 +132,10 @@ function PointTooltip({ active, payload, metric }: {
   const p = payload[0].payload
   const kind = metric === 'reply' ? 'replies / accepted' : 'accepted / invites'
   return (
-    <div className="bg-app-surface border border-app-border rounded-md shadow-[var(--shadow-overlay)] px-2.5 py-2">
+    <div className="bg-app-surface border border-app-border rounded-md shadow-[var(--shadow-overlay)] px-app-md py-app-sm">
       <div className="text-app-text font-semibold mb-0.5">{p.name}</div>
-      <div className="text-app-text-muted text-[length:var(--text-xs)] tabular-nums">{num(p.x)} leads</div>
-      <div className="text-app-text-muted text-[length:var(--text-xs)] tabular-nums">
+      <div className="text-app-text-muted text-app-meta tabular-nums">{num(p.x)} leads</div>
+      <div className="text-app-text-muted text-app-meta tabular-nums">
         {p.y.toFixed(1)}% — {num(p.num)} / {num(p.den)} {kind}
       </div>
     </div>

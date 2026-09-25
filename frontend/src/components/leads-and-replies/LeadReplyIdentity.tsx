@@ -25,10 +25,10 @@ export function LeadReplyIdentity({
   const sentiment = reply?.sentiment ? SENTIMENT_META[reply.sentiment] : null
   const intent = highestIntent ? INTENT_META[highestIntent] : null
   return (
-    <div className="flex items-start gap-[9px]">
+    <div className="flex items-start gap-app-sm">
       <LeadAvatar lead={lead} size={30} />
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        <div className="flex flex-wrap items-center gap-x-app-sm gap-y-app-xs">
           <a
             className="relative z-10 text-app-text no-underline hover:text-app-accent hover:underline"
             href={lead.profile_url}
@@ -51,7 +51,7 @@ export function LeadReplyIdentity({
         </div>
         {lead.company && <div className="text-app-meta text-app-text-muted">{lead.company}</div>}
         {showSnippet && reply?.body && (
-          <div className="mt-1.5 px-2.5 py-1.5 bg-app-surface-2 border-l-2 border-app-border-strong rounded-r-sm text-app-table text-app-text-secondary line-clamp-2">
+          <div className="mt-app-xs px-app-sm py-app-xs bg-app-surface-2 border-l-2 border-app-border-strong rounded-r-sm text-app-table text-app-text-secondary line-clamp-2">
             “{reply.body}”
           </div>
         )}
@@ -66,7 +66,7 @@ export function LeadMilestoneBadge({ lead }: { lead: Lead }) {
   return (
     <>
       <Badge tone={STAGE_TONE[stage.id]}>{stage.label}</Badge>
-      {risk && <Badge tone="danger" className="ml-1">{RISK_LABEL[risk]}</Badge>}
+      {risk && <Badge tone="danger" className="ml-app-xs">{RISK_LABEL[risk]}</Badge>}
     </>
   )
 }

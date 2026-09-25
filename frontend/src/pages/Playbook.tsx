@@ -145,7 +145,7 @@ export function Playbook() {
 
       <Panel className="playbook-editor">
         {/* Mode and save state stay in view while the document scrolls. */}
-        <div className="sticky top-0 z-10 -mx-app-xl -mt-app-xl mb-app-lg px-app-xl py-app-md flex items-center gap-app-md flex-wrap bg-app-surface border-b border-app-border rounded-t-card">
+        <div className="sticky top-0 z-10 -mx-card -mt-card mb-group px-card py-app-md flex items-center gap-inline flex-wrap bg-app-surface border-b border-app-border rounded-t-card">
           {/* Edit and Preview are explicit modes; at a width that fits both,
               the split below shows them side by side and this only marks
               which pane has focus. */}
@@ -176,7 +176,7 @@ export function Playbook() {
         </div>
 
         {loadError && (
-          <div className="mb-app-lg">
+          <div className="mb-group">
             <InlineError
               title={loadError}
               onRetry={load}
@@ -186,7 +186,7 @@ export function Playbook() {
           </div>
         )}
         {!loaded ? (
-          <div className="flex flex-col gap-2.5" aria-busy="true">
+          <div className="flex flex-col gap-stack" aria-busy="true">
             {['40%', '92%', '88%', '70%', '95%', '64%', '90%', '80%', '55%', '86%'].map((w, i) => (
               <Skeleton key={i} width={w} height={13} />
             ))}
@@ -208,7 +208,7 @@ export function Playbook() {
               />
             </div>
             <div className="playbook-pane playbook-preview-pane flex min-w-0 [&>*]:w-full">
-              <div className="playbook-preview chat-md max-w-[72ch] min-h-[520px] max-h-[72vh] p-app-lg border border-app-border rounded-control bg-app-surface overflow-y-auto">
+              <div className="playbook-preview chat-md max-w-[72ch] min-h-[520px] max-h-[72vh] p-card border border-app-border rounded-control bg-app-surface overflow-y-auto">
                 {content.trim() ? (
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                 ) : (

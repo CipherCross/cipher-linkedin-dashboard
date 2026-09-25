@@ -100,7 +100,7 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
         align="end"
         className="w-auto max-w-[calc(100vw-32px)] flex flex-row items-stretch gap-0 p-0 overflow-hidden rounded-card border border-app-border ring-0 shadow-lg"
       >
-        <ul className="shrink-0 list-none m-0 p-1.5 bg-app-surface-2 border-r border-app-border flex flex-col gap-px min-w-[120px]">
+        <ul className="shrink-0 list-none m-0 p-app-xs bg-app-surface-2 border-r border-app-border flex flex-col gap-px min-w-[120px]">
           {presets.map((p) => (
             <li key={p.id}>
               <Button
@@ -117,7 +117,7 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
           ))}
         </ul>
         <Calendar
-          className="p-2.5"
+          className="p-app-sm"
           mode="range"
           numberOfMonths={1}
           defaultMonth={selected.from}

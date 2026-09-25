@@ -141,7 +141,7 @@ export function Review() {
           />
         </Panel>
       ) : (
-        <div className="flex flex-col gap-app-xl mb-app-xl [&>*]:mt-0">
+        <div className="flex flex-col gap-section mb-section [&>*]:mt-0">
           {/* The gap alone spaces the sections; `.ui-panel + .ui-panel` would
               add its own margin on top of it between two adjacent panels. */}
           {intentOutcomes && <P3OutcomeSummary metrics={intentOutcomes} weeks={weeks} />}

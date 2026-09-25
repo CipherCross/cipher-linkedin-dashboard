@@ -11,7 +11,7 @@
 .page {
   max-width: var(--page-max);
   margin: 0 auto;
-  padding: var(--space-xl) var(--page-gutter) var(--space-3xl);
+  padding: var(--space-xl) var(--page-gutter) var(--space-2xl);
 }
 
 /* At 1280 the 32px gutter costs more than it buys: one 24px step everywhere so
@@ -23,7 +23,7 @@
 .center { display: flex; justify-content: center; padding-top: 30vh; }
 
 /* ---- Heading roles -------------------------------------------------------
- * page (28/36) → section (20/28) → subsection (16/24). Exactly three. A route
+ * page (24/32) → section (16/24) → subsection (14/20). Exactly three. A route
  * that wants a fourth level uses weight and colour, not a new size. */
 h1 {
   margin: 0;
@@ -34,7 +34,7 @@ h1 {
   color: var(--text);
 }
 h2 {
-  margin: 0 0 var(--space-md);
+  margin: 0 0 var(--space-sm);
   font-size: var(--text-section);
   line-height: var(--leading-section);
   font-weight: 600;
@@ -43,12 +43,12 @@ h2 {
 h3, h4, h5, h6 {
   margin: 0 0 var(--space-sm);
   font-size: var(--text-subsection);
-  line-height: var(--leading-body);
+  line-height: var(--leading-subsection);
   font-weight: 600;
   color: var(--text);
 }
 
-p { margin: 0 0 var(--space-md); }
+p { margin: 0 0 var(--space-sm); }
 p:last-child { margin-bottom: 0; }
 
 .muted { color: var(--text-muted); }
@@ -57,7 +57,7 @@ p:last-child { margin-bottom: 0; }
 
 .controls {
   display: flex;
-  gap: var(--space-md);
+  gap: var(--gap-inline);
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -70,7 +70,7 @@ a:hover { color: var(--accent-hover); }
  * Moved from ui.css when its compatibility block was retired (Phase 12). Every
  * product control is a primitive with its own class; these only give a bare
  * element (markdown tables, the calendar grid, generated widgets) a sane base. */
-:where(textarea) { line-height: 1.5; resize: vertical; }
+:where(textarea) { line-height: var(--leading-body); resize: vertical; }
 select { cursor: pointer; }
 
 /* strip the OS-default control and draw our own muted chevron */
@@ -84,7 +84,7 @@ select {
   background-position: right var(--space-md) center;
 }
 
-th, td { padding: var(--space-md); text-align: left; border-bottom: 1px solid var(--border); }
+th, td { padding: var(--inset-cell-y) var(--inset-cell-x); text-align: left; border-bottom: 1px solid var(--border); }
 tbody tr { height: var(--row-height); }
 th {
   color: var(--text-secondary);
@@ -110,7 +110,7 @@ tr:last-child td { border-bottom: none; }
 @media print {
   body { background: white !important; color: black !important; }
   .sidebar, .skip-link { display: none !important; }
-  main { margin: 0 !important; padding: 12px !important; max-width: none !important; }
+  main { margin: 0 !important; padding: var(--space-md) !important; max-width: none !important; }
   .ui-panel { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
   [hidden] { display: none !important; }
 }

@@ -495,7 +495,7 @@ export function ConversationDrawer({
       className="animate-[conv-slide-in_0.25s_var(--ease-out)]"
       bodyClassName="p-0 overflow-hidden flex flex-col"
     >
-      <div className="shrink-0 flex flex-col gap-app-md px-app-xl py-app-md border-b border-app-border">
+      <div className="shrink-0 flex flex-col gap-group px-dialog py-app-md border-b border-app-border">
         <div className="flex items-center gap-app-sm flex-wrap">
           <Link
             className="text-app-meta text-app-text-muted no-underline hover:text-app-accent hover:underline"
@@ -506,7 +506,7 @@ export function ConversationDrawer({
           </Link>
           {outreachAccount ? (
             <a
-              className="inline-flex items-center gap-1.5 text-app-meta text-app-text-muted no-underline [&[href]:hover]:text-app-text"
+              className="inline-flex items-center gap-app-sm text-app-meta text-app-text-muted no-underline [&[href]:hover]:text-app-text"
               href={outreachAccount.account_url ?? undefined}
               target={outreachAccount.account_url ? '_blank' : undefined}
               rel={outreachAccount.account_url ? 'noreferrer' : undefined}
@@ -685,7 +685,7 @@ export function ConversationDrawer({
       </div>
 
       {error && (
-        <div className="shrink-0 px-app-xl pt-app-md">
+        <div className="shrink-0 px-dialog pt-app-md">
           <InlineError
             title="The conversation could not load."
             message={error}
@@ -742,14 +742,14 @@ export function ConversationDrawer({
       {!importOpen && !followUpOpen && (
       <>
       <div
-        className="flex-[1_1_0] min-h-[120px] overflow-y-auto px-app-xl py-app-lg flex flex-col gap-app-lg [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
+        className="flex-[1_1_0] min-h-[120px] overflow-y-auto px-dialog py-app-md flex flex-col gap-group [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
         ref={threadRef}
         role="region"
         aria-label="Messages"
         tabIndex={0}
       >
         {loading && (
-          <div className="flex flex-col gap-app-lg" aria-hidden="true">
+          <div className="flex flex-col gap-group" aria-hidden="true">
             <Skeleton className="self-start" width="68%" height={44} radius="10px 10px 10px 2px" />
             <Skeleton className="self-end" width="54%" height={32} radius="10px 10px 2px 10px" />
             <Skeleton className="self-start" width="60%" height={38} radius="10px 10px 10px 2px" />
@@ -776,15 +776,15 @@ export function ConversationDrawer({
           return (
             <Fragment key={m.id}>
             {newDay && (
-              <div className="flex items-center gap-2.5 my-1 mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{dayHeading(m.sent_at)}</span></div>
+              <div className="flex items-center gap-app-sm my-app-xs mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{dayHeading(m.sent_at)}</span></div>
             )}
-            <div className={`flex flex-col gap-[3px] max-w-[88%] ${inbound ? 'self-start items-start' : 'self-end items-end'}`}>
+            <div className={`flex flex-col gap-app-xs max-w-[88%] ${inbound ? 'self-start items-start' : 'self-end items-end'}`}>
               <div
                 className={[
                   'px-app-md py-app-sm text-app-table whitespace-pre-wrap [overflow-wrap:anywhere]',
                   inbound
                     ? 'bg-app-surface-2 border border-app-border rounded-[10px_10px_10px_2px]'
-                    : 'bg-[var(--bubble-out)] text-[color:var(--bubble-out-fg)] rounded-[10px_10px_2px_10px]',
+                    : 'bg-[var(--bubble-out)] text-(color:--bubble-out-fg) rounded-[10px_10px_2px_10px]',
                 ].join(' ')}
               >
                 {editing?.id === m.id ? (
@@ -808,12 +808,12 @@ export function ConversationDrawer({
                   m.body || <span className="text-app-text-muted">(empty)</span>
                 )}
               </div>
-              <div className={`flex items-center gap-1.5 ${inbound ? '' : 'flex-row-reverse'}`}>
+              <div className={`flex items-center gap-app-xs ${inbound ? '' : 'flex-row-reverse'}`}>
                 <span className="text-app-meta text-app-text-muted">{clockTime(m.sent_at)}</span>
                 {m.source === 'manual' && (
                   <>
                     <span
-                      className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-[5px] cursor-help"
+                      className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-app-xs cursor-help"
                       title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
                     >
                       imported
@@ -864,7 +864,7 @@ export function ConversationDrawer({
           scrolling on its own, it can no longer push the coach and the notes
           below the drawer's bottom edge, out of reach. */}
       {manualReviewReady && latestInbound && (
-        <div className="min-h-0 max-h-[45%] shrink overflow-y-auto border-t border-app-border px-app-xl py-app-md">
+        <div className="min-h-0 max-h-[45%] shrink overflow-y-auto border-t border-app-border px-dialog py-app-md">
         <ReplyReviewPanel
           message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
           review={latestInbound.review ?? null}
@@ -930,7 +930,7 @@ export function ConversationDrawer({
                 <h3 className="m-0 mb-app-xs text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted">What hurt your reply odds</h3>
                 <div className="flex flex-col gap-app-sm">
                   {coaching.issues.map((iss, i) => (
-                    <div className="flex flex-col items-start gap-[3px] pl-[9px] border-l-2 border-app-border" key={i}>
+                    <div className="flex flex-col items-start gap-app-xs pl-app-sm border-l-2 border-app-border" key={i}>
                       <Badge tone={SEVERITY_TONE[iss.severity]}>
                         {ISSUE_KIND_LABEL[iss.kind]}
                       </Badge>
@@ -947,7 +947,7 @@ export function ConversationDrawer({
             {coaching.tips.length > 0 && (
               <div>
                 <h3 className="m-0 mb-app-xs text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted">How to respond now</h3>
-                <ul className="m-0 pl-[18px] flex flex-col gap-app-xs">
+                <ul className="m-0 pl-app-lg flex flex-col gap-app-xs">
                   {coaching.tips.map((t, i) => (
                     <li key={i}>{t}</li>
                   ))}

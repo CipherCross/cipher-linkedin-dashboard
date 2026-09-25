@@ -39,7 +39,7 @@
   align-items: center;
   gap: var(--space-md);
   flex: 0 0 auto;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--inset-pane);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface-2);
@@ -77,7 +77,7 @@
 .replies-pane-switch {
   display: none;
   flex: 0 0 auto;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--inset-pane);
   border-top: 1px solid var(--border);
   background: var(--surface-1);
 }
@@ -98,14 +98,14 @@
   justify-content: space-between;
   gap: var(--space-md);
   flex: 0 0 auto;
-  min-height: 68px;
-  padding: var(--space-md) var(--space-lg);
+  min-height: var(--pane-head-height);
+  padding: var(--space-sm) var(--inset-pane);
   border-bottom: 1px solid var(--border);
 }
 .replies-pane-title h2, .replies-thread-head h2, .replies-panel-heading h2 {
   margin: 0;
   font-size: var(--text-subsection);
-  line-height: var(--leading-body);
+  line-height: var(--leading-subsection);
 }
 
 /* The name is the first thing in the row and gets two lines before anything
@@ -113,8 +113,7 @@
 .replies-list-item {
   display: block;
   width: 100%;
-  min-height: var(--row-height-identity);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--inset-pane);
   border: 0;
   border-bottom: 1px solid var(--border);
   background: transparent;
@@ -142,7 +141,7 @@
 .replies-list-item-bottom { color: var(--text-muted); font-size: var(--text-meta); }
 .replies-list-item-bottom > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .replies-list-item-bottom b, .replies-pending-badge {
-  padding: 2px var(--space-sm);
+  padding: 0 var(--space-sm);
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--on-accent);
@@ -150,13 +149,13 @@
 }
 
 .replies-thread-head > div { min-width: 0; }
-.replies-thread-head p { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replies-thread-head p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .replies-message {
   display: flex; flex-direction: column; gap: var(--space-xs);
-  margin: var(--space-md) 0;
-  max-width: 90%;
-  padding: var(--space-md);
+  margin: var(--space-sm) 0;
+  max-width: 80%;
+  padding: var(--space-sm) var(--inset-pane);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   color: var(--text);
@@ -172,17 +171,17 @@
 }
 
 /* ---- Inspector ----------------------------------------------------------- */
-.replies-review-panel, .replies-action-panel { padding: var(--space-lg); }
+.replies-review-panel, .replies-action-panel { padding: var(--inset-pane); }
 .replies-action-panel { border-top: 1px solid var(--border); }
-.replies-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-md); }
-.replies-panel-heading time { display: block; margin-top: 2px; }
-.replies-optional { margin: var(--space-md) 0; padding-top: var(--space-md); border-top: 1px solid var(--border); font-size: var(--text-table); }
-.replies-optional summary { min-height: var(--control-height-sm); color: var(--accent); font-weight: 600; cursor: pointer; }
+.replies-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+.replies-panel-heading time { display: block; }
+.replies-optional { margin: var(--space-sm) 0; padding-top: var(--space-sm); border-top: 1px solid var(--border); font-size: var(--text-table); line-height: var(--leading-table); }
+.replies-optional summary { display: flex; align-items: center; min-height: var(--control-height-sm); color: var(--accent); font-weight: 600; cursor: pointer; }
 .replies-form-error, .replies-inline-error { margin: var(--space-xs) 0; color: var(--danger); font-size: var(--text-meta); }
-.replies-inline-error { padding: var(--space-md); border: 1px solid var(--danger-border); border-radius: var(--radius-control); background: var(--danger-subtle); }
-.replies-review-meta, .replies-history { margin-top: var(--space-md); color: var(--text-muted); font-size: var(--text-meta); }
-.replies-history { padding-top: var(--space-md); border-top: 1px solid var(--border); }
-.replies-history summary { color: var(--accent); font-weight: 600; cursor: pointer; }
+.replies-inline-error { padding: var(--space-sm) var(--inset-pane); border: 1px solid var(--danger-border); border-radius: var(--radius-control); background: var(--danger-subtle); }
+.replies-review-meta, .replies-history { margin-top: var(--space-sm); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+.replies-history { padding-top: var(--space-sm); border-top: 1px solid var(--border); }
+.replies-history summary { display: flex; align-items: center; min-height: var(--control-height-sm); color: var(--accent); font-weight: 600; cursor: pointer; }
 .replies-legacy-badge, .replies-pending-badge { font-size: var(--text-meta); }
 
 /* Footer stays inside the pane; only .replies-inspector-scroll scrolls, so
@@ -190,10 +189,10 @@
 .replies-inspector-footer {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   flex: 0 0 auto;
   flex-wrap: wrap;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--inset-pane);
   border-top: 1px solid var(--border);
   background: var(--surface-1);
 }
@@ -209,7 +208,7 @@
   justify-content: center;
   gap: var(--space-md);
   min-height: 120px;
-  padding: var(--space-xl);
+  padding: var(--space-lg);
   color: var(--text-muted);
   font-size: var(--text-table);
   text-align: center;
@@ -218,8 +217,7 @@
 .replies-error { color: var(--danger); }
 
 /* A short window is a stress case, not a separate design: the same hierarchy
- * with one tighter step, so the sticky footer still fits. */
+ * with one tighter page gap, so the sticky footer still fits. */
 @media (max-height: 720px) {
   .replies-page { gap: var(--space-sm); height: calc(100dvh - 104px); }
-  .replies-pane-title, .replies-thread-head { min-height: 56px; padding: var(--space-sm) var(--space-lg); }
 }

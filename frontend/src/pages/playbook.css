@@ -5,7 +5,7 @@
 /* The split only exists when both panes can be useful: below 1200px of page
  * width the editor keeps the full column and the segmented control decides
  * which mode is shown. The preview is capped at 72ch for readability. */
-.playbook-panes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xl); align-items: stretch; }
+.playbook-panes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-section); align-items: stretch; }
 .playbook-pane { display: flex; min-width: 0; }
 .playbook-pane > * { width: 100%; }
 .playbook-editor textarea {
@@ -14,7 +14,7 @@
   border: 1px solid var(--border-strong); border-radius: var(--radius-control);
   padding: var(--space-lg);
   font-family: var(--font-mono);
-  font-size: var(--text-table); line-height: 1.6;
+  font-size: var(--text-table); line-height: var(--leading-table);
 }
 .playbook-preview {
   max-width: 72ch;

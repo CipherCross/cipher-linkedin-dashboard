@@ -213,7 +213,7 @@ export function CampaignDetail() {
       )}
 
       {tab === 'sequence' && (
-        <div className="flex flex-col gap-app-xl">
+        <div className="flex flex-col gap-section">
           {data.campaignSequenceContext?.source === 'builder' ? (
             <DeployedSequence context={data.campaignSequenceContext} />
           ) : (
@@ -235,21 +235,21 @@ export function CampaignDetail() {
 
       {tab === 'performance' && (compareIds.length > 0 ? (
         <>
-          <div className="flex flex-wrap gap-2 mb-app-lg">
+          <div className="flex flex-wrap gap-app-sm mb-section">
             {selected.map((c) => (
               <span
-                className="inline-flex items-center gap-1.5 bg-app-surface border border-app-border rounded-pill py-[5px] px-app-md text-app-body"
+                className="inline-flex items-center gap-app-xs bg-app-surface border border-app-border rounded-pill py-app-xs px-app-md text-app-body"
                 key={c.campaign_id}
               >
                 {c.campaign_name}
                 {c.campaign_id === campaign.campaign_id ? (
-                  <span className="text-app-text-muted text-[length:var(--text-2xs)]"> · base</span>
+                  <span className="text-app-text-muted text-app-meta"> · base</span>
                 ) : (
                   <IconButton
                     label={`Remove ${c.campaign_name}`}
                     icon={<X aria-hidden="true" />}
                     onClick={() => writeCompare(compareIds.filter((x) => x !== c.campaign_id))}
-                    className="size-8 -my-1 -mr-2"
+                    className="size-icon-hit -my-app-xs -mr-app-sm"
                   />
                 )}
               </span>
@@ -259,7 +259,7 @@ export function CampaignDetail() {
           <CampaignCompareTable campaigns={selected} instances={data.instances} />
           <RateVolumeScatter campaigns={selected} />
 
-          <div className="grid grid-cols-2 gap-app-lg max-[860px]:grid-cols-1">
+          <div className="grid grid-cols-2 gap-section mt-section max-[860px]:grid-cols-1">
             {selected.map((c) => (
               <CampaignColumn key={c.campaign_id} campaign={c} leads={leadsFor(c.campaign_id)} />
             ))}
@@ -277,12 +277,12 @@ export function CampaignDetail() {
             intentPrev={kpis.intentPrev}
           />
 
-          <div className="grid grid-cols-2 gap-app-lg mb-app-xl">
+          <div className="grid grid-cols-2 gap-section mb-section">
             <Funnel leads={leads} showPipeline />
             <CohortChart leads={leads} />
           </div>
 
-          <div className="mb-app-xl">
+          <div className="mb-section">
             <ActivityChart
               activity={kpis.activity}
               title="Campaign activity over time"
@@ -294,16 +294,16 @@ export function CampaignDetail() {
 
           {/* Diagnostics that answer a specific question rather than the daily
               one. Collapsed so the funnel and activity stay the headline. */}
-          <Panel as="details" className="analyze-section mt-app-lg">
-            <summary className="cursor-pointer font-semibold list-none flex items-baseline gap-1.5">
+          <Panel as="details" className="analyze-section">
+            <summary className="cursor-pointer font-semibold list-none flex items-baseline gap-app-xs">
               Analyze
               <span className="text-app-text-muted text-app-meta"> · demographics, lead additions, timing</span>
             </summary>
-            <div className="flex flex-col gap-app-xl mt-app-lg">
+            <div className="flex flex-col gap-section mt-section">
               <DemographicsSection leads={leads} />
               <LeadAdditionsChart leads={leads} granularity="day" />
               <AddBatchesTable leads={leads} />
-              <div className="grid grid-cols-2 gap-app-lg mb-app-xl">
+              <div className="grid grid-cols-2 gap-section">
                 <LagHistogram
                   title="Time from invite to accept"
                   color={SERIES.accepted}
@@ -329,7 +329,7 @@ export function CampaignDetail() {
 function DeploymentSource({ context }: { context: CampaignSequenceContext | null }) {
   if (!context || context.source !== 'builder') {
     return (
-      <div data-campaign="source" className="flex items-center gap-1.5 flex-wrap mt-[5px] text-app-text-muted text-app-meta">
+      <div data-campaign="source" className="flex items-center gap-app-xs flex-wrap mt-app-xs text-app-text-muted text-app-meta">
         <Badge tone="neutral">Created in Linked Helper</Badge>
       </div>
     )
@@ -340,7 +340,7 @@ function DeploymentSource({ context }: { context: CampaignSequenceContext | null
   if (context.publish_status) parts.push(publishStatusLabel(context.publish_status))
   if (context.lineage === 'explicit_link') parts.push('linked by hand')
   return (
-    <div data-campaign="source" className="flex items-center gap-1.5 flex-wrap mt-[5px] text-app-text-muted text-app-meta">
+    <div data-campaign="source" className="flex items-center gap-app-xs flex-wrap mt-app-xs text-app-text-muted text-app-meta">
       <Badge tone="accent">Sequence Builder</Badge>
       {context.sequence_document_id ? (
         <Link className="text-app-text no-underline hover:text-app-accent hover:underline" to={`/sequences/${encodeURIComponent(context.sequence_document_id)}`}>
@@ -398,7 +398,7 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
   }
 
   return (
-    <Panel className="flex flex-col gap-app-md">
+    <Panel className="flex flex-col gap-group">
       <SectionHeader
         title="Briefing context"
         description={<>
@@ -416,7 +416,7 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Example: This campaign re-engages older leads who did not accept from Mykyta's main profile. Compare it as a second-touch audience, not a fresh outbound campaign."
       />
-      <div className="flex items-center justify-between gap-app-md max-[560px]:items-start max-[560px]:flex-col">
+      <div className="flex items-center justify-between gap-group max-[560px]:items-start max-[560px]:flex-col">
         <span className="text-app-text-muted text-app-meta">
           {campaign.briefing_context_updated_at
             ? `Updated ${new Date(campaign.briefing_context_updated_at).toLocaleString()}`
@@ -439,7 +439,7 @@ function CampaignBriefingContext({ campaign }: { campaign: CampaignMetrics }) {
 
 function CampaignColumn({ campaign, leads }: { campaign: CampaignMetrics; leads: Lead[] }) {
   return (
-    <div className="flex flex-col gap-app-xl">
+    <div className="flex flex-col gap-section">
       <Panel>
         <SectionHeader
           title={
@@ -478,8 +478,8 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
   const agedCount = demo.ages.reduce((n, b) => n + b.count, 0)
 
   return (
-    <div className="flex flex-col gap-app-xl">
-      <div className="grid grid-cols-2 gap-app-lg mb-app-xl">
+    <div className="flex flex-col gap-section">
+      <div className="grid grid-cols-2 gap-section">
         <Panel>
           <SectionHeader title="Age distribution" />
           {demo.ages.length === 0 ? (
@@ -513,7 +513,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
           {genderTotal === 0 ? (
             <ChartEmpty height={240} label="No gender data yet" />
           ) : (
-            <div className="flex flex-col gap-[14px] py-app-sm px-0">
+            <div className="flex flex-col gap-group py-app-sm px-0">
               <div className="flex w-full h-[22px] rounded-sm overflow-hidden bg-app-surface-2" role="img" aria-label="Gender split">
                 {demo.gender.map((g) =>
                   g.count > 0 ? (
@@ -529,7 +529,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
                   ) : null,
                 )}
               </div>
-              <ul className="list-none m-0 p-0 flex flex-wrap gap-x-[18px] gap-y-1.5 [&_li]:flex [&_li]:items-center [&_li]:gap-[7px] text-app-meta">
+              <ul className="list-none m-0 p-0 flex flex-wrap gap-x-app-lg gap-y-app-xs [&_li]:flex [&_li]:items-center [&_li]:gap-app-sm text-app-meta">
                 {demo.gender.map((g) => (
                   <li key={g.id}>
                     <span
@@ -549,7 +549,7 @@ function DemographicsSection({ leads }: { leads: Lead[] }) {
           )}
         </Panel>
       </div>
-      <div className="text-app-text-muted text-app-meta leading-[1.5]">
+      <div className="text-app-text-muted text-app-meta">
         Age is a career-history estimate; contradictory education/job signals remain unknown.
         Gender is inferred from name and headline until an SDR confirms it. “Pending evaluation”
         and an evaluated “unknown” are separate; neither is dropped from the totals.

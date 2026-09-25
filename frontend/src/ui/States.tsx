@@ -87,12 +87,12 @@ export function EmptyState({
 }) {
   return (
     <div className={`empty-state ${className}`.trim()} data-empty-kind={kind}>
-      <span className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-app-surface-2 text-app-text-muted mb-0.5">
-        <Icon size={22} aria-hidden="true" />
+      <span className="inline-flex items-center justify-center size-icon-hit rounded-control bg-app-surface-2 text-app-text-muted">
+        <Icon size={16} aria-hidden="true" />
       </span>
-      <div className="text-[length:var(--text-base)] font-semibold text-app-text">{title}</div>
-      {hint && <div className="max-w-[340px] text-app-meta leading-[1.5] text-app-text-muted">{hint}</div>}
-      {action && <div className="mt-1.5">{action}</div>}
+      <div className="text-app-table font-semibold text-app-text">{title}</div>
+      {hint && <div className="max-w-[340px] text-app-meta text-app-text-muted">{hint}</div>}
+      {action && <div className="mt-app-xs">{action}</div>}
     </div>
   )
 }

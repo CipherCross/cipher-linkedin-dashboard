@@ -77,11 +77,11 @@ function ToolCall({ part }: { part: any }) {
   const iconColor = failed ? 'text-app-danger' : running ? 'text-app-warning' : 'text-app-success'
 
   return (
-    <div className={`border border-app-border border-l-2 ${edgeColor} rounded-md bg-app-surface-2 text-[length:var(--text-sm)]`}>
+    <div className={`border border-app-border border-l-2 ${edgeColor} rounded-md bg-app-surface-2 text-app-meta`}>
       <Button
         variant="ghost"
         block
-        className="justify-start gap-app-sm text-app-text px-app-md py-app-sm text-[length:var(--text-sm)] font-normal rounded-none"
+        className="justify-start gap-app-sm text-app-text px-app-md py-app-sm text-app-meta font-normal rounded-none"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => setOpen(!open)}
@@ -96,7 +96,7 @@ function ToolCall({ part }: { part: any }) {
         {open ? <ChevronDown size={14} className="ml-auto text-app-text-muted shrink-0" /> : <ChevronRight size={14} className="ml-auto text-app-text-muted shrink-0" />}
       </Button>
       {open && (
-        <div id={contentId} className="border-t border-app-border px-app-md py-app-sm flex flex-col gap-app-sm [&_pre]:m-0 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [&_pre]:max-h-[260px] [&_pre]:overflow-y-auto [&_pre]:text-app-text-secondary [&_pre]:text-[length:var(--text-xs)]">
+        <div id={contentId} className="border-t border-app-border px-app-md py-app-sm flex flex-col gap-app-sm [&_pre]:m-0 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [&_pre]:max-h-[260px] [&_pre]:overflow-y-auto [&_pre]:text-app-text-secondary [&_pre]:text-app-meta">
           {sql && <pre>{sql}</pre>}
           {failed && <pre className="text-app-danger">{String(part.errorText ?? 'failed')}</pre>}
           {!failed && out != null && (
@@ -117,11 +117,11 @@ function Reasoning({ text }: { text: string }) {
   const contentId = useId()
   if (!text.trim()) return null
   return (
-    <div className="border border-dashed border-app-border rounded-md bg-transparent text-[length:var(--text-sm)]">
+    <div className="border border-dashed border-app-border rounded-md bg-transparent text-app-meta">
       <Button
         variant="ghost"
         block
-        className="justify-start gap-app-sm text-app-text px-app-md py-app-sm text-[length:var(--text-sm)] font-normal rounded-none"
+        className="justify-start gap-app-sm text-app-text px-app-md py-app-sm text-app-meta font-normal rounded-none"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => setOpen(!open)}
@@ -129,7 +129,7 @@ function Reasoning({ text }: { text: string }) {
         <span className="text-app-text-muted font-semibold italic">Thinking</span>
         {open ? <ChevronDown size={14} className="ml-auto text-app-text-muted shrink-0" /> : <ChevronRight size={14} className="ml-auto text-app-text-muted shrink-0" />}
       </Button>
-      {open && <div id={contentId} className="border-t border-dashed border-app-border px-app-md py-app-sm text-app-text-muted whitespace-pre-wrap text-[length:var(--text-sm)] max-h-[220px] overflow-y-auto">{text}</div>}
+      {open && <div id={contentId} className="border-t border-dashed border-app-border px-app-md py-app-sm text-app-text-muted whitespace-pre-wrap text-app-meta max-h-[220px] overflow-y-auto">{text}</div>}
     </div>
   )
 }
@@ -142,7 +142,7 @@ function Message({ m }: { m: UIMessage }) {
     .trim()
   return (
     <div data-role={m.role}>
-      <div className="text-[length:var(--text-2xs)] font-semibold text-app-text-muted uppercase tracking-[var(--tracking-caps)]">{m.role === 'user' ? 'You' : 'Claude'}</div>
+      <div className="text-app-meta font-semibold text-app-text-muted uppercase tracking-[var(--tracking-caps)]">{m.role === 'user' ? 'You' : 'Claude'}</div>
       <div className="flex flex-col gap-app-sm max-w-full">
         {m.parts.map((part, i) => {
           if (part.type === 'text') {
@@ -268,21 +268,21 @@ export function Chat() {
       />
 
       <Panel className="flex flex-col h-[calc(100vh-190px)] min-h-[420px] p-0 overflow-hidden relative">
-        <div className="flex-1 overflow-y-auto p-[18px] flex flex-col gap-app-lg" ref={scrollRef} onScroll={onScroll}>
+        <div className="flex-1 overflow-y-auto p-card flex flex-col gap-section" ref={scrollRef} onScroll={onScroll}>
           {messages.length === 0 && (
-            <div className="flex flex-col items-center text-center gap-2.5 m-auto max-w-[560px] py-app-sm px-0">
+            <div className="flex flex-col items-center text-center gap-stack m-auto max-w-[560px] py-app-sm px-0">
               <div className="inline-flex items-center justify-center w-[52px] h-[52px] rounded-lg bg-app-accent-subtle text-app-accent mb-0.5"><Sparkles size={26} /></div>
-              <div className="text-[length:var(--text-lg)] font-semibold tracking-[-0.01em]">Ask about your campaign data</div>
-              <div className="text-[length:var(--text-sm)] leading-[1.5] max-w-[460px] text-app-text-muted">
+              <div className="text-app-section font-semibold tracking-[-0.01em]">Ask about your campaign data</div>
+              <div className="text-app-meta max-w-[460px] text-app-text-muted">
                 Funnels, cohorts, per-account and per-step performance. Claude only
                 reads — it never changes your data. Try one of these:
               </div>
-              <div className="grid grid-cols-2 max-[560px]:grid-cols-1 gap-2.5 w-full mt-app-sm">
+              <div className="grid grid-cols-2 max-[560px]:grid-cols-1 gap-stack w-full mt-app-sm">
                 {SUGGESTIONS.map((s) => (
                   <Button
                     key={s}
                     variant="secondary"
-                    className="h-auto justify-start whitespace-normal text-left font-normal bg-app-surface-2 border-app-border text-app-text-secondary px-[13px] py-[11px] text-[length:var(--text-sm)] leading-[1.4] hover:border-app-accent-border hover:text-app-text hover:bg-app-surface-3"
+                    className="h-auto justify-start whitespace-normal text-left font-normal bg-app-surface-2 border-app-border text-app-text-secondary px-app-md py-app-sm text-app-meta hover:border-app-accent-border hover:text-app-text hover:bg-app-surface-3"
                     onClick={() => submit(s)}
                   >
                     {s}
@@ -321,7 +321,7 @@ export function Chat() {
         )}
 
         <form
-          className="flex gap-2.5 p-app-md border-t border-app-border items-end"
+          className="flex gap-inline p-app-md border-t border-app-border items-end"
           onSubmit={(e) => {
             e.preventDefault()
             submit(input)

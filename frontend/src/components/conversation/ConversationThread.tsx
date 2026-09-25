@@ -48,7 +48,7 @@ export function ConversationThread({
   if (!messages.length) return <div className="replies-thread-status"><MessageCircle size={20} aria-hidden="true" /> No messages in this window.</div>
   let previousDay = ''
   return (
-    <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain] px-app-xl py-app-lg" aria-label="Conversation" ref={scrollRef}>
+    <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain] px-app-lg py-app-sm" aria-label="Conversation" ref={scrollRef}>
       {olderCursor && <div className="flex justify-center mb-app-md">
         <Button variant="ghost" size="sm" icon={<ArrowUp aria-hidden="true" />} onClick={onLoadOlder} disabled={loading}>Load older messages</Button>
       </div>}
@@ -62,7 +62,7 @@ export function ConversationThread({
         const review = message.review
         return (
           <div key={message.id}>
-            {showDay && <div className="my-app-lg mx-auto text-app-text-muted text-app-meta text-center">{replyDayHeading(message.sent_at)}</div>}
+            {showDay && <div className="my-app-md mx-auto text-app-text-muted text-app-meta text-center">{replyDayHeading(message.sent_at)}</div>}
             {/* ui-exception(replies-message-bubble): a message row is the whole
                 conversation bubble (sender, timestamp, body, sentiment badge) —
                 richer content than Button's fixed contract renders — kept as a

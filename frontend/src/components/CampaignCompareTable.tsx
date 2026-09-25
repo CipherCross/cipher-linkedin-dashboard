@@ -132,7 +132,7 @@ export function CampaignCompareTable({
           )}
         </Table>
       </TableFrame>
-      <p className="text-app-meta text-app-text-muted mt-app-md">
+      <p className="text-app-meta text-app-text-muted mt-app-sm">
         ⚠ = under {SMALL_SAMPLE} leads, rate is noisy. Averages are
         pooled (totals ÷ totals), not a mean of the per-campaign rates.
       </p>
@@ -143,7 +143,7 @@ export function CampaignCompareTable({
 function rateCell(rate: number | null, max: number, color: string) {
   if (rate == null) return <span className="text-app-text-muted">—</span>
   return (
-    <div className="flex flex-col items-end gap-[3px]">
+    <div className="flex flex-col items-end gap-app-xs">
       <span className="tabular-nums">{rate.toFixed(1)}%</span>
       <div className="w-[72px] h-[5px] bg-app-surface-2 rounded-[var(--radius-xs)] overflow-hidden">
         <span

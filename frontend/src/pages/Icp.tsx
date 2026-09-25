@@ -220,7 +220,7 @@ export function Icp() {
           />
         </Panel>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-app-lg">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-section">
           {visible.map((icp) => (
             <IcpCard
               key={icp.id}
@@ -332,15 +332,15 @@ function ViewField({
 }) {
   if (!value || !value.trim()) return null
   return (
-    <div className="flex flex-col gap-1 min-w-0">
+    <div className="flex flex-col gap-app-xs min-w-0">
       <span className="text-app-meta font-medium text-app-text-muted">{label}</span>
-      <div className="flex items-start justify-between gap-2 min-w-0">
+      <div className="flex items-start justify-between gap-app-sm min-w-0">
         {link ? (
           <a
             href={value}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 min-w-0 [word-break:break-all] text-app-accent hover:underline"
+            className="inline-flex items-center gap-app-xs min-w-0 [word-break:break-all] text-app-accent hover:underline"
           >
             {value}
             <ExternalLink size={12} aria-hidden="true" className="shrink-0" />
@@ -375,13 +375,13 @@ function ViewChips({
   const shown = collapsible && !expanded ? values.slice(0, COLLAPSED_CHIPS) : values
   const hidden = values.length - shown.length
   return (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-app-sm min-w-0">
+      <div className="flex items-center gap-app-sm">
         <span className="text-app-meta font-medium text-app-text-muted">{label}</span>
         {collapsible && <span className="text-app-meta text-app-text-muted">{values.length}</span>}
         <CopyButton text={values.join(', ')} title={`Copy ${label.toLowerCase()}`} />
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-app-xs">
         {shown.map((v) => (
           <Chip tone={variant ?? 'include'} key={v}>{v}</Chip>
         ))}
@@ -481,7 +481,7 @@ function IcpViewer({
       size="xl"
       title={<>
         {icp.name}
-        {icp.archived && <Badge className="ml-2">Archived</Badge>}
+        {icp.archived && <Badge className="ml-app-sm">Archived</Badge>}
       </>}
       description={<>
         {personas.length} persona{personas.length === 1 ? '' : 's'} · {industries.length} industr
@@ -497,13 +497,13 @@ function IcpViewer({
         </Button>
       </>}
     >
-      <div className="flex flex-col gap-app-lg">
+      <div className="flex flex-col gap-group">
         <ViewField label="Airtable URL" value={icp.airtable_url} link />
 
         {hasProduct ? (
           <>
             <SectionHeader title="Product context" level="subsection" />
-            <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
               <ViewField label="Main product" value={icp.main_product} />
               <ViewField label="Product stage" value={icp.product_stage} />
               <ViewField label="Core sphere" value={icp.core_sphere} />
@@ -521,7 +521,7 @@ function IcpViewer({
           <>
             <SectionHeader title="Company criteria" level="subsection" />
             <ViewChips label="Countries" values={icp.company_countries} />
-            <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+            <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
               <ViewField label="Headcount" value={icp.company_headcount} />
               <ViewField label="Company age" value={icp.company_age} />
               <ViewField label="Dev team availability" value={icp.dev_team_availability} />
@@ -543,13 +543,13 @@ function IcpViewer({
             <SectionHeader title="Buyer personas" level="subsection" />
             <div className="flex flex-col gap-app-sm">
               {personas.map((p) => (
-                <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={p.id}>
+                <div className="flex flex-col gap-app-sm p-pane border border-app-border rounded-card bg-app-surface-2" key={p.id}>
                   <div className="flex items-center gap-app-sm">
                     <span className="flex-1 min-w-0 font-semibold break-words">{p.kind}</span>
                     <CopyButton text={`Persona — ${p.kind}`} title="Copy persona name" />
                   </div>
                   <ViewChips label="Job titles" values={p.job_titles} />
-                  <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+                  <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
                     <ViewField label="Age range" value={p.age_range} />
                     <ViewField label="Location" value={p.location} />
                     <ViewField label="Connections" value={p.connections_note} />
@@ -568,7 +568,7 @@ function IcpViewer({
             <SectionHeader title="Industries" level="subsection" />
             <div className="flex flex-col gap-app-sm">
               {industries.map((x) => (
-                <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={x.id}>
+                <div className="flex flex-col gap-app-sm p-pane border border-app-border rounded-card bg-app-surface-2" key={x.id}>
                   <div className="flex items-center gap-app-sm">
                     <span className="flex-1 min-w-0 font-semibold break-words">{x.name}</span>
                   </div>
@@ -749,9 +749,9 @@ function IcpEditor({
           </Button>
         </>}
       >
-        {error && <div className="mb-app-lg"><InlineError title="Could not save the ICP." message={error} /></div>}
-        <div className="flex flex-col gap-app-lg">
-          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+        {error && <div className="mb-group"><InlineError title="Could not save the ICP." message={error} /></div>}
+        <div className="flex flex-col gap-group">
+          <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
             <TextField
               label="Name"
               required
@@ -769,7 +769,7 @@ function IcpEditor({
           </div>
 
           <SectionHeader title="Product context" level="subsection" />
-          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+          <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
             <TextField label="Main product" value={draft.main_product} onChange={(e) => set('main_product', e.target.value)} />
             <TextField label="Product stage" value={draft.product_stage} onChange={(e) => set('product_stage', e.target.value)} />
             <TextField label="Core sphere" value={draft.core_sphere} onChange={(e) => set('core_sphere', e.target.value)} />
@@ -807,7 +807,7 @@ function IcpEditor({
             onChange={(v) => set('company_countries', v)}
             placeholder="Type a country, press Enter"
           />
-          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+          <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
             <TextField
               label="Headcount"
               value={draft.company_headcount}
@@ -848,7 +848,7 @@ function IcpEditor({
           <fieldset className="m-0 p-0 border-0 flex flex-col gap-app-sm">
             <legend className="mb-app-xs text-app-table font-semibold">Buyer personas</legend>
             {draft.personas.map((p, i) => (
-              <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={p._key}>
+              <div className="flex flex-col gap-app-sm p-pane border border-app-border rounded-card bg-app-surface-2" key={p._key}>
                 <div className="flex items-center gap-app-sm">
                   <TextField
                     className="flex-1 min-w-0"
@@ -871,7 +871,7 @@ function IcpEditor({
                   onChange={(v) => setPersona(p._key, { job_titles: v })}
                   placeholder="Type a title, press Enter"
                 />
-                <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+                <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
                   <TextField label="Age range" value={p.age_range} onChange={(e) => setPersona(p._key, { age_range: e.target.value })} />
                   <TextField label="Location" value={p.location} onChange={(e) => setPersona(p._key, { location: e.target.value })} />
                   <TextField
@@ -918,7 +918,7 @@ function IcpEditor({
               Set include keywords per sub-industry — start empty. The ICP-wide exclude list above applies to all.
             </p>
             {draft.industries.map((x, i) => (
-              <div className="flex flex-col gap-app-sm p-2.5 border border-app-border rounded-card bg-app-surface-2" key={x._key}>
+              <div className="flex flex-col gap-app-sm p-pane border border-app-border rounded-card bg-app-surface-2" key={x._key}>
                 <div className="flex items-center gap-app-sm">
                   <TextField
                     className="flex-1 min-w-0"

@@ -205,6 +205,18 @@
   --spacing-icon-glyph: var(--icon-glyph);
   --spacing-row: var(--row-height);
   --spacing-row-identity: var(--row-height-identity);
+  --spacing-row-compact: var(--row-height-compact);
+  --spacing-pane-head: var(--pane-head-height);
+  /* Density: p-card, px-pane, p-dialog, gap-section, mb-section, gap-group,
+   * gap-stack, gap-inline. Prefer these over a raw app-* step for a surface's
+   * padding or the gap between its sections (docs/ui-standard.md "Density"). */
+  --spacing-card: var(--inset-card);
+  --spacing-pane: var(--inset-pane);
+  --spacing-dialog: var(--inset-dialog);
+  --spacing-section: var(--gap-section);
+  --spacing-group: var(--gap-group);
+  --spacing-stack: var(--gap-stack);
+  --spacing-inline: var(--gap-inline);
 
   --radius-control: var(--radius-control);
   --radius-card: var(--radius-card);
@@ -217,6 +229,10 @@
   --text-app-table--line-height: var(--leading-table);
   --text-app-body: var(--text-body);
   --text-app-body--line-height: var(--leading-body);
+  --text-app-prose: var(--text-prose);
+  --text-app-prose--line-height: var(--leading-prose);
+  --text-app-subsection: var(--text-subsection);
+  --text-app-subsection--line-height: var(--leading-subsection);
   --text-app-section: var(--text-section);
   --text-app-section--line-height: var(--leading-section);
   --text-app-page: var(--text-page);

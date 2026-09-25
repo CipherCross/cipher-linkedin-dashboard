@@ -236,7 +236,7 @@ export function ImportHistoryPanel({
   // Which of the three stages the panel is on, for the numbered step header.
   const step = result ? 3 : blocks ? 2 : 1
   const stepsHeader = (
-    <ol className="flex items-center gap-app-sm list-none mt-0 mx-0 mb-1 p-0" aria-label="Import history progress">
+    <ol className="flex items-center gap-app-sm list-none mt-0 mx-0 mb-app-xs p-0" aria-label="Import history progress">
       {['Paste', 'Review', 'Import'].map((label, i) => {
         const n = i + 1
         const state = n === step ? 'active' : n < step ? 'done' : 'todo'
@@ -244,14 +244,14 @@ export function ImportHistoryPanel({
           <li
             key={label}
             className={[
-              'inline-flex items-center gap-1.5 text-[length:var(--text-xs)] font-semibold',
+              'inline-flex items-center gap-app-sm text-app-meta font-semibold',
               STEP_TEXT_CLASS[state],
-              i > 0 ? "before:content-[''] before:inline-block before:w-4 before:h-px before:bg-app-border before:mr-1.5" : '',
+              i > 0 ? "before:content-[''] before:inline-block before:w-4 before:h-px before:bg-app-border before:mr-app-sm" : '',
             ].filter(Boolean).join(' ')}
             aria-current={state === 'active' ? 'step' : undefined}
           >
             <span
-              className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border text-[length:var(--text-2xs)] ${STEP_NUMBER_CLASS[state]}`}
+              className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border text-app-meta ${STEP_NUMBER_CLASS[state]}`}
             >
               {state === 'done' ? <CheckCircle2 size={12} aria-hidden="true" /> : n}
             </span>
@@ -264,7 +264,7 @@ export function ImportHistoryPanel({
 
   if (result) {
     return (
-      <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5">
+      <div className="flex-1 overflow-y-auto pt-app-md px-dialog pb-app-lg flex flex-col gap-group">
         {stepsHeader}
         <div>
           Imported <strong>{result.inserted}</strong> new message{result.inserted === 1 ? '' : 's'}
@@ -288,7 +288,7 @@ export function ImportHistoryPanel({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto pt-app-md px-app-lg pb-app-lg flex flex-col gap-2.5">
+    <div className="flex-1 overflow-y-auto pt-app-md px-dialog pb-app-lg flex flex-col gap-group">
       {stepsHeader}
       {!blocks && (
         <>
@@ -338,7 +338,7 @@ export function ImportHistoryPanel({
           )}
           {blocks.map((b) => (
             <div
-              className={`border border-app-border rounded-md px-2.5 py-app-sm bg-app-bg flex flex-col gap-1.5 ${b.include ? '' : 'opacity-50'}`}
+              className={`border border-app-border rounded-md px-pane py-app-sm bg-app-bg flex flex-col gap-app-sm ${b.include ? '' : 'opacity-50'}`}
               key={b.key}
             >
               <div className="flex items-center gap-app-sm flex-wrap">

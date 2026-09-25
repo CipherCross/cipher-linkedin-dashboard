@@ -150,7 +150,7 @@ async function readAnalytics(filters: SentimentAnalyticsFilters, signal?: AbortS
 
 function Section({ title, subtitle, icon, children }: { title: string; subtitle?: string; icon?: ReactNode; children: ReactNode }) {
   return (
-    <Panel className="sa-section min-w-0 mb-app-xl">
+    <Panel className="sa-section min-w-0 mb-section">
       <SectionHeader title={<>{icon}{title}</>} description={subtitle} />
       {children}
     </Panel>
@@ -218,7 +218,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
       actions={<Button variant="secondary" icon={<RefreshCw aria-hidden="true" />} onClick={() => setRefresh((value) => value + 1)} loading={loading} loadingLabel="Refreshing analytics">{COPY.refresh}</Button>}
     />
 
-    <Panel className="flex items-end flex-wrap gap-app-lg mb-app-lg [&_.ui-field]:min-w-[220px]" aria-label="Analytics filters">
+    <Panel className="flex items-end flex-wrap gap-inline mb-section [&_.ui-field]:min-w-[220px]" aria-label="Analytics filters">
       <SegmentedControl
         label="Reply period"
         value={activePreset as '7' | '30' | 'month' | 'custom'}
@@ -242,7 +242,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
       onRequestClose={() => setMoreFilters(false)}
       footer={<Button variant="primary" onClick={() => setMoreFilters(false)}>Done</Button>}
     >
-      <div className="grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+      <div className="grid gap-group grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
         <TextField label="From · UTC" type="date" value={dateInputValue(filters.from)} onChange={(event) => setFilter('from', event.target.value)} />
         <TextField label="To · UTC" type="date" value={dateInputValue(filters.to)} onChange={(event) => setFilter('to', event.target.value)} />
         <SelectField label="Campaign" value={filters.campaign ?? ''} onChange={(event) => setFilter('campaign', event.target.value)}>
@@ -256,7 +256,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
       </div>
     </Dialog>}
 
-    {loading && !visibleResult && <Panel className="flex flex-col items-center justify-center gap-app-md min-h-[220px] text-center" role="status" aria-busy="true"><span className="w-5 h-5 border-2 border-app-border border-t-app-accent rounded-full animate-[sa-spin_.9s_linear_infinite]" aria-hidden="true" /> Loading the analytics…</Panel>}
+    {loading && !visibleResult && <Panel className="flex flex-col items-center justify-center gap-group min-h-[220px] text-center" role="status" aria-busy="true"><span className="w-5 h-5 border-2 border-app-border border-t-app-accent rounded-full animate-[sa-spin_.9s_linear_infinite]" aria-hidden="true" /> Loading the analytics…</Panel>}
     {error && <InlineError
       title="Could not load the analytics."
       message={stale ? 'The figures below are the last data that loaded for this period.' : undefined}
@@ -264,25 +264,25 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
       onRetry={() => setRefresh((value) => value + 1)}
     />}
     {visibleResult && <div aria-busy={loading || undefined}>
-      <div className="mt-0 mx-0 mb-app-lg text-app-text-muted text-app-meta flex items-center gap-app-sm flex-wrap">
+      <div className="mt-0 mx-0 mb-group text-app-text-muted text-app-meta flex items-center gap-app-sm flex-wrap">
         <span>{reviewed?.numerator ?? 0} of {reviewed?.denominator ?? 0} replies reviewed · snapshot {new Date(visibleResult.dataset_at).toLocaleString(UI_LOCALE)}{stale && ' · this data may be out of date'}</span>
         {loading && <UpdatingNote>Refreshing the analytics…</UpdatingNote>}
       </div>
-      <div className="grid gap-app-lg grid-cols-[repeat(auto-fit,minmax(220px,1fr))] mb-app-lg">
+      <div className="grid gap-group grid-cols-[repeat(auto-fit,minmax(220px,1fr))] mb-group">
         <MetricCard label="Conversations with a reply" metric={dialogues} href={dialogues ? drill(dialogues, 'dialogues') : null} hint="conversations in this period" showRate={false} />
         <MetricCard label="Replies reviewed" metric={reviewed} href={null} hint="messages, reviewed by hand" />
         <MetricCard label="Waiting for review" metric={pending} href={pendingHref} hint="conversations with an unreviewed reply" />
         <MetricCard label="Needs a next step" metric={needsStep} href={needsStep ? drill(needsStep, 'needs_confirmation') : null} hint="conversations" />
       </div>
-      <details className="mt-0 mx-0 mb-app-xl text-app-text-muted text-app-meta [&_summary]:min-h-control-sm [&_summary]:text-app-accent [&_summary]:font-semibold [&_summary]:cursor-pointer [&_p]:my-app-xs [&_p]:mx-0">
+      <details className="mt-0 mx-0 mb-section text-app-text-muted text-app-meta [&_summary]:min-h-control-sm [&_summary]:text-app-accent [&_summary]:font-semibold [&_summary]:cursor-pointer [&_p]:my-app-xs [&_p]:mx-0">
         <summary>What counts as reviewed</summary>
         <p>Reviewing is done by hand. Earlier AI labelling still needs a human pass and does not count as a reviewed reply. Buying interest is assessed separately.</p>
         <p>The analytical period is sliced in UTC; follow-up reminders run on Madrid time.</p>
       </details>
-      {!hasDialogues ? <Panel className="flex flex-col items-center justify-center gap-app-md min-h-[220px] text-center"><BarChart3 size={24} aria-hidden="true" /><strong>No inbound replies in this period</strong><span className="text-app-text-muted">Change the period or the filters.</span></Panel>
-        : !hasReviews ? <Panel className="flex flex-col items-center justify-center gap-app-md min-h-[220px] text-center"><BarChart3 size={24} aria-hidden="true" /><strong>No replies reviewed yet</strong><span className="text-app-text-muted">Review some replies to see reasons and the sentiment split.</span>{pendingHref && <LinkButton variant="primary" to={pendingHref}>Go to the review queue</LinkButton>}</Panel>
+      {!hasDialogues ? <Panel className="flex flex-col items-center justify-center gap-group min-h-[220px] text-center"><BarChart3 size={24} aria-hidden="true" /><strong>No inbound replies in this period</strong><span className="text-app-text-muted">Change the period or the filters.</span></Panel>
+        : !hasReviews ? <Panel className="flex flex-col items-center justify-center gap-group min-h-[220px] text-center"><BarChart3 size={24} aria-hidden="true" /><strong>No replies reviewed yet</strong><span className="text-app-text-muted">Review some replies to see reasons and the sentiment split.</span>{pendingHref && <LinkButton variant="primary" to={pendingHref}>Go to the review queue</LinkButton>}</Panel>
           : <>
-            <div className="grid gap-app-xl grid-cols-2 max-[1100px]:grid-cols-1 mb-app-xl [&_.sa-section]:mb-0">
+            <div className="grid gap-section grid-cols-2 max-[1100px]:grid-cols-1 mb-section [&_.sa-section]:mb-0">
               <Section title="Sentiment" subtitle="The latest inbound reply of each conversation in this period.">
                 <DistributionChart rows={Object.fromEntries(SENTIMENT_KEYS.map((key) => [key, visibleResult.sentiment[key] ?? { numerator: 0, denominator: visibleResult.sentiment.positive?.denominator ?? 0, rate: null }]))} labels={SENTIMENT_DISPLAY} linkFor={drill} />
                 <div className={`${SA_NOTE} text-app-text-muted text-app-meta`}>Declines and objections among the substantive replies reviewed by hand: {businessRate ? businessRate.numerator + ' / ' + businessRate.denominator + ' · ' + (businessRate.rate == null ? 'Not reviewed yet' : (businessRate.rate * 100).toFixed(1) + '%') : 'Not reviewed yet'}{businessRate && businessRate.numerator > 0 && drill(businessRate, 'business_rate') && <Link to={drill(businessRate, 'business_rate')!}> Show those conversations</Link>}</div>
@@ -290,13 +290,13 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
               <Section title="Decline and objection reasons" subtitle="Reasons recorded on reviewed replies in this period.">
                 {reasonsPresent ? <>
                   <ReasonBars rows={reasonRows} labels={REASON_DISPLAY} linkFor={drill} />
-                  <Button variant="ghost" size="sm" className="mt-app-md" onClick={() => setShowAllReasons((value) => !value)}>{showAllReasons ? 'Hide the full list' : 'Show every reason'}</Button>
+                  <Button variant="ghost" size="sm" className="mt-app-sm" onClick={() => setShowAllReasons((value) => !value)}>{showAllReasons ? 'Hide the full list' : 'Show every reason'}</Button>
                   {showAllReasons && <ReasonBars rows={reasonRows} labels={REASON_DISPLAY} linkFor={drill} showZero />}
                   <p className={`${SA_NOTE} text-app-text-muted text-app-meta`}>One conversation can carry several reasons, so these shares can add up to more than 100%.</p>
                 </> : <p className="text-app-text-muted">No declines or objections among the reviewed replies.</p>}
               </Section>
             </div>
-            <Section title="Weekly trend" subtitle="Weeks start on Monday, UTC; one conversation can appear in more than one week." icon={<TrendingUp size={18} aria-hidden="true" />}>
+            <Section title="Weekly trend" subtitle="Weeks start on Monday, UTC; one conversation can appear in more than one week." icon={<TrendingUp size={16} aria-hidden="true" />}>
               <SegmentedControl
                 label="Trend mode"
                 value={trendMode}
@@ -315,7 +315,7 @@ export function SentimentAnalysis({ reader = readAnalytics }: { reader?: typeof 
               <ComparisonTable rows={comparison.filter((row) => row.kind === comparisonKind).sort((a, b) => b.denominator - a.denominator)} labelFor={(row) => row.kind === 'account' ? displayAccount(row.id) : labelForComparison(row)} linkFor={(row) => buildRepliesDrilldownHref(filters, row, row.kind + ':' + row.id)} />
             </Section>
           </>}
-      <Section title="Work still open" subtitle="The current state of this cohort's conversations, not their state on a past date." icon={<Clock3 size={18} aria-hidden="true" />}>
+      <Section title="Work still open" subtitle="The current state of this cohort's conversations, not their state on a past date." icon={<Clock3 size={16} aria-hidden="true" />}>
         <WorkflowBuckets rows={visibleResult.workflow} linkFor={drill} showZero={false} />
       </Section>
     </div>}

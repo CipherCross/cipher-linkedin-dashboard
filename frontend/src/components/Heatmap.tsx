@@ -48,14 +48,14 @@ export function Heatmap({ leads }: { leads: Lead[] }) {
         <ChartEmpty height={200} label="No response data yet" />
       ) : (
         <>
-          <div className="grid grid-cols-[36px_repeat(24,1fr)] gap-0.5 mt-app-md">
+          <div className="grid grid-cols-[36px_repeat(24,1fr)] gap-0.5">
             <div />
             {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} className="text-[length:var(--text-2xs)] text-center text-app-text-muted">{h % 3 === 0 ? h : ''}</div>
+              <div key={h} className="text-app-meta text-center text-app-text-muted">{h % 3 === 0 ? h : ''}</div>
             ))}
             {grid.map((row, d) => (
               <Fragment key={d}>
-                <div className="text-[length:var(--text-2xs)] leading-4 text-app-text-muted">{DAYS[d]}</div>
+                <div className="text-app-meta leading-none self-center text-app-text-muted">{DAYS[d]}</div>
                 {row.map((count, h) => (
                   <div
                     key={h}

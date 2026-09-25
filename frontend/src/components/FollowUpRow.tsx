@@ -41,7 +41,7 @@ export function FollowUpRow({
   onOpen: () => void
 }) {
   return (
-    <article className="flex flex-wrap items-center gap-app-lg p-app-md border-b border-app-border last:border-b-0">
+    <article className="flex flex-wrap items-center gap-group p-pane border-b border-app-border last:border-b-0">
       <Button
         variant="ghost"
         onClick={onOpen}
@@ -50,7 +50,7 @@ export function FollowUpRow({
       >
         {avatar}
         <span className="flex flex-col gap-0.5 min-w-0">
-          <span className="text-app-table font-semibold leading-snug line-clamp-2 [overflow-wrap:anywhere] text-app-text">
+          <span className="text-app-table font-semibold line-clamp-2 [overflow-wrap:anywhere] text-app-text">
             {name}
           </span>
           <span className="text-app-meta font-normal text-app-text-muted truncate">{subtitle}</span>

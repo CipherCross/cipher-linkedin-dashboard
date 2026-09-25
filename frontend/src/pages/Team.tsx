@@ -547,8 +547,8 @@ type Role = 'member' | 'admin'
 /** While the roster is still loading the counts are unknown, not zero. */
 function TeamSummary({ items, loading = false }: { items: { label: string; value: number }[]; loading?: boolean }) {
   return (
-    <Panel className="mb-app-xl">
-      <dl className="m-0 grid grid-cols-3 gap-app-xl max-[700px]:grid-cols-1">
+    <Panel className="mb-section">
+      <dl className="m-0 grid grid-cols-3 gap-section max-[700px]:grid-cols-1">
         {items.map((item) => (
           <div className="flex flex-col-reverse gap-app-xs" key={item.label}>
             <dt className="text-app-meta text-app-text-muted">{item.label}</dt>
@@ -587,7 +587,7 @@ function InviteDialog({
           <Button variant="primary" loading={busy} disabled={!canSubmit} onClick={onSubmit}>{submitLabel}</Button>
         </>}
       >
-        <div className="grid grid-cols-2 gap-app-lg max-[700px]:grid-cols-1">{children}</div>
+        <div className="grid grid-cols-2 gap-group max-[700px]:grid-cols-1">{children}</div>
       </Dialog>
       {prompt}
     </>

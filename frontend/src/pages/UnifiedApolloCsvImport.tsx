@@ -86,9 +86,9 @@ const STATUS_TONE: Record<string, Tone> = {
 }
 
 const STEP_CLASS = {
-  active: 'flex items-center gap-app-sm px-app-md py-2 border rounded-control text-app-meta font-semibold bg-app-accent-subtle border-app-accent-border text-app-text',
-  done: 'flex items-center gap-app-sm px-app-md py-2 border rounded-control text-app-meta font-semibold bg-app-surface border-app-border text-app-success',
-  todo: 'flex items-center gap-app-sm px-app-md py-2 border rounded-control text-app-meta font-semibold bg-app-surface border-app-border text-app-text-muted',
+  active: 'flex items-center gap-app-sm px-app-md py-app-sm border rounded-control text-app-meta font-semibold bg-app-accent-subtle border-app-accent-border text-app-text',
+  done: 'flex items-center gap-app-sm px-app-md py-app-sm border rounded-control text-app-meta font-semibold bg-app-surface border-app-border text-app-success',
+  todo: 'flex items-center gap-app-sm px-app-md py-app-sm border rounded-control text-app-meta font-semibold bg-app-surface border-app-border text-app-text-muted',
 } as const
 
 const STEP_NUMBER_CLASS = {
@@ -106,7 +106,7 @@ function Stage({ title, description, aside, className = '', children }: {
   children?: ReactNode
 }) {
   return (
-    <Panel className={`mb-app-lg ${className}`.trim()}>
+    <Panel className={`mb-section ${className}`.trim()}>
       <SectionHeader title={title} description={description} actions={aside} />
       {children}
     </Panel>
@@ -116,7 +116,7 @@ function Stage({ title, description, aside, className = '', children }: {
 /** The stage's primary action, kept in view at the bottom while its list scrolls. */
 function StageActions({ summary, children }: { summary: ReactNode; children: ReactNode }) {
   return (
-    <div className="sticky bottom-3.5 z-[8] flex items-center justify-between gap-3.5 px-3.5 py-app-md mt-2.5 mb-app-lg border border-app-border-strong rounded-control bg-app-surface shadow-[var(--shadow-overlay)] max-[700px]:items-start max-[700px]:flex-col">
+    <div className="sticky bottom-app-md z-[8] flex items-center justify-between gap-group px-pane py-app-md mt-app-md mb-section border border-app-border-strong rounded-control bg-app-surface shadow-[var(--shadow-overlay)] max-[700px]:items-start max-[700px]:flex-col">
       <div>{summary}</div>
       <div className="flex items-center gap-app-sm flex-wrap max-[700px]:w-full">{children}</div>
     </div>
@@ -584,7 +584,7 @@ export function UnifiedApolloCsvImport() {
         onChange={(event) => void chooseFile(event.target.files?.[0])}
       />
 
-      <ol className="list-none mt-0 mx-0 mb-app-xl p-0 grid grid-cols-5 max-[700px]:grid-cols-2 gap-app-sm" aria-label="Import progress">
+      <ol className="list-none mt-0 mx-0 mb-section p-0 grid grid-cols-5 max-[700px]:grid-cols-2 gap-app-sm" aria-label="Import progress">
         {['Set up', 'Review file', 'Companies', 'Contacts', 'Results'].map((label, index) => {
           const number = index + 1
           const state = number === step ? 'active' : number < step ? 'done' : 'todo'
@@ -600,7 +600,7 @@ export function UnifiedApolloCsvImport() {
       </ol>
 
       {error && (
-        <div className="mb-app-lg">
+        <div className="mb-section">
           <InlineError title={error} onRetry={() => setError(null)} retryLabel="Dismiss" />
         </div>
       )}
@@ -630,10 +630,10 @@ export function UnifiedApolloCsvImport() {
       )}
 
       {!document && (
-        <Panel className="csv-upload-card mb-app-lg" data-disabled={addedBy ? undefined : ''}>
+        <Panel className="csv-upload-card mb-section" data-disabled={addedBy ? undefined : ''}>
           <FileSpreadsheet size={32} aria-hidden="true" />
           <h2 className="m-0 text-app-section">Upload one Apollo People CSV</h2>
-          <p className="max-w-[600px] m-0 mb-1 leading-[1.55] text-app-text-muted">
+          <p className="max-w-[600px] m-0 mb-app-xs text-app-body text-app-text-muted">
             Requires Apollo Account Id · up to 500 Contacts · maximum 5 MB. Email, phone, funding,
             revenue, intent, and other unmapped columns are ignored.
           </p>
@@ -660,7 +660,7 @@ export function UnifiedApolloCsvImport() {
           }
         >
           {document.warnings.map((warning) => <Notice key={warning}>{warning}</Notice>)}
-          <dl className="m-0 my-3.5 flex flex-col border border-app-border rounded-control overflow-hidden">
+          <dl className="m-0 my-group flex flex-col border border-app-border rounded-control overflow-hidden">
             {TARGET_FIELDS.map((target) => (
               <div className="csv-map-row" key={target}>
                 <dt>{TARGET_LABELS[target]}</dt>
@@ -703,12 +703,12 @@ export function UnifiedApolloCsvImport() {
                         {company.sourceRowNumbers.length} Contact{company.sourceRowNumbers.length === 1 ? '' : 's'} · {COMPANY_STATUS[preview?.status ?? 'failed']}
                       </span>
                       {preview?.reason && <span className="text-app-meta text-app-text-muted">{companyReason(preview.reason)}</span>}
-                      {decision?.kind === 'create' && <Badge tone="success" className="w-fit mt-1">Create new Company</Badge>}
-                      {decision?.kind === 'existing' && <Badge className="w-fit mt-1">Use {decision.company.name} · fill blank fields</Badge>}
-                      {decision?.kind === 'skip' && <Badge className="w-fit mt-1">Skip this group</Badge>}
+                      {decision?.kind === 'create' && <Badge tone="success" className="w-fit mt-app-xs">Create new Company</Badge>}
+                      {decision?.kind === 'existing' && <Badge className="w-fit mt-app-xs">Use {decision.company.name} · fill blank fields</Badge>}
+                      {decision?.kind === 'skip' && <Badge className="w-fit mt-app-xs">Skip this group</Badge>}
                     </div>
                     {needsDecision && (
-                      <div className="flex items-center gap-1.5 whitespace-nowrap max-[700px]:col-start-2 max-[700px]:flex-wrap">
+                      <div className="flex items-center gap-inline whitespace-nowrap max-[700px]:col-start-2 max-[700px]:flex-wrap">
                         {preview?.canCreate && (
                           <Button
                             variant="primary"
@@ -751,7 +751,7 @@ export function UnifiedApolloCsvImport() {
             title="4. Review Contacts"
             description="Every ready Contact already carries the exact Airtable Company ID resolved above."
             aside={
-              <div className="flex items-center justify-end gap-1.5 flex-wrap">
+              <div className="flex items-center justify-end gap-inline flex-wrap">
                 <Badge tone="info">{contactCounts.ready ?? 0} ready</Badge>
                 <Badge>{contactCounts.duplicate ?? 0} existing</Badge>
                 <Badge tone="danger">{contactCounts.invalid ?? 0} blocked</Badge>
@@ -783,7 +783,7 @@ export function UnifiedApolloCsvImport() {
                           <Badge tone={STATUS_TONE[status] ?? 'neutral'}>
                             {skipped ? 'Skipped' : CONTACT_STATUS[preview?.status ?? 'invalid']}
                           </Badge>
-                          {preview?.reason && <div className="text-app-meta text-app-text-muted mt-1">{preview.reason}</div>}
+                          {preview?.reason && <div className="text-app-meta text-app-text-muted mt-app-xs">{preview.reason}</div>}
                         </td>
                         <td className="text-right">
                           {preview?.status === 'ready' && (

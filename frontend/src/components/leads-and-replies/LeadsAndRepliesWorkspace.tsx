@@ -151,7 +151,7 @@ export function LeadsAndRepliesWorkspace({
   return (
     <section>
       {/* The segments narrow the same list, so they are tabs, not a mode switch. */}
-      <div className="flex items-end justify-between gap-app-md flex-wrap mb-app-lg">
+      <div className="flex items-end justify-between gap-app-md flex-wrap mb-section">
         <Tabs
           label="Filter campaign leads"
           value={filter}

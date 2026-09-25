@@ -134,33 +134,40 @@
   --space-8: 24px;
 
   /* ---- Type scale -------------------------------------------------------
-   * body/controls 16/24 · table 14/20 · metadata 13/18 (floor)
-   * page title 28/36 · section 20/28 · subsection 16/24 · KPI 32/40 */
+   * Pointer-first density (docs/ui-standard.md "Density"). UI text is 14/20 —
+   * body, controls and tables alike — as in Primer, Linear and shadcn; the
+   * 16/24 reading size survives only for long-form prose (--text-prose).
+   *   metadata 13/18 (floor) · body/table/controls 14/20 · prose 16/24
+   *   subsection 14/20 semibold · section 16/24 · page title 24/32 · KPI 28/36 */
   --text-meta: 13px;
   --text-table: 14px;
-  --text-body: 16px;
-  --text-subsection: 16px;
-  --text-section: 20px;
-  --text-page: 28px;
-  --text-kpi: 32px;
+  --text-body: 14px;
+  --text-prose: 16px;
+  --text-subsection: 14px;
+  --text-section: 16px;
+  --text-page: 24px;
+  --text-kpi: 28px;
 
   --leading-meta: 18px;
   --leading-table: 20px;
-  --leading-body: 24px;
-  --leading-section: 28px;
-  --leading-page: 36px;
-  --leading-kpi: 40px;
+  --leading-body: 20px;
+  --leading-prose: 24px;
+  --leading-subsection: 20px;
+  --leading-section: 24px;
+  --leading-page: 32px;
+  --leading-kpi: 36px;
 
-  /* legacy names. Nothing may resolve below 13px any more. */
+  /* legacy names, re-pointed onto the scale above. Nothing may resolve below
+   * 13px, and nothing new may use them. */
   --text-2xs: 13px;
   --text-xs: 13px;
   --text-sm: 13px;
   --text-base: 14px;
-  --text-md: 16px;
+  --text-md: 14px;
   --text-lg: 16px;
-  --text-xl: 18px;
-  --text-2xl: 20px;
-  --text-display: 28px;
+  --text-xl: 16px;
+  --text-2xl: 16px;
+  --text-display: 24px;
 
   --tracking-caps: 0.06em;
 
@@ -179,10 +186,26 @@
   --icon-hit: 32px;
   --icon-glyph: 16px;          /* icon inside a button or icon button */
   --icon-glyph-sm: 14px;       /* icon inside a small button */
-  --row-height: 52px;          /* single-line table row */
-  --row-height-compact: 44px;  /* dense comparison tables: Material 52dp minus two density steps */
+  --row-height: 44px;          /* single-line table row: 14/20 text + 12px either side */
+  --row-height-compact: 36px;  /* dense comparison tables: one control height */
   --checkbox-size: 16px;       /* Primer / shadcn size-4; Material's glyph is 18dp */
-  --row-height-identity: 68px; /* identity + secondary line */
+  --row-height-identity: 56px; /* identity + secondary line: 20 + 18 + 8px either side */
+  --choice-row-height: 28px;   /* one checkbox / radio option in a form */
+
+  /* ---- Density: insets and gaps ----------------------------------------- *
+   * Every surface takes its padding from one of these, never from a raw space
+   * step, so the whole product tightens or loosens in one place.
+   * See docs/ui-standard.md "Density". */
+  --inset-card: 16px;          /* Panel, card, KPI tile, callout */
+  --inset-pane: 12px;          /* split-pane workspaces, list rows, drawers */
+  --inset-dialog: 16px;        /* dialog header and body */
+  --inset-cell-y: 8px;         /* table cell; the row height sets the rest */
+  --inset-cell-x: 12px;
+  --pane-head-height: 52px;    /* a pane or drawer header: title + one meta line */
+  --gap-section: 16px;         /* between sections of a page */
+  --gap-group: 12px;           /* between groups inside a section */
+  --gap-stack: 8px;            /* between items of one group */
+  --gap-inline: 8px;           /* between controls in a row */
 
   /* ---- Layout ------------------------------------------------------------ */
   --sidebar-w: 232px;

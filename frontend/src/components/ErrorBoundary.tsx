@@ -36,17 +36,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (this.props.variant === 'inline') {
       return (
-        <div className="bg-app-surface border border-app-border rounded-card p-4 flex flex-col gap-2.5 items-start" role="alert">
-          <div className="flex items-center gap-2.5 text-app-danger">
+        <div className="bg-app-surface border border-app-border rounded-card p-card flex flex-col gap-stack items-start" role="alert">
+          <div className="flex items-center gap-inline text-app-danger">
             <TriangleAlert size={18} />
-            <h2 className="mt-1 mx-0 mb-0 text-[length:var(--text-lg)]">This page failed to load</h2>
+            <h2 className="m-0 text-app-section">This page failed to load</h2>
           </div>
-          <p className="m-0 text-app-text-secondary leading-[1.5]">
+          <p className="m-0 text-app-body text-app-text-secondary">
             Something went wrong while rendering this view. The rest of the
             dashboard is still available from the navigation above.
           </p>
-          {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-2.5 font-mono text-[length:var(--text-xs)] text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
-          <div className="flex gap-2.5 mt-0.5">
+          {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-app-sm font-mono text-app-meta text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
+          <div className="flex gap-inline mt-0.5">
             <Button variant="primary" icon={<RotateCw aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
               Try again
             </Button>
@@ -57,14 +57,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="min-h-screen flex items-center justify-center p-app-xl">
-        <div className="w-full max-w-[440px] flex flex-col items-center gap-app-md text-center bg-app-surface border border-app-border rounded-lg shadow-[var(--shadow-overlay)] px-7 py-8">
+        <div className="w-full max-w-[440px] flex flex-col items-center gap-app-md text-center bg-app-surface border border-app-border rounded-lg shadow-[var(--shadow-overlay)] p-app-xl">
           <Logo size={40} />
-          <h1 className="mt-1 mx-0 mb-0 text-[length:var(--text-xl)]">Something went wrong</h1>
-          <p className="m-0 text-app-text-secondary leading-[1.5]">
+          <h1 className="m-0 text-app-section">Something went wrong</h1>
+          <p className="m-0 text-app-body text-app-text-secondary">
             The dashboard hit an unexpected error while rendering this view.
           </p>
-          {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-2.5 font-mono text-[length:var(--text-xs)] text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
-          <div className="flex gap-2.5 mt-0.5">
+          {error.message && <pre className="w-full text-left bg-[var(--code-bg)] border border-app-border rounded-md px-app-md py-app-sm font-mono text-app-meta text-app-danger whitespace-pre-wrap [word-break:break-word] max-h-40 overflow-y-auto m-0">{error.message}</pre>}
+          <div className="flex gap-inline mt-0.5">
             <Button variant="primary" icon={<RotateCw aria-hidden="true" />} onClick={() => this.setState({ error: null })}>
               Try again
             </Button>
@@ -72,7 +72,7 @@ export class ErrorBoundary extends Component<Props, State> {
               Reload page
             </Button>
           </div>
-          <div className="inline-flex items-center gap-1.5 mt-1 text-app-meta text-app-text-muted">
+          <div className="inline-flex items-center gap-app-xs text-app-meta text-app-text-muted">
             <TriangleAlert size={13} />
             If this keeps happening, check the browser console and Sync health.
           </div>

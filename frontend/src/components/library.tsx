@@ -15,11 +15,11 @@ export function LibraryGroup({ title, count, children }: {
   children: ReactNode
 }) {
   return (
-    <section className="mb-app-xl">
-      <h2 className="mt-0 mb-app-md text-app-section">
+    <section className="mb-section">
+      <h2 className="mt-0 mb-group text-app-section">
         {title} <span className="text-app-meta font-normal text-app-text-muted">· {count}</span>
       </h2>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-app-lg">{children}</div>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-group">{children}</div>
     </section>
   )
 }
@@ -46,7 +46,7 @@ export function LibraryCard({
   return (
     <article
       className={[
-        'relative flex flex-col gap-2.5 p-4 border border-app-border rounded-card bg-app-surface',
+        'relative flex flex-col gap-stack p-card border border-app-border rounded-card bg-app-surface',
         onOpen ? 'hover:border-app-border-strong has-[[data-card-open]:focus-visible]:outline-2 has-[[data-card-open]:focus-visible]:outline-app-accent has-[[data-card-open]:focus-visible]:outline-offset-2' : '',
         archived ? 'opacity-60' : '',
       ].filter(Boolean).join(' ')}
@@ -81,8 +81,8 @@ export function LibraryCard({
 }
 
 const CHIP_CLASS = {
-  include: 'inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-pill border bg-app-surface-2 text-app-meta text-app-text-secondary border-[color-mix(in_srgb,var(--accent)_45%,var(--border))]',
-  exclude: 'inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-pill border bg-app-surface-2 text-app-meta text-app-text-secondary border-[color-mix(in_srgb,var(--danger)_45%,var(--border))]',
+  include: 'inline-flex items-center gap-app-xs max-w-full px-app-sm py-0.5 rounded-pill border bg-app-surface-2 text-app-meta text-app-text-secondary border-[color-mix(in_srgb,var(--accent)_45%,var(--border))]',
+  exclude: 'inline-flex items-center gap-app-xs max-w-full px-app-sm py-0.5 rounded-pill border bg-app-surface-2 text-app-meta text-app-text-secondary border-[color-mix(in_srgb,var(--danger)_45%,var(--border))]',
 } as const
 
 /** A keyword or value chip. `exclude` is prefixed with a minus so the meaning
@@ -112,7 +112,7 @@ export function Chip({ tone = 'include', children, onRemove, removeLabel }: {
 export function KeywordChips({ include = [], exclude = [] }: { include?: string[]; exclude?: string[] }) {
   if (include.length === 0 && exclude.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-app-xs">
       {include.map((keyword) => <Chip key={`i-${keyword}`}>{keyword}</Chip>)}
       {exclude.map((keyword) => <Chip key={`e-${keyword}`} tone="exclude">{keyword}</Chip>)}
     </div>

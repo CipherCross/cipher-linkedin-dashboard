@@ -64,7 +64,7 @@ input, textarea, select, button { font-family: inherit; }
   color: var(--text);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  padding: 10px 16px;
+  padding: var(--space-sm) var(--space-lg);
   font-size: var(--text-table);
   text-decoration: none;
   box-shadow: var(--shadow-overlay);

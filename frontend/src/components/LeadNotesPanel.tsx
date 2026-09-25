@@ -148,9 +148,9 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
       {notes && notes.length > 0 && (
         <ul className="list-none m-0 p-0 flex flex-col gap-app-sm">
           {notes.map((n) => (
-            <li key={n.id} className="border-l-2 border-app-border pl-[9px]">
+            <li key={n.id} className="border-l-2 border-app-border pl-app-sm">
               <div className="text-app-table [overflow-wrap:anywhere] whitespace-pre-wrap">{n.body}</div>
-              <div className="flex items-center gap-[5px] text-app-meta text-app-text-muted">
+              <div className="flex items-center gap-app-xs text-app-meta text-app-text-muted">
                 <span>{n.author || '—'}</span>
                 <span>· {ago(n.created_at)}</span>
                 <IconButton

@@ -103,7 +103,7 @@ function PerformanceLoading() {
   return (
     <div className="ov-performance" role="status" aria-label="Loading performance analytics">
       <div>
-        <div className="flex gap-app-2xl flex-wrap mt-0 mx-0 mb-app-lg">
+        <div className="flex gap-app-xl flex-wrap mt-0 mx-0 mb-group">
           {Array.from({ length: 3 }).map((_, index) => (
             <div className="ov-metric ov-loading-card" key={index}>
               <Skeleton width={72} height={11} />
@@ -113,7 +113,7 @@ function PerformanceLoading() {
             </div>
           ))}
         </div>
-        <Skeleton className="mt-app-lg" width="100%" height={280} radius={16} />
+        <Skeleton width="100%" height={280} radius={16} />
       </div>
       <aside className="ov-rates ov-loading-card">
         <Skeleton width={130} height={16} />
@@ -132,7 +132,7 @@ function AccountTableLoading() {
       </div>
       {Array.from({ length: 4 }).map((_, row) => (
         <div className="ov-loading-table-row" key={row}>
-          <span className="flex items-center gap-app-md"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
+          <span className="flex items-center gap-app-sm"><Skeleton width={32} height={32} radius="50%" /><Skeleton width={112} height={13} /></span>
           {Array.from({ length: 6 }).map((__, column) => <Skeleton key={column} width={column > 3 ? 58 : 34} height={12} />)}
         </div>
       ))}
@@ -349,7 +349,7 @@ function CampaignComparison({
   })
 
   return (
-    <div className="mt-app-xl">
+    <div className="mt-section">
       <SectionHeader level="subsection" title="Campaign comparison" />
       <TableFrame
         className="ov-campaign-frame"
@@ -433,7 +433,7 @@ function CampaignComparison({
           </Table>
         )}
       </TableFrame>
-      <div className={`flex justify-between items-center gap-app-md flex-wrap mt-app-md ${MUTED}`}>
+      <div className={`flex justify-between items-center gap-group flex-wrap mt-app-sm ${MUTED}`}>
         <span>{displayed.length} campaigns</span>
         <span className="flex items-center gap-app-sm">
           <Button variant="secondary" size="sm" disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>Previous campaigns</Button>
@@ -594,7 +594,7 @@ export function OverviewAnalytics({
         ) : performance && accountDataAvailable ? (
           <div className="ov-performance">
             <div>
-              <div className="flex gap-app-2xl flex-wrap mt-0 mx-0 mb-app-lg">
+              <div className="flex gap-app-xl flex-wrap mt-0 mx-0 mb-group">
                 {(['invited', 'connected', 'replied'] as const).map((key) => (
                   <div className="ov-metric" key={key}>
                     <span className="ov-dot" style={{ background: chartColors[key] }} aria-hidden="true" />
@@ -689,7 +689,7 @@ export function OverviewAnalytics({
                     })}</tbody>
                   </Table>
                 </TableFrame>
-                <div className={`flex justify-between items-center gap-app-md flex-wrap mt-app-md ${MUTED}`}>
+                <div className={`flex justify-between items-center gap-group flex-wrap mt-app-sm ${MUTED}`}>
                   <span>{accountRange.label} account counts and rates · rates use invited → connected and connected → replies</span>
                   <span className="flex items-center gap-app-sm">
                     {accountRows.length > 20 && (
@@ -705,7 +705,7 @@ export function OverviewAnalytics({
                 </div>
               </>
             ) : selected ? (
-              <div className="pt-app-lg border-t border-app-border" aria-label={`${accountRange.label} account totals`}>
+              <div className="pt-section border-t border-app-border" aria-label={`${accountRange.label} account totals`}>
                 <SectionHeader
                   level="subsection"
                   title={`${accountRange.label} account totals`}

@@ -173,25 +173,33 @@ export function Funnel({
           <Fragment key={s.key}>
             {i > 0 &&
               (s.boundary ? (
-                <div className="flex items-center gap-2.5 pl-[82px] my-[3px] text-[length:var(--text-2xs)] leading-[1.4] before:content-[''] before:self-stretch before:-ml-px before:border-l-2 before:border-dashed before:border-app-border-strong">
-                  <span className="uppercase tracking-[var(--tracking-caps)] text-app-text-muted font-semibold whitespace-nowrap">Manual pipeline</span>
-                  <span className="inline-flex gap-1.5">
+                // Same columns as the stage row, so the connector line starts
+                // exactly where the bar does.
+                <div className="grid grid-cols-[72px_1fr] gap-app-sm my-app-xs text-app-meta">
+                  <span aria-hidden="true" />
+                  <div className="flex items-center gap-app-sm before:content-[''] before:self-stretch before:-ml-px before:border-l-2 before:border-dashed before:border-app-border-strong">
+                    <span className="uppercase tracking-[var(--tracking-caps)] text-app-text-muted font-semibold whitespace-nowrap">Manual pipeline</span>
+                    <span className="inline-flex gap-app-xs">
+                      <span className="text-app-text-secondary font-semibold tabular-nums">
+                        {s.base && s.base > 0 ? pct(s.count, s.base) : '—'}
+                      </span>
+                      <span className="text-app-text-muted">{s.verb}</span>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-[72px_1fr] gap-app-sm text-app-meta">
+                  <span aria-hidden="true" />
+                  <div className="flex items-center gap-app-xs before:content-[''] before:self-stretch before:-ml-px before:border-l-2 before:border-solid before:border-app-border-strong">
                     <span className="text-app-text-secondary font-semibold tabular-nums">
                       {s.base && s.base > 0 ? pct(s.count, s.base) : '—'}
                     </span>
                     <span className="text-app-text-muted">{s.verb}</span>
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 pl-[82px] text-[length:var(--text-2xs)] leading-[1.4] before:content-[''] before:self-stretch before:-ml-px before:border-l-2 before:border-solid before:border-app-border-strong">
-                  <span className="text-app-text-secondary font-semibold tabular-nums">
-                    {s.base && s.base > 0 ? pct(s.count, s.base) : '—'}
-                  </span>
-                  <span className="text-app-text-muted">{s.verb}</span>
+                  </div>
                 </div>
               ))}
-            <div className="grid grid-cols-[72px_1fr_auto] items-center gap-2.5">
-              <span className="text-app-text-muted text-[length:var(--text-xs)]">{s.label}</span>
+            <div className="grid grid-cols-[72px_1fr_auto] items-center gap-app-sm">
+              <span className="text-app-text-muted text-app-meta">{s.label}</span>
               <div
                 className={`h-[18px] rounded-sm overflow-hidden ${
                   s.pipeline
@@ -218,7 +226,7 @@ export function Funnel({
           {pipelineRows && pipelineMax > 0 && ' · manual-pipeline bars use their own zoomed scale'}
         </span>
         {pipelineRows && (
-          <span className="text-[length:var(--text-xs)] text-app-text-secondary tabular-nums [&_strong]:text-app-text [&_strong]:font-semibold">
+          <span className="text-app-meta text-app-text-secondary tabular-nums [&_strong]:text-app-text [&_strong]:font-semibold">
             <strong>{num(clients)}</strong> clients from {num(total)} leads ·{' '}
             <strong>{total > 0 ? pct(clients, total) : '—'}</strong> Lead→Client
           </span>

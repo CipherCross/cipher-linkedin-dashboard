@@ -85,7 +85,7 @@ export function LeadsVelocityChart({
 
   return (
     <div
-      className="flex flex-col gap-app-xs min-w-0 bg-app-surface border border-app-border rounded-card p-app-lg flex-1 basis-[220px]"
+      className="flex flex-col gap-app-xs min-w-0 bg-app-surface border border-app-border rounded-card p-card flex-1 basis-[220px]"
       title={title}
     >
       <div className="flex items-center justify-between gap-app-sm">
@@ -106,7 +106,7 @@ export function LeadsVelocityChart({
       </div>
       <div className="text-app-kpi font-semibold tabular-nums tracking-[-0.02em]">{num(avg)}</div>
       <div className="text-app-text-secondary text-app-meta">per week · last {weeks} full weeks</div>
-      <div className="mt-auto pt-1.5">
+      <div className="mt-auto pt-app-xs">
         <ResponsiveContainer width="100%" height={28}>
           <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
             {/* Hidden but still gives Tooltip a "week" dataKey to look the label up

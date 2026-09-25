@@ -222,7 +222,7 @@ export function SearchLibrary() {
       {platforms.length > 0 && (
         <SegmentedControl
           label="Platform"
-          className="mb-app-lg"
+          className="mb-section"
           value={platforms.includes(platform) ? platform : 'all'}
           onChange={setPlatform}
           items={[{ id: 'all', label: 'All platforms' }, ...platforms.map((p) => ({ id: p, label: p }))]}
@@ -313,7 +313,7 @@ function SearchCard({
       <KeywordChips include={s.include_keywords ?? []} exclude={s.exclude_keywords ?? []} />
 
       {s.boolean_query && (
-        <div className="flex items-start gap-app-sm bg-app-surface-2 border border-app-border rounded-control px-2.5 py-app-sm">
+        <div className="flex items-start gap-app-sm bg-app-surface-2 border border-app-border rounded-control px-app-md py-app-sm">
           <code className="flex-1 min-w-0 whitespace-pre-wrap [word-break:break-word] font-mono text-app-meta text-app-text">{s.boolean_query}</code>
           <Button variant="secondary" size="sm" icon={<Copy aria-hidden="true" />} onClick={onCopy}>
             Copy
@@ -449,9 +449,9 @@ function SearchEditor({
           </Button>
         </>}
       >
-        {error && <div className="mb-app-lg"><InlineError title="Could not save the search." message={error} /></div>}
-        <div className="flex flex-col gap-app-lg">
-          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+        {error && <div className="mb-group"><InlineError title="Could not save the search." message={error} /></div>}
+        <div className="flex flex-col gap-group">
+          <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
             <TextField
               label="Name"
               required
@@ -594,7 +594,7 @@ function SearchEditor({
             </Button>
           </fieldset>
 
-          <div className="grid grid-cols-2 gap-app-lg max-[560px]:grid-cols-1">
+          <div className="grid grid-cols-2 gap-group max-[560px]:grid-cols-1">
             <TextField
               label="Author"
               value={draft.author}

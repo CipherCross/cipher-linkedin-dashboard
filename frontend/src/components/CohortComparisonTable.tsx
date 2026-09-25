@@ -128,7 +128,7 @@ export function CohortComparisonTable({
         </Table>
       </TableFrame>
 
-      <p className="text-app-meta text-app-text-muted mt-app-md">
+      <p className="text-app-meta text-app-text-muted mt-app-sm">
         Cohort = the week the invite went out. A cohort's rates stay greyed as
         “still maturing” until {maturity.acceptWeeks}w (accept) / {maturity.replyWeeks}w
         (reply) after its Monday; WoW ▲/▼ (percentage points) compare only matured
@@ -211,7 +211,7 @@ function Cell({
       {delta != null && delta !== 0 && (
         <Badge
           tone={delta > 0 ? 'success' : 'danger'}
-          className="ml-1.5"
+          className="ml-app-xs"
           title="vs prior matured cohort (pct points)"
         >
           {delta > 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}

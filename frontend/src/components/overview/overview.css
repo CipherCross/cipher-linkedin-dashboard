@@ -28,7 +28,7 @@
 .overview .ov-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-lg);
+  gap: var(--gap-group);
   margin: 0;
 }
 .overview .ov-total { min-width: 0; }
@@ -48,7 +48,7 @@
 .overview .ov-total small { display: block; min-height: var(--leading-meta); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
 
 /* ---- Performance chart --------------------------------------------------- */
-.overview .ov-performance { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--space-2xl); }
+.overview .ov-performance { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--gap-section); }
 .overview .ov-metric { display: grid; grid-template-columns: 10px auto; gap: 2px var(--space-sm); align-items: center; align-content: start; }
 /* The legend dot carries the series colour the chart also uses, so it is data,
  * not decoration. */
@@ -66,16 +66,16 @@
 .overview .ov-plot { display: block; width: 100%; height: 280px; min-height: 280px; overflow: visible; }
 .overview .ov-plot > div { min-height: 280px; }
 
-.overview .ov-rates { padding-left: var(--space-xl); border-left: 1px solid var(--border); }
+.overview .ov-rates { padding-left: var(--space-lg); border-left: 1px solid var(--border); }
 .overview .ov-rates h3 {
-  margin: 0 0 var(--space-lg);
+  margin: 0 0 var(--gap-group);
   color: var(--text-secondary);
   font-size: var(--text-meta);
   font-weight: 600;
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
 }
-.overview .ov-rate { margin-bottom: var(--space-xl); }
+.overview .ov-rate { margin-bottom: var(--space-lg); }
 .overview .ov-rate span { color: var(--text-muted); font-size: var(--text-meta); }
 .overview .ov-rate strong { margin: 2px 0; }
 
@@ -113,7 +113,7 @@
 .overview .ov-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* ---- Account drill-in ----------------------------------------------------- */
-.overview .ov-details { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-lg); margin: var(--space-lg) 0; }
+.overview .ov-details { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap-group); margin: var(--gap-group) 0; }
 .overview .ov-details span { color: var(--text-muted); font-size: var(--text-meta); }
 
 /* ---- Loading -------------------------------------------------------------
@@ -138,9 +138,9 @@
   display: grid;
   grid-template-columns: minmax(200px, 1.5fr) repeat(6, minmax(80px, 1fr));
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--gap-group);
   min-width: 900px;
-  padding: var(--space-md);
+  padding: var(--inset-cell-y) var(--inset-cell-x);
 }
 .overview .ov-loading-table-head { border-bottom: 1px solid var(--border); }
 .overview .ov-loading-table-row + .ov-loading-table-row { border-top: 1px solid var(--border); }
@@ -151,8 +151,8 @@
   .overview .ov-rates {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-xl);
-    padding: var(--space-lg) 0 0;
+    gap: var(--space-lg);
+    padding: var(--gap-group) 0 0;
     border-top: 1px solid var(--border);
     border-left: 0;
   }
@@ -168,7 +168,7 @@
 .campaign-preview__grid {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: var(--space-xl);
+  gap: var(--gap-section);
   align-items: start;
 }
 @container (max-width: 960px) {
@@ -191,7 +191,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--inset-pane);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
@@ -210,10 +210,12 @@
   line-height: var(--leading-meta);
   white-space: nowrap;
 }
-/* Full reply, never truncated; aligned under the name (30px avatar + 9px gap
- * in LeadReplyIdentity). Long unbroken tokens wrap instead of widening the page. */
+/* Full reply, never truncated; aligned under the name (LeadReplyIdentity's
+ * 30px avatar + its --space-sm gap). The avatar is a fixed media size, not a
+ * space step, so it stays a literal inside the calc. Long unbroken tokens wrap
+ * instead of widening the page. */
 .campaign-preview__body {
-  margin: 0 0 0 39px;
+  margin: 0 0 0 calc(30px + var(--space-sm));
   color: var(--text-secondary);
   font-size: var(--text-table);
   line-height: var(--leading-table);
@@ -227,7 +229,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--gap-group);
 }
 .campaign-preview__sequence li { display: flex; flex-direction: column; gap: var(--space-xs); }
 .campaign-preview__step {
@@ -238,7 +240,7 @@
 }
 .campaign-preview__copy {
   margin: 0;
-  padding: var(--space-md);
+  padding: var(--inset-pane);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -248,4 +250,4 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.campaign-preview__skeleton { display: flex; flex-direction: column; gap: var(--space-lg); margin-top: var(--space-md); }
+.campaign-preview__skeleton { display: flex; flex-direction: column; gap: var(--gap-group); margin-top: var(--space-md); }
