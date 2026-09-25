@@ -11,8 +11,8 @@ import { ReplyReviewPanel } from '../components/conversation/ReplyReviewPanel'
 import { WORKFLOW_LABELS } from '../components/reply-analysis/WorkflowBuckets'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { useRepliesInbox } from '../lib/useRepliesInbox'
-import { ACTION_LABELS, isReplyManualReady, REASON_LABELS, SENTIMENT_LABELS, nextUnreviewedReply, REPLY_SEARCH_DEBOUNCE_MS, type ReplyCapabilities, type ReplyInboxScope, type ReplyReadClient, type ReplyReviewDraft, type ReplyThreadMessage, type ReplyWorkflowMutation } from '../lib/replyReview'
-import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, FilterDialog, IconButton, LinkButton, PageHeader, SelectField, Tabs, TextField, EmptyState } from '../ui'
+import { ACTION_LABELS, isReplyManualReady, needsAutoResetConfirmation, REASON_LABELS, SENTIMENT_LABELS, nextUnreviewedReply, validateReview, REPLY_SEARCH_DEBOUNCE_MS, type ReplyCapabilities, type ReplyInboxScope, type ReplyReadClient, type ReplyReviewDraft, type ReplyThreadMessage, type ReplyWorkflowMutation } from '../lib/replyReview'
+import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, FilterDialog, IconButton, InlineError, LinkButton, PageHeader, SelectField, Tabs, TextField, EmptyState } from '../ui'
 import { COPY } from '../ui/labels'
 import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
 
@@ -124,6 +124,11 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const filtersOpen = filterDraft !== null
   const [workflowValid, setWorkflowValid] = useState(true)
   const [pendingNavigation, setPendingNavigation] = useState<NavigationRequest | null>(null)
+  // Why the Unsaved-changes dialog's Save did not go through. The review form it
+  // submits can sit in a hidden pane (two-pane layout), where its own error
+  // would never be seen — so the dialog says it, and the review pane is shown.
+  const [navigationSaveProblem, setNavigationSaveProblem] = useState<string | null>(null)
+  const reviewDraftRef = useRef<ReplyReviewDraft | null>(null)
   const [mobileStep, setMobileStep] = useState<'list' | 'thread' | 'review'>('list')
   const [newInboundAvailable, setNewInboundAvailable] = useState(false)
   const seenInboundRevision = useRef<{ key: string; revision: number } | null>(null)
@@ -163,6 +168,10 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   }, [selectedThreadKey, inbox.thread, latestInbound?.id, selectedMessage?.id])
   const actionRefresh = useCallback(() => { inbox.refresh() }, [inbox.refresh])
   const actions = useReplyReviewActions(actionRefresh)
+  // A save refused by the server while the Unsaved-changes dialog is up shows the
+  // review pane behind it, so Keep editing lands on the form that holds the error.
+  const saveRefused = Boolean(actions.error || actions.conflict)
+  useEffect(() => { if (pendingNavigation && saveRefused) setMobileStep('review') }, [pendingNavigation, saveRefused])
   useEffect(() => { if (!hasSelection) setMobileStep('list'); else if (mobileStep === 'list') setMobileStep('thread') }, [hasSelection, mobileStep])
   useEffect(() => {
     const workflow = inbox.thread?.workflow ?? selectedItem
@@ -179,7 +188,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [dirty])
-  const queueNavigation = useCallback((request: NavigationRequest) => setPendingNavigation(request), [])
+  const queueNavigation = useCallback((request: NavigationRequest) => { setNavigationSaveProblem(null); setPendingNavigation(request) }, [])
   const confirmNavigation = useCallback((action: () => void) => { if (dirty) queueNavigation({ proceed: action }); else action() }, [dirty, queueNavigation])
   const clearDirty = useCallback(() => { setReviewDirty(false); setWorkflowUserDirty(false); setAutoDncDerived(false); setAutoDncSnapshot(null); setWorkflowDncUserTouched(false) }, [])
   const navigateWithoutGuard = useCallback((item: typeof selectedItem, focus?: number | null) => { clearDirty(); inbox.selectThread(item, focus); setMobileStep(item ? 'thread' : 'list') }, [clearDirty, inbox])
@@ -212,6 +221,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     return actions.saveWorkflow({ instance_id: inbox.scope.thread.instance_id, profile_url: inbox.scope.thread.profile_url, workflow }).then((result) => { if (result) { setWorkflowUserDirty(false); setAutoDncDerived(false); setAutoDncSnapshot(null); setWorkflowDncUserTouched(false); if (pendingNavigation) { pendingNavigation.proceed(); setPendingNavigation(null) } } return result })
   }, [actions, inbox.scope.thread, workflowValid, pendingNavigation])
   const handleReviewDraftChange = useCallback((draft: ReplyReviewDraft) => {
+    reviewDraftRef.current = draft
     if (!inbox.scope.thread) return
     const hasDncReason = draft.reason_ids.includes('do_not_contact')
     // DNC selected as a review reason must be saved atomically with workflow.
@@ -310,6 +320,9 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
       else if (inbox.nextCursor) { const loaded = await inbox.nextPendingPage(); if (loaded) navigateWithoutGuard(loaded) }
     })
   }
+  const navigationDialogProblem = navigationSaveProblem
+    ?? (pendingNavigation && actions.conflict ? 'This conversation changed in another tab or was classified meanwhile. Your input is kept — keep editing to compare and save again.' : null)
+    ?? (pendingNavigation ? actions.error : null)
   return <div className="replies-page">
     <NavigationGuard dirty={dirty} onRequest={queueNavigation} />
     {pendingNavigation && <Dialog
@@ -322,12 +335,25 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         <Button variant="secondary" onClick={() => { pendingNavigation.cancel?.(); setPendingNavigation(null) }}>Keep editing</Button>
         <Button variant="danger" onClick={() => { clearDirty(); pendingNavigation.proceed(); setPendingNavigation(null) }}>Discard changes</Button>
         <Button variant="primary" disabled={!workflowValid} loading={actions.saving} onClick={() => {
-          if (reviewDirty) (document.getElementById('reply-review-form') as HTMLFormElement | null)?.requestSubmit()
-          else saveWorkflowOnly(false)
+          actions.clearError()
+          setNavigationSaveProblem(null)
+          if (reviewDirty) {
+            const draft = reviewDraftRef.current
+            const problem = draft
+              ? Object.values(validateReview(draft))[0]
+                ?? (needsAutoResetConfirmation(draft) ? 'Confirm clearing the reasons and buying interest that an automated reply cannot carry.' : null)
+              : null
+            if (problem) { setNavigationSaveProblem(problem); setMobileStep('review') }
+            // Submitted either way: an invalid draft is refused by the form,
+            // which also marks the fields it needs.
+            ;(document.getElementById('reply-review-form') as HTMLFormElement | null)?.requestSubmit()
+          } else saveWorkflowOnly(false)
         }}>{COPY.save}</Button>
       </>}
     >
-      <p>Discarding removes only the unsaved draft for this conversation.</p>
+      {navigationDialogProblem
+        ? <InlineError title="Not saved yet." message={navigationDialogProblem} />
+        : <p>Discarding removes only the unsaved draft for this conversation.</p>}
     </Dialog>}
 
     <PageHeader

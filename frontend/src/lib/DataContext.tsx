@@ -6,11 +6,13 @@ import { supabase } from './supabase'
 import { fetchConversationReplyIntents, isMissingRelation } from './conversationPaging'
 import {
   fetchNeonBootstrap,
+  fetchNeonFollowUpState,
   fetchNeonRouteSnapshot,
   resolveReadPath,
   routeSnapshotRequest,
   type NeonRouteSnapshot,
 } from './dashboardReads'
+import type { LeadEdit } from './leadEdits'
 import type { RosterPath } from './rosterWrites'
 import type {
   Annotation, CampaignMetrics, CampaignSequenceContext, CampaignStep, ConversationLatestMessage,
@@ -496,11 +498,20 @@ const Ctx = createContext<{
    *  manual-pipeline optimistic writes so a stage/assignee change reflects
    *  everywhere the lead is rendered. */
   patchLead: (leadId: string, patch: Partial<Lead>) => void
+  /** Every patchLead edit this session, merged per lead, with when it was made.
+   *  `data.leads` already carries them; this is for the leads it does not hold —
+   *  Leads reads its rows page by page — so the drawer and that table still show
+   *  a saved stage, owner or gender. Apply with `withLeadEdits`. */
+  leadEdits: ReadonlyMap<string, LeadEdit>
   /** Fold a completed campaign-context save into the campaign_metrics slice. */
   patchCampaign: (campaignId: string, patch: Partial<CampaignMetrics>) => void
   /** Optimistically replace/remove one conversation-scoped follow-up state.
    *  Pending values survive an in-flight five-minute refresh. */
   patchFollowUpState: (key: string, state: FollowUpState | null) => void
+  /** Load one conversation's follow-up state when the route's own data carries
+   *  none (Leads is page-local), so the conversation drawer can still schedule
+   *  against the real revision. A no-op where the route already has them. */
+  loadFollowUpState: (instanceId: string, profileUrl: string) => Promise<void>
   /** Insert-or-replace a saved search in place after a /api/playbook save, so
    *  the Search Library reflects the change without a full refetch. */
   upsertSavedSearch: (search: SavedSearch) => void
@@ -534,8 +545,10 @@ const Ctx = createContext<{
   phase: 'empty',
   refetch: () => {},
   patchLead: () => {},
+  leadEdits: new Map(),
   patchCampaign: () => {},
   patchFollowUpState: () => {},
+  loadFollowUpState: async () => {},
   upsertSavedSearch: () => {},
   removeSavedSearch: () => {},
   upsertIcp: () => {},
@@ -564,6 +577,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const activeRouteHashRef = useRef(activeRouteHash)
   activeRouteHashRef.current = activeRouteHash
   const [data, setData] = useState<DashboardData | null>(null)
+  const [leadEdits, setLeadEdits] = useState<ReadonlyMap<string, LeadEdit>>(() => new Map())
   const [loading, setLoading] = useState(true)
   const [phase, setPhase] = useState<'empty' | 'bootstrap' | 'full'>('empty')
   const bootstrapReady = useRef(false)
@@ -586,6 +600,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const pendingFollowUps = useRef<
     Map<string, { state: FollowUpState | null; at: number }>
   >(new Map())
+  // Follow-up states loaded one conversation at a time (loadFollowUpState) on a
+  // route whose data carries none. Folded into every commit that also carries
+  // none, so the five-minute refresh cannot take an open drawer's follow-up
+  // away. `routeHasFollowUps` is what the last commit's own data said.
+  const threadFollowUps = useRef<Map<string, FollowUpState | null>>(new Map())
+  const routeHasFollowUps = useRef(false)
 
   // Surface an error without wiping on-screen data: keep the last successful
   // load and only stamp the error field. First-load failures (prev === null)
@@ -627,6 +647,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const patchLead = useCallback((leadId: string, patch: Partial<Lead>) => {
     const prev = pendingPatches.current.get(leadId)?.patch
     pendingPatches.current.set(leadId, { patch: { ...prev, ...patch }, at: Date.now() })
+    setLeadEdits((edits) => {
+      const next = new Map(edits)
+      next.set(leadId, { patch: { ...edits.get(leadId)?.patch, ...patch }, at: Date.now() })
+      return next
+    })
     setData((prevData) =>
       prevData
         ? { ...prevData, leads: prevData.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)) }
@@ -649,6 +674,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const followUpKey = (instanceId: string, profileUrl: string) =>
     `${instanceId}|${profileUrl}`
+
+  // A route with its own follow-up data wins outright; one without it gets the
+  // states its drawers loaded one conversation at a time.
+  const withThreadFollowUps = useCallback(
+    (fetched: { followUpStates: FollowUpState[]; followUpsAvailable: boolean }): FollowUpState[] => {
+      if (fetched.followUpsAvailable || threadFollowUps.current.size === 0) return fetched.followUpStates
+      const byKey = new Map(fetched.followUpStates.map((r) => [followUpKey(r.instance_id, r.profile_url), r]))
+      for (const [key, state] of threadFollowUps.current) {
+        if (state) byKey.set(key, state)
+        else byKey.delete(key)
+      }
+      return [...byKey.values()]
+    },
+    [],
+  )
 
   const applyPendingFollowUps = useCallback((rows: FollowUpState[]): FollowUpState[] => {
     const pending = pendingFollowUps.current
@@ -676,6 +716,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const patchFollowUpState = useCallback((key: string, state: FollowUpState | null) => {
     pendingFollowUps.current.set(key, { state, at: Date.now() })
+    if (threadFollowUps.current.has(key)) threadFollowUps.current.set(key, state)
     setData((prevData) => {
       if (!prevData) return prevData
       const rest = prevData.followUpStates.filter(
@@ -683,6 +724,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
       )
       return {
         ...prevData,
+        followUpStates: state ? [...rest, state] : rest,
+      }
+    })
+  }, [])
+
+  const loadFollowUpState = useCallback(async (instanceId: string, profileUrl: string) => {
+    if (routeHasFollowUps.current || (await resolveReadPath()) !== 'neon') return
+    const { state, available } = await fetchNeonFollowUpState(instanceId, profileUrl)
+    if (!available || routeHasFollowUps.current) return
+    const key = followUpKey(instanceId, profileUrl)
+    threadFollowUps.current.set(key, state)
+    setData((prevData) => {
+      if (!prevData) return prevData
+      const rest = prevData.followUpStates.filter(
+        (row) => followUpKey(row.instance_id, row.profile_url) !== key,
+      )
+      return {
+        ...prevData,
+        followUpsAvailable: true,
         followUpStates: state ? [...rest, state] : rest,
       }
     })
@@ -956,12 +1016,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
               // Already reference-stable on a no-op delta (mergeById returns the
               // prior array when the batch is empty); full fetch gets a fresh one.
               pipelineEvents: events as unknown as DashboardData['pipelineEvents'],
-              followUpStates: applyPendingFollowUps(fetched.followUpStates),
+              followUpStates: applyPendingFollowUps(withThreadFollowUps(fetched)),
               latestConversationMessages: stableSlice(
                 base.latestConversationMessages,
                 fetched.latestConversationMessages,
               ),
-              followUpsAvailable: fetched.followUpsAvailable,
+              followUpsAvailable: fetched.followUpsAvailable || threadFollowUps.current.size > 0,
               campaignSequenceContext: fetched.campaignSequenceContext,
               leads: nextLeads,
             }
@@ -969,6 +1029,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // Advance the cursor for the next delta (start-time minus overlap).
           cursorRef.current = new Date(startedAt - REFRESH_OVERLAP_MS).toISOString()
           shownRouteKey.current = routeKey
+          routeHasFollowUps.current = fetched.followUpsAvailable
+          // Those states were a stand-in for route data this route now has.
+          if (fetched.followUpsAvailable) threadFollowUps.current.clear()
           setPhase('full')
           if (typeof performance !== 'undefined') {
             performance.mark('dashboard_full_ready')
@@ -996,7 +1059,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         inFlightRouteKey.current = null
       }
       if (id === reqId.current) setLoading(false)
-  }, [routeLoadKey, showError, applyPending, applyPendingFollowUps])
+  }, [routeLoadKey, showError, applyPending, applyPendingFollowUps, withThreadFollowUps])
 
   // Manual refetch (post-write) always forces a full fetch — a delta could miss
   // a row the caller just changed if updated_at ordering/skew raced the commit.
@@ -1014,7 +1077,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        data, loading, phase, refetch, patchLead, patchCampaign, patchFollowUpState,
+        data, loading, phase, refetch, patchLead, leadEdits, patchCampaign, patchFollowUpState, loadFollowUpState,
         upsertSavedSearch, removeSavedSearch,
         upsertIcp, removeIcp, upsertIcpPersona, removeIcpPersona,
         upsertIcpIndustry, removeIcpIndustry, upsertHypothesis, removeHypothesis,
@@ -1027,3 +1090,4 @@ export function DataProvider({ children }: { children: ReactNode }) {
 }
 
 export const useData = () => useContext(Ctx)
+

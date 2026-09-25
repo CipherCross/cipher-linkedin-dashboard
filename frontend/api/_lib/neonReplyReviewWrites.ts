@@ -17,6 +17,7 @@ import {
   type DataStoreTransaction,
 } from './data/contracts.js'
 import { unavailableResponse } from './data/availability.js'
+import { sqlStateOf, transactionCause } from './data/errorCause.js'
 import { resolveApplicationActor, type ApplicationAuthPath } from './identity/application.js'
 import type { IdentityProvider } from './identity/provider.js'
 import {
@@ -72,12 +73,19 @@ function asWorkflow(row: Record<string, unknown> | undefined): ReplyWorkflowDto 
 }
 
 function safeErrorLabel(error: unknown): string {
-  if (error instanceof DataStoreContractError) return `${error.name}(${error.code})`
-  if (error instanceof Error) return error.name
+  const sqlState = sqlStateOf(error)
+  const suffix = sqlState ? ` sqlstate=${sqlState}` : ''
+  const cause = transactionCause(error)
+  const causeLabel = cause !== error && cause instanceof Error ? ` cause=${cause.name}` : ''
+  if (error instanceof DataStoreContractError) return `${error.name}(${error.code})${causeLabel}${suffix}`
+  if (error instanceof Error) return `${error.name}${suffix}`
   return 'UnknownError'
 }
 
-function writeFailure(error: unknown, what: string): Response {
+export function writeFailure(wrapped: unknown, what: string): Response {
+  // Domain errors thrown inside the transaction arrive wrapped; classify the
+  // original, or every conflict and not-found below is unreachable.
+  const error = transactionCause(wrapped)
   const auth = authorizationResponse(error)
   if (auth) return auth
   const unavailable = unavailableResponse(error)
@@ -87,7 +95,7 @@ function writeFailure(error: unknown, what: string): Response {
   if (error instanceof ReplyReviewConflictError) return json({ error: error.message, code: error.code, current: error.current }, 409)
   if (error instanceof ReplyReviewUnavailableError || error instanceof DataStoreSchemaError) return json({ error: 'Manual reply review is unavailable for this tenant', code: 'REPLY_REVIEW_UNAVAILABLE' }, 503)
   if (error instanceof DataStoreUnavailableError) return unavailableResponse(error) ?? json({ error: 'Database unavailable' }, 503)
-  console.error(`Neon reply review failed (${what}):`, safeErrorLabel(error))
+  console.error(`Neon reply review failed (${what}):`, safeErrorLabel(wrapped))
   return json({ error: `Could not ${what}` }, 500)
 }
 

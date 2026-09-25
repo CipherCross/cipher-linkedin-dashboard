@@ -9,6 +9,7 @@ import { authFetch } from '../lib/api'
 import { fetchNeonThread, resolveReadPath } from '../lib/dashboardReads'
 import { useAuth } from '../lib/AuthContext'
 import { useData } from '../lib/DataContext'
+import { withLeadEdits } from '../lib/leadEdits'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
@@ -77,7 +78,7 @@ export function ConversationDrawer({
   onClose: () => void
 }) {
   const { isAdmin } = useAuth()
-  const { data, refetch, patchLead } = useData()
+  const { data, refetch, patchLead, leadEdits, loadFollowUpState } = useData()
   const toast = useToast()
   const { setStage, assign, members, memberWritesBlockedReason } =
     usePipelineActions()
@@ -112,6 +113,19 @@ export function ConversationDrawer({
   // mistaken for the edited one.
   const [reviewDirtyFor, setReviewDirtyFor] = useState<number | null>(null)
   const replyActions = useReplyReviewActions(() => { setReloadKey((value) => value + 1); refetch() })
+  // The review revision the server reported in a 409 — the reply was reviewed
+  // meanwhile, by a teammate or the AI classifier. The next save is checked
+  // against it, so Save again overwrites deliberately instead of conflicting
+  // forever; reloading the thread instead would remount the form and drop the
+  // SDR's input. Cleared whenever the thread reloads.
+  const [conflictRevision, setConflictRevision] = useState<number | null>(null)
+  useEffect(() => { setConflictRevision(null) }, [reloadKey, lead?.id])
+  useEffect(() => {
+    const conflict = replyActions.conflict
+    if (!conflict) return
+    const current = conflict.current as { revision?: unknown } | null | undefined
+    setConflictRevision(typeof current?.revision === 'number' ? current.revision : 0)
+  }, [replyActions.conflict])
   // Identifies the conversation a coach request was issued for, so a slow
   // response can't land on a drawer the user has since switched away from.
   const coachReqKey = useRef('')
@@ -158,6 +172,14 @@ export function ConversationDrawer({
     lastEdited.current = null
   }, [editing])
 
+  // Leads is page-local and carries no follow-up states; fetch this
+  // conversation's so Schedule follow-up works here and not only on Pipeline.
+  // A failure leaves the button hidden, as it was, rather than guessing.
+  useEffect(() => {
+    if (!lead) return
+    loadFollowUpState(lead.instance_id, lead.profile_url).catch(() => {})
+  }, [lead?.instance_id, lead?.profile_url, loadFollowUpState])
+
   // Fetch the full thread whenever the active lead changes (or an import lands).
   useEffect(() => {
     if (!lead) {
@@ -187,7 +209,12 @@ export function ConversationDrawer({
           setRows(thread as ThreadMsg[])
         } catch (e) {
           if (cancelled) return
-          setError(e instanceof Error ? e.message : String(e))
+          // The reply-review thread read answers 404 for a conversation with no
+          // messages at all — a lead invited or accepted but never written to.
+          // For the drawer that is an empty thread, not a failure: it is exactly
+          // the lead whose history the SDR has come here to import.
+          if ((e as { code?: string }).code === 'REPLY_REVIEW_NOT_FOUND') setRows([])
+          else setError(e instanceof Error ? e.message : String(e))
         }
         setLoading(false)
         return
@@ -317,8 +344,10 @@ export function ConversationDrawer({
 
   // The `lead` prop is a snapshot captured when the drawer opened; pipeline
   // fields (stage/substatus/assignee) mutate in place via patchLead, so read
-  // the live row from context for those controls.
-  const live = data?.leads.find((x) => x.id === lead.id) ?? lead
+  // the live row from context for those controls. Leads reads its rows
+  // page-locally, so a lead opened there is not in data.leads at all — its
+  // saved edits come from leadEdits instead.
+  const live = data?.leads.find((x) => x.id === lead.id) ?? withLeadEdits(lead, leadEdits)
   const liveStage = stageById(live.pipeline_stage)
   const followUpState = followUpStateMap(data?.followUpStates ?? []).get(
     followUpKey(lead.instance_id, lead.profile_url),
@@ -493,7 +522,13 @@ export function ConversationDrawer({
       // keyboard can scroll the thread at once, or the import / follow-up view.
       initialFocusRef={importOpen || followUpOpen ? viewRef : threadRef}
       className="animate-[conv-slide-in_0.25s_var(--ease-out)]"
-      bodyClassName="p-0 overflow-hidden flex flex-col"
+      // One scroll area for the whole body. It used to be overflow-hidden with a
+      // fixed-share thread and a 45%-capped review form, which on a 680px-tall
+      // window (a MacBook Air with the browser chrome) squeezed the form to a
+      // 35px strip and clipped an opened Notes panel below the bottom edge with
+      // no way to scroll to it. Now the thread keeps a readable minimum and
+      // everything below it is reached by scrolling the drawer.
+      bodyClassName="p-0 overflow-y-auto flex flex-col"
     >
       <div className="shrink-0 flex flex-col gap-group px-dialog py-app-md border-b border-app-border">
         <div className="flex items-center gap-app-sm flex-wrap">
@@ -742,7 +777,7 @@ export function ConversationDrawer({
       {!importOpen && !followUpOpen && (
       <>
       <div
-        className="flex-[1_1_0] min-h-[120px] overflow-y-auto px-dialog py-app-md flex flex-col gap-group [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
+        className="flex-[1_1_0] min-h-[240px] overflow-y-auto px-dialog py-app-md flex flex-col gap-group [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
         ref={threadRef}
         role="region"
         aria-label="Messages"
@@ -860,23 +895,24 @@ export function ConversationDrawer({
         })}
       </div>
 
-      {/* The review form is taller than the drawer at 720px. Capped and
-          scrolling on its own, it can no longer push the coach and the notes
-          below the drawer's bottom edge, out of reach. */}
+      {/* Full height: the drawer body scrolls, so the form, the coach and the
+          notes below it are all reachable however short the window is. */}
       {manualReviewReady && latestInbound && (
-        <div className="min-h-0 max-h-[45%] shrink overflow-y-auto border-t border-app-border px-dialog py-app-md">
+        <div className="shrink-0 border-t border-app-border px-dialog py-app-md">
         <ReplyReviewPanel
           message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
           review={latestInbound.review ?? null}
           saving={replyActions.saving}
-          error={replyActions.error}
+          error={replyActions.error ?? (replyActions.conflict
+            ? 'This reply was reviewed meanwhile (by a teammate or the AI classifier). Your choices are kept — Save again to replace that review.'
+            : null)}
           onDirtyChange={(dirty) => setReviewDirtyFor(dirty ? latestInbound.id : null)}
           onSave={async (draft) => {
             const saved = await replyActions.saveReview({
               instance_id: lead.instance_id,
               profile_url: lead.profile_url,
               message_id: latestInbound.id,
-              expected_review_revision: latestInbound.review?.revision ?? 0,
+              expected_review_revision: conflictRevision ?? latestInbound.review?.revision ?? 0,
               review: draft,
             })
             // A refused or failed save keeps the draft, and so keeps asking.

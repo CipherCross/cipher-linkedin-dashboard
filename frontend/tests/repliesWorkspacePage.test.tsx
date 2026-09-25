@@ -166,4 +166,23 @@ describe('Replies workspace page', () => {
     expect(aliceRow.getAttribute('aria-current')).toBe('true')
     expect((screen.getByRole('radio', { name: 'Negative' }) as HTMLInputElement).checked).toBe(true)
   })
+  it("says why the dialog's Save did not save, instead of staying silent", async () => {
+    // In the two-pane layout the review form sits in a hidden pane, so an error
+    // it shows is never seen: Save looked like it did nothing and the reason
+    // the SDR picked was simply not saved. The dialog now carries the reason.
+    const client = makeClient()
+    renderReplies(client)
+    const aliceRow = await screen.findByRole('button', { name: /Alice Example/ })
+    const bobRow = screen.getByRole('button', { name: /Bob Example/ })
+    fireEvent.click(aliceRow)
+    await screen.findByRole('radio', { name: 'Negative' })
+    fireEvent.click(screen.getByRole('radio', { name: 'Negative' }))
+
+    fireEvent.click(bobRow)
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' }).find((button) => dialog.contains(button))!)
+    expect((await screen.findByRole('alert')).textContent).toContain('Pick at least one reason')
+    // Nothing was saved and nothing navigated away.
+    expect(aliceRow.getAttribute('aria-current')).toBe('true')
+  })
 })

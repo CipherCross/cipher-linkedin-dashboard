@@ -46,7 +46,9 @@ import {
   authorizationResponse,
 } from './auth.js'
 import { getDataStore } from './data/store.js'
+import { raisedMessageOf, sqlStateOf } from './data/errorCause.js'
 import {
+  CONVERSATION_OPERATIONS,
   CONVERSATION_WRITE_COMMANDS,
   CONVERSATION_WRITE_OPERATIONS,
   PIPELINE_WRITE_COMMANDS,
@@ -100,8 +102,12 @@ const json = (body: unknown, status = 200) =>
  * own, so the duplication is recorded rather than resolved.
  */
 function safeErrorLabel(error: unknown): string {
-  if (error instanceof DataStoreContractError) return `${error.name}(${error.code})`
-  if (error instanceof Error) return error.name
+  // The SQLSTATE is what makes a TRANSACTION_INVALID diagnosable; it carries no
+  // driver text. See data/errorCause.ts.
+  const sqlState = sqlStateOf(error)
+  const suffix = sqlState ? ` sqlstate=${sqlState}` : ''
+  if (error instanceof DataStoreContractError) return `${error.name}(${error.code})${suffix}`
+  if (error instanceof Error) return `${error.name}${suffix}`
   return 'UnknownError'
 }
 
@@ -441,8 +447,39 @@ export async function neonFollowUp(
       return json({ ok: true, ...result })
     })
   } catch (error) {
-    return storeFailure(error, 'update the follow-up')
+    return followUpFailure(writer, input, error)
   }
+}
+
+/**
+ * `apply_follow_up_action` reports its own refusals as SQLSTATEs, and the
+ * Supabase path has always answered them as the client expects: 40001
+ * (`FOLLOW_UP_CONFLICT: …` — stale revision, already active, nothing to
+ * reschedule) is a 409 carrying the current state, 22023 (a missing or past
+ * date) a 400, P0002 an unknown conversation. Here they used to reach
+ * storeFailure as TRANSACTION_INVALID and become "Could not update the
+ * follow-up" — and the client, getting no state back, could not recover.
+ */
+export async function followUpFailure(writer: NeonWriter, input: NeonFollowUpInput, error: unknown): Promise<Response> {
+  const sqlState = sqlStateOf(error)
+  const message = raisedMessageOf(error) ?? ''
+  if (sqlState === 'P0002') return json({ error: 'unknown conversation' }, 404)
+  if (sqlState === '40001' || /^FOLLOW_UP_CONFLICT/i.test(message)) {
+    let state: unknown = null
+    try {
+      const page = await writer.store.query<Record<string, unknown>>(writer.actor, {
+        operation: CONVERSATION_OPERATIONS.followUpState,
+        params: { instanceId: input.instanceId, profileUrl: input.profileUrl },
+        page: { limit: 1 },
+      })
+      state = page.items[0] ?? null
+    } catch {
+      // The conflict stands without it; the client refetches on a null state.
+    }
+    return json({ error: message.replace(/^FOLLOW_UP_CONFLICT:\s*/i, '') || 'Follow-up changed elsewhere', state }, 409)
+  }
+  if (sqlState === '22023') return json({ error: message || 'Invalid follow-up input' }, 400)
+  return storeFailure(error, 'update the follow-up')
 }
 
 // ---------------------------------------------------------------------------

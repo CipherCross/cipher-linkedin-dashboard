@@ -5,8 +5,10 @@ import { Button } from '../ui'
 
 /**
  * A collapsible band under the conversation thread — the AI coach and the lead
- * notes. Collapsed it is one header row; open, it takes at most 40% of the
- * drawer and scrolls on its own, so the thread above never disappears.
+ * notes. Collapsed it is one header row; open, it takes its full height and the
+ * drawer body scrolls to it. (A 40%-capped band that scrolled on its own could
+ * be clipped below the drawer's edge on a short window, with nothing to scroll.)
+ * The thread above keeps its own minimum height, so it never disappears.
  *
  * The toggle is a disclosure button (`aria-expanded` / `aria-controls`); the
  * route-owned `actions` and `badges` sit beside it, never inside it.
@@ -24,10 +26,7 @@ export function ConversationSection({
   const bodyId = useId()
   return (
     <section
-      className={[
-        'border-t border-app-border bg-[var(--surface-sunken)] px-app-lg py-app-sm',
-        open ? 'shrink min-h-[120px] max-h-[40%] overflow-y-auto' : 'shrink-0',
-      ].filter(Boolean).join(' ')}
+      className="shrink-0 border-t border-app-border bg-[var(--surface-sunken)] px-app-lg py-app-sm"
     >
       <div className="flex items-center gap-app-sm">
         <Button

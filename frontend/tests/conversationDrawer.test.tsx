@@ -21,7 +21,11 @@ import type { Lead } from '../src/lib/types'
 const fetchNeonThread = vi.fn()
 const setStage = vi.fn(async () => {})
 const capabilities = vi.fn(async (): Promise<unknown> => ({ available: false }))
-const saveReview = vi.fn(async (): Promise<unknown> => null)
+const saveReview = vi.fn(async (_request?: unknown): Promise<unknown> => null)
+let replyConflict: { status: 409; message: string; current: unknown } | null = null
+const loadFollowUpState = vi.fn(async () => {})
+let leadEdits = new Map<string, { patch: Partial<Lead>; at: number }>()
+let leadsInData: Lead[] = []
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonThread: (...a: unknown[]) => fetchNeonThread(...a),
@@ -43,7 +47,7 @@ vi.mock('../src/lib/replyReview', async () => {
   }
 })
 vi.mock('../src/lib/useReplyReviewActions', () => ({
-  useReplyReviewActions: () => ({ saving: false, error: null, conflict: null, saveReview: () => saveReview() }),
+  useReplyReviewActions: () => ({ saving: false, error: null, conflict: replyConflict, saveReview: (request: unknown) => saveReview(request) }),
 }))
 vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: vi.fn() }))
@@ -67,10 +71,12 @@ const LEAD = {
 vi.mock('../src/lib/DataContext', () => ({
   useData: () => ({
     data: {
-      leads: [LEAD], campaigns: [], instances: [], followUpStates: [], followUpsAvailable: false,
+      leads: leadsInData, campaigns: [], instances: [], followUpStates: [], followUpsAvailable: false,
     },
     refetch: vi.fn(),
     patchLead: vi.fn(),
+    loadFollowUpState,
+    leadEdits,
   }),
 }))
 
@@ -100,6 +106,9 @@ beforeEach(() => {
   fetchNeonThread.mockResolvedValue(THREAD)
   capabilities.mockResolvedValue({ available: false })
   saveReview.mockResolvedValue(null)
+  replyConflict = null
+  leadEdits = new Map()
+  leadsInData = [LEAD]
 })
 
 describe('the conversation drawer', () => {
@@ -153,6 +162,55 @@ describe('the conversation drawer', () => {
     await act(async () => { fireEvent.click(within(alert).getByRole('button', { name: 'Retry' })) })
     await waitFor(() => expect(fetchNeonThread.mock.calls.length).toBe(calls + 1))
     expect(await screen.findByText('Hello!')).toBeTruthy()
+  })
+
+  it('shows a lead with no messages as an empty thread whose history can be imported', async () => {
+    // The reply-review thread read answers 404 REPLY_REVIEW_NOT_FOUND for a
+    // conversation with no messages — an accepted lead nobody has written to.
+    // That is the lead an SDR opens to import history, so it must not be an
+    // error, and Import history must not be disabled behind it.
+    fetchNeonThread.mockRejectedValue(
+      Object.assign(new Error('The requested thread was not found'), { status: 404, code: 'REPLY_REVIEW_NOT_FOUND' }),
+    )
+    await paint()
+    expect(await screen.findByText('No messages yet')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    const importButton = screen.getByRole('button', { name: 'Import history' })
+    expect((importButton as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(importButton)
+    expect(await screen.findByRole('region', { name: 'Import history' })).toBeTruthy()
+  })
+
+  it('shows a saved stage and owner for a lead the route data does not hold', async () => {
+    // Opened from Leads, the lead is not in data.leads (Leads reads page by
+    // page), so patchLead's edit reaches the drawer only through leadEdits.
+    // Before, the save landed and the selects kept showing the old values.
+    leadsInData = []
+    leadEdits = new Map([[LEAD.id, { patch: { pipeline_stage: 'interested', assigned_to: null }, at: Date.now() }]])
+    await paint()
+    fireEvent.click(screen.getByText('Lead details'))
+    expect((screen.getByLabelText('Stage') as HTMLSelectElement).value).toBe('interested')
+  })
+
+  it("asks for this conversation's follow-up state, which a page-local route does not carry", async () => {
+    await paint()
+    expect(loadFollowUpState).toHaveBeenCalledWith(LEAD.instance_id, LEAD.profile_url)
+  })
+
+  it('after a 409, says the reply was reviewed meanwhile and saves against the revision the server reported', async () => {
+    // The AI classifier or a teammate reviewed the reply while the drawer was
+    // open. The save used to answer a bare 500; now it is a 409 carrying the
+    // current review, and the next Save must be checked against that revision
+    // or it would conflict again forever.
+    capabilities.mockResolvedValue({ available: true })
+    replyConflict = { status: 409, message: 'review revision is stale', current: { revision: 4 } }
+    await paint()
+    await screen.findByRole('group', { name: 'Sentiment' })
+    expect(screen.getByText(/reviewed meanwhile/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: 'Neutral' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await act(async () => {})
+    expect(saveReview).toHaveBeenLastCalledWith(expect.objectContaining({ expected_review_revision: 4 }))
   })
 
   it('makes the coach and the notes disclosures', async () => {

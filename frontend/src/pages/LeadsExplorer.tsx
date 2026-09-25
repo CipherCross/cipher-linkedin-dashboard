@@ -9,6 +9,7 @@ import {
 } from '../lib/dashboardReads'
 import type { LeadsSearchQuery } from '../lib/dashboardReads'
 import { useData } from '../lib/DataContext'
+import { withLeadEdits } from '../lib/leadEdits'
 import { useConversation } from '../lib/ConversationContext'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
@@ -107,7 +108,7 @@ const FOLLOW_UP_TONE: Record<FollowUpBucket, Tone> = {
 
 export function LeadsExplorer() {
   const { isAdmin } = useAuth()
-  const { data, refetch } = useData()
+  const { data, refetch, leadEdits } = useData()
   const { openConversation } = useConversation()
   const { setStage, members, memberName } = usePipelineActions()
   const toast = useToast()
@@ -163,6 +164,9 @@ export function LeadsExplorer() {
   const [serverLoading, setServerLoading] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const [serverRefresh, setServerRefresh] = useState(0)
+  // When the page on screen was requested: edits made after it (in the
+  // conversation drawer, say) are laid over its rows until the next fetch.
+  const [serverFetchedAt, setServerFetchedAt] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
 
   // Search is debounced: it types into local state and only commits to the URL
@@ -242,10 +246,12 @@ export function LeadsExplorer() {
       setServerLoading(true)
       setServerError(null)
       setServerPage(null)
+      const startedAt = Date.now()
       try {
         const next = await fetchNeonLeadsSearchPage(serverQuery)
         if (cancelled) return
         setServerPage(next)
+        setServerFetchedAt(startedAt)
         performance.mark('dashboard_leads_page_ready')
       } catch (error) {
         if (cancelled) return
@@ -545,7 +551,7 @@ export function LeadsExplorer() {
   const allLeadCount = serverMode ? serverPage?.allTotal ?? 0 : data.leads.length
   const pages = Math.max(1, Math.ceil(resultCount / PAGE_SIZE))
   const pageRows = serverMode
-    ? (serverPage?.items ?? []).map((item) => item.lead)
+    ? (serverPage?.items ?? []).map((item) => withLeadEdits(item.lead, leadEdits, serverFetchedAt))
     : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   const dateColumns = DATE_COLUMNS.filter(

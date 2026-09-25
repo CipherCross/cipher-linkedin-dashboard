@@ -667,10 +667,22 @@ export async function activityFixture(request) {
   }
   if (op === 'identity.teamRoster') return json(page([member(role)]))
   if (op === 'messages.thread') return json(page(threadRows(scenario)))
+  if (op === 'conversations.followUpHistory') return json(page([]))
+  if (op === 'conversations.followUpState') {
+    // The drawer's one-conversation read (Leads carries no follow-up data).
+    const instanceId = url.searchParams.get('instance_id')
+    const profileUrl = url.searchParams.get('profile_url')
+    return json(page(followUpStateRows(scenario).filter((row) =>
+      !instanceId || (row.instance_id === instanceId && row.profile_url === profileUrl))))
+  }
   if (op === 'replies.capabilities') return json(replyCapabilities(role))
   if (op === 'replies.inbox') return json({ items: replyInboxRows(scenario, url.searchParams), next_cursor: null })
   if (op === 'replies.facets') return json({ facets: {} })
   if (op === 'replies.thread') {
+    // Production answers 404 for a conversation with no messages at all.
+    if (url.searchParams.get('profile_url') && url.searchParams.get('profile_url') !== 'https://example.test/fixture-lead') {
+      return json({ error: 'The requested thread was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
+    }
     return json({ messages: replyThreadRows(scenario), older_cursor: null, newer_cursor: null, inbound_revision: 1, workflow: null, next_focus_message_id: null })
   }
   if (op === 'replies.reviewHistory') return json({ items: [], next_cursor: null })

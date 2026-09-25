@@ -1041,6 +1041,8 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
   },
   [CONVERSATION_OPERATIONS.followUpState]: {
     operation: CONVERSATION_OPERATIONS.followUpState,
+    // Optional thread key: both halves or neither (see readOptionalConversation).
+    params: (url) => readOptionalConversation(url),
     tolerateMissingRelation: true,
   },
   [CONVERSATION_OPERATIONS.latestMessage]: {
@@ -1234,6 +1236,20 @@ function readConversation(url: URL): DataStoreParams {
     instanceId: readRequiredText(url, 'instance_id'),
     profileUrl: readRequiredText(url, 'profile_url'),
   }
+}
+
+/**
+ * The same thread key, optional as a pair: neither half reads every
+ * conversation, both read one. One half alone is refused rather than widened —
+ * a bare `profile_url` names a person on two accounts (see readConversation).
+ */
+function readOptionalConversation(url: URL): DataStoreParams {
+  const instanceId = readOptionalBoundedText(url, 'instance_id')
+  const profileUrl = readOptionalBoundedText(url, 'profile_url')
+  if ((instanceId === null) !== (profileUrl === null)) {
+    throw new BadRequest('instance_id and profile_url must be given together')
+  }
+  return instanceId === null ? {} : { instanceId, profileUrl }
 }
 
 /** Lowercase-canonical RFC 4122 form, which is how PostgreSQL renders a `uuid`. */

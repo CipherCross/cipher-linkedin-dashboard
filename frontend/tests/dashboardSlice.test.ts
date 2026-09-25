@@ -701,3 +701,20 @@ describe('the inbound history cannot be windowed', () => {
     expect(sqlOf(inspectable(outboundRecentOperation))).toContain("m.direction = 'out'")
   })
 })
+
+describe('conversations.followUpState for one conversation', () => {
+  // The conversation drawer on Leads (a page-local route) asks for one
+  // conversation's state; the route snapshots still walk every conversation.
+  // Both halves of the thread key bind together, and the keyset seek still
+  // owns $1/$2 so paging the full walk is unchanged.
+  it('binds the thread key after the seek, and walks everything without one', () => {
+    const one = followUpStateOperation.build({
+      params: { instanceId: 'notebook-1', profileUrl: 'https://example.test/in/ada' },
+    } as never)
+    expect(one.values).toEqual([null, null, 'notebook-1', 'https://example.test/in/ada'])
+    expect(one.text).toMatch(/\$3::text IS NULL OR \(s\.instance_id = \$3::text AND s\.profile_url = \$4::text\)/)
+
+    const all = followUpStateOperation.build({} as never)
+    expect(all.values).toEqual([null, null, null, null])
+  })
+})

@@ -1089,6 +1089,25 @@ export async function fetchNeonLeadNotes(
  * seek against an `(occurred_at, id)` order skips a row whenever two overlapping
  * writes commit with the two orders inverted.
  */
+/**
+ * One conversation's follow-up state, for a drawer opened on a route whose data
+ * carries none (Leads is page-local). `state` is null when the conversation has
+ * no follow-up yet; `available` is false when the relation is absent, which is
+ * the same condition the route snapshots report as `followUpsAvailable: false`.
+ */
+export async function fetchNeonFollowUpState(
+  instanceId: string,
+  profileUrl: string,
+  fetchImpl?: ApiFetch,
+): Promise<{ state: FollowUpState | null; available: boolean }> {
+  const page = await readPage<FollowUpState>(
+    READ_OPS.followUpState,
+    { instance_id: instanceId, profile_url: profileUrl, limit: 1 },
+    fetchImpl,
+  )
+  return { state: page.items[0] ?? null, available: page.unavailable !== true }
+}
+
 export async function fetchNeonFollowUpHistory(
   instanceId: string,
   profileUrl: string,

@@ -211,13 +211,25 @@ const FOLLOW_UP_STATE_SQL = `SELECT s.instance_id,
           s.updated_by,
           s.archived_at
      FROM public.conversation_follow_up_state s
-    WHERE ${conversationSeek('s')}`
+    WHERE ($3::text IS NULL OR (s.instance_id = $3::text AND s.profile_url = $4::text))
+      AND ${conversationSeek('s')}`
 
+/**
+ * With no params it walks every conversation, which is what the route
+ * snapshots bootstrap from. With `instanceId` + `profileUrl` it returns that one
+ * conversation's state (zero or one row): the conversation drawer asks for it on
+ * routes whose data carries no follow-up states — Leads is page-local — so the
+ * drawer can still schedule a follow-up against the real revision.
+ */
 export const followUpStateOperation: NeonQueryOperation<FollowUpStateRow> = {
   keyset: CONVERSATION_KEYSET,
-  build: ({ after }) => ({
+  build: ({ params, after }) => ({
     text: FOLLOW_UP_STATE_SQL,
-    values: conversationSeekValues(after),
+    values: [
+      ...conversationSeekValues(after),
+      params?.instanceId ?? null,
+      params?.profileUrl ?? null,
+    ],
   }),
   mapRow: (row: NeonRow): FollowUpStateRow => ({
     instance_id: String(row.instance_id),
