@@ -267,7 +267,7 @@ Set on the Vercel project, **never** with a `VITE_` prefix.
 | AI | `ANTHROPIC_API_KEY` |
 | Machine secrets | `CRON_SECRET` (GET cron paths of `/api/classify`, `/api/notify-replies`, `/api/briefing`, and identity session pruning), `NOTIFY_SECRET` (older agents only), `MCP_SECRET` (every MCP tool). All fail closed: missing → 500, mismatch → 401 |
 | Slack | `SLACK_WEBHOOK_URL`, optional `SLACK_REPLIES_WEBHOOK_URL` (falls back to it), optional `DASHBOARD_URL` for deep links |
-| Airtable | `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` for the Apollo CSV importers. Restrict the PAT to the target base with schema-read and record read/write only |
+| Airtable | `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` for the CSV importers (DB, Companies and Contacts tables). Restrict the PAT to the target base with schema-read and record read/write only |
 | Legacy | `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, optional `SUPABASE_URL` — still required while a deployment is on the Supabase path |
 
 **The provider flags are derived, not assumed.** Leave one unset and it resolves
@@ -308,7 +308,7 @@ figures; range- and subset-specific analysis is recomputed client-side in
 | `/icp` **ICP** | ICP definitions with personas and sub-industries |
 | `/hypotheses` **Hypotheses** | Hypotheses with linked campaigns and their funnels |
 | `/team` **Team** | Team directory; renders the identity or Supabase variant per authenticator |
-| `/csv-import` **CSV import** (admin) | One Apollo People CSV creates missing Airtable Companies first, then imports Contacts linked to the resolved Company records. Groups Companies by required `Apollo Account Id`, reviews name-only/ambiguous matches, skips existing Contacts, and supports safe retry plus a downloadable combined report. Requires one shared `Added by`; up to 500 Contact rows / 5 MB |
+| `/csv-import` **CSV import** (admin) | Two independent tabs. **Companies → DB** writes new companies into the Airtable **DB** table with `Initial status = New` for SDRs to approve there (Airtable automations copy approved rows into Companies; the importer never writes Companies). Dedupes on the bare domain against DB, Companies and the file itself, and reports every skipped duplicate with where it was found. **Leads → Contacts** groups leads by company and links each group to a Companies record you confirm; companies still waiting in DB hold their leads, Rejected ones decline them, and **Re-check** re-runs the preview on the loaded file after an approval. Each tab takes `Added by` from its own table; up to 500 rows / 5 MB per file; downloadable row-level reports. Every domain goes through `src/lib/domain.ts` |
 | `/chat` **Chat** | AI copilot with streamed markdown, reasoning, and visible tool calls |
 | `/health` **Health** | Sync-run history, per-instance freshness and errors, plus the per-notebook **Configure** editor |
 

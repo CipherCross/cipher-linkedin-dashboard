@@ -2,24 +2,27 @@ import { useEffect, useState } from 'react'
 import { Building2 } from 'lucide-react'
 import type { AirtableCompany } from '../lib/importApi'
 import { searchAirtableCompanies } from '../lib/importApi'
-import { Button, Dialog, InlineError, TextField, UpdatingNote } from '../ui'
+import { Badge, Button, Dialog, InlineError, TextField, UpdatingNote } from '../ui'
 
+const isRejected = (company: AirtableCompany) => company.approveStatus.trim().toLowerCase() === 'rejected'
+
+/**
+ * Picks the Companies record a group of leads is linked to. It lists the
+ * group's candidates and searches Companies by name, domain or LinkedIn. A
+ * Rejected record is shown but cannot be chosen.
+ */
 export function CompanyResolutionModal({
   sourceCompany,
   affectedRows,
   suggestions,
   onSelect,
-  onSkip,
   onClose,
-  subjectLabel = 'lead',
 }: {
   sourceCompany: string
   affectedRows: number
   suggestions: AirtableCompany[]
   onSelect: (company: AirtableCompany) => void
-  onSkip: () => void
   onClose: () => void
-  subjectLabel?: 'lead' | 'company'
 }) {
   const [query, setQuery] = useState(sourceCompany)
   const [results, setResults] = useState<AirtableCompany[]>(suggestions)
@@ -38,11 +41,14 @@ export function CompanyResolutionModal({
       setError(null)
       try {
         const companies = await searchAirtableCompanies(trimmed)
-        if (!cancelled) setResults(companies)
+        if (!cancelled) {
+          const found = new Set(companies.map((company) => company.id))
+          setResults([...suggestions.filter((company) => !found.has(company.id)), ...companies])
+        }
       } catch (reason) {
         if (!cancelled) {
           setError(reason instanceof Error ? reason.message : String(reason))
-          setResults([])
+          setResults(suggestions)
         }
       } finally {
         if (!cancelled) setBusy(false)
@@ -54,24 +60,17 @@ export function CompanyResolutionModal({
     }
   }, [query, suggestions])
 
-  const plural = subjectLabel === 'company' ? 'companies' : 'leads'
   return (
     <Dialog
       title="Choose the Airtable company"
       description={<>
-        Apollo company: <strong>{sourceCompany || 'Unnamed company'}</strong>
+        CSV company: <strong>{sourceCompany || 'Unnamed company'}</strong>
         {' · '}
-        {affectedRows}{' '}
-        {affectedRows === 1 ? subjectLabel : plural}
+        {affectedRows} {affectedRows === 1 ? 'lead' : 'leads'}
       </>}
       closeLabel="Close company picker"
       onRequestClose={onClose}
-      footer={<>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button variant="danger" onClick={onSkip}>
-          Skip {affectedRows === 1 ? `this ${subjectLabel}` : `all ${affectedRows} ${plural}`}
-        </Button>
-      </>}
+      footer={<Button variant="secondary" onClick={onClose}>Cancel</Button>}
     >
       <div className="flex flex-col gap-app-md">
         <TextField
@@ -79,7 +78,7 @@ export function CompanyResolutionModal({
           labelHidden
           type="search"
           value={query}
-          placeholder="Search by company name, website, or LinkedIn"
+          placeholder="Search Companies by name, website, or LinkedIn"
           onChange={(event) => setQuery(event.target.value)}
         />
 
@@ -96,29 +95,35 @@ export function CompanyResolutionModal({
               <Building2 size={24} aria-hidden="true" className="text-app-text-muted" />
               <div>No matching Companies found.</div>
               <div className="text-app-meta text-app-text-muted">
-                Try the company’s domain or LinkedIn URL, or skip {affectedRows === 1 ? `this ${subjectLabel}` : `these ${plural}`}.
+                Try the company’s domain or LinkedIn URL. A company that is still in DB cannot be linked until it is approved.
               </div>
             </div>
           )}
           {!busy &&
-            results.map((company) => (
-              <Button
-                key={company.id}
-                variant="secondary"
-                block
-                className="h-auto min-h-control py-app-sm grid grid-cols-[24px_minmax(0,1fr)_auto] gap-inline items-center text-left font-normal"
-                onClick={() => onSelect(company)}
-              >
-                <Building2 size={18} aria-hidden="true" className="text-app-accent" />
-                <span className="min-w-0 flex flex-col gap-0.5">
-                  <strong>{company.name || 'Unnamed company'}</strong>
-                  <span className="text-app-meta text-app-text-muted truncate">
-                    {[company.website, company.linkedin].filter(Boolean).join(' · ') || 'No website or LinkedIn stored'}
+            results.map((company) => {
+              const rejected = isRejected(company)
+              return (
+                <Button
+                  key={company.id}
+                  variant="secondary"
+                  block
+                  disabled={rejected}
+                  className="h-auto min-h-control py-app-sm grid grid-cols-[24px_minmax(0,1fr)_auto] gap-inline items-center text-left font-normal"
+                  onClick={() => onSelect(company)}
+                >
+                  <Building2 size={18} aria-hidden="true" className="text-app-accent" />
+                  <span className="min-w-0 flex flex-col gap-0.5">
+                    <strong>{company.name || 'Unnamed company'}</strong>
+                    <span className="text-app-meta text-app-text-muted truncate">
+                      {[company.website, company.linkedin].filter(Boolean).join(' · ') || 'No website or LinkedIn stored'}
+                    </span>
                   </span>
-                </span>
-                <span className="text-app-accent text-app-meta font-semibold">Select</span>
-              </Button>
-            ))}
+                  {rejected
+                    ? <Badge tone="danger">Rejected</Badge>
+                    : <span className="text-app-accent text-app-meta font-semibold">Select</span>}
+                </Button>
+              )
+            })}
         </div>
       </div>
     </Dialog>

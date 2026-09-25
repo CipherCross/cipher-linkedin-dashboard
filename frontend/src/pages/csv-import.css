@@ -1,0 +1,17 @@
+/* ui-exception(csv-import-grids): the dashed drop zone and its disabled
+ * variant. Utilities have no specificity to resolve a variant against.
+ * verify: CSV Import upload card on both tabs at 1280/1440/1920. */
+.csv-upload-card {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-stack);
+  text-align: center;
+  border-style: dashed;
+}
+.csv-upload-card > svg { color: var(--accent); }
+.csv-upload-card h2 { margin: 0; }
+.csv-upload-card p { max-width: 600px; margin: 0 0 var(--space-xs); line-height: var(--leading-body); }
+.csv-upload-card[data-disabled] > svg { color: var(--text-muted); }

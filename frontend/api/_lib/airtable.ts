@@ -1,12 +1,33 @@
-// Narrow Airtable Web API adapter for the Apollo Contact and Company importers. This is
-// deliberately not a generic proxy: callers cannot choose a base, table, or
-// field. Stable Airtable IDs keep harmless display-name changes from breaking
-// writes, while schema validation in contactImport.ts fails closed if a field is
-// deleted or retyped.
+// Narrow Airtable Web API adapter for the CSV importers. This is deliberately
+// not a generic proxy: callers cannot choose a base, table, or field. Stable
+// Airtable IDs keep harmless display-name changes from breaking writes, while
+// the schema checks in companyImport.ts and contactImport.ts fail closed if a
+// field is deleted or retyped.
+//
+// Writes go to exactly two tables. New companies land in DB for approval, and
+// Airtable automations — not this code — copy approved rows into Companies.
+// `createRecords` refuses every other table, so no import path can write
+// Companies even by mistake.
 
 export const AIRTABLE_IDS = {
+  dbTable: 'tblEYOgRDRg0aYfzI',
   companiesTable: 'tblDk8o4Nb4mFAEa8',
   contactsTable: 'tbl87CQnAjpKigu7i',
+  db: {
+    website: 'fldOtfQ8mk0W0quRi',
+    name: 'fldk8Ah5DzqNdC9Lw',
+    mailingName: 'flda4VsftBlL1kbvy',
+    linkedin: 'fldPbtYqIJ8B2XP4O',
+    country: 'fldSpGDwW6tHBCEv7',
+    foundedYear: 'fldntEDvhQv7gZKXk',
+    employees: 'fldHMWH6nF9SwnJgL',
+    industry: 'fld0q8PFtHszKqXIc',
+    keywords: 'fldaN1Aj5VIEMf5vo',
+    description: 'fldN4Gf1ee5iVG0Xs',
+    initialStatus: 'fldvNEA1HtWxMUVGW',
+    addedToCompanies: 'fldguxuyDXVp3BqkK',
+    addedBy: 'fldd8NOGRQVzR8Zqw',
+  },
   companies: {
     name: 'fldxi1YhTYAOPaWSR',
     mailingName: 'fld2lNvsLo7MV6IMt',
@@ -32,7 +53,7 @@ export const AIRTABLE_IDS = {
   },
 } as const
 
-interface AirtableRecord {
+export interface AirtableRecord {
   id: string
   createdTime?: string
   fields: Record<string, unknown>
@@ -44,10 +65,6 @@ interface AirtableListResponse {
 }
 
 interface AirtableCreateResponse {
-  records?: AirtableRecord[]
-}
-
-interface AirtableUpdateResponse {
   records?: AirtableRecord[]
 }
 
@@ -198,11 +215,68 @@ export async function listAllRecords(
   return records
 }
 
+/**
+ * Records matching `formula`, read through the POST `listRecords` endpoint so a
+ * long formula is not bounded by the URL length. Callers build the formula from
+ * values they have already constrained or escaped (see `formulaString`).
+ */
+export async function findRecordsByFormula(
+  tableId: string,
+  formula: string,
+  fieldIds: readonly string[],
+): Promise<AirtableRecord[]> {
+  const { baseId } = config()
+  const records: AirtableRecord[] = []
+  let offset: string | undefined
+
+  do {
+    const response = await airtableFetch<AirtableListResponse>(
+      `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}/listRecords`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          filterByFormula: formula,
+          pageSize: 100,
+          returnFieldsByFieldId: true,
+          fields: fieldIds,
+          ...(offset ? { offset } : {}),
+        }),
+      },
+    )
+    records.push(...(response.records ?? []))
+    offset = response.offset
+  } while (offset)
+
+  return records
+}
+
+/**
+ * A formula string literal. Backslashes and double quotes are escaped, control
+ * characters become spaces, and the value is capped so one cell cannot inflate
+ * a formula past what a request carries.
+ */
+export function formulaString(value: string, maxLength = 200): string {
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .slice(0, maxLength)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+  return `"${cleaned}"`
+}
+
+/** The only tables an importer may create records in. Companies is not one. */
+export const WRITABLE_TABLES: ReadonlySet<string> = new Set([
+  AIRTABLE_IDS.dbTable,
+  AIRTABLE_IDS.contactsTable,
+])
+
 export async function createRecords(
   tableId: string,
   fields: Array<Record<string, unknown>>,
-  options: { typecast?: boolean } = {},
 ): Promise<AirtableRecord[]> {
+  if (!WRITABLE_TABLES.has(tableId)) {
+    throw new AirtableError('Importers may only create records in DB or Contacts', 500)
+  }
   if (fields.length === 0 || fields.length > 10) {
     throw new AirtableError('Airtable create batch must contain 1–10 records', 500)
   }
@@ -212,35 +286,12 @@ export async function createRecords(
     `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params}`,
     {
       method: 'POST',
+      // Never typecast: the live select fields are already polluted by past
+      // typecast imports. Every select value written is checked against the
+      // schema's current choices first.
       body: JSON.stringify({
-        typecast: options.typecast === true,
+        typecast: false,
         records: fields.map((recordFields) => ({ fields: recordFields })),
-      }),
-    },
-  )
-  return response.records ?? []
-}
-
-export async function updateRecords(
-  tableId: string,
-  records: Array<{ id: string; fields: Record<string, unknown> }>,
-  options: { typecast?: boolean } = {},
-): Promise<AirtableRecord[]> {
-  if (records.length === 0 || records.length > 10) {
-    throw new AirtableError('Airtable update batch must contain 1–10 records', 500)
-  }
-  if (records.some((record) => !/^rec[a-zA-Z0-9]{14}$/.test(record.id))) {
-    throw new AirtableError('Airtable update batch contains an invalid record ID', 400)
-  }
-  const { baseId } = config()
-  const params = new URLSearchParams({ returnFieldsByFieldId: 'true' })
-  const response = await airtableFetch<AirtableUpdateResponse>(
-    `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        typecast: options.typecast === true,
-        records,
       }),
     },
   )

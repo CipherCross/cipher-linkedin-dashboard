@@ -1,9 +1,8 @@
-import type { CompanyImportRow, ContactImportRow } from './csvImport'
+import type { CompanyImportRow, LeadImportRow } from './csvImport'
 import { authFetch } from './api'
 
 export interface ImportMetadata {
-  source: 'apollo'
-  mappingVersion: number
+  target: 'db' | 'contacts'
   addedBy: string[]
   limits: { maxRows: number; maxFileBytes: number }
 }
@@ -13,78 +12,112 @@ export interface AirtableCompany {
   name: string
   website: string
   linkedin: string
+  /** Companies `Approve Status`. A Rejected record can never be linked. */
+  approveStatus: string
 }
 
-export type PreviewStatus = 'ready' | 'duplicate' | 'invalid' | 'company_action'
+// --------------------------------------------------------- Companies → DB
 
-export interface PreviewRowResult {
+export interface CompanyLocation {
+  table: 'DB' | 'Companies' | 'File'
+  id?: string
+  rowNumber?: number
+  name: string
+  website: string
+  status: string
+}
+
+export type CompanyPreviewStatus = 'ready' | 'name_match' | 'duplicate' | 'invalid'
+
+export interface CompanyPreviewResult {
   rowNumber: number
-  status: PreviewStatus
+  status: CompanyPreviewStatus
+  domain: string
   reason?: string
-  company?: AirtableCompany
-  matchMethod?: 'linkedin' | 'domain' | 'name' | 'resolved'
-  suggestions?: AirtableCompany[]
-  contactIds?: string[]
+  matches?: CompanyLocation[]
 }
 
-export interface PreviewResponse {
-  results: PreviewRowResult[]
+export interface CompanyPreviewResponse {
+  results: CompanyPreviewResult[]
   counts: Record<string, number>
 }
 
-export interface CommitInputRow {
+export interface CompanyCommitResult {
+  rowNumber: number
+  status: 'created' | 'duplicate' | 'failed'
+  domain: string
+  recordId?: string
+  error?: string
+  matches?: CompanyLocation[]
+}
+
+export interface CompanyCommitResponse {
+  results: CompanyCommitResult[]
+  counts: { created: number; duplicate: number; failed: number }
+}
+
+// ----------------------------------------------------- Leads → Contacts
+
+export type LeadGroupStatus = 'suggested' | 'ambiguous' | 'pending' | 'declined' | 'not_uploaded'
+
+export interface DbMatch {
+  id: string
+  name: string
+  website: string
+  status: string
+  addedToCompanies: boolean
+}
+
+export interface LeadGroup {
+  key: string
+  companyName: string
+  domain: string
+  linkedin: string
+  rowNumbers: number[]
+  status: LeadGroupStatus
+  method?: 'domain' | 'linkedin' | 'name'
+  suggestion?: AirtableCompany
+  candidates: AirtableCompany[]
+  rejected: AirtableCompany[]
+  db: DbMatch[]
+  declinedBy?: 'Companies' | 'DB'
+  reason: string
+}
+
+export interface LeadRowResult {
+  rowNumber: number
+  status: 'ready' | 'invalid' | 'duplicate' | 'existing'
+  reason?: string
+  groupKey?: string
+  contactIds?: string[]
+}
+
+export interface LeadPreviewResponse {
+  rows: LeadRowResult[]
+  groups: LeadGroup[]
+  counts: Record<string, number>
+}
+
+export interface ContactCommitRow {
   rowNumber: number
   personLinkedin: string
   firstName: string
   fullName: string
   title: string
   companyId: string
+  companyWebsite: string
 }
 
-export interface CommitRowResult {
+export interface ContactCommitResult {
   rowNumber: number
   status: 'created' | 'duplicate' | 'failed'
   contactId?: string
   error?: string
 }
 
-export interface CommitResponse {
-  results: CommitRowResult[]
+export interface ContactCommitResponse {
+  results: ContactCommitResult[]
   counts: { created: number; duplicate: number; failed: number }
-}
-
-export type CompanyPreviewStatus = 'ready' | 'duplicate' | 'invalid' | 'company_action'
-
-export interface CompanyPreviewRowResult {
-  rowNumber: number
-  status: CompanyPreviewStatus
-  reason?: string
-  company?: AirtableCompany
-  matchMethod?: 'linkedin' | 'domain' | 'name'
-  suggestions?: AirtableCompany[]
-  canCreate?: boolean
-}
-
-export interface CompanyPreviewResponse {
-  results: CompanyPreviewRowResult[]
-  counts: Record<string, number>
-}
-
-export interface CompanyCommitInputRow extends CompanyImportRow {
-  allowNameDuplicate: boolean
-  existingCompanyId?: string
-}
-
-export interface CompanyCommitRowResult {
-  rowNumber: number
-  status: 'created' | 'updated' | 'duplicate' | 'failed'
-  companyId?: string
-  error?: string
-}
-
-export interface CompanyCommitResponse {
-  results: CompanyCommitRowResult[]
-  counts: { created: number; updated: number; duplicate: number; failed: number }
 }
 
 const MAX_IMPORT_BODY_BYTES = 3_800_000
@@ -109,15 +142,30 @@ async function importPost<T>(body: Record<string, unknown>): Promise<T> {
   return payload as T
 }
 
-export function fetchImportMetadata(): Promise<ImportMetadata> {
+export function fetchCompanyImportMetadata(): Promise<ImportMetadata> {
+  return importPost<ImportMetadata>({ action: 'company_metadata' })
+}
+
+export function previewCompanies(rows: CompanyImportRow[]): Promise<CompanyPreviewResponse> {
+  return importPost<CompanyPreviewResponse>({ action: 'company_preview', rows })
+}
+
+export function commitCompanies(
+  addedBy: string,
+  rows: CompanyImportRow[],
+): Promise<CompanyCommitResponse> {
+  return importPost<CompanyCommitResponse>({ action: 'company_commit', addedBy, rows })
+}
+
+export function fetchContactImportMetadata(): Promise<ImportMetadata> {
   return importPost<ImportMetadata>({ action: 'contact_metadata' })
 }
 
-export function previewContacts(
-  rows: Array<ContactImportRow & { companyId?: string }>,
+export function previewLeads(
+  rows: LeadImportRow[],
   options: { forceCompanies?: boolean } = {},
-): Promise<PreviewResponse> {
-  return importPost<PreviewResponse>({
+): Promise<LeadPreviewResponse> {
+  return importPost<LeadPreviewResponse>({
     action: 'contact_preview',
     rows,
     forceCompanies: options.forceCompanies === true,
@@ -134,22 +182,7 @@ export async function searchAirtableCompanies(query: string): Promise<AirtableCo
 
 export function commitContacts(
   addedBy: string,
-  rows: CommitInputRow[],
-): Promise<CommitResponse> {
-  return importPost<CommitResponse>({ action: 'contact_commit', addedBy, rows })
-}
-
-export function fetchCompanyImportMetadata(): Promise<ImportMetadata> {
-  return importPost<ImportMetadata>({ action: 'company_metadata' })
-}
-
-export function previewCompanies(rows: CompanyImportRow[]): Promise<CompanyPreviewResponse> {
-  return importPost<CompanyPreviewResponse>({ action: 'company_preview', rows })
-}
-
-export function commitCompanies(
-  addedBy: string,
-  rows: CompanyCommitInputRow[],
-): Promise<CompanyCommitResponse> {
-  return importPost<CompanyCommitResponse>({ action: 'company_commit', addedBy, rows })
+  rows: ContactCommitRow[],
+): Promise<ContactCommitResponse> {
+  return importPost<ContactCommitResponse>({ action: 'contact_commit', addedBy, rows })
 }

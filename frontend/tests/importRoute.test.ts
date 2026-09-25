@@ -108,6 +108,30 @@ describe('/api/import route method dispatch', () => {
     expect(await response.json()).toEqual({ error: 'GET is not allowed' })
   })
 
+  it('keeps every Airtable CSV action behind the admin guard', async () => {
+    // Companies → DB and Leads → Contacts are two independent action sets on
+    // the human surface. Neither may reach Airtable without an authenticated
+    // admin, whichever action is named.
+    const fetcher = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetcher)
+    try {
+      for (const action of [
+        'company_metadata', 'company_preview', 'company_commit',
+        'contact_metadata', 'contact_preview', 'company_search', 'contact_commit',
+      ]) {
+        const response = await POST(new Request(url(), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action, addedBy: 'Someone', rows: [] }),
+        }))
+        expect(response.status).toBe(401)
+      }
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('still answers an unknown operation before any authorization', async () => {
     for (const response of [await get('agent.nope'), await post('agent.nope')]) {
       expect(response.status).toBe(400)

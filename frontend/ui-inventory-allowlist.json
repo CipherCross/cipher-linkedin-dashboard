@@ -4,8 +4,8 @@
     {
       "id": "native-file-input-csv",
       "kind": "raw-control",
-      "path": "src/pages/UnifiedApolloCsvImport.tsx",
-      "symbol": "UnifiedApolloCsvImport",
+      "path": "src/pages/CsvImportShared.tsx",
+      "symbol": "CsvUploadCard",
       "tag": "input",
       "nativeType": "file",
       "owner": "frontend/import",

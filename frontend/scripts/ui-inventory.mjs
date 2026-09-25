@@ -258,7 +258,7 @@ function ownerForConsumers(selector, consumerCandidates, ruleKey) {
     if (/Pipeline|LeadsAndRepliesWorkspace|CampaignTable|leads-and-replies/.test(source)) return 8
     if (/Replies|Conversation|reply-analysis|ReplyReview|LostReason/.test(source)) return 7
     if (/LeadsExplorer|FollowUps|FollowUp|Review|LeadNotes/.test(source)) return 6
-    if (/UnifiedApolloCsvImport|CompanyResolution|ImportHistory/.test(source)) return 5
+    if (/CsvImport|CompanyResolution|ImportHistory/.test(source)) return 5
     if (/SearchLibrary|Icp|Hypotheses|Playbook/.test(source)) return 4
     if (/Team|Health|NeonActivity/.test(source)) return 3
     if (/Layout|Auth|ResetPassword|QuickNavigation/.test(source)) return 2

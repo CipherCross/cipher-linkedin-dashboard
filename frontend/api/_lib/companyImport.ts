@@ -1,211 +1,135 @@
+// Companies upload → Airtable DB. New companies are created in DB with
+// `Initial status = New` for SDRs to approve there; Airtable automations copy
+// approved rows into Companies. Nothing here reads DB in full, and nothing
+// writes Companies — `createRecords` refuses that table outright.
+//
+// The dedupe key is the normalized domain. A domain already in DB (any status)
+// or in Companies, or repeated earlier in the same file, is skipped and
+// reported with where it was found. A name-only match is a warning: the row is
+// still created unless the user unticks it.
+import { DOMAIN_ISSUE_LABEL, parseDomain } from '../../src/lib/domain.js'
+import { AIRTABLE_IDS, AirtableError, getAirtableSchema } from './airtable.js'
 import {
-  AIRTABLE_IDS,
-  AirtableError,
-  createRecords,
-  getAirtableSchema,
-  listAllRecords,
-  updateRecords,
-} from './airtable.js'
-import {
+  CACHE_MS,
+  COMPANIES_SCHEMA,
+  asString,
   buildCompanyMaps,
+  canonicalCompanyLinkedin,
+  choicesOf,
+  createAll,
+  errorResponse,
+  findDbByDomains,
+  findDbByNames,
+  getCompanies,
   importAddedByChoices,
-  normalizeDomain,
-  normalizeLinkedin,
+  json,
   normalizeName,
-  shouldTypecastAddedBy,
-} from './contactImport.js'
+  requireFields,
+  type CompanyMaps,
+  type CompanyRecord,
+  type DbRecord,
+} from './airtableDirectory.js'
 
 const MAX_ROWS = 500
-const CACHE_MS = 5 * 60_000
 
 const LIMITS = {
   companyName: 500,
-  mailingName: 500,
-  employees: 20,
-  industry: 500,
   website: 2048,
   linkedin: 2048,
   country: 500,
+  employees: 20,
+  foundedYear: 20,
+  industry: 500,
   keywords: 10_000,
   description: 10_000,
-  foundedYear: 20,
 } as const
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-    },
-  })
 
 export interface CompanyImportRow {
   rowNumber: number
   companyName: string
-  mailingName: string
-  employees: string
-  industry: string
   website: string
   linkedin: string
   country: string
+  employees: string
+  foundedYear: string
+  industry: string
   keywords: string
   description: string
-  foundedYear: string
 }
 
-interface CompanyCommitRow extends CompanyImportRow {
-  allowNameDuplicate: boolean
-  existingCompanyId?: string
-}
-
-export interface CompanyRecord {
-  id: string
+/** Where an identical domain (or, for a warning, an identical name) already is. */
+export interface CompanyLocation {
+  table: 'DB' | 'Companies' | 'File'
+  id?: string
+  rowNumber?: number
   name: string
   website: string
-  linkedin: string
+  /** DB `Initial status` or Companies `Approve Status`; blank when unset. */
+  status: string
+}
+
+export type CompanyPreviewStatus = 'ready' | 'name_match' | 'duplicate' | 'invalid'
+
+export interface CompanyPreviewResult {
+  rowNumber: number
+  status: CompanyPreviewStatus
+  domain: string
+  reason?: string
+  matches?: CompanyLocation[]
 }
 
 interface CommitResult {
   rowNumber: number
-  status: 'created' | 'updated' | 'duplicate' | 'failed'
-  companyId?: string
+  status: 'created' | 'duplicate' | 'failed'
+  domain: string
+  recordId?: string
   error?: string
+  matches?: CompanyLocation[]
 }
-
-type CompanyMaps = ReturnType<typeof buildCompanyMaps>
 
 let schemaCache: { at: number; addedBy: string[] } | null = null
-interface CompanyState {
-  records: CompanyRecord[]
-  fieldsById: Map<string, Record<string, unknown>>
-}
-
-let companyCache: ({ at: number } & CompanyState) | null = null
-
-const asString = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
-
-function field(record: { fields: Record<string, unknown> }, id: string): string {
-  return asString(record.fields[id])
-}
 
 async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
   if (!force && schemaCache && Date.now() - schemaCache.at < CACHE_MS) {
     return { addedBy: schemaCache.addedBy }
   }
   const tables = await getAirtableSchema()
+  const db = tables.find((table) => table.id === AIRTABLE_IDS.dbTable)
   const companies = tables.find((table) => table.id === AIRTABLE_IDS.companiesTable)
-  if (!companies) throw new AirtableError('Required Airtable Companies table is missing', 503)
-
-  const expected = [
-    [AIRTABLE_IDS.companies.name, 'singleLineText'],
-    [AIRTABLE_IDS.companies.mailingName, 'singleLineText'],
-    [AIRTABLE_IDS.companies.website, 'url'],
-    [AIRTABLE_IDS.companies.linkedin, 'url'],
-    [AIRTABLE_IDS.companies.country, 'singleLineText'],
-    [AIRTABLE_IDS.companies.foundedYear, 'number'],
-    [AIRTABLE_IDS.companies.employees, 'number'],
-    [AIRTABLE_IDS.companies.industry, 'singleLineText'],
-    [AIRTABLE_IDS.companies.keywords, 'multilineText'],
-    [AIRTABLE_IDS.companies.description, 'richText'],
-    [AIRTABLE_IDS.companies.approveStatus, 'singleSelect'],
-    [AIRTABLE_IDS.companies.addedBy, 'singleSelect'],
-  ] as const
-  for (const [fieldId, type] of expected) {
-    const schemaField = companies.fields.find((item) => item.id === fieldId)
-    if (!schemaField || schemaField.type !== type) {
-      throw new AirtableError(
-        `Airtable schema mismatch for ${companies.name}.${fieldId}; expected ${type}`,
-        503,
-      )
-    }
+  if (!db || !companies) {
+    throw new AirtableError('Required Airtable DB or Companies table is missing', 503)
   }
 
-  const approve = companies.fields.find(
-    (item) => item.id === AIRTABLE_IDS.companies.approveStatus,
-  )
-  if (!(approve?.options?.choices ?? []).some((choice) => choice.name === 'New')) {
-    throw new AirtableError('Companies.Approve Status is missing the New choice', 503)
+  requireFields(db, [
+    [AIRTABLE_IDS.db.website, 'url'],
+    [AIRTABLE_IDS.db.name, 'singleLineText'],
+    [AIRTABLE_IDS.db.linkedin, 'url'],
+    [AIRTABLE_IDS.db.country, 'singleLineText'],
+    [AIRTABLE_IDS.db.foundedYear, 'number'],
+    [AIRTABLE_IDS.db.employees, 'number'],
+    [AIRTABLE_IDS.db.industry, 'singleLineText'],
+    [AIRTABLE_IDS.db.keywords, 'multilineText'],
+    [AIRTABLE_IDS.db.description, 'multilineText'],
+    [AIRTABLE_IDS.db.initialStatus, 'singleSelect'],
+    [AIRTABLE_IDS.db.addedToCompanies, 'singleSelect'],
+    [AIRTABLE_IDS.db.addedBy, 'singleSelect'],
+  ])
+  requireFields(companies, COMPANIES_SCHEMA)
+
+  if (!choicesOf(db, AIRTABLE_IDS.db.initialStatus).includes('New')) {
+    throw new AirtableError('DB.Initial status is missing the New choice', 503)
   }
-  const added = companies.fields.find((item) => item.id === AIRTABLE_IDS.companies.addedBy)
-  const addedBy = importAddedByChoices(
-    (added?.options?.choices ?? []).map((choice) => choice.name),
-  )
-  if (!addedBy.length) {
-    throw new AirtableError('Companies.Added by has no available choices', 503)
-  }
+  const addedBy = importAddedByChoices(choicesOf(db, AIRTABLE_IDS.db.addedBy))
+  if (!addedBy.length) throw new AirtableError('DB.Added by has no available choices', 503)
 
   schemaCache = { at: Date.now(), addedBy }
   return { addedBy }
 }
 
-const COMPANY_FIELD_IDS = Object.values(AIRTABLE_IDS.companies)
-
-async function getCompanyState(force = false): Promise<CompanyState> {
-  if (!force && companyCache && Date.now() - companyCache.at < CACHE_MS) {
-    return companyCache
-  }
-  const records = await listAllRecords(AIRTABLE_IDS.companiesTable, COMPANY_FIELD_IDS)
-  const companies = records.map((record) => ({
-    id: record.id,
-    name: field(record, AIRTABLE_IDS.companies.name),
-    website: field(record, AIRTABLE_IDS.companies.website),
-    linkedin: field(record, AIRTABLE_IDS.companies.linkedin),
-  }))
-  const state = {
-    records: companies,
-    fieldsById: new Map(records.map((record) => [record.id, record.fields])),
-  }
-  companyCache = { at: Date.now(), ...state }
-  return state
-}
-
-async function getCompanies(force = false): Promise<CompanyRecord[]> {
-  return (await getCompanyState(force)).records
-}
-
-function uniqueCompanies(groups: Array<CompanyRecord[] | undefined>): CompanyRecord[] {
-  const found = new Map<string, CompanyRecord>()
-  for (const group of groups) {
-    for (const company of group ?? []) found.set(company.id, company)
-  }
-  return [...found.values()].slice(0, 20)
-}
-
-function optionalInteger(value: string, label: string, min: number, max: number): number | null {
-  if (!value.trim()) return null
-  if (!/^\d+$/.test(value.trim())) throw new Error(`${label} must be a whole number`)
-  const parsed = Number(value)
-  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
-    throw new Error(`${label} must be between ${min} and ${max}`)
-  }
-  return parsed
-}
-
-function validateRow(row: CompanyImportRow): string | null {
-  if (!row.companyName.trim()) return 'Company name is required'
-  if (row.website && !normalizeDomain(row.website)) return 'Website URL is invalid'
-  const linkedin = row.linkedin ? normalizeLinkedin(row.linkedin) : ''
-  if (row.linkedin && !/^linkedin\.com\/company\/[^/]+/.test(linkedin)) {
-    return 'A public LinkedIn /company/ URL is required'
-  }
-  try {
-    optionalInteger(row.employees, 'Employees', 0, 10_000_000)
-    optionalInteger(row.foundedYear, 'Founded year', 1700, new Date().getUTCFullYear() + 1)
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error)
-  }
-  return null
-}
-
 function validRow(value: unknown): value is CompanyImportRow {
   if (!value || typeof value !== 'object') return false
   const row = value as Partial<CompanyImportRow>
-  if (
-    typeof row.rowNumber !== 'number' ||
-    !Number.isInteger(row.rowNumber) ||
-    row.rowNumber <= 1
-  ) {
+  if (typeof row.rowNumber !== 'number' || !Number.isInteger(row.rowNumber) || row.rowNumber <= 1) {
     return false
   }
   return (Object.keys(LIMITS) as Array<keyof typeof LIMITS>).every(
@@ -213,87 +137,7 @@ function validRow(value: unknown): value is CompanyImportRow {
   )
 }
 
-function canonicalWebsite(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`)
-  url.protocol = 'https:'
-  return url.toString()
-}
-
-function canonicalLinkedin(value: string): string {
-  const normalized = normalizeLinkedin(value)
-  return normalized ? `https://www.${normalized}/` : ''
-}
-
-export function classifyCompanyRow(row: CompanyImportRow, maps: CompanyMaps) {
-  const linkedinKey = normalizeLinkedin(row.linkedin)
-  const domainKey = normalizeDomain(row.website)
-  const nameKey = normalizeName(row.companyName)
-  const linkedinMatches = linkedinKey ? maps.linkedin.get(linkedinKey) ?? [] : []
-  const domainMatches = domainKey ? maps.domain.get(domainKey) ?? [] : []
-  const nameMatches = nameKey ? maps.name.get(nameKey) ?? [] : []
-  const suggestions = uniqueCompanies([linkedinMatches, domainMatches, nameMatches])
-
-  if (linkedinMatches.length > 1 || domainMatches.length > 1) {
-    return {
-      status: 'company_action' as const,
-      reason: 'ambiguous',
-      suggestions,
-      canCreate: false,
-    }
-  }
-
-  const stable = new Map<string, { company: CompanyRecord; method: 'linkedin' | 'domain' }>()
-  if (linkedinMatches.length === 1) {
-    stable.set(linkedinMatches[0].id, { company: linkedinMatches[0], method: 'linkedin' })
-  }
-  if (domainMatches.length === 1) {
-    stable.set(domainMatches[0].id, { company: domainMatches[0], method: 'domain' })
-  }
-  if (stable.size > 1) {
-    return {
-      status: 'company_action' as const,
-      reason: 'conflict',
-      suggestions,
-      canCreate: false,
-    }
-  }
-  if (stable.size === 1) {
-    const match = [...stable.values()][0]
-    return {
-      status: 'duplicate' as const,
-      reason: 'Company already exists in Airtable',
-      company: match.company,
-      matchMethod: match.method,
-      suggestions,
-      canCreate: false,
-    }
-  }
-
-  if (nameMatches.length) {
-    return {
-      status: 'company_action' as const,
-      reason: 'name_match',
-      suggestions,
-      canCreate: true,
-    }
-  }
-  return { status: 'ready' as const, canCreate: true }
-}
-
-async function metadata() {
-  const schema = await getImportSchema()
-  return json({
-    ok: true,
-    source: 'apollo',
-    mappingVersion: 1,
-    addedBy: schema.addedBy,
-    limits: { maxRows: MAX_ROWS, maxFileBytes: 5_000_000 },
-  })
-}
-
-async function preview(payload: Record<string, unknown>) {
+function rowsOrError(payload: Record<string, unknown>): CompanyImportRow[] | Response {
   if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
     return json({ error: 'rows (non-empty array) is required' }, 400)
   }
@@ -301,37 +145,173 @@ async function preview(payload: Record<string, unknown>) {
     return json({ error: `too many rows (max ${MAX_ROWS})` }, 400)
   }
   if (!payload.rows.every(validRow)) {
-    return json({ error: 'one or more Company preview rows are invalid' }, 400)
+    return json({ error: 'one or more Company rows are invalid' }, 400)
   }
+  return payload.rows as CompanyImportRow[]
+}
 
-  await getImportSchema()
-  const companies = await getCompanies()
-  const maps = buildCompanyMaps(companies)
-  const seenLinkedin = new Set<string>()
-  const seenDomain = new Set<string>()
+/** A whole number in range, or `null` — out-of-range values are left blank, not refused. */
+function optionalInteger(value: string, min: number, max: number): number | null {
+  if (!/^\d+$/.test(value.trim())) return null
+  const parsed = Number(value.trim())
+  return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : null
+}
 
-  const results = (payload.rows as CompanyImportRow[]).map((row) => {
-    const validation = validateRow(row)
-    if (validation) {
-      return { rowNumber: row.rowNumber, status: 'invalid' as const, reason: validation }
-    }
-    const linkedinKey = normalizeLinkedin(row.linkedin)
-    const domainKey = normalizeDomain(row.website)
-    if (
-      (linkedinKey && seenLinkedin.has(linkedinKey)) ||
-      (domainKey && seenDomain.has(domainKey))
-    ) {
+function rowIssue(row: CompanyImportRow): string | null {
+  if (!row.companyName.trim()) return 'Company name is required'
+  const { issue } = parseDomain(row.website)
+  return issue ? DOMAIN_ISSUE_LABEL[issue] : null
+}
+
+const fromDb = (record: DbRecord): CompanyLocation => ({
+  table: 'DB',
+  id: record.id,
+  name: record.name,
+  website: record.website,
+  status: record.status,
+})
+
+const fromCompanies = (record: CompanyRecord): CompanyLocation => ({
+  table: 'Companies',
+  id: record.id,
+  name: record.name,
+  website: record.website,
+  status: record.approveStatus,
+})
+
+interface Directory {
+  maps: CompanyMaps
+  dbByDomain: Map<string, DbRecord[]>
+  dbByName?: Map<string, DbRecord[]>
+}
+
+/** Existing homes of this domain in DB and Companies, DB first. */
+function domainMatches(domain: string, directory: Directory): CompanyLocation[] {
+  return [
+    ...(directory.dbByDomain.get(domain) ?? []).map(fromDb),
+    ...(directory.maps.domain.get(domain) ?? []).map(fromCompanies),
+  ]
+}
+
+function nameMatches(name: string, directory: Directory): CompanyLocation[] {
+  const key = normalizeName(name)
+  if (!key) return []
+  return [
+    ...(directory.dbByName?.get(key) ?? []).map(fromDb),
+    ...(directory.maps.name.get(key) ?? []).map(fromCompanies),
+  ]
+}
+
+/**
+ * The classification both preview and commit apply, in order: invalid row,
+ * repeat of an earlier row in the same upload, domain already in DB or
+ * Companies, name-only match (a warning), new.
+ */
+export function classifyCompanyRows(
+  rows: CompanyImportRow[],
+  directory: Directory,
+): CompanyPreviewResult[] {
+  const firstRowByDomain = new Map<string, CompanyImportRow>()
+  return rows.map((row) => {
+    const issue = rowIssue(row)
+    const domain = parseDomain(row.website).domain
+    if (issue) return { rowNumber: row.rowNumber, status: 'invalid', domain, reason: issue }
+
+    const earlier = firstRowByDomain.get(domain)
+    if (earlier) {
       return {
         rowNumber: row.rowNumber,
-        status: 'duplicate' as const,
-        reason: 'Duplicate company in this CSV',
+        status: 'duplicate',
+        domain,
+        reason: `Repeats row ${earlier.rowNumber} of this file`,
+        matches: [{
+          table: 'File',
+          rowNumber: earlier.rowNumber,
+          name: earlier.companyName,
+          website: earlier.website,
+          status: '',
+        }],
       }
     }
-    if (linkedinKey) seenLinkedin.add(linkedinKey)
-    if (domainKey) seenDomain.add(domainKey)
-    return { rowNumber: row.rowNumber, ...classifyCompanyRow(row, maps) }
-  })
+    firstRowByDomain.set(domain, row)
 
+    const existing = domainMatches(domain, directory)
+    if (existing.length) {
+      return {
+        rowNumber: row.rowNumber,
+        status: 'duplicate',
+        domain,
+        reason: 'This domain is already in Airtable',
+        matches: existing,
+      }
+    }
+    const byName = nameMatches(row.companyName, directory)
+    if (byName.length) {
+      return {
+        rowNumber: row.rowNumber,
+        status: 'name_match',
+        domain,
+        reason: 'A company with the same name but a different domain is already in Airtable',
+        matches: byName,
+      }
+    }
+    return { rowNumber: row.rowNumber, status: 'ready', domain }
+  })
+}
+
+export function dbFields(row: CompanyImportRow, addedBy: string): Record<string, unknown> {
+  const fields: Record<string, unknown> = {
+    [AIRTABLE_IDS.db.website]: parseDomain(row.website).domain,
+    [AIRTABLE_IDS.db.name]: row.companyName.trim(),
+    [AIRTABLE_IDS.db.initialStatus]: 'New',
+    [AIRTABLE_IDS.db.addedBy]: addedBy,
+  }
+  const strings = [
+    [AIRTABLE_IDS.db.linkedin, canonicalCompanyLinkedin(row.linkedin)],
+    [AIRTABLE_IDS.db.country, row.country],
+    [AIRTABLE_IDS.db.industry, row.industry],
+    [AIRTABLE_IDS.db.keywords, row.keywords],
+    [AIRTABLE_IDS.db.description, row.description],
+  ] as const
+  for (const [fieldId, value] of strings) {
+    if (value.trim()) fields[fieldId] = value.trim()
+  }
+  const employees = optionalInteger(row.employees, 0, 10_000_000)
+  const foundedYear = optionalInteger(row.foundedYear, 1700, new Date().getUTCFullYear() + 1)
+  if (employees !== null) fields[AIRTABLE_IDS.db.employees] = employees
+  if (foundedYear !== null) fields[AIRTABLE_IDS.db.foundedYear] = foundedYear
+  return fields
+}
+
+function uploadDomains(rows: CompanyImportRow[]): string[] {
+  return rows.map((row) => parseDomain(row.website).domain).filter(Boolean)
+}
+
+async function metadata() {
+  const schema = await getImportSchema()
+  return json({
+    ok: true,
+    target: 'db',
+    addedBy: schema.addedBy,
+    limits: { maxRows: MAX_ROWS, maxFileBytes: 5_000_000 },
+  })
+}
+
+async function preview(payload: Record<string, unknown>) {
+  const rows = rowsOrError(payload)
+  if (rows instanceof Response) return rows
+
+  await getImportSchema()
+  const [companies, dbByDomain, dbByName] = await Promise.all([
+    getCompanies(),
+    findDbByDomains(uploadDomains(rows)),
+    findDbByNames(rows.map((row) => row.companyName)),
+  ])
+  const results = classifyCompanyRows(rows, {
+    maps: buildCompanyMaps(companies),
+    dbByDomain,
+    dbByName,
+  })
   return json({
     ok: true,
     results,
@@ -342,367 +322,59 @@ async function preview(payload: Record<string, unknown>) {
   })
 }
 
-function validCommitRow(value: unknown): value is CompanyCommitRow {
-  if (!validRow(value)) return false
-  const row = value as Partial<CompanyCommitRow>
-  return (
-    typeof row.allowNameDuplicate === 'boolean' &&
-    (row.existingCompanyId === undefined || /^rec[a-zA-Z0-9]{14}$/.test(row.existingCompanyId))
-  )
-}
-
-function companyFields(row: CompanyImportRow, addedBy: string): Record<string, unknown> {
-  const fields: Record<string, unknown> = {
-    [AIRTABLE_IDS.companies.name]: row.companyName.trim(),
-    [AIRTABLE_IDS.companies.approveStatus]: 'New',
-    [AIRTABLE_IDS.companies.addedBy]: addedBy,
-  }
-  const strings = [
-    [AIRTABLE_IDS.companies.mailingName, row.mailingName],
-    [AIRTABLE_IDS.companies.website, row.website ? canonicalWebsite(row.website) : ''],
-    [AIRTABLE_IDS.companies.linkedin, canonicalLinkedin(row.linkedin)],
-    [AIRTABLE_IDS.companies.country, row.country],
-    [AIRTABLE_IDS.companies.industry, row.industry],
-    [AIRTABLE_IDS.companies.keywords, row.keywords],
-    [AIRTABLE_IDS.companies.description, row.description],
-  ] as const
-  for (const [fieldId, value] of strings) {
-    if (value.trim()) fields[fieldId] = value.trim()
-  }
-  const employees = optionalInteger(row.employees, 'Employees', 0, 10_000_000)
-  const foundedYear = optionalInteger(
-    row.foundedYear,
-    'Founded year',
-    1700,
-    new Date().getUTCFullYear() + 1,
-  )
-  if (employees !== null) fields[AIRTABLE_IDS.companies.employees] = employees
-  if (foundedYear !== null) fields[AIRTABLE_IDS.companies.foundedYear] = foundedYear
-  return fields
-}
-
-function isBlankAirtableValue(value: unknown): boolean {
-  return (
-    value === undefined ||
-    value === null ||
-    (typeof value === 'string' && !value.trim()) ||
-    (Array.isArray(value) && value.length === 0)
-  )
-}
-
-export function buildBlankCompanyFields(
-  row: CompanyImportRow,
-  addedBy: string,
-  currentFields: Record<string, unknown>,
-): Record<string, unknown> {
-  const desired = companyFields(row, addedBy)
-  delete desired[AIRTABLE_IDS.companies.name]
-  return Object.fromEntries(
-    Object.entries(desired).filter(([fieldId]) => isBlankAirtableValue(currentFields[fieldId])),
-  )
-}
-
-export function existingCompanyIdentityConflict(
-  row: CompanyImportRow,
-  existingCompanyId: string,
-  maps: CompanyMaps,
-): string | null {
-  const checks = [
-    ['LinkedIn URL', normalizeLinkedin(row.linkedin), maps.linkedin],
-    ['website domain', normalizeDomain(row.website), maps.domain],
-  ] as const
-  for (const [label, key, map] of checks) {
-    if (!key) continue
-    const conflicting = (map.get(key) ?? []).some((company) => company.id !== existingCompanyId)
-    if (conflicting) return `Apollo ${label} belongs to a different Airtable Company`
-  }
-  return null
-}
-
-function addCompanyToMaps(company: CompanyRecord, maps: CompanyMaps) {
-  const keys = [
-    [maps.linkedin, normalizeLinkedin(company.linkedin)],
-    [maps.domain, normalizeDomain(company.website)],
-    [maps.name, normalizeName(company.name)],
-  ] as const
-  for (const [map, key] of keys) {
-    if (!key) continue
-    map.set(key, [...(map.get(key) ?? []), company])
-  }
-}
-
 async function commit(payload: Record<string, unknown>) {
   const addedBy = asString(payload.addedBy)
-  if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
-    return json({ error: 'rows (non-empty array) is required' }, 400)
-  }
-  if (payload.rows.length > MAX_ROWS) {
-    return json({ error: `too many rows (max ${MAX_ROWS})` }, 400)
-  }
-  if (!payload.rows.every(validCommitRow)) {
-    return json({ error: 'one or more Company commit rows are invalid' }, 400)
-  }
+  const rows = rowsOrError(payload)
+  if (rows instanceof Response) return rows
 
   const schema = await getImportSchema(true)
   if (!schema.addedBy.includes(addedBy)) {
-    return json({ error: 'Added by must be one of the current Airtable choices' }, 400)
+    return json({ error: 'Added by must be one of the current DB choices' }, 400)
   }
 
-  const companyState = await getCompanyState(true)
-  const maps = buildCompanyMaps(companyState.records)
-  const companiesById = new Map(companyState.records.map((company) => [company.id, company]))
+  // DB has no uniqueness constraint, so the duplicate check is re-run against
+  // fresh reads immediately before creating. Preview results are never trusted.
+  const [companies, dbByDomain] = await Promise.all([
+    getCompanies(true),
+    findDbByDomains(uploadDomains(rows)),
+  ])
+  const classified = classifyCompanyRows(rows, { maps: buildCompanyMaps(companies), dbByDomain })
+
   const results: CommitResult[] = []
-  const valid: Array<{ row: CompanyCommitRow; fields: Record<string, unknown> }> = []
-  const enrichments: Array<{
-    row: CompanyCommitRow
-    companyId: string
-    fields: Record<string, unknown>
-  }> = []
-  const seenLinkedin = new Set<string>()
-  const seenDomain = new Set<string>()
-
-  for (const row of payload.rows as CompanyCommitRow[]) {
-    const validation = validateRow(row)
-    if (validation) {
-      results.push({ rowNumber: row.rowNumber, status: 'failed', error: validation })
-      continue
-    }
-    const linkedinKey = normalizeLinkedin(row.linkedin)
-    const domainKey = normalizeDomain(row.website)
-    if (
-      (linkedinKey && seenLinkedin.has(linkedinKey)) ||
-      (domainKey && seenDomain.has(domainKey))
-    ) {
+  const creatable: CompanyImportRow[] = []
+  classified.forEach((result, index) => {
+    if (result.status === 'invalid') {
+      results.push({ rowNumber: result.rowNumber, status: 'failed', domain: result.domain, error: result.reason })
+    } else if (result.status === 'duplicate') {
       results.push({
-        rowNumber: row.rowNumber,
+        rowNumber: result.rowNumber,
         status: 'duplicate',
-        error: 'Duplicate company in this commit',
+        domain: result.domain,
+        error: result.reason,
+        matches: result.matches,
       })
-      continue
+    } else {
+      creatable.push(rows[index])
     }
-    if (linkedinKey) seenLinkedin.add(linkedinKey)
-    if (domainKey) seenDomain.add(domainKey)
+  })
 
-    if (row.existingCompanyId) {
-      const existing = companiesById.get(row.existingCompanyId)
-      const currentFields = companyState.fieldsById.get(row.existingCompanyId)
-      if (!existing || !currentFields) {
-        results.push({
-          rowNumber: row.rowNumber,
-          status: 'failed',
-          error: 'The selected Airtable Company no longer exists',
-        })
-        continue
-      }
-      const conflict = existingCompanyIdentityConflict(row, existing.id, maps)
-      if (conflict) {
-        results.push({
-          rowNumber: row.rowNumber,
-          status: 'failed',
-          companyId: existing.id,
-          error: conflict,
-        })
-        continue
-      }
-      const fields = buildBlankCompanyFields(row, addedBy, currentFields)
-      if (!Object.keys(fields).length) {
-        results.push({
-          rowNumber: row.rowNumber,
-          status: 'duplicate',
-          companyId: existing.id,
-          error: 'Using existing Company; it has no blank Apollo fields to fill',
-        })
-        continue
-      }
-      enrichments.push({ row, companyId: existing.id, fields })
-      continue
-    }
-
-    const classification = classifyCompanyRow(row, maps)
-    if (classification.status === 'duplicate') {
-      results.push({
-        rowNumber: row.rowNumber,
-        status: 'duplicate',
-        companyId: classification.company.id,
-        error: classification.reason,
-      })
-      continue
-    }
-    if (
-      classification.status === 'company_action' &&
-      (classification.reason !== 'name_match' || !row.allowNameDuplicate)
-    ) {
-      results.push({
-        rowNumber: row.rowNumber,
-        status: 'duplicate',
-        companyId: classification.suggestions[0]?.id,
-        error:
-          classification.reason === 'name_match'
-            ? 'A Company with this name now exists in Airtable'
-            : 'Company identifiers now match conflicting or ambiguous Airtable records',
-      })
-      continue
-    }
-    valid.push({ row, fields: companyFields(row, addedBy) })
+  const outcomes = await createAll(AIRTABLE_IDS.dbTable, creatable, (row) => dbFields(row, addedBy))
+  for (const outcome of outcomes) {
+    const domain = parseDomain(outcome.item.website).domain
+    results.push(
+      outcome.id
+        ? { rowNumber: outcome.item.rowNumber, status: 'created', domain, recordId: outcome.id }
+        : { rowNumber: outcome.item.rowNumber, status: 'failed', domain, error: outcome.error },
+    )
   }
 
-  for (let index = 0; index < enrichments.length; index += 10) {
-    const chunk = enrichments.slice(index, index + 10)
-    try {
-      const updated = await updateRecords(
-        AIRTABLE_IDS.companiesTable,
-        chunk.map((item) => ({ id: item.companyId, fields: item.fields })),
-        { typecast: shouldTypecastAddedBy(addedBy) },
-      )
-      chunk.forEach((item, itemIndex) => {
-        const record = updated[itemIndex]
-        results.push(
-          record
-            ? {
-                rowNumber: item.row.rowNumber,
-                status: 'updated',
-                companyId: item.companyId,
-              }
-            : {
-                rowNumber: item.row.rowNumber,
-                status: 'failed',
-                companyId: item.companyId,
-                error: 'Airtable did not return the updated record',
-              },
-        )
-      })
-    } catch (error) {
-      const canIsolate =
-        error instanceof AirtableError &&
-        error.status >= 400 &&
-        error.status < 500 &&
-        error.status !== 429
-      if (!canIsolate) {
-        for (const item of chunk) {
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'failed',
-            companyId: item.companyId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-        continue
-      }
-      for (const item of chunk) {
-        try {
-          const [updated] = await updateRecords(
-            AIRTABLE_IDS.companiesTable,
-            [{ id: item.companyId, fields: item.fields }],
-            { typecast: shouldTypecastAddedBy(addedBy) },
-          )
-          if (!updated) throw new Error('Airtable did not return the updated record')
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'updated',
-            companyId: item.companyId,
-          })
-        } catch (singleError) {
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'failed',
-            companyId: item.companyId,
-            error: singleError instanceof Error ? singleError.message : String(singleError),
-          })
-        }
-      }
-    }
-  }
-
-  for (let index = 0; index < valid.length; index += 10) {
-    const chunk = valid.slice(index, index + 10)
-    try {
-      const created = await createRecords(
-        AIRTABLE_IDS.companiesTable,
-        chunk.map((item) => item.fields),
-        { typecast: shouldTypecastAddedBy(addedBy) },
-      )
-      chunk.forEach((item, itemIndex) => {
-        const record = created[itemIndex]
-        if (!record) {
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'failed',
-            error: 'Airtable did not return the created record',
-          })
-          return
-        }
-        results.push({
-          rowNumber: item.row.rowNumber,
-          status: 'created',
-          companyId: record.id,
-        })
-        addCompanyToMaps(
-          {
-            id: record.id,
-            name: item.row.companyName,
-            website: item.row.website,
-            linkedin: item.row.linkedin,
-          },
-          maps,
-        )
-      })
-    } catch (error) {
-      const canIsolate =
-        error instanceof AirtableError &&
-        error.status >= 400 &&
-        error.status < 500 &&
-        error.status !== 429
-      if (!canIsolate) {
-        for (const item of chunk) {
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'failed',
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-        continue
-      }
-      for (const item of chunk) {
-        try {
-          const [created] = await createRecords(
-            AIRTABLE_IDS.companiesTable,
-            [item.fields],
-            { typecast: shouldTypecastAddedBy(addedBy) },
-          )
-          if (!created) throw new Error('Airtable did not return the created record')
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'created',
-            companyId: created.id,
-          })
-          addCompanyToMaps(
-            {
-              id: created.id,
-              name: item.row.companyName,
-              website: item.row.website,
-              linkedin: item.row.linkedin,
-            },
-            maps,
-          )
-        } catch (singleError) {
-          results.push({
-            rowNumber: item.row.rowNumber,
-            status: 'failed',
-            error: singleError instanceof Error ? singleError.message : String(singleError),
-          })
-        }
-      }
-    }
-  }
-
-  companyCache = null
   results.sort((a, b) => a.rowNumber - b.rowNumber)
   const counts = results.reduce(
     (summary, result) => {
       summary[result.status]++
       return summary
     },
-    { created: 0, updated: 0, duplicate: 0, failed: 0 },
+    { created: 0, duplicate: 0, failed: 0 },
   )
   return json({ ok: true, results, counts })
 }
@@ -717,10 +389,7 @@ export async function handleCompanyImport(
     if (action === 'company_commit') return await commit(payload)
     return json({ error: 'unknown Company import action' }, 400)
   } catch (error) {
-    if (error instanceof AirtableError) {
-      const status = error.status >= 400 && error.status < 600 ? error.status : 502
-      return json({ error: error.message, retryable: error.retryable }, status)
-    }
-    return json({ error: error instanceof Error ? error.message : String(error) }, 500)
+    return errorResponse(error)
   }
 }
+

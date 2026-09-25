@@ -1,219 +1,174 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildCompanyRows,
-  buildContactRows,
-  buildUnifiedImportRows,
-  companyMappingErrors,
-  mappingErrors,
+  countryFromLocation,
+  detectCsvKind,
+  lenientInteger,
+  lenientYear,
   parseCompanyCsvFile,
-  parseCsvFile,
-  suggestApolloCompanyMapping,
-  suggestApolloMapping,
+  parseLeadCsvFile,
 } from '../src/lib/csvImport'
+import {
+  PRIVATE_VALUES,
+  companiesCsv,
+  companyFixture,
+  csvFile,
+  leadsCsv,
+  personFixture,
+} from './fixtures/csvExports'
 
-const APOLLO_HEADERS = [
-  'First Name',
-  'Last Name',
-  'Title',
-  'Company Name',
-  'Person Linkedin Url',
-  'Website',
-  'Company Linkedin Url',
-]
-
-const APOLLO_COMPANY_HEADERS = [
-  'Company Name',
-  'Company Name for Emails',
-  '# Employees',
-  'Industry',
-  'Website',
-  'Company Linkedin Url',
-  'Company Country',
-  'Keywords',
-  'Apollo Record Id',
-  'Short Description',
-  'Founded Year',
-  'Subsidiary of (Organization ID)',
-]
-
-describe('Apollo CSV import parsing', () => {
-  it('detects the fixed Apollo mapping case-insensitively', () => {
-    const mapping = suggestApolloMapping(APOLLO_HEADERS.map((header) => header.toUpperCase()))
-    expect(mapping.personLinkedin).toBe('PERSON LINKEDIN URL')
-    expect(mapping.companyLinkedin).toBe('COMPANY LINKEDIN URL')
-    expect(mapping.companyName).toBe('COMPANY NAME')
+describe('companies export parsing', () => {
+  it('maps the export columns to the DB allowlist, including multi-line cells', async () => {
+    const document = await parseCompanyCsvFile(csvFile(companiesCsv([companyFixture()])))
+    expect(document.kind).toBe('companies')
+    expect(document.rows).toEqual([
+      {
+        rowNumber: 2,
+        companyName: 'Northwind Health',
+        website: 'NorthwindHealth.example',
+        linkedin: 'https://www.linkedin.com/company/109209384',
+        country: 'Germany',
+        employees: '42',
+        foundedYear: '2019',
+        industry: 'Hospital & Health Care',
+        keywords: 'telehealth, diagnostics',
+        description: 'Invented company, used only in tests.',
+      },
+    ])
   })
 
-  it('parses quoted cells and builds only the allowlisted contact shape', async () => {
-    const csv = [
-      APOLLO_HEADERS.join(','),
-      [
-        'Ada',
-        'Lovelace',
-        '"Founder, CEO"',
-        'Analytical Engines',
-        'https://www.linkedin.com/in/ada-lovelace/',
-        'https://example.com',
-        'https://www.linkedin.com/company/analytical-engines/',
-      ].join(','),
-    ].join('\r\n')
-    const document = await parseCsvFile(new File([csv], 'apollo.csv', { type: 'text/csv' }))
-    const [row] = buildContactRows(document, document.mapping)
-
-    expect(row).toEqual({
-      rowNumber: 2,
-      personLinkedin: 'https://www.linkedin.com/in/ada-lovelace/',
-      firstName: 'Ada',
-      lastName: 'Lovelace',
-      fullName: 'Ada Lovelace',
-      title: 'Founder, CEO',
-      companyName: 'Analytical Engines',
-      companyWebsite: 'https://example.com',
-      companyLinkedin: 'https://www.linkedin.com/company/analytical-engines/',
-    })
-  })
-
-  it('rejects an Ensun company export', async () => {
-    const csv = 'Name,URI,LinkedIn\nAcme,https://acme.test,https://linkedin.com/company/acme\n'
-    await expect(
-      parseCsvFile(new File([csv], 'ensun.csv', { type: 'text/csv' })),
-    ).rejects.toThrow('Ensun')
-  })
-
-  it('rejects duplicate source mappings', () => {
-    const mapping = suggestApolloMapping(APOLLO_HEADERS)
-    mapping.title = mapping.firstName
-    expect(mappingErrors(mapping).join(' ')).toContain('only be mapped once')
-  })
-})
-
-describe('Apollo Company CSV import parsing', () => {
-  it('detects and builds every compatible Companies field', async () => {
-    const csv = [
-      APOLLO_COMPANY_HEADERS.join(','),
-      [
-        'Analytical Engines',
-        'Analytical Engines',
-        '35',
-        'Computer Software',
-        'https://analytical.test',
-        'http://www.linkedin.com/company/analytical-engines/',
-        'United Kingdom',
-        `"${'analysis, '.repeat(220)}"`,
-        '66aabbccddeeff0011223344',
-        '"A company with a detailed, multiline description."',
-        '1843',
-        '',
-      ].join(','),
-    ].join('\r\n')
+  it('falls back to the website when Company Domain is unusable, and blanks a 0 year', async () => {
     const document = await parseCompanyCsvFile(
-      new File([csv], 'apollo-accounts.csv', { type: 'text/csv' }),
+      csvFile(
+        companiesCsv([
+          companyFixture({
+            'Company Domain': '',
+            'Company Website URL': 'http://www.Fallback.example/',
+            'Company Year Founded': '0',
+            'Company Location': '',
+          }),
+        ]),
+      ),
     )
-    const [row] = buildCompanyRows(document, document.mapping)
-
-    expect(row.companyName).toBe('Analytical Engines')
-    expect(row.mailingName).toBe('Analytical Engines')
-    expect(row.employees).toBe('35')
-    expect(row.foundedYear).toBe('1843')
-    expect(row.keywords.length).toBeGreaterThan(1_000)
-    expect(row).not.toHaveProperty('apolloRecordId')
+    expect(document.rows[0]).toMatchObject({
+      website: 'http://www.Fallback.example/',
+      foundedYear: '',
+      country: 'Germany',
+    })
   })
 
-  it('detects the fixed Accounts mapping case-insensitively', () => {
-    const mapping = suggestApolloCompanyMapping(
-      APOLLO_COMPANY_HEADERS.map((header) => header.toUpperCase()),
+  it('never carries unmapped columns (revenue, headcounts, logo) into a row', async () => {
+    const document = await parseCompanyCsvFile(csvFile(companiesCsv([companyFixture()])))
+    const serialized = JSON.stringify(document.rows)
+    for (const value of PRIVATE_VALUES) expect(serialized).not.toContain(value)
+  })
+
+  it('accepts an older Apollo Accounts export through the aliases', async () => {
+    const csv = [
+      'Company Name,Website,Company Linkedin Url,Company Country,# Employees,Industry,Keywords,Short Description,Founded Year,Apollo Record Id',
+      'Analytical Engines,https://analytical.example,http://www.linkedin.com/company/analytical-engines/,United Kingdom,"1,200",Computer Software,"analysis, engines",A computing company.,1843,abc',
+    ].join('\n')
+    const [row] = (await parseCompanyCsvFile(csvFile(csv))).rows
+    expect(row).toMatchObject({
+      companyName: 'Analytical Engines',
+      website: 'https://analytical.example',
+      country: 'United Kingdom',
+      employees: '1200',
+      foundedYear: '1843',
+      keywords: 'analysis, engines',
+    })
+  })
+
+  it('rejects a leads export with a pointer to the right tab', async () => {
+    const csv = leadsCsv([{ person: personFixture(), company: companyFixture() }])
+    await expect(parseCompanyCsvFile(csvFile(csv))).rejects.toThrow('Leads → Contacts tab')
+  })
+
+  it('rejects a file that is neither export', async () => {
+    await expect(parseCompanyCsvFile(csvFile('Name,URI\nAcme,https://acme.example\n'))).rejects.toThrow(
+      '“Company Name” is missing',
     )
-    expect(mapping.companyName).toBe('COMPANY NAME')
-    expect(mapping.mailingName).toBe('COMPANY NAME FOR EMAILS')
-    expect(mapping.description).toBe('SHORT DESCRIPTION')
-  })
-
-  it('rejects an Apollo people export in Company mode', async () => {
-    const csv = `${APOLLO_HEADERS.join(',')}\nAda,Lovelace,Founder,Analytical Engines,https://linkedin.com/in/ada,https://analytical.test,https://linkedin.com/company/analytical\n`
-    await expect(
-      parseCompanyCsvFile(new File([csv], 'apollo-people.csv', { type: 'text/csv' })),
-    ).rejects.toThrow('Leads / Contacts')
-  })
-
-  it('requires Company name and rejects duplicate source mappings', () => {
-    const mapping = suggestApolloCompanyMapping(APOLLO_COMPANY_HEADERS)
-    mapping.companyName = ''
-    expect(companyMappingErrors(mapping).join(' ')).toContain('Company name is required')
-    mapping.companyName = mapping.website
-    expect(companyMappingErrors(mapping).join(' ')).toContain('only be mapped once')
   })
 })
 
-describe('Unified Apollo People import parsing', () => {
-  const headers = [
-    ...APOLLO_HEADERS,
-    'Company Name for Emails',
-    '# Employees',
-    'Industry',
-    'Company Country',
-    'Keywords',
-    'Apollo Account Id',
-    'Email',
-    'Mobile Phone',
-    'Annual Revenue',
-  ]
+describe('leads export parsing', () => {
+  it('maps person and company columns and trims the title', async () => {
+    const csv = leadsCsv([{ person: personFixture(), company: companyFixture() }])
+    const document = await parseLeadCsvFile(csvFile(csv))
+    expect(document.kind).toBe('leads')
+    expect(document.rows).toEqual([
+      {
+        rowNumber: 2,
+        personLinkedin: 'https://www.linkedin.com/in/avery-example/',
+        firstName: 'Avery',
+        lastName: 'Example',
+        fullName: 'Avery Example',
+        title: 'Founder & CEO',
+        companyName: 'Northwind Health',
+        companyWebsite: 'NorthwindHealth.example',
+        companyLinkedin: 'https://www.linkedin.com/company/109209384',
+      },
+    ])
+  })
 
-  const sourceRow = (firstName: string, personSlug: string, companyName = 'Analytical Engines') => [
-    firstName,
-    'Lovelace',
-    'Founder',
-    companyName,
-    `https://linkedin.com/in/${personSlug}`,
-    'https://analytical.test',
-    'https://linkedin.com/company/analytical-engines',
-    'Analytical Engines',
-    '35',
-    'Computer Software',
-    'United Kingdom',
-    '"analysis, engines"',
-    'apollo-account-1',
-    'private@example.test',
-    '+1 555 0100',
-    '1000000',
-  ]
+  it('drops email, email status, phone and profile summary at the allowlist', async () => {
+    const csv = leadsCsv([{ person: personFixture(), company: companyFixture() }])
+    const serialized = JSON.stringify((await parseLeadCsvFile(csvFile(csv))).rows)
+    for (const value of PRIVATE_VALUES) expect(serialized).not.toContain(value)
+    expect(serialized).not.toContain('othermail')
+  })
 
-  it('groups repeated People rows into one allowlisted Company candidate', async () => {
+  it('accepts an older Apollo People export through the aliases', async () => {
     const csv = [
-      headers.join(','),
-      sourceRow('Ada', 'ada').join(','),
-      sourceRow('Grace', 'grace').join(','),
-    ].join('\n')
-    const document = await parseCsvFile(new File([csv], 'apollo-people.csv'))
-    const result = buildUnifiedImportRows(document, document.mapping)
-
-    expect(result.contacts).toHaveLength(2)
-    expect(result.companies).toHaveLength(1)
-    expect(result.companies[0]).toMatchObject({
-      accountId: 'apollo-account-1',
-      sourceRowNumbers: [2, 3],
-      companyName: 'Analytical Engines',
-      employees: '35',
+      'First Name,Last Name,Title,Company Name,Person Linkedin Url,Website,Company Linkedin Url,Email',
+      'Ada,Lovelace,"Founder, CEO",Analytical Engines,https://www.linkedin.com/in/ada-lovelace/,https://analytical.example,https://www.linkedin.com/company/analytical-engines/,ada@example.test',
+    ].join('\r\n')
+    const [row] = (await parseLeadCsvFile(csvFile(csv))).rows
+    expect(row).toMatchObject({
+      personLinkedin: 'https://www.linkedin.com/in/ada-lovelace/',
+      title: 'Founder, CEO',
+      companyWebsite: 'https://analytical.example',
     })
-    expect(result.contacts[0]).not.toHaveProperty('Email')
-    expect(result.companies[0]).not.toHaveProperty('annualRevenue')
+    expect(JSON.stringify(row)).not.toContain('ada@example.test')
   })
 
-  it('fails closed when Apollo Account Id is missing', async () => {
-    const row = sourceRow('Ada', 'ada')
-    row[headers.indexOf('Apollo Account Id')] = ''
-    const document = await parseCsvFile(
-      new File([[headers.join(','), row.join(',')].join('\n')], 'apollo-people.csv'),
+  it('rejects a companies export with a pointer to the right tab', async () => {
+    await expect(parseLeadCsvFile(csvFile(companiesCsv([companyFixture()])))).rejects.toThrow(
+      'Companies → DB tab',
     )
-    expect(() => buildUnifiedImportRows(document, document.mapping)).toThrow('missing Apollo Account Id')
+  })
+})
+
+describe('shared parsing rules', () => {
+  it('detects the file kind from the header signature', () => {
+    expect(detectCsvKind(['Company Name', 'Company Domain'])).toBe('companies')
+    expect(detectCsvKind(['First Name', 'Company Name'])).toBe('leads')
+    expect(detectCsvKind(['Person Linkedin Url'])).toBe('leads')
+    expect(detectCsvKind(['Name', 'URI'])).toBeNull()
   })
 
-  it('fails the group when repeated rows contain conflicting Company data', async () => {
-    const csv = [
-      headers.join(','),
-      sourceRow('Ada', 'ada').join(','),
-      sourceRow('Grace', 'grace', 'Different Company').join(','),
-    ].join('\n')
-    const document = await parseCsvFile(new File([csv], 'apollo-people.csv'))
-    expect(() => buildUnifiedImportRows(document, document.mapping)).toThrow('conflicting Company name')
+  it('parses numbers leniently', () => {
+    expect(lenientInteger('1,234')).toBe('1234')
+    expect(lenientInteger('12.0')).toBe('12')
+    expect(lenientInteger('0.0 ONE')).toBe('')
+    expect(lenientInteger('12.5')).toBe('')
+    expect(lenientYear('0')).toBe('')
+    expect(lenientYear('1699')).toBe('')
+    expect(lenientYear('2019')).toBe('2019')
+    expect(lenientYear(String(new Date().getUTCFullYear() + 5))).toBe('')
+  })
+
+  it('takes the country from the last location segment', () => {
+    expect(countryFromLocation('Austin, Texas, United States')).toBe('United States')
+    expect(countryFromLocation('Germany')).toBe('Germany')
+    expect(countryFromLocation('')).toBe('')
+  })
+
+  it('rejects duplicate headers, a ragged row and an oversized file', async () => {
+    await expect(parseCompanyCsvFile(csvFile('Company Name,company name\na,b\n'))).rejects.toThrow('duplicate header')
+    await expect(parseCompanyCsvFile(csvFile('Company Name,Company Domain\na,b\nc,d,e\n'))).rejects.toThrow('row 3 has 3 columns')
+    const rows = Array.from({ length: 501 }, (_, index) => `Co ${index},co${index}.example`)
+    await expect(
+      parseCompanyCsvFile(csvFile(['Company Name,Company Domain', ...rows].join('\n'))),
+    ).rejects.toThrow('limit is 500')
   })
 })
