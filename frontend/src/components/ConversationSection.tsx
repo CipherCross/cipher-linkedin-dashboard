@@ -4,8 +4,8 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '../ui'
 
 /**
- * A collapsible band under the conversation thread — the AI coach and the lead
- * notes. Collapsed it is one header row; open, it takes its full height and the
+ * A collapsible band in the conversation drawer — the lead notes under the
+ * header, and the AI coach under the thread. Collapsed it is one header row; open, it takes its full height and the
  * drawer body scrolls to it. (A 40%-capped band that scrolled on its own could
  * be clipped below the drawer's edge on a short window, with nothing to scroll.)
  * The thread above keeps its own minimum height, so it never disappears.

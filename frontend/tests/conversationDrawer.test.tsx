@@ -213,14 +213,34 @@ describe('the conversation drawer', () => {
     expect(saveReview).toHaveBeenLastCalledWith(expect.objectContaining({ expected_review_revision: 4 }))
   })
 
-  it('makes the coach and the notes disclosures', async () => {
+  it('makes the coach a disclosure', async () => {
     await paint()
     const coach = screen.getByRole('button', { name: 'AI coach' })
     expect(coach.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(coach)
     expect(coach.getAttribute('aria-expanded')).toBe('true')
     expect(document.getElementById(coach.getAttribute('aria-controls')!)).not.toBeNull()
-    expect(screen.getByRole('button', { name: 'Notes' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('puts the notes under the header, open, above the thread', async () => {
+    await paint()
+    const notes = screen.getByRole('button', { name: /^Notes/ })
+    expect(notes.getAttribute('aria-expanded')).toBe('true')
+    const thread = screen.getByRole('region', { name: 'Messages' })
+    expect(notes.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Add a note' })).toBeTruthy()
+  })
+
+  it('keeps the notes beside the follow-up view', async () => {
+    onClose = vi.fn<() => void>()
+    render(
+      <MemoryRouter>
+        <ConversationDrawer lead={LEAD} initialMode="follow_up" onClose={onClose} />
+      </MemoryRouter>,
+    )
+    await act(async () => {})
+    expect(screen.getByRole('region', { name: 'Follow-up' })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Add a note' })).toBeTruthy()
   })
 
   describe('closing over unsaved work', () => {
@@ -266,6 +286,29 @@ describe('the conversation drawer', () => {
       fireEvent.click(within(prompt()!).getByRole('button', { name: 'Discard changes' }))
       expect(onClose).toHaveBeenCalledTimes(1)
       expect(await screen.findByText('Campaign page')).toBeTruthy()
+    })
+
+    it('asks before closing over a typed, unadded note, but not before switching views', async () => {
+      await paint()
+      fireEvent.change(screen.getByRole('textbox', { name: 'Add a note' }), {
+        target: { value: 'Idea for the next follow-up' },
+      })
+
+      // The notes stay mounted in the import view, so switching loses nothing.
+      fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+      expect(prompt()).toBeNull()
+      expect((screen.getByRole('textbox', { name: 'Add a note' }) as HTMLTextAreaElement).value)
+        .toBe('Idea for the next follow-up')
+
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Ada Lovelace' }), { key: 'Escape' })
+      expect(prompt()).not.toBeNull()
+      expect(onClose).not.toHaveBeenCalled()
+      keepEditing()
+      expect(prompt()).toBeNull()
+
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Ada Lovelace' }), { key: 'Escape' })
+      fireEvent.click(within(prompt()!).getByRole('button', { name: 'Discard changes' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
     })
 
     it('closes at once when the import view holds nothing', async () => {

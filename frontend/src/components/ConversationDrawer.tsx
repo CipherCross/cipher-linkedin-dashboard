@@ -108,6 +108,9 @@ export function ConversationDrawer({
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
   const [importDirty, setImportDirty] = useState(false)
+  // A typed note that has not been added. The notes panel stays mounted in
+  // every view, so only closing or navigating away can lose it.
+  const [noteDirty, setNoteDirty] = useState(false)
   // The inbound message whose review form has unsaved edits. Keyed by message
   // so a newer reply (which remounts the form with a fresh draft) is not
   // mistaken for the edited one.
@@ -322,22 +325,31 @@ export function ConversationDrawer({
     ? [...rows].reverse().find((m) => m.direction === 'in' && m.body)?.id ?? null
     : null
   const reviewUnsaved = !importOpen && !followUpOpen && reviewDirtyFor !== null && reviewDirtyFor === latestInboundId
-  const { guard, prompt: discardPrompt } = useDirtyGuard((importOpen && importDirty) || reviewUnsaved)
+  const viewUnsaved = (importOpen && importDirty) || reviewUnsaved
+  const { guard, prompt: discardPrompt } = useDirtyGuard(viewUnsaved)
+  // Closing also drops a note draft; switching views does not.
+  const { guard: closeGuard, prompt: closePrompt } = useDirtyGuard(viewUnsaved || noteDirty)
   const discardAnd = (action: () => void) => guard(() => {
     setImportDirty(false)
     setReviewDirtyFor(null)
     action()
   })
-  const requestClose = () => discardAnd(onClose)
+  const discardAllAnd = (action: () => void) => closeGuard(() => {
+    setImportDirty(false)
+    setReviewDirtyFor(null)
+    setNoteDirty(false)
+    action()
+  })
+  const requestClose = () => discardAllAnd(onClose)
   /** A link inside the drawer both navigates and closes it; with unsaved work
    *  the navigation waits for the answer. */
   const guardedLinkClick = (to: string) => (event: React.MouseEvent) => {
-    if (!(importOpen && importDirty) && !reviewUnsaved) {
+    if (!viewUnsaved && !noteDirty) {
       onClose()
       return
     }
     event.preventDefault()
-    discardAnd(() => { onClose(); navigate(to) })
+    discardAllAnd(() => { onClose(); navigate(to) })
   }
 
   if (!lead) return null
@@ -719,6 +731,8 @@ export function ConversationDrawer({
         </details>
       </div>
 
+      <LeadNotesPanel lead={lead} onDirtyChange={setNoteDirty} />
+
       {error && (
         <div className="shrink-0 px-dialog pt-app-md">
           <InlineError
@@ -999,12 +1013,11 @@ export function ConversationDrawer({
           </div>
         )}
       </ConversationSection>
-
-      <LeadNotesPanel lead={lead} />
       </>
       )}
 
       {discardPrompt}
+      {closePrompt}
       {pendingLost && (
         <LostReasonModal
           leadName={live.full_name}

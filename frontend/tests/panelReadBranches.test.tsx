@@ -22,7 +22,7 @@
  * deliberately **not** here. It is a thousand lines with a dozen contexts, and a
  * mount that heavy would be its own slice; it is recorded as a known limit.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -118,46 +118,75 @@ beforeEach(() => {
   resolveReadPath.mockResolvedValue('neon')
 })
 
-const expandNotes = async () => {
+const toggleNotes = async () => {
   await act(async () => {
     screen.getByRole('button', { name: /^Notes/ }).click()
   })
 }
 
 describe('LeadNotesPanel on the application-API read path', () => {
-  it('fetches on first expand and not before', async () => {
-    fetchNeonLeadNotes.mockResolvedValue([])
+  // Node's own `localStorage` global shadows jsdom's and has no working store
+  // without a file, so each test gets a plain in-memory one.
+  beforeEach(() => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, String(value)) },
+      removeItem: (key: string) => { store.delete(key) },
+      clear: () => store.clear(),
+    })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('fetches when the lead opens, even collapsed, so the header shows the count', async () => {
+    localStorage.setItem('leadDrawer.notesOpen.v1', 'false')
+    fetchNeonLeadNotes.mockResolvedValue([
+      { id: 1, lead_id: LEAD.id, author: 'Tester', body: 'Next: ask about Q4', created_at: null },
+    ])
     render(<LeadNotesPanel lead={LEAD} />)
 
-    // The panel is collapsed and the effect is guarded by `open`, so a mount that
-    // fetched would put a request behind every drawer open for a panel nobody
-    // looked at.
-    //
-    // Flushed first, and that flush *is* part of the assertion: the effect awaits
-    // `resolveReadPath()` before it reads, so a synchronous check here passes even
-    // when the guard is gone. The mutation pass caught this test being vacuous
-    // before it caught anything about the code — replacing the guard with
-    // `if (notes !== null) return` reddened nothing until this await was added.
-    await act(async () => {})
-    expect(fetchNeonLeadNotes).not.toHaveBeenCalled()
-
-    await expandNotes()
-    await waitFor(() => expect(fetchNeonLeadNotes).toHaveBeenCalledWith(LEAD.id))
+    const header = await screen.findByRole('button', { name: 'Notes (1)' })
+    expect(header.getAttribute('aria-expanded')).toBe('false')
+    expect(fetchNeonLeadNotes).toHaveBeenCalledWith(LEAD.id)
     expect(fetchNeonLeadNotes).toHaveBeenCalledTimes(1)
   })
 
-  it('does not refetch on a second expand', async () => {
+  it('is open by default and remembers a collapse', async () => {
+    fetchNeonLeadNotes.mockResolvedValue([])
+    render(<LeadNotesPanel lead={LEAD} />)
+
+    const header = screen.getByRole('button', { name: /^Notes/ })
+    expect(header.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('textbox', { name: 'Add a note' })).toBeDefined()
+    await toggleNotes()
+    expect(header.getAttribute('aria-expanded')).toBe('false')
+    expect(localStorage.getItem('leadDrawer.notesOpen.v1')).toBe('false')
+  })
+
+  it('does not refetch when toggled', async () => {
     fetchNeonLeadNotes.mockResolvedValue([
       { id: 1, lead_id: LEAD.id, author: 'Tester', body: 'A note', created_at: null },
     ])
     render(<LeadNotesPanel lead={LEAD} />)
 
-    await expandNotes()
     await waitFor(() => expect(screen.getByText('A note')).toBeDefined())
-    await expandNotes() // collapse
-    await expandNotes() // expand again
+    await toggleNotes() // collapse
+    await toggleNotes() // expand again
     // `notes !== null` is the guard. Without it every toggle costs a request.
     expect(fetchNeonLeadNotes).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports an unsaved draft and clears it when the panel goes away', async () => {
+    fetchNeonLeadNotes.mockResolvedValue([])
+    const onDirtyChange = vi.fn()
+    const { unmount } = render(<LeadNotesPanel lead={LEAD} onDirtyChange={onDirtyChange} />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Add a note' }), {
+      target: { value: 'Idea for the next follow-up' },
+    })
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true)
+    unmount()
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
   })
 
   it('shows the failure instead of an empty note list', async () => {
@@ -166,7 +195,6 @@ describe('LeadNotesPanel on the application-API read path', () => {
     fetchNeonLeadNotes.mockRejectedValue(new Error('leads.notes: Could not load dashboard data'))
     render(<LeadNotesPanel lead={LEAD} />)
 
-    await expandNotes()
     await waitFor(() => expect(screen.getByText(/leads\.notes/)).toBeDefined())
     expect(screen.queryByText('No notes yet.')).toBeNull()
   })
@@ -175,7 +203,6 @@ describe('LeadNotesPanel on the application-API read path', () => {
     resolveReadPath.mockResolvedValue('supabase')
     render(<LeadNotesPanel lead={LEAD} />)
 
-    await expandNotes()
     await waitFor(() =>
       expect(screen.getByText('Supabase is not configured.')).toBeDefined(),
     )

@@ -9,13 +9,41 @@ import type { Lead, LeadNote } from '../lib/types'
 import { Button, IconButton, InlineError, TextareaField } from '../ui'
 import { ConversationSection } from './ConversationSection'
 
-/** Collapsible per-lead notes, the same band as the drawer's AI coach. Notes
- *  are fetched on first expand (authenticated client), newest first; add/delete are
- *  optimistic and revert on failure. */
-export function LeadNotesPanel({ lead }: { lead: Lead }) {
+const OPEN_KEY = 'leadDrawer.notesOpen.v1'
+
+/** Open unless this viewer collapsed it last time. */
+function readOpen(): boolean {
+  try {
+    return localStorage.getItem(OPEN_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function writeOpen(open: boolean) {
+  try {
+    localStorage.setItem(OPEN_KEY, String(open))
+  } catch {
+    // A blocked store only means the choice is not remembered.
+  }
+}
+
+/** Per-lead notes — free text such as an idea for the next follow-up. It sits
+ *  under the drawer header, open unless the viewer collapsed it, and the notes
+ *  are fetched as soon as the lead opens (authenticated client), newest first,
+ *  so the collapsed header still shows the count. Add/delete are optimistic and
+ *  revert on failure. `onDirtyChange` reports an unsaved draft so the drawer can
+ *  ask before closing over it. */
+export function LeadNotesPanel({
+  lead,
+  onDirtyChange,
+}: {
+  lead: Lead
+  onDirtyChange?: (dirty: boolean) => void
+}) {
   const toast = useToast()
   const { addNote, deleteNote, actor } = usePipelineActions()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(readOpen)
   const [notes, setNotes] = useState<LeadNote[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,15 +52,21 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
 
   // Reset when the drawer switches leads.
   useEffect(() => {
-    setOpen(false)
     setNotes(null)
     setError(null)
     setBody('')
   }, [lead.id])
 
-  // Fetch on first expand.
+  const dirty = body.trim() !== ''
   useEffect(() => {
-    if (!open || notes !== null) return
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+  // The draft goes with the panel, so an unmounted panel is never dirty.
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])
+
+  // Fetch when the lead opens, open or not, so the header can show the count.
+  useEffect(() => {
+    if (notes !== null) return
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -71,7 +105,7 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
     return () => {
       cancelled = true
     }
-  }, [open, notes, lead.id])
+  }, [notes, lead.id])
 
   const add = async () => {
     const text = body.trim()
@@ -115,7 +149,10 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
     <ConversationSection
       title={`Notes${count > 0 ? ` (${count})` : ''}`}
       open={open}
-      onToggle={() => setOpen((o) => !o)}
+      onToggle={() => {
+        writeOpen(!open)
+        setOpen(!open)
+      }}
     >
       {error && <InlineError title="Notes could not load." message={error} />}
       {loading && <p className="m-0 text-app-meta text-app-text-muted">Loading notes…</p>}
@@ -127,7 +164,7 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
           labelHidden
           rows={2}
           value={body}
-          placeholder="Add a note…"
+          placeholder="Add a note — e.g. an idea for the next follow-up…"
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -146,7 +183,10 @@ export function LeadNotesPanel({ lead }: { lead: Lead }) {
       )}
 
       {notes && notes.length > 0 && (
-        <ul className="list-none m-0 p-0 flex flex-col gap-app-sm">
+        <ul
+          aria-label="Notes"
+          className="list-none m-0 p-0 flex flex-col gap-app-sm max-h-[200px] overflow-y-auto"
+        >
           {notes.map((n) => (
             <li key={n.id} className="border-l-2 border-app-border pl-app-sm">
               <div className="text-app-table [overflow-wrap:anywhere] whitespace-pre-wrap">{n.body}</div>

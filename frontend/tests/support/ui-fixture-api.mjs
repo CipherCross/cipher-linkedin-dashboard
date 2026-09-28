@@ -668,6 +668,15 @@ export async function activityFixture(request) {
   if (op === 'identity.teamRoster') return json(page([member(role)]))
   if (op === 'messages.thread') return json(page(threadRows(scenario)))
   if (op === 'conversations.followUpHistory') return json(page([]))
+  if (op === 'leads.notes') {
+    // One note on the fixture lead; adding or deleting is a refused write.
+    const lead = leadRows(scenario)[0]
+    return json(page(lead && url.searchParams.get('lead_id') === lead.id ? [{
+      id: 1, lead_id: lead.id, author: 'Fixture Admin',
+      body: 'Next follow-up: mention the Q4 roadmap they asked about.',
+      created_at: '2026-09-22T09:00:00.000Z',
+    }] : []))
+  }
   if (op === 'conversations.followUpState') {
     // The drawer's one-conversation read (Leads carries no follow-up data).
     const instanceId = url.searchParams.get('instance_id')
