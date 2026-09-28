@@ -259,6 +259,14 @@
       "owner_role_entered_by": "artifact",
       "session": "agent-ingest-repair",
       "description": "Additive correction for chat-store identity adoption after manual reply-review activation: message semantic invalidation distinguishes active humans, machine credentials and system actors; machine/system invalidation preserves the existing review-row actor provenance while its append-only event records the actual actor kind, so legacy manual reviews cannot violate their actor constraint."
+    },
+    {
+      "step": 21,
+      "artifact": "021_follow_up_outcome_resolves_action.sql",
+      "sha256": "39c1121429e5bb21f14af243560eced426a8f9eef5f155ac8621913914db081a",
+      "owner_role_entered_by": "artifact",
+      "session": "lead-notes-follow-up-cancel",
+      "description": "Additive correction to the step 017 projection guard: a legacy follow-up outcome (cancel, or complete/skip without a next date) that clears the due date now resolves a conversation whose action is still 'follow_up', instead of violating conversation_follow_up_state_follow_up_date_check. No grant, policy, table or data change."
     }
   ]
 }

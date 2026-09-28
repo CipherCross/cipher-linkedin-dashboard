@@ -141,6 +141,8 @@ const S08_ARTIFACTS = [
   // Machine-safe reply-review invalidation during message identity adoption (step 020).
   'postgres/tenant-baseline/v1/020_reply_review_machine_invalidation.sql',
   'postgres/tests/portable_reply_review_machine_invalidation_assertions.mjs',
+  // Follow-up outcomes resolve a still-'follow_up' action (step 021).
+  'postgres/tenant-baseline/v1/021_follow_up_outcome_resolves_action.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -374,8 +376,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty steps in order 1 -> 2 -> ... -> 20',
-  manifest.steps.length === 20 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-one steps in order 1 -> 2 -> ... -> 21',
+  manifest.steps.length === 21 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
@@ -424,6 +426,21 @@ check('step 020 distinguishes human, machine and system invalidation',
 check('step 020 preserves existing review provenance for non-human invalidation',
   /ELSE r\.reviewed_by END/i.test(machineInvalidationSql)
   && /ELSE r\.provenance END/i.test(machineInvalidationSql));
+
+const followUpOutcomeStep = manifest.steps.find((s) => s.step === 21);
+const followUpOutcomePath = join(BASELINE_DIR, '021_follow_up_outcome_resolves_action.sql');
+const followUpOutcomeSql = readFileSync(followUpOutcomePath, 'utf8');
+check('manifest declares step 021 follow-up outcome resolution',
+  followUpOutcomeStep?.artifact === '021_follow_up_outcome_resolves_action.sql');
+check('step 021 manifest digest matches its artifact',
+  followUpOutcomeStep?.sha256 === sha256(followUpOutcomePath),
+  `manifest ${followUpOutcomeStep?.sha256}, disk ${sha256(followUpOutcomePath)}`);
+check('step 021 resolves a cleared date whose action is still follow_up',
+  /CREATE OR REPLACE FUNCTION public\.reply_review_state_projection_guard\(\)/i.test(followUpOutcomeSql)
+  && /AND \(NEW\.action IS NULL OR NEW\.action = 'follow_up'\) THEN\s+NEW\.action := 'resolved'/i.test(followUpOutcomeSql));
+check('step 021 changes no table, policy, view or grant beyond the function it replaces',
+  !/\b(GRANT|CREATE POLICY|ALTER POLICY|CREATE VIEW|CREATE OR REPLACE VIEW|ALTER TABLE|DELETE|TRUNCATE|DROP|UPDATE public)\b/i
+    .test(stripComments('021_follow_up_outcome_resolves_action.sql', followUpOutcomeSql)));
 
 const compatibilityStep = readFileSync(join(BASELINE_DIR, '015_sequence_publish_compatibility.sql'), 'utf8');
 check('step 015 enforces one canary per fingerprint and one replacement per job',
