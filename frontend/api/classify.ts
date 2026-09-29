@@ -5,7 +5,7 @@
 //   GET  — the daily Vercel cron (guarded by CRON_SECRET).
 //   POST — the admin-only "Classify replies" button on the Leads page.
 //
-// AI-path split, by actor. Only demographics retains a model/write path:
+// Two principals, by actor. Only demographics retains a model/write path:
 //
 //   POST (batch, ?mode=demographics, ?mode=reclassify) — has a human. The actor
 //     resolves against Neon and the admin role is re-checked there, so the
@@ -22,10 +22,8 @@
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
-import { db } from './_lib/core.js'
-import { guardAdmin, guardMachine, authorizationResponse } from './_lib/auth.js'
+import { guardMachine, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
-import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
   DataStoreContractError,
@@ -117,305 +115,40 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
   if (req.method === 'GET') {
     const denied = await guardMachine(req, 'CRON_SECRET')
     if (denied) return denied
-    if (mode === 'demographics') {
-      if (deploymentAiPath() === 'neon') return classifyDemographicsOnNeon()
-      return json({ classified: 0, remaining: 0, demographics: await runDemographics(db()) })
-    }
+    if (mode === 'demographics') return classifyDemographicsOnNeon()
     // The old scheduled handler also drained demographics after reply
     // classification. Preserve that supported gender work while retiring only
     // the reply AI phase.
-    if (deploymentAiPath() === 'neon') {
-      try {
-        return json({
-          ...REPLY_CLASSIFICATION_DISABLED,
-          demographics: await runDemographicsOnNeon(getAiDataStore(), SYSTEM_ACTOR),
-        })
-      } catch (error) {
-        console.error('Neon demographics failed:', safeErrorLabel(error))
-        return json({ ...REPLY_CLASSIFICATION_DISABLED, demographics: { processed: 0, failed: 1, remaining: null, lifecycle: 'unavailable' } })
-      }
+    try {
+      return json({
+        ...REPLY_CLASSIFICATION_DISABLED,
+        demographics: await runDemographicsOnNeon(getAiDataStore(), SYSTEM_ACTOR),
+      })
+    } catch (error) {
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
+      console.error('Neon demographics failed:', safeErrorLabel(error))
+      return json({ ...REPLY_CLASSIFICATION_DISABLED, demographics: { processed: 0, failed: 1, remaining: null, lifecycle: 'unavailable' } })
     }
-    return json({
-      ...REPLY_CLASSIFICATION_DISABLED,
-      demographics: await runDemographics(db()),
-    })
   }
 
-  if (mode === 'demographics') {
-    if (deploymentAiPath() === 'neon') return classifyOnNeon(req, mode, deps)
-    const auth = await guardAdmin(req)
-    if (auth.response) return auth.response
-    return json({
-      classified: 0,
-      remaining: 0,
-      demographics: await runDemographics(db()),
-    })
-  }
-
-  if (deploymentAiPath() === 'neon') return classifyOnNeon(req, mode, deps)
-  const auth = await guardAdmin(req)
-  if (auth.response) return auth.response
-  // Manual review is the only supported reply classification path. The legacy
-  // Supabase provider has no review schema and must fail closed without writes.
-  return json({ ...REPLY_CLASSIFICATION_DISABLED, provider: 'supabase', code: 'REPLY_REVIEW_UNAVAILABLE' }, 503)
-}
-
-interface DemoLead {
-  id: string
-  instance_id: string
-  profile_url: string
-  full_name: string | null
-  headline: string | null
+  return classifyOnNeon(req, mode, deps)
 }
 
 interface DemographicsRun {
   processed: number
   failed: number
   remaining: number | null
-  lifecycle: 'v2' | 'legacy' | 'unavailable'
-}
-
-/**
- * Select a fair gender batch from the split lifecycle introduced by migration 048.
- * Every account contributes candidates before round-robin selection, so one older
- * notebook cannot monopolize the global oldest-first window.
- *
- * Returns null only when the v2 columns are absent, allowing a rolling deployment
- * to fall back to migration 041's legacy combined stamp.
- */
-async function selectGenderBatchV2(
-  sb: ReturnType<typeof db>
-): Promise<DemoLead[] | null> {
-  const { data: instances, error: instanceError } = await sb
-    .from('instances')
-    .select('id')
-    .order('id')
-  if (instanceError) throw instanceError
-
-  const buckets: DemoLead[][] = []
-  for (const instance of (instances ?? []) as Array<{ id: string }>) {
-    const { data, error } = await sb
-      .from('leads')
-      .select('id,instance_id,profile_url,full_name,headline')
-      .eq('instance_id', instance.id)
-      .or('demo_model.is.null,demo_model.neq.manual')
-      .or(
-        `gender_inferred_at.is.null,gender_model_version.is.null,` +
-          `gender_model_version.neq.${GENDER_VERSION}`
-      )
-      .order('added_at', { ascending: true })
-      .limit(DEMO_BATCH)
-    if (error) {
-      if (error.code === '42703' || /column\s+.*\s+does not exist/i.test(error.message)) {
-        return null
-      }
-      throw error
-    }
-    buckets.push((data ?? []) as DemoLead[])
-  }
-
-  const selected: DemoLead[] = []
-  const seenPeople = new Set<string>()
-  for (let offset = 0; selected.length < DEMO_BATCH; offset++) {
-    let found = false
-    for (const bucket of buckets) {
-      const lead = bucket[offset]
-      if (!lead) continue
-      found = true
-      const personKey = `${lead.instance_id}|${lead.profile_url}`
-      if (seenPeople.has(personKey)) continue
-      seenPeople.add(personKey)
-      selected.push(lead)
-      if (selected.length === DEMO_BATCH) break
-    }
-    if (!found) break
-  }
-  return selected
-}
-
-async function selectGenderBatchLegacy(sb: ReturnType<typeof db>): Promise<DemoLead[]> {
-  const { data, error } = await sb
-    .from('leads')
-    .select('id,instance_id,profile_url,full_name,headline')
-    .is('demo_inferred_at', null)
-    .order('added_at', { ascending: true })
-    .limit(DEMO_BATCH)
-  if (error) throw error
-  return (data ?? []) as DemoLead[]
-}
-
-async function countGenderBacklog(
-  sb: ReturnType<typeof db>,
-  lifecycle: 'v2' | 'legacy'
-): Promise<number | null> {
-  let query = sb.from('leads').select('id', { count: 'exact', head: true })
-  if (lifecycle === 'v2') {
-    query = query
-      .or('demo_model.is.null,demo_model.neq.manual')
-      .or(
-        `gender_inferred_at.is.null,gender_model_version.is.null,` +
-          `gender_model_version.neq.${GENDER_VERSION}`
-      )
-  } else {
-    query = query.is('demo_inferred_at', null)
-  }
-  const { count, error } = await query
-  if (error) {
-    console.warn('gender backlog count failed:', error.message)
-    return null
-  }
-  return count ?? 0
-}
-
-/**
- * Gender inference phase, capped at DEMO_BATCH and grouped by DEMO_GROUP.
- *
- * Idempotent + versioned: manual rows are excluded; completed rows are selected again
- * only after their name/headline changes (the migration resets their stamp) or this
- * code intentionally bumps GENDER_VERSION.
- *
- * Best-effort: failures never break reply classification. The response makes partial
- * progress and the remaining backlog visible instead of silently returning a number.
- *
- * HARD NO-PHOTOS RULE: the select list is explicit TEXT columns only — never
- * photo_path, never `select *` — because photo data must not reach any model.
- */
-async function runDemographics(sb: ReturnType<typeof db>): Promise<DemographicsRun> {
-  let processed = 0
-  let failed = 0
-  let lifecycle: 'v2' | 'legacy' = 'v2'
-  try {
-    let leads = await selectGenderBatchV2(sb)
-    if (leads === null) {
-      lifecycle = 'legacy'
-      leads = await selectGenderBatchLegacy(sb)
-    }
-    if (!leads.length) {
-      return {
-        processed: 0,
-        failed: 0,
-        remaining: await countGenderBacklog(sb, lifecycle),
-        lifecycle,
-      }
-    }
-
-    const now = new Date().toISOString()
-
-    const writeDemo = async (
-      lead: DemoLead,
-      gender: (typeof GENDERS)[number],
-      confidence: number
-    ) => {
-      const lifecyclePatch =
-        lifecycle === 'v2'
-          ? {
-              gender_inferred_at: now,
-              gender_model_version: GENDER_VERSION,
-            }
-          : {}
-      const { error: upErr } = await sb
-        .from('leads')
-        .update({
-          gender,
-          gender_confidence: confidence,
-          ...lifecyclePatch,
-          // Legacy compatibility for clients deployed before migration 048.
-          demo_inferred_at: now,
-          demo_model: MODEL,
-        })
-        // A person may exist in several campaigns on the same account. Persist one
-        // evaluation across every row so charts and manual review cannot diverge.
-        .eq('instance_id', lead.instance_id)
-        .eq('profile_url', lead.profile_url)
-      if (upErr) failed++
-      else processed++
-    }
-
-    // Leads with no usable name skip the model entirely — stamp 'unknown' directly.
-    const named: DemoLead[] = []
-    const nameless: DemoLead[] = []
-    for (const l of leads) {
-      if (l.full_name && l.full_name.trim()) named.push(l)
-      else nameless.push(l)
-    }
-    await Promise.all(nameless.map((l) => writeDemo(l, 'unknown', 0)))
-
-    for (const group of chunk(named, DEMO_GROUP)) {
-      const prompt = group
-        .map(
-          (l, i) =>
-            `[person ${i}] name: ${l.full_name?.trim() ?? ''}` +
-            (l.headline?.trim() ? `\nheadline: ${l.headline.trim().slice(0, BODY_CAP)}` : '')
-        )
-        .join('\n\n')
-
-      let results: Array<{ ref: number; gender: (typeof GENDERS)[number]; confidence: number }>
-      try {
-        const { object } = await generateObject({
-          model: anthropic(MODEL),
-          schema: z.object({
-            results: z
-              .array(
-                z.object({
-                  ref: z.number().int(),
-                  gender: z.enum(GENDERS),
-                  confidence: z.number().min(0).max(1),
-                })
-              )
-              .length(group.length),
-          }),
-          system: GENDER_SYSTEM,
-          prompt,
-        })
-        results = object.results
-      } catch (e) {
-        console.warn('gender inference failed for a group:', e)
-        failed += group.length
-        continue
-      }
-
-      // Same ref-validation as sentiment: valid, in-range, not-yet-used index into
-      // THIS group, so a hallucinated/duplicate ref can't write onto the wrong lead.
-      const usedRefs = new Set<number>()
-      await Promise.all(
-        results.map(async (r) => {
-          if (!Number.isInteger(r.ref) || r.ref < 0 || r.ref >= group.length) return
-          if (usedRefs.has(r.ref)) return
-          usedRefs.add(r.ref)
-          const lead = group[r.ref]
-          if (!lead) return
-          const confidence = Math.min(1, Math.max(0, r.confidence))
-          await writeDemo(lead, r.gender, confidence)
-        })
-      )
-    }
-
-    return {
-      processed,
-      failed,
-      remaining: await countGenderBacklog(sb, lifecycle),
-      lifecycle,
-    }
-  } catch (e) {
-    console.warn('demographics phase threw:', e)
-    return {
-      processed,
-      failed,
-      remaining: null,
-      lifecycle: 'unavailable',
-    }
-  }
+  lifecycle: 'v2' | 'unavailable'
 }
 
 // ---------------------------------------------------------------------------
-// The Neon branches: the POST paths (batch, demographics, reclassify) under a
-// human actor, and the GET cron under the system one.
+// The POST paths (batch, demographics, reclassify) under a human actor, and the
+// GET cron under the system one.
 //
 // Same authorization argument as `neonWrites.ts` for the POST paths: the actor
 // resolves against the database being written, and the admin role is re-checked
-// from that resolution — the Supabase guardAdmin answer is not carried over.
-// Same response bodies as the Supabase path, because the client cannot tell
-// which provider answered.
+// from that resolution.
 //
 // The cron has no actor to resolve and resolves none. Its principal is
 // `app_system` and its published actor is the nil uuid, which is a value that
@@ -431,9 +164,20 @@ function safeErrorLabel(error: unknown): string {
   return 'UnknownError'
 }
 
-/** The demographics phase on Neon. The baseline carries migration 048's v2
- *  columns by construction, so there is no legacy ladder here — one fair-batch
- *  statement replaces the per-instance walk `selectGenderBatchV2` does. */
+/**
+ * Gender inference phase, capped at DEMO_BATCH and grouped by DEMO_GROUP. The
+ * baseline carries migration 048's v2 columns by construction; one fair-batch
+ * statement gives every account candidates before round-robin selection, so one
+ * older notebook cannot monopolize the oldest-first window.
+ *
+ * Idempotent + versioned: manual rows are excluded; completed rows are selected
+ * again only after their name/headline changes or GENDER_VERSION is bumped.
+ * Best-effort: the response makes partial progress and the remaining backlog
+ * visible instead of silently returning a number.
+ *
+ * HARD NO-PHOTOS RULE: the batch reads explicit TEXT columns only — never
+ * photo_path — because photo data must not reach any model.
+ */
 async function runDemographicsOnNeon(
   store: DataStore,
   actor: ActorContext
@@ -620,6 +364,8 @@ function classifyDemographicsOnNeon(): Promise<Response> {
         demographics: await runDemographicsOnNeon(getAiDataStore(), SYSTEM_ACTOR),
       })
     } catch (error) {
+      const unavailable = unavailableResponse(error)
+      if (unavailable) return unavailable
       console.error('Neon demographics failed:', safeErrorLabel(error))
       return json({ error: 'Could not classify demographics' }, 500)
     }
@@ -630,7 +376,7 @@ function classifyDemographicsOnNeon(): Promise<Response> {
 // Manual reclassification compatibility — formerly `frontend/api/reclassify.ts`.
 // The legacy route is retained for old drawer callers, but delegates to the
 // transactional manual-review service. It never has an independent message
-// UPDATE path and it cannot operate on the Supabase fallback.
+// UPDATE path.
 // ---------------------------------------------------------------------------
 
 interface ReclassifyInput {
@@ -661,8 +407,8 @@ type ReclassifyPayload = {
   revision?: unknown
 }
 
-/** The one definition of a legal reclassify body, shared by both providers so
- *  they cannot drift on what a manual correction may contain. */
+/** The one definition of a legal reclassify body — what a manual correction
+ *  may contain. */
 function parseReclassifyPayload(payload: ReclassifyPayload):
   | { error: string; status: number; code?: string }
   | { input: ReclassifyInput } {
@@ -826,13 +572,7 @@ async function handleReclassify(req: Request, deps: NeonWriteDeps = {}): Promise
     return json({ error: 'method not allowed' }, 405)
   }
 
-  if (deploymentAiPath() === 'neon') return reclassifyOnNeon(req, deps)
-
-  const auth = await guardAdmin(req)
-  if (auth.response) return auth.response
-  // The fallback has no reply-review schema. Never resurrect the old direct
-  // UPDATE, even when a legacy caller still posts this URL.
-  return json({ error: 'Manual reply review is unavailable for this tenant', code: 'REPLY_REVIEW_UNAVAILABLE', manual_only: true }, 503)
+  return reclassifyOnNeon(req, deps)
 }
 
 export const GET = (req: Request) => handle(req)

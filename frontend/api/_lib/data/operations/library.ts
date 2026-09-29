@@ -47,9 +47,9 @@
  *
  * Every order below still ends in a unique column, because the driver applies
  * `LIMIT/OFFSET` to all of them and an order that is not total can repeat or skip
- * a row at a page boundary. The Supabase path orders several of these by
- * non-unique columns alone (`platform, name`; `icp_id, sort`) and gets away with
- * it because PostgREST returns the whole small relation in one response. That is
+ * a row at a page boundary. The retired Supabase path ordered several of these by
+ * non-unique columns alone (`platform, name`; `icp_id, sort`) and got away with
+ * it because PostgREST returned the whole small relation in one response. That is
  * not a property this path may assume.
  *
  * ## Array and JSON columns cross as themselves
@@ -389,9 +389,8 @@ export const hypothesesOperation: NeonQueryOperation<HypothesisRow> = {
 // ---------------------------------------------------------------------------
 
 /**
- * `(hypothesis_id, campaign_id)` is the primary key, so this order is total. The
- * Supabase path supplies no order at all here — harmless for one unpaged
- * response, and not something a paging read may inherit.
+ * `(hypothesis_id, campaign_id)` is the primary key, so this order is total, as
+ * a paging read needs.
  */
 const HYPOTHESIS_CAMPAIGNS_SQL = `SELECT c.hypothesis_id::text AS hypothesis_id,
           c.campaign_id,

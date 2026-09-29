@@ -1,13 +1,12 @@
 /**
  * The S12 slice, rendered.
  *
- * One read-only view whose data comes from Neon through `/api/activity-daily`,
- * beside the untouched Supabase path that feeds every other page. It reuses the
+ * One read-only view whose data comes through `/api/activity-daily`. It reuses the
  * existing `ActivityChart` on purpose: the point of the slice is to prove the
  * new data path, not to build new UI.
  *
- * This page is temporary scaffolding for the G2 decision. S13 migrates
- * `DataContext` and the real pages; at that point this route can go.
+ * This page is diagnostic scaffolding; the real pages read the same data
+ * through their own routes.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -65,9 +64,7 @@ export function NeonActivity() {
       <PageHeader
         title="Daily activity"
         breadcrumb={[{ label: 'Diagnostics' }]}
-        /* Honestly labelled as a diagnostic route, and no longer claiming that
-           "every other page still reads Supabase" — production has not read
-           Supabase since the cutover. */
+        /* Honestly labelled as a diagnostic route. */
         description="A diagnostic read-only slice used to check the application read path end to end. The dashboard's own pages read the same data through their own routes."
         context={<Badge tone="neutral">Diagnostic</Badge>}
         actions={

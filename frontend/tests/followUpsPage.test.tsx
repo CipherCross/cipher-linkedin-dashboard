@@ -28,11 +28,11 @@ vi.mock('../src/lib/ConversationContext', () => ({
 
 const ANN: TeamMember = {
   id: 1, name: 'Ann', active: true, created_at: '2026-01-01T00:00:00Z',
-  auth_user_id: 'u1', email: 'ann@example.test', role: 'member',
+  email: 'ann@example.test', role: 'member',
 }
 const BOB: TeamMember = {
   id: 2, name: 'Bob', active: true, created_at: '2026-01-01T00:00:00Z',
-  auth_user_id: 'u2', email: 'bob@example.test', role: 'member',
+  email: 'bob@example.test', role: 'member',
 }
 
 vi.mock('../src/lib/useFollowUpActions', () => ({
@@ -67,7 +67,7 @@ const followUpState = (over: Partial<FollowUpState>): FollowUpState => ({
 
 const EMPTY_DATA: DashboardData = {
   instances: [], campaigns: [], activity: [], leads: [], syncRuns: [], messages: [],
-  conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [], rosterPath: 'supabase',
+  conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [],
   pipelineEvents: [], followUpStates: [], latestConversationMessages: [], followUpsAvailable: true,
   savedSearches: [], icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [],
   hypothesisCampaigns: [], campaignSequenceContext: null,

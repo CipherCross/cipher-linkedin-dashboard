@@ -23,8 +23,8 @@
  *
  * ## Why the grammar is an allowlist and not a blocklist
  *
- * `src/lib/leadPhotos.ts` already carries a blocklist version of this idea for
- * the Supabase path: reject `..`, reject `://`, reject `?`. That was correct for
+ * The retired Supabase photo path used a blocklist version of this idea in
+ * `src/lib/leadPhotos.ts`: reject `..`, reject `://`, reject `?`. That was fine for
  * a display helper over service-written values, and it is the wrong shape here,
  * because a blocklist has to anticipate its attacker. This accepts a small
  * character set and refuses everything else, so the interesting cases —

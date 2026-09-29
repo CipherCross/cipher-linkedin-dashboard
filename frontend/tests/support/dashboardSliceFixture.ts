@@ -7,7 +7,7 @@
  * **Seeded here rather than reused from B2.** The B2 bounded tenant-slice copy was
  * deleted the day it ran and its deletion has been proved twice; re-copying is a
  * fresh owner decision each time, not a standing permission
- * (`docs/archive/implementation-handoffs/N-B2.md`). So this suite owns its own data and
+ * (N-B2 handoff, removed from the tree; see git history). So this suite owns its own data and
  * assumes none.
  *
  * ## What the shape is for

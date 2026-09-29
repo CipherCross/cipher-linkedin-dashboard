@@ -650,9 +650,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
     CONVERSATION_WRITE_COMMANDS.deleteManualMessage,
     deleteManualMessageOperation,
   )
-  // Registered, and deliberately not reachable from an endpoint: the roster wall
-  // (N-B2) blocks `p_owner_id` while reads stay on Supabase. See the module
-  // header and the S14 handoff.
+  // Reached from `/api/pipeline` through `neonFollowUp` (`_lib/neonWrites.ts`).
   registry.registerCommand(
     CONVERSATION_WRITE_COMMANDS.applyFollowUpAction,
     applyFollowUpActionOperation,

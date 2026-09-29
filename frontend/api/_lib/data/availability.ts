@@ -23,10 +23,18 @@
  * - **503** for the two transient causes, which is what they are;
  * - **500** for a rejected credential, which no retry clears and which means the
  *   deployment itself needs attention.
+ *
+ * A credential that is not set at all (`NEON_CONFIGURATION_MISSING`,
+ * `IDENTITY_CONFIGURATION_MISSING`) is the same kind of answer: no database was
+ * reached, no retry helps, and there is no other provider to fall back to. It is
+ * a 500 that names the code — never the variable, which this unauthenticated
+ * response has no reason to publish; the function log is where that goes.
  */
 
 import { DataStoreUnavailableError } from './contracts.js'
 import type { DataStoreUnavailableCode } from './contracts.js'
+import { NeonConfigurationError } from './neonConfig.js'
+import { IdentityConfigurationError } from '../identity/config.js'
 
 interface Answer {
   readonly status: 500 | 503
@@ -61,18 +69,36 @@ const ANSWERS: Readonly<Record<DataStoreUnavailableCode, Answer>> = {
 }
 
 /**
- * The response for a database that could not be reached, or `null` when the
- * error is something else and the caller should keep its own handling.
+ * The response for a database that could not be reached or a credential that
+ * is not configured, or `null` when the error is something else and the caller
+ * should keep its own handling.
  *
  * Shaped like `authorizationResponse`: it returns `null` rather than throwing or
  * guessing, so a call site adds one line and loses none of its existing
  * behaviour.
  */
 export function unavailableResponse(error: unknown): Response | null {
+  if (
+    error instanceof NeonConfigurationError ||
+    error instanceof IdentityConfigurationError
+  ) {
+    // The message names an environment variable and never a value, so it is
+    // safe for the log and is what makes the deployment diagnosable.
+    console.error('Deployment is not configured:', error.message)
+    return answer(500, `${NOT_CONFIGURED_TEXT} (${error.code})`)
+  }
   if (!(error instanceof DataStoreUnavailableError)) return null
-  const answer = ANSWERS[error.code]
-  return new Response(
-    JSON.stringify({ error: `${answer.text} (${error.code})` }),
-    { status: answer.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } },
-  )
+  const known = ANSWERS[error.code]
+  return answer(known.status, `${known.text} (${error.code})`)
+}
+
+const NOT_CONFIGURED_TEXT =
+  'This deployment is missing a server credential it needs — ' +
+  'retrying will not help, the deployment needs attention'
+
+function answer(status: 500 | 503, text: string): Response {
+  return new Response(JSON.stringify({ error: text }), {
+    status,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  })
 }

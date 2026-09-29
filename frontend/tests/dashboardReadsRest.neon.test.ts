@@ -14,15 +14,17 @@
  * So here the injected transport is the handler itself: `fetchNeonDashboard` and
  * the three component readers run against `createActivityDailyHandler` → the
  * real operation registry → the real driver → the real baseline RLS policies,
- * over `s13-rest`'s fixture. Nothing is stubbed but the identity provider's JWT
- * verification, exactly as the sibling live suites stub it.
+ * over `s13-rest`'s fixture. Nothing is faked but the identity provider,
+ * exactly as the sibling live suites fake it.
  *
  * The fixture is seeded by its own module, which is idempotent — the previous
  * sessions' warning stands: `s13-rest` living on the shared project is a
  * mutation of a shared database, not a contract.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   FOLLOW_UP_EVENT_COUNT,
@@ -63,7 +65,7 @@ import {
   fetchNeonLeadNotes,
   fetchNeonPlaybook,
   fetchNeonThread,
-  fetchReadPath,
+  fetchPhotoPath,
   readAll,
 } from '../src/lib/dashboardReads'
 import type { ApiFetch, NeonDashboardFetch } from '../src/lib/dashboardReads'
@@ -73,21 +75,13 @@ const connection = requireNeonTestConnection()
 
 let stubbedSubject: string | null = null
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 const SUBJECTS = { activeMember: 'subject-one' } as const
 
 const { createActivityDailyHandler } = await import('../api/activity-daily.js')
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 const { resetDataStore } = await import('../api/_lib/data/store.js')
 
 /**
@@ -103,7 +97,7 @@ const handlerFetch: ApiFetch = async (input) => {
   return GET(
     new Request(url, {
       method: 'GET',
-      headers: { authorization: 'Bearer stub-token' },
+      headers: fixtureIdentity.headers(stubbedSubject),
     }),
   )
 }
@@ -167,16 +161,11 @@ afterAll(async () => {
   await fixtures.end()
 })
 
-describe('the flag lookup, through the real endpoint', () => {
+describe('the photo-posture lookup, through the real endpoint', () => {
   it('answers without a credential and reports the deployment default', async () => {
-    // Unauthenticated by design: a dashboard on the Supabase path must not have
-    // to reach Neon successfully just to be told to keep using Supabase.
-    //
-    // **`neon`, with no flag set anywhere.** This process holds
-    // `NEON_DATABASE_URL` and nothing else, which after S27 is exactly the state
-    // a tenant is in — so this is the derived default observed end to end,
-    // through the real handler rather than through the resolver's unit test.
-    expect(await fetchReadPath(anonymousFetch)).toBe('neon')
+    // Unauthenticated by design. This process holds no object-storage
+    // credential, so the posture is `disabled`.
+    expect(await fetchPhotoPath(anonymousFetch)).toBe('disabled')
   })
 })
 
@@ -300,10 +289,6 @@ describe('the dashboard load, end to end', () => {
       }
       for (const row of dashboard.teamMembers) {
         expect(Number.isInteger(row.id)).toBe(true)
-        // Null on this path by construction: there is no Supabase Auth user
-        // behind a `team_roster()` row, and the Team page reads "is a login"
-        // from the baseline's `user_id NOT NULL` instead.
-        expect(row.auth_user_id).toBeNull()
       }
     })
 

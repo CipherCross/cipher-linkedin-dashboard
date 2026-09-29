@@ -4,9 +4,9 @@
  *
  * Same shape as `dashboardSlice.neon.test.ts` and deliberately so: the **real
  * handler** (`api/activity-daily.ts`), the real operation registry, the real
- * driver and the real baseline RLS policies. The only thing ever stubbed is the
- * identity provider's JWT verification, and only where a test says so — the
- * unauthenticated and invalid-token denials run it for real.
+ * driver and the real baseline RLS policies. The only thing faked is the
+ * identity provider (`support/fixtureIdentity.ts`); the unauthenticated and
+ * invalid-session denials present no valid session.
  *
  * Thirteen operations are covered here: the four medium relations, the six
  * tolerated library reads and the three reads that used to live inside a
@@ -14,7 +14,9 @@
  * other session's.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   ARCHIVED_FOLLOW_UPS,
@@ -60,16 +62,8 @@ const connection = requireNeonTestConnection()
 
 let stubbedSubject: string | null = null
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 /** The baseline's own identity fixtures, seeded with `provider = 'fixture'`. */
 const SUBJECTS = {
@@ -81,7 +75,7 @@ const SUBJECTS = {
 } as const
 
 const { createActivityDailyHandler } = await import('../api/activity-daily.js')
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 const { resetDataStore } = await import('../api/_lib/data/store.js')
 const { NeonDataStore, NeonOperationRegistry } = await import(
   '../api/_lib/data/neon.js'
@@ -105,7 +99,7 @@ function request(params: Record<string, string>, token = 'stub-token'): Request 
   }
   return new Request(url, {
     method: 'GET',
-    headers: token === '' ? {} : { authorization: `Bearer ${token}` },
+    headers: token === '' ? {} : fixtureIdentity.headers(stubbedSubject, token),
   })
 }
 
@@ -993,7 +987,7 @@ describe('S13 — the auth deny matrix over the new reads', () => {
     'conversations.followUpHistory',
   ] as const
 
-  it('fails unauthenticated requests closed, with the real verifier', async () => {
+  it('fails unauthenticated requests closed', async () => {
     stubbedSubject = null
     try {
       for (const op of OPS) {
@@ -1007,7 +1001,7 @@ describe('S13 — the auth deny matrix over the new reads', () => {
     }
   })
 
-  it('fails an invalid or expired token closed, with the real verifier', async () => {
+  it('fails an invalid or expired token closed', async () => {
     // Assembled at runtime: a JWT-shaped literal in a committed file trips the
     // repository's own secret sweep and would be a permanent false positive.
     const segment = (value: unknown) =>

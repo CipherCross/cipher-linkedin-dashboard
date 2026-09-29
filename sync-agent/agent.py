@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
 """Sync agent: pushes Linked Helper 2 local data to the dashboard.
 
-There are two transports, and which ones a notebook uses is decided by the
-credentials it holds rather than by a flag somebody remembered to set:
+The one destination is the dashboard's machine ingest gateway —
+`POST <ingest_url>` — authenticated by a per-notebook credential
+(`ingest_token`). See the "ingest gateway transport" section.
 
-  * **Supabase** — the original destination, reached with a shared service key.
-  * **the machine ingest gateway** — `POST <ingest_url>`, authenticating a
-    per-notebook credential (`ingest_token`). This is the only transport that
-    works for a tenant deployment, which never had Supabase at all.
-
-A notebook that holds both can run the gateway alongside Supabase (`shadow` /
-`dual`) or instead of it (`only`). A notebook that holds only a machine
-credential runs `only` and never constructs a Supabase client. See the
-"ingest gateway transport" section and `ingest_mode` in config.example.yaml.
-
-Runs on each notebook. Three commands:
+Runs on each notebook. Main commands:
 
   python3 agent.py inspect                 # discover LH2 data dirs + SQLite schemas
-  python3 agent.py sync                    # extract per config.yaml and upsert upstream
+  python3 agent.py sync                    # extract per config.yaml and deliver upstream
   python3 agent.py ingest-csv FILE --campaign "Name" [--kind successes|replies|queue]
-  python3 agent.py annotate "Template B"   # drop a marker on the dashboard charts
 
 Linked Helper 2 has no public API and its on-disk schema differs between
 versions, so the agent is mapping-driven: run `inspect` once, look at the
@@ -53,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.26.0"
+AGENT_VERSION = "1.27.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -88,11 +78,6 @@ LH2_DEFAULT_DIRS = [
 
 # ---------------------------------------------------------------- helpers
 
-def supabase_configured(cfg):
-    """Whether this notebook holds a Supabase service credential."""
-    return bool(cfg.get("supabase_url")) and bool(cfg.get("supabase_service_key"))
-
-
 def machine_configured(cfg):
     """Whether this notebook holds a usable machine ingest credential.
 
@@ -108,112 +93,48 @@ def machine_configured(cfg):
 def load_config():
     """Read config.yaml and refuse a notebook that has nowhere to sync to.
 
-    `instance_id` is required unconditionally — it is who this notebook claims
-    to be, and every row it writes is keyed by it.
+    `instance_id` is who this notebook claims to be, and every row it writes is
+    keyed by it. The machine credential (`ingest_url` + a well-formed
+    `ingest_token`) is the only destination there is.
 
-    The destination credentials are an OR rather than a fixed list, because
-    there are now two kinds of notebook and neither is a degraded form of the
-    other. The owner's notebooks hold a Supabase service key; a tenant's hold a
-    machine ingest credential and no Supabase account exists for them to have a
-    key for. Demanding `supabase_url`/`supabase_service_key` of the second kind
-    is what made the Supabase-free path impossible to run: `load_config` is the
-    first statement of `cmd_sync`, so the notebook exited before it could reach
-    the transport that would have worked.
-
-    Holding both is legitimate and is how a cutover is rehearsed — see
-    `resolve_ingest_mode`, which reads the same two predicates to decide which
-    destinations a run actually uses."""
+    Retired keys never refuse a config: every notebook that self-updates into
+    this version still has them in a file nobody has edited, and a sync that
+    exits over a key it does not read would take the whole fleet down with one
+    release. They are named once so the file can be tidied."""
     path = os.path.join(HERE, "config.yaml")
     if not os.path.exists(path):
         sys.exit("config.yaml not found — copy config.example.yaml and edit it.")
     with open(path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+        cfg = yaml.safe_load(f) or {}
     if not cfg.get("instance_id"):
         sys.exit("config.yaml is missing required key: instance_id")
-    if not supabase_configured(cfg) and not machine_configured(cfg):
+    if not machine_configured(cfg):
         sys.exit(
-            "config.yaml holds no destination credential. Set EITHER "
-            "supabase_url + supabase_service_key, OR ingest_url + a "
-            "well-formed ingest_token (lha.<uuid>.<secret>). With neither, "
-            "this notebook has nowhere to sync to."
+            "config.yaml holds no machine ingest credential. Set ingest_url "
+            "and a well-formed ingest_token (lha.<uuid>.<secret>) — without "
+            "them this notebook has nowhere to sync to."
         )
+    note_retired_config_keys(cfg)
     return cfg
 
 
-class Supabase:
-    def __init__(self, cfg):
-        self.base = cfg["supabase_url"].rstrip("/") + "/rest/v1"
-        self.headers = {
-            "apikey": cfg["supabase_service_key"],
-            "Authorization": f"Bearer {cfg['supabase_service_key']}",
-            "Content-Type": "application/json",
-        }
+def note_retired_config_keys(cfg):
+    """Name the keys a pre-1.27.0 config.yaml may still carry; never refuse.
 
-    def _request(self, method, url, retriable=True, **kwargs):
-        """Issue one PostgREST request with bounded retry, then raise_for_status.
-
-        A scheduled sync shouldn't fail on a momentary network/Supabase blip, so
-        transient failures are retried up to 3 attempts with backoff (~2s then
-        ~8s): connection errors/timeouts and 429/5xx responses. Everything else —
-        a 4xx other than 429 — raises immediately, since retrying a malformed or
-        rejected request never helps and would just delay a real error. Callers
-        need not raise_for_status themselves; this does it for them.
-
-        retriable=False disables the retry loop (single attempt) for a NON-idempotent
-        write, where a Timeout after the server committed would otherwise duplicate
-        the row on retry — the caller must own that risk explicitly."""
-        kwargs.setdefault("timeout", 30)
-        backoffs = (2, 8) if retriable else ()  # () -> single attempt, no retry
-        for attempt in range(len(backoffs) + 1):
-            try:
-                r = requests.request(method, url, **kwargs)
-            except (requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout) as e:
-                if attempt == len(backoffs):
-                    raise
-                wait = backoffs[attempt]
-                print(f"supabase {method} {url.rsplit('/', 1)[-1]}: "
-                      f"{type(e).__name__} (attempt {attempt + 1}/"
-                      f"{len(backoffs) + 1}) — retrying in {wait}s")
-                time.sleep(wait)
-                continue
-            # Retry throttling (429) and server errors (5xx); a 4xx like 400/409
-            # is a client problem the retry can't fix, so fall through and raise.
-            if (r.status_code == 429 or r.status_code >= 500) \
-                    and attempt < len(backoffs):
-                wait = backoffs[attempt]
-                print(f"supabase {method} {url.rsplit('/', 1)[-1]}: "
-                      f"HTTP {r.status_code} (attempt {attempt + 1}/"
-                      f"{len(backoffs) + 1}) — retrying in {wait}s")
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-            return r
-
-    def upsert(self, table, rows, on_conflict=None):
-        """Idempotent batch upsert. Returns number of rows sent."""
-        if not rows:
-            return 0
-        params = {"on_conflict": on_conflict} if on_conflict else {}
-        headers = dict(self.headers,
-                       Prefer="resolution=merge-duplicates,return=minimal")
-        for i in range(0, len(rows), 500):
-            self._request("POST", f"{self.base}/{table}", params=params,
-                          headers=headers, data=json.dumps(rows[i:i + 500]),
-                          timeout=60)
-        return len(rows)
-
-    def insert(self, table, row, retriable=True):
-        headers = dict(self.headers, Prefer="return=representation")
-        r = self._request("POST", f"{self.base}/{table}", retriable=retriable,
-                          headers=headers, data=json.dumps(row), timeout=60)
-        return r.json()[0]
-
-    def update(self, table, match, patch):
-        params = {k: f"eq.{v}" for k, v in match.items()}
-        self._request("PATCH", f"{self.base}/{table}", params=params,
-                      headers=self.headers, data=json.dumps(patch),
-                      timeout=60)
+    None of them is read. The Supabase pair belonged to the removed transport,
+    and `ingest_mode` has nothing left to choose between. `ingest_mode: only` is
+    silent — the installer still writes it, and it describes what the agent
+    does anyway. Any other value is named, because it reads as a choice the
+    agent no longer honours."""
+    leftover = [key for key in ("supabase_url", "supabase_service_key")
+                if key in cfg]
+    if leftover:
+        print(f"config.yaml: {', '.join(leftover)} unused since agent 1.27.0 — "
+              "safe to delete")
+    mode = str(cfg.get("ingest_mode") or "").strip().lower()
+    if mode and mode != "only":
+        print(f"config.yaml: ingest_mode {mode!r} is ignored — the ingest "
+              "gateway is the only destination")
 
 
 RELEASE_PUBLIC_KEY_CONFIG = "release_public_key"
@@ -2310,11 +2231,10 @@ class ConversationTracker:
     run's `pending_events()`.
     """
 
-    def __init__(self, cfg, instance_id, mode, warnings=None, state_path=None,
+    def __init__(self, cfg, instance_id, warnings=None, state_path=None,
                  quiet=False):
         self.cfg = cfg
         self.instance_id = instance_id
-        self.mode = mode
         self.warnings = warnings
         self.quiet = quiet
         self.settings = tracker_settings(cfg)
@@ -2359,9 +2279,9 @@ class ConversationTracker:
     @property
     def available(self):
         """The tracker needs the machine gateway: it reads candidates from it and
-        reports every enqueue back through it. A Supabase-only notebook has
+        reports every enqueue back through it. Without a credential it has
         neither half, so the feature simply does not exist there."""
-        return self.mode != "off" and machine_configured(self.cfg)
+        return machine_configured(self.cfg)
 
     def _resolve_profile(self):
         profile, error = _publish_profile(self.cfg)
@@ -3056,9 +2976,9 @@ def release_version(value):
 def self_update(cfg):
     """Fetch and verify a signed release through the authenticated machine API.
 
-    The old Supabase Storage read is intentionally gone. A missing machine
-    credential, missing release bucket, bad signature, bad hash or any I/O error
-    all leave the current file in place and return to the scheduled sync.
+    A missing machine credential, missing release bucket, bad signature, bad
+    hash or any I/O error all leave the current file in place and return to the
+    scheduled sync.
     """
     tmp = None
     try:
@@ -3150,21 +3070,21 @@ def reexec():
 
 
 # Keys that may be overridden online from the dashboard's Health page (stored in
-# instances.config and merged over the local config.yaml on every sync). The
-# bootstrap keys — supabase_url, supabase_service_key, instance_id — are
-# deliberately absent: they're needed locally just to connect/identify, so a
-# remote blob can never change where the agent points or who it claims to be.
+# instances.config and merged over the local config.yaml on every sync).
+# `instance_id` is deliberately absent: a remote blob can never change who the
+# agent claims to be. Anything a remote blob carries that is not listed here —
+# a leftover `ingest_mode` or Supabase key included — is ignored.
 #
-# ingest_url and ingest_mode ARE here, because the rollout of the second
-# transport has to be steerable per notebook without an SSH session: turning one
-# notebook to 'shadow', watching it, then the rest, is the whole rollout.
+# ingest_url and notify_url ARE here, so the dashboard can rotate them without
+# an SSH session. The local token is sent to whatever they name, so a remote
+# edit decides where the credential travels — a known gap, fixed separately.
 REMOTE_CONFIG_KEYS = {
     "instance_label",
     "account_name", "account_url", "account_avatar",
     "auto_update", "sync_steps", "sync_messages", "sync_photos",
     "lh2_db_path", "mapping", "local_timezone",
     "notify_url", "exclude_campaigns",
-    "ingest_url", "ingest_mode", "lh2_status",
+    "ingest_url", "lh2_status",
     # Conversation tracker (Phase 2). All five are safe to edit from the Health
     # page: none of them is a credential and none of them can point the agent at
     # a different dashboard. `tracker_refresh_after_days` is the server's knob —
@@ -3174,9 +3094,9 @@ REMOTE_CONFIG_KEYS = {
     "tracker_hours", "tracker_campaign_name",
 }
 
-# Keys a remote blob may NEVER set, whatever the allowlist above says. Two kinds
-# live here: the bootstrap keys (where the agent points and who it claims to be)
-# and the machine credential (ingest_token).
+# Keys a remote blob may NEVER set, whatever the allowlist above says: the
+# identity (instance_id), the machine credential (ingest_token) and the release
+# trust anchor.
 #
 # This is a subtraction rather than a comment because the failure it prevents is
 # somebody adding a credential to REMOTE_CONFIG_KEYS "so it can be rotated from
@@ -3187,82 +3107,42 @@ REMOTE_CONFIG_KEYS = {
 # never printed. The release public key is also local-only: it is a trust anchor,
 # not a rollout setting.
 LOCAL_ONLY_CONFIG_KEYS = frozenset({
-    "supabase_url", "supabase_service_key", "instance_id",
-    "ingest_token", RELEASE_PUBLIC_KEY_CONFIG,
+    "instance_id", "ingest_token", RELEASE_PUBLIC_KEY_CONFIG,
 })
 
 
 def fetch_remote_config(cfg):
     """Read this notebook's config through the authenticated machine API.
 
-    A pre-S23 config without a machine token retains the legacy read as a
-    migration bridge. Once a token is present, an API failure never falls back
-    to service-role PostgREST: revoke/expiry must actually stop config access.
-    """
+    Any failure returns {} and the sync runs on the local config.yaml alone.
+    There is no other source to fall back to, so a revoked or expired token
+    actually stops config access."""
     token = (cfg.get("ingest_token") or "").strip()
     api_url = machine_api_url(cfg, "agent.config")
-    if token or api_url:
-        if not token or not api_url or not parse_ingest_token(token):
-            print("remote-config: authenticated API is not configured — using local config.yaml only")
-            return {}
-        try:
-            r = requests.get(api_url, headers=machine_api_headers(cfg), timeout=30)
-            r.raise_for_status()
-            answer = r.json()
-            remote = answer.get("config") if isinstance(answer, dict) else None
-            return remote if isinstance(remote, dict) else {}
-        except (requests.RequestException, ValueError) as e:
-            print(f"remote-config API failed ({type(e).__name__}) — using local config.yaml only")
-            return {}
-
-    # The legacy bridge is Supabase's, so it does not exist for a notebook that
-    # has no Supabase credential. Reached only when neither `ingest_token` nor
-    # `ingest_url` is set, which `load_config` already refuses in that case —
-    # so this is unreachable rather than merely unlikely, and it is written as a
-    # guard rather than a comment because `.get` on a key that is absent by
-    # construction beats a KeyError raised from inside a fetch that is supposed
-    # to be non-fatal.
-    if not supabase_configured(cfg):
+    if not token or not api_url or not parse_ingest_token(token):
+        print("remote-config: authenticated API is not configured — using local config.yaml only")
         return {}
-
-    url = str(cfg.get("supabase_url") or "").rstrip("/") + "/rest/v1/instances"
-    service_key = cfg.get("supabase_service_key")
-    headers = {"apikey": service_key,
-               "Authorization": f"Bearer {service_key}"}
-    params = {"id": f"eq.{cfg['instance_id']}", "select": "config", "limit": 1}
     try:
-        r = requests.get(url, headers=headers, params=params, timeout=30)
+        r = requests.get(api_url, headers=machine_api_headers(cfg), timeout=30)
         r.raise_for_status()
-        rows = r.json()
+        answer = r.json()
+        remote = answer.get("config") if isinstance(answer, dict) else None
+        return remote if isinstance(remote, dict) else {}
     except (requests.RequestException, ValueError) as e:
-        print(f"remote-config legacy fetch failed ({type(e).__name__}) — using local config.yaml only")
+        print(f"remote-config API failed ({type(e).__name__}) — using local config.yaml only")
         return {}
-    remote = rows[0].get("config") if rows else None
-    return remote if isinstance(remote, dict) else {}
 
 
 def apply_remote_config(cfg):
     """Merge the remote overrides (instances.config) over the local config.yaml so
     settings can be changed online. Remote wins; only allowlisted keys are honored
-    (bootstrap keys are ignored); `mapping` is merged one level deep so a remote
+    (local-only keys are ignored); `mapping` is merged one level deep so a remote
     override of one section doesn't drop the others. A local
     `ignore_remote_config: true` opts out entirely — the escape hatch to recover a
     notebook if a bad remote value breaks its sync."""
     if cfg.get("ignore_remote_config"):
         return cfg
     remote = fetch_remote_config(cfg)
-    # Whether this notebook can deliver to a gateway is a question about the
-    # config this merge PRODUCES, not about the half-merged one: `ingest_url` is
-    # itself a remote key and can arrive in the very blob being applied, and
-    # `REMOTE_CONFIG_KEYS` is a set, so asking `cfg` from inside the loop made
-    # the answer depend on iteration order. `ingest_token` is local-only and so
-    # is always already in `cfg`. A remote URL that is not a string is not a URL
-    # — the predicate says no, which is the direction this refusal fails in.
-    merged_url = remote.get("ingest_url", cfg.get("ingest_url"))
-    machine_after_merge = machine_configured({
-        "ingest_url": merged_url if isinstance(merged_url, str) else None,
-        "ingest_token": cfg.get("ingest_token"),
-    })
     applied = []
     for key in REMOTE_CONFIG_KEYS - LOCAL_ONLY_CONFIG_KEYS:
         if key not in remote:
@@ -3273,19 +3153,6 @@ def apply_remote_config(cfg):
                 continue  # ignore a malformed mapping override, keep the local one
             base = cfg["mapping"] if isinstance(cfg.get("mapping"), dict) else {}
             cfg["mapping"] = dict(base, **val)
-        elif key == "ingest_mode" and str(val).strip().lower() == "only" \
-                and not machine_after_merge:
-            # `only` means "the gateway is the sole destination", and this
-            # notebook holds no gateway credential to make it one. A LOCAL
-            # `only` in that state is a stated choice and fails loudly (see
-            # `sync_machine_only`); a REMOTE one is a Health-page edit made
-            # against a notebook whose local file the editor cannot see, and
-            # honouring it would stop a working sync from a form. Refused for
-            # the same reason a malformed `mapping` is: an override that cannot
-            # describe this machine is not an instruction about it.
-            print("remote-config: ignoring ingest_mode 'only' — this notebook "
-                  "holds no ingest_url + ingest_token to deliver to")
-            continue
         else:
             cfg[key] = val
         applied.append(key)
@@ -3327,50 +3194,12 @@ def notify_new_replies(cfg):
 
 # ------------------------------------------------ ingest gateway transport
 #
-# The gateway transport. It delivers an extraction to `POST <ingest_url>` (the
+# The only transport. It delivers an extraction to `POST <ingest_url>` (the
 # dashboard's `/api/import?op=agent.ingest`), authenticating with a per-notebook
-# machine credential instead of the shared service key.
-#
-# Four modes, set per notebook by `ingest_mode` (remote-overridable, so a
-# rollout is one Health-page edit per notebook):
-#
-#   off     no payload is built, no request is made. The default for a notebook
-#           that holds a Supabase credential.
-#   shadow  deliver alongside Supabase, and treat every failure as noise. This
-#           is the stage where the gateway is being proved and nobody should be
-#           paged for it.
-#   dual    deliver alongside Supabase, and record a failure as a run warning,
-#           so a gateway that stops working is visible on the Health page
-#           instead of silent.
-#   only    the gateway is the SOLE destination. No Supabase client is built,
-#           no Supabase credential is needed, and a delivery failure fails the
-#           run. The default — and the only possibility — for a notebook that
-#           holds no Supabase credential.
-#
-# `only` used to be refused here, on the reasoning that "making the new store
-# authoritative is a whole-cutover decision about the whole dashboard, not a
-# flag on one notebook". That reasoning was right about the owner's fleet and
-# wrong about everyone else: a tenant deployment never had Supabase, so for its
-# notebooks there is no cutover to decide — there is one destination, and the
-# refusal meant the agent could not run for them at all. The decision the
-# comment was protecting is still a real one, and it is still not made here; it
-# is made by which credential a notebook is given. What `only` adds is the
-# ability to express "this notebook has one destination", which was previously
-# inexpressible even when it was the only true description of the machine.
-#
-# The three properties `off`/`shadow`/`dual` rely on are stated where they now
-# stop being true, because `only` inverts each of them:
-#
-#   * "nothing here can make a sync fail" — in `only` it must, since a refused
-#     delivery means nothing was recorded anywhere.
-#   * "the Supabase push runs first and stays authoritative" — in `only` there
-#     is no second copy, so the parity check is no longer a comparison against
-#     an authoritative store. See `verify_ingest_parity`.
-#   * "the run row is inserted before the work starts" — in `only` the run is
-#     recorded by the batch itself, so a run that never delivers leaves no row.
-#     See `sync_machine_only`.
-
-INGEST_MODES = ("off", "shadow", "dual", "only")
+# machine credential. Because it is the sole destination, a delivery failure
+# fails the run: nothing was recorded anywhere, and cron must not be told the
+# notebook synced. The run is recorded by the batch itself, so a run that never
+# delivers leaves no `sync_runs` row — see `sync_machine_only`.
 
 # The endpoint's own caps, restated here so a payload that would be refused is
 # refused locally with a legible message instead of costing a round trip. They
@@ -3403,41 +3232,6 @@ INGEST_TOKEN_RE = re.compile(
 INGEST_CHUNKABLE = ("campaign_steps", "leads", "messages", "events")
 
 
-def resolve_ingest_mode(cfg):
-    """The mode for this notebook, derived from the credentials it holds.
-
-    A notebook with no Supabase credential is 'only' whatever the flag says.
-    That is not the flag being overridden — it is the flag being unable to
-    describe the machine: `off`, `shadow` and `dual` all mean "and Supabase
-    gets the authoritative copy", and there is no Supabase to get one. A
-    notebook that resolved to `off` here would extract its whole LH2 database
-    and deliver it nowhere, reporting success. Deriving instead of defaulting is
-    the same rule the server's provider paths adopted: let each path decide from
-    the credential it holds, not from a flag nobody set.
-
-    A notebook that DOES hold a Supabase credential keeps the old behaviour
-    exactly: unset means `off`, and an unrecognised value means `off` too.
-    Fail-closed matters there because `ingest_mode` is remote-overridable and a
-    typo on the Health page must leave the notebook as it was, not enable a
-    transport nobody chose. An explicit `only` on such a notebook is honoured —
-    that is the cutover rehearsal, and it is reversible by setting the value
-    back, because every write behind it is an upsert of a full extraction."""
-    raw = str(cfg.get("ingest_mode") or "").strip().lower()
-    if not supabase_configured(cfg):
-        if raw and raw != "only":
-            print(f"ingest_mode {raw!r} describes a run that also writes to "
-                  "Supabase, and this notebook holds no Supabase credential — "
-                  "running 'only'")
-        return "only"
-    if not raw:
-        return "off"
-    if raw not in INGEST_MODES:
-        print(f"ingest_mode {raw!r} is not one of {'/'.join(INGEST_MODES)} — "
-              "treating it as 'off'")
-        return "off"
-    return raw
-
-
 def parse_ingest_token(raw):
     """Return the credential id of a well-formed token, else None.
 
@@ -3467,20 +3261,6 @@ def _ingest_campaigns(campaigns):
              "status_raw": c.get("status_raw")} for c in campaigns]
 
 
-def _legacy_supabase_campaigns(campaigns):
-    """Project onto the frozen legacy schema without weakening Neon ingest.
-
-    `supabase/migrations/` is immutable and has no normalized observation
-    columns. The fallback transport therefore keeps receiving its historical
-    campaign shape, while the authenticated gateway receives the full contract.
-    """
-    allowed = {
-        "id", "instance_id", "lh_campaign_id", "name", "status", "updated_at",
-    }
-    return [{key: value for key, value in campaign.items() if key in allowed}
-            for campaign in campaigns]
-
-
 def _ingest_steps(steps):
     return [{"campaign_id": s["campaign_id"],
              "step_index": s["step_index"],
@@ -3493,19 +3273,15 @@ def _ingest_steps(steps):
 
 
 def _ingest_leads(leads, edu_map, job_map):
-    """Leads, with the start years merged INLINE rather than sent as a second
-    pass.
+    """Leads, with the start years merged inline.
 
-    The Supabase path pushes years as separate bucketed upserts because
-    PostgREST rejects a batch with a mixed key set and a NULL year would clobber
-    a stored one. Neither constraint exists here: the gateway takes one row shape
-    and COALESCEs both year columns, so a NULL leaves the stored value alone.
-    Same values, one statement — and `verify_ingest_parity` compares them against
-    exactly what `build_year_updates` would have sent.
+    The gateway takes one row shape and COALESCEs both year columns, so a NULL
+    year leaves a stored one alone. `verify_ingest_parity` checks every year
+    against the extracted signal.
 
-    photo_path and photo_synced_at are always NULL from this path. The photo
-    mirror writes them directly to its own store after the push, and the gateway
-    COALESCEs both, so sending NULL is a no-op rather than an erasure."""
+    photo_path and photo_synced_at are always NULL. The agent mirrors no photos,
+    and the gateway COALESCEs both, so sending NULL is a no-op rather than an
+    erasure."""
     out = []
     for lead in leads:
         out.append({
@@ -3532,7 +3308,6 @@ def _ingest_leads(leads, edu_map, job_map):
 # The three chat-store fields the gateway's MessageRow gained alongside the
 # original five. They are always emitted (as None for a legacy/mapping row), so
 # the payload's key set never depends on which source produced the extraction.
-# The legacy Supabase table has no such columns — see `_supabase_messages`.
 CHAT_MESSAGE_FIELDS = ("external_id", "platform", "message_type")
 
 
@@ -3546,16 +3321,6 @@ def _ingest_messages(messages):
              "external_id": m.get("external_id"),
              "platform": m.get("platform"),
              "message_type": m.get("message_type")} for m in messages]
-
-
-def _supabase_messages(messages):
-    """The same rows without the chat-store fields, for the legacy Supabase push.
-
-    PostgREST rejects the WHOLE batch with a 400 when a payload names a column
-    the table does not have, and the Supabase `messages` table predates these
-    three. The machine gateway takes them; Supabase must not see them."""
-    return [{k: v for k, v in m.items() if k not in CHAT_MESSAGE_FIELDS}
-            for m in messages]
 
 
 def _ingest_events(events):
@@ -3574,15 +3339,14 @@ def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
     """Project ONE extraction into the gateway's IngestPayload contract.
 
     This is a projection, never a second extraction. `cmd_sync` reads the LH2
-    database once, hands the same in-memory lists to the Supabase upserts and to
-    this function, and passes the ALREADY-DEDUPED messages and events — the same
-    objects the Supabase push sent, not a fresh dedupe of the same inputs. That
-    is what makes "extraction parity" a structural property rather than a hope:
-    there is one extraction, and `verify_ingest_parity` proves the projection of
-    it loses nothing.
+    database once and passes the ALREADY-DEDUPED messages and events — the same
+    objects `verify_ingest_parity` is later handed, not a fresh dedupe of the
+    same inputs. That is what makes "extraction parity" a structural property
+    rather than a hope: there is one extraction, and `verify_ingest_parity`
+    proves the projection of it loses nothing.
 
     Only contract fields are emitted. The internal `updated_at` and the per-row
-    `instance_id` that PostgREST needs are deliberately absent: the gateway
+    `instance_id` the extraction carries are deliberately absent: the gateway
     stamps its own `updated_at` and takes the instance from the credential, and a
     field it would ignore must not be in the payload, because the idempotency key
     is a digest of the payload and a field nobody stores would make an inert
@@ -3590,13 +3354,11 @@ def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
 
     `owner` is the LH2-extracted account identity (`extract_owner`), which
     prefers the config values and fills the rest from the notebook's own
-    database. It is threaded in because the Supabase path writes it to
-    `instances` on every run and the avatar is the reason: LinkedIn media URLs
-    are signed and expire, so the copy that refreshes each sync is the only one
-    that keeps working. Reading it from config alone — which is what this did
-    before — meant a notebook whose avatar comes from the LH2 mapping delivered
-    an empty one, invisibly, because the gateway COALESCEs an empty value away
-    and the row simply kept whatever it already had."""
+    database. The avatar is the reason it travels on every run: LinkedIn media
+    URLs are signed and expire, so the copy that refreshes each sync is the only
+    one that keeps working. Reading it from config alone would deliver an empty
+    one for a notebook whose avatar comes from the LH2 mapping, invisibly,
+    because the gateway COALESCEs an empty value away."""
     identity = dict(owner or {})
     return {
         "instance_id": cfg["instance_id"],
@@ -3726,21 +3488,10 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
     every row survives, every value survives, and no chunk exceeds a cap the
     gateway would refuse.
 
-    A non-empty result REFUSES the delivery, and what that refusal is FOR
-    differs by mode — worth stating, because the same code now serves two
-    situations:
-
-      * alongside Supabase (`shadow`/`dual`), those same lists are what the
-        authoritative push just sent, so the check is a comparison against the
-        authoritative store. Sending a batch already known to disagree with it
-        would put a wrong number in a second place, and a wrong number in two
-        places is worse than a missing one in one.
-      * as the sole destination (`only`), there is no second copy to disagree
-        with, and the check keeps exactly the meaning it always literally had:
-        this batch is a faithful, complete, sendable projection of one
-        extraction. The refusal is now stronger, not weaker — it is the last
-        thing standing between a mis-projected extraction and the only store
-        there is, and it fails the run rather than skipping a mirror."""
+    A non-empty result REFUSES the delivery and fails the run. The gateway is
+    the only store there is, so this check is the last thing standing between a
+    mis-projected extraction and the dashboard's numbers: a missing run is
+    visible on the Health page, a wrong one is not."""
     problems = []
     seen = {name: [] for name in ("campaigns",) + INGEST_CHUNKABLE}
     keys = set()
@@ -3843,13 +3594,13 @@ def plan_ingest(cfg, payload, campaigns, leads, messages, events, steps, demo,
 def post_ingest_chunk(url, token, chunk, timeout=60):
     """POST one batch. Returns the decoded response body, or raises.
 
-    Retried like the Supabase writes and for the same reasons, with one addition
-    that is specific to this endpoint: the retry is safe BECAUSE the batch is
-    keyed. A timeout after the gateway committed is answered on the retry as a
-    replay, so the ambiguity a non-idempotent write has here simply does not
-    exist. A 4xx other than 429 is never retried — a malformed batch, a revoked
-    credential and a key already used for different data are all answers, not
-    blips, and retrying them only delays the log line that explains the run."""
+    Connection errors, timeouts, 429 and 5xx are retried with backoff (~2s then
+    ~8s), and the retry is safe BECAUSE the batch is keyed. A timeout after the
+    gateway committed is answered on the retry as a replay, so the ambiguity a
+    non-idempotent write has here simply does not exist. A 4xx other than 429
+    is never retried — a malformed batch, a revoked credential and a key
+    already used for different data are all answers, not blips, and retrying
+    them only delays the log line that explains the run."""
     backoffs = (2, 8)
     body = json.dumps(chunk, ensure_ascii=False, default=str).encode("utf-8")
     headers = {"Authorization": f"Bearer {token}",
@@ -3895,19 +3646,14 @@ def _ingest_outcome(answer):
     return "replay" if replayed else "accepted"
 
 
-def push_ingest(cfg, mode, chunks, problems):
-    """Deliver the batches. Returns (ok, note); NEVER raises.
-
-    `shadow` swallows the note, `dual` hands it to the run warnings, `only`
-    fails the run on it, and `off` never gets here. Alongside Supabase this runs
-    after the authoritative push has been recorded, so nothing here can turn a
-    green run red; as the sole destination it IS the push, and the caller treats
-    the note accordingly."""
+def push_ingest(cfg, chunks, problems):
+    """Deliver the batches. Returns (ok, note); NEVER raises — the caller
+    decides that a failed delivery fails the run."""
     url = (cfg.get("ingest_url") or "").strip()
     token = (cfg.get("ingest_token") or "").strip()
     if not url or not token:
         print("ingest: ingest_url or ingest_token is missing — "
-              f"mode {mode!r} has nothing to deliver to")
+              "nothing to deliver to")
         return False, "ingest transport is enabled but not configured"
     credential_id = parse_ingest_token(token)
     if not credential_id:
@@ -3944,7 +3690,7 @@ def push_ingest(cfg, mode, chunks, problems):
     return True, None
 
 
-def run_ingest_transport(cfg, mode, campaigns, leads, messages, events, steps,
+def run_ingest_transport(cfg, campaigns, leads, messages, events, steps,
                          demo, status, error, owner=None):
     """Build, chunk, verify and deliver — the whole transport behind ONE except.
 
@@ -3955,24 +3701,20 @@ def run_ingest_transport(cfg, mode, campaigns, leads, messages, events, steps,
     the caller's outer handler.
 
     What the swallow guarantees is that a failure arrives as a VALUE — `(False,
-    note)` — rather than as an exception. Whether that value is fatal is the
-    caller's decision, and it differs: alongside Supabase a failure must not
-    turn a completed authoritative push into a failed run, while as the sole
-    destination it must fail the run, because nothing was written anywhere. Both
-    callers need the same "never raises, always explains" contract; only the
-    handling differs."""
+    note)` — rather than as an exception, so every caller can exit with a line
+    that explains the run instead of a traceback."""
     try:
         payload = build_ingest_payload(cfg, campaigns, leads, messages, events,
                                        steps, demo, status, error, owner)
         chunks, problems = plan_ingest(cfg, payload, campaigns, leads, messages,
                                        events, steps, demo)
-        return push_ingest(cfg, mode, chunks, problems)
+        return push_ingest(cfg, chunks, problems)
     except Exception as e:
         print(f"ingest: transport failed before delivery ({type(e).__name__}: {e})")
         return False, f"ingest transport error: {type(e).__name__}: {e}"
 
 
-def preview_ingest_transport(cfg, mode, campaigns, leads, messages, events,
+def preview_ingest_transport(cfg, campaigns, leads, messages, events,
                              steps, demo, status, error, owner=None):
     """The dry run's half, swallowing for the same reason: a preview that
     crashes takes the whole `--dry-run` with it, and the LH2 comparison it exists
@@ -3982,13 +3724,13 @@ def preview_ingest_transport(cfg, mode, campaigns, leads, messages, events,
                                        steps, demo, status, error, owner)
         chunks, problems = plan_ingest(cfg, payload, campaigns, leads, messages,
                                        events, steps, demo)
-        print_ingest_dry_run(cfg, mode, chunks, problems)
+        print_ingest_dry_run(cfg, chunks, problems)
     except Exception as e:
         print(f"\ningest gateway — preview failed ({type(e).__name__}: {e})")
 
 
-def print_ingest_dry_run(cfg, mode, chunks, problems):
-    """What a dry run says about the second transport.
+def print_ingest_dry_run(cfg, chunks, problems):
+    """What a dry run says about the delivery.
 
     It prints the batches a real sync would deliver — their keys, their row
     counts, their sizes — and it sends nothing. That is not a shortcut: the
@@ -4001,7 +3743,9 @@ def print_ingest_dry_run(cfg, mode, chunks, problems):
     token = (cfg.get("ingest_token") or "").strip()
     credential_id = parse_ingest_token(token)
     rows = sum(sum(len(c[name]) for name in INGEST_CHUNKABLE) for c in chunks)
-    print(f"\ningest gateway — mode {mode!r}, nothing sent")
+    # The installer's dry-run check matches this line verbatim (install.py,
+    # `evaluate_dry_run`), including the retired mode word.
+    print("\ningest gateway — mode 'only', nothing sent")
     print(f"  endpoint    {url or '<ingest_url is not set>'}")
     print(f"  credential  {credential_id or ('<ingest_token is not set>' if not token else '<ingest_token is malformed>')}")
     print(f"  batches     {len(chunks)} covering {rows} chunkable rows "
@@ -4023,198 +3767,6 @@ def print_ingest_dry_run(cfg, mode, chunks, problems):
           "this extraction\n  today produces these same keys. Whether a key is "
           "a first attempt or a replay is\n  the gateway's answer and cannot be "
           "known from a dry run, which sends nothing.")
-    if mode == "off":
-        print("  ingest_mode is 'off', so a real sync would deliver none of this.")
-
-
-# Per-run cap on photo uploads so the initial backfill (potentially thousands of
-# leads) spreads over several scheduled syncs instead of hammering one run.
-PHOTO_CAP = 200
-
-
-def agent_photo_request(cfg, campaign_id, profile_url, photo_path, body=b"",
-                        content_type="application/octet-stream", absent=False):
-    """Send one photo/check to the authenticated object-storage API."""
-    url = machine_api_url(cfg, "agent.photoUpload")
-    token = (cfg.get("ingest_token") or "").strip()
-    if not url or not parse_ingest_token(token):
-        return False
-    headers = dict(machine_api_headers(cfg),
-                   **{"x-agent-campaign-id": str(campaign_id),
-                      "x-agent-profile-url": str(profile_url),
-                      "x-agent-photo-path": str(photo_path),
-                      "content-type": content_type})
-    if absent:
-        headers["x-agent-photo-absent"] = "1"
-    try:
-        response = requests.post(url, headers=headers, data=body, timeout=30)
-        response.raise_for_status()
-        return True
-    except Exception as error:
-        print(f"photo sync: authenticated object API failed ({type(error).__name__})")
-        return False
-
-
-def sync_photos(cfg, sb, avatar_map, machine_mode="off"):
-    """Mirror each lead's LinkedIn avatar into the private `lead-photos` Storage
-    bucket for authenticated/signed UI display — display-only, NEVER used for
-    any inference. Runs after the leads push, only when config `sync_photos` is
-    truthy. Like
-    notify_new_replies, EVERY exception is swallowed here: a photo problem must
-    never break a scheduled sync.
-
-    Signed licdn URLs expire within weeks, so we download the bytes at sync time
-    from the fresh DB read (`avatar_map`) rather than storing a soon-dead URL.
-    Per candidate (this instance's leads with photo_synced_at IS NULL, capped at
-    PHOTO_CAP):
-      - no local avatar URL, or HTTP 403/404 (expired/dead) -> stamp photo_synced_at
-        and leave photo_path NULL, so the job converges (a future --refresh-photos
-        flag can re-attempt);
-      - timeout / connection error / 5xx / upload failure -> leave the lead
-        UNTOUCHED so the next run retries it; counted as retryable;
-      - success -> upload the bytes, then PATCH photo_path + photo_synced_at.
-
-    SUPABASE-PATH ONLY, and the guard below is the honest form of that. Two
-    halves are missing before this can run without Supabase, and neither is
-    useful alone: the candidate list is a Supabase read with no machine-path
-    operation behind it (`app_machine` holds SELECT on `public.leads`, so one
-    could be written), and the destination bucket is not provisioned for a
-    tenant at all — `CANONICAL_TENANT_ENVIRONMENT` binds no `OBJECT_STORAGE_*`
-    value and pins `NEON_PHOTOS_DEFAULT` to `disabled`, so the authenticated
-    upload would 503 and the dashboard would not display the result if it
-    landed. Refusing loudly is the difference between a known gap and a
-    `sync_photos: true` that quietly mirrors nothing.
-    """
-    # `sb is None` FIRST, and it is the predicate that matters. The credential
-    # answers "could this notebook reach Supabase", which is not the question:
-    # `sync_machine_only` passes None deliberately, and a notebook mid-cutover
-    # still holds the keys it has stopped using. Testing only the credential let
-    # that combination through to `sb.update`, where the AttributeError was
-    # swallowed as `retryable` — so every run re-downloaded and re-uploaded the
-    # same capped window of photos and nothing ever converged.
-    if sb is None or not supabase_configured(cfg):
-        print("photo sync: skipped — the mirror writes to Supabase Storage and "
-              "reads its candidate list from Supabase, and this run has no "
-              "Supabase client to do either with")
-        return
-    try:
-        instance_id = cfg["instance_id"]
-        base = cfg["supabase_url"].rstrip("/")
-        service_key = cfg["supabase_service_key"]
-        auth = {"apikey": service_key,
-                "Authorization": f"Bearer {service_key}"}
-
-        # Candidates: unsynced leads for THIS instance. The leads unique key is
-        # (campaign_id, profile_url) — both selected for the later PATCH; profile_url
-        # also yields the slug. Capped so the backfill spreads over several runs.
-        # STABLE ORDER (newest added_at first, as classify.ts orders): together with
-        # converging on any permanent error below, this stops a stuck set from
-        # pinning the same PHOTO_CAP window every run and starving the backfill.
-        try:
-            r = requests.get(
-                f"{base}/rest/v1/leads", headers=auth,
-                params={"instance_id": f"eq.{instance_id}",
-                        "photo_synced_at": "is.null",
-                        "select": "campaign_id,profile_url",
-                        "order": "added_at.desc",
-                        "limit": PHOTO_CAP},
-                timeout=30)
-            r.raise_for_status()
-            candidates = r.json()
-        except (requests.RequestException, ValueError) as e:
-            print(f"photo sync: candidate fetch failed ({e}) — skipping this run")
-            return
-
-        now = dt.datetime.now(dt.timezone.utc).isoformat()
-        uploaded = no_avatar = retryable = machine_uploaded = 0
-        for cand in candidates:
-            cid = cand.get("campaign_id")
-            purl = cand.get("profile_url")
-            if not cid or not purl:
-                continue
-            match = {"campaign_id": cid, "profile_url": purl}
-            raw_slug = slug_from_profile_url(purl)
-            sanitized = sanitize_slug(raw_slug)
-            avatar_url = avatar_map.get(raw_slug)
-
-            # Converge quietly (mark synced, leave photo_path NULL) when there is no
-            # avatar on file, OR the slug sanitizes to empty (a malformed profile_url
-            # would otherwise collapse every such lead onto "{instance_id}/.jpg") —
-            # never upload in either case.
-            if not avatar_url or not sanitized:
-                try:
-                    if machine_mode != "off" and not agent_photo_request(
-                            cfg, cid, purl, f"{instance_id}/{sanitized}.jpg",
-                            absent=True):
-                        retryable += 1
-                        continue
-                    sb.update("leads", match, {"photo_synced_at": now})
-                    no_avatar += 1
-                except Exception:
-                    retryable += 1
-                continue
-
-            try:
-                resp = requests.get(avatar_url, timeout=10)
-            except requests.RequestException:
-                retryable += 1  # transient — retry next run, lead untouched
-                continue
-
-            if 400 <= resp.status_code < 500:
-                # ANY 4xx is permanent (expired/forbidden/gone signed URL, auth) ->
-                # converge (mark synced, no photo) so it can never pin a backfill slot.
-                try:
-                    if machine_mode != "off" and not agent_photo_request(
-                            cfg, cid, purl, f"{instance_id}/{sanitized}.jpg",
-                            absent=True):
-                        retryable += 1
-                        continue
-                    sb.update("leads", match, {"photo_synced_at": now})
-                    no_avatar += 1
-                except Exception:
-                    retryable += 1
-                continue
-            if resp.status_code != 200 or not resp.content:
-                retryable += 1  # 5xx / unexpected — retry next run, lead untouched
-                continue
-
-            ctype = resp.headers.get("content-type", "")
-            if not ctype.startswith("image/"):
-                ctype = "image/jpeg"
-            path = f"{instance_id}/{sanitized}.jpg"
-            try:
-                up = requests.post(
-                    f"{base}/storage/v1/object/lead-photos/{path}",
-                    headers=dict(auth, **{"x-upsert": "true",
-                                          "content-type": ctype}),
-                    data=resp.content, timeout=30)
-                up.raise_for_status()
-            except requests.RequestException:
-                retryable += 1  # upload failed — retry next run, lead untouched
-                continue
-
-            if machine_mode != "off":
-                if not agent_photo_request(
-                        cfg, cid, purl, path, resp.content, ctype):
-                    # The old bucket may have the bytes, but the authenticated
-                    # destination still needs a retry before this candidate can
-                    # be marked complete in Supabase.
-                    retryable += 1
-                    continue
-                machine_uploaded += 1
-
-            try:
-                sb.update("leads", match,
-                          {"photo_path": path, "photo_synced_at": now})
-                uploaded += 1
-            except Exception:
-                retryable += 1  # storage has the object; PATCH retries next run
-
-        print(f"photo sync: {uploaded} uploaded, {machine_uploaded} authenticated, "
-              f"{no_avatar} no-avatar, "
-              f"{retryable} retryable (of {len(candidates)} candidates)")
-    except Exception as e:
-        print(f"photo sync failed ({e}) — will retry after next sync")
 
 
 def content_hash(body):
@@ -4256,8 +3808,7 @@ LINKEDIN_IN_PREFIX = "https://www.linkedin.com/in/"
 def slug_from_profile_url(url):
     """Invert the leads mapping's profile_url = LINKEDIN_IN_PREFIX || external_id to
     recover the deduped slug (external_id). Tolerates other LinkedIn URL shapes and a
-    trailing slash. The recovered slug matches the avatar map's keys, and — once
-    sanitized — the stored photo_path, so a photo always joins back to its lead."""
+    trailing slash."""
     s = (url or "").strip()
     if s.startswith(LINKEDIN_IN_PREFIX):
         s = s[len(LINKEDIN_IN_PREFIX):]
@@ -4266,14 +3817,6 @@ def slug_from_profile_url(url):
         if m:
             s = m.group(1)
     return s.strip("/")
-
-
-def sanitize_slug(slug):
-    """Reduce a slug to a Storage-path-safe [A-Za-z0-9_-] token (percent-decode
-    first so an encoded name collapses to its readable form, then replace anything
-    else with '_'). Deterministic, so photo_path always matches the uploaded key."""
-    decoded = urllib.parse.unquote(slug or "")
-    return re.sub(r"[^A-Za-z0-9_-]", "_", decoded)
 
 
 # ---------------------------------------------------------------- inspect
@@ -5129,12 +4672,12 @@ def extract_chat_messages(con, instance_id, profile, own_id,
         })
     return out
 
-# ------------------------ demographics signals + avatar source ---------------
-# All three below reuse the SAME one-slug-per-person dedup as leads, so their
-# results key on the SAME slug-format profile_url (years) / slug (avatars) — and
-# all fail safe to EMPTY on schema drift (a build missing these tables just syncs
-# with no years/photos). Never wired to note_warning: these are new best-effort
-# extractions, so a notebook that lacks the tables must NOT read as 'partial'.
+# ------------------------------------------------ demographics signals -------
+# Both below reuse the SAME one-slug-per-person dedup as leads, so their results
+# key on the SAME slug-format profile_url — and both fail safe to EMPTY on schema
+# drift (a build missing these tables just syncs with no years). Never wired to
+# note_warning: these are best-effort extractions, so a notebook that lacks the
+# tables must NOT read as 'partial'.
 
 # Per-person EARLIEST education start year and EARLIEST first-job start year, for
 # deterministic birth-year inference downstream. Implausible placeholder years
@@ -5161,20 +4704,6 @@ JOIN {PEI_ONE_SLUG_SQL} pei ON pei.person_id = pp.person_id
 WHERE pp.start_year >= 1950 AND pp.start_year <= ?
 GROUP BY 1
 """
-
-# Best avatar URL per deduped slug: prefer the 800x800
-# person_original_mini_profile.avatar, fall back to the 100x100
-# person_mini_profile.avatar. LEFT JOINs tolerate a person with no mini-profile
-# row (NULL avatar). Signed licdn URLs expire within weeks, so the photo step
-# downloads the bytes at sync time from this fresh DB read.
-AVATAR_SQL = f"""
-SELECT pei.external_id AS slug,
-       COALESCE(NULLIF(pomp.avatar, ''), NULLIF(pmp.avatar, '')) AS avatar_url
-FROM {PEI_ONE_SLUG_SQL} pei
-LEFT JOIN person_original_mini_profile pomp ON pomp.person_id = pei.person_id
-LEFT JOIN person_mini_profile pmp ON pmp.person_id = pei.person_id
-"""
-
 
 def flatten_template(settings):
     """Flatten LH2's action_configs.actionSettings JSON into readable text.
@@ -5419,58 +4948,11 @@ def extract_demographic_years(cfg, con):
     return edu, job
 
 
-def build_avatar_map(con):
-    """{deduped slug (external_id) -> best avatar URL}. Prefers the 800x800
-    person_original_mini_profile.avatar, falls back to the 100x100
-    person_mini_profile.avatar. Fails safe to {} on schema drift (print-only) — the
-    photo step then finds no avatars and converges quietly."""
-    out = {}
-    try:
-        for row in con.execute(AVATAR_SQL):
-            slug = row["slug"]
-            url = row["avatar_url"]
-            if slug and url:
-                out[str(slug)] = str(url)
-    except sqlite3.Error as e:
-        print(f"avatar map extraction skipped ({e}) — photo sync finds no avatars")
-    return out
-
-
-def build_year_updates(leads, edu_map, job_map):
-    """Bucket leads by which start-year signals they carry so each PostgREST upsert
-    request has a UNIFORM key set (a mixed-key batch is rejected). Only non-NULL
-    years are ever emitted, so a re-sync can never clobber a stored year with NULL.
-    Returns (both, edu_only, job_only) — each a list of merge-duplicate rows on the
-    leads (campaign_id, profile_url) unique key; the row always already exists (leads
-    were just upserted) so each hits the UPDATE path and touches only these columns.
-
-    instance_id is included even though the row already exists: PostgREST's
-    merge-duplicates emits INSERT ... ON CONFLICT DO UPDATE, and Postgres validates
-    the candidate insert tuple's NOT NULL constraints BEFORE routing the conflict to
-    the UPDATE branch. Omitting the NOT NULL instance_id makes every batch 400 with a
-    not-null violation (which is exactly what happened in agent 1.12.0). It's set to
-    the lead's own instance_id, so the UPDATE branch is a no-op for that column."""
-    both, edu_only, job_only = [], [], []
-    for lead in leads:
-        e = edu_map.get(lead["profile_url"])
-        j = job_map.get(lead["profile_url"])
-        base = {"instance_id": lead["instance_id"],
-                "campaign_id": lead["campaign_id"],
-                "profile_url": lead["profile_url"]}
-        if e is not None and j is not None:
-            both.append(dict(base, education_start_year=e, first_job_start_year=j))
-        elif e is not None:
-            edu_only.append(dict(base, education_start_year=e))
-        elif j is not None:
-            job_only.append(dict(base, first_job_start_year=j))
-    return both, edu_only, job_only
-
-
 def apply_campaign_excludes(cfg, campaigns, leads, messages, steps):
     """Drop everything belonging to LH2 campaigns listed in `exclude_campaigns`
     (LH2 campaign ids, e.g. [4]). Archiving a campaign in LH2 does NOT remove
     it (or its person_in_campaigns_history rows) from the SQLite DB, so a
-    campaign deleted from Supabase gets resurrected by the next sync unless it
+    campaign deleted from the dashboard gets resurrected by the next sync unless it
     is excluded here. Events need no filtering — derive_events builds them from
     the already-filtered leads. Messages with campaign_id None are kept."""
     raw = cfg.get("exclude_campaigns") or []
@@ -5688,17 +5170,16 @@ def extract_local(cfg, warnings=None):
     campaigns, leads, messages, steps = apply_campaign_excludes(
         cfg, campaigns, leads, messages, steps)
 
-    # Age-inference signals + avatar source (both new + best-effort): built here
-    # while the DB is open, fail safe to empty so a notebook whose LH2 build lacks
-    # these tables still syncs cleanly (and is NOT flagged 'partial' — these are
-    # print-only on drift, never note_warning). Returned in `demo` for the leads
-    # year-merge, the photo step, and the dry-run coverage counts.
+    # Age-inference signals (best-effort): built here while the DB is open, fail
+    # safe to empty so a notebook whose LH2 build lacks these tables still syncs
+    # cleanly (and is NOT flagged 'partial' — these are print-only on drift,
+    # never note_warning). Returned in `demo` for the leads year-merge and the
+    # dry-run coverage counts.
     edu_map, job_map = extract_demographic_years(cfg, con)
-    avatar_map = build_avatar_map(con)
 
     owner = extract_owner(cfg, con, warnings)
     con.close()
-    demo = {"edu_map": edu_map, "job_map": job_map, "avatar_map": avatar_map,
+    demo = {"edu_map": edu_map, "job_map": job_map,
             "conversations": conversations}
     return campaigns, leads, messages, steps, owner, demo
 
@@ -5747,17 +5228,12 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
             print(f"{cname:<24}{s['step_index']:>2} {label:<22}"
                   f"{s['sent_count']:>7}{s['replied_count']:>9}{rate:>8}{s['current_count']:>6}")
 
-    edu_map, job_map, avatar_map = (demo["edu_map"], demo["job_map"],
-                                    demo["avatar_map"])
+    edu_map, job_map = demo["edu_map"], demo["job_map"]
     edu_n = sum(1 for l in leads if edu_map.get(l["profile_url"]) is not None)
     job_n = sum(1 for l in leads if job_map.get(l["profile_url"]) is not None)
-    avatar_n = sum(1 for l in leads
-                   if avatar_map.get(slug_from_profile_url(l["profile_url"])))
     print(f"\ndemographics: {edu_n} leads with an education start year, "
           f"{job_n} with a first-job start year "
           "(merged into leads; a NULL year is never sent).")
-    print(f"photos: {avatar_n}/{len(leads)} leads have a local avatar URL "
-          "(nothing downloaded in a dry run; enable with sync_photos).")
 
     conv = demo.get("conversations") or {}
     print("\nconversations:")
@@ -5805,28 +5281,26 @@ def cmd_sync(args):
     if not args.dry_run and self_update(cfg):
         reexec()
 
-    mode = resolve_ingest_mode(cfg)
-
     if args.dry_run:
         warnings = []
         # Quiet, so the tracker's whole block prints as one section at the end
         # rather than interleaved with the extraction counts. A dry run makes no
         # CDP call and writes no state; reading the candidate list is a GET and
         # is allowed, because previewing the split without it says nothing.
-        tracker = ConversationTracker(cfg, instance_id, mode, warnings, quiet=True)
+        tracker = ConversationTracker(cfg, instance_id, warnings, quiet=True)
         tracker.ensure(dry_run=True)
         tracker.apply_exclude()
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
         print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo)
-        # The second transport previews off the SAME lists, deduped exactly as the
-        # real push dedupes them, so the batch keys printed here are the keys a
-        # real sync would present today. The tracker's leftover refresh events are
+        # The delivery previews off the SAME lists, deduped exactly as the real
+        # sync dedupes them, so the batch keys printed here are the keys a real
+        # sync would present today. The tracker's leftover refresh events are
         # part of that batch — they were produced after the last run's push.
         sent_messages = dedupe_messages(messages)
         sent_events = dedupe_events(
             derive_events(instance_id, leads) + tracker.pending_events())
         preview_ingest_transport(
-            cfg, mode, campaigns, leads, sent_messages, sent_events, steps,
+            cfg, campaigns, leads, sent_messages, sent_events, steps,
             demo, "partial" if warnings else "ok",
             "; ".join(warnings)[:500], owner)
         tracker.refresh(dry_run=True)
@@ -5839,167 +5313,45 @@ def cmd_sync(args):
         return
 
     # The tracker resolves (or creates, once) BEFORE extraction, so its campaign
-    # is excluded from the very lists this run pushes. `warnings` is threaded in
-    # for the same reason every other fail-safe section is: a tracker that could
-    # not be reached must make the run 'partial', not falsely green.
+    # is excluded from the very lists this run delivers. `warnings` is threaded
+    # in for the same reason every other fail-safe section is: a tracker that
+    # could not be reached must make the run 'partial', not falsely green.
     warnings = []
-    tracker = ConversationTracker(cfg, instance_id, mode, warnings)
+    tracker = ConversationTracker(cfg, instance_id, warnings)
     tracker.ensure()
     tracker.apply_exclude()
-
-    if mode == "only":
-        return sync_machine_only(cfg, instance_id, mode, tracker, warnings)
-
-    sb = Supabase(cfg)
-    sb.upsert("instances", [{
-        "id": instance_id,
-        "label": cfg.get("instance_label", instance_id),
-        "agent_version": AGENT_VERSION,
-    }], on_conflict="id")
-    # sync_runs.status is one of: running (row inserted here) | ok | partial | error.
-    # 'partial' means the run pushed successfully but at least one fail-safe-to-empty
-    # section (messages/steps/first-message/owner) hit a schema-drift error — the run
-    # is green-ish but a feed may be silently empty, so it must NOT read as a clean 'ok'.
-    # NOT retriable: a plain insert with no on_conflict isn't idempotent, so a Timeout
-    # after the server committed would, on retry, leave an orphaned status='running'
-    # row (whose id we'd never keep) stuck forever on the Health page.
-    run = sb.insert("sync_runs", {"instance_id": instance_id}, retriable=False)
-
-    total = 0
-    try:
-        campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
-        total += sb.upsert("campaigns", _legacy_supabase_campaigns(campaigns),
-                           on_conflict="id")
-        total += sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
-        # Merge age-inference start years WITHOUT ever sending NULL (a re-sync must
-        # not clobber a stored year). Kept out of the main leads payload (which stays
-        # uniform) and pushed as separate merge-duplicate upserts bucketed by which
-        # years each row carries, so every request has a uniform key set. Each row's
-        # (campaign_id, profile_url) already exists from the leads upsert above, so
-        # merge-duplicates UPDATEs just these columns.
-        # GUARDED separately so a year failure never aborts the rest of the sync —
-        # events, messages, steps, the reply ping and photos all still run. Fail safe
-        # to a 'partial' run (visible on the Health page) and press on, exactly like
-        # the other fail-safe-to-empty sections. Two ways this can 400: (a) this agent
-        # self-updates ahead of migration 041, so the year columns don't exist yet;
-        # (b) the payload omits a NOT NULL leads column — merge-duplicates validates
-        # the candidate insert tuple before routing the conflict to UPDATE, so a
-        # missing instance_id 400s even though the row exists (the 1.12.0 bug, fixed
-        # in build_year_updates). A year failure must never break a scheduled sync.
-        try:
-            for bucket in build_year_updates(leads, demo["edu_map"], demo["job_map"]):
-                total += sb.upsert("leads", bucket, on_conflict="campaign_id,profile_url")
-        except Exception as e:
-            note_warning(warnings, "year columns push (migration 041 applied?)", e)
-            print(f"year columns push failed (migration 041 applied?): {e} — "
-                  "continuing; run reports 'partial'")
-        # events on_conflict key matches migration 035 (occurred_at dropped from the
-        # key so a corrected LH2 milestone UPDATES the event instead of inserting a
-        # duplicate). DEPLOY ORDER: migration 035 must be applied BEFORE this agent
-        # version rolls out — until then this key has no unique constraint and
-        # PostgREST rejects the on_conflict loudly (visible, not silent).
-        # Bound once, then upserted, so the ingest transport below delivers the
-        # SAME objects rather than a second dedupe of the same inputs. Two dedupes
-        # is two places for the tie-breaking rule to be, which is one more than a
-        # rule can be maintained in — and it would make the parity check compare a
-        # list against itself computed twice instead of against what was sent.
-        # The tracker's refresh runs AFTER this push, so the events it produces
-        # belong to the NEXT batch. They wait in the state file and are drained
-        # here — this is the only place they can enter a batch at all.
-        pending = tracker.pending_events()
-        sent_events = dedupe_events(derive_events(instance_id, leads) + pending)
-        sent_messages = dedupe_messages(messages)
-        total += sb.upsert("events", sent_events,
-                           on_conflict="instance_id,campaign_id,profile_url,event_type")
-        total += sb.upsert("messages", _supabase_messages(sent_messages),
-                           on_conflict="instance_id,profile_url,direction,sent_at,content_hash")
-        total += sb.upsert("campaign_steps", steps,
-                           on_conflict="campaign_id,step_index")
-        # Cleared only once the authoritative store has them.
-        tracker.mark_pending_delivered(pending)
-
-        # A successful push with swallowed per-section failures is 'partial', not 'ok'.
-        status = "partial" if warnings else "ok"
-
-        # The second transport, after the authoritative push and before the run is
-        # recorded — after, so it can never delay or endanger the Supabase write;
-        # before, so a 'dual' failure reaches the Health page in this run's own
-        # error field instead of the next one's. It never raises, so the outer
-        # except below cannot be reached from here and a green run stays green.
-        if mode != "off":
-            ok, note = run_ingest_transport(
-                cfg, mode, campaigns, leads, sent_messages, sent_events, steps,
-                demo, status, "; ".join(warnings)[:500], owner)
-            if not ok and mode == "dual":
-                warnings.append(f"ingest: {note}")
-                status = "partial"
-            elif not ok:
-                print(f"ingest: {note} — mode 'shadow', not reported on the run")
-
-        run_patch = {
-            "status": status, "rows_upserted": total,
-            "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()}
-        if warnings:
-            run_patch["error"] = "; ".join(warnings)[:500]
-        sb.update("sync_runs", {"id": run["id"]}, run_patch)
-        sb.update("instances", {"id": instance_id}, dict(
-            owner, last_sync_at=dt.datetime.now(dt.timezone.utc).isoformat()))
-        print(f"sync {status}: {total} rows upserted for instance {instance_id}"
-              + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
-        # After the run is recorded: both swallow everything internally, so they can
-        # never trip the outer except and flip a green run to status='error'.
-        # After the push and before the reply ping: the tracker enqueues work for
-        # LH2 only once this run's own data is safely delivered, and it swallows
-        # everything internally, so it can never flip a green run to 'error'.
-        tracker.refresh()
-        notify_new_replies(cfg)
-        # Photo mirroring runs after the leads push, opt-in per notebook. Off by
-        # default so the first backfill is a deliberate rollout, not an ambush.
-        if cfg.get("sync_photos"):
-            sync_photos(cfg, sb, demo["avatar_map"], mode)
-    except Exception as e:
-        sb.update("sync_runs", {"id": run["id"]}, {
-            "status": "error", "error": str(e)[:2000],
-            "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()})
-        sys.exit(f"sync failed: {e}")
+    return sync_machine_only(cfg, instance_id, tracker, warnings)
 
 
-def sync_machine_only(cfg, instance_id, mode, tracker=None, warnings=None):
-    """One sync whose ONLY destination is the machine ingest gateway.
+def sync_machine_only(cfg, instance_id, tracker=None, warnings=None):
+    """One sync, delivered to the machine ingest gateway.
 
-    Called instead of the Supabase half of `cmd_sync`, never alongside it. No
-    `Supabase(cfg)` is constructed anywhere on this path, which is the point:
-    the notebook may hold no Supabase credential at all.
-
-    Three things the Supabase path gets for free are re-derived here, and each
-    is worth naming because the difference is observable on the Health page.
-
-    **The run row.** Supabase inserts a `sync_runs` row with status `running`
-    BEFORE the work starts, so a notebook that dies mid-extraction leaves
-    evidence. The gateway writes its `sync_runs` row as part of an accepted
-    batch, so there is no equivalent — a run that never delivers leaves no row
-    at all. That is a real reduction and it is not hidden: the failure is
-    printed and the process exits non-zero, so the notebook's own cron log has
-    it, and `instances.last_sync_at` going stale is what the Health page shows.
-    Inventing a pre-run row would mean a second write path into the gateway for
-    a state nobody can query anyway.
+    **The run row.** The gateway writes its `sync_runs` row as part of an
+    accepted batch, so a run that never delivers leaves no row at all. The
+    failure is printed and the process exits non-zero, so the notebook's own
+    cron log has it, and `instances.last_sync_at` going stale is what the
+    Health page shows.
 
     **The instance heartbeat.** `agent.upsertInstance` sets `last_sync_at =
     now()` inside the batch and COALESCEs the account fields, so the heartbeat
-    and the owner identity travel with the payload rather than as a separate
-    PATCH afterwards.
+    and the owner identity travel with the payload.
 
-    **Failure is fatal.** In `shadow`/`dual` a delivery failure is at worst a
-    warning, because Supabase already has the rows. Here nothing was written
-    anywhere, so the run must exit non-zero — otherwise cron reports success for
-    a notebook that has been silently delivering nothing, which is precisely the
-    shape this whole path exists to avoid."""
+    **Failure is fatal.** Nothing was written anywhere, so the run must exit
+    non-zero — otherwise cron reports success for a notebook that has been
+    silently delivering nothing.
+
+    The batch's `sync_run.status` is 'ok' or 'partial'; 'partial' means at
+    least one fail-safe-to-empty section (messages/steps/first-message/owner)
+    hit a schema-drift error, so a feed may be silently empty."""
     if warnings is None:
         warnings = []
     if tracker is None:
-        tracker = ConversationTracker(cfg, instance_id, mode, warnings)
+        tracker = ConversationTracker(cfg, instance_id, warnings)
     try:
         campaigns, leads, messages, steps, owner, demo = extract_local(cfg, warnings)
+        # The tracker's refresh runs AFTER the push, so the events it produces
+        # belong to the NEXT batch. They wait in the state file and are drained
+        # here — this is the only place they can enter a batch at all.
         pending = tracker.pending_events()
         sent_events = dedupe_events(derive_events(instance_id, leads) + pending)
         sent_messages = dedupe_messages(messages)
@@ -6011,21 +5363,24 @@ def sync_machine_only(cfg, instance_id, mode, tracker=None, warnings=None):
     rows = (len(campaigns) + len(steps) + len(leads) + len(sent_messages)
             + len(sent_events))
     ok, note = run_ingest_transport(
-        cfg, mode, campaigns, leads, sent_messages, sent_events, steps, demo,
+        cfg, campaigns, leads, sent_messages, sent_events, steps, demo,
         status, "; ".join(warnings)[:500], owner)
     if not ok:
         sys.exit(f"sync failed: {note}")
+    # Cleared only once the gateway has them.
     tracker.mark_pending_delivered(pending)
 
     print(f"sync {status}: {rows} rows delivered to the ingest gateway for "
           f"instance {instance_id}"
           + (f" ({len(warnings)} section(s) failed empty)" if warnings else ""))
-    # Both swallow everything internally, exactly as on the Supabase path, so
-    # neither can turn a delivered run into a failed one.
+    # Both swallow everything internally, so neither can turn a delivered run
+    # into a failed one. The tracker enqueues work for LH2 only once this run's
+    # own data is safely delivered.
     tracker.refresh()
     notify_new_replies(cfg)
     if cfg.get("sync_photos"):
-        sync_photos(cfg, None, demo["avatar_map"], mode)
+        print("photo sync: not available on the ingest gateway path — "
+              "sync_photos is ignored")
 
 
 def dedupe_messages(messages):
@@ -6082,43 +5437,12 @@ def derive_events(instance_id, leads):
                     "profile_url": lead["profile_url"],
                     "event_type": etype,
                     "occurred_at": lead[field],
-                    # A milestone event has no payload, but the key must be
-                    # present: PostgREST refuses a bulk insert whose objects do
-                    # not all carry the same keys, and the tracker's refresh
+                    # A milestone event has no payload, but the key is kept so
+                    # every event row has one shape: the tracker's refresh
                     # events (which DO carry one) travel in the same batch.
                     "raw": None,
                 })
     return events
-
-
-# ---------------------------------------------------------------- annotate
-
-def cmd_annotate(args):
-    """Drop a marker on the dashboard's time-series charts, e.g.
-    `agent.py annotate "Switched to template B"`. Global by default; scope
-    with --campaign (dashboard campaign id) or --instance (this notebook).
-
-    SUPABASE-PATH ONLY, and unlike `ingest-csv` it cannot be ported: the machine
-    ingest contract has no annotations collection and `app_machine` holds no
-    grant on `public.annotations` (ledger step 009 lists the seven tables it may
-    write, and that is not one of them). Widening either is a schema decision
-    that needs its own ledger step, so this refuses rather than pretending."""
-    cfg = load_config()
-    if not supabase_configured(cfg):
-        sys.exit(
-            "annotate writes to Supabase and this notebook holds no Supabase "
-            "credential. The machine ingest gateway has no annotations "
-            "operation — app_machine holds no grant on public.annotations — so "
-            "there is nowhere for this note to go."
-        )
-    sb = Supabase(cfg)
-    sb.upsert("annotations", [{
-        "note": args.note,
-        "noted_at": args.date or dt.date.today().isoformat(),
-        "instance_id": cfg["instance_id"] if args.instance else None,
-        "campaign_id": args.campaign,
-    }], on_conflict="note,noted_at,instance_id,campaign_id")
-    print(f"annotation saved: {args.note!r} @ {args.date or 'today'}")
 
 
 # ---------------------------------------------------------------- ingest-csv
@@ -6158,8 +5482,7 @@ def csv_campaign_slug(name):
 def csv_leads(args, instance_id, campaign_id):
     """Parse one LH2 CSV export into normalized lead rows.
 
-    Split out of `cmd_ingest_csv` so the two destinations below read the same
-    rows. The parsing is unchanged; only its home moved."""
+    Split out of `cmd_ingest_csv` to keep the parsing apart from delivery."""
     leads = []
     with open(args.file, newline="", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
@@ -6207,15 +5530,14 @@ def csv_leads(args, instance_id, campaign_id):
 
 
 def cmd_ingest_csv(args):
-    """Ingest an LH2 CSV export, to whichever destination this notebook has.
+    """Ingest an LH2 CSV export through the ingest gateway.
 
-    The gateway branch is a real port rather than a refusal (unlike `annotate`)
-    because a CSV import is exactly what the ingest contract already carries: a
+    A CSV import is exactly what the ingest contract already carries: a
     campaign, its leads and the events derived from them. It reuses the same
     projection, the same chunking, the same content-addressed idempotency key
     and the same parity check as `sync`, so re-running an import is a replay
     rather than a second copy, and a mis-projected import is refused before it
-    is sent — the same guarantees the scheduled path has, for the same reasons.
+    is sent.
 
     Steps and messages are empty because a CSV export carries neither. The
     gateway COALESCEs an absent collection rather than clearing one, so an
@@ -6230,36 +5552,16 @@ def cmd_ingest_csv(args):
                 "lh_campaign_id": slug, "name": args.campaign,
                 "updated_at": dt.datetime.now(dt.timezone.utc).isoformat()}
 
-    if not supabase_configured(cfg):
-        leads = csv_leads(args, instance_id, campaign_id)
-        events = dedupe_events(derive_events(instance_id, leads))
-        ok, note = run_ingest_transport(
-            cfg, "only", [campaign], leads, [], events, [],
-            {"edu_map": {}, "job_map": {}}, "ok", "", owner)
-        if not ok:
-            sys.exit(f"ingest-csv failed: {note}")
-        print(f"ingested {len(leads)} leads into campaign '{args.campaign}' "
-              "through the ingest gateway")
-        return
-
-    sb = Supabase(cfg)
-    sb.upsert("instances", [dict(owner,
-                                 id=instance_id,
-                                 label=cfg.get("instance_label", instance_id),
-                                 agent_version=AGENT_VERSION)], on_conflict="id")
-    sb.upsert("campaigns", [campaign], on_conflict="id")
-
     leads = csv_leads(args, instance_id, campaign_id)
-    n = sb.upsert("leads", leads, on_conflict="campaign_id,profile_url")
-    # events on_conflict key matches migration 035 (occurred_at dropped from the key);
-    # dedupe_events pre-collapses in case the CSV repeats a profile. DEPLOY ORDER:
-    # migration 035 must be applied before this agent version runs, else PostgREST
-    # rejects the on_conflict loudly (visible, not silent).
-    sb.upsert("events", dedupe_events(derive_events(instance_id, leads)),
-              on_conflict="instance_id,campaign_id,profile_url,event_type")
-    sb.update("instances", {"id": instance_id},
-              {"last_sync_at": dt.datetime.now(dt.timezone.utc).isoformat()})
-    print(f"ingested {n} leads into campaign '{args.campaign}'")
+    # dedupe_events pre-collapses in case the CSV repeats a profile.
+    events = dedupe_events(derive_events(instance_id, leads))
+    ok, note = run_ingest_transport(
+        cfg, [campaign], leads, [], events, [],
+        {"edu_map": {}, "job_map": {}}, "ok", "", owner)
+    if not ok:
+        sys.exit(f"ingest-csv failed: {note}")
+    print(f"ingested {len(leads)} leads into campaign '{args.campaign}' "
+          "through the ingest gateway")
 
 
 # ---------------------------------------------------------------- main
@@ -6292,21 +5594,10 @@ def main():
     pv.set_defaults(func=cmd_publish_verify)
 
     ps = sub.add_parser("sync",
-                        help="sync the local LH2 DB to whichever destination "
-                             "config.yaml holds a credential for")
+                        help="sync the local LH2 DB to the ingest gateway")
     ps.add_argument("--dry-run", action="store_true",
                     help="extract and print per-campaign counts without pushing")
     ps.set_defaults(func=cmd_sync)
-
-    pa = sub.add_parser("annotate",
-                        help="mark an event (template change, audience swap…) "
-                             "on the dashboard charts")
-    pa.add_argument("note", help="short text shown on the chart marker")
-    pa.add_argument("--date", help="YYYY-MM-DD (default today)")
-    pa.add_argument("--campaign", help="dashboard campaign id to scope to")
-    pa.add_argument("--instance", action="store_true",
-                    help="scope to this notebook's account only")
-    pa.set_defaults(func=cmd_annotate)
 
     pc = sub.add_parser("ingest-csv", help="ingest an LH2 CSV export")
     pc.add_argument("file")

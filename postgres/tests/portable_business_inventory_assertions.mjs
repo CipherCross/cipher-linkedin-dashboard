@@ -6,7 +6,10 @@ const inventory = readJson("docs/platform-ops/portable-business-schema-inventory
 const sourceInventory = readJson("docs/platform-ops/tenant-schema-inventory-v053.json");
 const sourceDependencies = readJson("docs/platform-ops/supabase-dependencies-v053.json");
 const baseline = readFileSync("postgres/tenant-baseline/v1/001_portable_business_baseline.sql", "utf8");
-const source = readFileSync("supabase/tenant-baseline/v053/053_tenant_baseline.sql", "utf8");
+// The one-time derivation proof (001 compared definition-by-definition with the
+// legacy v053 SQL dump) was retired with the legacy schema on 2026-09-29. 001 is
+// immutable and digest-pinned by the ledger assertions, so the comparison could
+// no longer change; the checks against the JSON inventories below remain.
 const failures = [];
 const assert = (condition, message) => {
   if (!condition) failures.push(message);
@@ -25,27 +28,10 @@ const indexSql = (sql) => [...sql.matchAll(/^CREATE (UNIQUE )?INDEX ([a-z0-9_]+)
   .map((match) => ({ name: match[2], table: match[3], unique: Boolean(match[1]), sql: match[0] }));
 const viewSql = (sql) => [...sql.matchAll(/^CREATE VIEW public\.([a-z0-9_]+)(?: WITH \([^\n]+\))? AS\n[\s\S]*?;/gm)]
   .map((match) => ({ name: match[1], sql: match[0] }));
-const sourceTables = tableSql(source).map(({ name, sql }) => ({
-  name,
-  sql: sql.replace(/\n    auth_user_id uuid,/, ""),
-}));
 const portableTables = tableSql(baseline);
-const sourceIdentities = identitySql(source);
 const portableIdentities = identitySql(baseline);
-const sourceConstraints = constraintSql(source).filter(({ sql }) => !sql.includes("auth."));
 const portableConstraints = constraintSql(baseline);
-const sourceIndexes = indexSql(source).filter(({ sql }) => !sql.includes("auth_user_id"));
 const portableIndexes = indexSql(baseline);
-const sourceViews = new Map();
-for (const name of inventory.views.map((view) => view.name)) {
-  if (name === "campaign_metrics") {
-    const match = source.match(/CREATE OR REPLACE VIEW public\.campaign_metrics(?: WITH \([^\n]+\))? AS\n[\s\S]*?;(?=\n\n\n--\n-- Name: leads archive_follow_up_on_last_lead_delete)/);
-    sourceViews.set(name, match?.[0]?.replace(/^CREATE OR REPLACE VIEW /, "CREATE VIEW "));
-  } else {
-    const match = source.match(new RegExp(`CREATE VIEW public\\.${name}(?: WITH \\([^\\n]+\\))? AS\\n[\\s\\S]*?;`));
-    sourceViews.set(name, match?.[0]);
-  }
-}
 const portableViews = new Map(viewSql(baseline).map((view) => [view.name, view.sql]));
 
 assert(inventory.format_version === 1, "portable inventory format_version must be 1");
@@ -60,25 +46,17 @@ assert(portableTables.length === inventory.counts.tables, `table count mismatch:
 assert(sorted(portableTables.map(({ name }) => name).filter((name) => name !== "team_members")).join(",") === sorted(sourceInventory.tables.filter((name) => name !== "team_members")).join(","), "portable table names do not match S04 source contract");
 assert(!baseline.includes("auth_user_id"), "provider-specific identity column leaked into portable baseline");
 assert(!baseline.includes("auth."), "provider-specific identity schema reference leaked into portable baseline");
-for (const sourceTable of sourceTables) {
-  const portableTable = portableTables.find(({ name }) => name === sourceTable.name);
-  assert(portableTable, `missing table ${sourceTable.name}`);
-  if (portableTable) assert(compact(portableTable.sql) === compact(sourceTable.sql), `table definition changed: ${sourceTable.name}`);
-}
 
 assert(portableIdentities.length === inventory.counts.identity_columns, `identity count mismatch: ${portableIdentities.length}`);
-assert(JSON.stringify(portableIdentities.map(({ table, column, sql }) => ({ table, column, sql: compact(sql) }))) === JSON.stringify(sourceIdentities.map(({ table, column, sql }) => ({ table, column, sql: compact(sql) }))), "identity definitions changed");
 assert(portableConstraints.length === inventory.counts.constraints - inventory.counts.check_constraints, `explicit constraint count mismatch: ${portableConstraints.length}`);
 assert(sorted(portableConstraints.map(({ name }) => name)).join(",") === sorted([
   ...names(inventory.constraints.primary_keys),
   ...names(inventory.constraints.unique),
   ...names(inventory.constraints.foreign_keys),
 ]).join(","), "portable explicit constraint names do not match inventory");
-assert(JSON.stringify(portableConstraints.map(({ name, sql }) => [name, compact(sql)]).sort()) === JSON.stringify(sourceConstraints.map(({ name, sql }) => [name, compact(sql)]).sort()), "portable constraint definitions changed");
 
 assert(portableIndexes.length === inventory.counts.explicit_indexes, `explicit index count mismatch: ${portableIndexes.length}`);
 assert(JSON.stringify(sorted(portableIndexes.map(({ name }) => name))) === JSON.stringify(sorted(inventory.indexes.map(({ name }) => name))), "portable index names do not match inventory");
-assert(JSON.stringify(portableIndexes.map(({ name, sql }) => [name, compact(sql)]).sort()) === JSON.stringify(sourceIndexes.map(({ name, sql }) => [name, compact(sql)]).sort()), "portable index definitions changed");
 
 assert(portableViews.size === inventory.counts.views, `view count mismatch: ${portableViews.size}`);
 assert(!baseline.includes("CREATE OR REPLACE VIEW"), "portable baseline must declare each final view once");
@@ -88,7 +66,6 @@ for (const view of inventory.views) {
   assert(actual, `missing view ${view.name}`);
   assert(view.security_invoker === true && actual.includes("security_invoker='true'"), `view ${view.name} must preserve security_invoker metadata`);
   assert(sha256(actual) === view.definition_sha256, `view ${view.name} definition hash is stale`);
-  assert(compact(actual) === compact(sourceViews.get(view.name) ?? ""), `view output definition changed: ${view.name}`);
 }
 
 const forbiddenPatterns = [

@@ -1,7 +1,7 @@
 // Shared validation/normalization for the ICP + Hypothesis layer (migration
 // 043), used by /api/playbook's icp/hypothesis actions. Mirrors _lib/savedSearch.ts:
-// dependency-light pure input validation; the DB write itself lives in playbook.ts
-// (service-role db()). Every array/string cap here matches a check() constraint in
+// dependency-light pure input validation; the DB write itself lives in
+// _lib/neonLibraryWrites.ts. Every array/string cap here matches a check() constraint in
 // the migration so a payload that would violate the DB constraint fails with a
 // readable message instead of a raw Postgres error.
 

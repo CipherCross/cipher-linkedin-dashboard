@@ -20,8 +20,8 @@
  *
  * ## How a partial-column UPDATE is expressed without a dynamic column list
  *
- * The Supabase path sends `.update(normalized)` where `normalized` holds only
- * the keys the caller supplied, so an absent key means "leave it alone" and an
+ * The contract (inherited from the retired Supabase path's
+ * `.update(normalized)`) is that an absent key means "leave it alone" and an
  * explicit `null` means "clear it". Reproducing that with a fixed statement
  * needs a way to tell those two apart, which is why the patch crosses as
  * **jsonb** and every column is assigned from
@@ -57,8 +57,8 @@
  *
  * ## Conflicts and dangling references are answers, not failures
  *
- * A duplicate name is a 409 and a missing parent is a 400 on the Supabase path,
- * derived from SQLSTATE 23505 / 23503. Neither is caught here: the driver
+ * A duplicate name is a 409 and a missing parent is a 400, derived from SQLSTATE
+ * 23505 / 23503. Neither is caught here: the driver
  * classifies both into `DataStoreConstraintError` (see `contracts.ts`), and the
  * handler maps `kind` to the status. Doing it in the statement instead — an
  * `ON CONFLICT DO NOTHING` whose zero row count means "conflict" — was rejected
@@ -72,8 +72,7 @@
  * `campaigns` all carry `touch_updated_at` BEFORE UPDATE triggers in baseline
  * step `003`, and that trigger deliberately *overrides* a manually supplied
  * stamp. The one exception is `playbook`, which has no trigger, so its upsert
- * sets the column — matching the Supabase path, which sets it on every one of
- * these tables and is silently ignored on six of them.
+ * sets the column.
  */
 
 import type { NeonCommandOperation, NeonRow } from '../neon.js'
@@ -616,8 +615,7 @@ export const setHypothesisCampaignsOperation: NeonCommandOperation<
 // ---------------------------------------------------------------------------
 
 /**
- * The empty string clears the column, which is the Supabase path's behaviour
- * (`context || null`) restated in SQL with `NULLIF` so the rule lives in one
+ * The empty string clears the column (`NULLIF`), so the rule lives in one
  * place rather than in whichever caller happened to trim the value.
  *
  * `briefing_context_updated_at` is set here rather than by a trigger: it is not

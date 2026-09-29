@@ -18,17 +18,11 @@ const openConversation = vi.fn()
 const setStage = vi.fn(async () => {})
 const assign = vi.fn(async () => {})
 
-const pipelineActionsState = vi.hoisted(() => ({
-  memberWritesBlockedReason: null as string | null,
-}))
-
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonCoachingDigests: vi.fn(async () => []),
   fetchNeonLeadsSearchPage: vi.fn(),
-  resolveReadPath: async () => 'supabase',
-  resolvePhotoPath: async () => 'supabase',
+  resolvePhotoPath: async () => 'disabled',
 }))
-vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 vi.mock('../src/lib/api', () => ({ authFetch: vi.fn(), authPost: vi.fn() }))
 vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: false, member: null }) }))
 vi.mock('../src/lib/ToastContext', () => ({
@@ -47,7 +41,6 @@ vi.mock('../src/lib/usePipelineActions', () => ({
       { id: 8, name: 'Bohdan', active: true },
     ] as TeamMember[],
     memberName: (id: number | null) => (id === 7 ? 'Olena' : id === 8 ? 'Bohdan' : ''),
-    memberWritesBlockedReason: pipelineActionsState.memberWritesBlockedReason,
   }),
 }))
 
@@ -76,7 +69,7 @@ function dataWith(leads: Lead[]): DashboardData {
     instances: [instance('notebook-1')],
     campaigns: [{ campaign_id: 'notebook-1:1', instance_id: 'notebook-1', campaign_name: 'Fintech' }],
     activity: [], leads, syncRuns: [], messages: [], conversationReplyIntents: [], annotations: [],
-    steps: [], teamMembers: [], rosterPath: 'supabase', pipelineEvents: [], followUpStates: [],
+    steps: [], teamMembers: [], pipelineEvents: [], followUpStates: [],
     latestConversationMessages: [], followUpsAvailable: true, savedSearches: [], icps: [],
     icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [],
     campaignSequenceContext: null,
@@ -95,7 +88,6 @@ async function paint() {
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
-  pipelineActionsState.memberWritesBlockedReason = null
   data.value = dataWith([lead({})])
 })
 
@@ -140,13 +132,5 @@ describe('a card', () => {
 
     expect(screen.getByRole('dialog', { name: /Mark as lost/ })).toBeTruthy()
     expect(setStage).not.toHaveBeenCalled()
-  })
-
-  it('disables the owner select and shows the block reason as visible text when writes are blocked', async () => {
-    pipelineActionsState.memberWritesBlockedReason = 'Assignment is unavailable right now.'
-    await paint()
-    const owner = screen.getByRole('combobox', { name: 'Lead owner' }) as HTMLSelectElement
-    expect(owner.disabled).toBe(true)
-    expect(screen.getByText('Assignment is unavailable right now.')).toBeTruthy()
   })
 })

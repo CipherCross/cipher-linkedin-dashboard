@@ -3,10 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Trash2, X,
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 import { authPost } from '../lib/api'
 import { authFetch } from '../lib/api'
-import { fetchNeonThread, resolveReadPath } from '../lib/dashboardReads'
+import { fetchNeonThread } from '../lib/dashboardReads'
 import { useAuth } from '../lib/AuthContext'
 import { useData } from '../lib/DataContext'
 import { withLeadEdits } from '../lib/leadEdits'
@@ -80,8 +79,7 @@ export function ConversationDrawer({
   const { isAdmin } = useAuth()
   const { data, refetch, patchLead, leadEdits, loadFollowUpState } = useData()
   const toast = useToast()
-  const { setStage, assign, members, memberWritesBlockedReason } =
-    usePipelineActions()
+  const { setStage, assign, members } = usePipelineActions()
   const [pendingLost, setPendingLost] = useState(false)
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -195,67 +193,21 @@ export function ConversationDrawer({
     setError(null)
     setRows(null)
     ;(async () => {
-      // The Neon path serves one fixed projection: the column ladder below dies
-      // there rather than being reproduced. Its middle rung silently drops
-      // `intent_level` and `intent_reason` from every message in the thread, so
-      // an SDR triaging a conversation would see no buying intent *because the
-      // query asked for none* — a confident wrong answer in the one place a
-      // human decides from what is on screen. That was worth it while migration
-      // 047 was in flight; against a ledger-applied schema it hides a broken
-      // deployment from the person least able to detect it.
-      if ((await resolveReadPath()) === 'neon') {
-        try {
-          const thread = isReplyManualReady(replyCapabilities)
-            ? (await defaultReplyReadClient.thread({ instance_id: lead.instance_id, profile_url: lead.profile_url, limit: 100 })).messages
-            : await fetchNeonThread(lead.instance_id, lead.profile_url)
-          if (cancelled) return
-          setRows(thread as ThreadMsg[])
-        } catch (e) {
-          if (cancelled) return
-          // The reply-review thread read answers 404 for a conversation with no
-          // messages at all — a lead invited or accepted but never written to.
-          // For the drawer that is an empty thread, not a failure: it is exactly
-          // the lead whose history the SDR has come here to import.
-          if ((e as { code?: string }).code === 'REPLY_REVIEW_NOT_FOUND') setRows([])
-          else setError(e instanceof Error ? e.message : String(e))
-        }
-        setLoading(false)
-        return
+      try {
+        const thread = isReplyManualReady(replyCapabilities)
+          ? (await defaultReplyReadClient.thread({ instance_id: lead.instance_id, profile_url: lead.profile_url, limit: 100 })).messages
+          : await fetchNeonThread(lead.instance_id, lead.profile_url)
+        if (cancelled) return
+        setRows(thread as ThreadMsg[])
+      } catch (e) {
+        if (cancelled) return
+        // The reply-review thread read answers 404 for a conversation with no
+        // messages at all — a lead invited or accepted but never written to.
+        // For the drawer that is an empty thread, not a failure: it is exactly
+        // the lead whose history the SDR has come here to import.
+        if ((e as { code?: string }).code === 'REPLY_REVIEW_NOT_FOUND') setRows([])
+        else setError(e instanceof Error ? e.message : String(e))
       }
-      if (!supabase) {
-        setError('Supabase is not configured.')
-        setLoading(false)
-        return
-      }
-      let result = await supabase
-        .from('messages')
-        .select(
-          'id,direction,body,sent_at,sentiment,reason,classified_model,source,' +
-          'intent_level,intent_reason,intent_classified_model',
-        )
-        .eq('instance_id', lead.instance_id)
-        .eq('profile_url', lead.profile_url)
-        .order('sent_at', { ascending: true })
-      if (result.error?.code === '42703') {
-        result = await supabase
-          .from('messages')
-          .select('id,direction,body,sent_at,sentiment,reason,classified_model,source')
-          .eq('instance_id', lead.instance_id)
-          .eq('profile_url', lead.profile_url)
-          .order('sent_at', { ascending: true }) as typeof result
-      }
-      if (result.error?.code === '42703') {
-        result = await supabase
-          .from('messages')
-          .select('id,direction,body,sent_at,sentiment,reason,classified_model')
-          .eq('instance_id', lead.instance_id)
-          .eq('profile_url', lead.profile_url)
-          .order('sent_at', { ascending: true }) as typeof result
-      }
-      const { data: msgs, error: err } = result
-      if (cancelled) return
-      if (err) setError(err.message)
-      else setRows((msgs ?? []) as unknown as ThreadMsg[])
       setLoading(false)
     })()
     return () => {
@@ -675,19 +627,10 @@ export function ConversationDrawer({
                 ))}
               </SelectField>
             )}
-            {/* Disabled rather than emptied. This control *displays* the
-                current owner as well as changing them, and a select whose
-                value matches no option renders as "Unassigned" — so dropping
-                the options would turn a blocked write into a wrong reading.
-                The chooser in `FollowUpPanel`, which displays nothing, empties
-                its list instead. */}
             <SelectField
               label="Owner"
               value={String(live.assigned_to ?? '')}
               onChange={(e) => void assign(live, e.target.value ? Number(e.target.value) : null)}
-              disabled={memberWritesBlockedReason !== null}
-              title={memberWritesBlockedReason ?? undefined}
-              help={memberWritesBlockedReason ?? undefined}
             >
               <option value="">Unassigned</option>
               {members.map((m) => (

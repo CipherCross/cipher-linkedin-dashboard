@@ -1,39 +1,34 @@
 /**
- * Lead photo delivery, on either provider.
+ * Lead photo delivery through the application API.
  *
- * Two loaders live here and exactly one runs when photo delivery is enabled,
- * chosen by the deployment's `photoPath` flag (`api/activity-daily.ts` §
- * `deploymentPhotoPath`). An explicit `disabled` value takes neither loader:
- * avatars render initials and no storage or application photo request is made.
+ * The deployment's `photoPath` flag (`api/activity-daily.ts` §
+ * `deploymentPhotoPath`) decides whether photos are served at all. `disabled`
+ * renders initials and makes no photo request.
  *
- * ## What differs, and why it is not symmetrical
+ * The loader is keyed by **lead id**, and that is the security property: the
+ * storage credential is the server's and is scoped to a bucket, so a
+ * browser-supplied object key would move authorization into string validation.
+ * Ids go up and the server derives the key from a row it just read.
+ * `api/_lib/storage/leadPhotoService.ts` carries the full argument.
  *
- * The Supabase loader is keyed by **object path** and the API loader by **lead
- * id**, which looks like an inconsistency and is the security property. On the
- * Supabase path the browser holds a JWT that Storage applies RLS to, so naming the
- * object is not what authorizes the read. On the API path the credential is the
- * server's and is scoped to a bucket, so a browser-supplied key would move
- * authorization into string validation; ids go up and the server derives the key
- * from a row it just read. `api/_lib/storage/leadPhotoService.ts` carries the full
- * argument.
- *
- * That is also why the API loader **batches**. A page renders dozens of avatars,
+ * That is also why the loader **batches**. A page renders dozens of avatars,
  * and one serverless invocation per avatar would pay the actor-resolution cost
  * dozens of times; requests made in the same tick are coalesced into one call.
  *
- * `leadPhotos` — the shared instance every component uses — resolves the flag once
- * and delegates. `clear()` clears both, so `AuthContext`'s eight sign-out and
- * session-change call sites keep working with no change: a signed URL minted for
- * one member must not survive into another's session on either path.
+ * `leadPhotoUrls` — the shared instance every component uses — resolves the
+ * flag once and delegates. `clear()` is called by `AuthContext` on every
+ * sign-out and session change: a signed URL minted for one member must not
+ * survive into another's session.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { authFetch } from './api'
-import { READ_ENDPOINT, resolvePhotoPath, type ApiFetch } from './dashboardReads'
-import { supabase } from './supabase'
+import {
+  READ_ENDPOINT,
+  resolvePhotoPath,
+  type ApiFetch,
+  type PhotoPath,
+} from './dashboardReads'
 
-export const LEAD_PHOTO_BUCKET = 'lead-photos'
-export const LEAD_PHOTO_SIGNED_URL_TTL_SECONDS = 5 * 60
 const CACHE_REFRESH_SKEW_MS = 30_000
 
 interface CachedPhotoUrl {
@@ -41,103 +36,12 @@ interface CachedPhotoUrl {
   expiresAt: number
 }
 
-export interface LeadPhotoUrlLoader {
-  get: (path: string | null | undefined) => Promise<string | null>
-  clear: () => void
-}
-
-/** Accept only bucket-relative object names. `photo_path` is service-written,
- * but rejecting URL/traversal-shaped values keeps this display helper narrowly
- * scoped to the private lead-photo bucket. */
-export function normalizeLeadPhotoPath(
-  path: string | null | undefined,
-): string | null {
-  if (!path || path !== path.trim()) return null
-  if (
-    path.startsWith('/') ||
-    path.includes('\\') ||
-    path.includes('?') ||
-    path.includes('#') ||
-    path.includes('://')
-  ) {
-    return null
-  }
-  const segments = path.split('/')
-  if (segments.length < 2 || segments.some((segment) => !segment || segment === '.' || segment === '..')) {
-    return null
-  }
-  return path
-}
-
-/** Creates short-lived URLs only through the signed-in Supabase client.
- * Successful URLs are cached just short of their expiry and concurrent
- * requests for the same object share one Storage call. */
-export function createLeadPhotoUrlLoader(
-  client: SupabaseClient | null,
-  now: () => number = Date.now,
-): LeadPhotoUrlLoader {
-  const cache = new Map<string, CachedPhotoUrl>()
-  const pending = new Map<string, Promise<string | null>>()
-  let generation = 0
-
-  return {
-    async get(rawPath) {
-      const path = normalizeLeadPhotoPath(rawPath)
-      if (!path || !client) return null
-
-      const cached = cache.get(path)
-      if (cached && cached.expiresAt - CACHE_REFRESH_SKEW_MS > now()) {
-        return cached.url
-      }
-
-      const existing = pending.get(path)
-      if (existing) return existing
-
-      const requestGeneration = generation
-      const request = (async () => {
-        try {
-          const { data, error } = await client.storage
-            .from(LEAD_PHOTO_BUCKET)
-            .createSignedUrl(path, LEAD_PHOTO_SIGNED_URL_TTL_SECONDS)
-          if (error || !data?.signedUrl) return null
-          if (generation === requestGeneration) {
-            cache.set(path, {
-              url: data.signedUrl,
-              expiresAt: now() + LEAD_PHOTO_SIGNED_URL_TTL_SECONDS * 1000,
-            })
-          }
-          return data.signedUrl
-        } catch {
-          return null
-        }
-      })()
-
-      pending.set(path, request)
-      const clearPending = () => {
-        if (pending.get(path) === request) pending.delete(path)
-      }
-      void request.then(clearPending, clearPending)
-      return request
-    },
-    clear() {
-      generation += 1
-      cache.clear()
-      pending.clear()
-    },
-  }
-}
-
-// ---------------------------------------------------------------------------
-// The API-backed loader (S20)
-// ---------------------------------------------------------------------------
-
-/** What a caller has in hand when it wants a photo: a lead, on either path. */
+/** What a caller has in hand when it wants a photo: a lead. */
 export interface LeadPhotoRef {
   readonly id: string
-  readonly photo_path?: string | null
 }
 
-/** The interface `LeadAvatar` talks to. Both loaders implement it. */
+/** The interface `LeadAvatar` talks to. */
 export interface LeadPhotoSource {
   get: (lead: LeadPhotoRef | null | undefined) => Promise<string | null>
   clear: () => void
@@ -266,24 +170,10 @@ export function createApiLeadPhotoUrlLoader(
     clear() {
       generation += 1
       cache.clear()
-      // In-flight batches are not cancelled; their results are simply not cached,
-      // which is the same rule the Supabase loader's generation counter applies.
+      // In-flight batches are not cancelled; their results are simply not
+      // cached, because the generation counter moved on.
       pending = null
     },
-  }
-}
-
-/**
- * The Supabase loader behind the `LeadPhotoSource` interface.
- *
- * A thin adapter rather than a change to `createLeadPhotoUrlLoader`, so the live
- * path keeps its own signature, its own tests and its path-keyed cache exactly as
- * they are.
- */
-export function toLeadPhotoSource(loader: LeadPhotoUrlLoader): LeadPhotoSource {
-  return {
-    get: (lead) => loader.get(lead?.photo_path),
-    clear: () => loader.clear(),
   }
 }
 
@@ -291,37 +181,25 @@ export function toLeadPhotoSource(loader: LeadPhotoUrlLoader): LeadPhotoSource {
  * The instance the components use.
  *
  * Resolves the flag on first use and delegates from then on. `disabled` returns
- * `null` without calling a loader. `clear()` reaches **both** loaders regardless
- * of which one is active: `AuthContext` calls it on every sign-out and session
- * change, and a URL minted for one member must not survive into another's session
- * on either provider — including a loader that was active earlier in the page's
- * life.
+ * `null` without calling the loader.
  */
 export function createLeadPhotoSource(
-  supabaseSource: LeadPhotoSource,
   apiSource: LeadPhotoSource,
   // A thunk rather than the imported function itself: this is called at module
   // scope below, and naming the import there would make *loading* this module
   // depend on another module's runtime export — which is how a component test that
   // partially mocks `dashboardReads` fails at import time instead of where it
   // reads. The binding is touched only when a photo is actually requested.
-  photoPath: () => Promise<'disabled' | 'supabase' | 'neon'> = () => resolvePhotoPath(),
+  photoPath: () => Promise<PhotoPath> = () => resolvePhotoPath(),
 ): LeadPhotoSource {
   return {
     async get(lead) {
-      const path = await photoPath()
-      if (path === 'disabled') return null
-      return path === 'neon' ? apiSource.get(lead) : supabaseSource.get(lead)
+      return (await photoPath()) === 'neon' ? apiSource.get(lead) : null
     },
     clear() {
-      supabaseSource.clear()
       apiSource.clear()
     },
   }
 }
 
-/** The Supabase loader, still exported under its old name and unchanged. */
-export const leadPhotoUrls = createLeadPhotoSource(
-  toLeadPhotoSource(createLeadPhotoUrlLoader(supabase)),
-  createApiLeadPhotoUrlLoader(),
-)
+export const leadPhotoUrls = createLeadPhotoSource(createApiLeadPhotoUrlLoader())

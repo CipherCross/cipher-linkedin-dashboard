@@ -1,5 +1,5 @@
 /**
- * The AI layer, unit side: the flag semantics, the AI operation allowlist, the
+ * The AI layer, unit side: the AI operation allowlist, the
  * system vocabulary ledger step 007 made possible, and the system actor's
  * contract properties. No credential is needed — everything here is about what
  * the adapter STATES, not what a database answers. The live counterpart (the
@@ -7,12 +7,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { deploymentAiPath, NEON_AI_PATH_ENV } from '../api/_lib/data/aiPath.js'
-import {
-  NEON_AI_DATABASE_URL_ENV,
-  NEON_DATABASE_URL_ENV,
-} from '../api/_lib/data/neonConfig.js'
-import { ProviderPathError } from '../api/_lib/data/providerPath.js'
 import {
   AI_LOCAL_ROLE,
   buildAiStoreConfig,
@@ -49,53 +43,6 @@ import {
 import { GET as classifyCron } from '../api/classify.js'
 import { GET as briefingCron } from '../api/briefing.js'
 import { POST as notifyReplies } from '../api/notify-replies.js'
-
-describe('deploymentAiPath', () => {
-  const CREDENTIAL = { [NEON_AI_DATABASE_URL_ENV]: 'postgres://ai@example/db' }
-
-  it('takes an explicit value on either side', () => {
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: 'neon' })).toBe('neon')
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: 'supabase' })).toBe('supabase')
-    // Whitespace is trimmed, matching deploymentWritePath's shape exactly.
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: ' neon ' })).toBe('neon')
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: ' supabase ' })).toBe('supabase')
-  })
-
-  it('derives the unset case from this path\'s own credential', () => {
-    // **S27 inverted the default.** Unset used to mean `supabase` unconditionally;
-    // it now means "whatever this deployment is equipped for", which is what lets
-    // the flip land without a coordinated environment change.
-    expect(deploymentAiPath({})).toBe('supabase')
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: '  ' })).toBe('supabase')
-    expect(deploymentAiPath(CREDENTIAL)).toBe('neon')
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: '', ...CREDENTIAL })).toBe('neon')
-  })
-
-  it('reads its own credential and not the runtime one', () => {
-    // The AI layer runs as `app_system` and the runtime store as `app_runtime`.
-    // A deployment holding one and not the other is a real state, and treating
-    // the runtime credential as consent would run the AI layer with the wrong
-    // principal's surface.
-    expect(
-      deploymentAiPath({ [NEON_DATABASE_URL_ENV]: 'postgres://runtime@example/db' }),
-    ).toBe('supabase')
-  })
-
-  it('keeps an explicit `neon` without a credential, so it fails loudly', () => {
-    // The presence check decides the *unset* case only. Turning a stated choice
-    // into a silent `supabase` is this migration's worst outcome: a deployment
-    // reading the wrong database while reporting success.
-    expect(deploymentAiPath({ [NEON_AI_PATH_ENV]: 'neon' })).toBe('neon')
-  })
-
-  it('refuses a value nobody recognises rather than guessing', () => {
-    for (const value of ['true', '1', 'yes', 'Neon', 'NEON', ' neon2', 'supabse']) {
-      expect(() => deploymentAiPath({ [NEON_AI_PATH_ENV]: value, ...CREDENTIAL })).toThrow(
-        ProviderPathError,
-      )
-    }
-  })
-})
 
 describe('the AI operation allowlist', () => {
   const registry = buildAiRegistry()
@@ -271,7 +218,7 @@ describe('the system operation allowlist', () => {
     expect(insert.text).toMatch(/^INSERT INTO public\.saved_searches\b/)
     expect(update.text).toMatch(/^UPDATE public\.saved_searches\b/)
     // The row is the one the human path writes: same statements, and both
-    // return the full row so the tool answers as the Supabase path does.
+    // return the full row so the tool answers as the chat's save_search does.
     expect(insert.text).toContain('RETURNING')
     expect(update.text).toContain('RETURNING')
   })
@@ -547,19 +494,27 @@ describe('the cron half of classify and briefing', () => {
 })
 
 // ---------------------------------------------------------------------------
-// notify-replies: which provider answers, and what decides it.
+// The machine-authenticated AI paths without their credential. There is no
+// other provider to fall back to, so each must refuse by name: a named 500 with
+// NEON_CONFIGURATION_MISSING, never a silent success and never a body-less crash.
+// `NEON_AI_PATH_DEFAULT=neon`, which the tenant contract still binds, is set
+// throughout to prove it is inert.
 // ---------------------------------------------------------------------------
 
-describe('notify-replies picks its provider from the AI path flag', () => {
+async function expectNotConfigured(response: Response): Promise<void> {
+  expect(response.status).toBe(500)
+  const body = (await response.json()) as { error: string }
+  expect(body.error).toContain('NEON_CONFIGURATION_MISSING')
+  expect(body.error).not.toContain('team access')
+}
+
+describe('notify-replies without the app_system credential', () => {
   const SECRET = 'notify-secret-for-this-unit-test'
   const TOUCHED = [
-    NEON_AI_PATH_ENV,
+    'NEON_AI_PATH_DEFAULT',
     'NOTIFY_SECRET',
     'NEON_AI_DATABASE_URL',
     'NEON_DATABASE_URL',
-    'SUPABASE_URL',
-    'VITE_SUPABASE_URL',
-    'SUPABASE_SERVICE_ROLE_KEY',
   ] as const
   const saved = new Map<string, string | undefined>()
 
@@ -575,9 +530,11 @@ describe('notify-replies picks its provider from the AI path flag', () => {
       delete process.env[name]
     }
     process.env.NOTIFY_SECRET = SECRET
+    process.env.NEON_AI_PATH_DEFAULT = 'neon'
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     for (const [name, value] of saved) {
       if (value === undefined) delete process.env[name]
       else process.env[name] = value
@@ -585,44 +542,26 @@ describe('notify-replies picks its provider from the AI path flag', () => {
     saved.clear()
   })
 
-  it('stays on Supabase when the flag is unset', async () => {
-    // No provider is configured, so whichever branch was taken says so by
-    // name. This one names the Supabase server variables, which the Neon
-    // branch never reads.
-    await expect(notifyReplies(ping())).rejects.toThrow(/SUPABASE_URL/)
-  })
-
-  it('refuses to run on Neon without the app_system credential', async () => {
-    process.env[NEON_AI_PATH_ENV] = 'neon'
-    // And the RUNTIME credential is present, so a branch that silently fell
-    // back to `app_runtime` would succeed here instead of refusing.
+  it('refuses by name, even with the runtime credential present', async () => {
+    // A branch that silently fell back to `app_runtime` would succeed here.
     process.env.NEON_DATABASE_URL = 'postgres://runtime-principal@example.test/neon'
-    await expect(notifyReplies(ping())).rejects.toThrow(/NEON_AI_DATABASE_URL/)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expectNotConfigured(await notifyReplies(ping()))
   })
 
-  it('checks the machine secret before choosing a provider at all', async () => {
-    process.env[NEON_AI_PATH_ENV] = 'neon'
+  it('checks the machine secret before touching a store', async () => {
     const denied = await notifyReplies(ping('wrong'))
     expect(denied.status).toBe(401)
   })
 })
 
-// ---------------------------------------------------------------------------
-// The two cron GETs: which provider answers them, now that they are no longer
-// declared blocked. Same technique as the notify block above — no provider is
-// configured, so the branch that ran names its own missing variable.
-// ---------------------------------------------------------------------------
-
-describe('the classify and briefing crons pick their provider from the flag', () => {
+describe('the classify and briefing crons without the app_system credential', () => {
   const SECRET = 'cron-secret-for-this-unit-test'
   const TOUCHED = [
-    NEON_AI_PATH_ENV,
+    'NEON_AI_PATH_DEFAULT',
     'CRON_SECRET',
     'NEON_AI_DATABASE_URL',
     'NEON_DATABASE_URL',
-    'SUPABASE_URL',
-    'VITE_SUPABASE_URL',
-    'SUPABASE_SERVICE_ROLE_KEY',
   ] as const
   const saved = new Map<string, string | undefined>()
 
@@ -638,6 +577,7 @@ describe('the classify and briefing crons pick their provider from the flag', ()
       delete process.env[name]
     }
     process.env.CRON_SECRET = SECRET
+    process.env.NEON_AI_PATH_DEFAULT = 'neon'
     // The RUNTIME credential is present throughout, so a branch that quietly
     // fell back to `app_runtime` would succeed instead of refusing by name.
     process.env.NEON_DATABASE_URL = 'postgres://runtime-principal@example.test/neon'
@@ -653,38 +593,24 @@ describe('the classify and briefing crons pick their provider from the flag', ()
     saved.clear()
   })
 
-  it('runs classify’s cron on Supabase when the flag is unset', async () => {
-    await expect(classifyCron(cron('/api/classify'))).rejects.toThrow(/SUPABASE_URL/)
+  it('refuses classify’s cron by name', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expectNotConfigured(await classifyCron(cron('/api/classify')))
+    await expectNotConfigured(await classifyCron(cron('/api/classify?mode=demographics')))
   })
 
-  it('runs classify’s cron on the app_system store when the flag is on', async () => {
-    process.env[NEON_AI_PATH_ENV] = 'neon'
-    // Reply classification is retired after the manual-review cutover.  The
-    // remaining demographics-only cron is a no-op when its optional Neon
-    // credential is absent, so provider selection still succeeds without
-    // attempting a legacy reply-AI write.
-    expect((await classifyCron(cron('/api/classify'))).status).toBe(200)
-  })
-
-  it('checks CRON_SECRET before choosing a provider at all', async () => {
-    process.env[NEON_AI_PATH_ENV] = 'neon'
+  it('checks CRON_SECRET before touching a store', async () => {
     expect((await classifyCron(cron('/api/classify', 'wrong'))).status).toBe(401)
     expect((await briefingCron(cron('/api/briefing', 'wrong'))).status).toBe(401)
   })
 
   /**
-   * The briefing handler swallows every failure into one generic 500 — it must,
-   * because the caller is not entitled to the text — so the provider it chose is
-   * read off the log line it writes on the way out. That text is the endpoint's
-   * own plus `neonConfig.ts`'s own; no driver message and therefore no hostname
-   * can reach it, which is why asserting on it here is safe where asserting on a
-   * driver message would not be.
-   *
+   * The log line names the missing variable — `neonConfig.ts`'s own text, which
+   * names a variable and never a value — while the response names only the code.
    * The clock is pinned to a Wednesday because the daily cron declines to run
-   * outside Monday-Friday, and a test whose meaning depends on the day it is
-   * run on is not a test.
+   * outside Monday-Friday.
    */
-  async function briefingProviderLog(): Promise<string> {
+  it('refuses briefing’s cron by name, and logs which variable is missing', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-05T07:00:00.000Z'))
     const logged: string[] = []
@@ -692,16 +618,7 @@ describe('the classify and briefing crons pick their provider from the flag', ()
       logged.push(parts.map(String).join(' '))
     })
     const response = await briefingCron(cron('/api/briefing?kind=daily'))
-    expect(response.status).toBe(500)
-    return logged.join('\n')
-  }
-
-  it('runs briefing’s cron on Supabase when the flag is unset', async () => {
-    expect(await briefingProviderLog()).toMatch(/SUPABASE_URL/)
-  })
-
-  it('runs briefing’s cron on the app_system store when the flag is on', async () => {
-    process.env[NEON_AI_PATH_ENV] = 'neon'
-    expect(await briefingProviderLog()).toMatch(/NEON_AI_DATABASE_URL/)
+    await expectNotConfigured(response)
+    expect(logged.join('\n')).toMatch(/NEON_AI_DATABASE_URL/)
   })
 })

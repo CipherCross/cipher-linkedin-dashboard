@@ -191,10 +191,7 @@ function isInsufficientPrivilege(error: unknown): boolean {
 export interface IdentityHandlerDeps {
   readonly identity: IdentityProvider
   readonly store: DataStore
-  /** Transitional Supabase bearer acceptance. See `session.ts`. */
-  readonly acceptLegacyBearer?: boolean
   readonly providerName?: string
-  readonly legacyProviderName?: string
   readonly trustedOrigin: string
   readonly basePath?: string
 }
@@ -252,9 +249,7 @@ export function createIdentityHandler(
       resolved = await resolveRequestActor(request, {
         identity: deps.identity,
         store: deps.store,
-        acceptLegacyBearer: deps.acceptLegacyBearer,
         providerName: deps.providerName,
-        legacyProviderName: deps.legacyProviderName,
       })
     } catch (error) {
       const denial = authorizationResponse(error)
@@ -910,9 +905,6 @@ function deployedHandler(): (request: Request) => Promise<Response> {
       identity: getIdentityProvider(),
       store: getDataStore(),
       trustedOrigin: config.baseUrl,
-      // Transitional, and the reason is in session.ts: the running dashboard
-      // still signs in through Supabase Auth and S18 is what rewires it.
-      acceptLegacyBearer: true,
     })
   }
   return deployed

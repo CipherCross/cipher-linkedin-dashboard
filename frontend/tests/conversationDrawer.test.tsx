@@ -31,7 +31,6 @@ vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonThread: (...a: unknown[]) => fetchNeonThread(...a),
   fetchNeonLeadNotes: vi.fn(async () => []),
   fetchNeonFollowUpHistory: vi.fn(async () => ({ events: [], nextCursor: null, hasMore: false })),
-  resolveReadPath: async () => 'neon',
   resolvePhotoPath: async () => 'disabled',
 }))
 vi.mock('../src/lib/replyReview', async () => {
@@ -49,7 +48,6 @@ vi.mock('../src/lib/replyReview', async () => {
 vi.mock('../src/lib/useReplyReviewActions', () => ({
   useReplyReviewActions: () => ({ saving: false, error: null, conflict: replyConflict, saveReview: (request: unknown) => saveReview(request) }),
 }))
-vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: vi.fn() }))
 vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: true }) }))
 vi.mock('../src/lib/ToastContext', () => ({
@@ -58,7 +56,7 @@ vi.mock('../src/lib/ToastContext', () => ({
 vi.mock('../src/lib/usePipelineActions', () => ({
   usePipelineActions: () => ({
     setStage, assign: vi.fn(), addNote: vi.fn(), deleteNote: vi.fn(), actor: 'Tester',
-    members: [], assignableMembers: [], memberWritesBlockedReason: null, memberName: () => '',
+    members: [], memberName: () => '',
   }),
 }))
 

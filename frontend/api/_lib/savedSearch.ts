@@ -3,9 +3,9 @@
 // tool (_lib/tools.ts save_search) so the two write paths enforce identical caps
 // and can't drift.
 //
-// Deliberately dependency-light (no supabase / ai / zod imports) so playbook.ts
-// stays light — this module is pure input validation. The DB write itself lives in
-// each caller (both use service-role db()), kept intentionally identical.
+// Deliberately dependency-light (no store / ai / zod imports) so playbook.ts
+// stays light — this module is pure input validation. The DB write itself lives
+// behind each caller's Neon store.
 
 export const SEARCH_CAPS = {
   NAME: 120,

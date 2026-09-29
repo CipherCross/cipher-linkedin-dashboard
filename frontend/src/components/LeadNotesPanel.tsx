@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { fetchNeonLeadNotes, resolveReadPath } from '../lib/dashboardReads'
+import { fetchNeonLeadNotes } from '../lib/dashboardReads'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ago } from '../lib/format'
@@ -71,35 +70,16 @@ export function LeadNotesPanel({
     setLoading(true)
     setError(null)
     ;(async () => {
-      // Both paths order newest first with NULL `created_at` first: PostgreSQL's
-      // default for a bare `DESC` is NULLS FIRST and PostgREST emits the same
-      // bare `DESC`, so a note written with no timestamp sorts identically on
-      // either provider rather than first on one and last on the other.
-      if ((await resolveReadPath()) === 'neon') {
-        try {
-          const rows = await fetchNeonLeadNotes(lead.id)
-          if (cancelled) return
-          setNotes(rows)
-        } catch (e) {
-          if (cancelled) return
-          setError(e instanceof Error ? e.message : String(e))
-        }
-        setLoading(false)
-        return
+      // Newest first, with a NULL `created_at` first (a bare `DESC` is NULLS
+      // FIRST in PostgreSQL).
+      try {
+        const rows = await fetchNeonLeadNotes(lead.id)
+        if (cancelled) return
+        setNotes(rows)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
       }
-      if (!supabase) {
-        setError('Supabase is not configured.')
-        setLoading(false)
-        return
-      }
-      const { data, error: err } = await supabase
-        .from('lead_notes')
-        .select('id,lead_id,author,body,created_at')
-        .eq('lead_id', lead.id)
-        .order('created_at', { ascending: false })
-      if (cancelled) return
-      if (err) setError(err.message)
-      else setNotes((data ?? []) as LeadNote[])
       setLoading(false)
     })()
     return () => {

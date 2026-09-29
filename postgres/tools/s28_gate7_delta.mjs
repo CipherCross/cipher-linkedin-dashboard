@@ -20,7 +20,7 @@
 //
 // WHAT IS COPIED, AND WHAT IS DELIBERATELY NOT
 //
-// Measured read-only on 2026-08-12; see N-S28-OWNER-DATA-MIGRATION.md gate 7 for
+// Measured read-only on 2026-08-12; see the N-S27/N-S28 handoff, in git history (gate 7), for
 // the evidence behind every number.
 //
 //   1  briefings                1 row    the 2026-08-12 briefing

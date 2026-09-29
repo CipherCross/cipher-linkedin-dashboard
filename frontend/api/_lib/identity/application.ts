@@ -1,11 +1,10 @@
 /**
- * Authentication selection for the application data plane.
+ * Authentication for the application data plane.
  *
- * The browser and the Vercel functions must move together.  When the deployed
- * frontend selects the self-hosted identity path, application APIs accept only
- * its same-origin HttpOnly session cookie; they do not fall back to the retired
- * Supabase bearer verifier.  An unset or misspelled value keeps the currently
- * deployed Supabase path, so importing this module cannot switch production.
+ * Application APIs accept only the self-hosted identity provider's same-origin
+ * HttpOnly session cookie. There is no second authenticator and no deployment
+ * switch: `VITE_AUTH_PATH` is still bound by the tenant contract, but the server
+ * does not read it.
  */
 
 import type { DataStore } from '../data/contracts.js'
@@ -16,42 +15,26 @@ import {
   type RequestActor,
 } from './session.js'
 
-export const APPLICATION_AUTH_PATH_ENV = 'VITE_AUTH_PATH'
-
-export type ApplicationAuthPath = 'supabase' | 'identity'
-
-export function deploymentApplicationAuthPath(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): ApplicationAuthPath {
-  return (env[APPLICATION_AUTH_PATH_ENV] ?? '').trim() === 'identity'
-    ? 'identity'
-    : 'supabase'
-}
-
 export interface ResolveApplicationActorDeps {
   readonly store: DataStore
-  readonly authPath?: ApplicationAuthPath
+  /** Defaults to the deployed provider; tests inject the fake. */
   readonly identity?: IdentityProvider
-  readonly legacyProviderName?: string
+  /**
+   * `user_identities.provider` for the session's subjects. Defaults to the
+   * deployed provider's name; tests pass `fixture`, the provider the
+   * baseline's contract fixtures are seeded under.
+   */
+  readonly providerName?: string
 }
 
-/** Resolve exactly the authenticator selected for this deployment. */
+/** Resolve the caller from its identity session, or throw `AuthorizationError`. */
 export function resolveApplicationActor(
   request: Request,
   deps: ResolveApplicationActorDeps,
 ): Promise<RequestActor> {
-  const authPath = deps.authPath ?? deploymentApplicationAuthPath()
-  if (authPath === 'identity') {
-    return resolveRequestActor(request, {
-      store: deps.store,
-      identity: deps.identity ?? getIdentityProvider(),
-      acceptLegacyBearer: false,
-    })
-  }
-
   return resolveRequestActor(request, {
     store: deps.store,
-    acceptLegacyBearer: true,
-    legacyProviderName: deps.legacyProviderName,
+    identity: deps.identity ?? getIdentityProvider(),
+    providerName: deps.providerName,
   })
 }

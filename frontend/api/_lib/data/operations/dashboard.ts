@@ -7,26 +7,14 @@
  * (`activity.dailySeries`, S12); the five here complete the slice, and it is
  * six relations rather than seven for the reason below.
  *
- * **The `team_members` roster is deliberately not part of this slice.** N-S12
- * pre-decided the opposite — "the `team_members` roster is available through the
- * B4 function, so assignee and owner name joins work" — and that premise does
- * not hold while `leads` is still read from Supabase. `leads.assigned_to` is a
- * Supabase `team_members.id`, and the two id spaces denote different people:
- * source id 1 is the real admin, target id 1 is the immutable S06 fixture
- * "Active One" (N-B2 records the full map). A roster served from
- * `public.team_roster()` and joined against Supabase-shaped `assigned_to` values
- * in `usePipelineActions.memberName` would not fail — every owner chip on
- * Pipeline and every CSV `assigned_to` column would simply name the wrong
- * person. Nothing here reads `team_members` or any column referencing it, and
- * `frontend/tests/dashboardSlice.test.ts` asserts that rather than trusting this
- * comment.
- *
- * Two consequences for the session that moves the roster (S18 or later):
- * `team_members` and `leads` must move **together**, with the source→target id
- * map applied to `assigned_to`; and `public.team_roster()` returns no
- * `auth_user_id`, so `Team.tsx`'s "Login enabled" / "Assignment only" label —
- * which today keys on that column alone — has no source on the Neon side and
- * needs a roster column that says whether a login exists.
+ * **The roster is read only through `public.team_roster()`.** While `leads` still
+ * came from Supabase, `leads.assigned_to` held Supabase `team_members.id` values
+ * that denote different people on Neon (N-B2), so any roster join named the wrong
+ * person. Both sides now come from this database, and the bootstrap below carries
+ * the roster from `team_roster()` (never `public.team_members` directly);
+ * `frontend/tests/dashboardSlice.test.ts` pins which operations may mention a
+ * member id at all. `team_roster()` returns no `auth_user_id`, so the bootstrap
+ * sends it as NULL.
  *
  * **They are named as product operations, not as table reads.** G2's
  * architectural direction is explicit that the dispatching endpoint's allowlist
@@ -38,10 +26,10 @@
  *
  * Three rules every operation here follows:
  *
- * 1. **Read the same relation the Supabase path reads.** `campaign_metrics` and
- *    `daily_activity` are the two views B2 compared cell-for-cell on real
- *    numbers; reading the view rather than re-deriving the aggregate is what
- *    keeps that evidence applicable.
+ * 1. **Read the views, not a re-derived aggregate.** `campaign_metrics` and
+ *    `daily_activity` are the two views B2 compared cell-for-cell against the
+ *    Supabase original on real numbers; reading the view is what keeps that
+ *    evidence applicable.
  * 2. **Emit the browser's own column names.** The rows land in `DashboardData`
  *    unchanged, so the types in `frontend/src/lib/types.ts` do not fork and no
  *    page learns which provider answered.
@@ -306,8 +294,8 @@ const nullableText = (value: unknown): string | null =>
 /**
  * `count(*)` is `bigint` and `round(...)` is `numeric`; `pg` returns both as
  * strings so a value wider than a JS number cannot silently lose precision.
- * The browser's `CampaignMetrics` has always held numbers — PostgREST coerces
- * them on the Supabase side — so the coercion happens here instead, and `null`
+ * The browser's `CampaignMetrics` has always held numbers (PostgREST coerced
+ * them when Supabase served this), so the coercion happens here, and `null`
  * stays `null` rather than becoming `0`.
  */
 const nullableNumber = (value: unknown): number | null =>
@@ -1303,10 +1291,9 @@ export const instancesOverviewOperation: NeonQueryOperation<InstanceRow> = {
 /**
  * `ORDER BY campaign_name, campaign_id`.
  *
- * The Supabase path orders by `campaign_name` alone, which is not unique — two
- * campaigns on different instances routinely share a name. That is harmless
- * there because PostgREST returns the whole (small) relation in one response,
- * and it is *not* harmless here, because this path pages. The tiebreaker is the
+ * `campaign_name` alone is not unique — two campaigns on different instances
+ * routinely share a name — and this path pages, so an order on the name alone
+ * could repeat or skip a campaign across a page boundary. The tiebreaker is the
  * primary key, so the order is total and every page boundary is stable.
  */
 const CAMPAIGN_METRICS_SQL = `SELECT cm.campaign_id,
@@ -1363,8 +1350,8 @@ export const campaignsPerformanceOperation: NeonQueryOperation<CampaignMetricsRo
 
 /**
  * `(campaign_id, step_index)` is the table's primary key, so this order is
- * total. `updated_at` exists on the relation and is not selected: the Supabase
- * path fetches it only because it asks for `*`, and no page reads it.
+ * total. `updated_at` exists on the relation and is not selected: no page
+ * reads it.
  */
 const CAMPAIGN_STEPS_SQL = `SELECT s.campaign_id,
           s.step_index,
@@ -1401,10 +1388,9 @@ export const campaignsSequenceStepsOperation: NeonQueryOperation<CampaignStepRow
  * every notebook's run within the same second, so `started_at` alone is not a
  * total order and the Health page's first page would be non-deterministic.
  *
- * The Supabase path caps this at 200 rows with `.limit(200)`. The cap lives in
- * the caller here, as a page limit, because a limit baked into the SQL and a
- * limit applied by the driver's `LIMIT/OFFSET` wrapper would compose into
- * something neither one states.
+ * The list is capped at 200 rows. The cap lives in the caller, as a page limit,
+ * because a limit baked into the SQL and a limit applied by the driver's
+ * `LIMIT/OFFSET` wrapper would compose into something neither one states.
  */
 const SYNC_RUNS_SQL = `SELECT r.id::text AS id,
           r.instance_id,

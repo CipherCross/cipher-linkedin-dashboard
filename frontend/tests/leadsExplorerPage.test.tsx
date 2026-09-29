@@ -6,8 +6,9 @@
  * its conversation from the keyboard without the row being a `role="button"`
  * around other controls, and empty is told apart from no-match.
  *
- * The page runs on the legacy read path here (`resolveReadPath` → 'supabase'),
- * so every lead comes from `useData` and no server page is fetched.
+ * The server page is faked from `leads.value`: `q` filters by name, `total` is
+ * the match count and `allTotal` the dataset size — the two numbers the empty
+ * states are told apart by.
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
@@ -18,13 +19,21 @@ import type { DashboardData, Instance, Lead } from '../src/lib/types'
 const openConversation = vi.fn()
 const setStage = vi.fn(async () => {})
 
+const leads = vi.hoisted(() => ({ value: [] as Lead[] }))
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonCoachingDigests: vi.fn(async () => []),
-  fetchNeonLeadsSearchPage: vi.fn(),
-  resolveReadPath: async () => 'supabase',
-  resolvePhotoPath: async () => 'supabase',
+  fetchNeonLeadsSearchPage: vi.fn(async (query: { q?: string }) => {
+    const needle = (query.q ?? '').toLowerCase()
+    const matched = leads.value.filter((l) => (l.full_name ?? '').toLowerCase().includes(needle))
+    return {
+      items: matched.map((lead) => ({ lead, reply: null, highestIntent: null, followUp: null })),
+      total: matched.length,
+      allTotal: leads.value.length,
+      replyCounts: { total: 0, c: {} },
+    }
+  }),
+  resolvePhotoPath: async () => 'disabled',
 }))
-vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 vi.mock('../src/lib/api', () => ({ authFetch: vi.fn(), authPost: vi.fn() }))
 vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: false }) }))
 vi.mock('../src/lib/ToastContext', () => ({
@@ -56,17 +65,18 @@ const lead = (over: Partial<Lead>): Lead => ({
 
 const data = vi.hoisted(() => ({ value: null as unknown }))
 vi.mock('../src/lib/DataContext', () => ({
-  useData: () => ({ data: data.value, refetch: vi.fn() }),
+  useData: () => ({ data: data.value, refetch: vi.fn(), leadEdits: new Map() }),
 }))
 
 const { LeadsExplorer } = await import('../src/pages/LeadsExplorer')
 
-function dataWith(leads: Lead[]): DashboardData {
+function dataWith(rows: Lead[]): DashboardData {
+  leads.value = rows
   return {
     instances: [instance('notebook-1')],
     campaigns: [{ campaign_id: 'notebook-1:1', instance_id: 'notebook-1', campaign_name: 'Fintech' }],
-    activity: [], leads, syncRuns: [], messages: [], conversationReplyIntents: [], annotations: [],
-    steps: [], teamMembers: [], rosterPath: 'supabase', pipelineEvents: [], followUpStates: [],
+    activity: [], leads: [], syncRuns: [], messages: [], conversationReplyIntents: [], annotations: [],
+    steps: [], teamMembers: [], pipelineEvents: [], followUpStates: [],
     latestConversationMessages: [], followUpsAvailable: true, savedSearches: [], icps: [],
     icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [],
     campaignSequenceContext: null,

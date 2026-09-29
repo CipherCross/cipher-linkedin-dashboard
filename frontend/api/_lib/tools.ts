@@ -5,12 +5,10 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import {
   SCHEMA_DOC,
-  db,
   executeNamedSql,
   executeSql,
 } from './core.js'
 import { validateSearch } from './savedSearch.js'
-import { deploymentAiPath } from './data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './data/aiStore.js'
 import { DataStoreConstraintError } from './data/contracts.js'
 import { SYSTEM_OPERATIONS } from './data/operations/aiSystem.js'
@@ -141,65 +139,9 @@ export const toolDefs = {
   },
 } satisfies Record<string, ToolDef>
 
-// Insert-or-partial-patch a saved_searches row via the service-role client.
-// SHARED WRITE PATH: this is the same logic /api/playbook's save_search action runs
-// (validation via the same _lib/savedSearch module, same insert/update semantics) —
-// keep the two in sync. The AI's read-only SQL guard (ai_execute_sql) is NOT touched;
-// this write goes straight through db().
-//
-// SECURITY: /api/chat is UNAUTHENTICATED, so exposing this tool there is an open
-// write path. Accepted under the project's deferred-auth posture only because it is
-// bounded — one table, validated+capped fields, soft-archive (no hard delete). Flag
-// for the future auth pass.
-export async function executeSaveSearch(input: {
-  id?: number
-  [k: string]: unknown
-}): Promise<{ ok: true; search: unknown } | string> {
-  const { id, ...rest } = input
-  const isUpdate = id !== undefined && id !== null
-  const normalized = validateSearch(rest, !isUpdate)
-  if (typeof normalized === 'string') return `Invalid search: ${normalized}`
-
-  const supa = db()
-  if (isUpdate) {
-    if (Object.keys(normalized).length === 0) {
-      return 'Nothing to update — provide at least one field to change.'
-    }
-    const { data, error } = await supa
-      .from('saved_searches')
-      .update(normalized)
-      .eq('id', id)
-      .select()
-      .single()
-    if (error) {
-      if ((error as { code?: string }).code === '23505') {
-        return 'A search with that name already exists for this platform — pick a different name or update that row by its id.'
-      }
-      if ((error as { code?: string }).code === 'PGRST116') {
-        return `No saved search with id ${id}.`
-      }
-      return `Save failed: ${error.message}`
-    }
-    return { ok: true, search: data }
-  }
-
-  const { data, error } = await supa
-    .from('saved_searches')
-    .insert(normalized)
-    .select()
-    .single()
-  if (error) {
-    if ((error as { code?: string }).code === '23505') {
-      return 'A search with that name already exists for this platform — update the existing search (pass its id) instead of creating a duplicate.'
-    }
-    return `Save failed: ${error.message}`
-  }
-  return { ok: true, search: data }
-}
-
-/** The Neon branch of the chat's save_search. The patch is validated exactly
- *  as the Supabase path does; the write goes through S14's library operation
- *  under the request's resolved actor. Returns the same tool-result shapes. */
+/** The chat's save_search. Validated by `validateSearch` — the same module
+ *  /api/playbook's save_search action uses — then written through S14's library
+ *  operation under the request's resolved actor. */
 async function saveSearchOnNeon(
   req: Request,
   input: { id?: number; [k: string]: unknown },
@@ -242,8 +184,8 @@ async function saveSearchOnNeon(
  * The statements are the two S14 reviewed for the human path, registered a
  * second time under system names (see `aiSystem.ts`), so the row an MCP client
  * writes is the row a member would have written. Validation is `validateSearch`
- * — the same call, on the same input — and every returned string is one of the
- * Supabase path's, because the model on the other end reads them.
+ * — the same call, on the same input — and every returned string matches the
+ * chat's own, because the model on the other end reads them.
  */
 async function saveSearchAsSystem(input: {
   id?: number
@@ -288,12 +230,11 @@ async function saveSearchAsSystem(input: {
   }
 }
 
-/** The MCP surface's save_search, whichever provider is configured. */
+/** The MCP surface's save_search. */
 export async function executeSaveSearchAsSystem(input: {
   id?: number
   [k: string]: unknown
 }): Promise<{ ok: true; search: unknown } | string> {
-  if (deploymentAiPath() !== 'neon') return executeSaveSearch(input)
   return saveSearchAsSystem(input)
 }
 
@@ -353,7 +294,6 @@ export function buildTools(deps: BuildToolsDeps = {}) {
       description: toolDefs.save_search.description,
       inputSchema: z.object(toolDefs.save_search.inputShape),
       execute: async (input) => {
-        if (deploymentAiPath() !== 'neon') return executeSaveSearch(input)
         if (!deps.req) {
           return (
             'save_search is unavailable: this tool set was built without a request, ' +

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the agent's second transport: the machine ingest gateway.
+"""Tests for the agent's transport: the machine ingest gateway.
 
 Run with the agent's own virtualenv, from anywhere:
 
@@ -20,8 +20,8 @@ Three things are checked here that a single-language test could not:
   * Parity is checked by MUTATION as well as by agreement. A checker that
     reports "ok" on a faithful payload proves nothing until it also reports a
     problem on a payload with a row removed and on one with a value changed.
-  * The rollout modes are checked by what they DO, not by what they return:
-    'off' is proved by the transport never issuing a request at all.
+  * `sync` is checked by what it DOES — requests issued, the process exit —
+    not by what it returns.
 """
 
 import argparse
@@ -86,22 +86,6 @@ def a_token():
     return f"lha.3f1a6c52-9b0e-4d7a-8c31-2e5f7a9d0b64.{secret}"
 
 
-class OrderedKeys(frozenset):
-    """`REMOTE_CONFIG_KEYS` with its iteration order pinned.
-
-    `apply_remote_config` iterates `REMOTE_CONFIG_KEYS - LOCAL_ONLY_CONFIG_KEYS`,
-    and a frozenset of strings orders itself by hashes that are randomized per
-    process. A test about order-dependence therefore cannot use the real one."""
-
-    def __new__(cls, order):
-        self = super().__new__(cls, order)
-        self._order = list(order)
-        return self
-
-    def __sub__(self, other):
-        return [key for key in self._order if key not in other]
-
-
 def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello"):
     """A synthetic extraction in the exact row shapes `extract_local` returns."""
     now = "2026-08-07T00:00:00+00:00"
@@ -141,7 +125,6 @@ def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello"):
     demo = {
         "edu_map": {ls[0]["profile_url"]: 2010} if ls else {},
         "job_map": {ls[0]["profile_url"]: 2014} if ls else {},
-        "avatar_map": {},
     }
     return cs, ls, ms, ss, demo
 
@@ -303,20 +286,6 @@ class CampaignRuntimeStatusTest(unittest.TestCase):
         )
         self.assertEqual(rows, {})
         self.assertEqual(error, "STATUS_PROFILE_SCHEMA_FINGERPRINT_MISMATCH")
-
-    def test_frozen_supabase_fallback_drops_only_the_normalized_observation(self):
-        source = {
-            "id": "nb:1", "instance_id": "nb", "lh_campaign_id": "1",
-            "name": "Campaign", "status": "legacy", "updated_at": "now",
-            "runtime_status": "running", "is_archived": False,
-            "status_observed_at": "now", "status_source": "fixture",
-            "status_raw": "R",
-        }
-        self.assertEqual(agent._legacy_supabase_campaigns([source]), [{
-            "id": "nb:1", "instance_id": "nb", "lh_campaign_id": "1",
-            "name": "Campaign", "status": "legacy", "updated_at": "now",
-        }])
-        self.assertEqual(source["runtime_status"], "running")
 
 
 class CampaignRuntimeStatusV2Test(unittest.TestCase):
@@ -1506,38 +1475,64 @@ class TokenTest(unittest.TestCase):
             self.assertIsNone(agent.parse_ingest_token(bad), repr(bad))
 
 
+# The keys a pre-1.27.0 config.yaml still carries. The agent reads neither.
+SUPABASE_CFG = {"supabase_url": "https://sb.example",
+                "supabase_service_key": "service-key"}
+
+
+def machine_cfg(**extra):
+    """A notebook with a machine credential."""
+    return dict({"instance_id": "nb",
+                 "ingest_url": "https://dash.example/api/import?op=agent.ingest",
+                 "ingest_token": a_token()}, **extra)
+
+
 class RemoteConfigTest(unittest.TestCase):
     """The credential is local-only, and that is structural rather than said."""
 
     def test_the_two_key_sets_disagree_about_nothing_by_accident(self):
         self.assertTrue(agent.LOCAL_ONLY_CONFIG_KEYS & agent.REMOTE_CONFIG_KEYS
-                        <= {"ingest_token", "supabase_url",
-                            "supabase_service_key", "instance_id"})
+                        <= {"ingest_token", "instance_id"})
         self.assertIn("ingest_token", agent.LOCAL_ONLY_CONFIG_KEYS)
         self.assertIn("release_public_key", agent.LOCAL_ONLY_CONFIG_KEYS)
+        self.assertIn("instance_id", agent.LOCAL_ONLY_CONFIG_KEYS)
+
+    def test_retired_keys_are_not_remote_keys(self):
+        for key in ("ingest_mode", "supabase_url", "supabase_service_key"):
+            self.assertNotIn(key, agent.REMOTE_CONFIG_KEYS)
+        # Kept, so a remote `sync_photos: true` still reaches the notice.
+        self.assertIn("sync_photos", agent.REMOTE_CONFIG_KEYS)
 
     def test_remote_config_cannot_set_a_credential(self):
-        local = {"instance_id": "nb", "supabase_url": "https://local",
-                 "supabase_service_key": "local-key",
-                 "ingest_token": "lha.local", "release_public_key": "local-key",
-                 "ingest_mode": "off"}
+        local = {"instance_id": "nb", "ingest_token": "lha.local",
+                 "release_public_key": "local-key"}
         hostile = {"ingest_token": "lha.attacker", "release_public_key": "attacker",
-                   "supabase_url": "https://attacker",
-                   "supabase_service_key": "attacker-key",
                    "instance_id": "someone-else",
-                   "ingest_mode": "dual", "ingest_url": "https://gateway"}
+                   "ingest_url": "https://gateway"}
         with mock.patch.object(agent, "fetch_remote_config",
-                               return_value=hostile):
+                               return_value=hostile), \
+                mock.patch("builtins.print"):
             merged = agent.apply_remote_config(dict(local))
         # Refused.
         self.assertEqual(merged["ingest_token"], "lha.local")
         self.assertEqual(merged["release_public_key"], "local-key")
-        self.assertEqual(merged["supabase_url"], "https://local")
-        self.assertEqual(merged["supabase_service_key"], "local-key")
         self.assertEqual(merged["instance_id"], "nb")
-        # Honoured — this is the rollout lever and it must still work.
-        self.assertEqual(merged["ingest_mode"], "dual")
+        # Honoured — the dashboard may rotate the gateway URL.
         self.assertEqual(merged["ingest_url"], "https://gateway")
+
+    def test_a_remote_ingest_mode_or_leftover_supabase_keys_are_inert(self):
+        """instances.config rows written for older agents may still carry
+        these. They must neither land in the merged config nor break it."""
+        local = {"instance_id": "nb", "ingest_token": "lha.local",
+                 "ingest_url": "https://local/api/import?op=agent.ingest"}
+        remote = {"ingest_mode": "off", "supabase_url": "https://sb.example",
+                  "supabase_service_key": "service-key",
+                  "instance_label": "Renamed"}
+        with mock.patch.object(agent, "fetch_remote_config",
+                               return_value=remote), \
+                mock.patch("builtins.print"):
+            merged = agent.apply_remote_config(dict(local))
+        self.assertEqual(merged, dict(local, instance_label="Renamed"))
 
     def test_the_dashboard_refuses_to_STORE_a_credential_either(self):
         """The other half of the same rule, in the other language.
@@ -1555,82 +1550,22 @@ class RemoteConfigTest(unittest.TestCase):
         self.assertIn("ingest_token", denied)
         self.assertNotIn("release_public_key", denied)
 
-    def test_remote_config_cannot_switch_a_notebook_to_a_destination_it_lacks(self):
-        """`only` from the Health page against a notebook with no machine
-        credential would stop a working sync from a web form. A LOCAL `only` in
-        that state still fails loudly — that is a stated choice, this is not."""
-        local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off"}
-        with mock.patch.object(agent, "fetch_remote_config",
-                               return_value={"ingest_mode": "only"}), \
+    def test_the_config_fetch_has_no_fallback_source(self):
+        """No credential means no fetch at all; a failed fetch means local
+        config only. Either way exactly one place is ever asked."""
+        with mock.patch.object(agent.requests, "get") as got, \
                 mock.patch("builtins.print"):
-            merged = agent.apply_remote_config(dict(local))
-        self.assertEqual(merged["ingest_mode"], "off")
-
-    def test_remote_only_is_honoured_once_the_notebook_can_deliver(self):
-        local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "dual",
-                 "ingest_url": "https://dash.example/x", "ingest_token": a_token()}
-        with mock.patch.object(agent, "fetch_remote_config",
-                               return_value={"ingest_mode": "only"}), \
-                mock.patch("builtins.print"):
-            merged = agent.apply_remote_config(dict(local))
-        self.assertEqual(merged["ingest_mode"], "only")
-
-    def test_remote_only_survives_the_url_arriving_in_the_same_blob(self):
-        """The refusal must ask about the config the merge PRODUCES.
-
-        `ingest_url` is itself a remote key, so a Health-page edit that turns a
-        notebook on will usually carry the URL and the mode together. Asking
-        the half-merged config made the answer depend on the iteration order of
-        a set — honoured or ignored for the same input, decided by string
-        hashing. Both orders are pinned here because the real frozenset's order
-        is randomized per process and neither run would catch it reliably."""
-        remote = {"ingest_mode": "only",
-                  "ingest_url": "https://dash.example/api/import?op=agent.ingest"}
-        for order in (["ingest_mode", "ingest_url"], ["ingest_url", "ingest_mode"]):
-            local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off",
-                     "ingest_token": a_token()}
-            with mock.patch.object(agent, "REMOTE_CONFIG_KEYS", OrderedKeys(order)), \
-                    mock.patch.object(agent, "fetch_remote_config",
-                                      return_value=dict(remote)), \
-                    mock.patch("builtins.print"):
-                merged = agent.apply_remote_config(local)
-            self.assertEqual(merged["ingest_mode"], "only", order)
-            self.assertEqual(merged["ingest_url"], remote["ingest_url"], order)
-
-    def test_a_remote_url_alone_still_cannot_switch_a_notebook_to_only(self):
-        """The other half of the same question. A remote blob may supply the
-        URL, but never the token — so a notebook without a local one still
-        cannot be told it is the gateway's, in either order."""
-        remote = {"ingest_mode": "only",
-                  "ingest_url": "https://dash.example/api/import?op=agent.ingest"}
-        for order in (["ingest_mode", "ingest_url"], ["ingest_url", "ingest_mode"]):
-            local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off"}
-            with mock.patch.object(agent, "REMOTE_CONFIG_KEYS", OrderedKeys(order)), \
-                    mock.patch.object(agent, "fetch_remote_config",
-                                      return_value=dict(remote)), \
-                    mock.patch("builtins.print"):
-                merged = agent.apply_remote_config(local)
-            self.assertEqual(merged["ingest_mode"], "off", order)
-
-    def test_a_malformed_remote_url_fails_the_refusal_closed(self):
-        """A URL that is not a string is not a URL. The predicate must answer
-        no rather than raise: `apply_remote_config` is called unguarded at the
-        top of `cmd_sync`, so an exception here would break a working sync."""
-        local = {"instance_id": "nb", **SUPABASE_CFG, "ingest_mode": "off",
-                 "ingest_token": a_token()}
-        with mock.patch.object(agent, "fetch_remote_config",
-                               return_value={"ingest_mode": "only",
-                                             "ingest_url": {"not": "a url"}}), \
-                mock.patch("builtins.print"):
-            merged = agent.apply_remote_config(local)
-        self.assertEqual(merged["ingest_mode"], "off")
-
-    def test_the_legacy_fetch_is_unreachable_without_a_supabase_credential(self):
-        """It subscripted `cfg['supabase_url']` directly. A notebook that has no
-        such key must get `{}`, not a KeyError out of a non-fatal fetch."""
-        with mock.patch.object(agent.requests, "get") as got:
-            self.assertEqual(agent.fetch_remote_config({"instance_id": "nb"}), {})
+            self.assertEqual(agent.fetch_remote_config(
+                {"instance_id": "nb", **SUPABASE_CFG}), {})
         got.assert_not_called()
+        import requests
+        with mock.patch.object(agent.requests, "get",
+                               side_effect=requests.ConnectionError("down")) as got, \
+                mock.patch("builtins.print"):
+            self.assertEqual(agent.fetch_remote_config(
+                machine_cfg(**SUPABASE_CFG)), {})
+        self.assertEqual(got.call_count, 1)
+        self.assertIn("op=agent.config", got.call_args[0][0])
 
     def test_the_allowlist_subtraction_is_what_refuses_it(self):
         """Not the spelling of the allowlist: even if a later session adds the
@@ -1663,56 +1598,6 @@ class S23MachineApiTest(unittest.TestCase):
         with mock.patch.object(agent.requests, "post",
                                side_effect=RuntimeError("network")):
             agent.notify_new_replies(cfg)
-
-
-SUPABASE_CFG = {"supabase_url": "https://sb.example",
-                "supabase_service_key": "service-key"}
-
-
-def machine_cfg(**extra):
-    """A notebook with a machine credential and NO Supabase credential."""
-    return dict({"instance_id": "nb",
-                 "ingest_url": "https://dash.example/api/import?op=agent.ingest",
-                 "ingest_token": a_token()}, **extra)
-
-
-class ModeTest(unittest.TestCase):
-    def test_known_modes(self):
-        for mode in agent.INGEST_MODES:
-            self.assertEqual(
-                agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode=mode)),
-                mode)
-        self.assertEqual(
-            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode=" DUAL ")),
-            "dual")
-
-    def test_unset_and_unknown_are_off(self):
-        """Fail closed: `ingest_mode` is remote-overridable, so a typo on the
-        Health page must leave the notebook exactly as it was."""
-        self.assertEqual(agent.resolve_ingest_mode(dict(SUPABASE_CFG)), "off")
-        self.assertEqual(
-            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode="on")), "off")
-        self.assertEqual(
-            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode=None)), "off")
-
-    def test_only_is_a_mode(self):
-        """The refusal that used to be here was the whole blocker: without a
-        Supabase-off member there was no way to describe a tenant's notebook."""
-        self.assertIn("only", agent.INGEST_MODES)
-        self.assertEqual(
-            agent.resolve_ingest_mode(dict(SUPABASE_CFG, ingest_mode="only")),
-            "only")
-
-    def test_no_supabase_credential_resolves_to_only_whatever_the_flag_says(self):
-        """The mode is derived from the credential, not defaulted from a flag.
-
-        Every one of these would otherwise resolve to 'off' and the notebook
-        would extract its whole LH2 database and deliver it nowhere, reporting
-        success. That is the failure this derivation exists to make impossible."""
-        for flag in (None, "", "off", "shadow", "dual", "typo"):
-            cfg = machine_cfg() if flag is None else machine_cfg(ingest_mode=flag)
-            with mock.patch("builtins.print"):
-                self.assertEqual(agent.resolve_ingest_mode(cfg), "only", repr(flag))
 
 
 class IdempotencyKeyTest(unittest.TestCase):
@@ -1846,28 +1731,13 @@ class ParityTest(unittest.TestCase):
         self.assertTrue(any("sent_count" in p for p in problems), problems)
 
     def test_a_dropped_start_year_is_caught(self):
-        """The one field the two transports carry differently — bucketed
-        upserts there, inline here — so it is the one most able to drift."""
+        """The years are merged from a separate map, not from the lead row, so
+        they are the field most able to drift."""
         def mutate(chunks, cs, ls, ms, es, ss, demo):
             chunks[0]["leads"][0]["education_start_year"] = None
         problems = self._mutate(mutate)
         self.assertTrue(any("education_start_year" in p for p in problems),
                         problems)
-
-    def test_the_inline_years_equal_what_the_supabase_path_would_send(self):
-        cfg, payload, chunks, problems, source = planned(leads=30)
-        cs, ls, ms, es, ss, demo = source
-        buckets = agent.build_year_updates(ls, demo["edu_map"], demo["job_map"])
-        expected = {}
-        for bucket in buckets:
-            for row in bucket:
-                expected[(row["campaign_id"], row["profile_url"])] = (
-                    row.get("education_start_year"),
-                    row.get("first_job_start_year"))
-        for row in chunks[0]["leads"]:
-            key = (row["campaign_id"], row["profile_url"])
-            years = (row["education_start_year"], row["first_job_start_year"])
-            self.assertEqual(years, expected.get(key, (None, None)), key)
 
     def test_a_duplicated_key_across_chunks_is_caught(self):
         cfg, payload, chunks, problems, source = planned(leads=2500)
@@ -1887,10 +1757,10 @@ class ParityTest(unittest.TestCase):
 
 
 class DeliveryTest(unittest.TestCase):
-    def cfg(self, mode="dual", **extra):
+    def cfg(self, **extra):
         return dict({"instance_id": "nb", "instance_label": "Notebook",
                      "ingest_url": "https://dash.example/api/import?op=agent.ingest",
-                     "ingest_token": a_token(), "ingest_mode": mode}, **extra)
+                     "ingest_token": a_token()}, **extra)
 
     def test_a_first_attempt_and_its_replay_present_the_same_key(self):
         """The graded property. The gateway answers 'accepted' then 'replay',
@@ -1910,12 +1780,12 @@ class DeliveryTest(unittest.TestCase):
                                 "batch_id": "b-1", "rows_written": 7})
 
         with mock.patch.object(agent.requests, "post", side_effect=post):
-            first_ok, _ = agent.push_ingest(cfg, "dual", chunks, problems)
+            first_ok, _ = agent.push_ingest(cfg, chunks, problems)
             # A second sync over an unchanged notebook: re-planned from scratch,
             # not re-using the object, so the key survives a round trip through
             # the whole build.
             _, _, again, again_problems, _ = planned(cfg)
-            second_ok, _ = agent.push_ingest(cfg, "dual", again, again_problems)
+            second_ok, _ = agent.push_ingest(cfg, again, again_problems)
 
         self.assertTrue(first_ok)
         self.assertTrue(second_ok)
@@ -1933,7 +1803,7 @@ class DeliveryTest(unittest.TestCase):
             return Answer()
 
         with mock.patch.object(agent.requests, "post", side_effect=post):
-            agent.push_ingest(cfg, "shadow", chunks, problems)
+            agent.push_ingest(cfg, chunks, problems)
         self.assertEqual(seen["headers"]["Authorization"],
                          f"Bearer {cfg['ingest_token']}")
         self.assertNotIn(cfg["ingest_token"].rsplit(".", 1)[1], seen["body"])
@@ -1944,7 +1814,7 @@ class DeliveryTest(unittest.TestCase):
         with mock.patch.object(agent.requests, "post",
                                return_value=Answer(503, {"error": "not configured"})):
             with mock.patch.object(agent.time, "sleep"):
-                ok, note = agent.push_ingest(cfg, "dual", chunks, problems)
+                ok, note = agent.push_ingest(cfg, chunks, problems)
         self.assertFalse(ok)
         self.assertIn("503", note)
 
@@ -1955,7 +1825,7 @@ class DeliveryTest(unittest.TestCase):
         _, _, chunks, problems, _ = planned(cfg)
         with mock.patch.object(agent.requests, "post",
                                return_value=Answer(401, {"error": "Unauthorized"})) as post:
-            ok, note = agent.push_ingest(cfg, "dual", chunks, problems)
+            ok, note = agent.push_ingest(cfg, chunks, problems)
         self.assertFalse(ok)
         self.assertEqual(post.call_count, 1)
 
@@ -1965,7 +1835,7 @@ class DeliveryTest(unittest.TestCase):
         with mock.patch.object(agent.requests, "post",
                                return_value=Answer(500, {})) as post:
             with mock.patch.object(agent.time, "sleep"):
-                ok, note = agent.push_ingest(cfg, "dual", chunks, problems)
+                ok, note = agent.push_ingest(cfg, chunks, problems)
         self.assertFalse(ok)
         self.assertEqual(post.call_count, 3)
 
@@ -1973,7 +1843,7 @@ class DeliveryTest(unittest.TestCase):
         _, _, chunks, problems, _ = planned()
         for cfg in (self.cfg(ingest_url=""), self.cfg(ingest_token="")):
             with mock.patch.object(agent.requests, "post") as post:
-                ok, note = agent.push_ingest(cfg, "dual", chunks, problems)
+                ok, note = agent.push_ingest(cfg, chunks, problems)
             self.assertFalse(ok)
             self.assertIn("not configured", note)
             post.assert_not_called()
@@ -1982,19 +1852,18 @@ class DeliveryTest(unittest.TestCase):
         cfg = self.cfg(ingest_token="lha.not-a-uuid.short")
         _, _, chunks, problems, _ = planned(cfg)
         with mock.patch.object(agent.requests, "post") as post:
-            ok, note = agent.push_ingest(cfg, "dual", chunks, problems)
+            ok, note = agent.push_ingest(cfg, chunks, problems)
         self.assertFalse(ok)
         self.assertIn("malformed", note)
         post.assert_not_called()
 
     def test_a_parity_problem_refuses_the_delivery(self):
-        """A number known to disagree with the authoritative store must not be
-        written to a second one: wrong in two places is worse than missing in
-        one."""
+        """A batch known to disagree with its own extraction must not reach the
+        only store there is: a missing run is visible, a wrong one is not."""
         cfg = self.cfg()
         _, _, chunks, _, _ = planned(cfg)
         with mock.patch.object(agent.requests, "post") as post:
-            ok, note = agent.push_ingest(cfg, "dual", chunks,
+            ok, note = agent.push_ingest(cfg, chunks,
                                          ["leads: 3 sent vs 4 extracted"])
         self.assertFalse(ok)
         self.assertIn("parity", note)
@@ -2011,7 +1880,7 @@ class DeliveryTest(unittest.TestCase):
             return Answer() if len(calls) == 1 else Answer(400, {"error": "bad"})
 
         with mock.patch.object(agent.requests, "post", side_effect=post):
-            ok, note = agent.push_ingest(cfg, "dual", chunks, problems)
+            ok, note = agent.push_ingest(cfg, chunks, problems)
         self.assertFalse(ok)
         self.assertIn(f"2/{len(chunks)}", note)
 
@@ -2025,26 +1894,26 @@ class DeliveryTest(unittest.TestCase):
                                                          "replayed": True,
                                                          "batch_id": None})):
             with mock.patch("builtins.print") as printed:
-                ok, _ = agent.push_ingest(cfg, "dual", chunks, problems)
+                ok, _ = agent.push_ingest(cfg, chunks, problems)
         self.assertTrue(ok)
         self.assertTrue(any("inconsistent" in str(c) for c in printed.call_args_list))
 
 
 class DryRunTest(unittest.TestCase):
-    def render(self, cfg, mode, chunks, problems):
+    def render(self, cfg, chunks, problems):
         lines = []
         with mock.patch("builtins.print", side_effect=lambda *a, **k:
                         lines.append(" ".join(str(x) for x in a))):
-            agent.print_ingest_dry_run(cfg, mode, chunks, problems)
+            agent.print_ingest_dry_run(cfg, chunks, problems)
         return "\n".join(lines)
 
     def test_it_prints_the_real_keys_and_sends_nothing(self):
-        cfg = {"instance_id": "nb", "ingest_mode": "shadow",
+        cfg = {"instance_id": "nb",
                "ingest_url": "https://dash.example/api/import?op=agent.ingest",
                "ingest_token": a_token()}
         _, _, chunks, problems, _ = planned(cfg, leads=2500)
         with mock.patch.object(agent.requests, "post") as post:
-            out = self.render(cfg, "shadow", chunks, problems)
+            out = self.render(cfg, chunks, problems)
         post.assert_not_called()
         for chunk in chunks:
             self.assertIn(chunk["idempotency_key"], out)
@@ -2056,7 +1925,7 @@ class DryRunTest(unittest.TestCase):
         cfg = {"instance_id": "nb", "ingest_url": "https://dash.example/x",
                "ingest_token": token}
         _, _, chunks, problems, _ = planned(cfg)
-        out = self.render(cfg, "shadow", chunks, problems)
+        out = self.render(cfg, chunks, problems)
         self.assertIn("3f1a6c52-9b0e-4d7a-8c31-2e5f7a9d0b64", out)
         self.assertNotIn(token.rsplit(".", 1)[1], out)
 
@@ -2064,7 +1933,7 @@ class DryRunTest(unittest.TestCase):
         cfg = {"instance_id": "nb", "ingest_url": "https://x",
                "ingest_token": a_token()}
         _, _, chunks, problems, _ = planned(cfg)
-        out = self.render(cfg, "shadow", chunks, problems)
+        out = self.render(cfg, chunks, problems)
         self.assertIn("replay", out)
         self.assertIn("cannot be", out)
 
@@ -2072,169 +1941,26 @@ class DryRunTest(unittest.TestCase):
         cfg = {"instance_id": "nb", "ingest_url": "https://x",
                "ingest_token": a_token()}
         _, _, chunks, _, _ = planned(cfg)
-        out = self.render(cfg, "shadow", chunks, ["leads: 3 sent vs 4 extracted"])
+        out = self.render(cfg, chunks, ["leads: 3 sent vs 4 extracted"])
         self.assertIn("PROBLEM", out)
         self.assertIn("refuse to deliver", out)
 
-    def test_it_says_so_when_the_mode_is_off(self):
+    def test_it_prints_the_line_the_installer_matches(self):
+        """`installer/install.py` refuses a notebook whose dry run lacks this
+        exact line, so it survives the mode it names being retired."""
         cfg = {"instance_id": "nb", "ingest_url": "https://x",
                "ingest_token": a_token()}
         _, _, chunks, problems, _ = planned(cfg)
-        out = self.render(cfg, "off", chunks, problems)
-        self.assertIn("'off'", out)
+        out = self.render(cfg, chunks, problems)
+        self.assertIn("ingest gateway — mode 'only', nothing sent", out)
+        self.assertNotIn("'off'", out)
 
     def test_an_unset_token_is_named_rather_than_crashed_on(self):
         cfg = {"instance_id": "nb"}
         _, _, chunks, problems, _ = planned(cfg)
-        out = self.render(cfg, "off", chunks, problems)
+        out = self.render(cfg, chunks, problems)
         self.assertIn("ingest_token is not set", out)
         self.assertIn("ingest_url is not set", out)
-
-
-class FakeSupabase:
-    """Records what the old transport did, and answers exactly as PostgREST
-    would for the two calls `cmd_sync` reads back from."""
-
-    def __init__(self, cfg):
-        self.upserts = []
-        self.updates = []
-
-    def upsert(self, table, rows, on_conflict=None):
-        self.upserts.append((table, len(rows)))
-        return len(rows)
-
-    def insert(self, table, row, retriable=True):
-        return {"id": "run-1"}
-
-    def update(self, table, match, patch):
-        self.updates.append((table, patch))
-
-
-class CmdSyncWiringTest(unittest.TestCase):
-    """`cmd_sync` end to end with the network replaced.
-
-    The mode gate lives in `cmd_sync`, so testing `push_ingest` alone proves the
-    transport works and says nothing about when it runs. These four cases are
-    the ones the rollout depends on, and each is asserted on what was OBSERVED —
-    requests issued, tables upserted, the status the run was recorded with — not
-    on a return value."""
-
-    def run_sync(self, mode, post=None, **extra):
-        cfg = dict({
-            "instance_id": "nb", "instance_label": "Notebook",
-            "supabase_url": "https://sb.example",
-            "supabase_service_key": "service-key",
-            "ingest_url": "https://dash.example/api/import?op=agent.ingest",
-            "ingest_token": a_token(), "ingest_mode": mode,
-        }, **extra)
-        cs, ls, ms, ss, demo = extraction(leads=5, messages=4)
-        sb_holder = {}
-
-        def make_sb(config):
-            sb_holder["sb"] = FakeSupabase(config)
-            return sb_holder["sb"]
-
-        with mock.patch.object(agent, "load_config", return_value=cfg), \
-                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
-                mock.patch.object(agent, "self_update", return_value=False), \
-                mock.patch.object(agent, "extract_local",
-                                  return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "Supabase", side_effect=make_sb), \
-                mock.patch.object(agent, "notify_new_replies"), \
-                mock.patch.object(agent.time, "sleep"), \
-                mock.patch.object(agent.requests, "post",
-                                  side_effect=post or (lambda *a, **k: Answer())) as posted:
-            agent.cmd_sync(mock.Mock(dry_run=False))
-        sb = sb_holder["sb"]
-        run_patch = next(p for table, p in sb.updates if table == "sync_runs")
-        return sb, posted, run_patch
-
-    def test_off_pushes_to_supabase_and_never_reaches_the_gateway(self):
-        sb, posted, run_patch = self.run_sync("off")
-        ordered = [t for i, (t, _) in enumerate(sb.upserts)
-                   if i == 0 or sb.upserts[i - 1][0] != t]
-        self.assertEqual(ordered, ["instances", "campaigns", "leads", "events",
-                                   "messages", "campaign_steps"])
-        posted.assert_not_called()
-        self.assertEqual(run_patch["status"], "ok")
-
-    def test_shadow_delivers_and_a_failure_stays_off_the_run(self):
-        sb, posted, run_patch = self.run_sync(
-            "shadow", post=lambda *a, **k: Answer(503, {"error": "dark"}))
-        self.assertTrue(posted.called)
-        self.assertEqual(run_patch["status"], "ok")
-        self.assertNotIn("error", run_patch)
-
-    def test_dual_delivers_and_a_failure_marks_the_run_partial(self):
-        sb, posted, run_patch = self.run_sync(
-            "dual", post=lambda *a, **k: Answer(503, {"error": "dark"}))
-        self.assertTrue(posted.called)
-        self.assertEqual(run_patch["status"], "partial")
-        self.assertIn("ingest", run_patch["error"])
-
-    def test_a_successful_delivery_leaves_the_run_green(self):
-        sb, posted, run_patch = self.run_sync("dual")
-        self.assertEqual(posted.call_count, 1)
-        self.assertEqual(run_patch["status"], "ok")
-
-    def test_the_supabase_push_happens_before_the_gateway_ever_hears_of_it(self):
-        """Ordering is the invariant: the authoritative store is written and the
-        new one is offered the result. A gateway that hangs cannot delay it."""
-        order = []
-        cs, ls, ms, ss, demo = extraction(leads=5, messages=4)
-
-        class Recording(FakeSupabase):
-            def upsert(self, table, rows, on_conflict=None):
-                order.append(f"supabase:{table}")
-                return len(rows)
-
-        cfg = {"instance_id": "nb", "supabase_url": "https://sb.example",
-               "supabase_service_key": "k", "ingest_mode": "dual",
-               "ingest_url": "https://dash.example/x", "ingest_token": a_token()}
-
-        def post(*a, **k):
-            order.append("gateway")
-            return Answer()
-
-        with mock.patch.object(agent, "load_config", return_value=cfg), \
-                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
-                mock.patch.object(agent, "self_update", return_value=False), \
-                mock.patch.object(agent, "extract_local",
-                                  return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "Supabase", side_effect=Recording), \
-                mock.patch.object(agent, "notify_new_replies"), \
-                mock.patch.object(agent.requests, "post", side_effect=post):
-            agent.cmd_sync(mock.Mock(dry_run=False))
-        self.assertEqual(order[-1], "gateway")
-        self.assertTrue(all(step.startswith("supabase:") for step in order[:-1]))
-
-    def test_a_gateway_that_raises_cannot_fail_the_sync(self):
-        """The one property everything here rests on: a green Supabase run stays
-        green. `push_ingest` swallows, so the outer except is unreachable."""
-        def explode(*a, **k):
-            raise RuntimeError("gateway is on fire")
-
-        sb, posted, run_patch = self.run_sync("dual", post=explode)
-        self.assertEqual(run_patch["status"], "partial")
-        self.assertIn("ingest", run_patch["error"])
-
-    def test_a_dry_run_pushes_nothing_anywhere(self):
-        cfg = {"instance_id": "nb", "supabase_url": "https://sb.example",
-               "supabase_service_key": "k", "ingest_mode": "dual",
-               "ingest_url": "https://dash.example/x", "ingest_token": a_token()}
-        cs, ls, ms, ss, demo = extraction(leads=5, messages=4)
-        with mock.patch.object(agent, "load_config", return_value=cfg), \
-                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
-                mock.patch.object(agent, "self_update") as updated, \
-                mock.patch.object(agent, "extract_local",
-                                  return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "Supabase") as sb, \
-                mock.patch.object(agent.requests, "post") as posted, \
-                mock.patch("builtins.print"):
-            agent.cmd_sync(mock.Mock(dry_run=True))
-        sb.assert_not_called()
-        posted.assert_not_called()
-        updated.assert_not_called()
 
 
 class SwallowTest(unittest.TestCase):
@@ -2242,57 +1968,42 @@ class SwallowTest(unittest.TestCase):
 
     `push_ingest` never raises, but the build and the chunking that feed it are
     ordinary code — a mapping producing a row shape nobody expected is the
-    realistic failure — and an exception escaping THEM would reach `cmd_sync`'s
-    outer handler and turn a completed Supabase push into a failed run."""
+    realistic failure — and an exception escaping THEM would end the run in a
+    traceback instead of a line that explains it."""
 
     def cfg(self):
         return {"instance_id": "nb", "ingest_url": "https://dash.example/x",
-                "ingest_token": a_token(), "ingest_mode": "dual"}
+                "ingest_token": a_token()}
 
     def test_a_broken_projection_is_a_note_not_an_exception(self):
         cs, ls, ms, ss, demo = extraction(leads=3)
         del ls[0]["profile_url"]  # the shape the projection assumes
         with mock.patch.object(agent.requests, "post") as post:
-            ok, note = agent.run_ingest_transport(self.cfg(), "dual", cs, ls, ms,
+            ok, note = agent.run_ingest_transport(self.cfg(), cs, ls, ms,
                                                   [], ss, demo, "ok", "")
         self.assertFalse(ok)
         self.assertIn("transport error", note)
         post.assert_not_called()
 
-    def test_a_broken_projection_leaves_the_supabase_run_green_ish(self):
-        """'partial', because dual reports it — never 'error', which is what an
-        escaping exception would have made it.
-
-        The projection is made to raise directly rather than through a malformed
-        row: a row malformed enough to break the projection breaks `derive_events`
-        first, which is the OLD path and is correctly allowed to fail a sync. The
-        claim under test is narrower — that a fault on the new path alone cannot."""
+    def test_a_broken_projection_fails_the_sync_with_its_note(self):
+        """The projection is made to raise directly: the claim is that a fault
+        there reaches cron as an explained non-zero exit, never a traceback."""
         cs, ls, ms, ss, demo = extraction(leads=3)
-        cfg = dict(self.cfg(), supabase_url="https://sb.example",
-                   supabase_service_key="k")
-        holder = {}
-
-        def make_sb(config):
-            holder["sb"] = FakeSupabase(config)
-            return holder["sb"]
-
-        with mock.patch.object(agent, "load_config", return_value=cfg), \
+        with mock.patch.object(agent, "load_config", return_value=self.cfg()), \
                 mock.patch.object(agent, "apply_remote_config", lambda c: c), \
                 mock.patch.object(agent, "self_update", return_value=False), \
                 mock.patch.object(agent, "extract_local",
                                   return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "Supabase", side_effect=make_sb), \
-                mock.patch.object(agent, "notify_new_replies"), \
+                mock.patch.object(agent, "notify_new_replies") as notified, \
                 mock.patch.object(agent, "build_ingest_payload",
                                   side_effect=TypeError("row shape changed")), \
-                mock.patch.object(agent.requests, "post") as post:
+                mock.patch.object(agent.requests, "post") as post, \
+                mock.patch("builtins.print"), \
+                self.assertRaises(SystemExit) as raised:
             agent.cmd_sync(mock.Mock(dry_run=False))
-        run_patch = next(p for t, p in holder["sb"].updates if t == "sync_runs")
-        self.assertEqual(run_patch["status"], "partial")
-        self.assertIn("transport error", run_patch["error"])
+        self.assertIn("transport error", str(raised.exception))
         post.assert_not_called()
-        # And the old transport still did its whole job.
-        self.assertIn("campaign_steps", [t for t, _ in holder["sb"].upserts])
+        notified.assert_not_called()
 
     def test_a_broken_preview_does_not_take_the_dry_run_with_it(self):
         cs, ls, ms, ss, demo = extraction(leads=3)
@@ -2300,22 +2011,13 @@ class SwallowTest(unittest.TestCase):
         lines = []
         with mock.patch("builtins.print",
                         side_effect=lambda *a, **k: lines.append(str(a))):
-            agent.preview_ingest_transport(self.cfg(), "shadow", cs, ls, ms, [],
+            agent.preview_ingest_transport(self.cfg(), cs, ls, ms, [],
                                            ss, demo, "ok", "")
         self.assertTrue(any("preview failed" in line for line in lines), lines)
 
 
-class SupabasePathTest(unittest.TestCase):
-    """The old transport is preserved, and these are the ways that could stop
-    being true without anybody noticing."""
-
-    def test_the_supabase_class_is_untouched_by_the_new_transport(self):
-        with open(os.path.join(AGENT_DIR, "agent.py"), encoding="utf-8") as f:
-            source = f.read()
-        body = source[source.index("class Supabase:"):source.index("RELEASE_PUBLIC_KEY_CONFIG")]
-        self.assertNotIn("ingest", body)
-
-    def test_dedupe_still_collapses_the_supabase_unique_keys(self):
+class DedupeTest(unittest.TestCase):
+    def test_dedupe_collapses_the_unique_keys(self):
         cs, ls, ms, ss, demo = extraction(messages=4)
         doubled = ms + copy.deepcopy(ms)
         self.assertEqual(len(agent.dedupe_messages(doubled)), len(ms))
@@ -2324,8 +2026,8 @@ class SupabasePathTest(unittest.TestCase):
                          len(agent.dedupe_events(events)))
 
     def test_the_payload_is_built_from_the_deduped_lists(self):
-        """Parity would still pass if both sides deduped separately, and the two
-        transports would still be able to disagree. They must be the same list."""
+        """Parity would still pass if the payload and the check deduped
+        separately. They must be handed the same list."""
         cs, ls, ms, ss, demo = extraction(messages=4)
         sent = agent.dedupe_messages(ms + copy.deepcopy(ms))
         payload = agent.build_ingest_payload({"instance_id": "nb"}, cs, ls, sent,
@@ -2335,50 +2037,91 @@ class SupabasePathTest(unittest.TestCase):
 
 class LoadConfigTest(unittest.TestCase):
     """`load_config` is the first statement of every command, so what it demands
-    decides which notebooks can run at all. It used to demand a Supabase
-    credential unconditionally, which is why a tenant's notebook exited before
-    reaching the transport that would have worked for it."""
+    decides which notebooks can run at all. It demands a machine credential and
+    nothing else — and must never refuse a config over a key it no longer reads,
+    because every notebook that self-updates into 1.27.0 still has them."""
 
     def load(self, cfg):
+        lines = []
         with mock.patch.object(agent.os.path, "exists", return_value=True), \
                 mock.patch("builtins.open", mock.mock_open(read_data="{}")), \
-                mock.patch.object(agent.yaml, "safe_load", return_value=cfg):
-            return agent.load_config()
+                mock.patch.object(agent.yaml, "safe_load", return_value=cfg), \
+                mock.patch("builtins.print",
+                           side_effect=lambda *a, **k: lines.append(
+                               " ".join(str(part) for part in a))):
+            loaded = agent.load_config()
+        return loaded, lines
 
-    def test_a_supabase_notebook_still_loads(self):
-        cfg = {"instance_id": "nb", **SUPABASE_CFG}
-        self.assertEqual(self.load(cfg)["instance_id"], "nb")
+    def test_a_machine_notebook_loads_silently(self):
+        loaded, lines = self.load(machine_cfg())
+        self.assertEqual(loaded["instance_id"], "nb")
+        self.assertEqual(lines, [])
 
-    def test_a_machine_only_notebook_loads(self):
-        self.assertEqual(self.load(machine_cfg())["instance_id"], "nb")
+    def test_a_supabase_only_notebook_is_refused(self):
+        with self.assertRaises(SystemExit) as raised:
+            self.load({"instance_id": "nb", **SUPABASE_CFG})
+        message = str(raised.exception)
+        self.assertIn("ingest_url", message)
+        self.assertIn("lha.", message)
+        self.assertNotIn("supabase", message.lower())
 
-    def test_a_notebook_with_neither_credential_is_refused(self):
+    def test_leftover_supabase_keys_beside_a_credential_load_and_are_named(self):
+        loaded, lines = self.load(machine_cfg(**SUPABASE_CFG))
+        self.assertEqual(loaded["instance_id"], "nb")
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("supabase_url", lines[0])
+        self.assertIn("supabase_service_key", lines[0])
+        self.assertIn("delete", lines[0])
+
+    def test_ingest_mode_never_refuses_a_config(self):
+        """`only` is what the installer writes, so it is silent. Anything else
+        reads as a choice the agent no longer honours, so it is named once."""
+        loaded, lines = self.load(machine_cfg(ingest_mode="only"))
+        self.assertEqual(lines, [])
+        for flag in ("off", "shadow", "dual", "typo", " DUAL "):
+            loaded, lines = self.load(machine_cfg(ingest_mode=flag))
+            self.assertEqual(loaded["instance_id"], "nb")
+            self.assertEqual(len(lines), 1, (flag, lines))
+            self.assertIn("ignored", lines[0])
+
+    def test_every_retired_key_at_once_is_two_lines_not_a_refusal(self):
+        loaded, lines = self.load(machine_cfg(ingest_mode="dual", **SUPABASE_CFG))
+        self.assertEqual(loaded["ingest_mode"], "dual")  # left in place, unread
+        self.assertEqual(len(lines), 2, lines)
+
+    def test_a_notebook_with_no_credential_is_refused(self):
         with self.assertRaises(SystemExit) as raised:
             self.load({"instance_id": "nb"})
-        self.assertIn("no destination credential", str(raised.exception))
+        self.assertIn("no machine ingest credential", str(raised.exception))
 
-    def test_instance_id_is_still_required_of_everyone(self):
-        for cfg in (dict(SUPABASE_CFG), machine_cfg()):
-            cfg.pop("instance_id", None)
-            with self.assertRaises(SystemExit) as raised:
-                self.load(cfg)
-            self.assertIn("instance_id", str(raised.exception))
+    def test_instance_id_is_still_required(self):
+        cfg = machine_cfg()
+        cfg.pop("instance_id")
+        with self.assertRaises(SystemExit) as raised:
+            self.load(cfg)
+        self.assertIn("instance_id", str(raised.exception))
+
+    def test_an_empty_file_is_refused_legibly(self):
+        with self.assertRaises(SystemExit) as raised:
+            self.load(None)
+        self.assertIn("instance_id", str(raised.exception))
 
     def test_a_placeholder_token_is_not_a_credential(self):
         """The shape is part of the question. `ingest_token: "paste-it-here"`
-        with no Supabase key is a notebook that can reach nothing, and accepting
-        it would move the failure from a legible exit to a silent no-op."""
-        with self.assertRaises(SystemExit):
-            self.load({"instance_id": "nb", "ingest_url": "https://dash/x",
-                       "ingest_token": "paste-it-here"})
+        is a notebook that can reach nothing, and accepting it would move the
+        failure from a legible exit to a failed request on every run."""
+        for extra in ({}, SUPABASE_CFG):
+            with self.assertRaises(SystemExit):
+                self.load({"instance_id": "nb", "ingest_url": "https://dash/x",
+                           "ingest_token": "paste-it-here", **extra})
 
 
 class MachineOnlyWiringTest(unittest.TestCase):
-    """`sync` with the gateway as the ONLY destination.
+    """`sync` end to end with the network replaced.
 
-    Asserted on what was observed — whether a Supabase client was constructed,
-    whether a request went out, what the process exit was — because the claim is
-    about behaviour a tenant's notebook depends on, not about a return value."""
+    Asserted on what was observed — whether a request went out, what the
+    process exit was — because the claim is about behaviour every notebook
+    depends on, not about a return value."""
 
     def run_sync(self, post=None, extract=None, **extra):
         cfg = machine_cfg(instance_label="Notebook", **extra)
@@ -2393,9 +2136,9 @@ class MachineOnlyWiringTest(unittest.TestCase):
                     side_effect=extract,
                     **({} if extract else
                        {"return_value": (cs, ls, ms, ss, owner, demo)})), \
-                mock.patch.object(agent, "Supabase") as supabase, \
                 mock.patch.object(agent, "notify_new_replies") as notified, \
                 mock.patch.object(agent.time, "sleep"), \
+                mock.patch.object(agent.requests, "get") as got, \
                 mock.patch("builtins.print",
                            side_effect=lambda *a, **k: lines.append(" ".join(
                                str(part) for part in a))), \
@@ -2407,12 +2150,12 @@ class MachineOnlyWiringTest(unittest.TestCase):
                 exit_code = None
             except SystemExit as raised:
                 exit_code = str(raised.code)
-        return supabase, posted, notified, exit_code, lines
+        return got, posted, notified, exit_code, lines
 
-    def test_it_delivers_and_never_constructs_a_supabase_client(self):
-        supabase, posted, notified, exit_code, lines = self.run_sync()
-        supabase.assert_not_called()
+    def test_it_delivers(self):
+        got, posted, notified, exit_code, lines = self.run_sync()
         self.assertEqual(posted.call_count, 1)
+        self.assertIn("op=agent.ingest", posted.call_args[0][0])
         self.assertIsNone(exit_code)
         self.assertTrue(notified.called)
         self.assertTrue(any("sync ok" in line for line in lines), lines)
@@ -2433,9 +2176,8 @@ class MachineOnlyWiringTest(unittest.TestCase):
         self.assertEqual(payload["agent_version"], agent.AGENT_VERSION)
 
     def test_a_delivery_failure_fails_the_run(self):
-        """The inversion that matters. Alongside Supabase a failed delivery is a
-        warning; as the sole destination nothing was written anywhere, so cron
-        must not be told the notebook synced."""
+        """Nothing was written anywhere, so cron must not be told the notebook
+        synced."""
         _, posted, notified, exit_code, _ = self.run_sync(
             post=lambda *a, **k: Answer(401, {"error": "revoked"}))
         self.assertTrue(posted.called)
@@ -2465,43 +2207,36 @@ class MachineOnlyWiringTest(unittest.TestCase):
         posted.assert_not_called()
         self.assertIn("extraction", exit_code or "")
 
-    def test_photo_sync_is_refused_rather_than_silently_mirroring_nothing(self):
-        _, _, _, exit_code, lines = self.run_sync(sync_photos=True)
+    def test_sync_photos_prints_one_notice_and_touches_no_network(self):
+        got, posted, _, exit_code, lines = self.run_sync(sync_photos=True)
         self.assertIsNone(exit_code)
-        self.assertTrue(any("photo sync: skipped" in line for line in lines),
-                        lines)
-
-    def test_photo_sync_is_refused_even_when_supabase_keys_linger(self):
-        """The step-9 state of a cutover, and the one the credential guard let
-        through: `only` mode on a notebook that still HAS its Supabase keys.
-
-        `sync_machine_only` builds no Supabase client and passes None, so the
-        mirror would read candidates and upload bytes over plain `requests`,
-        then reach `sb.update` and raise AttributeError into an `except` that
-        counts it `retryable`. Nothing converges, and the same capped window is
-        re-downloaded and re-uploaded on every scheduled run, forever."""
-        cfg = dict(machine_cfg(), sync_photos=True, ingest_mode="only",
-                   **SUPABASE_CFG)
-        self.assertTrue(agent.supabase_configured(cfg))
-        cs, ls, ms, ss, demo = extraction(leads=3)
-        lines = []
-        with mock.patch.object(agent, "load_config", return_value=cfg), \
-                mock.patch.object(agent, "apply_remote_config", lambda c: c), \
-                mock.patch.object(agent, "self_update", return_value=False), \
-                mock.patch.object(agent, "extract_local",
-                                  return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "notify_new_replies"), \
-                mock.patch.object(agent.requests, "get") as got, \
-                mock.patch.object(agent.requests, "post",
-                                  side_effect=lambda *a, **k: Answer()), \
-                mock.patch("builtins.print",
-                           side_effect=lambda *a, **k: lines.append(
-                               " ".join(str(part) for part in a))):
-            agent.cmd_sync(mock.Mock(dry_run=False))
-        self.assertTrue(any("photo sync: skipped" in line for line in lines), lines)
-        # The candidate list is a GET against Supabase. Not reaching it is what
-        # proves the refusal happened before any work, not after.
+        notices = [line for line in lines if line.startswith("photo sync:")]
+        self.assertEqual(len(notices), 1, lines)
+        self.assertIn("not available", notices[0])
         got.assert_not_called()
+        self.assertEqual(posted.call_count, 1)  # the batch, nothing else
+
+    def test_no_notice_without_sync_photos(self):
+        _, _, _, _, lines = self.run_sync()
+        self.assertFalse(any(line.startswith("photo sync:") for line in lines))
+
+    def test_retired_keys_do_not_change_the_run(self):
+        """A 1.26.0 config.yaml, unedited: whatever `ingest_mode` says and
+        whichever Supabase keys linger, the run is one gateway delivery."""
+        for flag in ("off", "shadow", "dual", "only", "typo"):
+            got, posted, notified, exit_code, lines = self.run_sync(
+                ingest_mode=flag, sync_photos=True, **SUPABASE_CFG)
+            self.assertIsNone(exit_code, flag)
+            self.assertEqual(posted.call_count, 1, flag)
+            self.assertIn("op=agent.ingest", posted.call_args[0][0], flag)
+            got.assert_not_called()
+            self.assertTrue(notified.called, flag)
+
+    def test_the_removed_surface_is_gone(self):
+        for name in ("Supabase", "supabase_configured", "resolve_ingest_mode",
+                     "INGEST_MODES", "sync_photos", "agent_photo_request",
+                     "cmd_annotate", "build_year_updates"):
+            self.assertFalse(hasattr(agent, name), name)
 
     def test_a_dry_run_on_this_path_sends_nothing(self):
         cfg = machine_cfg()
@@ -2511,11 +2246,9 @@ class MachineOnlyWiringTest(unittest.TestCase):
                 mock.patch.object(agent, "self_update") as updated, \
                 mock.patch.object(agent, "extract_local",
                                   return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "Supabase") as supabase, \
                 mock.patch.object(agent.requests, "post") as posted, \
                 mock.patch("builtins.print"):
             agent.cmd_sync(mock.Mock(dry_run=True))
-        supabase.assert_not_called()
         posted.assert_not_called()
         updated.assert_not_called()
 
@@ -2525,10 +2258,9 @@ def sqlite_error():
     return sqlite3.DatabaseError("lh.db is locked")
 
 
-class SupabaseFreeCommandTest(unittest.TestCase):
-    """The two commands that were Supabase-only besides `sync`. One is ported
-    and one is refused, and the difference is whether the contract can carry
-    it — never whether it was convenient."""
+class CommandTest(unittest.TestCase):
+    """`ingest-csv` delivers through the gateway; `annotate` is gone, because
+    the ingest contract carries no annotations."""
 
     def test_ingest_csv_delivers_through_the_gateway(self):
         import tempfile
@@ -2544,7 +2276,6 @@ class SupabaseFreeCommandTest(unittest.TestCase):
             args = mock.Mock(file=path, campaign="SaaS Founders", kind="queue")
             with mock.patch.object(agent, "load_config",
                                    return_value=machine_cfg()), \
-                    mock.patch.object(agent, "Supabase") as supabase, \
                     mock.patch.object(
                         agent.requests, "post",
                         side_effect=lambda *a, **k: sent.append(k["data"])
@@ -2553,7 +2284,7 @@ class SupabaseFreeCommandTest(unittest.TestCase):
                 agent.cmd_ingest_csv(args)
         finally:
             os.unlink(path)
-        supabase.assert_not_called()
+        self.assertEqual(len(sent), 1)
         payload = json.loads(sent[0])
         self.assertEqual(len(payload["leads"]), 2)
         self.assertEqual(len(payload["campaigns"]), 1)
@@ -2586,28 +2317,12 @@ class SupabaseFreeCommandTest(unittest.TestCase):
             os.unlink(path)
         self.assertIn("ingest-csv failed", str(raised.exception))
 
-    def test_annotate_refuses_instead_of_writing_nowhere(self):
-        """`app_machine` holds no grant on public.annotations and the ingest
-        contract has no annotations collection, so there is nothing to port to."""
-        args = mock.Mock(note="Template B", date=None, campaign=None,
-                         instance=False)
-        with mock.patch.object(agent, "load_config", return_value=machine_cfg()), \
-                mock.patch.object(agent, "Supabase") as supabase, \
+    def test_the_annotate_command_no_longer_exists(self):
+        with mock.patch.object(sys, "argv", ["agent.py", "annotate", "Template B"]), \
+                mock.patch("sys.stderr", io.StringIO()), \
                 self.assertRaises(SystemExit) as raised:
-            agent.cmd_annotate(args)
-        supabase.assert_not_called()
-        self.assertIn("annotations", str(raised.exception))
-
-    def test_annotate_still_works_on_a_supabase_notebook(self):
-        args = mock.Mock(note="Template B", date="2026-08-11", campaign=None,
-                         instance=False)
-        with mock.patch.object(agent, "load_config",
-                               return_value={"instance_id": "nb", **SUPABASE_CFG}), \
-                mock.patch.object(agent, "Supabase") as supabase, \
-                mock.patch("builtins.print"):
-            agent.cmd_annotate(args)
-        supabase.return_value.upsert.assert_called_once()
-
+            agent.main()
+        self.assertEqual(raised.exception.code, 2)
 
 
 # ------------------------------------------------- LH2 chat store extraction
@@ -2908,18 +2623,6 @@ class MessageContractPlumbingTest(unittest.TestCase):
                        content_hash=agent.content_hash("hi"), external_id=None)]
         self.assertEqual(len(agent.dedupe_messages(legacy * 2)), 1)
 
-    def test_supabase_push_strips_the_columns_it_has_no_table_for(self):
-        rows = [{"instance_id": "nb", "campaign_id": "nb:1",
-                 "profile_url": "u", "direction": "in", "body": "b",
-                 "sent_at": "2026-09-01T10:00:00+00:00",
-                 "content_hash": "h", "external_id": "li:1",
-                 "platform": "linkedin", "message_type": "DEFAULT"}]
-        stripped = agent._supabase_messages(rows)
-        self.assertEqual(set(stripped[0]), {
-            "instance_id", "campaign_id", "profile_url", "direction", "body",
-            "sent_at", "content_hash"})
-        self.assertEqual(rows[0]["external_id"], "li:1")  # input untouched
-
     def test_parity_notices_a_changed_message_id(self):
         """The parity check is only worth its refusal if it compares the new
         fields too — a mutation test, not an agreement test."""
@@ -3128,12 +2831,12 @@ class TrackerTestCase(unittest.TestCase):
             },
         }, **extra)
 
-    def tracker(self, cfg=None, warnings=None, mode="only", state=None, **extra):
+    def tracker(self, cfg=None, warnings=None, state=None, **extra):
         if state is not None:
             with open(self.state_path, "w", encoding="utf-8") as f:
                 json.dump(state, f)
         return agent.ConversationTracker(
-            cfg if cfg is not None else self.cfg(**extra), "nb", mode,
+            cfg if cfg is not None else self.cfg(**extra), "nb",
             warnings if warnings is not None else [],
             state_path=self.state_path)
 
@@ -3211,12 +2914,11 @@ class TrackerEnsureTest(TrackerTestCase):
 
     def test_a_notebook_with_no_machine_credential_never_runs_it(self):
         tracker_db(self.db_path)
-        cfg = self.cfg(supabase_url="https://sb.example",
-                       supabase_service_key="k")
+        cfg = self.cfg()
         cfg.pop("ingest_url")
         cfg.pop("ingest_token")
         warnings = []
-        tracker = self.tracker(cfg=cfg, warnings=warnings, mode="off")
+        tracker = self.tracker(cfg=cfg, warnings=warnings)
         tracker.ensure()
         tracker.refresh()
         self.assertEqual(self.lh2.calls, [])
@@ -3581,7 +3283,7 @@ class TrackerEventTest(TrackerTestCase):
                          {"last_requested_at": "2026-09-13T08:00:00+00:00",
                           "count": 1, "method": "retry"})
         self.assertIsNone(refresh[0]["campaign_id"])
-        # Milestone events keep the key so PostgREST sees a uniform batch.
+        # Milestone events keep the key, so every event row has one shape.
         self.assertTrue(all("raw" in r for r in rows))
 
     def test_delivered_events_are_cleared_and_nothing_else_is(self):
@@ -3652,10 +3354,8 @@ class TrackerDryRunTest(TrackerTestCase):
                                   return_value=self.state_path), \
                 mock.patch.object(agent, "extract_local",
                                   return_value=(cs, ls, ms, ss, {}, demo)), \
-                mock.patch.object(agent, "Supabase") as sb, \
                 mock.patch.object(agent.requests, "post") as posted:
             agent.cmd_sync(mock.Mock(dry_run=True))
-        sb.assert_not_called()
         posted.assert_not_called()
         updated.assert_not_called()
         self.assertEqual(self.lh2.calls, [])
@@ -3669,7 +3369,7 @@ class TrackerSyncWiringTest(TrackerTestCase):
 
     def test_the_refresh_runs_after_the_gateway_push(self):
         tracker_db(self.db_path, targets=[(11, 2)], people=[(11, "processed-one")])
-        cfg = self.cfg(ingest_mode="only")
+        cfg = self.cfg()
         cs, ls, ms, ss, demo = extraction(leads=2, messages=1)
         order = []
 
@@ -3702,7 +3402,7 @@ class TrackerSyncWiringTest(TrackerTestCase):
 
     def test_last_runs_events_go_out_with_this_runs_batch(self):
         tracker_db(self.db_path)
-        cfg = self.cfg(ingest_mode="only")
+        cfg = self.cfg()
         cs, ls, ms, ss, demo = extraction(leads=2, messages=1)
         now = "2026-09-13T08:00:00+00:00"
         state = {"campaign_id": TRACKER_CAMPAIGN_ID, "action_id": TRACKER_ACTION_ID,

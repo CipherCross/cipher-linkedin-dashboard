@@ -10,8 +10,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useData } from '../lib/DataContext'
-import { followUpHistorySeek } from '../lib/conversationPaging'
-import { fetchNeonFollowUpHistory, resolveReadPath } from '../lib/dashboardReads'
+import { fetchNeonFollowUpHistory } from '../lib/dashboardReads'
 import {
   actorMember,
   activeFollowUp,
@@ -21,7 +20,6 @@ import {
   followUpStateMap,
   formatCalendarDate,
 } from '../lib/followUps'
-import { supabase } from '../lib/supabase'
 import { useFollowUpActions } from '../lib/useFollowUpActions'
 import { Button, InlineError, Panel, SelectField, TextField, TextareaField } from '../ui'
 import type { FollowUpEvent, Lead } from '../lib/types'
@@ -83,9 +81,7 @@ export function FollowUpPanel({
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
-  // The Neon path's "load more" position. The server's opaque cursor replaces
-  // the client-side seek entirely; it stays null on the Supabase path, which
-  // seeks from the last row it already holds.
+  // The "load more" position: the server's opaque cursor.
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
 
@@ -95,12 +91,9 @@ export function FollowUpPanel({
     [data?.followUpStates, key],
   )
   const members = actions.members
-  // Owner *options* come from the assignable roster, never from the display one:
-  // an `owner_id` chosen here is written back through `/api/pipeline`, which
-  // resolves it against the other provider when the roster is Neon's.
-  // `members` below still resolves the current owner's name, which is the read
-  // this slice fixed.
-  const activeMembers = actions.assignableMembers.filter((member) => member.active)
+  // Owner options are the active members; `members` also resolves an inactive
+  // current owner's name.
+  const activeMembers = members.filter((member) => member.active)
   const owner = state?.owner_id != null
     ? members.find((member) => member.id === state.owner_id)
     : undefined
@@ -135,50 +128,21 @@ export function FollowUpPanel({
   const loadHistory = async (append = false) => {
     setHistoryLoading(true)
     setHistoryError(null)
-    // The Neon path pages on the server's own cursor, which is a ROW comparison
-    // over the whole `(occurred_at, id)` sort key — so the seek and the order
-    // cannot disagree, and the client holds no seek logic at all.
-    if ((await resolveReadPath()) === 'neon') {
-      try {
-        const page = await fetchNeonFollowUpHistory(
-          lead.instance_id,
-          lead.profile_url,
-          HISTORY_PAGE,
-          append ? historyCursor : null,
-        )
-        setEvents((previous) => (append ? [...previous, ...page.events] : page.events))
-        setHistoryCursor(page.nextCursor)
-        setHasMore(page.hasMore && page.nextCursor !== null)
-      } catch (e) {
-        setHistoryError(e instanceof Error ? e.message : String(e))
-      }
-      setHistoryLoading(false)
-      return
-    }
-    if (!supabase) {
-      setHistoryLoading(false)
-      return
-    }
-    let query = supabase
-      .from('follow_up_events')
-      .select('*')
-      .eq('instance_id', lead.instance_id)
-      .eq('profile_url', lead.profile_url)
-      .order('occurred_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(HISTORY_PAGE)
-    // Seek on the whole sort key, not on `id` alone. `occurred_at` is
-    // transaction-start time and `id` is insert time, so two overlapping writes
-    // can commit with the two orders inverted; an `id`-only predicate then skips
-    // the row this order says comes next. See `followUpHistorySeek`.
-    if (append && events.length) query = query.or(followUpHistorySeek(events[events.length - 1]))
-    const { data: rows, error: loadError } = await query
-    if (loadError) {
-      setHistoryError(loadError.message)
-    } else {
-      const page = (rows ?? []) as FollowUpEvent[]
-      setEvents((previous) => append ? [...previous, ...page] : page)
-      setHasMore(page.length === HISTORY_PAGE)
+    // History pages on the server's own cursor, which is a ROW comparison over
+    // the whole `(occurred_at, id)` sort key — so the seek and the order cannot
+    // disagree, and the client holds no seek logic at all.
+    try {
+      const page = await fetchNeonFollowUpHistory(
+        lead.instance_id,
+        lead.profile_url,
+        HISTORY_PAGE,
+        append ? historyCursor : null,
+      )
+      setEvents((previous) => (append ? [...previous, ...page.events] : page.events))
+      setHistoryCursor(page.nextCursor)
+      setHasMore(page.hasMore && page.nextCursor !== null)
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : String(e))
     }
     setHistoryLoading(false)
   }
@@ -390,7 +354,6 @@ export function FollowUpPanel({
               label="Owner"
               required={mode === 'schedule' || mode === 'reassign'}
               value={ownerId}
-              help={actions.memberWritesBlockedReason ?? undefined}
               onChange={(event) => setOwnerId(event.target.value)}
             >
               <option value="">Choose owner…</option>

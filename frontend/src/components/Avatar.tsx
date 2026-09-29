@@ -29,16 +29,15 @@ export function InitialsAvatar({ name, size = 32 }: { name: string; size?: numbe
 }
 
 /** A lead's synced profile photo from the private lead-photo bucket. The signed
- * URL expires after five minutes and is minted by whichever path the deployment
- * serves — the authenticated Supabase client, or `/api/activity-daily` against
- * object storage (`src/lib/leadPhotos.ts` chooses). The fixed-size initials
+ * URL expires after five minutes and is minted by `/api/activity-daily` against
+ * object storage (`src/lib/leadPhotos.ts`). The fixed-size initials
  * fallback prevents layout shift while the URL loads or when delivery fails. */
 export function LeadAvatar({
   lead,
   size = 32,
   /**
-   * Where signed URLs come from. Defaults to the shared source, which picks the
-   * provider by flag; injectable so a rendering test can assert what reaches the
+   * Where signed URLs come from. Defaults to the shared source, which honours
+   * the deployment's photo posture; injectable so a rendering test can assert what reaches the
    * `src` attribute without a network or a session.
    */
   photos = leadPhotoUrls,
@@ -55,16 +54,16 @@ export function LeadAvatar({
     let current = true
     setUrl(null)
     setFailed(false)
-    // The whole lead, not its path: the API path addresses a photo by lead id and
-    // must never let the browser name an object key. See `leadPhotos.ts`.
+    // The whole lead, not its path: a photo is addressed by lead id, and the
+    // browser must never name an object key. See `leadPhotos.ts`.
     void photos.get(lead).then((signedUrl) => {
       if (current) setUrl(signedUrl)
     })
     return () => {
       current = false
     }
-    // `lead.id` as well as the path: on the API path the id is what identifies the
-    // request, so a row swapped in place must re-fetch even if both paths are null.
+    // `lead.id` identifies the request, so a row swapped in place re-fetches;
+    // `photo_path` changing means a newly synced photo.
   }, [lead.id, lead.photo_path])
 
   if (!url || failed) return <InitialsAvatar name={name} size={size} />

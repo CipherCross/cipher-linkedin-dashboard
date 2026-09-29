@@ -1,29 +1,20 @@
 /**
- * The copilot's ICP roster, on both providers.
+ * The copilot's ICP roster.
  *
- * This was the last Supabase-only surface in the API, and the way it failed is
- * the reason it needs a test rather than just a fix: `chat.ts` read
- * `neon ? '' : await loadIcpRoster()`, so on the Neon path the copilot lost its
- * ICP awareness with no error, no log and no failing request. Nothing that green
- * tests or a 200 response could ever show.
- *
- * So the assertions here are about the two things that silence could hide: that
- * **both** providers issue the same fixed query, and that a failure degrades the
- * prompt instead of taking the chat down — deliberately, rather than by
- * accidentally destructuring an error away as the PostgREST pair did.
+ * It once went silently empty — `chat.ts` skipped it on one provider with no
+ * error, no log and no failing request — so the assertions here are about the
+ * two things silence could hide: that the fixed queries are actually issued,
+ * and that a failure degrades the prompt instead of taking the chat down.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AI_NAMED_SQL, AI_OPERATIONS } from '../api/_lib/data/operations/ai.js'
+import { AI_OPERATIONS } from '../api/_lib/data/operations/ai.js'
 
 /** What the fake AI store will answer, per operation. */
 const answers = new Map<string, unknown[]>()
 /** Every operation the AI store was asked for, in order. */
 const askedOperations: string[] = []
-/** Every SQL text the Supabase RPC was handed, in order. */
-const rpcQueries: string[] = []
 let storeFails = false
-let rpcFails = false
 
 vi.mock('../api/_lib/data/aiStore.js', () => ({
   SYSTEM_ACTOR: {
@@ -45,21 +36,6 @@ vi.mock('../api/_lib/data/aiStore.js', () => ({
   }),
 }))
 
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({
-    rpc: async (_fn: string, args: { query: string }) => {
-      rpcQueries.push(args.query)
-      if (rpcFails) return { data: null, error: { message: 'boom' } }
-      for (const [name, sql] of Object.entries(AI_NAMED_SQL)) {
-        if (sql === args.query) {
-          return { data: answers.get(AI_OPERATIONS[name as keyof typeof AI_OPERATIONS]) ?? [], error: null }
-        }
-      }
-      return { data: [], error: null }
-    },
-  }),
-}))
-
 const { loadIcpRoster } = await import('../api/_lib/core.js')
 
 const ICPS = [
@@ -74,27 +50,13 @@ const HYPOTHESES = [
 beforeEach(() => {
   answers.clear()
   askedOperations.length = 0
-  rpcQueries.length = 0
   storeFails = false
-  rpcFails = false
   answers.set(AI_OPERATIONS.icpRoster, ICPS)
   answers.set(AI_OPERATIONS.hypothesisRoster, HYPOTHESES)
-  process.env.SUPABASE_URL = 'https://example.supabase.test'
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role'
 })
 
-afterEach(() => {
-  delete process.env.NEON_AI_PATH_DEFAULT
-  vi.unstubAllEnvs()
-})
-
-describe('the ICP roster on the Neon path', () => {
-  beforeEach(() => {
-    process.env.NEON_AI_PATH_DEFAULT = 'neon'
-  })
-
-  it('asks the AI vocabulary for both lists — it is no longer skipped', () => {
-    // The defect, stated as a test: on this path the roster used to be ''.
+describe('the ICP roster', () => {
+  it('asks the AI vocabulary for both lists — it is never skipped', () => {
     return loadIcpRoster().then((roster) => {
       expect(askedOperations).toEqual([
         AI_OPERATIONS.icpRoster,
@@ -141,25 +103,6 @@ describe('the ICP roster on the Neon path', () => {
   it('is empty when the team has neither ICPs nor hypotheses', async () => {
     answers.set(AI_OPERATIONS.icpRoster, [])
     answers.set(AI_OPERATIONS.hypothesisRoster, [])
-    await expect(loadIcpRoster()).resolves.toBe('')
-  })
-})
-
-describe('the ICP roster on the Supabase path', () => {
-  it('runs the very same two statements through the guard RPC', async () => {
-    const roster = await loadIcpRoster()
-    // One definition of each query, shared by both providers: the texts the RPC
-    // received are the adapter's own, not a second copy living in this loader.
-    expect(rpcQueries).toEqual([
-      AI_NAMED_SQL.icpRoster,
-      AI_NAMED_SQL.hypothesisRoster,
-    ])
-    expect(roster).toContain('Fintech scale-ups')
-    expect(roster).toContain('- "Cost pressure" (ICP: "Fintech scale-ups")')
-  })
-
-  it('degrades to no roster here too', async () => {
-    rpcFails = true
     await expect(loadIcpRoster()).resolves.toBe('')
   })
 })

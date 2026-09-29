@@ -71,7 +71,7 @@ function dataWith(campaigns: CampaignMetrics[]): DashboardData {
   return {
     instances: [INSTANCE], campaigns, activity: [], leads: [], syncRuns: [], messages: [],
     conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [],
-    rosterPath: 'neon', pipelineEvents: [], followUpStates: [],
+    pipelineEvents: [], followUpStates: [],
     latestConversationMessages: [], followUpsAvailable: true, savedSearches: [],
     icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [],
     campaignSequenceContext: null,

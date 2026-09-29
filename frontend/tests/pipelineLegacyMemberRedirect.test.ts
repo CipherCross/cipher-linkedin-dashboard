@@ -1,20 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const guardMember = vi.fn()
-const db = vi.fn()
-
-vi.mock('../api/_lib/auth.js', () => ({
-  authorizationResponse: () => null,
-  guardMember: (...args: unknown[]) => guardMember(...args),
-}))
-
-vi.mock('../api/_lib/core.js', () => ({
-  db: (...args: unknown[]) => db(...args),
-}))
-
-vi.mock('../api/_lib/data/writePath.js', () => ({
-  deploymentWritePath: () => 'supabase',
-}))
+const neonWriter = vi.fn()
 
 vi.mock('../api/_lib/neonWrites.js', () => ({
   neonAddNote: vi.fn(),
@@ -24,7 +10,7 @@ vi.mock('../api/_lib/neonWrites.js', () => ({
   neonSetGender: vi.fn(),
   neonSetInstanceConfig: vi.fn(),
   neonSetStage: vi.fn(),
-  neonWriter: vi.fn(),
+  neonWriter: (...args: unknown[]) => neonWriter(...args),
 }))
 
 const { POST } = await import('../api/pipeline.js')
@@ -37,15 +23,15 @@ const legacyActions = [
 ] as const
 
 beforeEach(() => {
-  guardMember.mockReset()
-  guardMember.mockResolvedValue({
-    principal: { member: { role: 'admin', name: 'Admin' } },
+  neonWriter.mockReset()
+  neonWriter.mockResolvedValue({
+    store: {},
+    actor: { kind: 'user', actorId: 'admin', tenantId: 'primary', role: 'admin' },
   })
-  db.mockReset()
 })
 
 describe('retired legacy team-member mutations', () => {
-  it.each(legacyActions)('returns a deliberate redirect for %s before constructing the legacy client', async (action) => {
+  it.each(legacyActions)('returns a deliberate redirect for %s', async (action) => {
     const response = await POST(
       new Request('https://dashboard.test/api/pipeline', {
         method: 'POST',
@@ -58,6 +44,19 @@ describe('retired legacy team-member mutations', () => {
       error: 'Team administration moved to /api/identity.',
       redirect: '/api/identity',
     })
-    expect(db).not.toHaveBeenCalled()
+  })
+
+  it.each(legacyActions)('refuses %s to a member before redirecting', async (action) => {
+    neonWriter.mockResolvedValue({
+      store: {},
+      actor: { kind: 'user', actorId: 'member', tenantId: 'primary', role: 'member' },
+    })
+    const response = await POST(
+      new Request('https://dashboard.test/api/pipeline', {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      }),
+    )
+    expect(response.status).toBe(403)
   })
 })

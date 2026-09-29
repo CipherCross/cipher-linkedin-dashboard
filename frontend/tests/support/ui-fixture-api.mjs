@@ -80,7 +80,6 @@ const teamMember = (role) => ({
   name: role === 'admin' ? 'Fixture Admin' : 'Fixture Member',
   active: true,
   created_at: '2026-01-01T00:00:00.000Z',
-  auth_user_id: null,
   email: `${role}@fixture.test`,
   role,
 })
@@ -592,7 +591,7 @@ export async function activityFixture(request) {
   if (!op) return json({ error: 'Missing fixture operation' }, 400)
   const role = activeRole(scenario)
   if (op === 'dashboard.bootstrap') {
-    return json(page([{ rosterPath: 'neon', instances: isEmpty(scenario) ? [] : [instance], campaigns: isEmpty(scenario) ? [] : [campaign], teamMembers: [teamMember(role)] }]))
+    return json(page([{ instances: isEmpty(scenario) ? [] : [instance], campaigns: isEmpty(scenario) ? [] : [campaign], teamMembers: [teamMember(role)] }]))
   }
   if (op === 'dashboard.routeSnapshot') return json(page([snapshot(scenario)]))
   if (op === 'overview.systemTotals') return json(page([{ totals: overviewSystemTotals(scenario, url.searchParams) }]))

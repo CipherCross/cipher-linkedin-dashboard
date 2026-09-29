@@ -1,5 +1,5 @@
 /**
- * The copilot is told what ICPs exist, on whichever provider answers.
+ * The copilot is told what ICPs exist.
  *
  * `icpRoster.test.ts` covers the loader. This covers the call site, and it is
  * the one that actually broke: `chat.ts` read `neon ? '' : await loadIcpRoster()`,
@@ -27,7 +27,6 @@ vi.mock('../api/_lib/neonWrites.js', () => ({
   neonWriter: async () => ({ store: {}, actor: { role: 'member' } }),
 }))
 vi.mock('../api/_lib/auth.js', () => ({
-  guardMember: async () => ({ response: null }),
   authorizationResponse: () => null,
   AuthorizationError: class extends Error {},
 }))
@@ -58,11 +57,12 @@ beforeEach(() => {
 })
 
 describe('the chat system prompt', () => {
+  // `NEON_AI_PATH_DEFAULT` is inert; the tenant contract still binds it.
   for (const [label, flag] of [
-    ['the Neon path', 'neon'],
-    ['the Supabase path', undefined],
+    ['with the inert AI flag set', 'neon'],
+    ['with no AI flag', undefined],
   ] as const) {
-    it(`carries the ICP roster on ${label}`, async () => {
+    it(`carries the ICP roster ${label}`, async () => {
       if (flag) process.env.NEON_AI_PATH_DEFAULT = flag
       else delete process.env.NEON_AI_PATH_DEFAULT
 

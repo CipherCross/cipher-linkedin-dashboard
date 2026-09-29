@@ -10,21 +10,18 @@
 //   GET  — a daily Vercel cron sweep (guarded by CRON_SECRET) that catches
 //          backlog left by pings lost to Slack/Vercel outages.
 //
-// ## The provider split
+// ## Who writes
 //
 // This endpoint has no human actor and never will: both triggers are machine
-// callers holding a shared secret. That is why it was declared blocked on the
-// Neon path for a whole session — every business policy in baseline step 002
-// opens only for an active *human*. Ledger step 007 is now applied and gives
-// the server-owned principal `app_system` its own write path, so when
-// `NEON_AI_PATH_DEFAULT=neon` this runs on the AI store as `SYSTEM_ACTOR`.
-// No human actor is invented anywhere: there is none to invent, and a
-// synthetic member id would be a lie the audit trail would carry forever.
+// callers holding a shared secret, and every business policy in baseline step
+// 002 opens only for an active *human*. Ledger step 007 gives the server-owned
+// principal `app_system` its own write path, so this runs on the AI store as
+// `SYSTEM_ACTOR`. No human actor is invented anywhere: there is none to invent,
+// and a synthetic member id would be a lie the audit trail would carry forever.
 //
-// The two implementations share everything above data access — the staleness
-// rule, the grouping, the snippets, the Slack payload and every response body —
-// through the `NotifyData` seam, because the callers cannot tell which provider
-// answered and must never need to.
+// Data access sits behind the `NotifyData` seam; the staleness rule, the
+// grouping, the snippets, the Slack payload and every response body live above
+// it.
 //
 // Concurrency: several notebooks sync on ~30-min crons that drift into
 // alignment, so overlapping invocations are the COMMON case. The claim is one
@@ -38,7 +35,6 @@
 // would grow an unbounded backlog that floods the channel the moment someone
 // sets the webhook — notifications are about now, old replies live on the
 // dashboard.
-import { db } from './_lib/core.js'
 import { postNewRepliesToSlack, type NewReplyForSlack } from './_lib/slack.js'
 import { guardMachine } from './_lib/auth.js'
 import { authenticateMachine, presentsMachineToken } from './_lib/agent/machineAuth.js'
@@ -46,8 +42,8 @@ import { readDeploymentTenantId } from './_lib/agent/tenant.js'
 import { getMachineDataStore } from './_lib/data/machineStore.js'
 import { machineStoreConfigured } from './_lib/data/neonConfig.js'
 import type { DataStore } from './_lib/data/contracts.js'
-import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
+import { unavailableResponse } from './_lib/data/availability.js'
 import {
   DataStoreContractError,
   MAX_PAGE_SIZE,
@@ -161,81 +157,6 @@ function safeErrorLabel(error: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
-// The Supabase implementation: the service-role client, exactly as before the
-// provider split.
-// ---------------------------------------------------------------------------
-
-function supabaseNotifyData(): NotifyData {
-  const sb = db()
-  return {
-    async claim(batch) {
-      // Candidates, oldest first so backlog drains in order.
-      const { data: cand, error } = await sb
-        .from('messages')
-        .select('id')
-        .eq('direction', 'in')
-        .eq('source', 'sync')
-        .is('notified_at', null)
-        .not('body', 'is', null)
-        .order('sent_at', { ascending: true })
-        .limit(batch)
-      if (error) return { kind: 'failed', message: error.message }
-      if (!cand?.length) return { kind: 'no-candidates' }
-
-      // Atomic; ids a concurrent run already claimed return zero rows.
-      const { data: claimed, error: claimErr } = await sb
-        .from('messages')
-        .update({ notified_at: new Date().toISOString() })
-        .in('id', cand.map((c) => c.id))
-        .is('notified_at', null)
-        .select('id,instance_id,campaign_id,profile_url,body,sent_at')
-      if (claimErr) return { kind: 'failed', message: claimErr.message }
-      if (!claimed?.length) return { kind: 'concurrent' }
-      return { kind: 'claimed', messages: claimed as Claimed[] }
-    },
-    async leads(instances, profiles) {
-      const { data } = await sb
-        .from('leads')
-        .select('instance_id,campaign_id,profile_url,full_name,headline,company')
-        .in('instance_id', instances as string[])
-        .in('profile_url', profiles as string[])
-      return (data ?? []) as LeadRow[]
-    },
-    async campaigns(ids) {
-      if (!ids.length) return []
-      const { data } = await sb
-        .from('campaigns')
-        .select('id,name')
-        .in('id', ids as string[])
-      return (data ?? []) as CampaignNameRow[]
-    },
-    async instances(ids) {
-      const { data } = await sb
-        .from('instances')
-        .select('id,account_name,label')
-        .in('id', ids as string[])
-      return (data ?? []) as InstanceNameRow[]
-    },
-    async unclaim(ids) {
-      await sb
-        .from('messages')
-        .update({ notified_at: null })
-        .in('id', ids as number[])
-    },
-    async remaining() {
-      const { count } = await sb
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('direction', 'in')
-        .eq('source', 'sync')
-        .is('notified_at', null)
-        .not('body', 'is', null)
-      return count ?? 0
-    },
-  }
-}
-
-// ---------------------------------------------------------------------------
 // The Neon implementation: the AI store as `app_system`, under step 007's
 // system write path.
 // ---------------------------------------------------------------------------
@@ -247,8 +168,8 @@ function supabaseNotifyData(): NotifyData {
  * route to them. Both guard reads are whole-relation (the guard takes no
  * parameter but the query text — see `aiSystem.ts`) and are filtered here.
  *
- * The three enrichment reads are issued in parallel by the shared half, as the
- * Supabase path always has, against a pool ceiling of two. The third waits for
+ * The three enrichment reads are issued in parallel by `announce`, against a
+ * pool ceiling of two. The third waits for
  * a connection rather than failing; they are sub-second reads of small
  * relations, and a read that somehow did time out degrades to no rows like any
  * other enrichment failure.
@@ -369,8 +290,7 @@ function neonNotifyData(): NotifyData {
           }),
         )
       } catch (error) {
-        // Swallowed, exactly as the Supabase path swallows its error: the rows
-        // stay claimed and unannounced, which the daily cron sweep re-reads
+        // Swallowed: the rows stay claimed and unannounced, which the daily cron sweep re-reads
         // only if they become un-claimable — a stuck row is a smaller failure
         // than a double post.
         console.error('Neon notify failed (un-claim the batch):', safeErrorLabel(error))
@@ -393,7 +313,7 @@ function neonNotifyData(): NotifyData {
 }
 
 // ---------------------------------------------------------------------------
-// Everything above data access, shared by both providers.
+// Everything above data access.
 // ---------------------------------------------------------------------------
 
 async function announce(data: NotifyData): Promise<Response> {
@@ -520,12 +440,17 @@ async function handle(req: Request): Promise<Response> {
     }
   }
 
-  // The provider decision, taken once per invocation. Both triggers are
-  // machine callers, so the AI path's flag is the whole decision — there is no
-  // actor to resolve and none is invented.
-  return announce(
-    deploymentAiPath() === 'neon' ? neonNotifyData() : supabaseNotifyData(),
-  )
+  // Both triggers are machine callers: there is no actor to resolve and none
+  // is invented.
+  let data: NotifyData
+  try {
+    data = neonNotifyData()
+  } catch (error) {
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    throw error
+  }
+  return announce(data)
 }
 
 export const GET = (req: Request) => handle(req)

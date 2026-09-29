@@ -7,15 +7,17 @@
  * separate connection, and `afterAll` drops the scope.
  *
  * What is real: the real operation registry, the real driver, the real baseline
- * RLS policies, the real step-`003` functions. The only stub is the JWT
- * verification, exactly as `dashboardSliceRest.neon.test.ts` stubs it — the
- * denial tests run it for real.
+ * RLS policies, the real step-`003` functions. The only fake is the identity
+ * provider, exactly as `dashboardSliceRest.neon.test.ts` fakes it — the
+ * denial tests present no valid session.
  *
  * The four things the spec names for this session each have a section below:
  * authorization, atomicity, dedup, and the locks.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   LEAD_IDS,
@@ -37,16 +39,8 @@ const connection = requireNeonTestConnection()
 
 let stubbedSubject: string | null = null
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 /** The baseline's own identity fixtures, `provider = 'fixture'`. */
 const SUBJECTS = {
@@ -73,11 +67,6 @@ const {
   PIPELINE_WRITE_OPERATIONS,
 } = await import('../api/_lib/data/operations/index.js')
 const { resetDataStore } = await import('../api/_lib/data/store.js')
-const { deploymentWritePath, NEON_WRITES_ENV } = await import(
-  '../api/_lib/data/writePath.js'
-)
-const { NEON_DATABASE_URL_ENV } = await import('../api/_lib/data/neonConfig.js')
-const { ProviderPathError } = await import('../api/_lib/data/providerPath.js')
 
 const fixtures = new NeonFixtureClient(connection.direct)
 
@@ -127,7 +116,7 @@ function request(subject: keyof typeof SUBJECTS | 'anonymous'): Request {
   stubbedSubject = subject === 'anonymous' ? null : SUBJECTS[subject]
   return new Request('https://dashboard.test/api/pipeline', {
     method: 'POST',
-    headers: subject === 'anonymous' ? {} : { authorization: 'Bearer stub-token' },
+    headers: subject === 'anonymous' ? {} : fixtureIdentity.headers(stubbedSubject),
   })
 }
 
@@ -192,36 +181,12 @@ afterAll(async () => {
 
 // ---------------------------------------------------------------------------
 
-describe('the write-path flag', () => {
-  it('takes an explicit value, and derives the unset one from the credential', () => {
-    // **S27 inverted the default.** `providerPath.test.ts` covers the resolver
-    // row by row; what this asserts is that the write flag is wired to it and to
-    // the runtime credential — the one this suite is actually running against.
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'neon' })).toBe('neon')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: ' neon ' })).toBe('neon')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: 'supabase' })).toBe('supabase')
-    expect(deploymentWritePath({})).toBe('supabase')
-    expect(deploymentWritePath({ [NEON_WRITES_ENV]: '' })).toBe('supabase')
-    expect(
-      deploymentWritePath({ [NEON_DATABASE_URL_ENV]: 'postgres://runtime@example/db' }),
-    ).toBe('neon')
-    // This process holds the real credential, so the deployment default here is
-    // `neon` with nothing set at all — the state every tenant is in.
-    expect(deploymentWritePath()).toBe('neon')
-    for (const value of ['true', '1', 'NEON', 'supabse']) {
-      expect(() => deploymentWritePath({ [NEON_WRITES_ENV]: value })).toThrow(
-        ProviderPathError,
-      )
-    }
-  })
-})
-
 describe('authorization', () => {
   it('refuses an unauthenticated caller and writes nothing', async () => {
     const response = await neonSetStage(
       request('anonymous'),
       { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(401)
 
@@ -240,7 +205,7 @@ describe('authorization', () => {
     const response = await neonSetStage(
       request('inactive'),
       { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(403)
 
@@ -254,7 +219,7 @@ describe('authorization', () => {
     const response = await neonSetStage(
       request('activeMember'),
       { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ ok: true, changed: true })
@@ -266,7 +231,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
     const response = await neonSetStage(
       request('activeMember'),
       { leadId: LEAD_IDS.stage, stage: 'call_booked', substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const body = (await response.json()) as Record<string, unknown>
@@ -310,7 +275,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
           substatus: null,
           lostReason: null,
         },
-        { store: injected, legacyProviderName: 'fixture' },
+        { store: injected, ...fixtureIdentity.deps },
       )
       // Not a 200 with an `event_error` field, which is what the Supabase path
       // returns. The caller is told the action failed.
@@ -343,7 +308,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
         substatus: null,
         lostReason: null,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(await response.json()).toEqual({ ok: true, changed: false })
     expect(
@@ -357,7 +322,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
     await neonSetStage(
       request('activeMember'),
       { leadId: LEAD_IDS.stage, stage: 'lost', substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     const first = await read(
       `SELECT pipeline_stage_changed_at FROM public.leads WHERE id = $1`,
@@ -373,7 +338,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
         substatus: 'hard_no',
         lostReason: 'budget',
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     const second = await read(
       `SELECT pipeline_stage, pipeline_substatus, lost_reason, pipeline_stage_changed_at
@@ -390,12 +355,12 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
     await neonSetStage(
       request('activeMember'),
       { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     const response = await neonSetStage(
       request('activeMember'),
       { leadId: LEAD_IDS.stage, stage: null, substatus: null, lostReason: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(await response.json()).toMatchObject({
       ok: true,
@@ -420,7 +385,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
         substatus: null,
         lostReason: null,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(404)
   })
@@ -431,7 +396,7 @@ describe('notes', () => {
     const response = await neonAddNote(
       request('activeMember'),
       { leadId: LEAD_IDS.notes, body: 'Called, will follow up Tuesday.' },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const body = (await response.json()) as { note?: Record<string, unknown> }
@@ -449,7 +414,7 @@ describe('notes', () => {
     const response = await neonAddNote(
       request('activeMember'),
       { leadId: '5a140000-0000-4000-8000-0000000000ff', body: 'orphan' },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(404)
     expect(
@@ -461,15 +426,15 @@ describe('notes', () => {
     const created = await neonAddNote(
       request('activeMember'),
       { leadId: LEAD_IDS.notes, body: 'to be deleted' },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     const noteId = ((await created.json()) as { note: { id: number } }).note.id
 
-    const first = await neonDeleteNote(request('activeMember'), { noteId }, { store, legacyProviderName: 'fixture' })
+    const first = await neonDeleteNote(request('activeMember'), { noteId }, { store, ...fixtureIdentity.deps })
     expect(first.status).toBe(200)
     expect(await first.json()).toEqual({ ok: true, deleted: noteId })
 
-    const second = await neonDeleteNote(request('activeMember'), { noteId }, { store, legacyProviderName: 'fixture' })
+    const second = await neonDeleteNote(request('activeMember'), { noteId }, { store, ...fixtureIdentity.deps })
     expect(second.status).toBe(404)
   })
 })
@@ -479,7 +444,7 @@ describe('set_gender: the override and its review row are one commit', () => {
     const response = await neonSetGender(
       request('activeAdmin'),
       { leadId: LEAD_IDS.genderPrimary, gender: 'female' },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const body = (await response.json()) as Record<string, unknown>
@@ -518,12 +483,12 @@ describe('set_gender: the override and its review row are one commit', () => {
     await neonSetGender(
       request('activeAdmin'),
       { leadId: LEAD_IDS.genderPrimary, gender: 'female' },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     await neonSetGender(
       request('activeAdmin'),
       { leadId: LEAD_IDS.genderPrimary, gender: 'male' },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     const reviews = await read(
       `SELECT predicted_gender, predicted_model FROM public.lead_gender_reviews
@@ -542,7 +507,7 @@ describe('set_gender: the override and its review row are one commit', () => {
     const response = await neonSetGender(
       request('activeAdmin'),
       { leadId: LEAD_IDS.genderPrimary, gender: null },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const leads = await read(
@@ -567,7 +532,7 @@ describe('set_gender: the override and its review row are one commit', () => {
       const response = await neonSetGender(
         request('activeAdmin'),
         { leadId: LEAD_IDS.genderPrimary, gender: 'female' },
-        { store: injected, legacyProviderName: 'fixture' },
+        { store: injected, ...fixtureIdentity.deps },
       )
       expect(response.status).toBe(500)
     } finally {
@@ -596,7 +561,7 @@ describe('set_instance_config', () => {
     const response = await neonSetInstanceConfig(
       request('activeAdmin'),
       { instanceId: WRITE_SCOPE, config: { sync_photos: true, batch: 25 } },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ ok: true, instance_id: WRITE_SCOPE })
@@ -613,7 +578,7 @@ describe('set_instance_config', () => {
     const response = await neonSetInstanceConfig(
       request('activeAdmin'),
       { instanceId: 'no-such-notebook', config: {} },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(404)
   })
@@ -639,7 +604,7 @@ describe('conversation import: dedup by normalized body, never by the unique key
         ]),
         normalize,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ ok: true, inserted: 0, skipped: 1 })
@@ -666,7 +631,7 @@ describe('conversation import: dedup by normalized body, never by the unique key
         ]),
         normalize,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const body = (await response.json()) as Record<string, unknown>
@@ -721,7 +686,7 @@ describe('conversation import: dedup by normalized body, never by the unique key
         ]),
         normalize,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const body = (await response.json()) as Record<string, unknown>
@@ -761,13 +726,13 @@ describe('conversation import: dedup by normalized body, never by the unique key
 
     const first = await neonImportConversation(request('activeAdmin'), payload, {
       store,
-      legacyProviderName: 'fixture',
+      ...fixtureIdentity.deps,
     })
     expect(await first.json()).toMatchObject({ inserted: 2, skipped: 0 })
 
     const second = await neonImportConversation(request('activeAdmin'), payload, {
       store,
-      legacyProviderName: 'fixture',
+      ...fixtureIdentity.deps,
     })
     const body = (await second.json()) as Record<string, unknown>
     expect(body).toMatchObject({ inserted: 0, skipped: 2 })
@@ -799,7 +764,7 @@ describe('conversation import: dedup by normalized body, never by the unique key
         ]),
         normalize,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(await response.json()).toMatchObject({ inserted: 1, skipped: 0 })
   })
@@ -816,7 +781,7 @@ describe('conversation import: dedup by normalized body, never by the unique key
         ]),
         normalize,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(400)
     expect(
@@ -841,7 +806,7 @@ describe('conversation import: dedup by normalized body, never by the unique key
           ]),
           normalize,
         },
-        { store: injected, legacyProviderName: 'fixture' },
+        { store: injected, ...fixtureIdentity.deps },
       )
       // The Supabase path returns 200 with `milestone_error` here, having already
       // committed the messages — a replied lead with a NULL `replied_at`.
@@ -883,8 +848,8 @@ describe('the thread lock', () => {
     // unique key covers only when the instants differ — here they do not, so the
     // key would save us. The lock is what makes it safe when they do differ.
     const [first, second] = await Promise.all([
-      neonImportConversation(request('activeAdmin'), payload, { store, legacyProviderName: 'fixture' }),
-      neonImportConversation(request('activeAdmin'), payload, { store, legacyProviderName: 'fixture' }),
+      neonImportConversation(request('activeAdmin'), payload, { store, ...fixtureIdentity.deps }),
+      neonImportConversation(request('activeAdmin'), payload, { store, ...fixtureIdentity.deps }),
     ])
 
     const bodies = await Promise.all([first.json(), second.json()])
@@ -920,10 +885,10 @@ describe('the thread lock', () => {
     // does NOT collide on these.
     const [a, b] = await Promise.all([
       payload('2026-07-01T10:00:00.000Z')().then((input) =>
-        neonImportConversation(request('activeAdmin'), input, { store, legacyProviderName: 'fixture' }),
+        neonImportConversation(request('activeAdmin'), input, { store, ...fixtureIdentity.deps }),
       ),
       payload('2026-07-01T10:05:00.000Z')().then((input) =>
-        neonImportConversation(request('activeAdmin'), input, { store, legacyProviderName: 'fixture' }),
+        neonImportConversation(request('activeAdmin'), input, { store, ...fixtureIdentity.deps }),
       ),
     ])
 
@@ -956,7 +921,7 @@ describe('manual edit and delete', () => {
         messages: await importBlocks([{ direction: 'in', body, sent_at: sentAt }]),
         normalize,
       },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     const rows = await read<{ id: string }>(
       `SELECT id::text AS id FROM public.messages
@@ -973,7 +938,7 @@ describe('manual edit and delete', () => {
     const response = await neonEditMessage(
       request('activeAdmin'),
       { messageId: id, body: 'Corrected wording', contentHash: hash },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
@@ -1002,7 +967,7 @@ describe('manual edit and delete', () => {
     const response = await neonEditMessage(
       request('activeAdmin'),
       { messageId: id, body: 'tampered', contentHash: await md5('tampered') },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(404)
 
@@ -1022,7 +987,7 @@ describe('manual edit and delete', () => {
     const response = await neonDeleteMessage(
       request('activeAdmin'),
       { messageId: id },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
     const body = (await response.json()) as Record<string, unknown>
@@ -1045,7 +1010,7 @@ describe('manual edit and delete', () => {
     const response = await neonDeleteMessage(
       request('activeAdmin'),
       { messageId: id },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(404)
     expect(await read(`SELECT id FROM public.messages WHERE id = $1`, [id])).toHaveLength(
@@ -1057,7 +1022,7 @@ describe('manual edit and delete', () => {
     const response = await neonDeleteMessage(
       request('activeAdmin'),
       { messageId: 2_147_483_600 },
-      { store, legacyProviderName: 'fixture' },
+      { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(404)
   })
@@ -1287,7 +1252,7 @@ describe('set_stage: two concurrent moves of one lead', () => {
       const first = neonSetStage(
         request('activeMember'),
         { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
-        { store: slow, legacyProviderName: 'fixture' },
+        { store: slow, ...fixtureIdentity.deps },
       )
       // Long enough for `first` to have taken the row lock and entered the
       // sleep, short enough to be inside it.
@@ -1295,7 +1260,7 @@ describe('set_stage: two concurrent moves of one lead', () => {
       const second = neonSetStage(
         request('activeMember'),
         { leadId: LEAD_IDS.stage, stage: 'call_booked', substatus: null, lostReason: null },
-        { store, legacyProviderName: 'fixture' },
+        { store, ...fixtureIdentity.deps },
       )
 
       const [a, b] = await Promise.all([first, second])

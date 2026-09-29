@@ -72,8 +72,8 @@ export interface SignedObjectUrl {
    * When the URL stops working, as a UTC instant.
    *
    * Returned rather than left implicit because the caller usually has to cache
-   * the URL for slightly less than this — `leadPhotos.ts` already does exactly
-   * that against the Supabase path, with a refresh skew.
+   * the URL for slightly less than this — `src/lib/leadPhotos.ts` does exactly
+   * that, with a refresh skew.
    */
   readonly expiresAt: string
   /**

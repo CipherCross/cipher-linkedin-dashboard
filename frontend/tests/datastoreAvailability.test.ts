@@ -13,7 +13,7 @@
  * proves the classifier is wired into the driver rather than merely correct in
  * isolation.
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   DataStoreAuthorizationError,
@@ -24,6 +24,12 @@ import {
 import { NeonDataStore, unavailableCodeFor } from '../api/_lib/data/neon.js'
 import { buildApplicationRegistry } from '../api/_lib/data/operations/index.js'
 import { unavailableResponse } from '../api/_lib/data/availability.js'
+import {
+  NeonConfigurationError,
+  readNeonAiConnectionString,
+  readNeonConnectionString,
+} from '../api/_lib/data/neonConfig.js'
+import { IdentityConfigurationError } from '../api/_lib/identity/config.js'
 import { AuthorizationError } from '../api/_lib/auth.js'
 
 /** A driver error shaped the way `pg` shapes one. */
@@ -181,5 +187,59 @@ describe('the response an endpoint gives for it', () => {
     expect(unavailableResponse(new DataStoreContractError('OTHER', 'x'))).toBeNull()
     expect(unavailableResponse(new Error('x'))).toBeNull()
     expect(unavailableResponse(null)).toBeNull()
+  })
+})
+
+describe('the response for a credential that is not configured', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** The error the real reader throws, rather than a hand-built one. */
+  function thrownBy(read: () => unknown): unknown {
+    try {
+      read()
+    } catch (error) {
+      return error
+    }
+    throw new Error('expected the reader to throw')
+  }
+
+  it('answers a missing Neon credential with a named 500, never a membership claim', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const error of [
+      thrownBy(() => readNeonConnectionString({})),
+      thrownBy(() => readNeonAiConnectionString({})),
+    ]) {
+      expect(error).toBeInstanceOf(NeonConfigurationError)
+      const response = unavailableResponse(error)
+      expect(response?.status).toBe(500)
+      expect(response?.headers.get('cache-control')).toBe('no-store')
+      const body = (await response!.json()) as { error: string }
+      expect(body.error).toContain('NEON_CONFIGURATION_MISSING')
+      expect(body.error).toContain('retrying will not help')
+      expect(body.error).not.toContain('team access')
+      // The response names the code only; which variable is missing goes to
+      // the log, not to an unauthenticated caller.
+      expect(body.error).not.toMatch(/NEON_(AI_)?DATABASE_URL/)
+    }
+  })
+
+  it('logs which variable is missing, and never a value', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    unavailableResponse(thrownBy(() => readNeonAiConnectionString({})))
+    const logged = errors.mock.calls.map((call) => call.join(' ')).join('\n')
+    expect(logged).toContain('NEON_AI_DATABASE_URL')
+  })
+
+  it('answers a missing identity credential the same way', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const response = unavailableResponse(
+      new IdentityConfigurationError('IDENTITY_SESSION_SECRET is not set.'),
+    )
+    expect(response?.status).toBe(500)
+    const body = (await response!.json()) as { error: string }
+    expect(body.error).toContain('IDENTITY_CONFIGURATION_MISSING')
+    expect(body.error).not.toContain('IDENTITY_SESSION_SECRET')
   })
 })

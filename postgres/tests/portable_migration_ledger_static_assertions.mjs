@@ -100,19 +100,15 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_identity_store_isolation_assertions.sql',
   'postgres/tests/portable_identity_write_path_ai_boundary_assertions.sql',
   'postgres/tests/portable_identity_write_path_cleanroom.sh',
-  'docs/implementation-handoffs/N-IDENTITY-LEDGER.md',
   // S17 (step 005, the atomic cross-store invite).
   'postgres/tenant-baseline/v1/005_identity_atomic_invite.sql',
   'postgres/tests/portable_identity_atomic_invite_assertions.sql',
   'postgres/tests/portable_identity_atomic_invite_cleanroom.sh',
-  'docs/implementation-handoffs/N-S17.md',
   // S13 consolidation (step 006, the message keyset's index).
   'postgres/tenant-baseline/v1/006_messages_direction_seek_index.sql',
-  'docs/implementation-handoffs/N-S13-consolidation.md',
   // S15 (the AI execution role bootstrap and step 007, the system write path).
   'postgres/tenant-baseline/v1/000_ai_execution_role_bootstrap.sql',
   'postgres/tenant-baseline/v1/007_ai_system_write_path.sql',
-  'docs/implementation-handoffs/N-S15.md',
   // S18 (step 008, the auto-advance EXECUTE grant the classify cron waits on).
   'postgres/tenant-baseline/v1/008_ai_system_auto_advance_execute.sql',
   // S21 (the machine ingest role bootstrap, step 009's write path and step 010,
@@ -120,7 +116,6 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/000_machine_ingest_role_bootstrap.sql',
   'postgres/tenant-baseline/v1/009_machine_ingest_path.sql',
   'postgres/tenant-baseline/v1/010_machine_schema_usage.sql',
-  'docs/implementation-handoffs/N-S21.md',
   // Sequence Builder's additive shared drafting workspace (step 011).
   'postgres/tenant-baseline/v1/011_sequence_builder_workspace.sql',
   // Approval-gated Sequence Builder -> Linked Helper publishing queue (step 012).
@@ -167,9 +162,9 @@ const EXECUTABLE_SCRIPTS = [
 // They were removed rather than weakened. What remains is genuinely immutable:
 // already-applied migrations, and the published baseline set — the latter also
 // enforced, more strongly, by the IMMUTABLE_BASELINE digest checks above.
+// supabase/migrations/ and supabase/tenant-baseline/ were protected here until the
+// legacy schema was deleted on 2026-09-29 (owner decision: Supabase is retired).
 const PROTECTED_PATHS = [
-  'supabase/migrations/',
-  'supabase/tenant-baseline/',
   'postgres/tenant-baseline/v1/001_portable_business_baseline.sql',
   'postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql',
   'postgres/tenant-baseline/v1/003_functions_triggers_ai_guard.sql',
@@ -264,16 +259,6 @@ const MARKER_SWEEP_EXEMPT = {
     'defines the marker patterns themselves',
   'docs/platform-ops/g1-dump-restore-go-no-go.json':
     'is the owner decision document; naming the provider being adopted and the one being left is its purpose. It is swept for resource IDs and credentials instead.',
-  'docs/implementation-handoffs/N-IDENTITY-LEDGER.md':
-    'is a handoff document, not executable content; naming the provider it asks the owner to apply to is its purpose. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
-  'docs/implementation-handoffs/N-S17.md':
-    'is a handoff document, not executable content; it names the provider whose apply it requests, the hosting provider whose function cap shaped the design, and the identity provider G3 accepted. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
-  'docs/implementation-handoffs/N-S13-consolidation.md':
-    'is a handoff document, not executable content; the two defects it fixes are in the provider-specific read path and the step it writes is for the provider being migrated to, so naming both is its subject. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
-  'docs/implementation-handoffs/N-S15.md':
-    'is a handoff document, not executable content; it names the provider the AI layer is migrating to, the one it is leaving, and the identity provider the transitional bearer resolves under. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
-  'docs/implementation-handoffs/N-S21.md':
-    'is a handoff document, not executable content; it names the provider whose apply it records, the transport the sync agent keeps using meanwhile, and the object store whose gate is still shut. It is swept for resource IDs and credentials instead, which is the sweep that matters for a document.',
 };
 
 // Provider RESOURCE identifiers, as opposed to provider names. These must not

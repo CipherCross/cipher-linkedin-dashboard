@@ -14,9 +14,8 @@
  * re-measured: the lead the run happened to open had one page of events, so
  * "Load more" never appeared. The three-page walk is `N-S13-switch.md`'s
  * observation and nothing since. The `hasMore` / `nextCursor` handling here is the
- * repeatable version — and it is the half where the two paths genuinely differ,
- * because the Neon branch takes the server's cursor while the Supabase branch
- * seeks on `(occurred_at, id)` client-side.
+ * repeatable version: the panel takes the server's cursor and computes no seek
+ * of its own.
  *
  * `ConversationDrawer` — the third page-local branch, `messages.thread` — is
  * deliberately **not** here. It is a thousand lines with a dozen contexts, and a
@@ -30,15 +29,12 @@ import type { Lead } from '../src/lib/types'
 
 const fetchNeonLeadNotes = vi.fn()
 const fetchNeonFollowUpHistory = vi.fn()
-const resolveReadPath = vi.fn()
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonLeadNotes: (...a: unknown[]) => fetchNeonLeadNotes(...a),
   fetchNeonFollowUpHistory: (...a: unknown[]) => fetchNeonFollowUpHistory(...a),
-  resolveReadPath: () => resolveReadPath(),
 }))
 
-vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: vi.fn() }))
 vi.mock('../src/lib/ToastContext', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
@@ -49,8 +45,6 @@ vi.mock('../src/lib/usePipelineActions', () => ({
     deleteNote: vi.fn(),
     actor: 'Tester',
     members: [],
-    assignableMembers: [],
-    memberWritesBlockedReason: null,
     memberName: () => '',
   }),
 }))
@@ -70,8 +64,6 @@ vi.mock('../src/lib/useFollowUpActions', () => ({
   useFollowUpActions: () => ({
     actor: 'Tester',
     members: [],
-    assignableMembers: [],
-    memberWritesBlockedReason: null,
     states: new Map(),
     schedule: vi.fn(),
     reschedule: vi.fn(),
@@ -114,8 +106,6 @@ afterEach(cleanup)
 beforeEach(() => {
   fetchNeonLeadNotes.mockReset()
   fetchNeonFollowUpHistory.mockReset()
-  resolveReadPath.mockReset()
-  resolveReadPath.mockResolvedValue('neon')
 })
 
 const toggleNotes = async () => {
@@ -198,16 +188,6 @@ describe('LeadNotesPanel on the application-API read path', () => {
     await waitFor(() => expect(screen.getByText(/leads\.notes/)).toBeDefined())
     expect(screen.queryByText('No notes yet.')).toBeNull()
   })
-
-  it('falls back to the Supabase branch, which is unconfigured here, and says so', async () => {
-    resolveReadPath.mockResolvedValue('supabase')
-    render(<LeadNotesPanel lead={LEAD} />)
-
-    await waitFor(() =>
-      expect(screen.getByText('Supabase is not configured.')).toBeDefined(),
-    )
-    expect(fetchNeonLeadNotes).not.toHaveBeenCalled()
-  })
 })
 
 describe('FollowUpPanel history on the application-API read path', () => {
@@ -253,9 +233,8 @@ describe('FollowUpPanel history on the application-API read path', () => {
     })
 
     await waitFor(() => expect(fetchNeonFollowUpHistory).toHaveBeenCalledTimes(2))
-    // The cursor the *server* returned, unmodified. The Supabase branch computes
-    // its own seek; this branch must not, and a client that re-derived one would
-    // disagree with the server's `(occurred_at, id)` ordering.
+    // The cursor the *server* returned, unmodified. A client that re-derived a
+    // seek would disagree with the server's `(occurred_at, id)` ordering.
     expect(fetchNeonFollowUpHistory.mock.calls[1][3]).toBe('cursor-1')
     // Appended: two events on screen, not one replaced by one.
     await waitFor(() => expect(screen.getAllByText(/^Scheduled ·/).length).toBeGreaterThan(1))

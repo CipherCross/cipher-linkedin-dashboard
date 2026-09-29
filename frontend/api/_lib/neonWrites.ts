@@ -1,30 +1,25 @@
 /**
  * The Neon implementations of the non-AI writes.
  *
- * Each function here is the `neon` branch of one action in `api/pipeline.ts` or
+ * Each function here implements one action in `api/pipeline.ts` or
  * `api/_lib/conversationImport.ts`. **Validation is not repeated here.** The
  * endpoint validates, then hands over already-checked values, so there is exactly
- * one definition of what a legal `stage` or a legal `next_follow_up_date` is and
- * the two providers cannot drift on it. What each function owns is the reads, the
- * writes, the transaction boundary and the response body — and the response body
- * is asserted to match the Supabase path's, because the browser does not know
- * which provider answered.
+ * one definition of what a legal `stage` or a legal `next_follow_up_date` is.
+ * What each function owns is the reads, the writes, the transaction boundary and
+ * the response body.
  *
- * ## Authorization: the database decides, and it decides differently from today
+ * ## Authorization: the database decides
  *
- * `resolveApplicationActor` selects exactly the authenticator the deployed SPA
- * selected. Legacy deployments continue to send a Supabase bearer; identity
- * deployments send the self-hosted Better Auth HttpOnly cookie and explicitly
- * disable bearer fallback. Both subjects pass through `identity_resolve_actor`,
- * which answers with the canonical actor id and role from this database.
+ * `resolveApplicationActor` reads the self-hosted Better Auth HttpOnly session
+ * cookie — the only sign-in path — and passes its subject through
+ * `identity_resolve_actor`, which answers with the canonical actor id and role
+ * from this database.
  *
  * Two consequences worth being explicit about:
  *
- * - **The role comes from Neon's `team_members`, not from a Supabase read.** On
- *   the Supabase path `guardMember` reads the role out of Supabase and the
- *   endpoint's admin check trusts it. Here the role is whatever the database that
- *   is about to be written says it is, which is the only place it can be checked
- *   without a race.
+ * - **The role comes from Neon's `team_members`.** It is whatever the database
+ *   that is about to be written says it is, which is the only place it can be
+ *   checked without a race.
  * - **The admin refusal in the endpoint is response shaping, not the gate.**
  *   Every relation written here carries `FOR ALL TO app_runtime` with a
  *   `WITH CHECK` that re-derives the actor from `app.actor_id`, so a write by a
@@ -79,10 +74,7 @@ import {
   type DataStoreTransaction,
   type Page,
 } from './data/contracts.js'
-import {
-  resolveApplicationActor,
-  type ApplicationAuthPath,
-} from './identity/application.js'
+import { resolveApplicationActor } from './identity/application.js'
 import type { IdentityProvider } from './identity/provider.js'
 
 const json = (body: unknown, status = 200) =>
@@ -140,27 +132,19 @@ export interface NeonWriter {
  */
 export interface NeonWriteDeps {
   readonly store?: DataStore
-  /** Test seam for the deployment-selected application authenticator. */
-  readonly authPath?: ApplicationAuthPath
-  /** Identity provider used only when `authPath` is `identity`. */
+  /** Identity provider; defaults to the deployed one. Tests inject the fake. */
   readonly identity?: IdentityProvider
   /**
-   * The provider name the transitional bearer resolves under. Defaults to
-   * `session.ts`'s `LEGACY_PROVIDER_NAME`, which is what production uses; the
-   * live suite overrides it because the baseline's identity fixtures are seeded
-   * under `provider = 'fixture'`. Same seam, same reason as
-   * `createActivityDailyHandler({ legacyProviderName })`.
+   * The provider name session subjects resolve under. Defaults to the deployed
+   * provider's; the live suite overrides it because the baseline's identity
+   * fixtures are seeded under `provider = 'fixture'`. Same seam, same reason as
+   * `createActivityDailyHandler({ providerName })`.
    */
-  readonly legacyProviderName?: string
+  readonly providerName?: string
 }
 
 /**
- * Resolve the actor once per request.
- *
- * The application-auth selector lazily constructs the identity provider only
- * for an identity deployment. The legacy path therefore retains its original
- * deployment prerequisites, while the Neon/Better Auth path has no Supabase
- * verifier dependency or fallback.
+ * Resolve the actor once per request, from the identity session cookie.
  */
 export async function neonWriter(
   request: Request,
@@ -169,9 +153,8 @@ export async function neonWriter(
   const store = deps.store ?? getDataStore()
   const resolved = await resolveApplicationActor(request, {
     store,
-    authPath: deps.authPath,
     identity: deps.identity,
-    legacyProviderName: deps.legacyProviderName,
+    providerName: deps.providerName,
   })
   return { store, actor: resolved.actor }
 }
@@ -248,8 +231,8 @@ export async function neonSetStage(
       const lead = previous.items[0]
       if (!lead) return json({ error: 'unknown lead_id' }, 404)
 
-      // Identical short-circuit to the Supabase path, and it must stay identical:
-      // it is what stops a board re-render appending an audit row per repaint.
+      // The no-op short-circuit: it is what stops a board re-render appending an
+      // audit row per repaint.
       if (
         input.stage === lead.pipeline_stage &&
         input.substatus === lead.pipeline_substatus &&
@@ -279,8 +262,7 @@ export async function neonSetStage(
       if (updated.rowCount === 0) return json({ error: 'unknown lead_id' }, 404)
 
       // The pairing. If this throws, the UPDATE above is rolled back and the
-      // caller gets a 500 — where the Supabase path reports `event_error`
-      // inside a 200 and leaves the stage moved with no audit row.
+      // caller gets a 500 — never a moved stage with no audit row.
       await transaction.execute<AppendEventResult>({
         operation: PIPELINE_WRITE_COMMANDS.appendStageEvent,
         params: {
@@ -321,9 +303,7 @@ export async function neonSetStage(
 
 /**
  * Assign inside the same actor-scoped transaction that writes its audit event.
- * `memberId` belongs to the Neon roster because the handler selects this branch
- * only when both reads and writes use the application data plane; no Supabase
- * client is constructed on this path.
+ * `memberId` belongs to the Neon roster, which is where the browser read it.
  */
 export async function neonAssign(
   request: Request,
@@ -412,8 +392,8 @@ export interface NeonFollowUpInput {
 /**
  * The baseline function owns the advisory lock, revision check, replay and the
  * paired state/event writes. The application transaction supplies the resolved
- * actor and the audit name from the same Neon roster, so all six actions retain
- * those guarantees without crossing either provider's member-id space.
+ * actor and the audit name from the same database's roster, so all six actions
+ * retain those guarantees and every member id names the right person.
  */
 export async function neonFollowUp(
   request: Request,
@@ -453,7 +433,7 @@ export async function neonFollowUp(
 
 /**
  * `apply_follow_up_action` reports its own refusals as SQLSTATEs, and the
- * Supabase path has always answered them as the client expects: 40001
+ * client expects them answered as: 40001
  * (`FOLLOW_UP_CONFLICT: …` — stale revision, already active, nothing to
  * reschedule) is a 409 carrying the current state, 22023 (a missing or past
  * date) a 400, P0002 an unknown conversation. Here they used to reach
@@ -585,8 +565,7 @@ export async function neonSetGender(
 
       // The audit row snapshots what the human overrode, so a value the human
       // themselves last set is *not* a prediction and is recorded as null —
-      // identical to the Supabase path, and it is what keeps model precision
-      // measurable from this table.
+      // which is what keeps model precision measurable from this table.
       const wasManual = lead.demo_model === 'manual'
       await transaction.execute<{ readonly id: string }>({
         operation: PIPELINE_WRITE_COMMANDS.appendGenderReview,
@@ -659,7 +638,7 @@ export interface NeonImportMessage {
   /** ISO UTC, already normalized by the endpoint. */
   readonly sent_at: string
   readonly force: boolean
-  /** `md5(body)`, computed by the endpoint so both providers use one definition. */
+  /** `md5(body)`, computed by the endpoint so there is one definition of it. */
   readonly contentHash: string
 }
 
@@ -783,10 +762,9 @@ export async function neonImportConversation(
       })
 
       // Report what actually changed, by comparing against the pre-state read
-      // inside this same transaction. The Supabase path reports the patch it
-      // *intended*; this reports what the row now says, which is the same thing
-      // only when the write succeeded — and here a failure would have rolled the
-      // messages back rather than reaching this line.
+      // inside this same transaction: what the row now says, not the patch that
+      // was intended. A failure would have rolled the messages back rather than
+      // reaching this line.
       const milestones: Record<string, string> = {}
       const after = backfilled.row
       if (after) {

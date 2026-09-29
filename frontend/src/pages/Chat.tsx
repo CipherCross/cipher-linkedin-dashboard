@@ -37,7 +37,7 @@ function loadStored(): UIMessage[] {
 // A server 500 (bad/missing keys) is worth naming the env vars for; a plain
 // network failure isn't — showing the key hint there just misleads.
 function looksLikeServerError(err: Error): boolean {
-  return /5\d\d|internal|api.?key|supabase|anthropic|service.?role/i.test(err.message || '')
+  return /5\d\d|internal|api.?key|anthropic|service.?role/i.test(err.message || '')
 }
 
 interface SqlOutput {
@@ -254,9 +254,8 @@ export function Chat() {
   return (
     <>
       {/* No provider or query language in the user-facing copy: neither is
-          something the reader can act on, and the name was wrong besides —
-          production has not read Supabase since the cutover. The SQL Claude
-          runs is still shown, per answer, in each tool block. */}
+          something the reader can act on. The SQL Claude runs is still shown,
+          per answer, in each tool block. */}
       <PageHeader
         title="Chat"
         description="Ask Claude about your campaign data. It reads the dashboard's own data and shows you the query behind each answer."

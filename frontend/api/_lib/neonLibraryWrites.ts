@@ -5,14 +5,12 @@
  * repeated here** — `playbook.ts` validates with `_lib/savedSearch.ts` and
  * `_lib/icp.ts` and hands over an already-normalized patch, so one definition of
  * a legal ICP survives the split. What this module owns is the operation
- * selection, the transaction boundary, the status codes and the response body,
- * and the body is asserted to match the Supabase path's because the browser
- * cannot tell which provider answered.
+ * selection, the transaction boundary, the status codes and the response body.
  *
  * ## The genericity moved, it did not disappear
  *
- * `playbook.ts` serves nine actions from `saveEntity(supa, table, bodyKey, …)`,
- * generic over a **table-name string**. That shape cannot survive a
+ * `playbook.ts` used to serve nine actions from a helper generic over a
+ * **table-name string**. That shape cannot survive a
  * named-operation allowlist (see `operations/libraryWrites.ts`), so the SQL side
  * became fifteen fixed statements — and the dispatch side stayed generic, over a
  * closed union of five entities. `LIBRARY_ENTITIES` below is that union: adding
@@ -21,14 +19,11 @@
  *
  * ## The admin rule is re-checked against the database being written
  *
- * `playbook.ts` gates every action with `guardAdmin`, which reads the role out of
- * **Supabase**. The relations written here carry only an *active member* policy
+ * The relations written here carry only an *active member* policy
  * (`icps_active_member` and its siblings in baseline step `002`) — admin is an
- * application rule, not a database one — so a Neon write that trusted the
- * Supabase role would be authorized entirely by the provider it is leaving. The
- * role is therefore taken again from Neon's `team_members` through
- * `resolveRequestActor`, and both must say admin. That is strictly narrower than
- * today, and it is the same argument `neonWrites.ts` makes for the member gate.
+ * application rule, not a database one. The role is therefore taken from Neon's
+ * `team_members` through `resolveRequestActor` for every write, the same
+ * argument `neonWrites.ts` makes for the member gate.
  *
  * ## No transaction spans two actions, because no action writes twice
  *
@@ -65,8 +60,8 @@ const json = (body: unknown, status = 200) =>
 /**
  * The five entities `saveEntity`/`deleteEntity` were generic over, named.
  *
- * `notFoundLabel` reproduces the Supabase path's two different phrasings rather
- * than tidying them: `saveEntity` says `unknown ${bodyKey} id` ("unknown icp
+ * `notFoundLabel` keeps two historically different phrasings rather than
+ * tidying them: `saveEntity` says `unknown ${bodyKey} id` ("unknown icp
  * id") and `deleteEntity` says `unknown ${table} id` ("unknown icps id"). They
  * are inconsistent, they are what the browser sees today, and unifying them is a
  * product change this session is not making.
@@ -135,11 +130,11 @@ function safeErrorLabel(error: unknown): string {
 }
 
 /**
- * Turn a store failure into the response the Supabase path would have given.
+ * Turn a store failure into the response the browser expects.
  *
  * The two constraint kinds are the whole reason `DataStoreConstraintError`
- * exists: PostgREST reports them as `error.code` `23505` / `23503` and
- * `playbook.ts` maps those to 409 and 400. Everything else is a 500 whose text
+ * exists: a unique violation (`23505`) is a 409 and a missing parent (`23503`)
+ * a 400. Everything else is a 500 whose text
  * is composed, never quoted — the driver's message can carry a hostname.
  */
 function libraryFailure(
@@ -161,8 +156,8 @@ function libraryFailure(
  * Resolve the actor and refuse a non-admin.
  *
  * The refusal is `AuthorizationError`, so it reaches the caller through
- * `authorizationResponse` with the same 403 body `guardAdmin` produces — the
- * browser sees one message whichever provider or whichever check refused.
+ * `authorizationResponse` with the same 403 body `playbook.ts`'s own admin check
+ * produces — the browser sees one message whichever check refused.
  */
 async function adminWriter(
   request: Request,
@@ -270,9 +265,8 @@ export async function neonDeleteEntity(
 /**
  * The baseline function raises `unknown hypothesis id` as a plain exception,
  * which the driver wraps into a `DataStoreTransactionError` whose message is
- * `` `${what}: ${originalMessage}` ``. The Supabase path reads that same text
- * (`error.message?.includes('unknown hypothesis id')`) to answer 404, and this
- * does too — restricted to a **substring this application authored**, in a
+ * `` `${what}: ${originalMessage}` ``. This reads that text to answer 404 —
+ * restricted to a **substring this application authored**, in a
  * message that names no relation and no host. It is the one place in the slice
  * where a status is decided from driver text, and it is recorded rather than
  * hidden: removing it means the function has to signal the case structurally,
@@ -321,8 +315,8 @@ export async function neonSetHypothesisCampaigns(
 /**
  * Note the deliberate asymmetry with `saveEntity`: a dangling `hypothesis_id`
  * here is `unknown hypothesis id`, not the generic `a referenced row does not
- * exist`, because the payload has exactly one foreign key and naming it is the
- * Supabase path's behaviour.
+ * exist`, because the payload has exactly one foreign key and naming it is
+ * more useful.
  */
 export async function neonAssignSearch(
   request: Request,

@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { FakeDataStore } from '../api/_lib/data/fake.js'
-import {
-  APPLICATION_AUTH_PATH_ENV,
-  deploymentApplicationAuthPath,
-  resolveApplicationActor,
-} from '../api/_lib/identity/application.js'
+import { resolveApplicationActor } from '../api/_lib/identity/application.js'
 import {
   FakeIdentityProvider,
   FAKE_SESSION_COOKIE,
@@ -32,24 +28,13 @@ function identityHarness() {
 }
 
 describe('application data-plane authentication', () => {
-  it('selects identity only for the exact reviewed deployment value', () => {
-    expect(deploymentApplicationAuthPath({ [APPLICATION_AUTH_PATH_ENV]: 'identity' })).toBe(
-      'identity',
-    )
-    for (const value of [undefined, '', 'Identity', 'better-auth', 'true']) {
-      expect(deploymentApplicationAuthPath({ [APPLICATION_AUTH_PATH_ENV]: value })).toBe(
-        'supabase',
-      )
-    }
-  })
-
   it('resolves an HttpOnly identity session through the canonical database actor', async () => {
     const { store, identity, session } = identityHarness()
     const resolved = await resolveApplicationActor(
       new Request('https://dashboard.test/api/activity-daily', {
         headers: { cookie: `${FAKE_SESSION_COOKIE}=${session}` },
       }),
-      { store, identity, authPath: 'identity' },
+      { store, identity },
     )
 
     expect(resolved.provider).toBe('better-auth')
@@ -57,16 +42,34 @@ describe('application data-plane authentication', () => {
     expect(resolved.actor).toMatchObject({ actorId: ACTOR_ID, role: 'member' })
   })
 
-  it('does not fall back to a Supabase bearer when identity is selected', async () => {
+  it('ignores a bearer token: the session cookie is the only credential', async () => {
     const { store, identity } = identityHarness()
     await expect(
       resolveApplicationActor(
         new Request('https://dashboard.test/api/activity-daily', {
           headers: { authorization: 'Bearer deliberately-not-verified' },
         }),
-        { store, identity, authPath: 'identity' },
+        { store, identity },
       ),
     ).rejects.toMatchObject({ status: 401, message: 'Authentication required' })
+  })
+
+  it('does not read VITE_AUTH_PATH: identity is the only path whatever it says', async () => {
+    const { store, identity, session } = identityHarness()
+    const previous = process.env.VITE_AUTH_PATH
+    process.env.VITE_AUTH_PATH = 'supabase'
+    try {
+      const resolved = await resolveApplicationActor(
+        new Request('https://dashboard.test/api/activity-daily', {
+          headers: { cookie: `${FAKE_SESSION_COOKIE}=${session}` },
+        }),
+        { store, identity },
+      )
+      expect(resolved.provider).toBe('better-auth')
+    } finally {
+      if (previous === undefined) delete process.env.VITE_AUTH_PATH
+      else process.env.VITE_AUTH_PATH = previous
+    }
   })
 
   it('uses the same identity-only boundary for Neon writes', async () => {
@@ -75,7 +78,7 @@ describe('application data-plane authentication', () => {
       new Request('https://dashboard.test/api/pipeline', {
         headers: { cookie: `${FAKE_SESSION_COOKIE}=${session}` },
       }),
-      { store, identity, authPath: 'identity' },
+      { store, identity },
     )
     expect(writer.actor.actorId).toBe(ACTOR_ID)
 
@@ -84,7 +87,7 @@ describe('application data-plane authentication', () => {
         new Request('https://dashboard.test/api/pipeline', {
           headers: { authorization: 'Bearer deliberately-not-verified' },
         }),
-        { store, identity, authPath: 'identity' },
+        { store, identity },
       ),
     ).rejects.toMatchObject({ status: 401 })
   })

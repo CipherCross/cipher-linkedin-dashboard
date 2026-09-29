@@ -386,11 +386,11 @@ export interface NotifyLeadContextParams {
 }
 
 /**
- * Display names for the claimed batch. The two array parameters are the same
- * cross-product filter the Supabase path's chained `.in()` pair applies, not a
- * pairwise match, so a row may come back for a person reached from another
- * account in the batch — the caller keys the lookup properly. The total order
- * is for the caller's paged walk, exactly as in the candidate read.
+ * Display names for the claimed batch. The two array parameters are a
+ * cross-product filter (instance in A and profile in B), not a pairwise match,
+ * so a row may come back for a person reached from another account in the batch —
+ * the caller keys the lookup properly. The total order is for the caller's paged
+ * walk, exactly as in the candidate read.
  */
 export const notifyLeadContextOperation: NeonQueryOperation<
   NotifyLeadRow,

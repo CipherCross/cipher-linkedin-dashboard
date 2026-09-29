@@ -1,14 +1,15 @@
 /**
- * The deterministic mapping between a lead photo as Supabase stores it today and
- * the tenant object key it takes in the new bucket.
+ * The deterministic mapping between a lead photo's `photo_path` (the layout of
+ * the retired Supabase bucket, which agents before 1.27.0 wrote) and the tenant
+ * object key it has in R2.
  *
  * ## Why this is one function and not two conventions
  *
- * `sync-agent/agent.py` writes a lead's avatar to the private `lead-photos`
+ * Agents before 1.27.0 wrote a lead's avatar to the private `lead-photos`
  * Supabase bucket at `<instance_id>/<sanitized-slug>.jpg`, where the slug is
  * `sanitize_slug()`'s output — percent-decoded, then every character outside
  * `[A-Za-z0-9_-]` replaced with `_`. The path is stored in `leads.photo_path`,
- * and the agent's docstring states the property this module depends on: the
+ * and the agent's docstring stated the property this module depends on: the
  * derivation is deterministic, so a photo always joins back to its lead.
  *
  * Two consumers need to agree about where that object lives in R2, and if they
