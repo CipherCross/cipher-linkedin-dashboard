@@ -74,7 +74,10 @@ vi.mock('../api/_lib/identity/session.js', async (importOriginal) => {
 const { createActivityDailyHandler, TOLERANT_OPERATION_NAMES } = await import(
   '../api/activity-daily.js'
 )
-const GET = createActivityDailyHandler({})
+const { FakeIdentityProvider } = await import('../api/_lib/identity/fakeProvider.js')
+// Never consulted — `resolveRequestActor` is stubbed above — but injected so
+// the handler does not construct the deployed provider, which needs a credential.
+const GET = createActivityDailyHandler({ identity: new FakeIdentityProvider() })
 
 interface Body {
   items?: unknown[]

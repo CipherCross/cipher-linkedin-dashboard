@@ -3,12 +3,14 @@
  *
  * Everything here goes through the **real handler** (`api/activity-daily.ts`'s
  * exported `GET`), the real operation registry, the real driver and the real
- * baseline RLS policies. The only thing ever stubbed is the identity provider's
- * JWT verification, and only in the tests that say so — the unauthenticated and
- * invalid-token denials run it for real.
+ * baseline RLS policies. The only thing faked is the identity provider, which
+ * issues real sessions for the baseline's `fixture` subjects; the
+ * unauthenticated and invalid-session denials present none.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   presetRanges,
@@ -38,23 +40,14 @@ import { CONTRACT_ACTORS } from './support/dataStoreContract'
 const connection = requireNeonTestConnection()
 
 /**
- * The identity-provider subject the stub presents. `null` means "use the real
- * `requireUser`", which is how the unauthenticated and bad-token cases stay
- * honest.
+ * The identity-provider subject the request presents a session for. `null`
+ * presents a session the provider never issued, which is how the bad-token
+ * cases stay honest.
  */
 let stubbedSubject: string | null = null
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 /** The baseline's own identity fixtures, seeded with `provider = 'fixture'`. */
 const SUBJECTS = {
@@ -85,10 +78,10 @@ const { createActivityDailyHandler, dayRangeToUtcRange } = await import(
 
 /**
  * The baseline seeds its identity fixtures under `provider = 'fixture'`, and the
- * transitional bearer path defaults to `provider = 'supabase'`. Injected rather
- * than overridden through the environment.
+ * deployed provider name is `better-auth`. Injected rather than overridden
+ * through the environment.
  */
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 const { resetDataStore, dataStoreExists, getDataStore } = await import(
   '../api/_lib/data/store.js'
 )
@@ -117,7 +110,7 @@ function request(params: Record<string, string>, token = 'stub-token'): Request 
   }
   return new Request(url, {
     method: 'GET',
-    headers: token === '' ? {} : { authorization: `Bearer ${token}` },
+    headers: token === '' ? {} : fixtureIdentity.headers(stubbedSubject, token),
   })
 }
 
@@ -527,7 +520,7 @@ describe('S12 slice — old/new parity over one shared dataset', () => {
 })
 
 describe('S12 slice — the auth deny matrix', () => {
-  it('fails an unauthenticated request closed, with the real verifier', async () => {
+  it('fails an unauthenticated request closed', async () => {
     stubbedSubject = null
     try {
       const denied = await call(FULL_RANGE, '')
@@ -538,7 +531,7 @@ describe('S12 slice — the auth deny matrix', () => {
     }
   })
 
-  it('fails an invalid or expired token closed, with the real verifier', async () => {
+  it('fails an invalid or expired token closed', async () => {
     // Assembled at runtime, never written out as a literal: a JWT-shaped string
     // in a committed file trips the repository's own secret sweep and would be a
     // permanent false positive. Same reason S11 builds URI shapes from fragments.

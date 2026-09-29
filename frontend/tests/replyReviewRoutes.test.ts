@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import { CONTRACT_ACTORS } from './support/dataStoreContract'
 import { REPLY_REVIEW_OPERATIONS } from '../api/_lib/data/operations/replyReviews.js'
@@ -48,19 +49,16 @@ const store = {
 } as unknown as DataStore
 
 vi.mock('../api/_lib/data/store.js', () => ({ getDataStore: () => store }))
-vi.mock('../api/_lib/auth.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/_lib/auth.js')>()),
-  requireUser: async () => ({ userId: 'subject-one', email: null }),
-}))
+const fixtureIdentity = new FixtureIdentity()
 
 const { createActivityDailyHandler } = await import('../api/activity-daily.js')
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 
 function request(params: Record<string, string>): Request {
   const url = new URL('https://dashboard.test/api/activity-daily')
   url.searchParams.set('op', REPLY_REVIEW_OPERATIONS.thread)
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
-  return new Request(url, { headers: { authorization: 'Bearer fixture-token' } })
+  return new Request(url, { headers: fixtureIdentity.headers('subject-one') })
 }
 
 describe('manual reply review routes', () => {
@@ -128,7 +126,7 @@ describe('manual reply review routes', () => {
     const url = new URL('https://dashboard.test/api/activity-daily')
     url.searchParams.set('op', REPLY_REVIEW_OPERATIONS.inbox)
     url.searchParams.set('metric_scope', 'sentiment:not-a-real-bucket')
-    const response = await GET(new Request(url, { headers: { authorization: 'Bearer fixture-token' } }))
+    const response = await GET(new Request(url, { headers: fixtureIdentity.headers('subject-one') }))
     expect(response.status).toBe(400)
   })
 

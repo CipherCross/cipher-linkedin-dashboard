@@ -12,19 +12,12 @@
  * proposal, no environment variable, no class of bug where a cached proposal
  * drifts.
  *
- * **Two authenticators, one resolver.** The provider subject can arrive two
- * ways, and both go through the same database function:
+ * **One authenticator.** The provider subject arrives in the identity session
+ * cookie the self-hosted provider issued, and nothing else. The transitional
+ * Supabase Auth bearer that once sat beside it is gone with the rest of
+ * Supabase: an `Authorization` header on a browser request is simply ignored.
  *
- * 1. An identity session cookie issued by the candidate — the production path.
- * 2. A Supabase Auth bearer JWT — **transitional**, and the reason it is still
- *    here is concrete: the running dashboard still signs in through Supabase
- *    Auth, and `S18` (not this session) is what rewires the browser. Removing it
- *    now would break the S12 page for a signed-in user with nothing to replace
- *    it. Note what it is *not*: it is no longer a mapping authority. The JWT
- *    yields a subject and nothing more; the database decides who that is, under
- *    `provider = 'supabase'`. `S18` deletes this branch.
- *
- * Neither authenticator can widen anything. `role` comes from
+ * The session cannot widen anything. `role` comes from
  * `public.team_members` through the resolver, never from a cookie, a claim or a
  * provider-side role column — which is F5, and it is why an account whose
  * provider role says `admin` while the database says `member` resolves as
@@ -36,7 +29,7 @@
  * request. Callers take the `RequestActor` this returns and pass it down.
  */
 
-import { AuthorizationError, requireUser } from '../auth.js'
+import { AuthorizationError } from '../auth.js'
 import type { DataStore, UserActorContext } from '../data/contracts.js'
 import { IDENTITY_PROVIDER_NAME } from './config.js'
 import type { IdentityProvider } from './provider.js'
@@ -50,9 +43,6 @@ import type { IdentityProvider } from './provider.js'
  */
 export const TENANT_ID = 'primary'
 
-/** `user_identities.provider` for the transitional Supabase authenticator. */
-export const LEGACY_PROVIDER_NAME = 'supabase'
-
 export interface RequestActor {
   readonly actor: UserActorContext
   /** The provider subject the session presented. Never a canonical user id. */
@@ -62,21 +52,8 @@ export interface RequestActor {
 }
 
 export interface ResolveRequestActorDeps {
-  /**
-   * Optional, and the omission is meaningful: an endpoint that has no reason to
-   * read a session cookie should not construct the identity pool to do it.
-   * `activity-daily.ts` passes nothing here, so it needs no identity credential
-   * and keeps working on the transitional bearer alone — which is what stops the
-   * bridge removal from becoming a deployment prerequisite.
-   */
-  readonly identity?: IdentityProvider
+  readonly identity: IdentityProvider
   readonly store: DataStore
-  /**
-   * Whether to accept the transitional Supabase bearer JWT. Injected rather
-   * than read from the environment so a test states its intent instead of
-   * mutating process state, and so `S18` deletes one call site.
-   */
-  readonly acceptLegacyBearer?: boolean
   /**
    * Provider label for the candidate's own subjects. Injectable because the
    * baseline's contract fixtures are seeded under `provider = 'fixture'`, and a
@@ -84,7 +61,6 @@ export interface ResolveRequestActorDeps {
    * writing production data to prove a read.
    */
   readonly providerName?: string
-  readonly legacyProviderName?: string
 }
 
 /**
@@ -104,27 +80,10 @@ export async function resolveRequestActor(
   request: Request,
   deps: ResolveRequestActorDeps,
 ): Promise<RequestActor> {
-  const providerName = deps.providerName ?? IDENTITY_PROVIDER_NAME
-  const legacyProviderName = deps.legacyProviderName ?? LEGACY_PROVIDER_NAME
-
-  const session = deps.identity
-    ? await deps.identity.getSession(request.headers)
-    : null
-
-  let subject: string
-  let provider: string
-
-  if (session) {
-    subject = session.user.subject
-    provider = providerName
-  } else if (deps.acceptLegacyBearer && hasBearer(request)) {
-    // Throws 401 itself for an invalid or expired token.
-    const user = await requireUser(request)
-    subject = user.userId
-    provider = legacyProviderName
-  } else {
-    throw new AuthorizationError(401, 'Authentication required')
-  }
+  const provider = deps.providerName ?? IDENTITY_PROVIDER_NAME
+  const session = await deps.identity.getSession(request.headers)
+  if (!session) throw new AuthorizationError(401, 'Authentication required')
+  const subject = session.user.subject
 
   const resolved = await deps.store.resolveActor({ provider, subject })
 
@@ -164,8 +123,4 @@ export function requireAdminActor(resolved: RequestActor): RequestActor {
     throw new AuthorizationError(403, 'Admin access required')
   }
   return resolved
-}
-
-function hasBearer(request: Request): boolean {
-  return /^Bearer\s+.+/i.test(request.headers.get('authorization') ?? '')
 }

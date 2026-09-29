@@ -32,6 +32,18 @@ import {
 import { AGENT_INGEST_OP } from '../api/_lib/agent/ingest.js'
 import { resetDataStore } from '../api/_lib/data/store.js'
 
+// The human routes resolve their caller through the deployed identity provider,
+// which needs a credential this file deliberately does not hold. The fake
+// issues no sessions, so every human request here is unauthenticated.
+vi.mock('../api/_lib/identity/runtime.js', async (importOriginal) => {
+  const { FakeIdentityProvider } = await import('../api/_lib/identity/fakeProvider.js')
+  const identity = new FakeIdentityProvider()
+  return {
+    ...(await importOriginal<typeof import('../api/_lib/identity/runtime.js')>()),
+    getIdentityProvider: () => identity,
+  }
+})
+
 const url = (op?: string) =>
   `https://dashboard.test/api/import${op === undefined ? '' : `?op=${op}`}`
 
@@ -126,7 +138,6 @@ describe('/api/import route method dispatch', () => {
     // human surface answers a named 500 — not "Could not verify team access",
     // which would be a claim about a check that never ran.
     vi.stubEnv('NEON_DATABASE_URL', '')
-    vi.stubEnv('VITE_AUTH_PATH', '')
     const fetcher = vi.fn(async () => new Response('{}'))
     vi.stubGlobal('fetch', fetcher)
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -154,7 +165,6 @@ describe('/api/import route method dispatch', () => {
     // admin, whichever action is named. The store is configured but never
     // reached: an unauthenticated caller is refused before any connection.
     vi.stubEnv('NEON_DATABASE_URL', 'postgresql://nobody:nothing@127.0.0.1:1/nowhere')
-    vi.stubEnv('VITE_AUTH_PATH', '')
     const fetcher = vi.fn(async () => new Response('{}'))
     vi.stubGlobal('fetch', fetcher)
     try {

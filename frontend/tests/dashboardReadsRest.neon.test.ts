@@ -14,15 +14,17 @@
  * So here the injected transport is the handler itself: `fetchNeonDashboard` and
  * the three component readers run against `createActivityDailyHandler` → the
  * real operation registry → the real driver → the real baseline RLS policies,
- * over `s13-rest`'s fixture. Nothing is stubbed but the identity provider's JWT
- * verification, exactly as the sibling live suites stub it.
+ * over `s13-rest`'s fixture. Nothing is faked but the identity provider,
+ * exactly as the sibling live suites fake it.
  *
  * The fixture is seeded by its own module, which is idempotent — the previous
  * sessions' warning stands: `s13-rest` living on the shared project is a
  * mutation of a shared database, not a contract.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   FOLLOW_UP_EVENT_COUNT,
@@ -73,21 +75,13 @@ const connection = requireNeonTestConnection()
 
 let stubbedSubject: string | null = null
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 const SUBJECTS = { activeMember: 'subject-one' } as const
 
 const { createActivityDailyHandler } = await import('../api/activity-daily.js')
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 const { resetDataStore } = await import('../api/_lib/data/store.js')
 
 /**
@@ -103,7 +97,7 @@ const handlerFetch: ApiFetch = async (input) => {
   return GET(
     new Request(url, {
       method: 'GET',
-      headers: { authorization: 'Bearer stub-token' },
+      headers: fixtureIdentity.headers(stubbedSubject),
     }),
   )
 }

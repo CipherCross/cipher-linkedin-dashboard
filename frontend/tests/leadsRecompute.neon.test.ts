@@ -34,7 +34,9 @@
  * every count-based test stayed green. That is asserted head-on below.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   ALL_TIME_RANGE,
@@ -65,19 +67,11 @@ const connection = requireNeonTestConnection()
 
 let stubbedSubject: string | null = 'subject-one'
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 const { createActivityDailyHandler } = await import('../api/activity-daily.js')
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 const { resetDataStore } = await import('../api/_lib/data/store.js')
 
 const fixtures = new NeonFixtureClient(connection.pooled)
@@ -102,7 +96,7 @@ async function readAll(op: string): Promise<Record<string, unknown>[]> {
     const response = await GET(
       new Request(url, {
         method: 'GET',
-        headers: { authorization: 'Bearer stub-token' },
+        headers: fixtureIdentity.headers(stubbedSubject),
       }),
     )
     expect(response.status).toBe(200)

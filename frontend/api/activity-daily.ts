@@ -99,10 +99,7 @@ import {
   type DataStoreStageTiming,
 } from './_lib/data/telemetry.js'
 import { resolveRequestActor } from './_lib/identity/session.js'
-import {
-  resolveApplicationActor,
-  type ApplicationAuthPath,
-} from './_lib/identity/application.js'
+import { resolveApplicationActor } from './_lib/identity/application.js'
 import type { IdentityProvider } from './_lib/identity/provider.js'
 import {
   objectStorageConfigured,
@@ -1304,10 +1301,10 @@ export interface ActivityDailyDeps {
    * photo request from reaching either the actor or object-storage layers.
    */
   readonly env?: NodeJS.ProcessEnv
-  readonly authPath?: ApplicationAuthPath
+  /** Identity provider; defaults to the deployed one. Tests inject the fake. */
   readonly identity?: IdentityProvider
   /**
-   * Which `user_identities.provider` the transitional bearer resolves under.
+   * Which `user_identities.provider` session subjects resolve under.
    *
    * Injectable rather than read from the environment, which is a deliberate
    * change from the bridge this replaced: that carried a
@@ -1316,7 +1313,7 @@ export interface ActivityDailyDeps {
    * only exists for tests is indistinguishable at a glance from one a deployment
    * is supposed to set, so the seam is now an argument.
    */
-  readonly legacyProviderName?: string
+  readonly providerName?: string
 }
 
 /**
@@ -1452,10 +1449,8 @@ async function handleRequest(
     }
   }
 
-  // The deployed SPA and this endpoint use the same explicit auth selector.
-  // Legacy mode verifies the transitional bearer. Identity mode reads the
-  // self-hosted Better Auth cookie and disables bearer fallback. In both cases
-  // the provider supplies only a subject; `identity_resolve_actor` in the tenant
+  // The self-hosted Better Auth session cookie is the only authenticator. The
+  // provider supplies only a subject; `identity_resolve_actor` in the tenant
   // database decides active membership and role.
   //
   // **Resolved once per request** (G2's B5), then passed down. S12 measured this
@@ -1466,9 +1461,8 @@ async function handleRequest(
   try {
     const resolved = await resolveApplicationActor(req, {
       store: getDataStore(),
-      authPath: deps.authPath,
       identity: deps.identity,
-      legacyProviderName: deps.legacyProviderName,
+      providerName: deps.providerName,
     })
     actor = resolved.actor
   } catch (error) {

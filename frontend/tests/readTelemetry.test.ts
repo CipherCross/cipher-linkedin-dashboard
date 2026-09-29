@@ -23,6 +23,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   collectDataStoreStages,
@@ -73,19 +74,16 @@ const store = {
 } as unknown as DataStore
 
 vi.mock('../api/_lib/data/store.js', () => ({ getDataStore: () => store }))
-vi.mock('../api/_lib/auth.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/_lib/auth.js')>()),
-  requireUser: async () => ({ userId: 'subject-one', email: null }),
-}))
+const fixtureIdentity = new FixtureIdentity()
 
 const { createActivityDailyHandler } = await import('../api/activity-daily.js')
-const GET = createActivityDailyHandler({ legacyProviderName: 'fixture' })
+const GET = createActivityDailyHandler(fixtureIdentity.deps)
 
 function read(op: string, params: Record<string, string> = {}): Request {
   const url = new URL('https://dashboard.test/api/activity-daily')
   url.searchParams.set('op', op)
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
-  return new Request(url, { headers: { authorization: 'Bearer fixture-token' } })
+  return new Request(url, { headers: fixtureIdentity.headers('subject-one') })
 }
 
 /** Run the handler and return the one `dashboard_read` payload it logged. */

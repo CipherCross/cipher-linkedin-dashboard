@@ -18,7 +18,7 @@ import {
 } from './data/contracts.js'
 import { unavailableResponse } from './data/availability.js'
 import { sqlStateOf, transactionCause } from './data/errorCause.js'
-import { resolveApplicationActor, type ApplicationAuthPath } from './identity/application.js'
+import { resolveApplicationActor } from './identity/application.js'
 import type { IdentityProvider } from './identity/provider.js'
 import {
   REPLY_REVIEW_OPERATIONS,
@@ -52,9 +52,8 @@ import {
 
 export interface ReplyReviewWriteDeps {
   readonly store?: DataStore
-  readonly authPath?: ApplicationAuthPath
-  readonly legacyProviderName?: string
   readonly identity?: IdentityProvider
+  readonly providerName?: string
 }
 
 export interface ReplyReviewWriter {
@@ -101,7 +100,7 @@ export function writeFailure(wrapped: unknown, what: string): Response {
 
 export async function replyReviewWriter(request: Request, deps: ReplyReviewWriteDeps = {}): Promise<ReplyReviewWriter> {
   const store = deps.store ?? getDataStore()
-  const resolved = await resolveApplicationActor(request, { store, authPath: deps.authPath, identity: deps.identity, legacyProviderName: deps.legacyProviderName })
+  const resolved = await resolveApplicationActor(request, { store, identity: deps.identity, providerName: deps.providerName })
   return { store, actor: resolved.actor }
 }
 

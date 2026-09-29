@@ -2,8 +2,8 @@
  * S14's second write slice — `/api/playbook`'s thirteen actions, live.
  *
  * Same shape as `writeSlice.neon.test.ts`: the real registry, the real driver,
- * the real baseline policies, the real step-`003` function, and only the JWT
- * verification stubbed. It commits, so the fixture resets in `beforeEach` and
+ * the real baseline policies, the real step-`003` function, and only the
+ * identity provider faked. It commits, so the fixture resets in `beforeEach` and
  * every assertion reads back on a separate connection.
  *
  * Three things this file is really for, and each has a section:
@@ -16,7 +16,9 @@
  * 3. **The admin gate reading Neon's roster**, not Supabase's.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+
+import { FixtureIdentity } from './support/fixtureIdentity'
 
 import {
   LIBRARY_NAMES,
@@ -41,16 +43,8 @@ const connection = requireNeonTestConnection()
 
 let stubbedSubject: string | null = null
 
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (stubbedSubject === null) return actual.requireUser(req)
-      return { userId: stubbedSubject, email: null }
-    },
-  }
-})
+/** Sessions for the baseline's `provider = 'fixture'` subjects. */
+const fixtureIdentity = new FixtureIdentity()
 
 const SUBJECTS = {
   activeMember: 'subject-one',
@@ -81,11 +75,11 @@ function request(subject: keyof typeof SUBJECTS | 'anonymous'): Request {
   stubbedSubject = subject === 'anonymous' ? null : SUBJECTS[subject]
   return new Request('https://dashboard.test/api/playbook', {
     method: 'POST',
-    headers: subject === 'anonymous' ? {} : { authorization: 'Bearer stub-token' },
+    headers: subject === 'anonymous' ? {} : fixtureIdentity.headers(stubbedSubject),
   })
 }
 
-const deps = () => ({ store, legacyProviderName: 'fixture' })
+const deps = () => ({ store, ...fixtureIdentity.deps })
 
 async function read<TRow = Record<string, unknown>>(
   sql: string,

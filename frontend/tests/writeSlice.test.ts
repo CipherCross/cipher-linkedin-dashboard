@@ -25,7 +25,10 @@
  * `tests/identity.test.ts` drew.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import { FIXTURE_PROVIDER_NAME, FixtureIdentity } from './support/fixtureIdentity'
+import type { IdentityProvider } from '../api/_lib/identity/provider.js'
 
 import { FakeDataStore } from '../api/_lib/data/fake.js'
 import { DataStoreConstraintError } from '../api/_lib/data/contracts.js'
@@ -70,7 +73,7 @@ interface Recorded {
 interface Harness {
   readonly store: FakeDataStore
   readonly executed: Recorded[]
-  readonly deps: { store: FakeDataStore; legacyProviderName: string }
+  readonly deps: { store: FakeDataStore; identity: IdentityProvider; providerName: string }
 }
 
 /** What `pipeline.leadPipelineFields` answers with, per test. */
@@ -92,15 +95,14 @@ function harness(): Harness {
   const store = new FakeDataStore()
   const executed: Recorded[] = []
 
-  // Production resolves the transitional bearer under `provider = 'supabase'`.
-  // These tests pass `legacyProviderName: 'legacy'` explicitly — the same seam
-  // the live suites use to point at the baseline's `fixture` rows — so the
-  // provider name is never a hidden default.
-  store.seedActor('legacy', MEMBER.subject, {
+  // Sessions resolve under `providerName: 'fixture'`, passed explicitly — the
+  // same seam the live suites use to point at the baseline's `fixture` rows —
+  // so the provider name is never a hidden default.
+  store.seedActor(FIXTURE_PROVIDER_NAME, MEMBER.subject, {
     actorId: MEMBER.actorId,
     role: 'member',
   })
-  store.seedActor('legacy', ADMIN.subject, {
+  store.seedActor(FIXTURE_PROVIDER_NAME, ADMIN.subject, {
     actorId: ADMIN.actorId,
     role: 'admin',
   })
@@ -220,36 +222,25 @@ function harness(): Harness {
   return {
     store,
     executed,
-    deps: { store, legacyProviderName: 'legacy' },
+    deps: { store, ...fixtureIdentity.deps },
   }
 }
 
+const fixtureIdentity = new FixtureIdentity()
+
 /**
- * Which subject the stubbed `requireUser` reports. Set per test; `null` lets the
- * real implementation run, which is how the unauthenticated path stays honest.
+ * Which subject the request presents a fake identity session for. Set per
+ * test; `null` sends no credential, which is how the unauthenticated path
+ * stays honest.
  */
 let currentSubject: string | null = ADMIN.subject
 
 function request(): Request {
   return new Request('https://dashboard.test/api/pipeline', {
     method: 'POST',
-    headers: currentSubject ? { authorization: 'Bearer stub' } : {},
+    headers: currentSubject ? fixtureIdentity.headers(currentSubject) : {},
   })
 }
-
-// `requireUser` is the only thing between the bearer and the subject, and it
-// verifies a real Supabase JWT. Stubbing the module the way the live suites do
-// keeps that boundary intact while letting these tests choose a subject.
-vi.mock('../api/_lib/auth.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/_lib/auth.js')>()
-  return {
-    ...actual,
-    requireUser: async (req: Request) => {
-      if (currentSubject === null) return actual.requireUser(req)
-      return { userId: currentSubject, email: null }
-    },
-  }
-})
 
 beforeEach(() => {
   currentSubject = ADMIN.subject
