@@ -146,7 +146,7 @@ describe('manual reply-review Neon operations', () => {
   it('keeps sentiment and intent projection provenance independent', () => {
     const statement = projectReviewOperation.build({ actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' }, params: {
       instanceId: 'n1', profileUrl: 'p', messageId: 4, expectedRevision: 1, sentiment: null, intentState: 'unreviewed', intentLevel: null,
-      comment: null, taxonomyVersion: 'reply-review-v1', actorId: 'actor', reviewedAt: '2020-01-01T00:00:00.000Z',
+      comment: null, taxonomyVersion: 'reply-review-v1', actorId: 'actor',
     } })
     expect(statement.text).toContain("classified_model = CASE WHEN $2::text IS NULL THEN NULL")
     expect(statement.text).toContain("intent_classified_model = CASE WHEN $3::text = 'unreviewed' THEN NULL")

@@ -22,9 +22,10 @@ export interface ReplaceReasonsParams extends DataStoreParams {
   readonly messageId: number
   readonly reasonIds: readonly ReplyReasonId[]
 }
-export interface ProjectReviewParams extends SaveReviewParams {
-  readonly reviewedAt: string
-}
+/** No review timestamp: the projection stamps `clock_timestamp()` itself, and a
+ * value the SQL never references is an untyped parameter PostgreSQL rejects
+ * (42P18) — which failed every manual save until 2026-09-29. */
+export type ProjectReviewParams = SaveReviewParams
 export interface SetWorkflowParams extends ReplyThreadParams {
   readonly expectedRevision: number
   readonly observedInboundRevision: number
@@ -160,9 +161,9 @@ export const projectReviewOperation: NeonCommandOperation<SavedReviewResult, Pro
       intent_reason = CASE WHEN $3::text = 'level' THEN $5::text ELSE NULL END,
       intent_classified_at = CASE WHEN $3::text = 'unreviewed' THEN NULL ELSE clock_timestamp() END,
       intent_classified_model = CASE WHEN $3::text = 'unreviewed' THEN NULL ELSE 'manual' END,
-      intent_taxonomy_version = CASE WHEN $3::text = 'unreviewed' THEN NULL ELSE $7::text END
-      WHERE id = $1::bigint AND instance_id = $8::text AND profile_url = $9::text`,
-    values: [params?.messageId ?? 0, params?.sentiment ?? null, params?.intentState ?? 'unreviewed', params?.intentLevel ?? null, params?.comment ?? null, params?.reviewedAt ?? new Date(0).toISOString(), params?.taxonomyVersion ?? 'reply-review-v1', params?.instanceId ?? '', params?.profileUrl ?? ''],
+      intent_taxonomy_version = CASE WHEN $3::text = 'unreviewed' THEN NULL ELSE $6::text END
+      WHERE id = $1::bigint AND instance_id = $7::text AND profile_url = $8::text`,
+    values: [params?.messageId ?? 0, params?.sentiment ?? null, params?.intentState ?? 'unreviewed', params?.intentLevel ?? null, params?.comment ?? null, params?.taxonomyVersion ?? 'reply-review-v1', params?.instanceId ?? '', params?.profileUrl ?? ''],
   }),
   mapResult: mapCount,
 }
