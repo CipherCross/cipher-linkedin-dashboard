@@ -1,10 +1,10 @@
 # Split CSV import: Companies → Airtable "DB", Leads → Airtable "Contacts"
 
-Supersedes `specs/2026-08-13-unified-apollo-csv-import.md` (shipped). When this plan ships, move that spec to `docs/archive/`.
+Supersedes `specs/2026-08-13-unified-apollo-csv-import.md` (shipped). That spec has been deleted; see git history.
 
 ## Status (2026-09-25)
 
-Phases 1–4 and 6 are implemented on branch `csv-import-db-contacts`; the superseded spec is in `docs/archive/specs/`. Phase 5's dry-run script is `frontend/scripts/airtable-website-backfill.mjs` (dry run on the live base: DB 21,770 values would change and 25 are left alone; Companies 5,102 and 4). Its `--apply` mode has not been run.
+Phases 1–4 and 6 are implemented on branch `csv-import-db-contacts`; the superseded spec is in git history. Phase 5's dry-run script is `frontend/scripts/airtable-website-backfill.mjs` (dry run on the live base: DB 21,770 values would change and 25 are left alone; Companies 5,102 and 4). Its `--apply` mode has not been run.
 
 Still open, all outside the code:
 - The four Airtable-owner items below. Item 1 decides whether bare domains in `Company Website` are safe for the automation and the Interface; nothing has been written to the live base yet.

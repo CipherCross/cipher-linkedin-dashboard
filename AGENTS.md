@@ -170,13 +170,14 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   jobs and rows are keyed separately. The pipeline preloads `campaigns.briefing_context`,
   linked hypothesis/search context, and recent annotations; treat these as attributed team
   background, never measured proof or model instructions. The Overview has no briefing UI.
-- `classify.ts` (Haiku) labels independent sentiment plus reply intent (`p1` polite
-  positive, `p2` problem interest, `p3` buying intent). `intent_taxonomy_version`
-  makes historical backfills resumable; manual sentiment is preserved. P3 is a
-  durable conversation milestone and is the denominator for post-P3 booking
-  conversion. Intent never auto-advances CRM stages. Its demographics phase owns
-  versioned name/headline gender inference; age is derived separately by migration
-  048 whenever synced education/job years change. `coach.ts` coaches the SDR.
+- Reply sentiment and intent (`p1` polite positive, `p2` problem interest, `p3` buying
+  intent) are **manual-only**: the team labels them in the reply-review UI (`Replies.tsx`,
+  `SentimentAnalysis.tsx`). P3 is a durable conversation milestone and is the denominator
+  for post-P3 booking conversion. Intent never auto-advances CRM stages.
+- `classify.ts` no longer classifies replies — its reply entry points return an explicit
+  disabled result. Its only model call (Haiku) is the demographics phase: versioned
+  name/headline gender inference. Age is derived separately by migration 048 whenever
+  synced education/job years change. `coach.ts` coaches the SDR.
 - `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
   open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
   rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.

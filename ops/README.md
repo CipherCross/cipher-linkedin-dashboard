@@ -47,9 +47,9 @@ The Supabase-era P4-C provisioning path was never completed and **must not be
 resumed**; it was superseded by the `--s26` runtime, which has since onboarded a
 real tenant (`uitop`) end to end against live Neon, Vercel and Resend. The two
 checkpoint documents for the abandoned path are archived at
-[`P4-C-pre-provisioning-checkpoint.md`](../docs/archive/implementation-handoffs/P4-C-pre-provisioning-checkpoint.md)
+`docs/archive/implementation-handoffs/P4-C-pre-provisioning-checkpoint.md` (git history)
 and
-[`p4-c-deferred-provisioning-plan.md`](../docs/archive/platform-ops/p4-c-deferred-provisioning-plan.md).
+`docs/archive/platform-ops/p4-c-deferred-provisioning-plan.md` (git history).
 
 Requires Node.js 22.5 or newer because it uses the built-in `node:sqlite` API.
 

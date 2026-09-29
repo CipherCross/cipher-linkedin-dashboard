@@ -1,8 +1,7 @@
 # UI standard
 
 The dashboard has one visual system. This file is what it is; the reasoning and
-the audit that produced it are in
-`specs/2026-09-14-ui-cleanup-standardization.md`.
+the audit that produced it are in the 2026-09-14 UI cleanup spec (git history).
 
 Three facts frame everything below:
 
