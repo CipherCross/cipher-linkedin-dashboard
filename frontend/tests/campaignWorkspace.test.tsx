@@ -232,7 +232,6 @@ const dashboardData = (context: CampaignSequenceContext | null): DashboardData =
   annotations: [],
   steps: [],
   teamMembers: [],
-  rosterPath: 'neon',
   pipelineEvents: [],
   followUpStates: [],
   latestConversationMessages: [],

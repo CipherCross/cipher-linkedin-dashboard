@@ -1,9 +1,8 @@
 /**
  * Client for the S12 Neon slice (`GET /api/activity-daily`).
  *
- * Deliberately standalone: it does not go through `DataContext`, because S12 is
- * one slice beside the existing Supabase path and S13 owns the `DataContext`
- * migration. Nothing here changes what the rest of the dashboard reads.
+ * Deliberately standalone: it does not go through `DataContext`, and nothing
+ * here changes what the rest of the dashboard reads.
  */
 
 import { authFetch } from './api'

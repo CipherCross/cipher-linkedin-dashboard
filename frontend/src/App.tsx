@@ -106,8 +106,7 @@ export default function App() {
                     <Route path={APP_ROUTE_SEGMENTS.health} element={<Health />} />
                     <Route path={APP_ROUTE_SEGMENTS.team} element={<Team />} />
                     <Route path={APP_ROUTE_SEGMENTS.chat} element={<Chat />} />
-                    {/* S12: one read-only slice served from Neon, beside the
-                        Supabase path every other route still uses. */}
+                    {/* S12: a read-only diagnostic slice of the read path. */}
                     <Route path={APP_ROUTE_SEGMENTS.neonActivity} element={<NeonActivity />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Route>

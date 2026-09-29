@@ -11,7 +11,6 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { AUTH_PATH_ENV, deploymentAuthPath } from '../src/lib/authPath'
 import {
   currentSession,
   findSelf,
@@ -63,24 +62,6 @@ const ACTIVE_BODY = {
 function body(call: Call): Record<string, unknown> {
   return JSON.parse(String(call.init?.body)) as Record<string, unknown>
 }
-
-describe('deploymentAuthPath', () => {
-  it('is off unless a build says exactly "identity"', () => {
-    expect(deploymentAuthPath({})).toBe('supabase')
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: '' })).toBe('supabase')
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: 'true' })).toBe('supabase')
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: '1' })).toBe('supabase')
-    // The AI path's value, in case someone copies the wrong flag across.
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: 'neon' })).toBe('supabase')
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: 'Identity' })).toBe('supabase')
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: true })).toBe('supabase')
-  })
-
-  it('accepts the value, with surrounding whitespace', () => {
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: 'identity' })).toBe('identity')
-    expect(deploymentAuthPath({ [AUTH_PATH_ENV]: '  identity  ' })).toBe('identity')
-  })
-})
 
 describe('session.current — three outcomes, and a fourth that is not one', () => {
   it('200 yields the session, with the role the resolver gave', async () => {
@@ -263,16 +244,12 @@ describe('team.roster', () => {
     expect(findSelf(members, 'unknown')).toBeNull()
   })
 
-  it('projects a roster row without claiming a Supabase auth user exists', async () => {
-    // auth_user_id is null because on this path there IS no Supabase Auth user.
-    // The Supabase page reads that field as "login enabled"; filling it with the
-    // canonical uuid would answer a question from the wrong id space.
+  it('projects a roster row onto the dashboard member shape', async () => {
     expect(toTeamMember(ROW)).toEqual({
       id: 7,
       name: 'Dana',
       active: true,
       created_at: '2026-01-02T03:04:05.000Z',
-      auth_user_id: null,
       email: 'dana@example.com',
       role: 'admin',
     })

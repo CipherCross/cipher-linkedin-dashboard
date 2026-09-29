@@ -10,10 +10,7 @@
  * of the twenty-two had no caller at all. This module is every one of those
  * callers.
  *
- * It is a plain module rather than logic inside `DataContext.tsx` for the reason
- * `conversationPaging.ts` records — originally a toolchain constraint
- * (`tsconfig.api.json` type-checked `tests/` and declared no `jsx`, so a test
- * importing a `.tsx` file could not compile), and now a straightforward one:
+ * It is a plain module rather than logic inside `DataContext.tsx` because
  * everything this path *decides* — which operation, which parameters, when a walk
  * stops, what an `unavailable` marker means — is provable here without mounting
  * anything, and is covered by `tests/dashboardReads.test.ts`.
@@ -26,32 +23,23 @@
  *
  * ## The rules this client keeps, and where each comes from
  *
- * 1. **A partial result is never returned as if it were complete.** Same rule as
- *    `conversationPaging.ts`, applied to cursor walks: a failed page throws and
+ * 1. **A partial result is never returned as if it were complete.** Applied to
+ *    cursor walks: a failed page throws and
  *    discards the accumulator, and a walk that will not terminate throws rather
- *    than answering with the pages it managed to collect. This is deliberately
- *    *narrower* than `fetchAllPipelineEvents` on the Supabase path, which still
- *    returns its accumulator mid-walk (`N-S13-consolidation.md` Known limit 4).
+ *    than answering with the pages it managed to collect.
  * 2. **The server's tolerance policy is the client's tolerance policy.** Ten
  *    reads answer an absent relation with `unavailable: true` and HTTP 200; the
  *    other twelve fail. This client adds no tolerance of its own — a non-200 is
- *    an error on every operation. See `fetchNeonDashboard` for what that changes
- *    against the Supabase path.
+ *    an error on every operation.
  * 3. **The fetch asymmetry is preserved by construction.** Inbound messages are
  *    read all-time with no `from`/`to`; outbound carries the 90-day floor. The
  *    endpoint refuses `from`/`to` on `messages.inboundHistory` by not declaring
  *    it `ranged`, so the asymmetry is enforced on both sides rather than
  *    remembered on one.
- * 4. **The roster crosses with the leads, on the same flag, or not at all.**
+ * 4. **The roster comes from the same database as the leads.**
  *    `leads.assigned_to` and `conversation_follow_up_state.owner_id` are member
- *    ids in whichever provider's id space the rows came from, and the two spaces
- *    name different people (`N-B2.md`). S13 answered that by serving no roster
- *    here, which was right while `leads` came from Supabase and wrong the moment
- *    it did not: a Neon dashboard beside an empty roster states "0 Active
- *    teammates". So `identity.teamRoster` is one of the reads below, both ends
- *    of every member-id join arrive from one database, and the *writes* that
- *    would carry an id back to the other one are refused — see
- *    `rosterWrites.ts`, which is where that rule lives.
+ *    ids, so `identity.teamRoster` is one of the reads below and both ends of
+ *    every member-id join arrive from one database.
  */
 
 import { authFetch } from './api'
@@ -229,27 +217,23 @@ export function routeSnapshotRequest(hash: string): RouteSnapshotRequest | null 
   return null
 }
 
-/** The flag lookup. Dispatched before authentication and reads no database. */
+/**
+ * The deployment lookup. Dispatched before authentication and reads no
+ * database. The server still answers `readPath` (constant `neon`) beside
+ * `photoPath`; this client reads only the photo half.
+ */
 export const READ_PATH_OPERATION = 'config.readPath'
-
-export type ReadPath = 'supabase' | 'neon'
 
 /**
  * Which lead-photo posture the deployment serves. `disabled` means initials
  * only: it is a deliberate no-photo policy and never falls through to storage.
  */
-export type PhotoPath = 'disabled' | 'supabase' | 'neon'
-
-export interface DeploymentPaths {
-  readonly readPath: ReadPath
-  readonly photoPath: PhotoPath
-}
+export type PhotoPath = 'disabled' | 'neon'
 
 /**
- * The injectable transport. Defaults to `authFetch`, which attaches the
- * signed-in browser's credential — a Supabase bearer today, the identity cookie
- * once `VITE_AUTH_PATH` flips. Injectable so every rule below is testable
- * without a network or a session.
+ * The injectable transport. Defaults to `authFetch`, which sends the signed-in
+ * browser's identity cookie. Injectable so every rule below is testable without
+ * a network or a session.
  */
 export type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -268,209 +252,70 @@ export const MAX_LIMIT = 1000
 export const MAX_PAGES = 1000
 
 // ---------------------------------------------------------------------------
-// The path flag
+// The photo posture
 // ---------------------------------------------------------------------------
 
-let pathsPromise: Promise<DeploymentPaths> | null = null
-
-/** What `fallbackPaths` reads. Narrower than `ImportMetaEnv`, exactly as
- *  `authPath.ts` does it, so a test can pass a plain object. */
-export type BrowserEnv = Readonly<Record<string, unknown>>
+let photoPathPromise: Promise<PhotoPath> | null = null
 
 /**
- * Whether this build holds a legacy Supabase client at all.
+ * Ask the deployment which photo posture it serves, or `null` when the lookup
+ * gives no usable answer — a network failure, a non-200, or a body carrying
+ * neither exact string.
  *
- * `src/lib/supabase.ts` constructs one only when both variables are present and
- * exports `null` otherwise, so this is the same condition read without importing
- * the client — the browser's equivalent of the server's `dataStoreConfigured`.
+ * Plain `fetch`, not `authFetch`: this operation is unauthenticated by design
+ * (see `readPathResponse` in `api/activity-daily.ts`), so an avatar rendering
+ * before sign-in has settled does not depend on a session.
  */
-function legacyClientConfigured(env: BrowserEnv): boolean {
-  const url = env.VITE_SUPABASE_URL
-  const key = env.VITE_SUPABASE_ANON_KEY
-  return typeof url === 'string' && url !== '' && typeof key === 'string' && key !== ''
-}
-
-/**
- * What the browser assumes when the lookup gives it no usable answer.
- *
- * **Derived from the credential this build holds**, which is the same rule the
- * server's flags follow (`api/_lib/data/providerPath.ts`) and, for the same
- * reason, not a hardcoded side:
- *
- *   * **A build with no Supabase client falls back to `neon`.** The old fallback
- *     was `supabase` unconditionally, and on a tenant that is a `null` client —
- *     so one transient blip turned into *"Supabase is not configured — set
- *     VITE_SUPABASE_URL…"* until the tab was reloaded, a sentence about a
- *     provider the deployment does not have.
- *   * **A build that does hold one falls back to `supabase`.** Falling back to
- *     `neon` there would be a *new* way to break a working dashboard: those reads
- *     go straight to PostgREST and do not depend on this same-origin lookup at
- *     all, so a blip in the lookup would move a page that was about to work onto
- *     a path the deployment may have no credential for.
- *   * **The photo half follows the read half**, because it must: the two
- *     providers' lead ids name different rows. `disabled` is the honest answer to
- *     "we do not know yet" — `neon` would fire one 503 per avatar at a deployment
- *     that may not serve them.
- *
- * A fallback, not a guess we live with: a failed lookup is never memoised, so the
- * next caller asks again — see `resolveDeploymentPaths`.
- */
-function fallbackPaths(
-  env: BrowserEnv = import.meta.env as unknown as BrowserEnv,
-): DeploymentPaths {
-  return legacyClientConfigured(env)
-    ? { readPath: 'supabase', photoPath: 'supabase' }
-    : { readPath: 'neon', photoPath: 'disabled' }
-}
-
-/** A lookup's answer, and whether it *is* one. */
-interface PathsLookup {
-  readonly paths: DeploymentPaths
-  /** `true` when `paths` came from `fallbackPaths` because the lookup failed. */
-  readonly failed: boolean
-}
-
-/**
- * Ask the deployment which paths it serves — reads and photos, in one request.
- *
- * **Every lookup failure takes `fallbackPaths`**, which since S27 derives its
- * side from the credential this build holds rather than always answering
- * `supabase`. A malformed answer counts as a failure: the two exact strings are
- * the only readable answers, and a body carrying neither tells us nothing about
- * the deployment.
- *
- * A *readable* answer is believed in full, including two rules that survive
- * unchanged. An explicit `disabled` photo posture means initials-only and must
- * never fall through to a storage call. And the `neon` photo path can only be
- * `neon` when the read path is — the browser asks for photos by `lead.id`, and the
- * two providers' lead ids name different rows, so a dashboard reading Supabase
- * leads while asking Neon for their photos would render one person's face against
- * another's name.
- *
- * A readable read path with an unreadable *photo* field is still an answer, not a
- * failure: it is what a server built before S20 sends, and `supabase` photos were
- * right for it.
- */
-async function lookupDeploymentPaths(
+async function lookupPhotoPath(
   fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
-  env?: BrowserEnv,
-): Promise<PathsLookup> {
-  const failure = (): PathsLookup => ({ paths: fallbackPaths(env), failed: true })
+): Promise<PhotoPath | null> {
   try {
     const res = await fetchImpl(
       `${READ_ENDPOINT}?op=${encodeURIComponent(READ_PATH_OPERATION)}`,
     )
-    if (!res.ok) return failure()
-    const body = (await res.json()) as {
-      readPath?: unknown
-      photoPath?: unknown
-    } | null
-    if (body?.readPath !== 'neon' && body?.readPath !== 'supabase') {
-      return failure()
-    }
-    const readPath: ReadPath = body.readPath
-    return {
-      failed: false,
-      paths: {
-        readPath,
-        photoPath:
-          body.photoPath === 'disabled'
-            ? 'disabled'
-            : readPath === 'neon' && body.photoPath === 'neon'
-              ? 'neon'
-              : 'supabase',
-      },
-    }
+    if (!res.ok) return null
+    const body = (await res.json()) as { photoPath?: unknown } | null
+    return body?.photoPath === 'neon' || body?.photoPath === 'disabled'
+      ? body.photoPath
+      : null
   } catch {
-    return failure()
+    return null
   }
 }
 
-/** The lookup's answer alone. The memoizing callers need to know whether it
- *  failed; everything else — and every test of the parsing rules — does not. */
-export async function fetchDeploymentPaths(
-  fetchImpl?: ApiFetch,
-  env?: BrowserEnv,
-): Promise<DeploymentPaths> {
-  return (await lookupDeploymentPaths(fetchImpl, env)).paths
+/**
+ * The lookup's answer alone, unmemoized. A failed lookup answers `disabled`:
+ * initials are the honest outcome for "we do not know", where `neon` would fire
+ * one request per avatar at a deployment that may not serve them.
+ */
+export async function fetchPhotoPath(fetchImpl?: ApiFetch): Promise<PhotoPath> {
+  return (await lookupPhotoPath(fetchImpl)) ?? 'disabled'
 }
 
 /**
- * Ask the deployment which read path it serves.
+ * The photo posture, resolved once per page load and shared by every avatar.
  *
- * **S27 stopped hardcoding the failure direction.** A network failure, a 500, a
- * body that is not the expected enum, an endpoint that does not exist yet — all
- * used to mean "keep reading Supabase", which was right while every build had a
- * Supabase client and wrong for a tenant, where there is no Supabase to keep
- * reading. They now take `fallbackPaths`, which asks what this build actually
- * holds, and none of them is remembered — so a failure costs one retry rather
- * than the session.
- *
- * Plain `fetch`, not `authFetch`: this operation is unauthenticated by design
- * (see `readPathResponse` in `api/activity-daily.ts`), and routing it through
- * the authenticator would make a dashboard on the *Supabase* path depend on a
- * credential just to be told to stay there.
+ * An **answer** is memoized — a deployment's posture does not change under a
+ * running tab. A **failure is not**: it answers `disabled` for that caller and
+ * the next one asks again, so a transient blip costs a retry rather than the
+ * session's photos.
  */
-export async function fetchReadPath(
-  fetchImpl: ApiFetch = globalThis.fetch.bind(globalThis),
-  env?: BrowserEnv,
-): Promise<ReadPath> {
-  return (await fetchDeploymentPaths(fetchImpl, env)).readPath
-}
-
-/**
- * The flag, resolved once per page load and shared by `DataContext` and the
- * three components that read on demand.
- *
- * An **answer** is memoized: re-asking would let one session flap between
- * providers mid-flight — a five-minute refresh answering from Neon while an open
- * drawer still reads Supabase — and a deployment's answer does not change under a
- * running tab anyway.
- *
- * A **failure is not**, which is S27's correction. Caching one pinned the whole
- * page to a fallback until it was reloaded; dropping it means the Retry button,
- * the five-minute refresh and the next component each ask again, and the session
- * heals itself. This does not reopen the flapping the memo exists to prevent:
- * that needs two *successful* answers that disagree.
- */
-export function resolveReadPath(
-  fetchImpl?: ApiFetch,
-  env?: BrowserEnv,
-): Promise<ReadPath> {
-  return resolveDeploymentPaths(fetchImpl, env).then((paths) => paths.readPath)
-}
-
-/**
- * The photo path, from the same memoized lookup.
- *
- * One request answers both, so an avatar rendering before `DataContext`'s first
- * load does not add a second startup round trip — and the two answers cannot
- * disagree, which they could if each were fetched separately and a deployment
- * changed between the two.
- */
-export function resolvePhotoPath(
-  fetchImpl?: ApiFetch,
-  env?: BrowserEnv,
-): Promise<PhotoPath> {
-  return resolveDeploymentPaths(fetchImpl, env).then((paths) => paths.photoPath)
-}
-
-function resolveDeploymentPaths(
-  fetchImpl?: ApiFetch,
-  env?: BrowserEnv,
-): Promise<DeploymentPaths> {
-  pathsPromise ??= lookupDeploymentPaths(fetchImpl, env).then((lookup) => {
-    // Concurrent callers still share this one in-flight request; what is dropped
-    // is the *settled* fallback, so only the next caller pays for the retry.
-    if (lookup.failed) pathsPromise = null
-    return lookup.paths
+export function resolvePhotoPath(fetchImpl?: ApiFetch): Promise<PhotoPath> {
+  photoPathPromise ??= lookupPhotoPath(fetchImpl).then((path) => {
+    // Concurrent callers still share this one in-flight request; what is
+    // dropped is the *settled* failure, so only the next caller retries.
+    if (path === null) {
+      photoPathPromise = null
+      return 'disabled'
+    }
+    return path
   })
-  return pathsPromise
+  return photoPathPromise
 }
 
-/** Drop the memoized flags. For tests; nothing in the app calls it. */
-export function resetReadPath(): void {
-  pathsPromise = null
+/** Drop the memoized posture. For tests; nothing in the app calls it. */
+export function resetPhotoPath(): void {
+  photoPathPromise = null
 }
 
 // ---------------------------------------------------------------------------
@@ -574,22 +419,10 @@ export async function readAll<T>(
 /**
  * Everything `DataContext` commits, in the browser's own types.
  *
- * `teamMembers` is here as of the roster slice, and it is the same
- * `TeamMember[]` the Supabase path commits — see `fetchNeonDashboard` for what
- * differs *inside* those rows and why the difference is rendered rather than
- * smoothed.
+ * `teamMembers` is here as of the roster slice — see `fetchNeonDashboard` for
+ * what its rows carry.
  */
 export interface NeonDashboardFetch {
-  /**
-   * Whose id space `teamMembers` — and every `assigned_to` and `owner_id` beside
-   * it — belongs to. Constant `'neon'`, and it is here rather than written by
-   * the caller for a measured reason: a mutation that set it to `'supabase'` in
-   * `DataContext.tsx` reddened **no test**, because a `.tsx` file cannot be
-   * imported by this repo's node-environment suite. It decides whether
-   * `rosterWrites.ts` lets a member id be written back, so an untestable literal
-   * was the wrong place for it.
-   */
-  readonly rosterPath: 'neon'
   readonly teamMembers: TeamMember[]
   readonly instances: Instance[]
   readonly campaigns: CampaignMetrics[]
@@ -614,29 +447,25 @@ export interface NeonDashboardFetch {
 
 export interface NeonDashboardOptions {
   /**
-   * The 90-day floor, as an inclusive UTC calendar day (`YYYY-MM-DD`) — exactly
-   * the string `DataContext` already computes and passes to PostgREST. It bounds
+   * The 90-day floor, as an inclusive UTC calendar day (`YYYY-MM-DD`). It bounds
    * the daily-activity series and the outbound message window, and nothing else.
    */
   readonly since: string
   /**
    * The delta-refresh watermark, or `null` for a full load. Only the four reads
-   * that can express a watermark receive it; everything else is re-read whole,
-   * which is what the Supabase path does too.
+   * that can express a watermark receive it; everything else is re-read whole.
    */
   readonly updatedSince: string | null
   readonly fetchImpl?: ApiFetch
 }
 
 /**
- * The Health page's cap. The Supabase path spells it `.limit(200)`; here it is a
- * page size and the first page is the answer — asking for one page of 200 and
+ * The Health page's cap. It is a page size and the first page is the answer — asking for one page of 200 and
  * not walking is the same "newest 200 runs" the page has always rendered.
  */
 export const SYNC_RUN_LIMIT = 200
 
 export interface NeonDashboardBootstrap {
-  readonly rosterPath: 'neon'
   readonly instances: Instance[]
   readonly campaigns: CampaignMetrics[]
   readonly teamMembers: TeamMember[]
@@ -664,7 +493,6 @@ export async function fetchNeonBootstrap(
   const row = page.items[0]
   if (!row) throw new Error(`${READ_OPS.bootstrap}: response contained no bootstrap row`)
   return {
-    rosterPath: 'neon',
     instances: row.instances,
     campaigns: row.campaigns,
     teamMembers: row.teamMembers,
@@ -879,43 +707,18 @@ export async function fetchNeonLeadsSearchPage(
 /**
  * Load the whole dashboard from the application API.
  *
- * ## Three differences from the Supabase path, all deliberate
+ * **The roster comes from here too**, so both ends of every member-id join
+ * arrive from one database. `team_members.user_id` is `NOT NULL` in the
+ * portable baseline, so every member *is* a login.
  *
- * **1. The roster comes from here too, and its rows mean something slightly
- * different.** Both ends of every member-id join now arrive from one database,
- * which is what makes the join correct and what makes serving the roster from
- * the *other* provider forbidden rather than merely untidy. Two consequences
- * this module does not paper over:
+ * **No column ladders.** The ledger-applied baseline carries every column the
+ * operations select, so a missing column is a broken deployment rather than a
+ * migration in flight, and it fails loudly (`api/_lib/data/operations/leads.ts`).
  *
- *   * **`auth_user_id` is `null` on every row**, and that is a statement, not a
- *     placeholder — `toTeamMember` in `identityAuth.ts` records the argument.
- *     There is no Supabase Auth user behind a `team_roster()` row. The field
- *     means "there is a Supabase login", the answer is no, and filling it with
- *     the canonical uuid would make an id from one space answer a question about
- *     another. What replaces it as the page's source of truth is the schema:
- *     `team_members.user_id` is `NOT NULL` in the portable baseline, so on this
- *     path every member *is* a login and "assignment only" is a state that
- *     cannot exist. `Team.tsx` renders that from the roster's provenance rather
- *     than from a fabricated column.
- *   * **The ids are this provider's.** They are safe to *display* beside leads
- *     read here and unsafe to *send* to a writer that is not here. The refusal
- *     lives in `rosterWrites.ts`.
- *
- * **2. No column ladders.** The two retry ladders (`LEAD_COLUMN_LADDER`,
- * `MESSAGE_COLUMN_LADDER`) exist because the Supabase schema drifted under a
- * deployed frontend. The ledger-applied baseline carries every column of the
- * widest rung, so a missing column there is a broken deployment rather than a
- * migration in flight, and it fails loudly. That argument is the operations'
- * (`api/_lib/data/operations/leads.ts`), not this file's; the consequence here
- * is simply that there is nothing to step down to.
- *
- * **3. No blanket error tolerance.** The Supabase path excludes seven reads'
- * errors from the aggregate `error` and takes `data ?? []`, so *any* failure on
- * the library relations or the pipeline log silently empties them. Here only an
- * absent relation is tolerated, by the server, per operation. A timeout or a
- * denial on `searches.saved` now fails the load — which the outer `catch` in
- * `DataContext` degrades to "prior data plus a visible banner", not a blank
- * dashboard.
+ * **No blanket error tolerance.** Only an absent relation is tolerated, by the
+ * server, per operation. A timeout or a denial on `searches.saved` fails the
+ * load — which the outer `catch` in `DataContext` degrades to "prior data plus
+ * a visible banner", not a blank dashboard.
  */
 export async function fetchNeonDashboard(
   options: NeonDashboardOptions,
@@ -941,8 +744,8 @@ export async function fetchNeonDashboard(
     all<RosterMember>(READ_OPS.teamRoster),
     all<Instance>(READ_OPS.instances),
     all<CampaignMetrics>(READ_OPS.campaigns),
-    // `from` only: the Supabase path filters `day >= since` with no upper bound,
-    // and the endpoint's day→instant conversion leaves `toExclusive` unset.
+    // `from` only: no upper bound, and the endpoint's day→instant conversion
+    // leaves `toExclusive` unset.
     all<DailyActivity>(READ_OPS.dailySeries, { from: since }),
     // Not a walk. The Health page renders the newest 200 runs; one page of 200
     // is that, and following the cursor would fetch the entire run history.
@@ -971,11 +774,8 @@ export async function fetchNeonDashboard(
   ])
 
   return {
-    rosterPath: 'neon',
-    // The same projection the identity path applies to the same rows, reused
-    // rather than restated: one mapping, one place where `auth_user_id` is
-    // decided, and no chance of the two paths disagreeing about what a roster
-    // row means.
+    // The same projection the identity surface applies to the same rows,
+    // reused rather than restated.
     teamMembers: teamMembers.items.map(toTeamMember),
     instances: instances.items,
     campaigns: campaigns.items,
@@ -1001,8 +801,7 @@ export async function fetchNeonDashboard(
     // The marker's whole reason for existing. `fetchFollowUpData` distinguishes a
     // pre-migration database from an empty queue and the UI renders the two
     // differently; a bare `[]` would have erased that. Either relation being
-    // absent means the feature is unavailable, which is how the Supabase path's
-    // shared `try` already behaves.
+    // absent means the feature is unavailable.
     followUpsAvailable: !followUpStates.unavailable && !latestMessages.unavailable,
     conversationReplyIntents: replyIntents.items,
   }
@@ -1084,10 +883,9 @@ export async function fetchNeonLeadNotes(
  *
  * Paged rather than walked, because the panel's own "load more" is the pager —
  * this is the one component read whose paging is a user action rather than a
- * completeness requirement. The cursor is the server's, which is what closes the
- * defect `N-S13-part3.md` design call 7 found in the Supabase path: an `id`-only
- * seek against an `(occurred_at, id)` order skips a row whenever two overlapping
- * writes commit with the two orders inverted.
+ * completeness requirement. The cursor is the server's: an `id`-only seek
+ * against an `(occurred_at, id)` order would skip a row whenever two
+ * overlapping writes commit with the two orders inverted.
  */
 /**
  * One conversation's follow-up state, for a drawer opened on a route whose data
@@ -1128,7 +926,7 @@ export async function fetchNeonFollowUpHistory(
 }
 
 /** The playbook as the page renders it. `updated_at` is what the header's
- *  "last saved" line reads; the Supabase path takes the same two columns. */
+ *  "last saved" line reads. */
 export interface PlaybookDocument {
   readonly content: string
   readonly updated_at: string | null
@@ -1139,8 +937,7 @@ export interface PlaybookDocument {
  *
  * The distinction is the whole return type. `public.playbook` ships with the
  * baseline and no seeded row, so zero rows means "nobody has written one yet" —
- * which the page renders as an empty editor with its placeholder, exactly as
- * PostgREST's `maybeSingle()` produces today. A *failure* is a throw, never an
+ * which the page renders as an empty editor with its placeholder. A *failure* is a throw, never an
  * empty document: the caller unlocks the editor on success, and a blank box an
  * admin can Save over the real playbook is the one outcome this read must not
  * be able to produce. The endpoint does not tolerate an absent relation here

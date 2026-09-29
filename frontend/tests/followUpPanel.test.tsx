@@ -18,13 +18,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DashboardData, FollowUpState, Lead } from '../src/lib/types'
 
 const fetchNeonFollowUpHistory = vi.fn()
-const resolveReadPath = vi.fn()
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonFollowUpHistory: (...a: unknown[]) => fetchNeonFollowUpHistory(...a),
-  resolveReadPath: () => resolveReadPath(),
 }))
-vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 
 const data = vi.hoisted(() => ({ value: null as DashboardData | null }))
 vi.mock('../src/lib/DataContext', () => ({ useData: () => ({ data: data.value }) }))
@@ -32,9 +29,7 @@ vi.mock('../src/lib/DataContext', () => ({ useData: () => ({ data: data.value })
 const EVE = { id: 5, name: 'Eve', active: true }
 const actions = vi.hoisted(() => ({
   actor: 'Eve',
-  members: [{ id: 5, name: 'Eve' }],
-  assignableMembers: [{ id: 5, name: 'Eve', active: true }],
-  memberWritesBlockedReason: null as string | null,
+  members: [{ id: 5, name: 'Eve', active: true }],
   schedule: vi.fn(),
   reschedule: vi.fn(),
   reassign: vi.fn(),
@@ -56,7 +51,7 @@ const LEAD = {
 
 const EMPTY_DATA: DashboardData = {
   instances: [], campaigns: [], activity: [], leads: [], syncRuns: [], messages: [],
-  conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [], rosterPath: 'supabase',
+  conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [],
   pipelineEvents: [], followUpStates: [], latestConversationMessages: [], followUpsAvailable: true,
   savedSearches: [], icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [],
   hypothesisCampaigns: [], campaignSequenceContext: null,
@@ -89,9 +84,7 @@ afterEach(cleanup)
 
 beforeEach(() => {
   vi.clearAllMocks()
-  resolveReadPath.mockResolvedValue('neon')
   fetchNeonFollowUpHistory.mockResolvedValue({ events: [], nextCursor: null, hasMore: false })
-  actions.memberWritesBlockedReason = null
   data.value = { ...EMPTY_DATA, followUpStates: [] }
 })
 

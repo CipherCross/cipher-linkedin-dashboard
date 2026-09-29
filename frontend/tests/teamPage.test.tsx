@@ -17,11 +17,9 @@ const identity = vi.hoisted(() => ({
   setMemberRole: vi.fn(),
   setMemberActive: vi.fn(),
 }))
-const data = vi.hoisted(() => ({ value: null as unknown }))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }))
 
 vi.mock('../src/lib/identityAuth', () => identity)
-vi.mock('../src/lib/DataContext', () => ({ useData: () => ({ data: data.value, refetch: vi.fn() }) }))
 vi.mock('../src/lib/ToastContext', () => ({ useToast: () => toast }))
 
 import { Team } from '../src/pages/Team'
@@ -31,11 +29,11 @@ const ROSTER: RosterMember[] = [
   { id: 2, userId: 'u-2', name: 'Max Member', email: 'max@x.test', role: 'member', active: true, createdAt: '2026-01-01' },
 ]
 
-function auth(isAdmin: boolean, authPath: 'identity' | 'supabase' = 'identity'): AuthContextValue {
+function auth(isAdmin: boolean): AuthContextValue {
   return {
-    status: 'ready', authPath, user: null, isAdmin, error: null,
+    status: 'ready', user: null, isAdmin, error: null,
     member: { id: 1, name: 'Ada Admin', role: isAdmin ? 'admin' : 'member' } as never,
-    signIn: vi.fn(), requestPasswordReset: vi.fn(), setPassword: vi.fn(), signOut: vi.fn(), revalidate: vi.fn(async () => {}),
+    signIn: vi.fn(), requestPasswordReset: vi.fn(), signOut: vi.fn(), revalidate: vi.fn(async () => {}),
   } as AuthContextValue
 }
 
@@ -53,7 +51,7 @@ beforeEach(() => {
   identity.setMemberActive.mockResolvedValue({ kind: 'ok' })
 })
 
-describe('Team on the identity path', () => {
+describe('Team', () => {
   it('gives an admin the invite action and per-row Edit, with counts in the summary', async () => {
     await renderTeam(auth(true))
     expect(screen.getByRole('button', { name: 'Add teammate' })).toBeTruthy()
@@ -123,27 +121,5 @@ describe('Team on the identity path', () => {
     await renderTeam(auth(true))
     expect(screen.getByRole('alert').textContent).toContain('Roster read failed: 503')
     expect(screen.getByText('No teammates to show')).toBeTruthy()
-  })
-})
-
-describe('Team on the Supabase authenticator', () => {
-  const member = (id: number, name: string, auth_user_id: string | null) => ({
-    id, name, email: `${id}@x.test`, role: 'member', active: true, created_at: '2026-01-01', auth_user_id,
-  })
-
-  it('is read-only on the application-API roster', async () => {
-    data.value = { rosterPath: 'neon', teamMembers: [member(5, 'Neon Person', null)] }
-    await renderTeam(auth(true, 'supabase'))
-    expect(screen.queryByRole('button', { name: 'Invite teammate' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull()
-    expect(screen.getByText('Login enabled')).toBeTruthy()
-  })
-
-  it('stays read-only on the Supabase roster too: its writer is retired', async () => {
-    data.value = { rosterPath: 'supabase', teamMembers: [member(1, 'Ada Admin', 'a'), member(7, 'Assign Only', null)] }
-    await renderTeam(auth(true, 'supabase'))
-    expect(screen.queryByRole('button', { name: 'Invite teammate' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull()
-    expect(screen.getAllByText('Login enabled')).toHaveLength(2)
   })
 })

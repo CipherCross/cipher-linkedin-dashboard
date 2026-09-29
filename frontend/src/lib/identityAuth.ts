@@ -49,8 +49,7 @@
  * `team_roster()` returns **two** identifiers per row and they name different
  * things: `id` is `public.team_members.id`, a bigint, and `userId` is
  * `public.users.id`, a uuid. The three admin functions all take the **uuid**
- * (`identity_admin_set_member_active(p_user_id uuid, …)`), and the Supabase path
- * this replaces keys its own updates on the bigint. Crossing them is a mistake
+ * (`identity_admin_set_member_active(p_user_id uuid, …)`). Crossing them is a mistake
  * that type-checks: both are "the member's id" in English. So the admin calls
  * here take `userId` under that name and nothing in this file passes a
  * `RosterMember.id` to one.
@@ -482,16 +481,8 @@ export async function setMemberRole(
 }
 
 /**
- * Project a roster row onto the shape the rest of the SPA already consumes, so
- * `Layout`, `usePipelineActions` and the Team page compile against one type on
- * both paths.
- *
- * `auth_user_id` is **null**, and that is a statement rather than a placeholder:
- * on this path there is no Supabase Auth user, and the field means precisely
- * that. Filling it with the canonical uuid would make an id from one space
- * answer a question about another — the same conflation the admin keys above
- * exist to avoid — and the Supabase path reads that field to mean "login
- * enabled", which would then be wrong in both directions.
+ * Project a roster row onto the shape the rest of the SPA consumes
+ * (`Layout`, `usePipelineActions`, the dashboard data).
  */
 export function toTeamMember(row: RosterMember): TeamMember {
   return {
@@ -499,7 +490,6 @@ export function toTeamMember(row: RosterMember): TeamMember {
     name: row.name,
     active: row.active,
     created_at: row.createdAt,
-    auth_user_id: null,
     email: row.email,
     role: row.role,
   }

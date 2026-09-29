@@ -1,34 +1,22 @@
 /**
- * Who is signed in, on either of the two authenticators.
+ * Who is signed in.
  *
- * `deploymentAuthPath()` picks one at startup and the choice is a build-time
- * deployment decision — see `authPath.ts` for why the two must coexist rather
- * than one replacing the other in place. Everything below the context sees one
- * `AuthContextValue` and cannot tell which path produced it; that is the whole
- * point, and it is why `user` is a neutral `{id, email}` rather than Supabase's
- * `User`.
+ * The self-hosted identity provider (`/api/identity`, an HttpOnly session
+ * cookie) is the only authenticator. Nothing is held in the browser: the
+ * session is read from the server, and so is the authority.
  *
- * What genuinely differs between the two, and is not smoothed over:
- *
- * - **Where `role` comes from.** On the identity path it is the resolver's
- *   answer in `session.current`, read from `public.team_members` — never the
- *   cookie, never the roster row the UI happens to be showing. `isAdmin` is
- *   derived from the session for that reason, so a stale or unreadable roster
- *   cannot widen anyone's access.
- * - **`setting_password`.** A Supabase invite/recovery link lands back on the
- *   SPA with `token_hash` in the query string and the person sets a password
- *   there, against a recovery *session*. The identity path has no such
- *   callback: its link carries a one-time token in the hash and is answered by
- *   the `/reset-password` screen, which spends the token directly. So this
- *   state stays unreachable there and `setPassword` says so instead of
- *   pretending it has a session it does not have.
- * - **`unavailable`.** New, and it belongs to both paths conceptually but only
- *   the identity path can currently reach it: the auth service being down is not
- *   the same as being signed out, and rendering it as a sign-in form asks
- *   someone to retype their password at a server that will not answer. On a
- *   revalidation it is softer still — an already-ready session stays ready and
- *   the error is surfaced beside it, because a blip must not evict a working
- *   session.
+ * - **Where `role` comes from.** The resolver's answer in `session.current`,
+ *   read from `public.team_members` — never the cookie, never the roster row
+ *   the UI happens to be showing. `isAdmin` is derived from the session for
+ *   that reason, so a stale or unreadable roster cannot widen anyone's access.
+ * - **Password setting.** Invitation and recovery links carry a one-time token
+ *   in the hash and are answered by the `/reset-password` screen, which spends
+ *   the token directly — before this gate, with no session involved.
+ * - **`unavailable`.** The auth service being down is not the same as being
+ *   signed out, and rendering it as a sign-in form asks someone to retype
+ *   their password at a server that will not answer. On a revalidation it is
+ *   softer still — an already-ready session stays ready and the error is
+ *   surfaced beside it, because a blip must not evict a working session.
  */
 
 import {
@@ -42,11 +30,9 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
-import type { EmailOtpType, Session } from '@supabase/supabase-js'
 import { AuthCard, AuthForm, AuthMessage, AuthState } from '../components/AuthCard'
 import { Button, TextField } from '../ui'
 import { useVisibleInterval } from './useVisibleInterval'
-import { deploymentAuthPath, type AuthPath } from './authPath'
 import {
   currentSession as fetchCurrentSession,
   findSelf,
@@ -58,20 +44,17 @@ import {
   type IdentitySession,
 } from './identityAuth'
 import { leadPhotoUrls } from './leadPhotos'
-import { supabase } from './supabase'
 import type { TeamMember } from './types'
 
 export type AuthStatus =
   | 'initializing'
   | 'signed_out'
-  | 'setting_password'
   | 'unauthorized'
   | 'unavailable'
   | 'ready'
 
-/** Provider-neutral. `id` is the authenticator's own subject — a Supabase auth
- *  uuid on one path, the identity provider's subject on the other — and is
- *  never a canonical `public.users.id`. */
+/** `id` is the identity provider's subject, never a canonical
+ *  `public.users.id`. */
 export interface AuthUser {
   readonly id: string
   readonly email: string | null
@@ -79,94 +62,29 @@ export interface AuthUser {
 
 export interface AuthContextValue {
   status: AuthStatus
-  /** Which authenticator answered. Read by `authFetch` and the Team page. */
-  authPath: AuthPath
   user: AuthUser | null
   member: TeamMember | null
   isAdmin: boolean
   error: string | null
   signIn: (email: string, password: string) => Promise<void>
   requestPasswordReset: (email: string) => Promise<void>
-  setPassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
   revalidate: () => Promise<void>
 }
 
 /** Exported so rendering tests can supply a fixed session state. */
 export const AuthContext = createContext<AuthContextValue | null>(null)
-const NEEDS_PASSWORD_KEY = 'outreach-deck-needs-password'
-
-function passwordFlag(): string | null {
-  try {
-    return localStorage.getItem(NEEDS_PASSWORD_KEY)
-  } catch {
-    return null
-  }
-}
-
-function setPasswordFlag(userId: string) {
-  try {
-    localStorage.setItem(NEEDS_PASSWORD_KEY, userId)
-  } catch {
-    // The set-password screen still works for this tab without persistence.
-  }
-}
-
-function clearPasswordFlag() {
-  try {
-    localStorage.removeItem(NEEDS_PASSWORD_KEY)
-  } catch {
-    // Restricted storage must not block auth.
-  }
-}
-
-function callbackParams(): { tokenHash: string; type: EmailOtpType } | null {
-  const params = new URLSearchParams(window.location.search)
-  const tokenHash = params.get('token_hash')
-  const rawType = params.get('type')
-  if (
-    !tokenHash ||
-    (rawType !== 'invite' && rawType !== 'recovery')
-  ) {
-    return null
-  }
-  return { tokenHash, type: rawType }
-}
-
-function clearCallbackParams() {
-  const url = new URL(window.location.href)
-  url.searchParams.delete('token_hash')
-  url.searchParams.delete('type')
-  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
-}
-
 /**
  * Re-check the session every minute and whenever the tab is looked at again.
  *
- * Shared by both providers because the reason is the same on both: membership
- * and role live in the database and can be revoked while a tab sits open, and
- * neither a Supabase JWT nor a session cookie notices that on its own.
+ * Membership and role live in the database and can be revoked while a tab sits
+ * open, and a session cookie does not notice that on its own.
  */
 function useSessionHeartbeat(status: AuthStatus, revalidate: () => Promise<void>) {
   useVisibleInterval(revalidate, status === 'ready' ? 60_000 : null)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Read once per mount: the flag is a build-time constant, and re-reading it
-  // per render would only invite the two providers to swap under a live session.
-  const [path] = useState<AuthPath>(() => deploymentAuthPath())
-  return path === 'identity' ? (
-    <IdentityAuthProvider>{children}</IdentityAuthProvider>
-  ) : (
-    <SupabaseAuthProvider>{children}</SupabaseAuthProvider>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// The identity path — `/api/identity`, an HttpOnly cookie, nothing held here.
-// ---------------------------------------------------------------------------
-
-function IdentityAuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('initializing')
   const [session, setSession] = useState<IdentitySession | null>(null)
   const [member, setMember] = useState<TeamMember | null>(null)
@@ -269,17 +187,6 @@ function IdentityAuthProvider({ children }: { children: ReactNode }) {
     if (result.kind === 'refused') throw new Error(result.message)
   }, [])
 
-  const setPassword = useCallback(async (_password: string) => {
-    void _password
-    // Not a stub: there is no recovery *session* to set a password against on
-    // this path. The emailed link carries a one-time token instead, and the
-    // `/reset-password` screen spends it. Saying so is the honest surface;
-    // silently resolving would look like it had worked.
-    throw new Error(
-      'Open the link from your email to set a password — this screen has no recovery session.',
-    )
-  }, [])
-
   const signOut = useCallback(async () => {
     // Abandons any hydration already in flight — see `generation`.
     generation.current += 1
@@ -295,7 +202,6 @@ function IdentityAuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
-      authPath: 'identity',
       user: session ? { id: session.subject, email: null } : null,
       member,
       // From the session, never from `member`: the roster is display data and
@@ -304,7 +210,6 @@ function IdentityAuthProvider({ children }: { children: ReactNode }) {
       error,
       signIn,
       requestPasswordReset,
-      setPassword,
       signOut,
       revalidate,
     }),
@@ -314,248 +219,6 @@ function IdentityAuthProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       revalidate,
       session,
-      setPassword,
-      signIn,
-      signOut,
-      status,
-    ],
-  )
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-// ---------------------------------------------------------------------------
-// The Supabase path — unchanged behaviour, and the default everywhere today.
-// ---------------------------------------------------------------------------
-
-function SupabaseAuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('initializing')
-  const [session, setSession] = useState<Session | null>(null)
-  const [member, setMember] = useState<TeamMember | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const mounted = useRef(true)
-  const needsPasswordUser = useRef<string | null>(passwordFlag())
-  const sessionUserId = useRef<string | null>(null)
-
-  const hydrate = useCallback(async (nextSession: Session | null) => {
-    if (!mounted.current) return
-    const changedUser =
-      nextSession != null &&
-      sessionUserId.current != null &&
-      sessionUserId.current !== nextSession.user.id
-    sessionUserId.current = nextSession?.user.id ?? null
-    setSession(nextSession)
-    if (!nextSession || changedUser) {
-      setMember(null)
-      leadPhotoUrls.clear()
-    }
-    setError(null)
-
-    if (!nextSession || !supabase) {
-      setStatus('signed_out')
-      return
-    }
-
-    const { data: claimsData, error: claimsError } =
-      await supabase.auth.getClaims(nextSession.access_token)
-    if (claimsError || claimsData?.claims?.sub !== nextSession.user.id) {
-      leadPhotoUrls.clear()
-      await supabase.auth.signOut({ scope: 'local' })
-      if (!mounted.current) return
-      setSession(null)
-      setStatus('signed_out')
-      setError('Your session expired. Please sign in again.')
-      return
-    }
-
-    if (
-      needsPasswordUser.current === nextSession.user.id ||
-      passwordFlag() === nextSession.user.id
-    ) {
-      leadPhotoUrls.clear()
-      setMember(null)
-      setStatus('setting_password')
-      return
-    }
-
-    const { data, error: memberError } = await supabase
-      .from('team_members')
-      .select('id,name,active,created_at,email,role,auth_user_id')
-      .eq('auth_user_id', nextSession.user.id)
-      .maybeSingle()
-
-    if (!mounted.current) return
-    if (memberError) {
-      leadPhotoUrls.clear()
-      setMember(null)
-      setStatus('unauthorized')
-      setError(`Could not verify team access: ${memberError.message}`)
-      return
-    }
-    if (
-      !data ||
-      data.active !== true ||
-      (data.role !== 'member' && data.role !== 'admin')
-    ) {
-      leadPhotoUrls.clear()
-      setMember(null)
-      setStatus('unauthorized')
-      return
-    }
-
-    setMember(data as TeamMember)
-    setStatus('ready')
-  }, [])
-
-  useEffect(() => {
-    mounted.current = true
-    if (!supabase) {
-      setStatus('signed_out')
-      /* Deliberately not the env-var names: whoever is looking at the
-       * sign-in screen cannot set them, and the deployment configuration is
-       * not theirs to see. The console line below is for whoever can. */
-      console.error(
-        'Sign-in is unavailable: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set on this deployment.',
-      )
-      setError(
-        'Sign-in is unavailable on this deployment. Ask an administrator to finish setting it up.',
-      )
-      return () => {
-        mounted.current = false
-      }
-    }
-
-    const client = supabase
-    const boot = async () => {
-      const callback = callbackParams()
-      if (callback) {
-        const { data, error: verifyError } = await client.auth.verifyOtp({
-          token_hash: callback.tokenHash,
-          type: callback.type,
-        })
-        clearCallbackParams()
-        if (verifyError || !data.session) {
-          if (!mounted.current) return
-          setStatus('signed_out')
-          setError(
-            verifyError?.message ??
-              'This invitation or recovery link is invalid or expired.',
-          )
-          return
-        }
-        needsPasswordUser.current = data.session.user.id
-        setPasswordFlag(data.session.user.id)
-        if (!mounted.current) return
-        setSession(data.session)
-        setStatus('setting_password')
-        return
-      }
-
-      const { data, error: sessionError } = await client.auth.getSession()
-      if (sessionError) {
-        if (!mounted.current) return
-        setStatus('signed_out')
-        setError(sessionError.message)
-        return
-      }
-      await hydrate(data.session)
-    }
-
-    void boot()
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'PASSWORD_RECOVERY' && nextSession) {
-        needsPasswordUser.current = nextSession.user.id
-        setPasswordFlag(nextSession.user.id)
-      }
-      window.setTimeout(() => {
-        void hydrate(nextSession)
-      }, 0)
-    })
-
-    return () => {
-      mounted.current = false
-      subscription.unsubscribe()
-    }
-  }, [hydrate])
-
-  const revalidate = useCallback(async () => {
-    if (!session) return
-    await hydrate(session)
-  }, [hydrate, session])
-
-  useSessionHeartbeat(status, revalidate)
-
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      if (!supabase) throw new Error('Supabase is not configured')
-      setError(null)
-      const { data, error: signInError } =
-        await supabase.auth.signInWithPassword({ email: email.trim(), password })
-      if (signInError) throw signInError
-      await hydrate(data.session)
-    },
-    [hydrate],
-  )
-
-  const requestPasswordReset = useCallback(async (email: string) => {
-    if (!supabase) throw new Error('Supabase is not configured')
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-      email.trim(),
-      { redirectTo: `${window.location.origin}/` },
-    )
-    if (resetError) throw resetError
-  }, [])
-
-  const setPassword = useCallback(
-    async (password: string) => {
-      if (!supabase || !session) throw new Error('No recovery session is active')
-      if (password.length < 12) {
-        throw new Error('Use at least 12 characters.')
-      }
-      const { error: updateError } = await supabase.auth.updateUser({ password })
-      if (updateError) throw updateError
-      clearPasswordFlag()
-      needsPasswordUser.current = null
-      const { data } = await supabase.auth.getSession()
-      await hydrate(data.session)
-    },
-    [hydrate, session],
-  )
-
-  const signOut = useCallback(async () => {
-    clearPasswordFlag()
-    needsPasswordUser.current = null
-    setMember(null)
-    setSession(null)
-    setStatus('signed_out')
-    if (supabase) await supabase.auth.signOut({ scope: 'global' })
-  }, [])
-
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      status,
-      authPath: 'supabase',
-      user: session?.user
-        ? { id: session.user.id, email: session.user.email ?? null }
-        : null,
-      member,
-      isAdmin: member?.role === 'admin',
-      error,
-      signIn,
-      requestPasswordReset,
-      setPassword,
-      signOut,
-      revalidate,
-    }),
-    [
-      error,
-      member,
-      requestPasswordReset,
-      revalidate,
-      session?.user,
-      setPassword,
       signIn,
       signOut,
       status,
@@ -582,7 +245,6 @@ function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [password, setPasswordValue] = useState('')
-  const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
@@ -609,23 +271,6 @@ function AuthScreen() {
       setMessage(
         'If that address belongs to an invited teammate, a recovery link is on its way.',
       )
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const submitPassword = async (event: FormEvent) => {
-    event.preventDefault()
-    setLocalError(null)
-    if (password !== confirm) {
-      setLocalError('Passwords do not match.')
-      return
-    }
-    setBusy(true)
-    try {
-      await auth.setPassword(password)
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -660,37 +305,6 @@ function AuthScreen() {
           {auth.user?.email && <div className="w-fit px-app-md py-app-sm rounded-control bg-app-surface-2 text-app-text-secondary text-app-table">{auth.user.email}</div>}
           <Button block onClick={() => void auth.signOut()}>Sign out</Button>
         </AuthState>
-      )}
-
-      {auth.status === 'setting_password' && (
-        <AuthForm
-          title="Set your password"
-          description="Use at least 12 characters. This finishes your invitation or recovery."
-          error={localError}
-          onSubmit={submitPassword}
-        >
-          <TextField
-            label="New password"
-            type="password"
-            autoComplete="new-password"
-            minLength={12}
-            value={password}
-            onChange={(event) => setPasswordValue(event.target.value)}
-            required
-          />
-          <TextField
-            label="Confirm password"
-            type="password"
-            autoComplete="new-password"
-            minLength={12}
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-            required
-          />
-          <Button variant="primary" block type="submit" loading={busy}>
-            {busy ? 'Saving…' : 'Save password'}
-          </Button>
-        </AuthForm>
       )}
 
       {auth.status === 'signed_out' && mode === 'login' && (

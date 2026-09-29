@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { supabase } from '../lib/supabase'
-import { fetchNeonPlaybook, resolveReadPath } from '../lib/dashboardReads'
+import { fetchNeonPlaybook } from '../lib/dashboardReads'
 import { authPost } from '../lib/api'
 import { useToast } from '../lib/ToastContext'
 import { shortDate } from '../lib/format'
@@ -12,11 +11,9 @@ import { Button, InlineError, PageHeader, Panel, SaveStatus, SegmentedControl, T
 import { COPY } from '../ui/labels'
 
 // The single global playbook: one Markdown document that grounds the AI
-// conversation coach (/api/coach) for every account. Read on whichever path the
-// deployment serves — the signed-in Supabase client, or `coach.playbook` through
-// the application API; saved through /api/playbook (service-role + admin role),
-// which picks its own provider from NEON_WRITES_DEFAULT. See migration
-// 022_playbook — this replaces the old per-instance structured playbook.
+// conversation coach (/api/coach) for every account. Read through
+// `coach.playbook` on the application API; saved through /api/playbook
+// (admin role, enforced server-side).
 
 const PLACEHOLDER = `# Playbook
 
@@ -58,46 +55,21 @@ export function Playbook() {
   const load = useCallback(async () => {
     const id = ++reqId.current
 
-    // Both paths read the same singleton and mean the same thing by an absent
-    // row: nobody has written a playbook yet, so the editor opens empty on its
-    // placeholder. What they must not share is a *failure* rendered that way —
-    // `loadError` locks the editor precisely so a blank box cannot be saved over
-    // the real document, and both branches below set it on every failure.
-    if ((await resolveReadPath()) === 'neon') {
-      setLoaded(false)
-      setLoadError(null)
-      try {
-        const doc = await fetchNeonPlaybook()
-        if (id !== reqId.current) return
-        setContent(doc?.content ?? '')
-        setSavedAt(doc?.updated_at ?? null)
-        setDirty(false)
-      } catch (e) {
-        if (id !== reqId.current) return
-        setLoadError(`Couldn't load playbook: ${e instanceof Error ? e.message : String(e)}`)
-      }
-      setLoaded(true)
-      return
-    }
-
-    if (!supabase) {
-      setLoadError('Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-      setLoaded(true)
-      return
-    }
+    // An absent row means nobody has written a playbook yet, so the editor
+    // opens empty on its placeholder. A *failure* must not be rendered that way
+    // — `loadError` locks the editor precisely so a blank box cannot be saved
+    // over the real document.
     setLoaded(false)
     setLoadError(null)
-    const { data, error } = await supabase
-      .from('playbook')
-      .select('content,updated_at')
-      .maybeSingle()
-    if (id !== reqId.current) return
-    if (error) {
-      setLoadError(`Couldn't load playbook: ${error.message}`)
-    } else {
-      setContent(data?.content ?? '')
-      setSavedAt(data?.updated_at ?? null)
+    try {
+      const doc = await fetchNeonPlaybook()
+      if (id !== reqId.current) return
+      setContent(doc?.content ?? '')
+      setSavedAt(doc?.updated_at ?? null)
       setDirty(false)
+    } catch (e) {
+      if (id !== reqId.current) return
+      setLoadError(`Couldn't load playbook: ${e instanceof Error ? e.message : String(e)}`)
     }
     setLoaded(true)
   }, [])

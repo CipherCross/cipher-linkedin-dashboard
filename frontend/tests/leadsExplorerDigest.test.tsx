@@ -1,24 +1,17 @@
 // @vitest-environment jsdom
 /**
- * The Leads Explorer's coaching digest panel, and the error slot the coaching
- * slice added to it.
+ * The Leads Explorer's coaching digest panel, and its error slot.
  *
- * `N-BROWSER-RUN.md` mutation 12 made this page's Neon branch swallow its read
- * error the way the Supabase branch always has, and **reddened nothing**. That is
- * the whole point of the branch: `N-COACHING.md` design call 5 records that the
- * existing read destructures `{ data: rows }` and discards the error, so a failed
- * digest read has always rendered as "no digests computed yet" — and the Neon
- * branch sets `digestErr` instead, which the expanded panel renders.
- *
- * A divergence that exists on purpose is exactly the kind that gets "tidied up"
- * by someone making the two branches look alike. This file makes that a red test.
+ * A failed digest read must not render as "no digests computed yet": the page
+ * sets `digestErr`, which the expanded panel renders. This file makes a change
+ * that swallowed the error a red test.
  *
  * ## What is real
  *
  * The page component, its panel markup, its collapse state and the effect that
- * fetches. Replaced: the four contexts, `dashboardReads`, the Supabase client and
- * `authFetch`. `MemoryRouter` is real rather than mocked, because the page reads
- * its filters from `useSearchParams` and a fake would have to reimplement it.
+ * fetches. Replaced: the four contexts, `dashboardReads` and `authFetch`.
+ * `MemoryRouter` is real rather than mocked, because the page reads its filters
+ * from `useSearchParams` and a fake would have to reimplement it.
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { act } from 'react'
@@ -28,17 +21,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CoachingDigest, DashboardData, Instance } from '../src/lib/types'
 
 const fetchNeonCoachingDigests = vi.fn()
-const resolveReadPath = vi.fn()
-/** The Supabase branch's `.select('*')`, which returns `{ data, error }`. */
-const supabaseSelect = vi.fn()
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonCoachingDigests: (...a: unknown[]) => fetchNeonCoachingDigests(...a),
-  resolveReadPath: () => resolveReadPath(),
-}))
-
-vi.mock('../src/lib/supabase', () => ({
-  supabase: { from: () => ({ select: () => supabaseSelect() }) },
+  fetchNeonLeadsSearchPage: async () => ({
+    items: [], total: 0, allTotal: 0, replyCounts: { total: 0, c: {} },
+  }),
 }))
 
 vi.mock('../src/lib/api', () => ({ authFetch: vi.fn(), authPost: vi.fn() }))
@@ -74,7 +62,6 @@ const EMPTY_DATA: DashboardData = {
   annotations: [],
   steps: [],
   teamMembers: [],
-  rosterPath: 'supabase',
   pipelineEvents: [],
   followUpStates: [],
   latestConversationMessages: [],
@@ -124,15 +111,9 @@ afterEach(cleanup)
 
 beforeEach(() => {
   fetchNeonCoachingDigests.mockReset()
-  resolveReadPath.mockReset()
-  supabaseSelect.mockReset()
 })
 
-describe('the coaching digest panel on the application-API read path', () => {
-  beforeEach(() => {
-    resolveReadPath.mockResolvedValue('neon')
-  })
-
+describe('the coaching digest panel', () => {
   it('is collapsed at first paint but fetches anyway', async () => {
     fetchNeonCoachingDigests.mockResolvedValue([DIGEST])
     paint()
@@ -176,46 +157,5 @@ describe('the coaching digest panel on the application-API read path', () => {
     // And the message carries the operation name, so the failure is diagnosable
     // from a screenshot.
     expect(banner?.textContent).toMatch(/coaching\.digests/)
-  })
-
-  it('does not read Supabase', async () => {
-    fetchNeonCoachingDigests.mockResolvedValue([])
-    paint()
-    await waitFor(() => expect(fetchNeonCoachingDigests).toHaveBeenCalled())
-    expect(supabaseSelect).not.toHaveBeenCalled()
-  })
-})
-
-describe('the same panel on the Supabase read path', () => {
-  beforeEach(() => {
-    resolveReadPath.mockResolvedValue('supabase')
-  })
-
-  it('renders the digests it reads from PostgREST', async () => {
-    supabaseSelect.mockResolvedValue({ data: [DIGEST], error: null })
-    paint()
-    await waitFor(() => expect(supabaseSelect).toHaveBeenCalled())
-    await expand()
-
-    expect(screen.getByText(/Answer the question before pitching/)).toBeDefined()
-    expect(fetchNeonCoachingDigests).not.toHaveBeenCalled()
-  })
-
-  it('still swallows its error, and this test says so on purpose', async () => {
-    // Pinned as the *current* behaviour, not endorsed as correct. N-COACHING
-    // design call 5 left this branch exactly as it was on the argument that
-    // narrowing a working path was not that slice's job; the divergence from the
-    // Neon branch above is therefore deliberate and asymmetric. If someone
-    // decides to fix it, this test failing is the intended way to find out that
-    // the asymmetry was written down rather than overlooked.
-    supabaseSelect.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
-    paint()
-    await waitFor(() => expect(supabaseSelect).toHaveBeenCalled())
-    await expand()
-
-    expect(panelBanner()).toBeNull()
-    // Indistinguishable from "nobody has computed one" — the failure mode the
-    // Neon branch refused to inherit.
-    expect(screen.getAllByText(/Not generated yet/)).toHaveLength(2)
   })
 })

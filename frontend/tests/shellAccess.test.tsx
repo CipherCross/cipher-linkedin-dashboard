@@ -33,14 +33,12 @@ beforeAll(() => {
 function auth(overrides: Partial<AuthContextValue>): AuthContextValue {
   return {
     status: 'signed_out',
-    authPath: 'identity',
     user: null,
     member: null,
     isAdmin: false,
     error: null,
     signIn: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
-    setPassword: vi.fn(async () => {}),
     signOut: vi.fn(async () => {}),
     revalidate: vi.fn(async () => {}),
     ...overrides,
@@ -88,16 +86,6 @@ describe('pre-session screens', () => {
     expect(screen.getByRole('status').textContent).toContain('recovery link is on its way')
     fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }))
     expect(screen.getByRole('heading', { level: 1, name: 'Sign in' })).toBeTruthy()
-  })
-
-  it('refuses mismatched passwords before calling the server', () => {
-    const value = auth({ status: 'setting_password' })
-    renderGate(value)
-    fireEvent.change(screen.getByLabelText(/^New password/), { target: { value: 'aaaaaaaaaaaa' } })
-    fireEvent.change(screen.getByLabelText(/^Confirm password/), { target: { value: 'bbbbbbbbbbbb' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save password' }))
-    expect(screen.getByRole('alert').textContent).toBe('Passwords do not match.')
-    expect(value.setPassword).not.toHaveBeenCalled()
   })
 
   it('offers a retry when the session cannot be checked, and sign-out when access is inactive', () => {

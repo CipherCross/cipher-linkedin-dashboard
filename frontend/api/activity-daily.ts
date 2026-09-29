@@ -1126,10 +1126,10 @@ function readOptionalInstance(url: URL): string | null {
  * Read `updated_since` — the delta-refresh watermark — as a UTC instant.
  *
  * Instant-granular, unlike `from`/`to`, and for a substantive reason rather than
- * for convenience: the watermark's whole job is to be finer than a day. The
- * Supabase path sets it to the load's start time minus a two-minute overlap
- * (`REFRESH_OVERLAP_MS`), so rounding it to a day would either re-fetch the day so
- * far on every five-minute tick or skip commits, depending on which way it rounded.
+ * for convenience: the watermark's whole job is to be finer than a day. A delta
+ * caller sets it to its load's start time minus a short overlap, so rounding it
+ * to a day would either re-fetch the day so far on every refresh or skip
+ * commits, depending on which way it rounded.
  *
  * `asUtcTimestamp` accepts an explicit offset and normalizes it, so a client that
  * sends `+02:00` gets the instant it meant. A bare local time has no instant and is

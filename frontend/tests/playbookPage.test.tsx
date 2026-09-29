@@ -15,7 +15,7 @@
  * and the `disabled` expressions the lock is made of. Replaced: `dashboardReads`
  * (so the three outcomes can be produced on demand), `AuthContext` (admin, since
  * a non-admin is locked for a different reason and would mask this one), the
- * Supabase client, the toast, and `react-markdown` — the preview pane's renderer
+ * toast, and `react-markdown` — the preview pane's renderer
  * is not what this file is about and it is ESM-heavy.
  *
  * ## The three outcomes, kept apart
@@ -30,13 +30,10 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchNeonPlaybook = vi.fn()
-const resolveReadPath = vi.fn()
-const maybeSingle = vi.fn()
 const authPost = vi.fn()
 
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonPlaybook: (...a: unknown[]) => fetchNeonPlaybook(...a),
-  resolveReadPath: () => resolveReadPath(),
 }))
 
 vi.mock('../src/lib/api', () => ({
@@ -50,13 +47,6 @@ vi.mock('../src/lib/ToastContext', () => ({
 
 vi.mock('../src/lib/AuthContext', () => ({
   useAuth: () => ({ isAdmin: true }),
-}))
-
-/** The Supabase branch's client, shaped only as far as `load()` uses it. */
-vi.mock('../src/lib/supabase', () => ({
-  supabase: {
-    from: () => ({ select: () => ({ maybeSingle: () => maybeSingle() }) }),
-  },
 }))
 
 vi.mock('react-markdown', () => ({
@@ -82,16 +72,10 @@ afterEach(cleanup)
 
 beforeEach(() => {
   fetchNeonPlaybook.mockReset()
-  resolveReadPath.mockReset()
-  maybeSingle.mockReset()
   authPost.mockReset()
 })
 
-describe('Playbook on the application-API read path', () => {
-  beforeEach(() => {
-    resolveReadPath.mockResolvedValue('neon')
-  })
-
+describe('Playbook', () => {
   it('renders the document and its "Last saved" stamp, with the editor unlocked', async () => {
     fetchNeonPlaybook.mockResolvedValue({
       content: '# Real playbook\n\nDo not overwrite me.',
@@ -142,44 +126,11 @@ describe('Playbook on the application-API read path', () => {
     expect(document.body.textContent).not.toMatch(/Last saved/)
   })
 
-  it('reads through the application API and never touches Supabase', async () => {
+  it('reads through the application API exactly once', async () => {
     fetchNeonPlaybook.mockResolvedValue({ content: 'x', updated_at: null })
 
     render(<Playbook />)
 
     await waitFor(() => expect(fetchNeonPlaybook).toHaveBeenCalledTimes(1))
-    expect(maybeSingle).not.toHaveBeenCalled()
-  })
-})
-
-describe('Playbook on the Supabase read path', () => {
-  beforeEach(() => {
-    resolveReadPath.mockResolvedValue('supabase')
-  })
-
-  it('takes the Supabase branch and leaves the application API alone', async () => {
-    maybeSingle.mockResolvedValue({
-      data: { content: 'from postgrest', updated_at: '2026-08-04T00:00:00.000Z' },
-      error: null,
-    })
-
-    render(<Playbook />)
-
-    await waitFor(() => expect(editor().value).toBe('from postgrest'))
-    expect(fetchNeonPlaybook).not.toHaveBeenCalled()
-    expect(editor().disabled).toBe(false)
-  })
-
-  it('locks the editor on a PostgREST error too — the branches agree on this', async () => {
-    // The Neon branch was added beside this one, and the lock is the property the
-    // two paths must not disagree about. Pinning both is what makes a future
-    // divergence a red test rather than a code review.
-    maybeSingle.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
-
-    render(<Playbook />)
-
-    await waitFor(() => expect(screen.getByRole('alert')).toBeDefined())
-    expect(editor().disabled).toBe(true)
-    expect(saveButton().disabled).toBe(true)
   })
 })

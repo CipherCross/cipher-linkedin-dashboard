@@ -65,7 +65,7 @@ import {
   fetchNeonLeadNotes,
   fetchNeonPlaybook,
   fetchNeonThread,
-  fetchReadPath,
+  fetchPhotoPath,
   readAll,
 } from '../src/lib/dashboardReads'
 import type { ApiFetch, NeonDashboardFetch } from '../src/lib/dashboardReads'
@@ -161,16 +161,11 @@ afterAll(async () => {
   await fixtures.end()
 })
 
-describe('the flag lookup, through the real endpoint', () => {
+describe('the photo-posture lookup, through the real endpoint', () => {
   it('answers without a credential and reports the deployment default', async () => {
-    // Unauthenticated by design: a dashboard on the Supabase path must not have
-    // to reach Neon successfully just to be told to keep using Supabase.
-    //
-    // **`neon`, with no flag set anywhere.** This process holds
-    // `NEON_DATABASE_URL` and nothing else, which after S27 is exactly the state
-    // a tenant is in — so this is the derived default observed end to end,
-    // through the real handler rather than through the resolver's unit test.
-    expect(await fetchReadPath(anonymousFetch)).toBe('neon')
+    // Unauthenticated by design. This process holds no object-storage
+    // credential, so the posture is `disabled`.
+    expect(await fetchPhotoPath(anonymousFetch)).toBe('disabled')
   })
 })
 
@@ -294,10 +289,6 @@ describe('the dashboard load, end to end', () => {
       }
       for (const row of dashboard.teamMembers) {
         expect(Number.isInteger(row.id)).toBe(true)
-        // Null on this path by construction: there is no Supabase Auth user
-        // behind a `team_roster()` row, and the Team page reads "is a login"
-        // from the baseline's `user_id NOT NULL` instead.
-        expect(row.auth_user_id).toBeNull()
       }
     })
 

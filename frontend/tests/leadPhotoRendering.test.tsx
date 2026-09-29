@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * Signed rendering: what `LeadAvatar` actually puts in the DOM on each path, and
+ * Signed rendering: what `LeadAvatar` actually puts in the DOM, and
  * how the API loader behaves under a page's worth of avatars.
  *
  * Two things make this worth mounting a component for rather than testing the
@@ -27,14 +27,10 @@ import { LeadAvatar } from '../src/components/Avatar'
 import {
   createApiLeadPhotoUrlLoader,
   createLeadPhotoSource,
-  toLeadPhotoSource,
-  createLeadPhotoUrlLoader,
   MAX_PHOTO_REQUEST_BATCH,
   type LeadPhotoSource,
 } from '../src/lib/leadPhotos'
 import type { Lead } from '../src/lib/types'
-
-vi.mock('../src/lib/supabase', () => ({ supabase: null }))
 
 const lead = (id: string, photoPath: string | null = 'notebook-1/alice.jpg'): Lead =>
   ({
@@ -73,14 +69,9 @@ function photoFetch(
 }
 
 const sourceOn = (
-  path: 'disabled' | 'supabase' | 'neon',
+  path: 'disabled' | 'neon',
   apiSource: LeadPhotoSource,
-): LeadPhotoSource =>
-  createLeadPhotoSource(
-    toLeadPhotoSource(createLeadPhotoUrlLoader(null)),
-    apiSource,
-    async () => path,
-  )
+): LeadPhotoSource => createLeadPhotoSource(apiSource, async () => path)
 
 /* The fallback is found by `data-avatar`, not by a class. Classes on these
  * elements are Tailwind utilities now and change whenever the styling does;
@@ -135,35 +126,15 @@ describe('LeadAvatar on the API photo path', () => {
     })
   })
 
-  it('asks for nothing on the Supabase path', async () => {
+  it('uses initials without asking for a photo when disabled', async () => {
     const { calls, fetchImpl } = photoFetch(() => ({ body: { photos: [] } }))
-    const photos = sourceOn('supabase', createApiLeadPhotoUrlLoader(fetchImpl))
+    const photos = sourceOn('disabled', createApiLeadPhotoUrlLoader(fetchImpl))
 
     render(<LeadAvatar lead={lead('lead-1')} photos={photos} />)
 
     await waitFor(() => {
       expect(document.querySelector("[data-avatar='fallback']")).not.toBeNull()
     })
-    // The Supabase loader was constructed with a null client, so it answers null —
-    // what matters is that the API was never called on that path.
-    expect(calls).toEqual([])
-  })
-
-  it('uses initials without asking either photo delivery path when disabled', async () => {
-    const { calls, fetchImpl } = photoFetch(() => ({ body: { photos: [] } }))
-    const supabaseLoader = { get: vi.fn(async () => SIGNED), clear: vi.fn() }
-    const photos = createLeadPhotoSource(
-      supabaseLoader,
-      createApiLeadPhotoUrlLoader(fetchImpl),
-      async () => 'disabled',
-    )
-
-    render(<LeadAvatar lead={lead('lead-1')} photos={photos} />)
-
-    await waitFor(() => {
-      expect(document.querySelector("[data-avatar='fallback']")).not.toBeNull()
-    })
-    expect(supabaseLoader.get).not.toHaveBeenCalled()
     expect(calls).toEqual([])
   })
 })
@@ -327,11 +298,11 @@ describe('the API loader under a page of avatars', () => {
     expect(calls).toHaveLength(2)
   })
 
-  it('clears both loaders whichever path is active', () => {
-    const supabaseLoader = { get: vi.fn(async () => null), clear: vi.fn() }
-    const apiLoader = { get: vi.fn(async () => null), clear: vi.fn() }
-    createLeadPhotoSource(supabaseLoader, apiLoader, async () => 'neon').clear()
-    expect(supabaseLoader.clear).toHaveBeenCalledTimes(1)
-    expect(apiLoader.clear).toHaveBeenCalledTimes(1)
+  it('clears the loader whichever posture is active', () => {
+    for (const posture of ['neon', 'disabled'] as const) {
+      const apiLoader = { get: vi.fn(async () => null), clear: vi.fn() }
+      createLeadPhotoSource(apiLoader, async () => posture).clear()
+      expect(apiLoader.clear).toHaveBeenCalledTimes(1)
+    }
   })
 })

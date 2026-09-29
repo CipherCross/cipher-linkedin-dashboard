@@ -22,12 +22,10 @@ const fetchPerformance = vi.fn()
 const fetchCampaigns = vi.fn()
 const fetchSystem = vi.fn()
 const fetchPreview = vi.fn()
-const resolvePath = vi.fn()
 let data: DashboardData
 
 vi.mock('../src/lib/DataContext', () => ({ useData: () => ({ data, phase: 'full' }) }))
 vi.mock('../src/lib/dashboardReads', () => ({
-  resolveReadPath: () => resolvePath(),
   fetchNeonOverviewSystemTotals: (...args: unknown[]) => fetchSystem(...args),
   fetchNeonOverviewPerformance: (...args: unknown[]) => fetchPerformance(...args),
   fetchNeonOverviewAccountCampaigns: (...args: unknown[]) => fetchCampaigns(...args),
@@ -98,9 +96,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-06T12:00:00Z'))
   data = {
     instances: [{ id: 'one', label: 'Notebook one', account_name: 'Alice', last_sync_at: '2026-09-06T10:00:00Z', agent_version: null, account_url: null, account_avatar: null, config: null, config_updated_at: null }],
-    campaigns: [campaign()] as never, leads: [], activity: [], syncRuns: [], messages: [], conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [], rosterPath: 'neon', pipelineEvents: [], followUpStates: [], latestConversationMessages: [], followUpsAvailable: false, savedSearches: [], icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [], campaignSequenceContext: null,
+    campaigns: [campaign()] as never, leads: [], activity: [], syncRuns: [], messages: [], conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [], pipelineEvents: [], followUpStates: [], latestConversationMessages: [], followUpsAvailable: false, savedSearches: [], icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [], campaignSequenceContext: null,
   }
-  resolvePath.mockReset().mockResolvedValue('neon')
   fetchSystem.mockReset().mockResolvedValue(system())
   fetchPerformance.mockReset().mockResolvedValue(performance())
   fetchCampaigns.mockReset().mockResolvedValue(accountCampaigns())

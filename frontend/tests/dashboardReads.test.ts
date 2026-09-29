@@ -48,13 +48,11 @@ import {
   fetchNeonLeadNotes,
   fetchNeonPlaybook,
   fetchNeonThread,
-  fetchDeploymentPaths,
-  fetchReadPath,
+  fetchPhotoPath,
   readAll,
   readPage,
-  resetReadPath,
+  resetPhotoPath,
   resolvePhotoPath,
-  resolveReadPath,
   routeSnapshotRequest,
   REPLY_READ_OPS,
 } from '../src/lib/dashboardReads'
@@ -160,71 +158,44 @@ describe('the read vocabulary', () => {
   })
 })
 
-describe('the path flag', () => {
-  /**
-   * The two build shapes the fallback distinguishes, passed explicitly rather
-   * than left to `import.meta.env` — a developer's own `.env` holds Supabase
-   * variables, so an ambient default would make these tests pass or fail
-   * depending on whose machine ran them.
-   */
-  const TENANT_BUILD = {}
-  const LEGACY_BUILD = {
-    VITE_SUPABASE_URL: 'https://project.supabase.co',
-    VITE_SUPABASE_ANON_KEY: 'anon-key',
-  }
-
+describe('the photo posture', () => {
   beforeEach(() => {
-    resetReadPath()
+    resetPhotoPath()
   })
 
-  it('asks for exactly the flag operation, unauthenticated', async () => {
-    const rec = recorder(() => jsonResponse({ readPath: 'supabase' }))
-    await fetchReadPath(rec.fetchImpl)
+  it('asks for exactly the lookup operation, unauthenticated', async () => {
+    const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath: 'neon' }))
+    await fetchPhotoPath(rec.fetchImpl)
     expect(rec.urls).toEqual([
       `${READ_ENDPOINT}?op=${encodeURIComponent(READ_PATH_OPERATION)}`,
     ])
   })
 
   it('believes only the two exact strings the server can answer', async () => {
-    const answers = ['neon', 'supabase', ' neon ', 'NEON', 'Neon', 'true', '1', '']
+    const answers = ['neon', 'disabled', ' neon ', 'NEON', 'Neon', 'supabase', 'true', '']
     const seen: string[] = []
-    for (const readPath of answers) {
-      const rec = recorder(() => jsonResponse({ readPath }))
-      seen.push(await fetchReadPath(rec.fetchImpl, TENANT_BUILD))
+    for (const photoPath of answers) {
+      const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath }))
+      seen.push(await fetchPhotoPath(rec.fetchImpl))
     }
-    // The two answers are taken as given, whitespace and all. Everything after
-    // them is unreadable, which since S27 means the fallback rather than
-    // `supabase` — see the failure test below for why that direction turned round.
     expect(seen).toEqual([
-      'neon', 'supabase', 'neon',
-      'neon', 'neon', 'neon', 'neon', 'neon',
+      'neon', 'disabled',
+      'disabled', 'disabled', 'disabled', 'disabled', 'disabled', 'disabled',
     ])
   })
 
-  it('falls back when the answer is missing or malformed', async () => {
-    for (const body of [{}, { readPath: null }, { readPath: 7 }, null, 'neon']) {
+  it('answers disabled when the answer is missing or malformed', async () => {
+    for (const body of [{}, { photoPath: null }, { photoPath: 7 }, null, 'neon']) {
       const rec = recorder(() => jsonResponse(body))
-      expect(await fetchDeploymentPaths(rec.fetchImpl, TENANT_BUILD)).toEqual({
-        readPath: 'neon',
-        photoPath: 'disabled',
-      })
+      expect(await fetchPhotoPath(rec.fetchImpl)).toBe('disabled')
     }
   })
 
-  /**
-   * **S27 turned this direction round, and it is the point of the change.**
-   *
-   * `supabase` was the safe fallback while Supabase was the thing that worked.
-   * On a tenant it is a `null` client, so one transient blip used to become
-   * *"Supabase is not configured — set VITE_SUPABASE_URL…"*, a sentence about a
-   * provider the deployment does not have, for the rest of the tab's life.
-   *
-   * A failed lookup means the same-origin API is unreachable, so every read is
-   * about to fail anyway; what matters is that it fails visibly and retryably.
-   */
-  it('falls back to neon on a non-200, on a body that is not JSON, and on a network failure', async () => {
+  it('answers disabled on a non-200, on a body that is not JSON, and on a network failure', async () => {
+    // Initials are the honest answer to "we do not know": `neon` would fire one
+    // request per avatar at a deployment that may not serve them.
     const failures: Responder[] = [
-      () => jsonResponse({ error: 'boom' }, 500),
+      () => jsonResponse({ readPath: 'neon', photoPath: 'neon' }, 500),
       () => jsonResponse({ error: 'nope' }, 404),
       () => new Response('<html>', { status: 200 }),
       () => {
@@ -233,157 +204,23 @@ describe('the path flag', () => {
     ]
     for (const respond of failures) {
       const rec = recorder(respond)
-      expect(await fetchReadPath(rec.fetchImpl, TENANT_BUILD)).toBe('neon')
+      expect(await fetchPhotoPath(rec.fetchImpl)).toBe('disabled')
     }
   })
 
-  /**
-   * The other half of the same rule, and the reason the fallback is derived
-   * rather than simply flipped to `neon`.
-   *
-   * A build that *does* hold a Supabase client reads straight from PostgREST and
-   * does not depend on this same-origin lookup at all. Falling back to `neon`
-   * there would be a new way to break a working dashboard: a blip in a lookup
-   * that its reads never needed would move it onto a path the deployment may have
-   * no credential for.
-   */
-  it('falls back to supabase on a build that holds a Supabase client', async () => {
-    const failures: Responder[] = [
-      () => jsonResponse({ error: 'boom' }, 500),
-      () => {
-        throw new TypeError('Failed to fetch')
-      },
-    ]
-    for (const respond of failures) {
-      const rec = recorder(respond)
-      expect(await fetchDeploymentPaths(rec.fetchImpl, LEGACY_BUILD)).toEqual({
-        readPath: 'supabase',
-        photoPath: 'supabase',
-      })
-    }
-  })
-
-  it('reads a half-configured Supabase build as holding no client', async () => {
-    // `src/lib/supabase.ts` needs both variables to construct a client and
-    // exports `null` otherwise, so one alone is not a client to fall back to.
-    const rec = recorder(() => {
-      throw new TypeError('Failed to fetch')
-    })
-    for (const env of [
-      { VITE_SUPABASE_URL: 'https://project.supabase.co' },
-      { VITE_SUPABASE_ANON_KEY: 'anon-key' },
-      { VITE_SUPABASE_URL: '', VITE_SUPABASE_ANON_KEY: 'anon-key' },
-    ]) {
-      expect(await fetchReadPath(rec.fetchImpl, env)).toBe('neon')
-    }
-  })
-
-  /**
-   * The photo flag, and the rule that is enforced on both sides of the wire.
-   *
-   * The browser asks for photos by `lead.id`, and the two providers' lead ids name
-   * different rows (`N-B2.md`). So a deployment answering `photoPath: 'neon'` while
-   * its read path is Supabase would have the dashboard render one person's face
-   * against another's name — and it would look like a caching bug. The server
-   * refuses to *report* that combination and this refuses to *believe* it; a
-   * mutation removing either was silent until this test existed.
-   */
-  it('never takes the photo path without the read path', async () => {
-    const rec = recorder(() =>
-      jsonResponse({ readPath: 'supabase', photoPath: 'neon' }),
-    )
-    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
-      readPath: 'supabase',
-      photoPath: 'supabase',
-    })
-  })
-
-  it('takes the photo path when both are neon', async () => {
-    const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath: 'neon' }))
-    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
-      readPath: 'neon',
-      photoPath: 'neon',
-    })
-  })
-
-  it('preserves the explicit initials-only photo posture', async () => {
-    const rec = recorder(() =>
-      jsonResponse({ readPath: 'neon', photoPath: 'disabled' }),
-    )
-    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
-      readPath: 'neon',
-      photoPath: 'disabled',
-    })
-  })
-
-  it.each([
-    ['absent', { readPath: 'neon' }],
-    ['null', { readPath: 'neon', photoPath: null }],
-    ['a near miss', { readPath: 'neon', photoPath: 'Neon' }],
-    ['true', { readPath: 'neon', photoPath: true }],
-  ])('leaves the photo path on supabase when it is %s', async (_label, body) => {
-    const rec = recorder(() => jsonResponse(body))
-    expect((await fetchDeploymentPaths(rec.fetchImpl)).photoPath).toBe('supabase')
-  })
-
-  it('takes neither provider for photos when the lookup fails', async () => {
-    const failures: Responder[] = [
-      () => jsonResponse({ readPath: 'neon', photoPath: 'neon' }, 500),
-      () => new Response('<html>', { status: 200 }),
-      () => {
-        throw new TypeError('Failed to fetch')
-      },
-    ]
-    for (const respond of failures) {
-      const rec = recorder(respond)
-      // The photo half is the one that needed thinking about. `supabase` would
-      // ask a client that may not exist for objects named by the other provider's
-      // rows, and `neon` would fire one 503 per avatar at a deployment that may
-      // not serve them. Initials are the honest answer to "we do not know yet".
-      expect(await fetchDeploymentPaths(rec.fetchImpl, TENANT_BUILD)).toEqual({
-        readPath: 'neon',
-        photoPath: 'disabled',
-      })
-    }
-  })
-
-  it('reads a photo field it cannot parse as an answer, not a failure', async () => {
-    // A server built before S20 sends no `photoPath` at all, and `supabase`
-    // photos were right for it. Only an unreadable *read* path means the lookup
-    // itself failed.
-    const rec = recorder(() => jsonResponse({ readPath: 'supabase' }))
-    expect(await fetchDeploymentPaths(rec.fetchImpl)).toEqual({
-      readPath: 'supabase',
-      photoPath: 'supabase',
-    })
-  })
-
-  it('answers both flags from one request', async () => {
-    const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath: 'neon' }))
-    expect(await resolveReadPath(rec.fetchImpl)).toBe('neon')
-    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
-    // One lookup for both, so the two can never disagree about one deployment.
-    expect(rec.urls).toHaveLength(1)
+  it('does not depend on the read-path half of the answer', async () => {
+    const rec = recorder(() => jsonResponse({ photoPath: 'neon' }))
+    expect(await fetchPhotoPath(rec.fetchImpl)).toBe('neon')
   })
 
   it('asks once per page load and caches an answer', async () => {
-    const rec = recorder(() => jsonResponse({ readPath: 'supabase' }))
-    expect(await resolveReadPath(rec.fetchImpl)).toBe('supabase')
-    expect(await resolveReadPath(rec.fetchImpl)).toBe('supabase')
-    expect(await resolveReadPath(rec.fetchImpl)).toBe('supabase')
-    // One session, one answer. Re-asking would let a five-minute refresh answer
-    // from one provider while an open drawer still reads the other.
+    const rec = recorder(() => jsonResponse({ readPath: 'neon', photoPath: 'neon' }))
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
     expect(rec.urls).toHaveLength(1)
   })
 
-  /**
-   * **A failure is not an answer, and S27 stopped caching it.**
-   *
-   * Caching one pinned the page to a fallback until the tab was reloaded — the
-   * Retry button could not help, because nothing re-asked. This does not reopen
-   * the flapping the memo exists to prevent: that needs two *successful* answers
-   * that disagree, and a deployment's answer does not change under a running tab.
-   */
   it('re-asks after a failure, and heals when the lookup comes back', async () => {
     let attempt = 0
     const rec = recorder(() => {
@@ -391,26 +228,24 @@ describe('the path flag', () => {
       if (attempt < 3) throw new TypeError('Failed to fetch')
       return jsonResponse({ readPath: 'neon', photoPath: 'neon' })
     })
-    expect(await resolveReadPath(rec.fetchImpl, TENANT_BUILD)).toBe('neon')
-    expect(await resolvePhotoPath(rec.fetchImpl, TENANT_BUILD)).toBe('disabled')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('disabled')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('disabled')
     // The third call is the one that succeeds, and it is the one remembered.
-    expect(await resolvePhotoPath(rec.fetchImpl, TENANT_BUILD)).toBe('neon')
-    expect(await resolvePhotoPath(rec.fetchImpl, TENANT_BUILD)).toBe('neon')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
+    expect(await resolvePhotoPath(rec.fetchImpl)).toBe('neon')
     expect(rec.urls).toHaveLength(3)
   })
 
   it('shares one in-flight failing lookup rather than one request per caller', async () => {
-    // Only the *settled* fallback is dropped. Callers that arrive together still
-    // pay for one request, so a startup with three readers does not triple it.
     const rec = recorder(() => {
       throw new TypeError('Failed to fetch')
     })
     const [a, b, c] = await Promise.all([
-      resolveReadPath(rec.fetchImpl, TENANT_BUILD),
-      resolveReadPath(rec.fetchImpl, TENANT_BUILD),
-      resolveReadPath(rec.fetchImpl, TENANT_BUILD),
+      resolvePhotoPath(rec.fetchImpl),
+      resolvePhotoPath(rec.fetchImpl),
+      resolvePhotoPath(rec.fetchImpl),
     ])
-    expect([a, b, c]).toEqual(['neon', 'neon', 'neon'])
+    expect([a, b, c]).toEqual(['disabled', 'disabled', 'disabled'])
     expect(rec.urls).toHaveLength(1)
   })
 })
@@ -480,9 +315,8 @@ describe('walking a relation', () => {
         ? jsonResponse({ items: [index], nextCursor: `c${index}`, hasMore: true })
         : jsonResponse({ error: 'Could not load dashboard data' }, 500),
     )
-    // The defect class this module exists to close: `fetchAllPipelineEvents` on
-    // the Supabase path returns what it has, turning a transient failure into a
-    // confidently short audit log.
+    // The defect class this module exists to close: returning what has arrived
+    // turns a transient failure into a confidently short audit log.
     await expect(readAll('pipeline.eventLog', {}, rec.fetchImpl)).rejects.toThrow(
       /pipeline\.eventLog: Could not load dashboard data/,
     )
@@ -549,7 +383,6 @@ describe('the dashboard load', () => {
     })
     const result = await fetchNeonBootstrap(rec.fetchImpl)
     expect(rec.urls).toHaveLength(1)
-    expect(result.rosterPath).toBe('neon')
     expect(result.instances).toHaveLength(1)
     expect(result.teamMembers[0]?.id).toBe(7)
   })
@@ -694,8 +527,7 @@ describe('the dashboard load', () => {
     expect(inbound.has('from')).toBe(false)
     expect(inbound.has('to')).toBe(false)
 
-    // Outbound carries the 90-day floor and no upper bound, exactly as the
-    // Supabase path's `.gte('sent_at', since)` does.
+    // Outbound carries the 90-day floor and no upper bound.
     const outbound = onlyQuery(rec, READ_OPS.outboundMessages)
     expect(outbound.get('from')).toBe(SINCE)
     expect(outbound.has('to')).toBe(false)
@@ -791,13 +623,6 @@ describe('the dashboard load', () => {
         name: 'Active One',
         active: true,
         created_at: '2026-02-03T04:05:06.000Z',
-        // Null, and deliberately so: there is no Supabase Auth user behind a
-        // `team_roster()` row. Filling it with the canonical uuid would make an
-        // id from one space answer a question about another — and the Team page
-        // reads this field to mean "has a Supabase login", which would then be
-        // wrong in both directions. `Team.tsx` gets "is a login" from the
-        // baseline's `user_id NOT NULL` instead, keyed on `rosterPath`.
-        auth_user_id: null,
         email: 'active-one@example.test',
         role: 'admin',
       },
@@ -806,20 +631,6 @@ describe('the dashboard load', () => {
     expect(JSON.stringify(result.teamMembers)).not.toContain(
       '00000000-0000-0000-0000-0000000000aa',
     )
-  })
-
-  it('labels the roster it returns with the provider it came from', async () => {
-    // The marker every write surface consults. It lives on this result rather
-    // than being written by `DataContext.tsx` because a literal in a `.tsx` file
-    // is one no test here can reach — a mutation setting it to `'supabase'` in
-    // that file reddened nothing, which is how it ended up here.
-    const rec = recorder()
-    const result = await fetchNeonDashboard({
-      since: SINCE,
-      updatedSince: null,
-      fetchImpl: rec.fetchImpl,
-    })
-    expect(result.rosterPath).toBe('neon')
   })
 
   it('walks the roster rather than taking its first page', async () => {

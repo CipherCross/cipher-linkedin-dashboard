@@ -64,7 +64,7 @@ function dataWith(campaigns: CampaignMetrics[], instances: Instance[] = [INSTANC
   return {
     instances, campaigns, activity: [], leads: [], syncRuns: [], messages: [],
     conversationReplyIntents: [], annotations: [], steps: [], teamMembers: [],
-    rosterPath: 'supabase', pipelineEvents: [], followUpStates: [],
+    pipelineEvents: [], followUpStates: [],
     latestConversationMessages: [], followUpsAvailable: true, savedSearches: [],
     icps: [], icpPersonas: [], icpIndustries: [], hypotheses: [], hypothesisCampaigns: [],
     campaignSequenceContext: null,

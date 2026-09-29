@@ -3,9 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   ChevronDown, ChevronRight, Columns3, Download, Filter, GraduationCap, SearchX, Sparkles,
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 import {
-  fetchNeonCoachingDigests, fetchNeonLeadsSearchPage, resolveReadPath,
+  fetchNeonCoachingDigests, fetchNeonLeadsSearchPage,
 } from '../lib/dashboardReads'
 import type { LeadsSearchQuery } from '../lib/dashboardReads'
 import { useData } from '../lib/DataContext'
@@ -30,10 +29,10 @@ import type {
 } from '../lib/types'
 import {
   AGE_BUCKETS, GENDER_SHORT, INTENT_META, INTENT_ORDER, RISK_LABEL, SENTIMENT_META,
-  SENTIMENT_ORDER, STAGES, ageBucketOf, ageRange, downloadCsv, highestIntentByLead,
-  accountLabeller, latestRepliesByLead, leadKey, riskOf, stageOf, toCsv,
+  SENTIMENT_ORDER, STAGES, ageRange, downloadCsv,
+  accountLabeller, leadKey, riskOf, stageOf, toCsv,
 } from '../lib/leads'
-import type { AgeBucket, RiskFlag, Stage } from '../lib/leads'
+import type { RiskFlag } from '../lib/leads'
 import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
 import { num, shortDate } from '../lib/format'
 import {
@@ -108,7 +107,7 @@ const FOLLOW_UP_TONE: Record<FollowUpBucket, Tone> = {
 
 export function LeadsExplorer() {
   const { isAdmin } = useAuth()
-  const { data, refetch, leadEdits } = useData()
+  const { data, leadEdits } = useData()
   const { openConversation } = useConversation()
   const { setStage, members, memberName } = usePipelineActions()
   const toast = useToast()
@@ -159,7 +158,6 @@ export function LeadsExplorer() {
    * rather than being dropped. The filters and the export are unchanged. */
   const showDetailColumns = params.get('cols') === 'all'
 
-  const [serverMode, setServerMode] = useState(false)
   const [serverPage, setServerPage] = useState<LeadsSearchPage | null>(null)
   const [serverLoading, setServerLoading] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -235,14 +233,6 @@ export function LeadsExplorer() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const path = await resolveReadPath()
-      if (cancelled) return
-      if (path !== 'neon') {
-        setServerMode(false)
-        setServerPage(null)
-        return
-      }
-      setServerMode(true)
       setServerLoading(true)
       setServerError(null)
       setServerPage(null)
@@ -314,15 +304,13 @@ export function LeadsExplorer() {
   // Latest inbound reply (body + classification) per lead — powers the sentiment
   // buckets/counts and the per-row snippet shown in reply mode.
   const snippets = useMemo(() => {
-    if (!serverMode) return latestRepliesByLead(data?.messages ?? [])
     return new Map(
       (serverPage?.items ?? [])
         .filter((item) => item.reply !== null)
         .map((item) => [leadKey(item.lead.instance_id, item.lead.profile_url), item.reply!]),
     )
-  }, [data?.messages, serverMode, serverPage])
+  }, [serverPage])
   const conversationIntents = useMemo(() => {
-    if (!serverMode) return highestIntentByLead(data?.messages ?? [])
     return new Map(
       (serverPage?.items ?? [])
         .filter((item) => item.highestIntent !== null)
@@ -331,13 +319,12 @@ export function LeadsExplorer() {
           { highest: item.highestIntent!, first_at: item.reply?.sent_at ?? '' },
         ]),
     )
-  }, [data?.messages, serverMode, serverPage])
+  }, [serverPage])
   const followUps = useMemo(() => {
-    if (!serverMode) return followUpStateMap(data?.followUpStates ?? [])
     return followUpStateMap(
       (serverPage?.items ?? []).flatMap((item) => item.followUp ? [item.followUp] : []),
     )
-  }, [data?.followUpStates, serverMode, serverPage])
+  }, [serverPage])
 
   const [updatingDemographics, setUpdatingDemographics] = useState(false)
 
@@ -357,8 +344,7 @@ export function LeadsExplorer() {
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
       toast.success(demographicsSummary(j.demographics) || 'Demographics are up to date')
-      if (serverMode) setServerRefresh((value) => value + 1)
-      else refetch()
+      setServerRefresh((value) => value + 1)
     } catch (e) {
       toast.error(`Couldn't update demographics: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -366,9 +352,8 @@ export function LeadsExplorer() {
     }
   }
 
-  // Per-account coaching digest — collapsible, collapsed by default. Read on
-  // whichever path the deployment serves, like the rest of the dashboard;
-  // (re)computed on demand via POST /api/coach.
+  // Per-account coaching digest — collapsible, collapsed by default. Read
+  // through the application API; (re)computed on demand via POST /api/coach.
   const [digests, setDigests] = useState<Record<string, CoachingDigest>>({})
   const [digestOpen, setDigestOpen] = useState(false)
   /* The filter sheet edits a draft and commits it on Apply. Writing each
@@ -387,26 +372,18 @@ export function LeadsExplorer() {
         for (const r of rows) map[r.instance_id] = r
         setDigests(map)
       }
-      if ((await resolveReadPath()) === 'neon') {
-        try {
-          const rows = await fetchNeonCoachingDigests()
-          if (cancelled) return
-          index(rows)
-        } catch (e) {
-          if (cancelled) return
-          // The Supabase branch below swallows its error — it destructures only
-          // `data`, so a failure has always rendered as "no digests computed
-          // yet". The panel owns an error slot, so this path fills it instead.
-          setDigestErr(
-            `Couldn't load the coaching digest: ${e instanceof Error ? e.message : String(e)}`,
-          )
-        }
-        return
+      try {
+        const rows = await fetchNeonCoachingDigests()
+        if (cancelled) return
+        index(rows)
+      } catch (e) {
+        if (cancelled) return
+        // A failure is not "no digests computed yet"; the panel owns an error
+        // slot, so it is filled.
+        setDigestErr(
+          `Couldn't load the coaching digest: ${e instanceof Error ? e.message : String(e)}`,
+        )
       }
-      if (!supabase) return
-      const { data: rows } = await supabase.from('coaching_digest').select('*')
-      if (cancelled || !rows) return
-      index(rows as CoachingDigest[])
     })()
     return () => {
       cancelled = true
@@ -449,94 +426,7 @@ export function LeadsExplorer() {
     scrollRef.current?.scrollTo({ top: 0 })
   }
 
-  // Everything except the two reply filters — the shared base that both the
-  // sentiment bucket counts and the final row list derive from, so bucket counts
-  // stay truthful against the other active filters (account/campaign/stage/…).
-  const baseFiltered = useMemo(() => {
-    if (!data) return []
-    const needle = q.trim().toLowerCase()
-    return data.leads.filter((l) => {
-      if (inst !== 'all' && l.instance_id !== inst) return false
-      if (effCamp !== 'all' && l.campaign_id !== effCamp) return false
-      if (stage !== 'all' && stageOf(l) !== (stage as Stage)) return false
-      if (risk !== 'all' && riskOf(l) !== (risk as RiskFlag)) return false
-      if (pipe === 'untriaged') {
-        if (!l.replied_at || l.pipeline_stage) return false
-      } else if (pipe !== 'all' && l.pipeline_stage !== pipe) return false
-      if (who === 'unassigned') {
-        if (l.assigned_to != null) return false
-      } else if (who !== 'all' && String(l.assigned_to) !== who) return false
-      if (genderF === 'pending') {
-        if (l.gender != null) return false
-      } else if (genderF !== 'all' && l.gender !== genderF) return false
-      if (ageF !== 'all' && ageBucketOf(l) !== (ageF as AgeBucket)) return false
-      if (followF !== 'all') {
-        const followState = followUps.get(followUpKey(l.instance_id, l.profile_url))
-        if (followUpBucket(followState) !== followF) return false
-      }
-      if (needle) {
-        const hay = `${l.full_name ?? ''} ${l.headline ?? ''} ${l.company ?? ''}`.toLowerCase()
-        if (!hay.includes(needle)) return false
-      }
-      return true
-    })
-  }, [data, inst, effCamp, stage, risk, pipe, who, genderF, ageF, followF, followUps, q])
-
-  const bucketOf = (l: Lead): Sentiment | 'unclassified' =>
-    snippets.get(leadKey(l.instance_id, l.profile_url))?.sentiment ?? 'unclassified'
-
-  // Sentiment bucket counts over the base set, restricted to replied leads inside
-  // the reply-date window but NOT by the sentiment filter itself (so the numbers
-  // don't collapse to the selected bucket) — matches the old Replies page.
-  const legacyReplyCounts = useMemo(() => {
-    const c: Record<string, number> = {}
-    let total = 0
-    const since = repliedDays > 0 ? Date.now() - repliedDays * 86_400_000 : 0
-    for (const l of baseFiltered) {
-      if (!l.replied_at) continue
-      if (repliedDays > 0 && new Date(l.replied_at).getTime() < since) continue
-      c[bucketOf(l)] = (c[bucketOf(l)] ?? 0) + 1
-      total++
-    }
-    return { c, total }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseFiltered, repliedDays, snippets])
-
-  const replyCounts = serverMode
-    ? serverPage?.replyCounts ?? { total: 0, c: {} }
-    : legacyReplyCounts
-
-  const filtered = useMemo(() => {
-    const since = repliedDays > 0 ? Date.now() - repliedDays * 86_400_000 : 0
-    const rows = baseFiltered.filter((l) => {
-      if (repliedDays > 0) {
-        if (!l.replied_at || new Date(l.replied_at).getTime() < since) return false
-      }
-      if (sent) {
-        if (!l.replied_at) return false
-        if (sent !== 'any' && bucketOf(l) !== sent) return false
-      }
-      if (intent) {
-        const level = conversationIntents.get(leadKey(l.instance_id, l.profile_url))?.highest
-        if (intent === 'none' ? !!level : level !== intent) return false
-      }
-      return true
-    })
-    rows.sort((a, b) => {
-      const av = sortKey === 'next_follow_up_date'
-        ? followUps.get(followUpKey(a.instance_id, a.profile_url))?.next_follow_up_date ?? ''
-        : a[sortKey] ?? ''
-      const bv = sortKey === 'next_follow_up_date'
-        ? followUps.get(followUpKey(b.instance_id, b.profile_url))?.next_follow_up_date ?? ''
-        : b[sortKey] ?? ''
-      if (av === bv) return 0
-      if (av === '') return 1 // nulls last regardless of direction
-      if (bv === '') return -1
-      return sortAsc ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
-    })
-    return rows
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseFiltered, repliedDays, sent, intent, snippets, conversationIntents, sortKey, sortAsc, followUps])
+  const replyCounts = serverPage?.replyCounts ?? { total: 0, c: {} }
 
   if (!data) return null
 
@@ -547,12 +437,11 @@ export function LeadsExplorer() {
   const campaignOptions = data.campaigns.filter(
     (c) => inst === 'all' || c.instance_id === inst,
   )
-  const resultCount = serverMode ? serverPage?.total ?? 0 : filtered.length
-  const allLeadCount = serverMode ? serverPage?.allTotal ?? 0 : data.leads.length
+  const resultCount = serverPage?.total ?? 0
+  const allLeadCount = serverPage?.allTotal ?? 0
   const pages = Math.max(1, Math.ceil(resultCount / PAGE_SIZE))
-  const pageRows = serverMode
-    ? (serverPage?.items ?? []).map((item) => withLeadEdits(item.lead, leadEdits, serverFetchedAt))
-    : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const pageRows = (serverPage?.items ?? []).map((item) =>
+    withLeadEdits(item.lead, leadEdits, serverFetchedAt))
 
   const dateColumns = DATE_COLUMNS.filter(
     (c) => (!c.optional || showAdded) && (showDetailColumns || !c.detail),
@@ -672,27 +561,16 @@ export function LeadsExplorer() {
   const exportCsv = async () => {
     setExporting(true)
     try {
-      let items: LeadsSearchItem[]
-      if (serverMode) {
-        items = []
-        const exportPageSize = 1_000
-        const pageCount = Math.ceil(resultCount / exportPageSize)
-        for (let exportPage = 0; exportPage < pageCount; exportPage++) {
-          const result = await fetchNeonLeadsSearchPage({
-            ...serverQuery,
-            page: exportPage,
-            pageSize: exportPageSize,
-          })
-          items.push(...result.items)
-        }
-      } else {
-        items = filtered.map((lead) => ({
-          lead,
-          reply: snippets.get(leadKey(lead.instance_id, lead.profile_url)) ?? null,
-          highestIntent:
-            conversationIntents.get(leadKey(lead.instance_id, lead.profile_url))?.highest ?? null,
-          followUp: followUps.get(followUpKey(lead.instance_id, lead.profile_url)) ?? null,
-        }))
+      const items: LeadsSearchItem[] = []
+      const exportPageSize = 1_000
+      const pageCount = Math.ceil(resultCount / exportPageSize)
+      for (let exportPage = 0; exportPage < pageCount; exportPage++) {
+        const result = await fetchNeonLeadsSearchPage({
+          ...serverQuery,
+          page: exportPage,
+          pageSize: exportPageSize,
+        })
+        items.push(...result.items)
       }
 
       downloadCsv(
@@ -1022,7 +900,7 @@ export function LeadsExplorer() {
                       const v = e.target.value
                       if (v === 'lost') setPendingLost(l)
                       else void setStage(l, v || null).then(() => {
-                        if (serverMode) setServerRefresh((value) => value + 1)
+                        setServerRefresh((value) => value + 1)
                       })
                     }}
                   >
@@ -1151,7 +1029,7 @@ export function LeadsExplorer() {
             const lead = pendingLost
             setPendingLost(null)
             void setStage(lead, 'lost', { lostReason: reason }).then(() => {
-              if (serverMode) setServerRefresh((value) => value + 1)
+              setServerRefresh((value) => value + 1)
             })
           }}
         />
