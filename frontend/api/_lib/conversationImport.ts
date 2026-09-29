@@ -1,15 +1,14 @@
 // Manual conversation import. LH2 stops capturing a thread once the SDR takes
 // it over by hand, so the ConversationDrawer's "Import history" flow lets her
-// paste the LinkedIn thread; the parsed blocks land here. Writes need the
-// service-role key (messages has no RLS write policy), reused from _lib/core.
+// paste the LinkedIn thread; the parsed blocks land here. This file validates;
+// the Neon writes in _lib/neonWrites.ts read, write and commit.
 //
 // Dedup: synced rows carry the LH2 action-RUN time as sent_at while pasted rows
 // carry the real message time, so the messages identity key never merges the
 // two copies of one logical message. We dedupe by direction + normalized body
 // within the thread instead; a block the client explicitly re-checked in the
 // preview arrives with force=true and skips that check (e.g. a legitimately
-// repeated "Thanks!"). The identity-key upsert with ignoreDuplicates backstops
-// exact re-imports.
+// repeated "Thanks!"). The identity key backstops exact re-imports.
 //
 // Milestone backfill: imported messages prove milestones LH2 never saw (an
 // inbound message = a reply happened). Only NULL milestone columns are filled —
@@ -22,13 +21,9 @@
 // Extra actions (Vercel Hobby caps this project at its current 12 function
 // files, so editing/deletion share the import dispatcher): edit_message updates
 // the body of ONE manually-imported message; { action: 'delete_message', id }
-// deletes one via
-// the delete_manual_message RPC (039), which also repairs lead milestones the
-// import backfilled from that row. Sync rows are not deletable — the RPC
-// refuses them and we 404.
+// deletes one and repairs lead milestones the import backfilled from that row.
+// Sync rows are not deletable — the delete refuses them and we 404.
 import { createHash } from 'node:crypto'
-import { db } from './core.js'
-import { deploymentWritePath } from './data/writePath.js'
 import {
   neonDeleteMessage,
   neonEditMessage,
@@ -57,11 +52,6 @@ interface ImportMessage {
   body: string
   sent_at: string // ISO UTC
   force?: boolean
-}
-
-const minIso = (msgs: ImportMessage[], direction: 'in' | 'out'): string | null => {
-  const times = msgs.filter((m) => m.direction === direction).map((m) => m.sent_at)
-  return times.length ? times.reduce((a, b) => (a < b ? a : b)) : null
 }
 
 export async function handleConversationImport(
@@ -121,112 +111,20 @@ export async function handleConversationImport(
     })
   }
 
-  // The provider split, after the payload is fully validated. `normalizeForDedup`
-  // and `md5` are passed across rather than reimplemented: the dedup rule has one
-  // definition per TS root and this session does not add a third.
-  if (deploymentWritePath() === 'neon') {
-    return neonImportConversation(req, {
-      instanceId: instance_id,
-      campaignId: campaign_id,
-      profileUrl: profile_url,
-      messages: msgs.map((m) => ({
-        direction: m.direction,
-        body: m.body,
-        sent_at: m.sent_at,
-        force: m.force === true,
-        contentHash: md5(m.body),
-      })),
-      normalize: normalizeForDedup,
-    })
-  }
-
-  const supa = db()
-
-  // The lead must exist: it anchors the messages->campaigns FK (enforced on new
-  // writes) and is the milestone-backfill target.
-  const { data: lead, error: leadErr } = await supa
-    .from('leads')
-    .select('id,instance_id,connected_at,first_message_at,replied_at')
-    .eq('campaign_id', campaign_id)
-    .eq('profile_url', profile_url)
-    .maybeSingle()
-  if (leadErr) return json({ error: leadErr.message }, 500)
-  if (!lead) return json({ error: 'unknown lead (campaign_id + profile_url)' }, 404)
-  if (lead.instance_id !== instance_id) {
-    return json({ error: 'instance_id does not match the lead' }, 400)
-  }
-
-  const { data: existing, error: exErr } = await supa
-    .from('messages')
-    .select('direction,body')
-    .eq('instance_id', instance_id)
-    .eq('profile_url', profile_url)
-  if (exErr) return json({ error: exErr.message }, 500)
-
-  const seen = new Set(
-    (existing ?? []).map((r) => `${r.direction}|${normalizeForDedup(r.body ?? '')}`),
-  )
-  const rows: Record<string, string>[] = []
-  let skipped = 0
-  for (const m of msgs) {
-    const key = `${m.direction}|${normalizeForDedup(m.body)}`
-    if (!m.force && seen.has(key)) {
-      skipped++
-      continue
-    }
-    seen.add(key) // a double-pasted block dedupes against itself within one request
-    rows.push({
-      instance_id,
-      campaign_id,
-      profile_url,
+  // `normalizeForDedup` and `md5` are passed across rather than reimplemented:
+  // the dedup rule has one definition per TS root.
+  return neonImportConversation(req, {
+    instanceId: instance_id,
+    campaignId: campaign_id,
+    profileUrl: profile_url,
+    messages: msgs.map((m) => ({
       direction: m.direction,
       body: m.body,
       sent_at: m.sent_at,
-      content_hash: md5(m.body),
-      source: 'manual',
-    })
-  }
-
-  let inserted = 0
-  if (rows.length) {
-    const { data, error } = await supa
-      .from('messages')
-      .upsert(rows, {
-        onConflict: 'instance_id,profile_url,direction,sent_at,content_hash',
-        ignoreDuplicates: true, // forced exact re-import = silent skip, not a 409
-      })
-      .select('id')
-    if (error) return json({ error: error.message }, 500)
-    inserted = data?.length ?? 0
-    skipped += rows.length - inserted
-  }
-
-  // Backfill from the FULL validated payload, not just inserted rows — patching
-  // only NULL columns is what makes this idempotent, and a fully-deduped
-  // re-import should still fill a milestone a previous partial import missed.
-  const minIn = minIso(msgs, 'in')
-  const minOut = minIso(msgs, 'out')
-  const patch: Record<string, string> = {}
-  if (!lead.replied_at && minIn) patch.replied_at = minIn
-  if (!lead.first_message_at && minOut) patch.first_message_at = minOut
-  if (!lead.connected_at) {
-    const earliest = [minIn, minOut].filter((t): t is string => !!t).sort()[0]
-    if (earliest) patch.connected_at = earliest
-  }
-
-  let milestone_error: string | undefined
-  if (Object.keys(patch).length) {
-    const { error } = await supa.from('leads').update(patch).eq('id', lead.id)
-    // Messages are already committed at this point — report, don't fail the call.
-    if (error) milestone_error = error.message
-  }
-
-  return json({
-    ok: true,
-    inserted,
-    skipped,
-    ...(Object.keys(patch).length && !milestone_error ? { milestones: patch } : {}),
-    ...(milestone_error ? { milestone_error } : {}),
+      force: m.force === true,
+      contentHash: md5(m.body),
+    })),
+    normalize: normalizeForDedup,
   })
 }
 
@@ -234,17 +132,7 @@ async function deleteMessage(id: unknown, req: Request): Promise<Response> {
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id (positive integer) is required' }, 400)
   }
-  if (deploymentWritePath() === 'neon') {
-    return neonDeleteMessage(req, { messageId: id })
-  }
-  const { data, error } = await db().rpc('delete_manual_message', { p_message_id: id })
-  if (error) return json({ error: error.message }, 500)
-  const result = data as { deleted?: boolean; milestones_recomputed?: number } | null
-  if (!result?.deleted) {
-    // Unknown id or a source='sync' row — the RPC deletes neither.
-    return json({ error: 'no manual message with that id' }, 404)
-  }
-  return json({ ok: true, deleted: id, milestones_recomputed: result.milestones_recomputed ?? 0 })
+  return neonDeleteMessage(req, { messageId: id })
 }
 
 async function editMessage(
@@ -260,21 +148,9 @@ async function editMessage(
   }
 
   const nextBody = body.trim()
-  if (deploymentWritePath() === 'neon') {
-    return neonEditMessage(req, {
-      messageId: id,
-      body: nextBody,
-      contentHash: md5(nextBody),
-    })
-  }
-  const { data, error } = await db()
-    .from('messages')
-    .update({ body: nextBody, content_hash: md5(nextBody) })
-    .eq('id', id)
-    .eq('source', 'manual')
-    .select('id')
-    .maybeSingle()
-  if (error) return json({ error: error.message }, 500)
-  if (!data) return json({ error: 'no manual message with that id' }, 404)
-  return json({ ok: true, edited: id, body: nextBody })
+  return neonEditMessage(req, {
+    messageId: id,
+    body: nextBody,
+    contentHash: md5(nextBody),
+  })
 }

@@ -4,14 +4,14 @@
 //
 // S21 added the first machine operation to this file, and S23 adds the
 // authenticated config/photo/release operations. They are dispatched at the top
-// of `handle` — before the body is read and before `guardAdmin` runs — so the
+// of `handle` — before the body is read and before the admin check runs — so the
 // human actions below are untouched, in the same order, behind the same guard,
 // with the same error text. The subjects never share a code path; they share a
 // serverless slot, which is the whole reason this file has more than one subject.
 import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
-import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import {
   AGENT_INGEST_OP,
@@ -40,7 +40,6 @@ import {
 import { readDeploymentTenantId } from './_lib/agent/tenant.js'
 import { getMachineDataStore } from './_lib/data/machineStore.js'
 import { machineStoreConfigured } from './_lib/data/neonConfig.js'
-import { deploymentWritePath } from './_lib/data/writePath.js'
 import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 60
@@ -160,28 +159,23 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: `${req.method} is not allowed` }, 405)
   }
 
-  if (deploymentWritePath() === 'neon') {
-    try {
-      const writer = await neonWriter(req)
-      if (writer.actor.role !== 'admin') {
-        throw new AuthorizationError(403, 'Admin access required')
-      }
-    } catch (error) {
-      const denial = authorizationResponse(error)
-      if (denial) return denial
-      // The database was not reached, so no membership decision was taken and
-      // the answer below would be a claim about one. Named cause, honest status.
-      const unavailable = unavailableResponse(error)
-      if (unavailable) return unavailable
-      console.error(
-        'Import authorization failed:',
-        error instanceof Error ? error.name : 'UnknownError',
-      )
-      return json({ error: 'Could not verify team access' }, 500)
+  try {
+    const writer = await neonWriter(req)
+    if (writer.actor.role !== 'admin') {
+      throw new AuthorizationError(403, 'Admin access required')
     }
-  } else {
-    const auth = await guardAdmin(req)
-    if (auth.response) return auth.response
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    console.error(
+      'Import authorization failed:',
+      error instanceof Error ? error.name : 'UnknownError',
+    )
+    return json({ error: 'Could not verify team access' }, 500)
   }
 
   const contentLength = Number(req.headers.get('content-length') ?? 0)

@@ -2,9 +2,8 @@ import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 
 import { anthropic } from '@ai-sdk/anthropic'
 import { SCHEMA_DOC, loadIcpRoster } from './_lib/core.js'
 import { buildTools } from './_lib/tools.js'
-import { authorizationResponse, guardMember } from './_lib/auth.js'
+import { authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
-import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 300
@@ -34,29 +33,23 @@ HOW TO WORK
 - Today's date: ${new Date().toISOString().slice(0, 10)}.`
 
 export async function POST(req: Request) {
-  const neon = deploymentAiPath() === 'neon'
-  if (neon) {
-    try {
-      await neonWriter(req)
-    } catch (error) {
-      const denial = authorizationResponse(error)
-      if (denial) return denial
-      // The database was not reached, so no membership decision was taken and
-      // the answer below would be a claim about one. Named cause, honest status.
-      const unavailable = unavailableResponse(error)
-      if (unavailable) return unavailable
-      console.error(
-        'Chat authorization failed:',
-        error instanceof Error ? error.name : 'UnknownError',
-      )
-      return new Response(JSON.stringify({ error: 'Could not verify team access' }), {
-        status: 500,
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-  } else {
-    const auth = await guardMember(req)
-    if (auth.response) return auth.response
+  try {
+    await neonWriter(req)
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    console.error(
+      'Chat authorization failed:',
+      error instanceof Error ? error.name : 'UnknownError',
+    )
+    return new Response(JSON.stringify({ error: 'Could not verify team access' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    })
   }
 
   const { messages }: { messages: UIMessage[] } = await req.json()
@@ -64,14 +57,8 @@ export async function POST(req: Request) {
   // Always-on ICP/hypothesis awareness (cheap: names + one-liners), so the copilot
   // doesn't need a tool call just to know what ICPs/hypotheses exist. Fetched per
   // request rather than baked into the module-level constant so a freshly-created
-  // ICP shows up immediately, not just after the next cold start.
-  //
-  // It used to read `neon ? '' : await loadIcpRoster()`, because the loader was
-  // Supabase-only and building a service-role client for optional prompt context
-  // would have been worse. The loader now reads through the AI adapter's own
-  // vocabulary on whichever provider this deployment serves, and swallows its own
-  // failures, so the preload is no longer something a provider can silently take
-  // away.
+  // ICP shows up immediately, not just after the next cold start. The loader
+  // swallows its own failures: optional prompt context never takes the chat down.
   const roster = await loadIcpRoster()
   const SYSTEM = roster
     ? `${SYSTEM_BASE}\n\n${roster}\n\nUse hypothesis_overview (or run_sql) for the funnel/keywords/personas behind any of these.`

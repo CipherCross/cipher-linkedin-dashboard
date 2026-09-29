@@ -4,9 +4,8 @@
 // grounds the AI conversation coach (/api/coach). It now also owns the Search Library
 // (saved_searches) writes and the ICP/Hypothesis layer (migration 043) via an `action`
 // dispatch — folded in here rather than new files because frontend/api is at the
-// Vercel Hobby 12-function cap. Reads happen through authenticated RLS; these
-// WRITES need the service-role key, reused from
-// /api/_lib/core.ts.
+// Vercel Hobby 12-function cap. The writes themselves live in
+// _lib/neonLibraryWrites.ts; this file validates and dispatches.
 //
 // Back-compatible: a POST with NO `action` key is the legacy playbook save
 // ({content}); a POST with action:'save_search' | 'delete_search' hits the Search
@@ -18,9 +17,8 @@
 // also share this endpoint to stay within the function cap, but require any
 // active member rather than an admin. All older paths keep the admin guard.
 //
-// Every path requires a verified application admin.
-import { db } from './_lib/core.js'
-import { AuthorizationError, authorizationResponse, guardAdmin, guardMember } from './_lib/auth.js'
+// Every other path requires a verified application admin.
+import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import { validateSearch } from './_lib/savedSearch.js'
 import {
@@ -30,7 +28,6 @@ import {
   validateIndustry,
   validatePersona,
 } from './_lib/icp.js'
-import { deploymentWritePath } from './_lib/data/writePath.js'
 import {
   neonAssignSearch,
   neonDeleteEntity,
@@ -57,12 +54,9 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   })
 
-const errCode = (e: unknown) => (e as { code?: string } | null)?.code
-
 // --- legacy: single global playbook (no `action` key) ----------------------
 
 async function savePlaybook(
-  supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
   req: Request,
 ) {
@@ -74,17 +68,7 @@ async function savePlaybook(
     return json({ error: 'playbook too large' }, 413)
   }
 
-  if (deploymentWritePath() === 'neon') {
-    return neonSavePlaybook(req, { content })
-  }
-
-  // Upsert the singleton row (id=true, enforced by the table's check constraint).
-  const { error } = await supa
-    .from('playbook')
-    .upsert({ id: true, content, updated_at: new Date().toISOString() }, { onConflict: 'id' })
-  if (error) return json({ error: error.message }, 500)
-
-  return json({ ok: true })
+  return neonSavePlaybook(req, { content })
 }
 
 // --- save_search: insert (no id) or partial-patch update (id present) ------
@@ -92,7 +76,6 @@ async function savePlaybook(
 const SEARCH_CONFLICT = 'a search with that name already exists for this platform'
 
 async function saveSearch(
-  supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
   req: Request,
 ) {
@@ -117,56 +100,18 @@ async function saveSearch(
     return json({ error: 'no fields to update' }, 400)
   }
 
-  // The provider split, after validation: `normalized` is the same patch on
-  // both paths, so a legal search has one definition.
-  if (deploymentWritePath() === 'neon') {
-    return neonSaveEntity(req, {
-      entity: 'search',
-      ...(isUpdate ? { id: id as number } : {}),
-      patch: normalized,
-      bodyKey: 'search',
-      conflictMessage: SEARCH_CONFLICT,
-    })
-  }
-
-  if (isUpdate) {
-    const { data, error } = await supa
-      .from('saved_searches')
-      .update(normalized)
-      .eq('id', id)
-      .select()
-      .single()
-    if (error) {
-      if (errCode(error) === '23505') {
-        return json({ error: SEARCH_CONFLICT }, 409)
-      }
-      // .single() with no matched row -> PGRST116; the id doesn't exist.
-      if (errCode(error) === 'PGRST116') {
-        return json({ error: 'unknown search id' }, 404)
-      }
-      return json({ error: error.message }, 500)
-    }
-    return json({ ok: true, search: data })
-  }
-
-  const { data, error } = await supa
-    .from('saved_searches')
-    .insert(normalized)
-    .select()
-    .single()
-  if (error) {
-    if (errCode(error) === '23505') {
-      return json({ error: 'a search with that name already exists for this platform' }, 409)
-    }
-    return json({ error: error.message }, 500)
-  }
-  return json({ ok: true, search: data })
+  return neonSaveEntity(req, {
+    entity: 'search',
+    ...(isUpdate ? { id: id as number } : {}),
+    patch: normalized,
+    bodyKey: 'search',
+    conflictMessage: SEARCH_CONFLICT,
+  })
 }
 
 // --- delete_search: hard delete (page-only; NOT an AI tool) ----------------
 
 async function deleteSearch(
-  supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
   req: Request,
 ) {
@@ -174,33 +119,22 @@ async function deleteSearch(
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id must be a positive integer' }, 400)
   }
-  if (deploymentWritePath() === 'neon') {
-    return neonDeleteEntity(req, { entity: 'search', id })
-  }
-  const { data, error } = await supa
-    .from('saved_searches')
-    .delete()
-    .eq('id', id)
-    .select('id')
-  if (error) return json({ error: error.message }, 500)
-  if (!data?.length) return json({ error: 'unknown search id' }, 404)
-  return json({ ok: true })
+  return neonDeleteEntity(req, { entity: 'search', id })
 }
 
 // --- ICP / Hypothesis layer (migration 043) ---------------------------------
 // Four entities (icps, icp_personas, icp_industries, hypotheses) share the same
 // insert-or-partial-patch-update shape as save_search above, so a generic pair of
 // helpers covers all of them instead of four near-identical copies. save_search /
-// delete_search above are left untouched (already shipped, has its own
-// platform-scoped conflict message).
+// delete_search above keep their own platform-scoped conflict message.
 
 type EntityValidator<T> = (input: unknown, requireCore: boolean) => T | string
 
-/** Insert (no id) or partial-patch update (id present) one row of `table`,
- *  keyed by `bodyKey` in the request payload (e.g. payload.icp). */
+/** Insert (no id) or partial-patch update (id present) one row of `entity`,
+ *  keyed by `bodyKey` in the request payload (e.g. payload.icp). A relation may
+ *  not be a run-time string behind an allowlist entry, so the closed union
+ *  selects one of fifteen fixed statements. */
 async function saveEntity<T extends Record<string, unknown>>(
-  supa: ReturnType<typeof db>,
-  table: string,
   entity: LibraryEntity,
   bodyKey: string,
   payload: Record<string, unknown>,
@@ -227,56 +161,18 @@ async function saveEntity<T extends Record<string, unknown>>(
     return json({ error: 'no fields to update' }, 400)
   }
 
-  // The provider split. `entity` replaces `table` on the Neon side: a relation
-  // may not be a run-time string behind an allowlist entry, so the closed union
-  // selects one of fifteen fixed statements instead.
-  if (deploymentWritePath() === 'neon') {
-    return neonSaveEntity(req, {
-      entity,
-      ...(isUpdate ? { id: id as number } : {}),
-      patch: normalized,
-      bodyKey,
-      conflictMessage,
-    })
-  }
-
-  if (isUpdate) {
-    // Widen to Record<string, unknown> — supabase-js's .update<T>() runs an
-    // excess-property check against its own inferred generic, which conflicts
-    // with `normalized` still carrying saveEntity's generic T here.
-    const { data, error } = await supa
-      .from(table)
-      .update(normalized as Record<string, unknown>)
-      .eq('id', id)
-      .select()
-      .single()
-    if (error) {
-      if (errCode(error) === '23505') return json({ error: conflictMessage }, 409)
-      if (errCode(error) === '23503') return json({ error: 'a referenced row does not exist' }, 400)
-      if (errCode(error) === 'PGRST116') return json({ error: `unknown ${bodyKey} id` }, 404)
-      return json({ error: error.message }, 500)
-    }
-    return json({ ok: true, [bodyKey]: data })
-  }
-
-  const { data, error } = await supa
-    .from(table)
-    .insert(normalized as Record<string, unknown>)
-    .select()
-    .single()
-  if (error) {
-    if (errCode(error) === '23505') return json({ error: conflictMessage }, 409)
-    if (errCode(error) === '23503') return json({ error: 'a referenced row does not exist' }, 400)
-    return json({ error: error.message }, 500)
-  }
-  return json({ ok: true, [bodyKey]: data })
+  return neonSaveEntity(req, {
+    entity,
+    ...(isUpdate ? { id: id as number } : {}),
+    patch: normalized,
+    bodyKey,
+    conflictMessage,
+  })
 }
 
-/** Hard delete one row of `table` by id (cascades handle child rows —
+/** Hard delete one row of `entity` by id (cascades handle child rows —
  *  icp_personas/icp_industries/hypothesis_campaigns all `on delete cascade`). */
 async function deleteEntity(
-  supa: ReturnType<typeof db>,
-  table: string,
   entity: LibraryEntity,
   payload: Record<string, unknown>,
   req: Request,
@@ -285,20 +181,12 @@ async function deleteEntity(
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     return json({ error: 'id must be a positive integer' }, 400)
   }
-  if (deploymentWritePath() === 'neon') {
-    return neonDeleteEntity(req, { entity, id })
-  }
-  const { data, error } = await supa.from(table).delete().eq('id', id).select('id')
-  if (error) return json({ error: error.message }, 500)
-  if (!data?.length) return json({ error: `unknown ${table} id` }, 404)
-  return json({ ok: true })
+  return neonDeleteEntity(req, { entity, id })
 }
 
-/** Replace a hypothesis's campaign set atomically via the set_hypothesis_campaigns
- *  RPC (migration 043) — a plain function, not a supabase-js multi-call sequence,
- *  so a campaign can't be left half-migrated between hypotheses. */
+/** Replace a hypothesis's campaign set atomically, so a campaign can't be left
+ *  half-migrated between hypotheses. */
 async function setHypothesisCampaigns(
-  supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
   req: Request,
 ): Promise<Response> {
@@ -309,27 +197,11 @@ async function setHypothesisCampaigns(
   const campaignIds = validateCampaignIds(payload.campaign_ids)
   if (typeof campaignIds === 'string') return json({ error: campaignIds }, 400)
 
-  if (deploymentWritePath() === 'neon') {
-    return neonSetHypothesisCampaigns(req, { hypothesisId: hypothesis_id, campaignIds })
-  }
-
-  const { error } = await supa.rpc('set_hypothesis_campaigns', {
-    p_hypothesis_id: hypothesis_id,
-    p_campaign_ids: campaignIds,
-  })
-  if (error) {
-    if (errCode(error) === '23503') return json({ error: 'one or more campaign_ids do not exist' }, 400)
-    if (error.message?.includes('unknown hypothesis id')) {
-      return json({ error: 'unknown hypothesis id' }, 404)
-    }
-    return json({ error: error.message }, 500)
-  }
-  return json({ ok: true })
+  return neonSetHypothesisCampaigns(req, { hypothesisId: hypothesis_id, campaignIds })
 }
 
 /** Set or clear which hypothesis a saved search executes (saved_searches.hypothesis_id). */
 async function assignSearch(
-  supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
   req: Request,
 ): Promise<Response> {
@@ -344,25 +216,10 @@ async function assignSearch(
   ) {
     return json({ error: 'hypothesis_id must be a positive integer or null' }, 400)
   }
-  if (deploymentWritePath() === 'neon') {
-    return neonAssignSearch(req, { searchId: search_id, hypothesisId: hypothesis_id })
-  }
-  const { data, error } = await supa
-    .from('saved_searches')
-    .update({ hypothesis_id })
-    .eq('id', search_id)
-    .select()
-    .single()
-  if (error) {
-    if (errCode(error) === '23503') return json({ error: 'unknown hypothesis id' }, 400)
-    if (errCode(error) === 'PGRST116') return json({ error: 'unknown search id' }, 404)
-    return json({ error: error.message }, 500)
-  }
-  return json({ ok: true, search: data })
+  return neonAssignSearch(req, { searchId: search_id, hypothesisId: hypothesis_id })
 }
 
 async function saveCampaignContext(
-  supa: ReturnType<typeof db>,
   payload: Record<string, unknown>,
   req: Request,
 ): Promise<Response> {
@@ -382,32 +239,10 @@ async function saveCampaignContext(
     )
   }
 
-  if (deploymentWritePath() === 'neon') {
-    return neonSaveCampaignContext(req, { campaignId, context })
-  }
-
-  const updatedAt = new Date().toISOString()
-  const { data, error } = await supa
-    .from('campaigns')
-    .update({
-      briefing_context: context || null,
-      briefing_context_updated_at: updatedAt,
-    })
-    .eq('id', campaignId)
-    .select('id,briefing_context,briefing_context_updated_at')
-  if (error) return json({ error: error.message }, 500)
-  if (!data?.length) return json({ error: 'unknown campaign_id' }, 404)
-
-  return json({
-    ok: true,
-    campaign_id: data[0].id,
-    briefing_context: data[0].briefing_context,
-    briefing_context_updated_at: data[0].briefing_context_updated_at,
-  })
+  return neonSaveCampaignContext(req, { campaignId, context })
 }
 
 async function handle(req: Request): Promise<Response> {
-  const neon = deploymentWritePath() === 'neon'
   // Sequence Builder shares this endpoint to stay within the Vercel Hobby
   // function cap, but unlike the older strategy libraries it is a workspace for
   // every active member. Peek through a cloned body so the existing admin paths
@@ -422,46 +257,29 @@ async function handle(req: Request): Promise<Response> {
     // The canonical parse below preserves the existing invalid-JSON response.
   }
   if (isSequenceAction(sequencePayload?.action)) {
-    if (neon) return handleSequenceAction(req, sequencePayload as Record<string, unknown>)
-    const auth = await guardMember(req)
-    if (auth.response) return auth.response
-    return json(
-      {
-        error: 'Sequence Builder requires the Neon data path.',
-        code: 'NEON_PATH_REQUIRED',
-      },
-      503,
-    )
+    return handleSequenceAction(req, sequencePayload as Record<string, unknown>)
   }
   if (isSequencePublishAction(sequencePayload?.action)) {
-    if (neon) return handleSequencePublishAction(req, sequencePayload as Record<string, unknown>)
-    const auth = await guardAdmin(req)
-    if (auth.response) return auth.response
-    return json({ error: 'Sequence publishing requires the Neon data path.', code: 'NEON_PATH_REQUIRED' }, 503)
+    return handleSequencePublishAction(req, sequencePayload as Record<string, unknown>)
   }
 
-  if (neon) {
-    try {
-      const writer = await neonWriter(req)
-      if (writer.actor.role !== 'admin') {
-        throw new AuthorizationError(403, 'Admin access required')
-      }
-    } catch (error) {
-      const denial = authorizationResponse(error)
-      if (denial) return denial
-      // The database was not reached, so no membership decision was taken and
-      // the answer below would be a claim about one. Named cause, honest status.
-      const unavailable = unavailableResponse(error)
-      if (unavailable) return unavailable
-      console.error(
-        'Playbook authorization failed:',
-        error instanceof Error ? error.name : 'UnknownError',
-      )
-      return json({ error: 'Could not verify team access' }, 500)
+  try {
+    const writer = await neonWriter(req)
+    if (writer.actor.role !== 'admin') {
+      throw new AuthorizationError(403, 'Admin access required')
     }
-  } else {
-    const auth = await guardAdmin(req)
-    if (auth.response) return auth.response
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    console.error(
+      'Playbook authorization failed:',
+      error instanceof Error ? error.name : 'UnknownError',
+    )
+    return json({ error: 'Could not verify team access' }, 500)
   }
 
   let payload: Record<string, unknown>
@@ -471,59 +289,54 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: 'invalid JSON body' }, 400)
   }
 
-  // Every Neon branch below authenticates and re-checks admin against the
-  // database it writes before it touches this argument. Do not construct the
-  // legacy service-role client on that path.
-  const supa = neon ? (null as unknown as ReturnType<typeof db>) : db()
-
   // Route on `action`. Absent action => the legacy playbook save (unchanged).
   const action = (payload as { action?: unknown } | null)?.action
   if (typeof action === 'string') {
     switch (action) {
       case 'save_search':
-        return saveSearch(supa, payload, req)
+        return saveSearch(payload, req)
       case 'delete_search':
-        return deleteSearch(supa, payload, req)
+        return deleteSearch(payload, req)
       case 'save_icp':
         return saveEntity(
-          supa, 'icps', 'icp', 'icp', payload, validateIcp,
+          'icp', 'icp', payload, validateIcp,
           'an ICP with that name already exists', req,
         )
       case 'delete_icp':
-        return deleteEntity(supa, 'icps', 'icp', payload, req)
+        return deleteEntity('icp', payload, req)
       case 'save_icp_persona':
         return saveEntity(
-          supa, 'icp_personas', 'persona', 'persona', payload, validatePersona,
+          'persona', 'persona', payload, validatePersona,
           'a persona of that kind already exists for this ICP', req,
         )
       case 'delete_icp_persona':
-        return deleteEntity(supa, 'icp_personas', 'persona', payload, req)
+        return deleteEntity('persona', payload, req)
       case 'save_icp_industry':
         return saveEntity(
-          supa, 'icp_industries', 'industry', 'industry', payload, validateIndustry,
+          'industry', 'industry', payload, validateIndustry,
           'an industry with that name already exists for this ICP', req,
         )
       case 'delete_icp_industry':
-        return deleteEntity(supa, 'icp_industries', 'industry', payload, req)
+        return deleteEntity('industry', payload, req)
       case 'save_hypothesis':
         return saveEntity(
-          supa, 'hypotheses', 'hypothesis', 'hypothesis', payload, validateHypothesis,
+          'hypothesis', 'hypothesis', payload, validateHypothesis,
           'a hypothesis with that name already exists', req,
         )
       case 'delete_hypothesis':
-        return deleteEntity(supa, 'hypotheses', 'hypothesis', payload, req)
+        return deleteEntity('hypothesis', payload, req)
       case 'set_hypothesis_campaigns':
-        return setHypothesisCampaigns(supa, payload, req)
+        return setHypothesisCampaigns(payload, req)
       case 'assign_search':
-        return assignSearch(supa, payload, req)
+        return assignSearch(payload, req)
       case 'save_campaign_context':
-        return saveCampaignContext(supa, payload, req)
+        return saveCampaignContext(payload, req)
       default:
         return json({ error: 'unknown action' }, 400)
     }
   }
 
-  return savePlaybook(supa, payload, req)
+  return savePlaybook(payload, req)
 }
 
 export const POST = (req: Request) => handle(req)

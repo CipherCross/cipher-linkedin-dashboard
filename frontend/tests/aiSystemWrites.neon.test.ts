@@ -445,36 +445,26 @@ describe('step 007 admits the system statements, and the rows really change', ()
     })
   })
 
-  it('writes through the MCP save_search surface end to end, on the flagged path', async () => {
-    // The flag is overridden inside this process only, for this test only —
-    // never in a deployment, and never on disk.
-    const { NEON_AI_PATH_ENV } = await import('../api/_lib/data/aiPath.js')
+  it('writes through the MCP save_search surface end to end', async () => {
     const { executeSaveSearchAsSystem } = await import('../api/_lib/tools.js')
-    const previous = process.env[NEON_AI_PATH_ENV]
-    process.env[NEON_AI_PATH_ENV] = 'neon'
-    try {
-      const result = await executeSaveSearchAsSystem({
-        name: 'S15 MCP search',
-        platform: SYSTEM_SEARCH_PLATFORM,
-        boolean_query: '("head of" OR cto) AND saas',
-      })
-      // A string here is the tool's refusal text, which the model would read.
-      expect(typeof result).toBe('object')
-      expect((result as { ok: true }).ok).toBe(true)
+    const result = await executeSaveSearchAsSystem({
+      name: 'S15 MCP search',
+      platform: SYSTEM_SEARCH_PLATFORM,
+      boolean_query: '("head of" OR cto) AND saas',
+    })
+    // A string here is the tool's refusal text, which the model would read.
+    expect(typeof result).toBe('object')
+    expect((result as { ok: true }).ok).toBe(true)
 
-      const rows = await outOfBand((client) =>
-        client.query(
-          `SELECT name, boolean_query FROM public.saved_searches
-            WHERE platform = $1 AND name = $2`,
-          [SYSTEM_SEARCH_PLATFORM, 'S15 MCP search'],
-        ),
-      )
-      expect(rows.rows).toHaveLength(1)
-      expect(rows.rows[0]?.boolean_query).toBe('("head of" OR cto) AND saas')
-    } finally {
-      if (previous === undefined) delete process.env[NEON_AI_PATH_ENV]
-      else process.env[NEON_AI_PATH_ENV] = previous
-    }
+    const rows = await outOfBand((client) =>
+      client.query(
+        `SELECT name, boolean_query FROM public.saved_searches
+          WHERE platform = $1 AND name = $2`,
+        [SYSTEM_SEARCH_PLATFORM, 'S15 MCP search'],
+      ),
+    )
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0]?.boolean_query).toBe('("head of" OR cto) AND saas')
   })
 })
 

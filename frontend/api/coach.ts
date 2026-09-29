@@ -14,21 +14,15 @@
 // Requires an active dashboard member. Mode A short-circuits on an unchanged
 // thread (last_msg_marker); Mode B is bounded and manual.
 //
-// ## The provider split
-//
-// Every caller is a signed-in human, so this whole handler is portable — the
-// AI path's blocked half is cron, and the coach has none. `deploymentAiPath()`
-// chooses the data layer once per request: the Supabase service-role client,
-// or the shared Neon runtime store under the caller's resolved actor. The two
-// implementations share everything above data access — the prompts, the model
-// calls, the marker math, the response bodies — through the `CoachData` seam.
+// Every caller is a signed-in human, so the handler runs on the shared Neon
+// runtime store under the caller's resolved actor. Data access sits behind the
+// `CoachData` seam; the prompts, the model calls, the marker math and the
+// response bodies live above it.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
-import { db } from './_lib/core.js'
-import { guardMember, AuthorizationError, authorizationResponse } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
-import { deploymentAiPath } from './_lib/data/aiPath.js'
 import {
   DataStoreContractError,
   MAX_PAGE_SIZE,
@@ -140,8 +134,6 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   })
 
-type Sb = ReturnType<typeof db>
-
 /** Inject the global playbook (Markdown) + this conversation's ICP (if its campaign
  *  is assigned to a hypothesis) into the system prompt. Either piece is optional —
  *  the coach stays generic where one or both are unconfigured. */
@@ -199,8 +191,8 @@ const markerOf = (thread: Msg[]) => {
 }
 
 // ---------------------------------------------------------------------------
-// The data seam. Everything above is provider-neutral; everything below it is
-// one of two implementations of the same reads and writes.
+// The data seam: the reads and writes the coaching flows need, and their Neon
+// implementation.
 // ---------------------------------------------------------------------------
 
 interface ExistingCoaching {
@@ -242,8 +234,7 @@ interface CoachData {
   }): Promise<void>
 }
 
-/** This conversation's ICP text, from rows both providers return in the same
- *  shape. Shared by both implementations. */
+/** This conversation's ICP text. */
 function renderIcpText(
   hypothesisName: string,
   icp: IcpDetailRow,
@@ -258,117 +249,6 @@ function renderIcpText(
     lines.push(`Buyer persona (${p.kind}): ${titles}${p.background ? ` — ${p.background}` : ''}`)
   }
   return lines.join('\n')
-}
-
-/** The Supabase implementation: the service-role client, exactly as before the
- *  provider split. */
-function supabaseCoachData(sb: Sb): CoachData {
-  return {
-    async loadThread(instance_id, profile_url) {
-      const { data } = await sb
-        .from('messages')
-        .select('direction,body,sent_at,source')
-        .eq('instance_id', instance_id)
-        .eq('profile_url', profile_url)
-        .order('sent_at', { ascending: true })
-      return (data ?? []) as Msg[]
-    },
-    async loadExisting(instance_id, profile_url) {
-      const { data } = await sb
-        .from('conversation_coaching')
-        .select('next_action,issues,tips,summary,last_msg_marker,coached_at,model')
-        .eq('instance_id', instance_id)
-        .eq('profile_url', profile_url)
-        .maybeSingle()
-      return (data as ExistingCoaching | null) ?? null
-    },
-    async saveCoaching(row) {
-      await sb.from('conversation_coaching').upsert(row, { onConflict: 'instance_id,profile_url' })
-    },
-    async loadPlaybook() {
-      const { data } = await sb.from('playbook').select('content').maybeSingle()
-      return ((data?.content as string | undefined) ?? '').trim()
-    },
-    /** This conversation's ICP, resolved campaign -> hypothesis -> ICP (migration 043).
-     *  Returns '' when the campaign isn't assigned to a hypothesis, the hypothesis has no
-     *  ICP, or campaign_id wasn't provided — coaching stays generic in all those cases.
-     *  Compact by design (personas + purchase triggers, not the full keyword lists —
-     *  those are sourcing-recipe data, not coaching-relevant). */
-    async loadIcpForCampaign(campaign_id) {
-      if (!campaign_id) return ''
-      const { data: hc } = await sb
-        .from('hypothesis_campaigns')
-        .select('hypothesis_id')
-        .eq('campaign_id', campaign_id)
-        .maybeSingle()
-      if (!hc) return ''
-
-      const { data: hyp } = await sb
-        .from('hypotheses')
-        .select('name,icp_id')
-        .eq('id', (hc as { hypothesis_id: number }).hypothesis_id)
-        .maybeSingle()
-      const icpId = (hyp as { name: string; icp_id: number | null } | null)?.icp_id
-      if (!icpId) return ''
-
-      const [{ data: icp }, { data: personas }] = await Promise.all([
-        sb
-          .from('icps')
-          .select('name,main_product,core_sphere,secondary_sphere,purchase_triggers')
-          .eq('id', icpId)
-          .maybeSingle(),
-        sb
-          .from('icp_personas')
-          .select('kind,job_titles,background')
-          .eq('icp_id', icpId)
-          .order('sort'),
-      ])
-      if (!icp) return ''
-      const i = icp as {
-        name: string
-        main_product: string | null
-        core_sphere: string | null
-        secondary_sphere: string | null
-        purchase_triggers: string[] | null
-      }
-      return renderIcpText((hyp as { name: string }).name, i, (personas ?? []) as CoachIcpPersonaRow[])
-    },
-    /** Profiles whose newest message is inbound — the prospect is waiting on us.
-     *  Paginated so a busy account beyond ~5000 messages isn't silently truncated
-     *  (which would drop actionable threads from the digest). */
-    async actionableProfiles(instance_id) {
-      const PAGE = 1000
-      const latestDir = new Map<string, string>()
-      for (let from = 0; ; from += PAGE) {
-        const { data } = await sb
-          .from('messages')
-          .select('profile_url,direction,sent_at')
-          .eq('instance_id', instance_id)
-          .order('sent_at', { ascending: false })
-          .range(from, from + PAGE - 1)
-        const rows = (data ?? []) as { profile_url: string; direction: string }[]
-        for (const m of rows) {
-          if (!latestDir.has(m.profile_url)) latestDir.set(m.profile_url, m.direction)
-        }
-        if (rows.length < PAGE) break
-      }
-      return [...latestDir.entries()].filter(([, d]) => d === 'in').map(([p]) => p)
-    },
-    async loadIssues(instance_id) {
-      const { data } = await sb
-        .from('conversation_coaching')
-        .select('issues')
-        .eq('instance_id', instance_id)
-      return ((data ?? []) as { issues: unknown[] }[]).map((r) => ({
-        issues: Array.isArray(r.issues) ? r.issues : [],
-      }))
-    },
-    async saveDigest(row) {
-      await sb
-        .from('coaching_digest')
-        .upsert(row, { onConflict: 'instance_id' })
-    },
-  }
 }
 
 /** The Neon implementation: the shared runtime store under the caller's
@@ -472,8 +352,8 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
       return renderIcpText(hyp.name, icp, personasPage.items)
     },
     async actionableProfiles(instance_id) {
-      // Same computation as the Supabase path: newest-first walk, keep each
-      // profile's first (newest) direction, keep the inbound ones.
+      // Newest-first walk, keep each profile's first (newest) direction, keep
+      // the inbound ones.
       const rows = await allPages<{ profile_url: string; direction: string }>(
         AI_WRITE_OPERATIONS.coachActionableProfiles,
         { instanceId: instance_id },
@@ -507,7 +387,7 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
 }
 
 // ---------------------------------------------------------------------------
-// The coaching flows, provider-neutral over the seam.
+// The coaching flows, over the seam.
 // ---------------------------------------------------------------------------
 
 interface CoachingOut {
@@ -645,10 +525,9 @@ function safeErrorLabel(error: unknown): string {
   return 'UnknownError'
 }
 
-/** The Neon branch of this handler. The endpoint's `guardMember` already
- *  authenticated against Supabase; the actor is resolved AGAINST NEON, because
- *  the database being written is the only place the membership can be checked
- *  without a race — the same argument `neonWrites.ts` makes. */
+/** Resolve the actor against the database being written — the only place the
+ *  membership can be checked without a race, the same argument `neonWrites.ts`
+ *  makes — then coach. */
 async function coachOnNeon(
   req: Request,
   body: {
@@ -705,12 +584,6 @@ async function coachOnNeon(
 }
 
 async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response> {
-  const neon = deploymentAiPath() === 'neon'
-  if (!neon) {
-    const auth = await guardMember(req)
-    if (auth.response) return auth.response
-  }
-
   let body: {
     instance_id?: unknown
     profile_url?: unknown
@@ -729,32 +602,7 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
     return json({ error: 'instance_id (string) is required' }, 400)
   }
 
-  // The provider decision, taken once per request. The AI path flag moves the
-  // whole handler: every call here has a human actor, so none of it is blocked
-  // on the system write path.
-  if (neon) {
-    return coachOnNeon(req, { ...body, instance_id }, deps)
-  }
-
-  const sb = db()
-  const data = supabaseCoachData(sb)
-
-  if (body.mode === 'digest') {
-    return digest(data, instance_id)
-  }
-
-  const profile_url = body.profile_url
-  if (typeof profile_url !== 'string' || !profile_url) {
-    return json({ error: 'profile_url (string) is required' }, 400)
-  }
-  // Optional: this lead's campaign, so coaching can be grounded in its ICP (if the
-  // campaign is assigned to a hypothesis) — see loadIcpForCampaign.
-  const campaign_id = typeof body.campaign_id === 'string' ? body.campaign_id : null
-
-  const playbook = await data.loadPlaybook()
-  const out = await coachConversation(data, instance_id, profile_url, playbook, body.force === true, campaign_id)
-  if (!out) return json({ error: 'no messages in this conversation' }, 404)
-  return json(out)
+  return coachOnNeon(req, { ...body, instance_id }, deps)
 }
 
 export const POST = (req: Request) => handle(req)

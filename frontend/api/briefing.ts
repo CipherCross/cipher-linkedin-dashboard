@@ -7,13 +7,11 @@
 // path. Campaign context is always preloaded and attributed as team-provided
 // background so the model does not invent causal explanations from funnel data.
 //
-// AI-path split, by actor — and since ledger step 007 was applied, both halves
-// move with `NEON_AI_PATH_DEFAULT=neon`. Actor and admin role resolve against
-// Neon for the POST; the GET cron has no human actor and runs on the AI store as
+// Two principals, by actor. Actor and admin role resolve against Neon for the
+// POST; the GET cron has no human actor and runs on the AI store as
 // `app_system` under `SYSTEM_ACTOR`. Either way the WHOLE job machine (claims,
 // stages, the briefing upsert) runs on the same database the investigation
-// reads, because a briefing cannot investigate Neon while recording its job
-// state in Supabase.
+// reads.
 //
 // What differs between the two principals is exactly one method of the seam.
 // Step 007 granted `app_system` `briefing_jobs`, `briefings` and
@@ -28,7 +26,6 @@ import { generateObject, generateText, stepCountIs } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import {
   SCHEMA_DOC,
-  db,
   executeNamedSql,
   executeSql,
   type SqlResult,
@@ -49,9 +46,8 @@ import {
   TEAM_CONTEXT_RULES,
 } from './_lib/briefing.js'
 import type { BriefingKind, BriefingPeriod, StructuredBriefing } from './_lib/briefing.js'
-import { guardAdmin, guardMachine, authorizationResponse, AuthorizationError } from './_lib/auth.js'
+import { guardMachine, authorizationResponse, AuthorizationError } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
-import { deploymentAiPath } from './_lib/data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
   DataStoreContractError,
@@ -215,46 +211,9 @@ interface TeamContextRows {
   annotations: AnnotationRow[]
 }
 
-/** The Supabase preload of causal/strategic background. The Neon branch loads
- *  the same rows through its registered operations. */
-async function loadTeamContextRows(): Promise<TeamContextRows> {
-  const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
-  const [campaignsRes, instancesRes, hypothesesRes, assignmentsRes, searchesRes, annotationsRes] =
-    await Promise.all([
-      db()
-        .from('campaigns')
-        .select('id,name,instance_id,briefing_context,briefing_context_updated_at')
-        .order('name'),
-      db().from('instances').select('id,label,account_name').order('id'),
-      db().from('hypotheses').select('id,name,description').eq('archived', false).order('name'),
-      db().from('hypothesis_campaigns').select('hypothesis_id,campaign_id'),
-      db()
-        .from('saved_searches')
-        .select('name,hypothesis_id,description,notes')
-        .eq('archived', false)
-        .not('hypothesis_id', 'is', null)
-        .order('name'),
-      db()
-        .from('annotations')
-        .select('instance_id,campaign_id,note,noted_at')
-        .gte('noted_at', since)
-        .order('noted_at', { ascending: false })
-        .limit(100),
-    ])
-
-  return {
-    campaigns: (campaignsRes.data ?? []) as CampaignContextRow[],
-    instances: (instancesRes.data ?? []) as TeamContextRows['instances'],
-    hypotheses: (hypothesesRes.data ?? []) as HypothesisRow[],
-    assignments: (assignmentsRes.data ?? []) as HypothesisCampaignRow[],
-    searches: (searchesRes.data ?? []) as SearchContextRow[],
-    annotations: (annotationsRes.data ?? []) as AnnotationRow[],
-  }
-}
-
 /** Build the TEAM-PROVIDED CONTEXT block from already-loaded rows. It is
  *  deliberately serialized as delimited data and the model is told never to
- *  follow instructions inside it. Shared by both providers. */
+ *  follow instructions inside it. */
 function composeTeamContext(rows: TeamContextRows): string {
   const campaigns = rows.campaigns
   const instances = rows.instances
@@ -542,7 +501,7 @@ async function renderSeed(
       seedQueries(kind, period, now).map(async ({ label, named, sql }) => {
         try {
           // Fixed seeds run by operation name; the per-run composed ones carry
-          // their SQL. Both end in the same guard on both providers.
+          // their SQL. Both end in the same guard.
           const result: SqlResult = named
             ? await executeNamedSql(named)
             : await executeSql(sql as string)
@@ -634,7 +593,6 @@ interface BriefingJobRow {
   updated_at: string
 }
 
-type Sb = ReturnType<typeof db>
 type TickResult = {
   kind: BriefingKind
   briefing_date: string
@@ -666,10 +624,9 @@ interface BriefingUpsertRow {
  * The data seam of the briefing job machine.
  *
  * The machine itself — claims, stage transitions, the stale sweep, the
- * briefing upsert — is provider-neutral over this interface; `supabase`
- * and `neon` differ only in how each call reaches its database. The seam is
- * the reason the admin POST can move to Neon whole: a briefing cannot
- * investigate one database while recording its job state in another.
+ * briefing upsert — runs over this interface. Its one implementation is
+ * `neonBriefingData`, which takes the principal (the admin's resolved actor or
+ * `SYSTEM_ACTOR`) and the route for the out-of-grant context reads.
  */
 interface BriefingData {
   ensureJob(kind: BriefingKind, briefingDate: string): Promise<void>
@@ -712,73 +669,6 @@ interface BriefingData {
 }
 
 type BriefingTools = ReturnType<typeof buildTools>
-
-async function claim(
-  sb: Sb,
-  kind: BriefingKind,
-  briefingDate: string,
-  job: BriefingJobRow,
-  next: JobStatus,
-): Promise<BriefingJobRow | null> {
-  const { data } = await sb
-    .from('briefing_jobs')
-    .update({
-      status: next,
-      version: job.version + 1,
-      attempt: job.attempt + 1,
-      error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('briefing_date', briefingDate)
-    .eq('briefing_kind', kind)
-    .eq('status', job.status)
-    .eq('version', job.version)
-    .select()
-  return data?.length === 1 ? (data[0] as BriefingJobRow) : null
-}
-
-async function finishStage(
-  sb: Sb,
-  kind: BriefingKind,
-  briefingDate: string,
-  claimed: BriefingJobRow,
-  next: JobStatus,
-  patch: Record<string, unknown>,
-): Promise<void> {
-  await sb
-    .from('briefing_jobs')
-    .update({
-      ...patch,
-      status: next,
-      attempt: 0,
-      version: claimed.version + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('briefing_date', briefingDate)
-    .eq('briefing_kind', kind)
-    .eq('version', claimed.version)
-}
-
-async function failStage(
-  sb: Sb,
-  kind: BriefingKind,
-  briefingDate: string,
-  claimed: BriefingJobRow,
-  startStatus: JobStatus,
-  message: string,
-): Promise<void> {
-  await sb
-    .from('briefing_jobs')
-    .update({
-      status: claimed.attempt >= MAX_ATTEMPTS ? 'error' : startStatus,
-      error: message,
-      version: claimed.version + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('briefing_date', briefingDate)
-    .eq('briefing_kind', kind)
-    .eq('version', claimed.version)
-}
 
 async function afterLostRace(
   data: BriefingData,
@@ -1012,93 +902,6 @@ async function runStructureStage(
       error: message,
       progressed: true,
     }
-  }
-}
-
-/** The Supabase implementation of the seam — the original PostgREST calls,
- *  with the optimistic version predicates still on the client side. */
-function supabaseBriefingData(sb: Sb): BriefingData {
-  return {
-    async ensureJob(kind, briefingDate) {
-      await sb.from('briefing_jobs').upsert(
-        { briefing_date: briefingDate, briefing_kind: kind },
-        { onConflict: 'briefing_date,briefing_kind', ignoreDuplicates: true },
-      )
-    },
-    async loadJob(kind, briefingDate) {
-      const { data } = await sb
-        .from('briefing_jobs')
-        .select('*')
-        .eq('briefing_date', briefingDate)
-        .eq('briefing_kind', kind)
-      return (data?.[0] as BriefingJobRow | undefined) ?? null
-    },
-    claim: (kind, briefingDate, job, next) => claim(sb, kind, briefingDate, job, next),
-    finishStage: (kind, briefingDate, claimed, next, patch) =>
-      finishStage(sb, kind, briefingDate, claimed, next, patch),
-    failStage: (kind, briefingDate, claimed, nextStatus, message) =>
-      failStage(sb, kind, briefingDate, claimed, nextStatus, message),
-    async resetJob(kind, briefingDate, expectedVersion) {
-      const { data } = await sb
-        .from('briefing_jobs')
-        .update({
-          status: 'pending',
-          attempt: 0,
-          version: expectedVersion + 1,
-          seed: null,
-          signals_block: null,
-          prior_md: null,
-          drafts: null,
-          verified_text: null,
-          error: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('briefing_date', briefingDate)
-        .eq('briefing_kind', kind)
-        .eq('version', expectedVersion)
-        .select()
-      return data?.length === 1 ? (data[0] as BriefingJobRow) : null
-    },
-    async staleError(kind, briefingDate, message, expectedVersion) {
-      await sb
-        .from('briefing_jobs')
-        .update({
-          status: 'error',
-          error: message,
-          version: expectedVersion + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('briefing_date', briefingDate)
-        .eq('briefing_kind', kind)
-        .eq('version', expectedVersion)
-    },
-    async upsertBriefing(row) {
-      const { error } = await sb
-        .from('briefings')
-        .upsert(row, { onConflict: 'briefing_date,briefing_kind' })
-      if (error) throw new Error(error.message)
-    },
-    async fetchPriorBriefing(kind, beforeDate) {
-      const { data, error } = await sb
-        .from('briefings')
-        .select('briefing_date,headline,summary,changes,sections,actions,risks')
-        .eq('briefing_kind', kind)
-        .lt('briefing_date', beforeDate)
-        .order('briefing_date', { ascending: false })
-        .limit(1)
-      if (error || !data?.length) return null
-      return data[0] as PriorBriefing
-    },
-    async fetchWeeklyReference(briefingDate) {
-      const { data } = await sb
-        .from('briefings')
-        .select('briefing_date,headline,summary,changes,sections,actions,risks')
-        .eq('briefing_kind', 'weekly')
-        .eq('briefing_date', briefingDate)
-        .limit(1)
-      return data?.length ? (data[0] as PriorBriefing) : null
-    },
-    loadTeamContext: loadTeamContextRows,
   }
 }
 
@@ -1507,54 +1310,27 @@ export async function handleBriefing(
   const kind = forcedKind ?? parseKind(req)
   if (!kind) return json({ error: 'kind must be daily or weekly' }, 400)
 
-  if (req.method === 'GET') {
-    const denied = await guardMachine(req, 'CRON_SECRET')
-    if (denied) return denied
-    // The cron's provider is chosen below, after the scheduled-weekday check —
-    // it has no actor to resolve, so the flag is the whole decision and there
-    // is nothing to do here that the shared code below does not already do.
-  } else if (deploymentAiPath() === 'neon') {
-    return briefingOnNeon(req, kind, deps)
-  } else {
-    const auth = await guardAdmin(req)
-    if (auth.response) return auth.response
-  }
+  if (req.method !== 'GET') return briefingOnNeon(req, kind, deps)
+
+  const denied = await guardMachine(req, 'CRON_SECRET')
+  if (denied) return denied
 
   const now = new Date()
-  if (req.method === 'GET' && !shouldRunBriefing(kind, now)) {
+  if (!shouldRunBriefing(kind, now)) {
     return json({ kind, status: 'skipped', reason: 'outside scheduled weekday' })
   }
 
   try {
-    if (req.method === 'GET') {
-      // The cron half. `buildTools()` needs no request either way: its read-only
-      // tools go through `executeSql`/`executeNamedSql`, which already pick the
-      // AI store when the flag is on, and the machine caller has no member to
-      // write a saved search as.
-      const cron =
-        deploymentAiPath() === 'neon' ? systemBriefingData() : supabaseBriefingData(db())
-      return json(await runToCompletion(cron, kind, now, false, true, buildTools()))
-    }
-
-    const data = supabaseBriefingData(db())
-    const options = await req.json().catch(() => null) as {
-      full?: unknown
-      send_slack?: unknown
-    } | null
-    if (options?.full === true) {
-      return json(
-        await runToCompletion(data, kind, now, true, options.send_slack === true, buildTools({ req })),
-      )
-    }
-
-    // Internal recovery path: one stage per call, idempotent by kind/period,
-    // admin-guarded, and deliberately silent in Slack.
-    return json(await advanceBriefingJob(data, kind, true, false, now, buildTools({ req })))
-  } catch (error) {
-    console.error(
-      `${kind} briefing failed:`,
-      error instanceof Error ? error.message : String(error),
+    // The cron half. `buildTools()` needs no request: its read-only tools go
+    // through `executeSql`/`executeNamedSql` on the AI store, and the machine
+    // caller has no member to write a saved search as.
+    return json(
+      await runToCompletion(systemBriefingData(), kind, now, false, true, buildTools()),
     )
+  } catch (error) {
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    console.error(`${kind} briefing failed:`, safeErrorLabel(error))
     return json({ error: `Failed to generate the ${kind} briefing — check server logs.` }, 500)
   }
 }

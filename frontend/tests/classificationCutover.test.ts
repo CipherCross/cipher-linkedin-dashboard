@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const generateObject = vi.hoisted(() => vi.fn())
 const anthropic = vi.hoisted(() => vi.fn(() => ({ model: 'fixture' })))
-const deploymentAiPath = vi.hoisted(() => vi.fn())
 const guardMachine = vi.hoisted(() => vi.fn(async () => null))
-const guardAdmin = vi.hoisted(() => vi.fn(async () => ({ response: null })))
-const db = vi.hoisted(() => vi.fn())
 const neonWriter = vi.hoisted(() => vi.fn())
 const replyReviewWriter = vi.hoisted(() => vi.fn())
 const saveReplyReview = vi.hoisted(() => vi.fn())
@@ -13,13 +10,10 @@ const getAiDataStore = vi.hoisted(() => vi.fn())
 
 vi.mock('ai', () => ({ generateObject }))
 vi.mock('@ai-sdk/anthropic', () => ({ anthropic }))
-vi.mock('../api/_lib/data/aiPath.js', () => ({ deploymentAiPath }))
 vi.mock('../api/_lib/auth.js', () => ({
   guardMachine,
-  guardAdmin,
   authorizationResponse: () => null,
 }))
-vi.mock('../api/_lib/core.js', () => ({ db }))
 vi.mock('../api/_lib/neonWrites.js', () => ({ neonWriter }))
 vi.mock('../api/_lib/neonReplyReviewWrites.js', () => ({ replyReviewWriter, saveReplyReview }))
 vi.mock('../api/_lib/data/operations/replyReviews.js', () => ({
@@ -80,7 +74,6 @@ function demographicsStore() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  deploymentAiPath.mockReturnValue('neon')
   neonWriter.mockResolvedValue({ store: {}, actor: ADMIN })
   replyReviewWriter.mockResolvedValue({ store: {}, actor: ADMIN })
 })
@@ -111,7 +104,6 @@ describe('reply-classification AI cutover', () => {
       'classify.genderBatch',
       'classify.genderBacklog',
     ])
-    expect(db).not.toHaveBeenCalled()
   })
 
   it('leaves old worker operation names fail-closed during registry rollout', () => {
@@ -129,18 +121,6 @@ describe('reply-classification AI cutover', () => {
     })
     expect(neonWriter).toHaveBeenCalledTimes(1)
     expect(generateObject).not.toHaveBeenCalled()
-  })
-
-  it('Supabase fallback is unavailable and cannot perform a legacy reply write', async () => {
-    deploymentAiPath.mockReturnValue('supabase')
-    const response = await POST(new Request('https://example.test/api/classify', { method: 'POST' }))
-    expect(response.status).toBe(503)
-    expect(await responseBody(response)).toMatchObject({
-      code: 'REPLY_REVIEW_UNAVAILABLE',
-      manual_only: true,
-    })
-    expect(generateObject).not.toHaveBeenCalled()
-    expect(db).not.toHaveBeenCalled()
   })
 
   it('keeps POST demographics as the only model-backed classify branch', async () => {

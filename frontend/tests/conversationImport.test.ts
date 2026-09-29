@@ -1,74 +1,64 @@
+import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { rpc, from, update, maybeSingle } = vi.hoisted(() => {
-  const maybeSingle = vi.fn()
-  const chain: Record<string, ReturnType<typeof vi.fn>> = {}
-  chain.update = vi.fn(() => chain)
-  chain.eq = vi.fn(() => chain)
-  chain.select = vi.fn(() => chain)
-  chain.maybeSingle = maybeSingle
-  return {
-    rpc: vi.fn(),
-    from: vi.fn(() => chain),
-    update: chain.update,
-    maybeSingle,
-  }
-})
+const { neonDeleteMessage, neonEditMessage, neonImportConversation } = vi.hoisted(() => ({
+  neonDeleteMessage: vi.fn(),
+  neonEditMessage: vi.fn(),
+  neonImportConversation: vi.fn(),
+}))
 
-vi.mock('../api/_lib/core.js', () => ({
-  db: () => ({ rpc, from }),
+vi.mock('../api/_lib/neonWrites.js', () => ({
+  neonDeleteMessage,
+  neonEditMessage,
+  neonImportConversation,
 }))
 
 import { handleConversationImport } from '../api/_lib/conversationImport'
 
+const ok = (body: unknown) =>
+  new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
+
 describe('conversation history actions', () => {
   beforeEach(() => {
-    rpc.mockReset()
-    from.mockClear()
-    update.mockClear()
-    maybeSingle.mockReset()
+    neonDeleteMessage.mockReset()
+    neonEditMessage.mockReset()
+    neonImportConversation.mockReset()
   })
 
   it('deletes an imported message without requiring a full import payload', async () => {
-    rpc.mockResolvedValue({
-      data: { deleted: true, milestones_recomputed: 1 },
-      error: null,
-    })
+    neonDeleteMessage.mockResolvedValue(ok({ ok: true, deleted: 42, milestones_recomputed: 1 }))
+    const req = new Request('https://example.test/api/import', { method: 'POST' })
 
-    const response = await handleConversationImport(
-      { action: 'delete_message', id: 42 },
-      new Request('https://example.test/api/import', { method: 'POST' }),
-    )
+    const response = await handleConversationImport({ action: 'delete_message', id: 42 }, req)
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({
-      ok: true,
-      deleted: 42,
-      milestones_recomputed: 1,
-    })
-    expect(rpc).toHaveBeenCalledWith('delete_manual_message', {
-      p_message_id: 42,
-    })
+    expect(neonDeleteMessage).toHaveBeenCalledWith(req, { messageId: 42 })
+    expect(neonImportConversation).not.toHaveBeenCalled()
   })
 
   it('edits a manual message without requiring conversation identity fields', async () => {
-    maybeSingle.mockResolvedValue({ data: { id: 42 }, error: null })
+    neonEditMessage.mockResolvedValue(ok({ ok: true, edited: 42, body: 'Corrected message' }))
+    const req = new Request('https://example.test/api/import', { method: 'POST' })
 
     const response = await handleConversationImport(
       { action: 'edit_message', id: 42, body: '  Corrected message  ' },
-      new Request('https://example.test/api/import', { method: 'POST' }),
+      req,
     )
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({
-      ok: true,
-      edited: 42,
+    expect(neonEditMessage).toHaveBeenCalledWith(req, {
+      messageId: 42,
       body: 'Corrected message',
+      contentHash: createHash('md5').update('Corrected message', 'utf8').digest('hex'),
     })
-    expect(from).toHaveBeenCalledWith('messages')
-    expect(update).toHaveBeenCalledWith({
-      body: 'Corrected message',
-      content_hash: expect.any(String),
-    })
+  })
+
+  it('refuses a malformed id before touching the store', async () => {
+    const req = new Request('https://example.test/api/import', { method: 'POST' })
+    for (const id of [0, -1, 1.5, '42', null]) {
+      const response = await handleConversationImport({ action: 'delete_message', id }, req)
+      expect(response.status).toBe(400)
+    }
+    expect(neonDeleteMessage).not.toHaveBeenCalled()
   })
 })

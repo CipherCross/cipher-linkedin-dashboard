@@ -6,9 +6,8 @@
 //
 // Posting to Slack requires a verified application admin.
 import { postReviewDigestToSlack, type ReviewDigestRow } from './_lib/slack.js'
-import { AuthorizationError, authorizationResponse, guardAdmin } from './_lib/auth.js'
+import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
-import { deploymentApplicationAuthPath } from './_lib/identity/application.js'
 import { neonWriter } from './_lib/neonWrites.js'
 
 export const maxDuration = 10
@@ -32,28 +31,23 @@ const nonNegInt = (v: unknown): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= 0
 
 async function handle(req: Request): Promise<Response> {
-  if (deploymentApplicationAuthPath() === 'identity') {
-    try {
-      const writer = await neonWriter(req)
-      if (writer.actor.role !== 'admin') {
-        throw new AuthorizationError(403, 'Admin access required')
-      }
-    } catch (error) {
-      const denial = authorizationResponse(error)
-      if (denial) return denial
-      // The database was not reached, so no membership decision was taken and
-      // the answer below would be a claim about one. Named cause, honest status.
-      const unavailable = unavailableResponse(error)
-      if (unavailable) return unavailable
-      console.error(
-        'Review digest authorization failed:',
-        error instanceof Error ? error.name : 'UnknownError',
-      )
-      return json({ error: 'Could not verify team access' }, 500)
+  try {
+    const writer = await neonWriter(req)
+    if (writer.actor.role !== 'admin') {
+      throw new AuthorizationError(403, 'Admin access required')
     }
-  } else {
-    const auth = await guardAdmin(req)
-    if (auth.response) return auth.response
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    console.error(
+      'Review digest authorization failed:',
+      error instanceof Error ? error.name : 'UnknownError',
+    )
+    return json({ error: 'Could not verify team access' }, 500)
   }
 
   const raw = await req.text()

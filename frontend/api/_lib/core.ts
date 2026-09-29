@@ -1,10 +1,7 @@
 // Shared data-access core for the AI layer. Used by both /api/chat (Vercel AI
 // SDK tools) and /api/mcp (MCP server) so the two surfaces stay in sync.
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { deploymentAiPath } from './data/aiPath.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './data/aiStore.js'
 import {
-  AI_NAMED_SQL,
   AI_OPERATIONS,
   ACCEPT_LAG_SQL,
   CAMPAIGN_OVERVIEW_SQL,
@@ -31,24 +28,7 @@ export {
   WEEKLY_FUNNEL_SQL,
 }
 
-let _client: SupabaseClient | null = null
-
-/** Service-role Supabase client (bypasses RLS). Shared by the AI SQL layer and
- *  the reply classifier (/api/classify). */
-export function db(): SupabaseClient {
-  if (_client) return _client
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) {
-    throw new Error(
-      'Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY environment variables'
-    )
-  }
-  _client = createClient(url, key, { auth: { persistSession: false } })
-  return _client
-}
-
-// ai_execute_sql (migration 021, updated 030-035) hard-caps results at 1000 rows
+// ai_execute_sql (tenant baseline 003) hard-caps results at 1000 rows
 // server-side; this layer trims further to MAX_ROWS / MAX_CHARS below.
 const MAX_ROWS = 200
 const MAX_CHARS = 24_000
@@ -59,7 +39,7 @@ export interface SqlResult {
   truncated: boolean
 }
 
-/** Apply the row/character caps, identically on both provider branches. */
+/** Apply the row/character caps. */
 function capRows(all: unknown[]): SqlResult {
   let rows = all.slice(0, MAX_ROWS)
   // Hard cap on payload size so one giant query can't blow up the context.
@@ -69,64 +49,43 @@ function capRows(all: unknown[]): SqlResult {
   return { rows, rowCount: all.length, truncated: rows.length < all.length }
 }
 
-/** Run a read-only SQL query through the guard (enforced in Postgres). On the
- *  Supabase path that is the ai_execute_sql RPC with the service-role client;
- *  on the Neon path it is the `ai.executeSql` operation of the AI store, which
- *  connects as the app_system principal and calls the portable baseline's
- *  guard — the same function, one provider step later. */
+/** Run a read-only SQL query through the guard (enforced in Postgres): the
+ *  `ai.executeSql` operation of the AI store, which connects as the app_system
+ *  principal and calls the tenant baseline's `ai_execute_sql`. */
 export async function executeSql(query: string): Promise<SqlResult> {
-  if (deploymentAiPath() === 'neon') {
-    const page = await getAiDataStore().query<unknown[]>(SYSTEM_ACTOR, {
-      operation: AI_OPERATIONS.executeSql,
-      params: { query },
-    })
-    return capRows((page.items[0] as unknown[] | undefined) ?? [])
-  }
-  const { data, error } = await db().rpc('ai_execute_sql', { query })
-  if (error) throw new Error(`SQL error: ${error.message}`)
-  return capRows(Array.isArray(data) ? data : [])
+  const page = await getAiDataStore().query<unknown[]>(SYSTEM_ACTOR, {
+    operation: AI_OPERATIONS.executeSql,
+    params: { query },
+  })
+  return capRows((page.items[0] as unknown[] | undefined) ?? [])
 }
 
-/** Run one of the application's FIXED queries by name. The Neon branch passes
- *  only the operation name — the SQL is owned by the adapter's registry — so
- *  each fixed query is its own allowlist entry rather than text passed through
- *  the generic operation. The Supabase branch runs the same text via the RPC. */
+/** Run one of the application's FIXED queries by name. Only the operation name
+ *  is passed — the SQL is owned by the adapter's registry — so each fixed query
+ *  is its own allowlist entry rather than text passed through the generic
+ *  operation. */
 export async function executeNamedSql(name: AiNamedQuery): Promise<SqlResult> {
-  if (deploymentAiPath() === 'neon') {
-    const page = await getAiDataStore().query<unknown[]>(SYSTEM_ACTOR, {
-      operation: AI_OPERATIONS[name],
-    })
-    return capRows((page.items[0] as unknown[] | undefined) ?? [])
-  }
-  return executeSql(AI_NAMED_SQL[name])
+  const page = await getAiDataStore().query<unknown[]>(SYSTEM_ACTOR, {
+    operation: AI_OPERATIONS[name],
+  })
+  return capRows((page.items[0] as unknown[] | undefined) ?? [])
 }
 
 /** Compact, cheap "ICP + hypothesis roster" for the chat copilot's always-on system
  *  prompt (names + a one-line summary each) so it's ICP-aware without a tool call;
  *  depth (personas, full keyword lists, per-hypothesis funnel) is left to run_sql /
- *  hypothesis_overview on demand. Flat selects joined in JS (matches the rest of this
- *  codebase's style — no PostgREST relationship embedding). Empty string when neither
- *  table has any live (non-archived) rows yet, so a blank ICP layer adds nothing to
- *  the prompt.
+ *  hypothesis_overview on demand. Flat selects joined in JS. Empty string when
+ *  neither table has any live (non-archived) rows yet, so a blank ICP layer adds
+ *  nothing to the prompt.
  *
- *  ## Why this reads through `executeNamedSql` rather than `db()`
- *
- *  It was the last Supabase-only surface in the API, and `chat.ts` closed the
- *  hole the wrong way: `neon ? '' : await loadIcpRoster()` meant the copilot on
- *  the Neon path lost its ICP awareness **silently**, with no error and no log —
- *  the one failure shape that survives every green test run. Both fixed queries
- *  now live in the AI adapter's vocabulary beside `hypothesis_overview`, which
- *  already reads both relations through the same guard on both providers, so
- *  there is one definition and neither provider can drift from it.
+ *  Both fixed queries live in the AI adapter's vocabulary beside
+ *  `hypothesis_overview`, so there is one definition of what the roster reads.
  *
  *  ## It never throws
  *
- *  The roster is prompt context, not an authorization surface. The PostgREST
- *  pair swallowed failures by construction — it destructured `data` and ignored
- *  `error` — so a failed read produced an empty roster and a working chat.
- *  `executeNamedSql` throws, so the swallow is now explicit and deliberate:
- *  degrading the prompt is right, taking the copilot down for optional context
- *  is not. */
+ *  The roster is prompt context, not an authorization surface. `executeNamedSql`
+ *  throws, so the swallow is explicit and deliberate: degrading the prompt is
+ *  right, taking the copilot down for optional context is not. */
 export async function loadIcpRoster(): Promise<string> {
   let icps: SqlResult
   let hyps: SqlResult

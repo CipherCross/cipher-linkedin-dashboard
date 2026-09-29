@@ -51,9 +51,7 @@
  *   guard call with SQL text this file owns, registered under its own name so
  *   the allowlist records each fixed query as its own reviewed entry — the same
  *   discipline S14 applied when nineteen fixed statements replaced two generic
- *   helpers. The text lives here, in the adapter, in exactly one place; the AI
- *   layer's Supabase branch imports it from here so the two providers cannot
- *   drift on it.
+ *   helpers. The text lives here, in the adapter, in exactly one place.
  */
 
 import { NeonOperationRegistry, type NeonRow } from '../neon.js'
@@ -311,7 +309,8 @@ where archived = false
 order by name
 `.trim()
 
-/** Every fixed query and the SQL it runs under, for the Supabase branch. */
+/** Every fixed query and the SQL it runs under. The registry below registers
+ *  each one as its own allowlisted operation. */
 export const AI_NAMED_SQL: Record<AiNamedQuery, string> = {
   weeklyFunnel: WEEKLY_FUNNEL_SQL,
   campaignOverview: CAMPAIGN_OVERVIEW_SQL,

@@ -1,11 +1,12 @@
-// MCP server exposing the same Supabase SQL tooling as /api/chat, so external
+// MCP server exposing the same SQL tooling as /api/chat, so external
 // MCP clients (Claude Desktop, Claude Code, etc.) can analyze the data too.
 // Endpoint: https://<deployment>/api/mcp (Streamable HTTP transport).
 // Tool names/descriptions/input shapes come from _lib/tools.ts's `toolDefs`
 // so the two surfaces (chat's AI-SDK tools and this MCP server) can't drift.
 //
-// The whole MCP surface is machine-authenticated because every tool reads through
-// service-role-backed SQL. MCP clients cannot inherit the SPA's user session.
+// The whole MCP surface is machine-authenticated because every tool runs as the
+// AI store's `app_system` principal. MCP clients cannot inherit the SPA's user
+// session.
 import { createMcpHandler } from 'mcp-handler'
 import {
   SCHEMA_DOC,
@@ -92,10 +93,8 @@ const adminHandler = createMcpHandler(
       toolDefs.save_search.description,
       toolDefs.save_search.inputShape,
       // MCP authenticates with MCP_SECRET — a machine caller with no human
-      // actor, and none is invented. On the Neon path the write runs as
-      // `app_system` under ledger step 007's system write path; on the Supabase
-      // path it runs through the service-role client, as it always has. Same
-      // row either way; the gate is MCP_SECRET on both.
+      // actor, and none is invented. The write runs as `app_system` under
+      // ledger step 007's system write path; the gate is MCP_SECRET.
       async (args) => asText(await executeSaveSearchAsSystem(args))
     )
   },

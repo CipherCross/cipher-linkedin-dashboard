@@ -223,7 +223,7 @@ export function readObjectStorageTenantId(
  *
  * Used by the one caller that must not throw: the unauthenticated path-flag
  * lookup, which answers "which photo path does this deployment serve" and has to
- * answer `supabase` — not fail — when storage is unconfigured. Every other caller
+ * answer `disabled` — not fail — when storage is unconfigured. Every other caller
  * wants the exception, because by then a missing credential is a fault rather than
  * a state.
  */

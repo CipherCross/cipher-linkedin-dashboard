@@ -14,9 +14,8 @@ import { describe, expect, it } from 'vitest'
 import {
   createActivityDailyHandler,
   deploymentPhotoPath,
-  deploymentReadPath,
+  PhotoPathError,
 } from '../api/activity-daily.js'
-import { ProviderPathError } from '../api/_lib/data/providerPath.js'
 import {
   objectStorageConfigured,
   ObjectStorageConfigurationError,
@@ -275,97 +274,54 @@ describe('the request the endpoint accepts', () => {
 
 describe('the photo-path flag', () => {
   it('reports the explicit initials-only posture without checking storage', () => {
+    expect(deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'disabled' })).toBe('disabled')
     expect(
-      deploymentPhotoPath({
-        NEON_PHOTOS_DEFAULT: 'disabled',
-        NEON_READS_DEFAULT: 'neon',
-      }),
+      deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'disabled', ...CONFIGURED }),
     ).toBe('disabled')
   })
 
-  it('is supabase unless both correctness conditions hold', () => {
-    expect(deploymentPhotoPath({})).toBe('supabase')
-    // Storage alone is not enough: the read path decides whose lead ids these are.
-    expect(
-      deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'neon', ...CONFIGURED }),
-    ).toBe('supabase')
-    // Nor is the read path alone, without storage configured.
-    expect(
-      deploymentPhotoPath({
-        NEON_PHOTOS_DEFAULT: 'neon',
-        NEON_READS_DEFAULT: 'neon',
-      }),
-    ).toBe('supabase')
+  it('is neon when object storage resolves, stated or unset', () => {
+    expect(deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'neon', ...CONFIGURED })).toBe('neon')
+    expect(deploymentPhotoPath({ ...CONFIGURED })).toBe('neon')
+    // Whitespace is the unset case too, not a value.
+    expect(deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: '  ', ...CONFIGURED })).toBe('neon')
   })
 
-  it('holds an explicit `neon` to the same two conditions', () => {
-    // **A deliberate difference from the other flags**, where a stated `neon`
-    // without its credential fails loudly. Photos are cosmetic: degrading to
-    // Supabase or to initials is honest, whereas refusing the flag lookup over
-    // them would take down a dashboard whose data is fine.
-    expect(
-      deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'neon', NEON_READS_DEFAULT: 'supabase', ...CONFIGURED }),
-    ).toBe('supabase')
+  it('degrades to initials without object storage, even when `neon` is stated', () => {
+    // Photos are cosmetic: initials are honest, whereas refusing the flag lookup
+    // over them would take down a dashboard whose data is fine.
+    expect(deploymentPhotoPath({})).toBe('disabled')
+    expect(deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: 'neon' })).toBe('disabled')
   })
 
-  it('is neon when the read path and the storage config both hold', () => {
-    expect(
-      deploymentPhotoPath({
-        NEON_PHOTOS_DEFAULT: 'neon',
-        NEON_READS_DEFAULT: 'neon',
-        ...CONFIGURED,
-      }),
-    ).toBe('neon')
-  })
-
-  it('derives the unset case rather than requiring the opt-in', () => {
-    // **S27 retired the opt-in as a third condition.** A deployment equipped for
-    // Neon photos — reads on Neon, storage resolving — serves them without being
-    // told twice; what it must not do is serve them when either condition fails.
+  it('ignores the inert read-path flag the tenant contract still binds', () => {
     expect(
       deploymentPhotoPath({ NEON_READS_DEFAULT: 'neon', ...CONFIGURED }),
     ).toBe('neon')
-    expect(deploymentPhotoPath({ NEON_READS_DEFAULT: 'neon' })).toBe('supabase')
-    expect(deploymentPhotoPath({ ...CONFIGURED })).toBe('supabase')
-    // Whitespace is the unset case too, not a value.
     expect(
-      deploymentPhotoPath({
-        NEON_PHOTOS_DEFAULT: '  ',
-        NEON_READS_DEFAULT: 'neon',
-        ...CONFIGURED,
-      }),
+      deploymentPhotoPath({ NEON_READS_DEFAULT: 'supabase', ...CONFIGURED }),
     ).toBe('neon')
   })
 
-  it('takes an explicit `supabase` without consulting either condition', () => {
-    expect(
-      deploymentPhotoPath({
-        NEON_PHOTOS_DEFAULT: 'supabase',
-        NEON_READS_DEFAULT: 'neon',
-        ...CONFIGURED,
-      }),
-    ).toBe('supabase')
-  })
-
-  it.each([['true'], ['1'], ['NEON'], [' neon-ish'], ['disable'], ['supabse']])(
-    'refuses %j rather than reading it as off',
+  it.each([['true'], ['1'], ['NEON'], [' neon-ish'], ['disable'], ['supabase']])(
+    'refuses %j rather than guessing',
     (value) => {
-      // The old rule read every unknown value as `supabase`, which was safe while
-      // that was the working path. It is not now: a deployment whose reads are on
-      // Neon would be told to fetch photos from a provider its rows do not name.
       expect(() =>
-        deploymentPhotoPath({
-          NEON_PHOTOS_DEFAULT: value,
-          NEON_READS_DEFAULT: 'neon',
-          ...CONFIGURED,
-        }),
-      ).toThrow(ProviderPathError)
+        deploymentPhotoPath({ NEON_PHOTOS_DEFAULT: value, ...CONFIGURED }),
+      ).toThrow(PhotoPathError)
     },
   )
 
-  it('leaves the read-path flag alone', () => {
-    expect(deploymentReadPath({ NEON_PHOTOS_DEFAULT: 'neon' })).toBe('supabase')
-    expect(deploymentReadPath({ NEON_READS_DEFAULT: 'neon' })).toBe('neon')
+  it('answers the lookup with readPath neon, whatever the inert flags say', async () => {
+    // A tab opened before the Supabase removal still asks for `readPath`.
+    for (const env of [{}, { NEON_READS_DEFAULT: 'neon' }, { NEON_READS_DEFAULT: 'supabase' }]) {
+      const handler = createActivityDailyHandler({ env })
+      const response = await handler(
+        new Request('https://dashboard.test/api/activity-daily?op=config.readPath'),
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ readPath: 'neon', photoPath: 'disabled' })
+    }
   })
 
   it('answers the flag lookup with the refusal instead of crashing', async () => {
@@ -400,8 +356,8 @@ describe('the photo-path flag', () => {
   it('fails closed before authentication or storage when the S26 initials-only posture disables photos', async () => {
     const handler = createActivityDailyHandler({
       env: {
-        NEON_READS_DEFAULT: 'neon',
         NEON_PHOTOS_DEFAULT: 'disabled',
+        ...CONFIGURED,
       },
     })
     const response = await handler(

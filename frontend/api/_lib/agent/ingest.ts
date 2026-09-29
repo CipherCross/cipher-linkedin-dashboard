@@ -18,8 +18,8 @@
  * operation on it is a registered *query*; `pipeline.ts` keys its audit rows on
  * a human actor's display name, and a machine has none.
  *
- * The dispatch is `?op=`, checked before the body is read and before
- * `guardAdmin` runs, so the human actions on this file are untouched — same
+ * The dispatch is `?op=`, checked before the body is read and before the
+ * admin check runs, so the human actions on this file are untouched — same
  * order, same guard, same error text — and this operation's own authentication
  * is the only one it ever meets.
  *
