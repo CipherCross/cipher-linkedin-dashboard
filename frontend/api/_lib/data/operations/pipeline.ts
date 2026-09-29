@@ -13,7 +13,7 @@
  * The relation is append-only and unbounded — one row per manual stage move or
  * assignment, for the lifetime of the team — so it is a base-table walk like
  * `leads` and `messages`, and it seeks rather than counts. The order is
- * `(occurred_at, id)` **ascending**, matching the Supabase path, so the seek is
+ * `(occurred_at, id)` **ascending**, so the seek is
  * `(occurred_at, id) > (…)`.
  *
  * The `id` tiebreaker is load-bearing rather than decorative: a bulk

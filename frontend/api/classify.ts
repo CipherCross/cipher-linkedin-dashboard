@@ -143,8 +143,8 @@ interface DemographicsRun {
 }
 
 // ---------------------------------------------------------------------------
-// The Neon branches: the POST paths (batch, demographics, reclassify) under a
-// human actor, and the GET cron under the system one.
+// The POST paths (batch, demographics, reclassify) under a human actor, and the
+// GET cron under the system one.
 //
 // Same authorization argument as `neonWrites.ts` for the POST paths: the actor
 // resolves against the database being written, and the admin role is re-checked

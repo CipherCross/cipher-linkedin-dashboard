@@ -1250,9 +1250,8 @@ function systemBriefingData(): BriefingData {
   return neonBriefingData(getAiDataStore(), SYSTEM_ACTOR, 'guard')
 }
 
-/** The Neon branch of the admin POST. Actor and admin role resolve against
- *  Neon — the database being written decides — then the entire job machine
- *  runs there through the seam. */
+/** The admin POST. Actor and admin role resolve against the database being
+ *  written, then the entire job machine runs there through the seam. */
 async function briefingOnNeon(
   req: Request,
   kind: BriefingKind,

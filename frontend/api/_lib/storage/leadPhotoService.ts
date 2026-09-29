@@ -3,12 +3,12 @@
  *
  * ## Why the client sends lead ids and never an object key or a path
  *
- * The Supabase path hands the browser a `photo_path` in every lead row and lets
- * the browser ask Storage for a URL. That is safe *there* because the request
- * carries the user's own JWT and Storage applies RLS to it — the browser naming
- * the object costs nothing, because naming it is not what authorizes it.
+ * The retired Supabase path handed the browser a `photo_path` in every lead row
+ * and let the browser ask Storage for a URL. That was safe *there* because the
+ * request carried the user's own JWT and Storage applied RLS to it — the browser
+ * naming the object cost nothing, because naming it was not what authorized it.
  *
- * On this path the credential is the server's, and it is scoped to the bucket
+ * Here the credential is the server's, and it is scoped to the bucket
  * rather than to a row. So if the browser named the object, the *only* thing
  * standing between a signed-in member and any key in the class would be string
  * validation. That inverts where authorization lives, and it does it quietly:
@@ -22,8 +22,8 @@
  *
  * ## Why one request carries many ids
  *
- * A page of the Leads Explorer renders dozens of avatars at once. The Supabase
- * path spends one Storage call per avatar, which is a direct call to a
+ * A page of the Leads Explorer renders dozens of avatars at once. The retired
+ * Supabase path spent one Storage call per avatar, a direct call to a
  * purpose-built service; the equivalent here would be one *serverless function
  * invocation* per avatar — the same 200 ms actor resolution repeated fifty times,
  * on a Hobby plan with a concurrency cap. So the operation takes a batch, the
@@ -36,7 +36,7 @@
  * response. `photo_synced_at` with a NULL `photo_path` is the agent's way of
  * recording "checked, LinkedIn had none", which is true of a large share of every
  * campaign, so it is the ordinary case rather than a fault. The avatar falls back
- * to initials exactly as it does today.
+ * to initials.
  *
  * A key the derivation *refuses* is also absent from the response, and that one is
  * logged: `photo_path` is service-written and every value in it should map, so a
@@ -53,10 +53,9 @@ import type { ObjectStorageProvider } from './provider.js'
 /**
  * How long a photo URL lives.
  *
- * Five minutes, which is what `LEAD_PHOTO_SIGNED_URL_TTL_SECONDS` on the Supabase
- * path already uses — the browser's cache-and-refresh logic is written around that
- * number, and the two paths having different lifetimes would make one of them the
- * untested one. Well inside `MAX_GET_TTL_SECONDS`; asserted against it below so a
+ * Five minutes, the lifetime the browser's cache-and-refresh logic
+ * (`src/lib/leadPhotos.ts`) is written around. Well inside
+ * `MAX_GET_TTL_SECONDS`; asserted against it below so a
  * later change to either cannot leave this silently out of policy.
  */
 export const LEAD_PHOTO_URL_TTL_SECONDS = 5 * 60

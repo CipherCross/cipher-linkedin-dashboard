@@ -21,9 +21,9 @@
  * | `leads.assigned_to` moves | `pipeline_events` `kind='assignment'` |
  * | `leads.gender` override | `lead_gender_reviews` |
  *
- * On the Supabase path each pair is two PostgREST calls, and the second one
- * failing is reported as `event_error` or `review_error` **inside a 200**. So
- * today a stage can move with no audit row and the caller is told `ok: true`.
+ * On the retired Supabase path each pair was two PostgREST calls, and the second
+ * one failing was reported as `event_error` or `review_error` **inside a 200**, so
+ * a stage could move with no audit row while the caller was told `ok: true`.
  * That matters more than it sounds: `pipeline_events` is not a log the dashboard
  * displays, it is what "ever reached stage X" is *reconstructed* from, so a
  * missing row silently lowers a funnel number for good. There is no repair path,
@@ -116,10 +116,10 @@ export interface LeadByIdParams {
 /**
  * Read inside the write transaction, **and with `FOR UPDATE`**.
  *
- * The first half is the difference from the Supabase path, where the "what was
- * the stage before?" read is its own call: two concurrent stage moves there can
- * both read the same previous stage and write two audit rows claiming the same
- * origin, so the reconstructed history forks.
+ * The first half is the difference from the retired Supabase path, where the
+ * "what was the stage before?" read was its own call: two concurrent stage moves
+ * there could both read the same previous stage and write two audit rows
+ * claiming the same origin, so the reconstructed history forks.
  *
  * Reading it inside the writing transaction does not by itself fix that —
  * Postgres default isolation is READ COMMITTED, so both transactions can still
@@ -224,23 +224,20 @@ export interface ActorDisplayNameRow {
  *
  * **From this database, keyed on `team_members.user_id`.** Two alternatives lost:
  *
- * - *Reuse the Supabase principal's name*, which the endpoint already holds. It
- *   is one fewer round trip and it is wrong in a way that would not show up for
- *   months: the audit trail of a Neon write would be sourced from Supabase, so
- *   the two providers could disagree about who did something and the row on Neon
- *   would be the one that was wrong.
+ * - *Reuse the name of the principal the endpoint resolved* (once a Supabase
+ *   principal). It lost while two providers were live: the audit trail of a Neon
+ *   write would have been sourced from the other provider, which could disagree
+ *   about who did something.
  * - *Carry the name in the `ActorContext`.* `resolveActor` deliberately returns
  *   `actorId` and `role` and nothing else, because everything it returns becomes
  *   something the resolver is trusted for. A display name is presentation data;
  *   putting it there would widen the one function that runs with no actor
  *   published.
  *
- * **The key is the uuid, never the bigint.** `team_members.id` is the colliding
- * id space N-B2 measured — the same integer denotes different people on the two
- * providers. `user_id` is the canonical uuid, which is also what `app.actor_id`
- * holds and what every RLS policy compares against, so this lookup cannot pick
- * the wrong person. That is why it is a roster read this session is allowed to
- * make while `leads.assigned_to` remains blocked.
+ * **The key is the uuid, never the bigint.** `team_members.id` was the colliding
+ * id space N-B2 measured while two providers were live. `user_id` is the
+ * canonical uuid, which is also what `app.actor_id` holds and what every RLS
+ * policy compares against, so this lookup cannot pick the wrong person.
  */
 const ACTOR_DISPLAY_NAME_SQL = `SELECT tm.name
      FROM public.team_members tm
@@ -537,12 +534,12 @@ export interface LeadNoteResult {
 /**
  * `INSERT … SELECT … FROM leads WHERE id = $1`, not `INSERT … VALUES`.
  *
- * The Supabase path checks the lead exists in its own call and then inserts, so
- * a lead deleted between the two yields a foreign-key error with a 500 rather
- * than the 404 the caller was promised. Selecting the parent in the insert makes
- * "unknown lead" a **zero row count** instead of an error, in one statement:
- * there is no window to lose the lead in, and the handler maps 0 to 404 without
- * having to read a SQLSTATE.
+ * Checking the lead in its own call and then inserting (as the retired Supabase
+ * path did) turns a lead deleted between the two into a foreign-key error with a
+ * 500 rather than the 404 the caller was promised. Selecting the parent in the
+ * insert makes "unknown lead" a **zero row count** instead of an error, in one
+ * statement: there is no window to lose the lead in, and the handler maps 0 to
+ * 404 without having to read a SQLSTATE.
  */
 const ADD_NOTE_SQL = `INSERT INTO public.lead_notes (lead_id, author, body)
      SELECT l.id, $2, $3
@@ -604,21 +601,21 @@ export const deleteNoteOperation: NeonCommandOperation<
  * Keyed by `(instance_id, profile_url)`, so it updates the person and not the
  * row — the same human reached from two campaigns is two `leads` rows with one
  * gender, and an SDR who corrects it on one board expects the other to agree.
- * The Supabase path does the same thing; it is restated here because the
- * parameter is a lead id and the `WHERE` is not.
+ * It is restated here because the parameter is a lead id and the `WHERE` is
+ * not.
  *
  * **The rolling-deploy fallback is gone, and that is a measurement rather than a
- * simplification.** The Supabase handler retries with a narrower patch on
- * SQLSTATE 42703, because migration 041 supported the override before 048 added
- * `gender_inferred_at` / `gender_model_version`, and a deployment could be mid
- * roll. The portable baseline has all four columns in step `001` by
+ * simplification.** The retired Supabase handler retried with a narrower patch
+ * on SQLSTATE 42703, because legacy migration 041 supported the override before
+ * 048 added `gender_inferred_at` / `gender_model_version`, and a deployment could
+ * be mid roll. The portable baseline has all four columns in step `001` by
  * construction — checked in `001_portable_business_baseline.sql`, `public.leads`
  * — so on this path there is no version of the schema the retry could rescue,
  * and a retry that can never fire is a branch nothing tests.
  *
- * `gender_model_version` is set to NULL on both branches, matching the Supabase
- * handler: a human override has no model version, and clearing it is what stops
- * a later backfill treating the row as machine-labelled at some version.
+ * `gender_model_version` is set to NULL on both branches: a human override has
+ * no model version, and clearing it is what stops a later backfill treating the
+ * row as machine-labelled at some version.
  */
 export interface SetGenderParams {
   readonly instanceId: string

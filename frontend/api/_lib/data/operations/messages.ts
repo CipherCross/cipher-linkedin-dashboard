@@ -108,11 +108,10 @@ export interface MessagesParams {
 }
 
 /**
- * The message column list the Supabase path's widest rung asks for, in the same
- * order. Its three-rung ladder (`MESSAGE_COLUMN_LADDER`) is dropped for the same
- * reasons `leads.directory` drops its four — see that file's header; the argument
- * is identical and the baseline likewise already carries every column, including
- * the migration-047 intent set.
+ * The message column list the retired Supabase path's widest rung asked for, in
+ * the same order. Its three-rung ladder (`MESSAGE_COLUMN_LADDER`) is dropped for
+ * the reasons `leads.directory` dropped its four — see that file's header; the
+ * baseline already carries every column, including the migration-047 intent set.
  *
  * `content_hash`, `notified_at` and `updated_at` exist on the relation and are not
  * selected: the first two belong to the sync agent and the notifier, and no page
@@ -129,7 +128,7 @@ export interface MessagesParams {
  * which is exactly the descending sort order — so it resumes at the row after the
  * previous page's last, with no dependence on `sent_at` being unique. It is not:
  * a bulk sync stamps identical times across many rows, which is why `id` is in the
- * key at all, and why the Supabase path adds the same tiebreaker.
+ * key at all.
  */
 function messagesSql(direction: 'in' | 'out'): string {
   return `SELECT m.id::text AS id,

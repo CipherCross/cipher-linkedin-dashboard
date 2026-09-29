@@ -34,9 +34,9 @@
  * mislabels owners without failing anything. That argument held exactly as long
  * as `leads` came from the other provider. Once `leads.directory` answers the
  * dashboard, both ends of the join arrive from *this* database and the integers
- * agree — so the roster must move on the same flag rather than a separate one,
- * and a dashboard reading Neon leads beside no roster at all is the thing that
- * now misreports (it renders "0 Active teammates").
+ * agree — so the roster is served beside the leads, and a dashboard reading
+ * leads beside no roster at all is the thing that now misreports (it renders "0
+ * Active teammates").
  *
  * Two properties keep the inversion from being a loosening:
  *

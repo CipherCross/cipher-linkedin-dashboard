@@ -4,14 +4,12 @@
  * SQL lives here, behind a named operation. Handlers never see SQL text, a
  * driver object, a connection string or a provider resource ID.
  *
- * The query reads the `daily_activity` view rather than re-deriving the
- * aggregate, deliberately: the existing Supabase path reads the same view
- * (`frontend/src/lib/DataContext.tsx`), and the view's definition is
- * semantically identical in both schemas —
- * `supabase/migrations/001_init.sql` and
- * `postgres/tenant-baseline/v1/001_portable_business_baseline.sql`. Reading the
- * same view on both sides is what makes the parity claim about numbers rather
- * than about two independently-written aggregates.
+ * The query reads the `daily_activity` view
+ * (`postgres/tenant-baseline/v1/001_portable_business_baseline.sql`) rather than
+ * re-deriving the aggregate, deliberately: the view was ported unchanged from
+ * the retired Supabase schema and compared cell for cell against it, and reading
+ * it keeps that parity evidence about numbers rather than about two
+ * independently-written aggregates.
  */
 
 import type { NeonQueryOperation, NeonRow } from '../neon.js'

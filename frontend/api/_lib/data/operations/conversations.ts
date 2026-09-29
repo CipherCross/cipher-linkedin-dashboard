@@ -41,17 +41,15 @@
  * stops at PostgREST's 1,000-row cap. Every conversation past the thousandth is
  * missing its `highest_intent` and its P3 milestone, which is the denominator for
  * post-P3 booking conversion — so the figure is not merely incomplete, it is
- * biased, and nothing anywhere reports a problem. This path pages it. The
- * Supabase path is untouched by this session and still truncates; that is the
- * owner's to schedule, and it is reported separately from the migration.
+ * biased, and nothing anywhere reports a problem. This path pages it.
  *
  * ## `owner_id` is the same hazard as `assigned_to`, under another name
  *
  * `conversation_follow_up_state.owner_id` and `follow_up_events.previous_owner_id`
- * / `new_owner_id` are `team_members.id` values in the **source** id space. The
- * same integers on Neon denote different people (N-B2 has the map), so a roster
- * join here mislabels the owner of a follow-up task and fails nothing. The
- * columns are selected and never resolved, exactly as `leads.assigned_to` is, and
+ * / `new_owner_id` are `team_members.id` values. While two providers were live
+ * the same integers denoted different people on each (N-B2), so a roster join
+ * would have mislabelled a follow-up's owner and failed nothing. The columns are
+ * selected and never resolved here, exactly as `leads.assigned_to` is, and
  * `frontend/tests/dashboardSlice.test.ts` asserts the distinction per operation.
  *
  * `follow_up_events` also carries `previous_owner_name` / `new_owner_name`, which
@@ -67,8 +65,7 @@
  * endpoint answers with an explicit `unavailable: true` rather than a bare `[]` —
  * an empty follow-up queue and an absent one look identical in an array, and the
  * browser has to be able to tell them apart to keep rendering what it renders
- * today. `conversations.replyIntent` tolerates it for the same reason its
- * Supabase error is excluded from the aggregate error today.
+ * today. `conversations.replyIntent` tolerates it for the same reason.
  *
  * `conversations.followUpHistory` does **not**. It is fetched on demand by a panel
  * that has its own error state and shows it; swallowing a failure there would

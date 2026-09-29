@@ -8,9 +8,9 @@
  *
  * LH2 stops capturing a thread once the SDR takes it over by hand, so the paste
  * flow writes `messages` with `source='manual'` and backfills whatever milestones
- * those messages prove. On the Supabase path that is four independent PostgREST
- * calls — read the lead, read the thread, upsert the rows, patch the lead — and
- * two things go wrong with it:
+ * those messages prove. On the retired Supabase path that was four independent
+ * PostgREST calls — read the lead, read the thread, upsert the rows, patch the
+ * lead — and two things went wrong with it:
  *
  * - **The milestone patch failing is reported as `milestone_error` inside a
  *   200.** The messages are already committed, so there is nothing else the
@@ -58,8 +58,8 @@
  *
  * So `conversations.threadDedupKeys` reads `(direction, body)` for the thread and
  * the handler reuses the function it already has. The read is paged through the
- * store like any other, which is a small improvement on the Supabase path's
- * unpaginated `select` — the same latent cap defect the S13 consolidation
+ * store like any other, which was a small improvement on the retired Supabase
+ * path's unpaginated `select` — the same latent cap defect the S13 consolidation
  * measured on `conversation_reply_intent`, here on a relation that could in
  * principle hold a thread of more than a thousand messages.
  *
@@ -69,16 +69,16 @@
  * It already takes the advisory lock, already checks `expected_revision`
  * optimistically, already replays a repeated `mutation_id` after comparing a
  * `request_fingerprint`, and already writes `conversation_follow_up_state` and
- * `follow_up_events` in one statement's transaction. So the Supabase path here is
- * **not** "separate PostgREST calls": it is one RPC, and the port is one
- * `execute` of the same function. The atomicity, idempotency and locking this
- * session owes are already in the SQL and travel with the baseline; what this
- * module adds is proof that they still hold on Neon under `app_runtime`.
+ * `follow_up_events` in one statement's transaction. So this was never
+ * "separate PostgREST calls" even on the retired Supabase path: it was one RPC,
+ * and the port is one `execute` of the same function. The atomicity,
+ * idempotency and locking this session owes are already in the SQL and travel
+ * with the baseline; what this module adds is proof that they still hold on Neon
+ * under `app_runtime`.
  *
- * It is registered and proven live, and **the endpoint does not route to it** —
- * see the handoff on the roster wall. `p_owner_id` is a `team_members.id`, and
- * while reads stay on Supabase the browser supplies that integer from the
- * Supabase roster, where the same value denotes a different person (N-B2).
+ * `/api/pipeline` routes the six follow-up actions to it through
+ * `neonFollowUp` (`_lib/neonWrites.ts`). `p_owner_id` is a `team_members.id`
+ * from the same database's roster, so the owner it names is the right person.
  */
 
 import type { NeonCommandOperation, NeonQueryOperation, NeonRow } from '../neon.js'
@@ -224,9 +224,9 @@ export const lockThreadOperation: NeonCommandOperation<
  * `DataStoreParam` already admits arrays of scalars, so the contract did not have
  * to widen.
  *
- * `ON CONFLICT … DO NOTHING` on `messages_identity_key` is retained from the
- * Supabase path and does the same job: a forced exact re-import is a silent skip
- * rather than a 409. It is a backstop, not the dedup — see the module header.
+ * `ON CONFLICT … DO NOTHING` on `messages_identity_key` is a backstop: a forced
+ * exact re-import is a silent skip rather than a 409. It is not the dedup — see
+ * the module header.
  * `RETURNING id` therefore counts only the rows that really landed, which is what
  * the response's `inserted` reports.
  */
@@ -273,10 +273,10 @@ export const insertImportedMessagesOperation: NeonCommandOperation<
 /**
  * `COALESCE` per column, which makes the idempotency structural.
  *
- * The Supabase handler builds a patch object containing only the columns that
- * are currently NULL, so its "fill only what is missing" rule lives in
- * JavaScript and a future edit could drop it silently. Here every column is
- * assigned `COALESCE(column, $n)`, so a non-NULL milestone can only ever be
+ * The retired Supabase handler built a patch object containing only the columns
+ * that were NULL, so its "fill only what is missing" rule lived in JavaScript,
+ * where a future edit could drop it silently. Here every column is assigned
+ * `COALESCE(column, $n)`, so a non-NULL milestone can only ever be
  * written back to itself: LH2 stays ground truth for anything it recorded, and a
  * re-import of a fully deduped paste still fills a milestone an earlier partial
  * import missed.

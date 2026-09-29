@@ -1,11 +1,11 @@
 /**
  * The briefing job machine and its reads, as named operations.
  *
- * The Supabase path drives `briefing_jobs` with PostgREST update-where-version
- * calls; these are the same statements with the optimistic predicates in the
- * SQL, which is where they belong: the version check is the collision defence,
- * and a claim that forgot its `WHERE version` is an operation nobody
- * registered, not a runtime accident.
+ * The retired Supabase path drove `briefing_jobs` with PostgREST
+ * update-where-version calls; these are the same statements with the optimistic
+ * predicates in the SQL, which is where they belong: the version check is the
+ * collision defence, and a claim that forgot its `WHERE version` is an operation
+ * nobody registered, not a runtime accident.
  *
  * Every command here keys on `(briefing_date, briefing_kind, version)` and
  * bumps the version itself — callers pass the version they read, never the
@@ -556,8 +556,8 @@ from hypothesis_campaigns
 `.trim(),
   // `now() - interval '30 days'` rather than a bound parameter, because the
   // guard's signature is `ai_execute_sql(text)` and there is nowhere to bind
-  // one. The window is the same 30 days the Supabase and direct paths compute
-  // in JavaScript, evaluated one layer down instead.
+  // one. The window is the same 30 days the other reads compute in JavaScript,
+  // evaluated one layer down instead.
   recentAnnotations: `
 select instance_id, campaign_id, note, noted_at
 from annotations

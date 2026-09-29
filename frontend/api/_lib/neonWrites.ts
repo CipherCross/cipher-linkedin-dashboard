@@ -392,8 +392,8 @@ export interface NeonFollowUpInput {
 /**
  * The baseline function owns the advisory lock, revision check, replay and the
  * paired state/event writes. The application transaction supplies the resolved
- * actor and the audit name from the same Neon roster, so all six actions retain
- * those guarantees without crossing either provider's member-id space.
+ * actor and the audit name from the same database's roster, so all six actions
+ * retain those guarantees and every member id names the right person.
  */
 export async function neonFollowUp(
   request: Request,
@@ -638,7 +638,7 @@ export interface NeonImportMessage {
   /** ISO UTC, already normalized by the endpoint. */
   readonly sent_at: string
   readonly force: boolean
-  /** `md5(body)`, computed by the endpoint so both providers use one definition. */
+  /** `md5(body)`, computed by the endpoint so there is one definition of it. */
   readonly contentHash: string
 }
 

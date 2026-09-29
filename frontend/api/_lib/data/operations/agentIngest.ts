@@ -43,8 +43,8 @@
  *
  * No delete, of any row, in any operation. Step 009 grants the machine
  * principal no `DELETE` at all, so an ingest cannot remove a lead that vanished
- * from the notebook's local database — which is the behaviour the Supabase
- * transport already has, and changing it is not a transport decision.
+ * from the notebook's local database — which is what the retired Supabase
+ * transport did too, and changing it is not a transport decision.
  */
 
 import { RESOLVE_MACHINE_ACTOR_OPERATION } from '../contracts.js'
@@ -407,7 +407,7 @@ export interface LeadPhotoCheckParams {
 /**
  * The no-avatar half of the photo API. The agent must be able to converge a
  * checked lead without inventing an object path; `photo_synced_at` with a NULL
- * path is the existing meaning on both providers.
+ * path means "checked, LinkedIn had none".
  */
 export const stampLeadPhotoCheckOperation: NeonCommandOperation<
   number,

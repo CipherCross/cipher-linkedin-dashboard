@@ -291,9 +291,9 @@ export interface ActionableProfileRow {
 
 /**
  * The digest's walk of an account's messages, newest first. The handler pages
- * it and keeps each profile's FIRST direction, which is the newest message's —
- * the same computation the Supabase path does over `.range()` pages. The order
- * is total (`sent_at DESC, id DESC`) because synced batches stamp equal times.
+ * it and keeps each profile's FIRST direction, which is the newest message's.
+ * The order is total (`sent_at DESC, id DESC`) because synced batches stamp
+ * equal times.
  */
 export const coachActionableProfilesOperation: NeonQueryOperation<
   ActionableProfileRow,
@@ -454,14 +454,14 @@ export interface GenderBatchParams {
 }
 
 /**
- * The fair gender batch, as one statement. The Supabase path selects a bucket
- * per instance and then round-robins across buckets in instance order,
- * deduplicating each person by `(instance_id, profile_url)`; this reproduces
- * that: `rn` is the position inside each instance's bucket (oldest lead
- * first), the `DISTINCT ON` keeps a person's earliest bucket position, and the
- * final `rn, instance_id` order is the round-robin interleaving. The portable
- * baseline carries every v2 lifecycle column by construction, so there is no
- * legacy ladder here — see S14's design call 6 for the same argument.
+ * The fair gender batch, as one statement: a bucket per instance, round-robin
+ * across buckets in instance order, each person deduplicated by
+ * `(instance_id, profile_url)`, as the retired Supabase path did. `rn` is the
+ * position inside each instance's bucket (oldest lead first), the `DISTINCT ON`
+ * keeps a person's earliest bucket position, and the final `rn, instance_id`
+ * order is the round-robin interleaving. The portable baseline carries every v2
+ * lifecycle column by construction, so there is no legacy ladder here — see S14's
+ * design call 6 for the same argument.
  */
 export const classifyGenderBatchOperation: NeonQueryOperation<
   GenderBatchRow,
@@ -523,8 +523,7 @@ export const classifyWriteGenderOperation: NeonCommandOperation<
     if (!params) throw new Error('classify.writeGender requires parameters')
     return {
       // A person may sit in several campaigns on the same account; one
-      // evaluation persists across every row, keyed exactly as the Supabase
-      // path's chained `.eq()` pair.
+      // evaluation persists across every row keyed by (instance_id, profile_url).
       text: `UPDATE public.leads
                 SET gender = $3::text,
                     gender_confidence = $4::real,

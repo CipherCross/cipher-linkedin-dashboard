@@ -140,8 +140,8 @@ export class DataStoreUnavailableError extends DataStoreContractError {
  *   `` `${what}: ${originalMessage}` ``, and for a connection-level failure the
  *   original text embeds the database hostname — which is why
  *   `safeErrorLabel` in the endpoint logs `name`/`code` and nothing else.
- *   String-matching `does not exist`, the way the Supabase path's
- *   `isMissingRelation` must, would put the handler back in the business of
+ *   String-matching `does not exist`, the way the retired Supabase path's
+ *   `isMissingRelation` had to, would put the handler back in the business of
  *   parsing driver text.
  * - **It must not be the driver's own decision.** Tolerating a missing relation
  *   is a *product* judgement about one read; an adapter that quietly returned

@@ -10,9 +10,9 @@
  *
  * ## The column ladder does not survive, and that is a decision
  *
- * The Supabase path walks a four-rung retry ladder
- * (`DataContext.tsx:59`, `LEAD_COLUMN_LADDER`): ask for the widest column list,
- * and on PostgREST's SQLSTATE 42703 drop to a narrower rung. It exists because
+ * The retired Supabase path walked a four-rung retry ladder
+ * (`LEAD_COLUMN_LADDER` in `DataContext.tsx`): ask for the widest column list,
+ * and on PostgREST's SQLSTATE 42703 drop to a narrower rung. It existed because
  * that schema drifted — migrations 041/042/048 were applied out of band, so a
  * deployed frontend could be ahead of the database, and degrading beat a dead
  * dashboard during the window.
@@ -82,7 +82,7 @@ export const LEADS_OPERATIONS = {
  * One lead, in the browser's own column names.
  *
  * Mirrors `Lead` in `frontend/src/lib/types.ts` — where the demographics fields
- * are declared optional precisely because the Supabase ladder could omit them.
+ * were declared optional because the retired Supabase ladder could omit them.
  * They are non-optional-but-nullable here: this path always selects them, so
  * `null` means "not inferred" rather than "not asked for", which is a strictly
  * better signal. Assignability to `Lead` is asserted in the live suite.
@@ -138,8 +138,7 @@ export interface LeadsDirectoryParams {
    * how a caller ends up filtering the wrong column. `leads.directory` therefore
    * ignores `range` entirely and takes this explicitly.
    *
-   * Its correctness rests on the same 2-minute overlap the Supabase path uses
-   * (`REFRESH_OVERLAP_MS`); nothing about that changes here.
+   * The caller owns the watermark and any overlap behind it.
    */
   readonly updatedSince: string | null
   readonly [key: string]: string | null
@@ -148,10 +147,6 @@ export interface LeadsDirectoryParams {
 /**
  * `ORDER BY id` — the primary key, so the order is total and a keyset walk can
  * neither skip nor repeat.
- *
- * The Supabase path orders by `id` too, so a paged walk returns the same rows in
- * the same sequence on both providers, which is what keeps the client recompute
- * comparable between them.
  *
  * `id` is a `uuid`; PostgreSQL orders it byte-wise and consistently, and `>` on
  * uuid is the same total order the index provides. The cursor carries it as text.
@@ -572,13 +567,9 @@ export const leadsSearchPageOperation: NeonQueryOperation<
  * than raising. With the relation bounded at a handful of notes per lead, offset
  * costs nothing and avoids the trap entirely.
  *
- * The order is `created_at DESC, id DESC`. The `id` tiebreaker is added here: the
- * Supabase path orders on `created_at` alone, which is fine for one unpaged
- * response and is not a total order. NULL placement is PostgreSQL's default for
- * `DESC`, which is NULLS FIRST — and it is PostgREST's too, since PostgREST emits
- * the same bare `DESC` unless a caller asks otherwise. So a note with no
- * `created_at` sorts first on both providers rather than first on one and last on
- * the other.
+ * The order is `created_at DESC, id DESC`; `created_at` alone is not a total
+ * order. NULL placement is PostgreSQL's default for `DESC`, which is NULLS FIRST
+ * (as it was under PostgREST), so a note with no `created_at` sorts first.
  */
 export interface LeadNoteRow {
   readonly id: number
