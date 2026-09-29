@@ -162,9 +162,9 @@ const EXECUTABLE_SCRIPTS = [
 // They were removed rather than weakened. What remains is genuinely immutable:
 // already-applied migrations, and the published baseline set — the latter also
 // enforced, more strongly, by the IMMUTABLE_BASELINE digest checks above.
+// supabase/migrations/ and supabase/tenant-baseline/ were protected here until the
+// legacy schema was deleted on 2026-09-29 (owner decision: Supabase is retired).
 const PROTECTED_PATHS = [
-  'supabase/migrations/',
-  'supabase/tenant-baseline/',
   'postgres/tenant-baseline/v1/001_portable_business_baseline.sql',
   'postgres/tenant-baseline/v1/002_identity_roles_actor_rls.sql',
   'postgres/tenant-baseline/v1/003_functions_triggers_ai_guard.sql',

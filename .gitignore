@@ -19,5 +19,3 @@ ops/*.lh2backup
 # per-notebook conversation-tracker state (agent-written, never committed)
 sync-agent/tracker_state.json
 
-# Supabase CLI link cache (per-machine)
-supabase/.temp/
