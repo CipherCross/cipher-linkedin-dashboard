@@ -1,33 +1,21 @@
 # Copy to config.yaml on each notebook and edit. config.yaml is gitignored —
 # it holds credentials, never commit it.
 #
-# WHICH KEYS ARE REQUIRED depends on which destination this notebook has, and
-# the agent derives that from the credentials it finds rather than from a flag:
+# REQUIRED: instance_id (below) plus a machine ingest credential — ingest_url
+# and ingest_token (see "The machine ingest gateway"). A config without them is
+# refused at startup rather than syncing into nothing. Leftover supabase_url /
+# supabase_service_key / ingest_mode keys from older agents are ignored and can
+# be deleted.
 #
-#   * a notebook on the ORIGINAL deployment sets supabase_url +
-#     supabase_service_key (below), and optionally the gateway keys further down
-#     to mirror or to cut over;
-#   * a notebook on a TENANT deployment sets ingest_url + ingest_token and NO
-#     Supabase keys at all — a tenant has no Supabase project to have a key for.
-#     Such a notebook runs `ingest_mode: only` whatever the flag says.
-#
-# `instance_id` is always required. A config with neither destination is
-# refused at startup rather than syncing into nothing.
-#
-# ONLINE CONFIG: the bootstrap keys (supabase_url, supabase_service_key,
-# instance_id) plus the machine token and release public key must be set
-# locally. The token is the one credential used for ingest, config, photo
-# upload, notify and release authorization; EVERYTHING else in this file
+# ONLINE CONFIG: instance_id, the machine token and the release public key must
+# be set locally. The token is the one credential used for ingest, config,
+# notify and release authorization; EVERYTHING else in this file
 # (instance_label, account_*, the sync_* toggles, lh2_db_path, even the mapping)
 # can be overridden from the dashboard's Health page; the agent merges those
 # online values over this file on every sync and REMOTE WINS. So you rarely need
 # to touch this file again after the first sync. Set `ignore_remote_config: true`
 # to pin a notebook to this file only (escape hatch if a bad online value breaks
 # its sync).
-
-# Omit BOTH of these on a tenant notebook.
-supabase_url: "https://YOUR-PROJECT.supabase.co"
-supabase_service_key: "YOUR-SERVICE-ROLE-KEY"   # Settings -> API -> service_role
 
 # Self-update: before each scheduled sync the agent asks the authenticated
 # machine API for the signed current release, verifies the Ed25519 signature,
@@ -39,29 +27,21 @@ auto_update: true
 # Message-sequence view: the agent automatically extracts each campaign's
 # outbound steps (invite + follow-up messages) and their per-step reply rates
 # straight from lh.db — no mapping needed, the queries are built in. The step
-# TEMPLATE TEXT is synced too, so it becomes anon-readable in Supabase (same
+# TEMPLATE TEXT is synced too, so every dashboard member can read it (same
 # tradeoff as sync_messages below). Set to false to skip the whole thing.
 sync_steps: true
 
 # Conversation history: the agent automatically extracts the full message thread
 # per lead — both the messages we sent and the replies we received — straight
 # from lh.db (built-in query, no mapping needed). Powers the Replies feed and
-# the server-side sentiment + P1/P2/P3 intent classifier. PRIVACY:
-# message bodies become anon-readable in Supabase until Auth is on. Set to false
-# to skip. Override mapping.messages below only for a non-standard LH2 schema.
+# the server-side sentiment + P1/P2/P3 intent classifier. PRIVACY: message
+# bodies are readable by every dashboard member. Set to false to skip. Override
+# mapping.messages below only for a non-standard LH2 schema.
 sync_messages: true
 
-# Lead photos (UI display ONLY — never used for any inference): after each
-# successful sync the agent mirrors each lead's LinkedIn profile photo into the
-# private `lead-photos` Storage bucket so the authenticated dashboard can show
-# avatars through short-lived signed URLs. OFF by default — flip it on per
-# notebook (usually remotely, from the Health page: it's a remote-config key)
-# once migration 054 is applied and you're ready for the initial backfill, which
-# spreads over several syncs (200 photos per run). Every photo error is swallowed
-# — it can NEVER break a sync. NOTE: the same licdn URL expiry as above applies —
-# the agent downloads the bytes at sync time from a fresh DB read rather than
-# storing the URL; a dead/missing avatar is skipped quietly (marked done, no
-# photo) and never retried.
+# Lead photos: NOT available. Photo mirroring was removed with the Supabase
+# transport in agent 1.27.0; the gateway has no photo candidate list. A truthy
+# value only prints a one-line notice after each sync.
 sync_photos: false
 
 # New-reply Slack alerts: after each successful sync the agent pings this
@@ -76,40 +56,19 @@ sync_photos: false
 # The machine ingest gateway.
 #
 # The agent delivers its extraction to the dashboard's ingest endpoint,
-# authenticating with a credential issued for THIS notebook rather than a shared
-# service key. On a tenant deployment this is the only transport there is.
+# authenticating with a credential issued for THIS notebook. It is the only
+# destination: a delivery failure fails the run, because nothing was written
+# anywhere. `ingest-csv` delivers through the same gateway, with the same
+# idempotency key and parity check as `sync`.
 #
-#   ingest_mode: off     nothing is built and nothing is sent. The default for a
-#                        notebook that holds a Supabase credential.
-#                shadow  delivered alongside Supabase; every failure is noise
-#                        and is not reported
-#                dual    delivered alongside Supabase; a failure marks the run
-#                        'partial' so it shows on the Health page
-#                only    the gateway is the SOLE destination. No Supabase client
-#                        is built and a delivery failure FAILS the run, because
-#                        nothing was written anywhere. Automatic — and the only
-#                        possibility — when no Supabase credential is set.
-#
-# Roll out one notebook at a time: set ingest_mode to 'shadow' remotely from the
-# Health page, read the run's log, then move it to 'dual', then to 'only'.
-#
-# Two commands behave differently on a Supabase-free notebook. `ingest-csv`
-# works — it delivers through the same gateway, with the same idempotency key
-# and parity check as `sync`. `annotate` refuses: the ingest contract carries no
-# annotations and app_machine holds no grant on that table. `sync_photos` is
-# skipped for the same kind of reason, and says so on every run.
-#
-# ingest_url and ingest_mode are remote-config keys. `ingest_url` must also be
-# bootstrapped locally when the authenticated config API is first enabled; after
-# that, the dashboard may rotate it remotely. ingest_token is NOT, and
+# ingest_url is a remote-config key. It must be set locally for the first sync;
+# after that, the dashboard may rotate it remotely. ingest_token is NOT, and
 # never will be: it is a credential, and a remote blob that could set it would
 # be a way to hand every notebook a token of somebody else's choosing. Mint one
 # per notebook through the dashboard's
 # admin.agentCredentialIssue operation; the plaintext is shown exactly once.
-#
-# ingest_url: "https://<your-app>.vercel.app/api/import?op=agent.ingest"
-# ingest_mode: "off"
-# ingest_token: "lha.<credential-uuid>.<secret>"
+ingest_url: "https://<your-app>.vercel.app/api/import?op=agent.ingest"
+ingest_token: "lha.<credential-uuid>.<secret>"
 
 # Signed release verification. This is a local-only Ed25519 public key in
 # unpadded base64url form (32 bytes). It is a trust anchor, so it cannot be
@@ -169,7 +128,7 @@ sync_photos: false
 
 # LH2 campaign ids this notebook must NEVER sync (test campaigns, etc.).
 # Archiving in LH2 is not enough — archived campaigns stay in lh.db and would
-# be re-created in Supabase on the next sync. Also settable remotely from the
+# be re-created on the dashboard on the next sync. Also settable remotely from the
 # Health page. Applies to campaigns, leads, events, steps and messages.
 # exclude_campaigns: [4]
 
