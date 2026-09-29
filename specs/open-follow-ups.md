@@ -68,9 +68,10 @@ that the code alone cannot prove done. Delete a line when it is done or dropped.
 Supabase was removed from the code on 2026-09-29 (agent 1.27.0, Neon-only API, identity
 sign-in, `supabase/` deleted). Owner actions still to do:
 
-- Repoint `sync-agent/installer/release.json` at the pushed commit that carries agent
-  1.27.0 (version, commit, raw URL, sha256, bytes), then run `sync-agent/deploy.sh`;
-  confirm all four notebooks report 1.27.0 on the Health page.
+- Agent 1.27.0 was published on 2026-09-29 (installer pin at `ac3002a`, pointer and
+  signature verified in the bucket). Still to confirm: all four notebooks report 1.27.0 on
+  the Health page with fresh successful syncs. Merge this branch with a merge commit, not
+  a squash, so the pinned `ac3002a` stays reachable for new installs.
 - Remove `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
   `SUPABASE_ANON_KEY` and `SUPABASE_URL` from Vercel.
 - Preview deployments need `NEON_AI_DATABASE_URL` and `IDENTITY_*` (pointing at the fixture
