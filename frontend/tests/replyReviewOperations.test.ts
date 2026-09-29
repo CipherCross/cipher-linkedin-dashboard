@@ -103,6 +103,18 @@ describe('manual reply-review Neon operations', () => {
     expect(setWorkflowOperation.build({ actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' }, params: { instanceId: 'n1', profileUrl: 'p', expectedRevision: 3, observedInboundRevision: 4, action: 'follow_up', ownerId: 7, nextFollowUpDate: '2026-09-12', doNotContact: false, supportingMessageId: null, actorId: 'actor', mutationId: '00000000-0000-4000-8000-000000000000' } }).values).toContain(3)
   })
 
+  // `INSERT … SELECT … WHERE expected = 0` proposes no row once one exists, so
+  // ON CONFLICT DO UPDATE never ran and every edit of a saved review or workflow
+  // answered 409. The existing row must also propose, leaving the revision
+  // check in DO UPDATE to decide. Proved against PostgreSQL on 2026-09-29.
+  it('lets an existing review or workflow reach its revision-checked update', () => {
+    const actor = { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' } as const
+    const review = saveReviewOperation.build({ actor, params: { instanceId: 'n1', profileUrl: 'p', messageId: 4, expectedRevision: 2, sentiment: 'neutral', intentState: 'none', intentLevel: null, comment: null, taxonomyVersion: 'reply-review-v1', actorId: 'actor' } }).text
+    expect(review).toContain('WHERE $2::bigint = 0 OR EXISTS (SELECT 1 FROM public.reply_reviews WHERE message_id = $1::bigint)')
+    const workflow = setWorkflowOperation.build({ actor, params: { instanceId: 'n1', profileUrl: 'p', expectedRevision: 3, observedInboundRevision: 4, action: 'resolved', ownerId: 7, nextFollowUpDate: null, doNotContact: false, supportingMessageId: null, actorId: 'actor', mutationId: '00000000-0000-4000-8000-000000000000' } }).text
+    expect(workflow).toContain('WHERE $3::bigint = 0 OR EXISTS (SELECT 1 FROM public.conversation_follow_up_state WHERE instance_id = $1 AND profile_url = $2)')
+  })
+
   it('applies every inbox view and independent queue flags in SQL', () => {
     for (const view of ['all', 'unreviewed', 'needs_reply', 'deferred', 'completed'] as const) {
       const statement = inboxOperation.build({ actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' }, params: {

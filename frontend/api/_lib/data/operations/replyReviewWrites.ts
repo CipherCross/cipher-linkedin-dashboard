@@ -111,6 +111,13 @@ export const workflowForThreadOperation = {
   build: ({ params }: { params?: ReplyThreadParams }): NeonStatement => ({ text: `SELECT instance_id, profile_url, action, owner_id, to_char(next_follow_up_date, 'YYYY-MM-DD') AS next_follow_up_date, do_not_contact, acknowledged_inbound_revision, revision, supporting_message_id, updated_at, updated_by FROM public.conversation_follow_up_state WHERE instance_id = $1 AND profile_url = $2`, values: replyKey(params) }),
 } satisfies { build: (context: { params?: ReplyThreadParams }) => NeonStatement }
 
+// Both upserts below are optimistic: the source row is proposed only for a
+// first write (expected revision 0) or when a row already exists, so a stale
+// expectation on an existing row reaches ON CONFLICT and fails its revision
+// check (rowCount 0 -> 409). Gating on `expected = 0` alone proposed nothing
+// once a row existed, so every edit of a saved review or workflow answered 409
+// "reviewed meanwhile", Save again included — hidden until 2026-09-29 because
+// the first save never committed (see ProjectReviewParams).
 export const saveReviewOperation: NeonCommandOperation<SavedReviewResult, SaveReviewParams> = {
   build: ({ params }) => ({
     text: `INSERT INTO public.reply_reviews
@@ -118,7 +125,7 @@ export const saveReviewOperation: NeonCommandOperation<SavedReviewResult, SaveRe
      SELECT $1::bigint, $3::text, $4::text, $5::text, $6::text, $7::text, $8::uuid, 'human', clock_timestamp(), 1,
        CASE WHEN $3::text IS NULL THEN 'none' ELSE 'human' END,
        CASE WHEN $4::text = 'unreviewed' THEN 'none' ELSE 'human' END
-      WHERE $2::bigint = 0
+      WHERE $2::bigint = 0 OR EXISTS (SELECT 1 FROM public.reply_reviews WHERE message_id = $1::bigint)
      ON CONFLICT (message_id) DO UPDATE SET sentiment = EXCLUDED.sentiment,
        intent_state = EXCLUDED.intent_state, intent_level = EXCLUDED.intent_level,
        comment = EXCLUDED.comment, taxonomy_version = EXCLUDED.taxonomy_version,
@@ -174,7 +181,7 @@ export const setWorkflowOperation: NeonCommandOperation<SavedWorkflowResult, Set
       (instance_id, profile_url, action, owner_id, next_follow_up_date, do_not_contact,
        acknowledged_inbound_revision, supporting_message_id, revision, last_mutation_id, updated_by, updated_at)
       SELECT $1, $2, $4, $5::bigint, $6::date, $7::boolean, $8::bigint, $9::bigint, 1, $10::uuid, $11::text, clock_timestamp()
-      WHERE $3::bigint = 0
+      WHERE $3::bigint = 0 OR EXISTS (SELECT 1 FROM public.conversation_follow_up_state WHERE instance_id = $1 AND profile_url = $2)
       ON CONFLICT (instance_id, profile_url) DO UPDATE SET action = EXCLUDED.action, owner_id = EXCLUDED.owner_id,
         next_follow_up_date = EXCLUDED.next_follow_up_date, do_not_contact = EXCLUDED.do_not_contact,
         acknowledged_inbound_revision = EXCLUDED.acknowledged_inbound_revision,
