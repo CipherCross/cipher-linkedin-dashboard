@@ -18,7 +18,7 @@
  * which is what they always meant and is a stronger claim.
  *
  * That is a smaller claim than "the candidate works end to end against Neon", and
- * the gap is recorded in `docs/implementation-handoffs/N-S17.md` rather than
+ * the gap was recorded in the N-S17 handoff (now in git history) rather than
  * papered over. The end-to-end claim is made where it can be made safely: the
  * S16 spike measured the candidate's own behaviour in a clean room against these
  * exact tables, and `postgres/tests/portable_identity_atomic_invite_cleanroom.sh`
