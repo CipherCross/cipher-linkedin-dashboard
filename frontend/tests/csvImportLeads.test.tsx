@@ -122,7 +122,76 @@ describe('Leads → Contacts tab', () => {
     const declined = row(panel, 'domain:fabrikam.example')
     expect(within(declined).getByText('Declined')).toBeTruthy()
     expect(within(declined).getByText('DB · Rejected')).toBeTruthy()
-    expect(within(declined).queryByRole('button')).toBeNull()
+    expect(within(declined).queryByRole('button', { name: /Confirm|Choose|Change/ })).toBeNull()
+    fireEvent.click(within(declined).getByRole('button', { name: /Show 1 lead of Fabrikam/ }))
+    const leads = within(panel).getByRole('list', { name: 'Leads of Fabrikam' })
+    expect(within(leads).queryByRole('button', { name: /Use|Choose|Change/ })).toBeNull()
+  })
+
+  it('links a not-uploaded lead to the one Companies record its headline names, with Undo', async () => {
+    const AIFORIA = company('recC00000000000011', 'Aiforia Technologies')
+    api.previewLeads.mockResolvedValue({
+      ...preview,
+      rows: preview.rows.map((item) => (item.rowNumber === 4 ? { ...item, headlineMatches: [AIFORIA] } : item)),
+    })
+    const panel = await upload()
+    fireEvent.change(within(panel).getByLabelText(/Added by/), { target: { value: 'David Hamaniuk' } })
+    const leads = within(panel).getByRole('list', { name: 'Leads of Tailspin Toys' })
+    expect(within(leads).getByText('Found in headline', { exact: false })).toBeTruthy()
+    expect(within(row(panel, 'domain:tailspin.example')).getByText('Every lead linked on its own')).toBeTruthy()
+    expect(within(panel).getByText('linked from headline', { exact: false })).toBeTruthy()
+
+    fireEvent.click(within(leads).getByRole('button', { name: 'Undo' }))
+    expect(within(panel).getByRole('button', { name: 'Create 0 contacts' })).toBeTruthy()
+    fireEvent.click(within(leads).getByRole('button', { name: 'Use Aiforia Technologies' }))
+    await act(async () => {
+      fireEvent.click(within(panel).getByRole('button', { name: 'Create 1 contact' }))
+    })
+    expect(api.commitContacts.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ rowNumber: 4, companyId: AIFORIA.id, companyWebsite: 'tailspin.example' }),
+    ])
+  })
+
+  it('asks instead of linking when the headline names several companies, or the company is pending', async () => {
+    const AIFORIA = company('recC00000000000011', 'Aiforia Technologies')
+    const AXIOS = company('recC00000000000012', 'Axios Care')
+    api.previewLeads.mockResolvedValue({
+      ...preview,
+      rows: preview.rows.map((item) =>
+        item.rowNumber === 4 ? { ...item, headlineMatches: [AIFORIA, AXIOS] }
+          : item.rowNumber === 5 ? { ...item, headlineMatches: [AXIOS] }
+            : item),
+    })
+    const panel = await upload()
+    const tailspin = within(panel).getByRole('list', { name: 'Leads of Tailspin Toys' })
+    expect(within(tailspin).getByRole('button', { name: 'Use Aiforia Technologies' })).toBeTruthy()
+    expect(within(tailspin).getByRole('button', { name: 'Use Axios Care' })).toBeTruthy()
+    const contoso = within(panel).getByRole('list', { name: 'Leads of Contoso' })
+    expect(within(contoso).getByRole('button', { name: 'Use Axios Care' })).toBeTruthy()
+    expect(within(panel).getByRole('button', { name: 'Create 0 contacts' })).toBeTruthy()
+  })
+
+  it('links one lead of a group to another company without moving the rest', async () => {
+    const panel = await upload()
+    fireEvent.change(within(panel).getByLabelText(/Added by/), { target: { value: 'David Hamaniuk' } })
+    fireEvent.click(within(row(panel, 'domain:northwind.example')).getByRole('button', { name: /Show 2 leads of Northwind Health/ }))
+    const leads = within(panel).getByRole('list', { name: 'Leads of Northwind Health' })
+    const third = leads.querySelector('[data-lead="3"]') as HTMLElement
+    fireEvent.click(within(third).getByRole('button', { name: 'Choose for this lead' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Choose the Airtable company' })
+    expect(within(dialog).getByText('Lead:', { exact: false })).toBeTruthy()
+    fireEvent.change(within(dialog).getByRole('searchbox'), { target: { value: 'Tailspin' } })
+    fireEvent.click((await within(dialog).findAllByText('Tailspin Holdings', {}, { timeout: 2000 }))[0].closest('button')!)
+    expect(within(third).getByText('Chosen for this lead', { exact: false })).toBeTruthy()
+
+    fireEvent.click(within(row(panel, 'domain:northwind.example')).getByRole('button', { name: 'Confirm' }))
+    await act(async () => {
+      fireEvent.click(within(panel).getByRole('button', { name: 'Create 2 contacts' }))
+    })
+    expect(api.commitContacts.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ rowNumber: 2, companyId: NORTHWIND.id }),
+      expect.objectContaining({ rowNumber: 3, companyId: OTHER.id }),
+    ])
   })
 
   it('links a not-uploaded group manually and refuses a Rejected pick', async () => {

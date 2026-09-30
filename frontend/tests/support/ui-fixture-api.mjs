@@ -707,6 +707,11 @@ export async function fixtureControl(request) {
 }
 
 const FIXTURE_COMPANY = { id: 'recFixture0000001', name: 'Fixture Labs', website: 'https://fixture.test', linkedin: '', approveStatus: 'Approved' }
+const HEADLINE_COMPANIES = [
+  FIXTURE_COMPANY,
+  { id: 'recFixture0000002', name: 'Harbor Analytics', website: 'https://harbor.test', linkedin: '', approveStatus: 'Approved' },
+  { id: 'recFixture0000003', name: 'Quill Care', website: 'https://quill.test', linkedin: '', approveStatus: 'Approved' },
+]
 
 /**
  * CSV import endpoint: metadata, previews and company search are reads and get
@@ -729,15 +734,34 @@ export async function importFixture(request) {
     return json({ results, counts: {} })
   }
   if (body.action === 'contact_preview') {
+    // The first CSV company is suggested; every other one is "not uploaded",
+    // and a headline naming a fixture company carries it as a headline match.
     const rows = Array.isArray(body.rows) ? body.rows : []
-    const rowNumbers = rows.map((row) => row.rowNumber)
+    const byCompany = new Map()
+    for (const row of rows) {
+      const name = String(row.companyName || 'Unnamed')
+      byCompany.set(name, [...(byCompany.get(name) ?? []), row.rowNumber])
+    }
+    const keyOf = (name) => `name:${name.toLowerCase()}`
+    const headlineMatches = (row) => HEADLINE_COMPANIES.filter((company) =>
+      company.name.toLowerCase() !== String(row.companyName).toLowerCase() &&
+      String(row.headline || '').toLowerCase().includes(company.name.toLowerCase()))
     return json({
-      rows: rows.map((row) => ({ rowNumber: row.rowNumber, status: 'ready', groupKey: 'domain:fixture.test' })),
-      groups: rowNumbers.length ? [{
-        key: 'domain:fixture.test', companyName: FIXTURE_COMPANY.name, domain: 'fixture.test', linkedin: '', rowNumbers,
-        status: 'suggested', method: 'domain', suggestion: FIXTURE_COMPANY, candidates: [FIXTURE_COMPANY], rejected: [], db: [],
-        reason: 'One Companies record has this domain',
-      }] : [],
+      rows: rows.map((row) => {
+        const matches = headlineMatches(row)
+        return { rowNumber: row.rowNumber, status: 'ready', groupKey: keyOf(String(row.companyName || 'Unnamed')), ...(matches.length ? { headlineMatches: matches } : {}) }
+      }),
+      groups: [...byCompany].map(([name, rowNumbers], index) => index === 0
+        ? {
+            key: keyOf(name), companyName: name, domain: 'fixture.test', linkedin: '', rowNumbers,
+            status: 'suggested', method: 'domain', suggestion: FIXTURE_COMPANY, candidates: [FIXTURE_COMPANY], rejected: [], db: [],
+            reason: 'One Companies record has this domain',
+          }
+        : {
+            key: keyOf(name), companyName: name, domain: '', linkedin: '', rowNumbers,
+            status: 'not_uploaded', candidates: [], rejected: [], db: [],
+            reason: 'This company is in neither DB nor Companies; upload it in the Companies tab first',
+          }),
       counts: {},
     })
   }

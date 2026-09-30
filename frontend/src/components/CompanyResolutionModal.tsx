@@ -7,24 +7,29 @@ import { Badge, Button, Dialog, InlineError, TextField, UpdatingNote } from '../
 const isRejected = (company: AirtableCompany) => company.approveStatus.trim().toLowerCase() === 'rejected'
 
 /**
- * Picks the Companies record a group of leads is linked to. It lists the
+ * Picks the Companies record a group of leads — or, with `leadName`, one lead
+ * of it — is linked to. It lists the
  * group's candidates and searches Companies by name, domain or LinkedIn. A
  * Rejected record is shown but cannot be chosen.
  */
 export function CompanyResolutionModal({
   sourceCompany,
   affectedRows,
+  leadName,
+  initialQuery = sourceCompany,
   suggestions,
   onSelect,
   onClose,
 }: {
   sourceCompany: string
   affectedRows: number
+  leadName?: string
+  initialQuery?: string
   suggestions: AirtableCompany[]
   onSelect: (company: AirtableCompany) => void
   onClose: () => void
 }) {
-  const [query, setQuery] = useState(sourceCompany)
+  const [query, setQuery] = useState(initialQuery)
   const [results, setResults] = useState<AirtableCompany[]>(suggestions)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,9 +69,12 @@ export function CompanyResolutionModal({
     <Dialog
       title="Choose the Airtable company"
       description={<>
+        {leadName && <>Lead: <strong>{leadName}</strong>{' · '}</>}
         CSV company: <strong>{sourceCompany || 'Unnamed company'}</strong>
-        {' · '}
-        {affectedRows} {affectedRows === 1 ? 'lead' : 'leads'}
+        {!leadName && <>
+          {' · '}
+          {affectedRows} {affectedRows === 1 ? 'lead' : 'leads'}
+        </>}
       </>}
       closeLabel="Close company picker"
       onRequestClose={onClose}

@@ -14,6 +14,9 @@ import {
 import {
   classifyGroups,
   groupRows,
+  headlineIndex,
+  headlineMatches,
+  nameVariants,
   type LeadGroup,
   type LeadRow,
 } from '../api/_lib/contactImport'
@@ -190,6 +193,39 @@ describe('lead group classification', () => {
   })
 })
 
+describe('headline company matches', () => {
+  const aiforia = company('recC00000000000011', { name: 'Aiforia Technologies', website: 'https://aiforia.com' })
+  const axios = company('recC00000000000012', { name: 'Axios Care', website: 'https://axios.care' })
+  const dissect = company('recC00000000000013', { name: 'Data Dissect (Neo Data Pty Ltd)', website: 'https://datadissect.com.au' })
+  const annota = company('recC00000000000014', { name: 'Annota GmbH', website: 'https://annota.de' })
+  const generic = company('recC00000000000015', { name: 'Health', website: 'https://health.example' })
+  const rejected = company('recC00000000000016', { name: 'Grievy', website: 'https://grievy.example', approveStatus: 'Rejected' })
+  const index = headlineIndex([aiforia, axios, dissect, annota, generic, rejected])
+  const ids = (headline: string, domain = '') => headlineMatches(headline, index, domain).map((record) => record.id)
+
+  it('drops a parenthetical and legal suffixes but keeps the stored spelling', () => {
+    expect(nameVariants('Data Dissect (Neo Data Pty Ltd)')).toEqual(['data dissect neo data pty ltd', 'data dissect'])
+    expect(nameVariants('Annota GmbH')).toEqual(['annota gmbh', 'annota'])
+    expect(nameVariants('Health')).toEqual([])
+    expect(nameVariants('Nexa')).toEqual([])
+  })
+
+  it('finds a linkable Companies record named in the headline, on word boundaries', () => {
+    expect(ids('Chief Operating Officer at Aiforia Technologies')).toEqual([aiforia.id])
+    expect(ids('Co-founder Axios-Care | Project Manager @TSR')).toEqual([axios.id])
+    expect(ids('CTO @ Data Dissect · SaaS')).toEqual([dissect.id])
+    expect(ids('Founder of Annota, privacy-first AI')).toEqual([annota.id])
+    expect(ids('Advisor at Aiforiatech')).toEqual([])
+    expect(ids('Digital health leader')).toEqual([])
+    expect(ids('Co-Founder & CEO at grievy')).toEqual([])
+  })
+
+  it('returns every named company, and never the lead’s own CSV company', () => {
+    expect(ids('COO Aiforia Technologies · Board, Axios Care')).toEqual([aiforia.id, axios.id])
+    expect(ids('COO at Aiforia Technologies', 'aiforia.com')).toEqual([])
+  })
+})
+
 describe('Leads → Contacts handler', () => {
   type Handler = typeof import('../api/_lib/contactImport').handleContactImport
   let airtable: FakeAirtable
@@ -249,6 +285,19 @@ describe('Leads → Contacts handler', () => {
     ])
     const dbRequests = airtable.requests.filter((request) => request.path.includes(AIRTABLE_IDS.dbTable))
     expect(dbRequests.every((request) => request.path.endsWith('/listRecords'))).toBe(true)
+  })
+
+  it('names Companies records found in a ready lead’s headline', async () => {
+    const id = airtable.addCompany('Aiforia Technologies', 'aiforia.com', 'Approved')
+    const { body } = await call(handle, 'contact_preview', {
+      rows: [
+        lead(2, { companyName: 'Finnish Bioindustries', companyWebsite: 'finbio.net', headline: 'COO at Aiforia Technologies' }),
+        lead(3, { headline: 'Founder at Northwind Health' }),
+      ],
+    })
+    expect(body.rows[0]).toMatchObject({ status: 'ready', headlineMatches: [expect.objectContaining({ id })] })
+    expect(body.rows[1].headlineMatches).toBeUndefined()
+    expect(body.groups[0]).toMatchObject({ key: 'domain:finbio.net', status: 'not_uploaded' })
   })
 
   it('makes a held group linkable once its company reaches Companies (Re-check)', async () => {

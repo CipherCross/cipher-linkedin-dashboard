@@ -9,7 +9,9 @@ import { normalizeDomain } from './domain'
 // `Linkedin URL Public`, …). Apollo People/Accounts header names are kept as
 // aliases so older exports still parse. Everything not named here is dropped
 // at this allowlist: email, phone, revenue and every other column never leave
-// the browser.
+// the browser. The profile headline and the current-jobs count are kept
+// because an export names only one of a person's current companies; they help
+// the user spot and relink a lead whose CSV company is the wrong one.
 
 export const CSV_IMPORT_LIMITS = {
   maxFileBytes: 5_000_000,
@@ -49,6 +51,9 @@ export interface LeadImportRow {
   companyName: string
   companyWebsite: string
   companyLinkedin: string
+  headline: string
+  /** `Current Jobs Number`; 0 when the export does not say. */
+  currentJobs: number
 }
 
 export interface CompanyCsvDocument extends CsvSource {
@@ -82,6 +87,8 @@ const LEAD_COLUMNS = {
   firstName: ['First Name'],
   lastName: ['Last Name'],
   title: ['Current Job', 'Title', 'Job Title'],
+  headline: ['Profile Headline', 'Headline'],
+  currentJobs: ['Current Jobs Number'],
 } as const
 
 /** Columns that only a people export has. Their presence decides the file kind. */
@@ -273,6 +280,8 @@ export async function parseLeadCsvFile(file: File): Promise<LeadCsvDocument> {
         companyName: company.companyName,
         companyWebsite: company.website,
         companyLinkedin: company.linkedin,
+        headline: value('headline').slice(0, 500),
+        currentJobs: Number(lenientInteger(value('currentJobs')) || 0),
       }
     }),
   }

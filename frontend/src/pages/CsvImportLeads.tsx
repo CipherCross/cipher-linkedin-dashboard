@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
-import { CheckCircle2, Download, RefreshCw, RotateCcw, Search, Undo2, Users } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
+import {
+  CheckCircle2, ChevronDown, ChevronRight, Download, ExternalLink, RefreshCw, RotateCcw, Search, Undo2, Users,
+} from 'lucide-react'
 import { CompanyResolutionModal } from '../components/CompanyResolutionModal'
 import { downloadCsvReport, parseLeadCsvFile } from '../lib/csvImport'
 import type { LeadCsvDocument, LeadImportRow } from '../lib/csvImport'
@@ -14,10 +16,11 @@ import type {
   DbMatch,
   LeadGroup,
   LeadPreviewResponse,
+  LeadRowResult,
 } from '../lib/importApi'
 import { useToast } from '../lib/ToastContext'
 import {
-  Badge, Button, InlineError, SectionHeader, Table, TableFrame, UpdatingNote, type Tone,
+  Badge, Button, ExternalLinkButton, InlineError, SectionHeader, Table, TableFrame, UpdatingNote, type Tone,
 } from '../ui'
 import {
   AddedByField,
@@ -35,6 +38,12 @@ import {
 // is preselected, never written until confirmed. Companies still waiting in DB
 // hold their leads until an SDR approves them; Re-check runs the preview again
 // on the file already loaded.
+//
+// An export names one company per lead even when the person has several
+// current jobs, so a single lead can also be linked on its own. When the CSV
+// company is in neither DB nor Companies and the headline names exactly one
+// Companies record, the lead is linked to it automatically (with Undo); when
+// the headline names several, the user picks one.
 
 type GroupState = LeadGroup['status'] | 'confirmed'
 
@@ -55,6 +64,23 @@ const ROW_STATUS: Record<string, string> = {
   existing: 'Already in Contacts',
 }
 
+type LeadLink = { company: AirtableCompany; auto: boolean }
+type Picker = { groupKey: string; rowNumber?: number }
+
+/** Links made without a click: a not-uploaded company whose lead's headline names exactly one Companies record. */
+function autoLinks(response: LeadPreviewResponse): Record<number, LeadLink> {
+  const byRow = new Map(response.rows.map((row) => [row.rowNumber, row]))
+  const links: Record<number, LeadLink> = {}
+  for (const group of response.groups) {
+    if (group.status !== 'not_uploaded') continue
+    for (const rowNumber of group.rowNumbers) {
+      const matches = byRow.get(rowNumber)?.headlineMatches ?? []
+      if (matches.length === 1) links[rowNumber] = { company: matches[0], auto: true }
+    }
+  }
+  return links
+}
+
 const dbStatus = (match: DbMatch) =>
   `DB · ${match.status || 'No status'}${match.addedToCompanies ? ' · added to Companies' : ''}`
 
@@ -73,7 +99,9 @@ export function LeadsImport() {
   const [document, setDocument] = useState<LeadCsvDocument | null>(null)
   const [preview, setPreview] = useState<LeadPreviewResponse | null>(null)
   const [confirmed, setConfirmed] = useState<Record<string, AirtableCompany>>({})
-  const [pickerKey, setPickerKey] = useState<string | null>(null)
+  const [leadLinks, setLeadLinks] = useState<Record<number, LeadLink>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [picker, setPicker] = useState<Picker | null>(null)
   const [committed, setCommitted] = useState<ContactCommitResponse | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,16 +110,34 @@ export function LeadsImport() {
     () => new Map((document?.rows ?? []).map((row) => [row.rowNumber, row])),
     [document],
   )
+  const resultByRow = useMemo(
+    () => new Map<number, LeadRowResult>((preview?.rows ?? []).map((row) => [row.rowNumber, row])),
+    [preview],
+  )
   const groups = preview?.groups ?? []
-  const pickerGroup = groups.find((group) => group.key === pickerKey) ?? null
+  const pickerGroup = groups.find((group) => group.key === picker?.groupKey) ?? null
+  const pickerLead = picker?.rowNumber ? rowsByNumber.get(picker.rowNumber) : undefined
   const skippedRows = (preview?.rows ?? []).filter((row) => row.status !== 'ready')
   const stateOf = (group: LeadGroup): GroupState => (confirmed[group.key] ? 'confirmed' : group.status)
   const canLink = (group: LeadGroup) => group.status !== 'declined'
+  /** Leads that follow the group's company rather than a link of their own. */
+  const groupRowsOf = (group: LeadGroup) => group.rowNumbers.filter((rowNumber) => !leadLinks[rowNumber])
+  const headlineMatchesOf = (group: LeadGroup, rowNumber: number) => {
+    const own = new Set([group.suggestion?.id, confirmed[group.key]?.id])
+    return (resultByRow.get(rowNumber)?.headlineMatches ?? []).filter((company) => !own.has(company.id))
+  }
   const singleDomainMatches = groups.filter(
     (group) => group.status === 'suggested' && group.method === 'domain' && !confirmed[group.key],
   )
-  const confirmedGroups = groups.filter((group) => confirmed[group.key])
-  const leadsToCreate = confirmedGroups.reduce((total, group) => total + group.rowNumbers.length, 0)
+  const toCreate = groups.filter(canLink).flatMap((group) =>
+    group.rowNumbers.flatMap((rowNumber) => {
+      const company = leadLinks[rowNumber]?.company ?? confirmed[group.key]
+      return company ? [{ rowNumber, company }] : []
+    }),
+  )
+  const leadsToCreate = toCreate.length
+  const companiesToLink = new Set(toCreate.map((item) => item.company.id)).size
+  const autoLinked = Object.values(leadLinks).filter((link) => link.auto).length
 
   const runPreview = async (doc: LeadCsvDocument, recheck = false) => {
     setBusy(true)
@@ -100,6 +146,8 @@ export function LeadsImport() {
       const response = await previewLeads(doc.rows, { forceCompanies: recheck })
       setPreview(response)
       setConfirmed({})
+      setLeadLinks(autoLinks(response))
+      setExpanded({})
       setCommitted(null)
       if (recheck) toast.success('Re-checked against Airtable · created contacts now show as existing')
     } catch (reason) {
@@ -127,6 +175,8 @@ export function LeadsImport() {
     setDocument(null)
     setPreview(null)
     setConfirmed({})
+    setLeadLinks({})
+    setExpanded({})
     setCommitted(null)
     setError(null)
   }
@@ -138,6 +188,16 @@ export function LeadsImport() {
     setConfirmed((current) => {
       const next = { ...current }
       delete next[group.key]
+      return next
+    })
+
+  const linkLead = (rowNumber: number, company: AirtableCompany) =>
+    setLeadLinks((current) => ({ ...current, [rowNumber]: { company, auto: false } }))
+
+  const unlinkLead = (rowNumber: number) =>
+    setLeadLinks((current) => {
+      const next = { ...current }
+      delete next[rowNumber]
       return next
     })
 
@@ -153,20 +213,18 @@ export function LeadsImport() {
     setBusy(true)
     setError(null)
     try {
-      const rows = confirmedGroups.flatMap((group) =>
-        group.rowNumbers.map((rowNumber) => {
-          const row = rowsByNumber.get(rowNumber) as LeadImportRow
-          return {
-            rowNumber,
-            personLinkedin: row.personLinkedin,
-            firstName: row.firstName,
-            fullName: row.fullName,
-            title: row.title,
-            companyId: confirmed[group.key].id,
-            companyWebsite: row.companyWebsite,
-          }
-        }),
-      )
+      const rows = toCreate.map(({ rowNumber, company }) => {
+        const row = rowsByNumber.get(rowNumber) as LeadImportRow
+        return {
+          rowNumber,
+          personLinkedin: row.personLinkedin,
+          firstName: row.firstName,
+          fullName: row.fullName,
+          title: row.title,
+          companyId: company.id,
+          companyWebsite: row.companyWebsite,
+        }
+      })
       const response = await commitContacts(addedBy, rows)
       setCommitted(response)
       toast.success(
@@ -184,12 +242,15 @@ export function LeadsImport() {
     }
   }
 
-  const heldGroups = groups.filter((group) => group.status === 'pending' || group.status === 'not_uploaded')
+  const heldGroups = groups.filter(
+    (group) => (group.status === 'pending' || group.status === 'not_uploaded') && groupRowsOf(group).length,
+  )
   const declinedGroups = groups.filter((group) => group.status === 'declined')
   const unconfirmedGroups = groups.filter(
-    (group) => (group.status === 'suggested' || group.status === 'ambiguous') && !confirmed[group.key],
+    (group) =>
+      (group.status === 'suggested' || group.status === 'ambiguous') && !confirmed[group.key] && groupRowsOf(group).length,
   )
-  const leadCount = (list: LeadGroup[]) => list.reduce((total, group) => total + group.rowNumbers.length, 0)
+  const leadCount = (list: LeadGroup[]) => list.reduce((total, group) => total + groupRowsOf(group).length, 0)
   const commitByRow = new Map((committed?.results ?? []).map((result) => [result.rowNumber, result]))
   const failedRows = (committed?.results ?? []).filter((result) => result.status === 'failed')
 
@@ -204,17 +265,21 @@ export function LeadsImport() {
       ['Source Row', 'Person LinkedIn', 'Full Name', 'CSV Company', 'Company Status', 'Company Detail', 'Linked Company', 'Linked Company ID', 'Contact Status', 'Contact Detail', 'Contact ID'],
       document.rows.map((row) => {
         const group = groupByRow.get(row.rowNumber)
-        const linked = group ? confirmed[group.key] : undefined
+        const own = leadLinks[row.rowNumber]
+        const linked = group && canLink(group) ? own?.company ?? confirmed[group.key] : undefined
+        const companyStatus = own
+          ? own.auto ? 'Linked from headline' : 'Linked for this lead'
+          : group ? GROUP_STATUS[stateOf(group)].label : ''
         const server = commitByRow.get(row.rowNumber)
         const planned = rowResult.get(row.rowNumber)
         const contactStatus = server?.status
-          ?? (planned && planned.status !== 'ready' ? ROW_STATUS[planned.status] : group ? GROUP_STATUS[stateOf(group)].label : '')
+          ?? (planned && planned.status !== 'ready' ? ROW_STATUS[planned.status] : companyStatus)
         return [
           row.rowNumber,
           row.personLinkedin,
           row.fullName,
           row.companyName,
-          group ? GROUP_STATUS[stateOf(group)].label : '',
+          companyStatus,
           group ? [groupWhere(group), group.reason].filter(Boolean).join(' · ') : '',
           linked?.name ?? '',
           linked?.id ?? '',
@@ -241,7 +306,7 @@ export function LeadsImport() {
           {list.map((group) => (
             <tr key={group.key}>
               <td><strong>{group.companyName || 'Unnamed company'}</strong><div className="text-app-meta text-app-text-muted">{group.domain}</div></td>
-              <td className="tabular-nums">{group.rowNumbers.length}</td>
+              <td className="tabular-nums">{groupRowsOf(group).length}</td>
               <td>{groupWhere(group) || GROUP_STATUS[group.status].label}</td>
               <td className="text-app-meta text-app-text-muted">{group.reason}</td>
             </tr>
@@ -271,7 +336,7 @@ export function LeadsImport() {
       {!document && (
         <CsvUploadCard
           title="Upload a leads CSV"
-          hint={<>Each lead is linked to a Companies record you confirm. Leads whose company is still waiting in DB are held, not dropped. Up to 500 rows · maximum 5 MB. Email, phone and profile columns are ignored.</>}
+          hint={<>Each lead is linked to a Companies record you confirm. Leads whose company is still waiting in DB are held, not dropped. A lead can also be linked on its own when its CSV company is not the right one. Up to 500 rows · maximum 5 MB. Email, phone and profile summary are ignored; the headline is used only to suggest a company.</>}
           disabled={metadata.busy || !!metadata.error}
           onFile={(file) => void chooseFile(file)}
         />
@@ -325,18 +390,38 @@ export function LeadsImport() {
                     {groups.map((group) => {
                       const state = stateOf(group)
                       const linked = confirmed[group.key] ?? group.suggestion
+                      const ownLinks = group.rowNumbers.filter((rowNumber) => leadLinks[rowNumber]).length
+                      const hinted = group.rowNumbers.some((rowNumber) => headlineMatchesOf(group, rowNumber).length)
+                      const open = expanded[group.key]
+                        ?? (group.status === 'pending' || group.status === 'not_uploaded' || hinted || ownLinks > 0)
                       return (
-                        <tr key={group.key} data-group={group.key}>
+                        <Fragment key={group.key}>
+                        <tr data-group={group.key}>
                           <td>
                             <strong>{group.companyName || 'Unnamed company'}</strong>
                             <div className="text-app-meta text-app-text-muted">{group.domain || group.linkedin || 'No domain'}</div>
                           </td>
-                          <td className="tabular-nums">{group.rowNumbers.length}</td>
+                          <td>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="tabular-nums"
+                              aria-expanded={open}
+                              aria-label={`${open ? 'Hide' : 'Show'} ${plural(group.rowNumbers.length, 'lead')} of ${group.companyName || 'this company'}`}
+                              icon={open ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+                              onClick={() => setExpanded((current) => ({ ...current, [group.key]: !open }))}
+                            >
+                              {group.rowNumbers.length}
+                            </Button>
+                          </td>
                           <td>
                             <Badge tone={GROUP_STATUS[state].tone}>{GROUP_STATUS[state].label}</Badge>
                             <div className="text-app-meta text-app-text-muted mt-app-xs">
                               {groupWhere(group) && <div>{groupWhere(group)}</div>}
-                              {!confirmed[group.key] && group.reason}
+                              {ownLinks > 0 && canLink(group) && (
+                                <div>{ownLinks === group.rowNumbers.length ? 'Every lead' : plural(ownLinks, 'lead')} linked on its own</div>
+                              )}
+                              {!confirmed[group.key] && ownLinks < group.rowNumbers.length && group.reason}
                             </div>
                           </td>
                           <td>
@@ -371,12 +456,81 @@ export function LeadsImport() {
                               </Button>
                             )}
                             {canLink(group) && (
-                              <Button size="sm" variant="ghost" icon={<Search aria-hidden="true" />} onClick={() => setPickerKey(group.key)}>
+                              <Button size="sm" variant="ghost" icon={<Search aria-hidden="true" />} onClick={() => setPicker({ groupKey: group.key })}>
                                 {group.suggestion || confirmed[group.key] ? 'Change' : 'Choose'}
                               </Button>
                             )}
                           </td>
                         </tr>
+                        {open && (
+                          <tr data-leads={group.key}>
+                            <td colSpan={5} className="pt-0">
+                              <ul aria-label={`Leads of ${group.companyName || 'this company'}`} className="flex flex-col gap-app-sm pl-app-md border-l-2 border-app-border">
+                                {group.rowNumbers.map((rowNumber) => {
+                                  const lead = rowsByNumber.get(rowNumber)
+                                  if (!lead) return null
+                                  const own = leadLinks[rowNumber]
+                                  const matches = headlineMatchesOf(group, rowNumber)
+                                  return (
+                                    <li key={rowNumber} data-lead={rowNumber} className="flex items-start justify-between gap-app-md">
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-app-sm flex-wrap">
+                                          <strong>{lead.fullName || lead.personLinkedin}</strong>
+                                          {lead.currentJobs > 1 && <Badge tone="warning">{lead.currentJobs} current jobs</Badge>}
+                                        </div>
+                                        <div className="text-app-meta text-app-text-muted">
+                                          {[lead.title, lead.headline].filter(Boolean).join(' · ')}
+                                        </div>
+                                        {own && (
+                                          <div className="text-app-meta mt-app-xs">
+                                            Linked to <strong>{own.company.name || 'Unnamed company'}</strong>
+                                            <span className="text-app-text-muted">
+                                              {' · '}{own.auto ? 'Found in headline' : 'Chosen for this lead'}
+                                              {own.company.approveStatus && ` · Companies · ${own.company.approveStatus}`}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-app-xs shrink-0 flex-wrap justify-end">
+                                        {canLink(group) && !own && matches.map((company) => (
+                                          <Button key={company.id} size="sm" variant="secondary" onClick={() => linkLead(rowNumber, company)}>
+                                            Use {company.name || 'Unnamed company'}
+                                          </Button>
+                                        ))}
+                                        {own && (
+                                          <Button size="sm" variant="ghost" icon={<Undo2 aria-hidden="true" />} onClick={() => unlinkLead(rowNumber)}>
+                                            Undo
+                                          </Button>
+                                        )}
+                                        {canLink(group) && (
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon={<Search aria-hidden="true" />}
+                                            onClick={() => setPicker({ groupKey: group.key, rowNumber })}
+                                          >
+                                            {own ? 'Change' : 'Choose for this lead'}
+                                          </Button>
+                                        )}
+                                        <ExternalLinkButton
+                                          variant="ghost"
+                                          size="sm"
+                                          href={lead.personLinkedin}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          icon={<ExternalLink aria-hidden="true" />}
+                                        >
+                                          LinkedIn
+                                        </ExternalLinkButton>
+                                      </div>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       )
                     })}
                   </tbody>
@@ -413,7 +567,8 @@ export function LeadsImport() {
             )}
           </Stage>
           <StageActions summary={<>
-            <strong>{leadsToCreate}</strong> {leadsToCreate === 1 ? 'lead' : 'leads'} in {plural(confirmedGroups.length, 'confirmed company', 'confirmed companies')} will be created in Contacts
+            <strong>{leadsToCreate}</strong> {leadsToCreate === 1 ? 'lead' : 'leads'} in {plural(companiesToLink, 'company', 'companies')} will be created in Contacts
+            {autoLinked > 0 && <> · <strong>{autoLinked}</strong> linked from headline</>}
             {leadCount(heldGroups) > 0 && <> · <strong>{leadCount(heldGroups)}</strong> held</>}
             {leadCount(declinedGroups) > 0 && <> · <strong>{leadCount(declinedGroups)}</strong> declined</>}
             {!addedBy && <span className="text-app-text-muted"> · Select Added by first.</span>}
@@ -486,13 +641,23 @@ export function LeadsImport() {
       {pickerGroup && (
         <CompanyResolutionModal
           sourceCompany={pickerGroup.companyName}
-          affectedRows={pickerGroup.rowNumbers.length}
-          suggestions={pickerGroup.candidates}
+          affectedRows={groupRowsOf(pickerGroup).length}
+          leadName={pickerLead ? pickerLead.fullName || pickerLead.personLinkedin : undefined}
+          initialQuery={pickerLead ? headlineMatchesOf(pickerGroup, pickerLead.rowNumber)[0]?.name ?? '' : undefined}
+          suggestions={
+            pickerLead
+              ? [...new Map(
+                  [...headlineMatchesOf(pickerGroup, pickerLead.rowNumber), ...pickerGroup.candidates]
+                    .map((company) => [company.id, company]),
+                ).values()]
+              : pickerGroup.candidates
+          }
           onSelect={(company) => {
-            confirm(pickerGroup, company)
-            setPickerKey(null)
+            if (pickerLead) linkLead(pickerLead.rowNumber, company)
+            else confirm(pickerGroup, company)
+            setPicker(null)
           }}
-          onClose={() => setPickerKey(null)}
+          onClose={() => setPicker(null)}
         />
       )}
     </>

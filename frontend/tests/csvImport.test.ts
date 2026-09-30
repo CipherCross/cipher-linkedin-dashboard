@@ -106,8 +106,23 @@ describe('leads export parsing', () => {
         companyName: 'Northwind Health',
         companyWebsite: 'NorthwindHealth.example',
         companyLinkedin: 'https://www.linkedin.com/company/109209384',
+        headline: 'Founder at Northwind Health',
+        currentJobs: 1,
       },
     ])
+  })
+
+  it('keeps the headline and current-jobs count, blank and zero when the export lacks them', async () => {
+    const csv = leadsCsv([{
+      person: personFixture({ 'Profile Headline': 'COO at Aiforia Technologies', 'Current Jobs Number': '2' }),
+      company: companyFixture(),
+    }])
+    const [row] = (await parseLeadCsvFile(csvFile(csv))).rows
+    expect(row).toMatchObject({ headline: 'COO at Aiforia Technologies', currentJobs: 2 })
+
+    const bare = 'First Name,Last Name,Title,Company Name,Person Linkedin Url\nAda,Lovelace,CEO,Engines,https://www.linkedin.com/in/ada/'
+    const [old] = (await parseLeadCsvFile(csvFile(bare))).rows
+    expect(old).toMatchObject({ headline: '', currentJobs: 0 })
   })
 
   it('drops email, email status, phone and profile summary at the allowlist', async () => {

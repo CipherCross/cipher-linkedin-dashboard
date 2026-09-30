@@ -90,6 +90,8 @@ export interface LeadRowResult {
   reason?: string
   groupKey?: string
   contactIds?: string[]
+  /** Companies records named in the lead's headline, other than its CSV company. */
+  headlineMatches?: AirtableCompany[]
 }
 
 export interface LeadPreviewResponse {

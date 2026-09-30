@@ -11,6 +11,11 @@
 //                 in Companies yet; leads are held until an SDR approves it
 //   not_uploaded  found nowhere; leads are held (manual search still works)
 //
+// Exports carry one company per lead even when the person holds several
+// current jobs, so the CSV company can be the wrong one. Preview therefore also
+// names, per lead, the Companies records whose name appears in the lead's
+// headline, and the user may link any single lead to a different record.
+//
 // Commit accepts only rows that carry a confirmed Companies record ID, and
 // re-verifies it: the record must still exist, must not be Rejected, and the
 // lead's own company must not have been declined. It never re-matches.
@@ -45,6 +50,8 @@ const MAX_ROWS = 500
 const CONTACT_CACHE_MS = 60_000
 const MAX_TEXT = 1000
 const MAX_CANDIDATES = 10
+const MAX_HEADLINE_MATCHES = 3
+const MAX_NAME_WORDS = 6
 
 export interface LeadRow {
   rowNumber: number
@@ -56,6 +63,8 @@ export interface LeadRow {
   companyName: string
   companyWebsite: string
   companyLinkedin: string
+  /** Profile headline; used only to suggest a company, never written. */
+  headline?: string
 }
 
 interface CommitRow {
@@ -108,6 +117,8 @@ export interface LeadRowResult {
   reason?: string
   groupKey?: string
   contactIds?: string[]
+  /** Linkable Companies records named in the lead's headline, other than its CSV company. */
+  headlineMatches?: CompanyRecord[]
 }
 
 type RowResultStatus = 'created' | 'duplicate' | 'failed'
@@ -409,6 +420,61 @@ export function classifyGroups(
   return groups.map((group) => companiesVerdict(group, maps) ?? dbVerdict(group, maps, db))
 }
 
+// ---------------------------------------------------------------- headlines
+
+const LEGAL_SUFFIX =
+  /\s(?:gmbh|ag|ug|kg|ltd|limited|pty|inc|llc|llp|plc|corp|corporation|co|oy|oyj|ab|as|sa|sas|srl|spa|bv|nv)$/
+
+/** Single words too generic to prove a headline names that company. */
+const GENERIC_NAMES = new Set([
+  'health', 'healthcare', 'medical', 'digital', 'software', 'solutions', 'consulting', 'technology',
+  'technologies', 'services', 'systems', 'partners', 'ventures', 'capital', 'global', 'group',
+  'labs', 'studio', 'clinic', 'therapy', 'founder', 'startup', 'advisor', 'board',
+])
+
+/** The spellings of a company name a headline might use: as stored, without a parenthetical, without a legal suffix. */
+export function nameVariants(name: string): string[] {
+  const full = normalizeName(name)
+  const bare = normalizeName(name.replace(/\([^)]*\)/g, ' '))
+  let stripped = bare
+  while (LEGAL_SUFFIX.test(stripped)) stripped = stripped.replace(LEGAL_SUFFIX, '').trim()
+  return [...new Set([full, bare, stripped])].filter((variant) =>
+    variant.includes(' ')
+      ? variant.replace(/ /g, '').length >= 4 && variant.split(' ').length <= MAX_NAME_WORDS
+      : variant.length >= 5 && !GENERIC_NAMES.has(variant),
+  )
+}
+
+export function headlineIndex(companies: CompanyRecord[]): Map<string, CompanyRecord[]> {
+  const index = new Map<string, CompanyRecord[]>()
+  for (const company of linkable(companies)) {
+    for (const variant of nameVariants(company.name)) {
+      index.set(variant, [...(index.get(variant) ?? []), company])
+    }
+  }
+  return index
+}
+
+/** Companies records whose name appears as whole words in the headline, excluding the lead's own CSV domain. */
+export function headlineMatches(
+  headline: string,
+  index: Map<string, CompanyRecord[]>,
+  ownDomain = '',
+): CompanyRecord[] {
+  const words = normalizeName(headline).split(' ').filter(Boolean)
+  const found = new Map<string, CompanyRecord>()
+  for (let start = 0; start < words.length; start++) {
+    for (let length = MAX_NAME_WORDS; length >= 1; length--) {
+      if (start + length > words.length) continue
+      for (const company of index.get(words.slice(start, start + length).join(' ')) ?? []) {
+        if (ownDomain && normalizeDomain(company.website) === ownDomain) continue
+        found.set(company.id, company)
+      }
+    }
+  }
+  return [...found.values()].slice(0, MAX_HEADLINE_MATCHES)
+}
+
 // ------------------------------------------------------------------ actions
 
 const isText = (value: unknown) => typeof value === 'string' && value.length <= MAX_TEXT
@@ -429,7 +495,8 @@ function validPreviewRow(value: unknown): value is LeadRow {
       row.companyName,
       row.companyWebsite,
       row.companyLinkedin,
-    ].every(isText)
+    ].every(isText) &&
+    (row.headline === undefined || isText(row.headline))
   )
 }
 
@@ -484,6 +551,8 @@ async function preview(payload: Record<string, unknown>) {
     getContacts(payload.forceCompanies === true),
   ])
   const existing = contactMap(contacts)
+  const maps = buildCompanyMaps(companies)
+  const byHeadline = rows.some((row) => row.headline?.trim()) ? headlineIndex(companies) : null
   const seen = new Set<string>()
 
   const ready: LeadRow[] = []
@@ -505,10 +574,17 @@ async function preview(payload: Record<string, unknown>) {
       }
     }
     ready.push(row)
-    return { rowNumber: row.rowNumber, status: 'ready', groupKey: groupKeyOf(row) }
+    const matches = byHeadline && row.headline
+      ? headlineMatches(row.headline, byHeadline, normalizeDomain(row.companyWebsite))
+      : []
+    return {
+      rowNumber: row.rowNumber,
+      status: 'ready',
+      groupKey: groupKeyOf(row),
+      ...(matches.length ? { headlineMatches: matches } : {}),
+    }
   })
 
-  const maps = buildCompanyMaps(companies)
   const drafts = groupRows(ready)
   const lookup = needsDbLookup(drafts, maps)
   const [byDomain, byName] = await Promise.all([
