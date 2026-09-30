@@ -219,6 +219,21 @@
   white-space: nowrap;
 }
 .replies-workspace.list-rail .replies-list-dot { display: block; }
+/* The rail is too narrow for a sentence: its loading, error and empty states
+ * keep their text for assistive tech only. */
+.replies-workspace.list-rail .replies-list-pane > .replies-loading,
+.replies-workspace.list-rail .replies-list-pane > .replies-error,
+.replies-workspace.list-rail .replies-list-pane > .empty-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .replies-workspace.list-rail .replies-list-more { padding-inline: 0; }
 
 .replies-thread-head > div { min-width: 0; }
