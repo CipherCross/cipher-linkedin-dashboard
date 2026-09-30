@@ -4,6 +4,27 @@ Declutter `#/replies`, make the thread read as a chat, keep the review form visi
 at every desktop width. Review stays the workflow: select → read → label → Save and
 next. No composer, no sending.
 
+## Status (2026-09-30)
+
+Phases 1–4 are built and committed on `main`, **not pushed or deployed**:
+`992e76c` (one list page at a time), `1acdfcf` (layout + messenger thread),
+`962b0df` (lead photos), and `06948d3` (drawer). Verified in the
+`ui-fixture` browser at 1280×720, 1440×900 and 1920×1080 (review form and Save on
+screen without a click at all three; first row at y≈190; 11 rows visible at
+1440×900), and with the `photos-admin` fixture scenario (photos by lead id,
+broken image → initials).
+
+Deviations from the plan below, decided while building:
+- Bands are **≥1120** (list 288 · review 340) and **900–1119** (rail 64 · review
+  320), not ≥1180 / list 300: at 1440 with the sidebar open the container is
+  1160px, and the full list had to fit there.
+- Queue rows show the time today and the date before that; the exact time is the
+  tooltip.
+- The drawer now shows Madrid times (it used the browser's clock).
+
+Still open: phase 5 (contact names, own spec), a signed-in production smoke, and
+push + deploy.
+
 ## Context
 
 A peer product's inbox reads as far more finished than ours at the same type scale
