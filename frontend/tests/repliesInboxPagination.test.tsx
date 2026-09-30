@@ -101,4 +101,47 @@ describe('Replies Inbox directional pagination', () => {
     expect(result.current.thread?.older_cursor).toBeNull()
     expect(result.current.thread?.newer_cursor).toBeNull()
   })
+  it('runs one list page at a time when scrolling and Save and next both page', async () => {
+    // The scroll sentinel and the Save-and-next walk page the same list. Each
+    // used to run on its own and overwrite the other's abort controller, so a
+    // scroll during a walk could abort it or append a page twice.
+    const listItem = (n: number, pending: number) => ({ ...item, profile_url: `https://linkedin.com/in/p${n}`, name: `P${n}`, pending_count: pending })
+    let inFlight = 0
+    let overlapped = false
+    const pages: Record<string, { items: ReturnType<typeof listItem>[]; next_cursor: string | null }> = {
+      first: { items: [listItem(1, 0)], next_cursor: 'c2' },
+      c2: { items: [listItem(2, 0)], next_cursor: 'c3' },
+      c3: { items: [listItem(3, 1)], next_cursor: null },
+    }
+    const inbox = vi.fn(async (request: { cursor?: string | null }) => {
+      inFlight += 1
+      if (inFlight > 1) overlapped = true
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      inFlight -= 1
+      return { ...pages[request.cursor ?? 'first'], scope: DEFAULT_REPLY_SCOPE }
+    })
+    const client: ReplyReadClient = {
+      capabilities: vi.fn().mockResolvedValue({ available: true, active: true, manual_ready: true, mode: 'manual' }),
+      facets: vi.fn().mockResolvedValue({ facets: {}, scope: DEFAULT_REPLY_SCOPE }),
+      inbox: inbox as unknown as ReplyReadClient['inbox'],
+      thread: vi.fn().mockResolvedValue({ messages: [], older_cursor: null, newer_cursor: null, workflow: null }),
+      history: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    }
+    const { result } = renderHook(() => useRepliesInbox(client), { wrapper: ({ children }) => <MemoryRouter>{children}</MemoryRouter> })
+    await waitFor(() => expect(result.current.nextCursor).toBe('c2'))
+    let found: Awaited<ReturnType<typeof result.current.nextPendingPage>> = null
+    await act(async () => {
+      const scrolled = result.current.loadMore()
+      const again = result.current.loadMore()
+      const walk = result.current.nextPendingPage()
+      await Promise.all([scrolled, again])
+      found = await walk
+    })
+    expect(overlapped).toBe(false)
+    expect(found).toMatchObject({ name: 'P3' })
+    expect(result.current.items.map(({ name }) => name)).toEqual(['P1', 'P2', 'P3'])
+    // first page, c2 (the scroll), c3 (the walk continuing from where it ended)
+    expect(inbox.mock.calls.map(([request]) => request.cursor ?? 'first')).toEqual(['first', 'c2', 'c3'])
+    expect(result.current.loadingMore).toBe(false)
+  })
 })

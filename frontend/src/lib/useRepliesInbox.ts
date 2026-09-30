@@ -308,50 +308,73 @@ export function useRepliesInbox(client: ReplyReadClient = defaultReplyReadClient
     return () => { cancelled = true }
   }, [client])
 
-  const loadMore = useCallback(async (): Promise<RepliesInboxItem[]> => {
-    if (!nextCursor || loadingMore || !isReplyManualReady(capabilities)) return []
+  /**
+   * Every read of a further list page goes through here, one at a time.
+   *
+   * Two callers page the list: the scroll sentinel (`loadMore`) and Save and
+   * next walking forward to the next pending reply (`nextPendingPage`). Each
+   * used to run on its own and overwrite the other's abort controller, so a
+   * scroll that fired during a Save-and-next walk could abort the walk or append
+   * the same page twice. `pageRun` is the one request in flight; the cursor is
+   * read from a ref so a caller that waited for the previous page continues
+   * from where that page ended, not from the cursor it closed over.
+   */
+  const nextCursorRef = useRef<string | null>(null)
+  nextCursorRef.current = nextCursor
+  const pageRun = useRef<Promise<unknown> | null>(null)
+  const readPage = useCallback(async (cursor: string, controller: AbortController, requestedScope: string): Promise<RepliesInboxItem[] | null> => {
+    const response = await client.inbox({ ...scope, cursor }, controller.signal)
+    if (controller.signal.aborted || activeListScope.current !== requestedScope) return null
+    const incoming = response.items ?? []
+    setItems((current) => { const seen = new Set(current.map((item) => `${item.instance_id}|${item.profile_url}`)); return [...current, ...incoming.filter((item) => { const key = `${item.instance_id}|${item.profile_url}`; if (seen.has(key)) return false; seen.add(key); return true })] })
+    nextCursorRef.current = response.next_cursor ?? null
+    setNextCursor(nextCursorRef.current)
+    return incoming
+  }, [client, scope])
+  const runPages = useCallback(<T,>(work: (controller: AbortController, requestedScope: string) => Promise<T>, fallback: T): Promise<T> => {
     const controller = new AbortController()
     moreAbort.current = controller
     const requestedScope = listScopeKey
     setLoadingMore(true)
-    try {
-      const response = await client.inbox({ ...scope, cursor: nextCursor }, controller.signal)
-      if (controller.signal.aborted || activeListScope.current !== requestedScope) return []
-      const incoming = response.items ?? []
-      setItems((current) => { const seen = new Set(current.map((item) => `${item.instance_id}|${item.profile_url}`)); return [...current, ...incoming.filter((item) => { const key = `${item.instance_id}|${item.profile_url}`; if (seen.has(key)) return false; seen.add(key); return true })] })
-      setNextCursor(response.next_cursor ?? null)
-      return incoming
-    } catch (reason: unknown) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason))
-      return []
-    } finally { setLoadingMore(false) }
-  }, [capabilities, client, listScopeKey, loadingMore, nextCursor, scope])
+    const run = work(controller, requestedScope)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason))
+        return fallback
+      })
+      .finally(() => { if (pageRun.current === run) { pageRun.current = null; setLoadingMore(false) } })
+    pageRun.current = run
+    return run
+  }, [listScopeKey])
+
+  const loadMore = useCallback(async (): Promise<RepliesInboxItem[]> => {
+    // A page already on its way answers this call too; the sentinel fires
+    // again once that page renders if the end is still in view.
+    if (pageRun.current || !nextCursorRef.current || !isReplyManualReady(capabilities)) return []
+    return runPages(async (controller, requestedScope) => {
+      const cursor = nextCursorRef.current
+      return cursor ? (await readPage(cursor, controller, requestedScope)) ?? [] : []
+    }, [] as RepliesInboxItem[])
+  }, [capabilities, readPage, runPages])
 
   const nextPendingPage = useCallback(async (): Promise<RepliesInboxItem | null> => {
-    if (!nextCursor || !isReplyManualReady(capabilities)) return null
-    const requestedScope = listScopeKey
-    const controller = new AbortController()
-    moreAbort.current = controller
-    let cursor: string | null = nextCursor
-    const visited = new Set<string>()
-    setLoadingMore(true)
-    try {
+    if (!isReplyManualReady(capabilities)) return null
+    // Wait for a page that is already loading, then walk on from its cursor.
+    if (pageRun.current) await pageRun.current.catch(() => undefined)
+    if (!nextCursorRef.current) return null
+    return runPages(async (controller, requestedScope) => {
+      const visited = new Set<string>()
+      let cursor = nextCursorRef.current
       while (cursor && !visited.has(cursor)) {
         visited.add(cursor)
-        const response = await client.inbox({ ...scope, cursor }, controller.signal)
-        if (controller.signal.aborted || activeListScope.current !== requestedScope) return null
-        const incoming = response.items ?? []
-        setItems((current) => { const seen = new Set(current.map((item) => `${item.instance_id}|${item.profile_url}`)); return [...current, ...incoming.filter((item) => { const key = `${item.instance_id}|${item.profile_url}`; if (seen.has(key)) return false; seen.add(key); return true })] })
-        cursor = response.next_cursor ?? null
-        setNextCursor(cursor)
+        const incoming = await readPage(cursor, controller, requestedScope)
+        if (!incoming) return null
         const next = incoming.find((item) => item.pending_count > 0)
         if (next) return next
+        cursor = nextCursorRef.current
       }
-    } catch (reason: unknown) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason))
-    } finally { setLoadingMore(false) }
-    return null
-  }, [capabilities, client, listScopeKey, nextCursor, scope])
+      return null
+    }, null as RepliesInboxItem | null)
+  }, [capabilities, readPage, runPages])
 
   const loadOlder = useCallback(() => {
     if (!thread?.older_cursor || !scope.thread || loadingThread || !isReplyManualReady(capabilities)) return
