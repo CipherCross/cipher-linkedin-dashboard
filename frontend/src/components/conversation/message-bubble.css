@@ -1,0 +1,23 @@
+/* ===========================================================================
+ * Chat bubbles — shared by the Replies thread and the conversation drawer.
+ *
+ * Direction is carried by colour AND position, so the two sides stay apart in
+ * greyscale: outbound is filled and on the right, inbound is light and on the
+ * left. No border; the tail corner on the sender's side is --radius-xs.
+ * ======================================================================== */
+.message-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-sm) var(--inset-pane);
+  border-radius: var(--radius-bubble);
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  text-align: left;
+}
+.message-bubble--in { background: var(--bubble-in); color: var(--bubble-in-fg); }
+.message-bubble--out { background: var(--bubble-out); color: var(--bubble-out-fg); }
+.message-bubble--in.message-bubble--tail { border-bottom-left-radius: var(--radius-xs); }
+.message-bubble--out.message-bubble--tail { border-bottom-right-radius: var(--radius-xs); }
+.message-bubble__body { white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -52,6 +52,7 @@
  * on those routes each of these rules silently defeated every Tailwind utility
  * regardless of specificity. They belong in `app` with the rest of the app's
  * CSS, where specificity decides normally and utilities still win. */
+@import './components/conversation/message-bubble.css' layer(app);
 @import './pages/replies-inbox.css' layer(app);
 @import './pages/sentiment-analysis.css' layer(app);
 @import './components/overview/overview.css' layer(app);

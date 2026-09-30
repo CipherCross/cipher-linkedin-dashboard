@@ -270,6 +270,8 @@ export interface ReplyThreadMessage {
   readonly body: string | null
   readonly sent_at: string
   readonly first_seen_at: string | null
+  /** `manual` for a message imported by hand from LinkedIn, `sync` for the agent's. */
+  readonly source: string | null
   readonly review: ReplyReviewDto | null
   readonly has_older?: boolean
   readonly has_newer?: boolean

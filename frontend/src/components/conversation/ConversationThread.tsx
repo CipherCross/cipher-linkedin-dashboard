@@ -1,9 +1,11 @@
 import { useLayoutEffect, useRef } from 'react'
 import { ArrowDown, ArrowUp, MessageCircle } from 'lucide-react'
-import { replyDateKey, replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
+import { replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../../lib/replyTime'
+import { groupMessages } from '../../lib/messageGroups'
 import { SENTIMENT_LABELS, type ReplyThreadMessage } from '../../lib/replyReview'
 import { SENTIMENT_META } from '../../lib/leads'
 import { Badge, Button } from '../../ui'
+import { MessageBubble } from './MessageBubble'
 
 export interface ConversationThreadProps {
   messages: ReplyThreadMessage[]
@@ -16,13 +18,11 @@ export interface ConversationThreadProps {
   onSelectMessage: (message: ReplyThreadMessage) => void
   onLoadOlder?: () => void
   onLoadNewer?: () => void
-  inboundName?: string
-  outboundName?: string
 }
 
 export function ConversationThread({
   messages, selectedMessageId, focusMessageId, loading, error, olderCursor, newerCursor,
-  onSelectMessage, onLoadOlder, onLoadNewer, inboundName = 'LinkedIn contact', outboundName = 'LinkedIn account',
+  onSelectMessage, onLoadOlder, onLoadNewer,
 }: ConversationThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastFirstId = useRef<number | null>(null)
@@ -46,45 +46,53 @@ export function ConversationThread({
   if (loading && !messages.length) return <div className="replies-thread-status" aria-busy="true">Loading the conversation…</div>
   if (error && !messages.length) return <div className="replies-thread-status text-app-danger">{error}</div>
   if (!messages.length) return <div className="replies-thread-status"><MessageCircle size={20} aria-hidden="true" /> No messages in this window.</div>
-  let previousDay = ''
+  const groups = groupMessages(messages)
   return (
-    <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain] px-app-lg py-app-sm" aria-label="Conversation" ref={scrollRef}>
+    <div className="replies-thread-scroll" aria-label="Conversation" ref={scrollRef}>
       {olderCursor && <div className="flex justify-center mb-app-md">
         <Button variant="ghost" size="sm" icon={<ArrowUp aria-hidden="true" />} onClick={onLoadOlder} disabled={loading}>Load older messages</Button>
       </div>}
-      {messages.map((message) => {
-        const day = replyDateKey(message.sent_at)
-        const showDay = day !== previousDay
-        previousDay = day
-        const inbound = message.direction === 'in'
-        const selected = message.id === selectedMessageId
-        const focused = message.id === focusMessageId
-        const review = message.review
+      {groups.map((group) => {
+        const inbound = group.direction === 'in'
+        const last = group.messages[group.messages.length - 1]
         return (
-          <div key={message.id}>
-            {showDay && <div className="my-app-md mx-auto text-app-text-muted text-app-meta text-center">{replyDayHeading(message.sent_at)}</div>}
-            {/* ui-exception(replies-message-bubble): a message row is the whole
-                conversation bubble (sender, timestamp, body, sentiment badge) —
-                richer content than Button's fixed contract renders — kept as a
-                real, keyboard-operable <button> so Tab/Enter/Space still select
-                it for review. verify: Tab through the thread, Enter/Space
-                selects a message, and the selected bubble carries
-                aria-pressed="true". */}
-            <button
-              type="button"
-              className={`replies-message ${inbound ? 'inbound' : 'outbound'} ${focused ? 'focused' : ''}`}
-              data-message-id={message.id}
-              onClick={() => onSelectMessage(message)}
-              aria-pressed={selected}
-              aria-label={`${inbound ? 'Inbound' : 'Outbound'} message ${replyTime(message.sent_at)} (${REPLY_TIME_ZONE_LABEL})`}
-            >
-              <span className="replies-message-meta"><span>{inbound ? inboundName : outboundName}</span><time dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(message.sent_at)}</time></span>
-              <span className="text-app-table whitespace-pre-wrap [word-break:break-word]">{message.body || '—'}</span>
-              {inbound && <span className="replies-message-footer">
-                {review?.sentiment ? <Badge tone={SENTIMENT_META[review.sentiment].tone}>{SENTIMENT_LABELS[review.sentiment]}</Badge> : <span className="text-app-warning text-app-meta font-semibold">Unreviewed</span>}
-                {review?.reason_ids?.length ? <span className="text-app-text-muted text-app-meta">{review.reason_ids.length === 1 ? '1 reason' : `${review.reason_ids.length} reasons`}</span> : null}
-              </span>}
-            </button>
+          <div key={group.key} className={inbound ? 'replies-group replies-group--in' : 'replies-group replies-group--out'}>
+            {group.startsDay && <div className="replies-day">{replyDayHeading(last.sent_at)}</div>}
+            {group.messages.map((message, index) => {
+              const selected = message.id === selectedMessageId
+              const focused = message.id === focusMessageId
+              const review = message.review
+              const exact = `${replyTime(message.sent_at, true)} · ${REPLY_TIME_ZONE_LABEL}`
+              const imported = message.source === 'manual'
+              return (
+                <div key={message.id} className="replies-group-item">
+                  {/* ui-exception(replies-message-bubble): a message is the whole
+                      chat bubble (body, and under it the review state), richer
+                      content than Button's fixed contract renders — kept as a
+                      real, keyboard-operable <button> around the purely visual
+                      MessageBubble so Tab/Enter/Space still select it for
+                      review. verify: Tab through the thread, Enter/Space
+                      selects a message, and the selected bubble carries
+                      aria-pressed="true". */}
+                  <button
+                    type="button"
+                    className={`replies-message ${inbound ? 'inbound' : 'outbound'}${focused ? ' focused' : ''}`}
+                    data-message-id={message.id}
+                    onClick={() => onSelectMessage(message)}
+                    aria-pressed={selected}
+                    aria-label={`${inbound ? 'Inbound' : 'Outbound'} message ${exact}${imported ? ', imported' : ''}`}
+                  >
+                    <MessageBubble direction={group.direction} body={message.body} tail={index === group.messages.length - 1} title={exact} />
+                  </button>
+                  {(inbound || imported) && <span className="replies-message-footer">
+                    {inbound && (review?.sentiment ? <Badge tone={SENTIMENT_META[review.sentiment].tone}>{SENTIMENT_LABELS[review.sentiment]}</Badge> : <Badge tone="warning">Unreviewed</Badge>)}
+                    {inbound && review?.reason_ids?.length ? <span>{review.reason_ids.length === 1 ? '1 reason' : `${review.reason_ids.length} reasons`}</span> : null}
+                    {imported && <span>Imported</span>}
+                  </span>}
+                </div>
+              )
+            })}
+            <time className="replies-group-time" dateTime={last.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(last.sent_at)}</time>
           </div>
         )
       })}

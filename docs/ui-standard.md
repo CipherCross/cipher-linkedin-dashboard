@@ -250,6 +250,26 @@ wanted. One light theme, still.
 - Filters open **over** the page. They never take height from the results.
 - A wide table or board scrolls inside its own region, with a written hint. It
   is never shrunk until its text is unreadable.
+- A split-pane workspace keeps its **working pane** on screen at every desktop
+  width; the navigation pane is what gives way. Replies: list 288 + thread +
+  review 340 from a 1120px container; a 64px avatar rail (the list opens over
+  the thread) from 900px; the two-pane switch only below that. The rail hides
+  row text visually, never with `display: none`, so rows keep their names.
+
+### Chat threads
+
+- One bubble language, `MessageBubble` (`src/components/conversation/`), for
+  every conversation surface. Outbound is filled `--bubble-out` on the right,
+  inbound `--bubble-in` on the left, no border, `--radius-bubble` with the
+  sender-side corner at `--radius-xs` on the last bubble of a run.
+- A run of one side's messages less than 10 minutes apart on the same Madrid
+  day is one group: 4px inside it, 12px between groups, one time under the
+  last bubble. Every bubble keeps its exact time in its title and accessible
+  name, and stays individually selectable.
+- The bubble is visual only. Selection, editing and deleting are controls the
+  surface places around it, never inside it.
+- Review state and "Imported" sit under the bubble as a badge or muted text,
+  colour paired with a word.
 
 ## Dates
 
@@ -308,8 +328,8 @@ redesign every count is zero except the named exceptions in
 | `chip-input-entry` | tag field | the text box inside the framed chip container |
 | `hypothesis-row-open` | Hypotheses | name button stretched over the comparison row |
 | `row-open-button` | Leads, campaign workspace | overlay button that opens a row |
-| `replies-queue-item` | Replies | a rich, selectable queue row |
-| `replies-message-bubble` | conversation thread | a rich, selectable message |
+| `replies-queue-item` | Replies | a rich, selectable two-line queue row (also the rail's avatar button) |
+| `replies-message-bubble` | conversation thread | the selection button around a visual-only `MessageBubble` |
 | `publish-target-card` | publish wizard | a rich destination card around a hidden radio |
 | `publish-branch-tile` | publish wizard | a branch tile around a hidden checkbox |
 

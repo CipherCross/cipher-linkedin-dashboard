@@ -483,6 +483,7 @@ function mapThread(row: NeonRow): ReplyThreadMessage {
     id: Number(row.id), instance_id: String(row.instance_id), profile_url: String(row.profile_url),
     campaign_id: nullableText(row.campaign_id), direction: row.direction === 'out' ? 'out' : 'in',
     body: nullableText(row.body), sent_at: String(row.sent_at), first_seen_at: nullableText(row.first_seen_at),
+    source: nullableText(row.source),
     review: reviewFromJson(row.review, Number(row.id)),
     has_older: row.has_older === true, has_newer: row.has_newer === true,
   }
@@ -553,7 +554,7 @@ export const threadOperation: NeonQueryOperation<ReplyThreadMessage, ReplyThread
                FROM page
            )
            SELECT m.id::text AS id, m.instance_id, m.profile_url, m.campaign_id,
-                  m.direction, m.body, m.sent_at, m.first_seen_at,
+                  m.direction, m.body, m.sent_at, m.first_seen_at, m.source,
                   EXISTS (SELECT 1 FROM public.messages om WHERE om.instance_id=$1 AND om.profile_url=$2 AND (om.sent_at,om.id)<(b.first_sent_at,b.first_id)) AS has_older,
                   EXISTS (SELECT 1 FROM public.messages nm WHERE nm.instance_id=$1 AND nm.profile_url=$2 AND (nm.sent_at,nm.id)>(b.last_sent_at,b.last_id)) AS has_newer,
                   CASE WHEN rr.message_id IS NULL THEN NULL ELSE jsonb_build_object(

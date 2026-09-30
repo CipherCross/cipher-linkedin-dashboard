@@ -232,23 +232,96 @@ function replyCapabilities(role) {
   }
 }
 
-function replyInboxRows(scenario, search) {
+/* The review queue: the fixture lead first, then enough synthetic
+ * conversations to scroll, page (REPLY_PAGE_SIZE per page) and show every row
+ * shape — a name or the unknown-contact identifier, inbound or outbound last,
+ * pending or reviewed. Only the fixture lead has a `leads` row. */
+const REPLY_PAGE_SIZE = 10
+const FIXTURE_LEAD_PROFILE = 'https://example.test/fixture-lead'
+const QUEUE_PEOPLE = [
+  ['Jordan Sample', 'Sample Systems', 'Not right now, maybe next quarter.', 'in', 1],
+  [null, null, 'Thanks, it is a pleasure to have you in my network', 'in', 1],
+  ['Casey Example', 'Example Group', 'Could you send more detail on pricing and onboarding for a 40-person team?', 'in', 2],
+  ['Riley Demo', 'Demo & Co', 'Following up — worth a 15-minute call next week?', 'out', 0],
+  [null, null, 'Likewise :)', 'in', 1],
+  ['Morgan Placeholder', 'Placeholder Inc', 'Sure — here is our deck.', 'in', 0],
+  ['Taylor Specimen', 'Specimen Labs', 'Who handles regression testing before a release?', 'out', 0],
+  ['Avery Mock', 'Mockingbird', 'Please remove me from your list.', 'in', 1],
+  ['Quinn Stub', 'Stub Studio', 'Interesting — what does it cost?', 'in', 1],
+  [null, null, 'Hi!', 'in', 1],
+  ['Drew Dummy', 'Dummy Data', 'Happy to connect.', 'in', 0],
+  ['Sam Proxy', 'Proxy Partners', 'Let me check with my CTO and come back.', 'in', 1],
+  ['Charlie Double', 'Double Take', 'Thanks for connecting, Charlie.', 'out', 0],
+  ['Jamie Sketch', 'Sketchworks', 'Not interested, thanks.', 'in', 0],
+  ['Robin Draft', 'Draft House', 'Can we talk on Thursday?', 'in', 2],
+  ['Parker Trial', 'Trial & Error', 'Sounds good.', 'in', 1],
+  ['Kendall Pilot', 'Pilot Point', 'What integrations do you support?', 'in', 1],
+]
+const UNKNOWN_SLUGS = ['david-glauber-1b1961191', 'marina-fernandez-21443776', 'ACoAABkq3xYBmP0-fixture']
+
+function queueRow(profile_url, name, company, snippet, direction, pending, index) {
+  const sent = new Date(Date.UTC(2026, 8, 21, 12, 0) - index * 47 * 60 * 1000).toISOString()
+  return {
+    instance_id: instance.id, profile_url,
+    name, company, headline: name ? `${company} · Head of Sales` : null, campaign_id: campaign.campaign_id,
+    latest_snippet: snippet, latest_direction: direction,
+    latest_sent_at: sent, selected_message_id: 100 + index * 10 + 3, pending_count: pending,
+    owner_id: null, action: pending ? null : 'needs_reply', next_follow_up_date: null, do_not_contact: false,
+    review_revision: 0, workflow_revision: 0, revision: 0, inbound_revision: 1, acknowledged_inbound_revision: pending ? 0 : 1,
+  }
+}
+
+function replyQueue(scenario) {
   if (isEmpty(scenario)) return []
+  let unknown = 0
+  return [
+    {
+      ...queueRow(FIXTURE_LEAD_PROFILE, 'Alex Fixture', 'Fixture Labs', 'Thanks for reaching out — happy to chat.', 'in', 1, 0),
+      headline: 'Product leader', selected_message_id: 1,
+    },
+    ...QUEUE_PEOPLE.map(([name, company, snippet, direction, pending], i) => {
+      const slug = name ? name.toLowerCase().replace(/\s+/g, '-') : UNKNOWN_SLUGS[unknown++ % UNKNOWN_SLUGS.length]
+      return queueRow(`https://www.linkedin.com/in/${slug}`, name, company, snippet, direction, pending, i + 1)
+    }),
+  ]
+}
+
+function replyInboxPage(scenario, search) {
   const query = (search.get('query') ?? '').toLowerCase()
-  if (query && !'alex fixture'.includes(query)) return []
-  return [{
-    instance_id: instance.id, profile_url: 'https://example.test/fixture-lead',
-    name: 'Alex Fixture', company: 'Fixture Labs', headline: 'Product leader', campaign_id: campaign.campaign_id,
-    latest_snippet: 'Thanks for reaching out — happy to chat.', latest_direction: 'in',
-    latest_sent_at: '2026-09-21T12:00:00.000Z', selected_message_id: 1, pending_count: 1,
-    owner_id: null, action: null, next_follow_up_date: null, do_not_contact: false,
-    review_revision: 0, workflow_revision: 0, revision: 0, inbound_revision: 1, acknowledged_inbound_revision: 0,
-  }]
+  const rows = replyQueue(scenario).filter((row) => !query || `${row.name ?? ''} ${row.company ?? ''} ${row.profile_url}`.toLowerCase().includes(query))
+  const offset = Math.max(0, Number(search.get('cursor') ?? 0) || 0)
+  const next = offset + REPLY_PAGE_SIZE
+  return { items: rows.slice(offset, next), next_cursor: next < rows.length ? String(next) : null }
+}
+
+/* A synthetic thread for every queued conversation: grouped runs on both
+ * sides, a run that crosses Madrid midnight (21:55Z and 22:10Z are 23:55 and
+ * 00:10 in CEST) and one imported message. */
+function syntheticThread(row, index) {
+  const base = 100 + index * 10
+  const message = (offset, direction, body, sent_at, source = 'fixture') => ({
+    id: base + offset, instance_id: instance.id, profile_url: row.profile_url, campaign_id: campaign.campaign_id,
+    direction, body, sent_at, source, review: null,
+  })
+  return [
+    message(0, 'out', 'Hi — saw your team is hiring for sales. Glad to connect!', '2026-09-19T15:52:00.000Z'),
+    message(1, 'out', 'Quick question: how do you run follow-ups today?', '2026-09-19T15:53:00.000Z'),
+    message(2, 'in', 'Hey, thanks for the note.', '2026-09-20T21:55:00.000Z'),
+    message(3, 'in', row.latest_direction === 'in' ? row.latest_snippet : 'Let me think about it.', '2026-09-20T22:10:00.000Z'),
+    message(4, 'out', 'Imported from LinkedIn by hand: sure, Tuesday works.', '2026-09-21T09:00:00.000Z', 'manual'),
+  ]
+}
+
+function replyThread(scenario, profileUrl) {
+  if (!profileUrl || profileUrl === FIXTURE_LEAD_PROFILE) return replyThreadRows(scenario)
+  const queue = replyQueue(scenario)
+  const index = queue.findIndex((row) => row.profile_url === profileUrl)
+  return index > 0 ? syntheticThread(queue[index], index) : null
 }
 
 function replyThreadRows(scenario) {
   return threadRows(scenario).map((message) => ({
-    id: message.id, instance_id: instance.id, profile_url: 'https://example.test/fixture-lead',
+    id: message.id, instance_id: instance.id, profile_url: FIXTURE_LEAD_PROFILE,
     campaign_id: campaign.campaign_id, direction: message.direction, body: message.body,
     sent_at: message.sent_at, source: message.source, review: null,
   }))
@@ -684,14 +757,13 @@ export async function activityFixture(request) {
       !instanceId || (row.instance_id === instanceId && row.profile_url === profileUrl))))
   }
   if (op === 'replies.capabilities') return json(replyCapabilities(role))
-  if (op === 'replies.inbox') return json({ items: replyInboxRows(scenario, url.searchParams), next_cursor: null })
+  if (op === 'replies.inbox') return json(replyInboxPage(scenario, url.searchParams))
   if (op === 'replies.facets') return json({ facets: {} })
   if (op === 'replies.thread') {
     // Production answers 404 for a conversation with no messages at all.
-    if (url.searchParams.get('profile_url') && url.searchParams.get('profile_url') !== 'https://example.test/fixture-lead') {
-      return json({ error: 'The requested thread was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
-    }
-    return json({ messages: replyThreadRows(scenario), older_cursor: null, newer_cursor: null, inbound_revision: 1, workflow: null, next_focus_message_id: null })
+    const messages = replyThread(scenario, url.searchParams.get('profile_url'))
+    if (!messages) return json({ error: 'The requested thread was not found', code: 'REPLY_REVIEW_NOT_FOUND' }, 404)
+    return json({ messages, older_cursor: null, newer_cursor: null, inbound_revision: 1, workflow: null, next_focus_message_id: null })
   }
   if (op === 'replies.reviewHistory') return json({ items: [], next_cursor: null })
   return json({ error: 'Local fixture operation is unsupported', operation: op }, 501)

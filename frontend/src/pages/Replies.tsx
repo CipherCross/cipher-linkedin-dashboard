@@ -1,10 +1,10 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Filter, Inbox, RefreshCw, X } from 'lucide-react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { AlertCircle, ExternalLink, Filter, Inbox, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react'
 import { Link, UNSAFE_DataRouterContext, useBlocker, useLocation } from 'react-router-dom'
-import { InitialsAvatar } from '../components/Avatar'
+import { Avatar, InitialsAvatar } from '../components/Avatar'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
-import { replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
+import { replyDate, replyDateKey, replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { ConversationActionPanel } from '../components/conversation/ConversationActionPanel'
 import { ConversationThread } from '../components/conversation/ConversationThread'
 import { ReplyReviewPanel } from '../components/conversation/ReplyReviewPanel'
@@ -18,7 +18,13 @@ import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
 
 const VIEWS: ReplyInboxScope['view'][] = ['all', 'unreviewed', 'needs_reply', 'deferred', 'completed']
 const VIEW_LABELS: Record<ReplyInboxScope['view'], string> = { all: COPY.all, unreviewed: COPY.unreviewed, needs_reply: COPY.needsReply, deferred: COPY.deferred, completed: COPY.completed }
-function formatTime(value: string | null): string { return value ? replyTime(value, true) : '—' }
+/** A queue row's time, as a messenger shows it: the time today, the date before
+ * that. The exact time is the row's tooltip. */
+function rowTime(value: string | null): string {
+  if (!value) return '—'
+  return replyDateKey(value) === replyDateKey(new Date()) ? replyTime(value) : replyDate(value)
+}
+function exactTime(value: string | null): string { return value ? `${replyTime(value, true)} · ${REPLY_TIME_ZONE_LABEL}` : REPLY_TIME_ZONE_LABEL }
 function profileName(profile: string): string { return profile.split('/').filter(Boolean).pop() || profile }
 function capabilityMessage(capabilities: ReplyCapabilities | null): string {
   if (!capabilities) return 'Checking whether manual review is available…'
@@ -31,6 +37,46 @@ function capabilityMessage(capabilities: ReplyCapabilities | null): string {
 }
 
 type NavigationRequest = { proceed: () => void; cancel?: () => void }
+
+/**
+ * Which layout the workspace container has room for.
+ *
+ * `wide` fits list + thread + review; `mid` (every 1280–1440 screen with the
+ * sidebar open) fits the review form only if the list steps back to a rail;
+ * `narrow` falls back to the two-pane switch the stylesheet owns. The bands are
+ * measured on the same element the stylesheet's container query reads, so the
+ * JS mode and the CSS fallback cannot disagree about where 900px is. Without a
+ * ResizeObserver (jsdom) the workspace is `wide`.
+ */
+type WorkspaceBand = 'wide' | 'mid' | 'narrow'
+export const REPLIES_WIDE_MIN = 1120
+export const REPLIES_MID_MIN = 900
+function bandFor(width: number): WorkspaceBand {
+  return width >= REPLIES_WIDE_MIN ? 'wide' : width >= REPLIES_MID_MIN ? 'mid' : 'narrow'
+}
+function useWorkspaceBand(ref: RefObject<HTMLElement | null>): WorkspaceBand {
+  const [band, setBand] = useState<WorkspaceBand>('wide')
+  useEffect(() => {
+    const element = ref.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    const measure = () => { const width = element.getBoundingClientRect().width; if (width > 0) setBand(bandFor(width)) }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return band
+}
+
+/* A per-viewer convenience: whether this person keeps the list collapsed on a
+ * wide screen. Storage can be missing or throw, and the page works without it. */
+const LIST_COLLAPSED_KEY = 'replies.listCollapsed'
+function readListCollapsed(): boolean {
+  try { return window.localStorage.getItem(LIST_COLLAPSED_KEY) === '1' } catch { return false }
+}
+function writeListCollapsed(value: boolean) {
+  try { window.localStorage.setItem(LIST_COLLAPSED_KEY, value ? '1' : '0') } catch { /* per-viewer only */ }
+}
 
 function DataRouterNavigationGuard({ dirty, onRequest }: { dirty: boolean; onRequest: (request: NavigationRequest) => void }) {
   const blocker = useBlocker(dirty)
@@ -116,6 +162,15 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const { data } = useData()
   const { openConversation } = useConversation()
   const inbox = useRepliesInbox(client)
+  const pageRef = useRef<HTMLDivElement>(null)
+  const listPaneRef = useRef<HTMLElement>(null)
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const band = useWorkspaceBand(pageRef)
+  const [listPinnedCollapsed, setListPinnedCollapsed] = useState(readListCollapsed)
+  const [listOverlayOpen, setListOverlayOpen] = useState(false)
+  const listCollapsed = band === 'mid' || (band === 'wide' && listPinnedCollapsed)
+  const listMode: 'full' | 'rail' | 'overlay' = !listCollapsed ? 'full' : listOverlayOpen ? 'overlay' : 'rail'
   const [search, setSearch] = useState(inbox.scope.query)
   /* The filter sheet edits a draft and commits it on Apply. Every field used
    * to call guardedScope on change, so Escape dismissed a dialog whose changes
@@ -191,7 +246,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const queueNavigation = useCallback((request: NavigationRequest) => { setNavigationSaveProblem(null); setPendingNavigation(request) }, [])
   const confirmNavigation = useCallback((action: () => void) => { if (dirty) queueNavigation({ proceed: action }); else action() }, [dirty, queueNavigation])
   const clearDirty = useCallback(() => { setReviewDirty(false); setWorkflowUserDirty(false); setAutoDncDerived(false); setAutoDncSnapshot(null); setWorkflowDncUserTouched(false) }, [])
-  const navigateWithoutGuard = useCallback((item: typeof selectedItem, focus?: number | null) => { clearDirty(); inbox.selectThread(item, focus); setMobileStep(item ? 'thread' : 'list') }, [clearDirty, inbox])
+  const navigateWithoutGuard = useCallback((item: typeof selectedItem, focus?: number | null) => { clearDirty(); inbox.selectThread(item, focus); setMobileStep(item ? 'thread' : 'list'); setListOverlayOpen(false) }, [clearDirty, inbox])
   const guardedSelect = useCallback((item: typeof selectedItem, focus?: number | null) => { confirmNavigation(() => navigateWithoutGuard(item, focus)) }, [confirmNavigation, navigateWithoutGuard])
   const guardedScope = useCallback((patch: Partial<ReplyInboxScope>, options?: { replace?: boolean }) => { confirmNavigation(() => { clearDirty(); inbox.setScope(patch, options) }) }, [clearDirty, confirmNavigation, inbox])
   const updateScope = useCallback((patch: Partial<ReplyInboxScope>) => inbox.setScope(patch), [inbox])
@@ -248,6 +303,44 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     setWorkflowDraft(workflow)
   }, [])
   const handleWorkflowDirtyChange = useCallback((value: boolean) => { if (value) setWorkflowUserDirty(true) }, [])
+  /* The list laid over the thread closes on Escape and on a click outside it,
+   * but never while the unsaved-changes dialog or the filter sheet is up: their
+   * buttons sit outside the list, and "Keep editing" must return to the same
+   * open list. A row pick closes it only once the navigation goes through. */
+  const overlayBlocked = pendingNavigation !== null || filtersOpen
+  useEffect(() => {
+    if (listMode !== 'overlay' || overlayBlocked) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setListOverlayOpen(false) }
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (target && listPaneRef.current?.contains(target)) return
+      setListOverlayOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onPointer)
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onPointer) }
+  }, [listMode, overlayBlocked])
+  const toggleList = () => {
+    if (band === 'wide') { const next = !listPinnedCollapsed; setListPinnedCollapsed(next); writeListCollapsed(next); setListOverlayOpen(false) }
+    else setListOverlayOpen((open) => !open)
+  }
+  const listToggleLabel = listMode === 'full' ? 'Collapse the conversation list'
+    : listMode === 'overlay' ? 'Hide the conversation list'
+      : band === 'wide' ? 'Expand the conversation list' : 'Show the conversation list'
+  /* Paging is a sentinel at the end of the list. `loadMore` itself refuses to
+   * start while another page (or a Save-and-next walk) is loading, so the
+   * observer can fire as often as it likes. */
+  const observerSupported = typeof IntersectionObserver !== 'undefined'
+  const { loadMore, nextCursor } = inbox
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!observerSupported || !sentinel || !nextCursor || inbox.error) return
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) void loadMore() }, { root: listScrollRef.current, rootMargin: '200px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [observerSupported, loadMore, nextCursor, inbox.error, inbox.items.length])
+  const instancesById = useMemo(() => new Map((data?.instances ?? []).map((instance) => [instance.id, instance])), [data?.instances])
+  const showAccountMark = !inbox.scope.account && (inbox.capabilities?.instances?.length ?? 0) > 1
   const hasData = inbox.loading || inbox.items.length > 0
   const currentName = selectedItem?.name || UNKNOWN_PERSON_LABEL
   const selectedIsOutboundOnly = hasSelection && !!selectedMessage && selectedMessage.direction !== 'in'
@@ -323,7 +416,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const navigationDialogProblem = navigationSaveProblem
     ?? (pendingNavigation && actions.conflict ? 'This conversation changed in another tab or was classified meanwhile. Your input is kept — keep editing to compare and save again.' : null)
     ?? (pendingNavigation ? actions.error : null)
-  return <div className="replies-page">
+  return <div className="replies-page" ref={pageRef}>
     <NavigationGuard dirty={dirty} onRequest={queueNavigation} />
     {pendingNavigation && <Dialog
       size="sm"
@@ -360,13 +453,13 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
       title={COPY.replies}
       actions={<div className="flex items-center gap-app-md">
         <LinkButton to="/sentiment-analysis" variant="ghost">Sentiment analysis</LinkButton>
-        <Button
-          variant="secondary"
+        <IconButton
+          bordered
+          label={inbox.loading ? 'Refreshing replies' : COPY.refresh}
           icon={<RefreshCw aria-hidden="true" />}
           onClick={() => confirmNavigation(inbox.refresh)}
           loading={inbox.loading}
-          loadingLabel="Refreshing replies"
-        >{COPY.refresh}</Button>
+        />
       </div>}
     />
 
@@ -459,17 +552,11 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
       <Button variant="ghost" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button>
     </div>}
 
-    {capabilityReady ? <div className={'replies-workspace' + (mobileStep === 'review' ? ' pane-review' : '') + (hasSelection ? ' ' : '')}>
-      <aside className="replies-list-pane" aria-label="Conversations">
-        <div className="replies-pane-title">
-          <div>
-            <h2>{inbox.scope.view === 'unreviewed' ? 'Review queue' : 'Conversations'}</h2>
-            <span className="block text-app-text-muted text-app-meta">{inbox.nextCursor ? `${inbox.items.length} loaded · more available` : `${inbox.items.length} conversation${inbox.items.length === 1 ? '' : 's'}`}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-app-sm px-app-md py-app-sm border-b border-app-border flex-[0_0_auto]">
+    {capabilityReady ? <div className={['replies-workspace', `band-${band}`, `list-${listMode}`, mobileStep === 'review' ? 'pane-review' : ''].filter(Boolean).join(' ')}>
+      <aside className="replies-list-pane" aria-label="Conversations" ref={listPaneRef}>
+        <div className="replies-list-head">
           <TextField
-            className="flex-1 min-w-0"
+            className="replies-list-search"
             label="Search conversations"
             labelHidden
             type="search"
@@ -478,46 +565,72 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-          <IconButton label="Clear the search" icon={<X aria-hidden="true" />} onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }} />
+          {search && <IconButton className="replies-list-search" label="Clear the search" icon={<X aria-hidden="true" />} onClick={() => { setSearch(''); guardedScope({ query: '', cursor: null }) }} />}
+          {band !== 'narrow' && <IconButton
+            label={listToggleLabel}
+            aria-expanded={listMode !== 'rail'}
+            icon={listMode === 'rail' ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            onClick={toggleList}
+          />}
         </div>
         {inbox.loading && !inbox.items.length ? <div className="replies-loading" role="status" aria-busy="true">Loading replies…</div>
           : inbox.error && !hasData ? <div className="replies-error" role="alert"><AlertCircle size={20} aria-hidden="true" />{inbox.error}<Button variant="secondary" size="sm" onClick={inbox.refresh}>{COPY.retry}</Button></div>
             : !inbox.items.length ? <EmptyState icon={Inbox} title={scopeLabel ? 'No conversations match this report period' : 'Nothing to review'} hint={scopeLabel ? 'Check the period and the conditions of the report.' : 'Try another queue or a wider arrival period.'} />
-              : <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain]">{inbox.items.map((item) => {
+              : <div className="replies-list-scroll" ref={listScrollRef}>{inbox.items.map((item) => {
                 const selected = inbox.scope.thread?.instance_id === item.instance_id && inbox.scope.thread.profile_url === item.profile_url
                 const name = item.name || UNKNOWN_PERSON_LABEL
+                const identifier = item.name ? null : profileName(item.profile_url)
+                const account = showAccountMark ? instancesById.get(item.instance_id) : undefined
                 /* ui-exception(replies-queue-item): a conversation row is rich,
-                   multi-line content (avatar, name, timestamp, snippet, account,
-                   owner and pending badge) that Button's fixed-height contract
-                   cannot render; it stays a real, keyboard-operable <button> so
-                   Tab/Enter/Space still select it. verify: Tab through the
-                   queue, Enter selects a row, and the selected row carries
-                   aria-current="true". */
-                return <button type="button" key={item.instance_id + '|' + item.profile_url} className="replies-list-item" aria-current={selected ? 'true' : undefined} onClick={() => guardedSelect(item)}>
-                  <span className="replies-list-identity"><InitialsAvatar name={name} size={32} /><span className="flex-1 min-w-0"><span className="replies-list-item-top"><strong>{name}</strong><time dateTime={item.latest_sent_at ?? undefined} title={REPLY_TIME_ZONE_LABEL}>{formatTime(item.latest_sent_at)}</time></span><span className="block truncate text-app-text-muted text-app-meta">{item.company || item.headline || profileName(item.profile_url)}</span></span></span>
-                  <span className="[display:-webkit-box] my-app-xs mx-0 text-app-text-muted text-app-meta overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{item.latest_direction === 'in' ? 'Reply: ' : 'Sent: '}{item.latest_snippet || 'No text'}</span>
-                  <span className="replies-list-item-bottom"><span>{accountLabel(item.instance_id)}</span><span>{item.owner_id ? ownerLabel(item.owner_id) : null}{item.action ? ' · ' + ACTION_LABELS[item.action] : ''}</span>{item.pending_count > 0 && <b>{item.pending_count}</b>}</span>
+                   two-line content (avatar, name, timestamp, snippet, account
+                   and pending badge) that Button's fixed-height contract cannot
+                   render; it stays a real, keyboard-operable <button> so
+                   Tab/Enter/Space still select it. In the rail its text is
+                   visually hidden, not removed, so the row keeps its name.
+                   verify: Tab through the queue, Enter selects a row, and the
+                   selected row carries aria-current="true". */
+                return <button type="button" key={item.instance_id + '|' + item.profile_url} className="replies-list-item" aria-current={selected ? 'true' : undefined} title={listMode === 'rail' ? [name, identifier].filter(Boolean).join(' · ') : undefined} onClick={() => guardedSelect(item)}>
+                  <span className="replies-list-avatar">
+                    <InitialsAvatar name={identifier ?? name} size={32} />
+                    {item.pending_count > 0 && <span className="replies-list-dot" aria-hidden="true" />}
+                  </span>
+                  <span className="replies-list-text">
+                    <span className="replies-list-item-top">
+                      <span className="replies-list-name"><strong>{name}</strong>{identifier && <span className="replies-list-id">{identifier}</span>}</span>
+                      <time dateTime={item.latest_sent_at ?? undefined} title={exactTime(item.latest_sent_at)}>{rowTime(item.latest_sent_at)}</time>
+                    </span>
+                    <span className="replies-list-item-bottom">
+                      <span className="replies-list-snippet">{item.latest_direction === 'in' ? '' : 'You: '}{item.latest_snippet || 'No text'}</span>
+                      {account && <span className="replies-list-account" title={accountLabel(item.instance_id)}><Avatar inst={account} size={16} /><span className="replies-visually-hidden">{accountLabel(item.instance_id)}</span></span>}
+                      {item.pending_count > 0 && <b><span className="replies-visually-hidden">Unreviewed: </span>{item.pending_count}</b>}
+                    </span>
+                  </span>
                 </button>
-              })}</div>}
-        {inbox.nextCursor && <div className="flex-[0_0_auto] border-t border-app-border p-app-sm">
-          <Button variant="ghost" size="sm" block onClick={inbox.loadMore} loading={inbox.loadingMore} loadingLabel="Loading more conversations">Load more</Button>
-        </div>}
+              })}
+                {inbox.nextCursor && <div ref={sentinelRef} className="replies-list-more">
+                  {inbox.loadingMore ? <span role="status">Loading more…</span>
+                    : (!observerSupported || inbox.error) && <Button variant="ghost" size="sm" block onClick={() => void inbox.loadMore()}>Load more</Button>}
+                </div>}
+              </div>}
       </aside>
 
       <main className="replies-thread-pane">
         {hasSelection ? <>
           <div className="replies-thread-head">
-            <div>
-              <h2>{currentName}</h2>
-              <p className="text-app-text-muted text-app-meta">{selectedItem?.company || selectedItem?.headline || profileName(inbox.scope.thread?.profile_url ?? '')} · {accountLabel(inbox.scope.thread?.instance_id ?? '')}</p>
+            <div className="replies-thread-identity">
+              <InitialsAvatar name={selectedItem?.name || profileName(inbox.scope.thread?.profile_url ?? '')} size={32} />
+              <div>
+                <h2>{currentName}</h2>
+                <p className="text-app-text-muted text-app-meta">{[selectedItem?.name ? selectedItem.headline || selectedItem.company : profileName(inbox.scope.thread?.profile_url ?? ''), accountLabel(inbox.scope.thread?.instance_id ?? '')].filter(Boolean).join(' · ')}</p>
+              </div>
             </div>
             <div className="flex items-center gap-app-sm flex-[0_0_auto] flex-wrap justify-end">
               {newInboundAvailable && <Button variant="secondary" size="sm" onClick={() => { if (inbox.thread?.newer_cursor) inbox.loadNewer(); else if (latestInbound) confirmNavigation(() => { updateScope({ thread: { instance_id: latestInbound.instance_id, profile_url: latestInbound.profile_url, focus_message_id: latestInbound.id } }); setNewInboundAvailable(false) }) }}>New reply · show it</Button>}
               {selectedLead && <Button variant="ghost" size="sm" onClick={() => confirmNavigation(() => openConversation(selectedLead, { mode: 'import_history' }))}>Import history</Button>}
-              <ExternalLinkButton variant="ghost" size="sm" href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer">LinkedIn ↗</ExternalLinkButton>
+              <ExternalLinkButton variant="ghost" size="sm" icon={<ExternalLink aria-hidden="true" />} href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer" title="Open the profile on LinkedIn">LinkedIn</ExternalLinkButton>
             </div>
           </div>
-          <ConversationThread messages={inbox.thread?.messages ?? []} selectedMessageId={selectedMessage?.id ?? null} focusMessageId={inbox.scope.thread?.focus_message_id} loading={inbox.loadingThread} error={inbox.threadError} olderCursor={inbox.thread?.older_cursor} newerCursor={inbox.thread?.newer_cursor} inboundName={currentName} outboundName={accountLabel(inbox.scope.thread?.instance_id ?? '')} onSelectMessage={(message) => confirmNavigation(() => updateScope({ thread: { instance_id: message.instance_id, profile_url: message.profile_url, focus_message_id: message.id } }))} onLoadOlder={inbox.loadOlder} onLoadNewer={inbox.loadNewer} />
+          <ConversationThread messages={inbox.thread?.messages ?? []} selectedMessageId={selectedMessage?.id ?? null} focusMessageId={inbox.scope.thread?.focus_message_id} loading={inbox.loadingThread} error={inbox.threadError} olderCursor={inbox.thread?.older_cursor} newerCursor={inbox.thread?.newer_cursor} onSelectMessage={(message) => confirmNavigation(() => updateScope({ thread: { instance_id: message.instance_id, profile_url: message.profile_url, focus_message_id: message.id } }))} onLoadOlder={inbox.loadOlder} onLoadNewer={inbox.loadNewer} />
           <div className="replies-pane-switch">
             <Button variant="ghost" block onClick={() => setMobileStep(mobileStep === 'review' ? 'thread' : 'review')}>
               {mobileStep === 'review' ? '← Back to conversations' : `${COPY.reviewReply} and ${COPY.nextStep.toLowerCase()} →`}

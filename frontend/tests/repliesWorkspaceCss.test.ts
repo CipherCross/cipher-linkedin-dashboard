@@ -73,7 +73,7 @@ describe('Replies workspace stylesheet', () => {
   const { top, conditional } = partition(css)
 
   it('reveals the pane switch below the three-pane threshold', () => {
-    expect(conditional).toContain('@container (max-width: 1239px)')
+    expect(conditional).toContain('@container (max-width: 899px)')
     const inQuery = displayRules(conditional, '.replies-pane-switch')
     expect(inQuery).toHaveLength(1)
     expect(inQuery[0][1]).not.toBe('none')
@@ -88,7 +88,20 @@ describe('Replies workspace stylesheet', () => {
     // And it has to come before the query that reveals it.
     const base = css.indexOf('.replies-pane-switch')
     expect(base).toBeGreaterThan(-1)
-    expect(base).toBeLessThan(css.indexOf('@container (max-width: 1239px)'))
+    expect(base).toBeLessThan(css.indexOf('@container (max-width: 899px)'))
+  })
+
+  it('keeps the review pane on screen from 900px up: the list is what collapses', () => {
+    // The mid band (every 1280–1440 screen with the sidebar open) used to drop
+    // the review pane behind a switch. Now it keeps three columns and the list
+    // becomes the rail; only the list pane may leave the grid there, as the
+    // overlay laid over the thread.
+    expect(top).toMatch(/\.replies-workspace\.band-mid\s*\{\s*grid-template-columns:\s*var\(--replies-rail\) minmax\(0, 1fr\) 320px;/)
+    expect(top).toMatch(/\.replies-workspace\.list-overlay \.replies-list-pane\s*\{[^}]*position:\s*absolute/)
+    expect(displayRules(top, '.replies-workspace.band-mid .replies-inspector-pane')).toHaveLength(0)
+    // The rail hides row text visually, never with display:none, so each row
+    // keeps its accessible name.
+    expect(displayRules(top, '.replies-workspace.list-rail .replies-list-text')).toHaveLength(0)
   })
 
   it('keeps the review pane reachable in the two-pane layout', () => {
@@ -96,7 +109,7 @@ describe('Replies workspace stylesheet', () => {
     // one is decided by .pane-review — the class the switch toggles.
     expect(conditional).toContain('.replies-workspace.pane-review .replies-list-pane { display: none; }')
     expect(conditional).toContain('.replies-workspace:not(.pane-review) .replies-inspector-pane { display: none; }')
-    // At ≥1240px all three panes show, so nothing unconditional may hide the
+    // From 900px up all three panes show, so nothing unconditional may hide the
     // inspector — the base rule lays it out like the other two.
     const unconditional = displayRules(top, '.replies-inspector-pane')
     expect(unconditional.length).toBeGreaterThan(0)

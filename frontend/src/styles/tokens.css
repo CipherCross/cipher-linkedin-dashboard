@@ -73,6 +73,11 @@
   /* ---- Chat / message bubbles ------------------------------------------- */
   --bubble-out: #2563eb;
   --bubble-out-fg: #ffffff;
+  --bubble-out-hover: #1d4ed8;
+  --bubble-in: #f2f4f7;
+  --bubble-in-fg: #182230;
+  --bubble-in-hover: #e9edf3;
+  --radius-bubble: 12px;       /* the tail corner on the sender's side is --radius-xs */
 
   /* ---- Brand ------------------------------------------------------------ */
   --linkedin: #0a66c2;
