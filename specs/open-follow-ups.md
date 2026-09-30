@@ -40,8 +40,20 @@ that the code alone cannot prove done. Delete a line when it is done or dropped.
   JSON and encode per target column type; match rows by grain). Fix or delete the tool
   before reusing it. (from N-S28)
 
+- **Replies review workspace polish (shipped 2026-09-30, spec deleted).** Contact names
+  for lead-less threads need agent 1.28.0 on every notebook plus ledger 022 (applied on
+  production). Still open: the uitop tenant has no step 022 — apply it before uitop deploys
+  a `main` that includes 129f02d, or its Replies inbox read 500s; promote 022 into
+  `PROTECTED_PATHS` in `portable_migration_ledger_static_assertions.mjs`; and check how many
+  of production's ~655 nameless inbound threads the chat store actually names (the agent
+  prints `contact names: N of M threads` in its dry run). The inbox read took 6.5 s on
+  production on 2026-09-30 (`replies.inbox` execute), which predates this work and is worth
+  its own look.
+
 ## Verification never recorded
 
+- Replies at 1280 was smoke-checked signed in on 2026-09-30 (rail, thread, review form);
+  1440/1920 and the drawer were verified only on the local fixture.
 - Signed-in, read-only production smoke of the redesigned UI at 1280/1440/1920:
   shell and role gating, one route per page family, Replies, Sequence editor.
   (from the 2026-09-22 component-system redesign and UI-CLEANUP-STANDARDIZATION)
