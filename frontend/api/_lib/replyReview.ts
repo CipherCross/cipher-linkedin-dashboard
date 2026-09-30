@@ -200,6 +200,10 @@ export interface ReplyInboxItem {
   readonly company: string | null
   readonly headline: string | null
   readonly campaign_id: string | null
+  /** The conversation's `leads` row, when it has one; `null` for a contact reached outside campaigns. */
+  readonly lead_id: string | null
+  /** That lead's synced photo; it is fetched by `lead_id`, never by this path. */
+  readonly photo_path: string | null
   readonly latest_snippet: string | null
   readonly latest_direction: 'in' | 'out' | null
   readonly latest_sent_at: string | null

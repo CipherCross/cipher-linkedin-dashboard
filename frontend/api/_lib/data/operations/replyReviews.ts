@@ -209,6 +209,7 @@ function mapInbox(row: NeonRow): ReplyInboxItem {
   return {
     instance_id: String(row.instance_id), profile_url: String(row.profile_url),
     name: nullableText(row.name), company: nullableText(row.company), headline: nullableText(row.headline), campaign_id: nullableText(row.campaign_id),
+    lead_id: nullableText(row.lead_id), photo_path: nullableText(row.photo_path),
     latest_snippet: nullableText(row.latest_snippet),
     latest_direction: row.latest_direction === 'in' || row.latest_direction === 'out' ? row.latest_direction : null,
     latest_sent_at: nullableText(row.latest_sent_at), selected_message_id: nullableNumber(row.selected_message_id),
@@ -358,7 +359,7 @@ export const inboxOperation: NeonQueryOperation<ReplyInboxItem, ReplyInboxParams
                     coalesce(wf.do_not_contact,false) = false AND
                     coalesce(rs.inbound_revision,0) <= coalesce(wf.acknowledged_inbound_revision,0) AND wf.action=$21::text))
         ), identity AS (
-          SELECT f.*, ld.full_name AS name, ld.company, ld.headline,
+          SELECT f.*, ld.full_name AS name, ld.company, ld.headline, ld.id::text AS lead_id, ld.photo_path,
                  (f.sort_at, f.instance_id, f.profile_url) AS cursor_key,
                  COALESCE(f.pending_message_id, f.latest_inbound_id) AS selected_message_id,
                  CASE WHEN f.pending_message_id IS NOT NULL
@@ -366,12 +367,12 @@ export const inboxOperation: NeonQueryOperation<ReplyInboxItem, ReplyInboxParams
                       ELSE COALESCE(f.latest_review_revision, 0)
                   END AS review_revision
             FROM filtered f LEFT JOIN LATERAL (
-              SELECT full_name, company, headline FROM public.leads ld0
+              SELECT id, full_name, company, headline, photo_path FROM public.leads ld0
                WHERE ld0.instance_id=f.instance_id AND ld0.profile_url=f.profile_url
                ORDER BY ld0.updated_at DESC, ld0.id DESC LIMIT 1
             ) ld ON true
         )
-        SELECT instance_id, profile_url, name, company, headline, latest_snippet, latest_direction, latest_sent_at,
+        SELECT instance_id, profile_url, name, company, headline, lead_id, photo_path, latest_snippet, latest_direction, latest_sent_at,
                selected_message_id, pending_count, owner_id, action, to_char(next_follow_up_date,'YYYY-MM-DD') AS next_follow_up_date,
                do_not_contact, GREATEST(workflow_revision, inbound_revision) AS revision, review_revision,
                workflow_revision, inbound_revision, acknowledged_inbound_revision, campaign_ids,

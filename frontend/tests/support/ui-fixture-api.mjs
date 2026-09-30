@@ -259,11 +259,18 @@ const QUEUE_PEOPLE = [
 ]
 const UNKNOWN_SLUGS = ['david-glauber-1b1961191', 'marina-fernandez-21443776', 'ACoAABkq3xYBmP0-fixture']
 
+/* Named rows have a `leads` row and a synced photo; unknown contacts have
+ * neither. Photos are only served in the `photos-admin` scenario. */
+const queueLeadId = (index) => `fixture-queue-lead-00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+/* One lead's photo is a broken image, to prove the initials fallback. */
+const BROKEN_PHOTO_INDEX = 3
+
 function queueRow(profile_url, name, company, snippet, direction, pending, index) {
   const sent = new Date(Date.UTC(2026, 8, 21, 12, 0) - index * 47 * 60 * 1000).toISOString()
   return {
     instance_id: instance.id, profile_url,
     name, company, headline: name ? `${company} · Head of Sales` : null, campaign_id: campaign.campaign_id,
+    lead_id: name ? queueLeadId(index) : null, photo_path: name ? `${instance.id}/queue-${index}.jpg` : null,
     latest_snippet: snippet, latest_direction: direction,
     latest_sent_at: sent, selected_message_id: 100 + index * 10 + 3, pending_count: pending,
     owner_id: null, action: pending ? null : 'needs_reply', next_follow_up_date: null, do_not_contact: false,
@@ -278,12 +285,32 @@ function replyQueue(scenario) {
     {
       ...queueRow(FIXTURE_LEAD_PROFILE, 'Alex Fixture', 'Fixture Labs', 'Thanks for reaching out — happy to chat.', 'in', 1, 0),
       headline: 'Product leader', selected_message_id: 1,
+      lead_id: leadRows(scenario)[0]?.id ?? null,
     },
     ...QUEUE_PEOPLE.map(([name, company, snippet, direction, pending], i) => {
       const slug = name ? name.toLowerCase().replace(/\s+/g, '-') : UNKNOWN_SLUGS[unknown++ % UNKNOWN_SLUGS.length]
       return queueRow(`https://www.linkedin.com/in/${slug}`, name, company, snippet, direction, pending, i + 1)
     }),
   ]
+}
+
+const PHOTO_COLOURS = ['#7c9cbf', '#b58f6e', '#8fae8b', '#a58bb8', '#c28f8f', '#6fa3a8']
+/* A local, generated portrait: a flat head-and-shoulders silhouette. */
+function fixturePhoto(index) {
+  const colour = PHOTO_COLOURS[index % PHOTO_COLOURS.length]
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="${colour}"/><circle cx="32" cy="25" r="12" fill="#f3e3d3"/><path d="M10 64c2-14 11-22 22-22s20 8 22 22z" fill="#f3e3d3"/></svg>`
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+}
+
+function leadPhotoUrls(scenario, ids) {
+  if (scenario !== 'photos-admin') return []
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+  return ids.flatMap((leadId) => {
+    const match = /-(\d{12})$/.exec(leadId)
+    if (!leadId.startsWith('fixture-queue-lead-') || !match) return []
+    const index = Number(match[1])
+    return [{ leadId, url: index === BROKEN_PHOTO_INDEX ? 'data:image/png;base64,broken' : fixturePhoto(index), expiresAt }]
+  })
 }
 
 function replyInboxPage(scenario, search) {
@@ -617,7 +644,7 @@ function publishTargets() {
 }
 
 export async function setFixtureScenario(next) {
-  const allowed = new Set(['populated-admin', 'populated-member', 'empty-admin', 'empty-member', 'error', 'read-error'])
+  const allowed = new Set(['populated-admin', 'populated-member', 'empty-admin', 'empty-member', 'error', 'read-error', 'photos-admin'])
   if (!allowed.has(next)) return false
   await writeFile(process.env.UI_FIXTURE_STATE_FILE, `${next}\n`)
   return true
@@ -649,7 +676,11 @@ export async function activityFixture(request) {
   const url = new URL(request.url)
   const op = url.searchParams.get('op')
   if (request.method !== 'GET') return mutationRefusal()
-  if (op === 'config.readPath') return json({ readPath: 'neon', photoPath: 'disabled' })
+  if (op === 'config.readPath') return json({ readPath: 'neon', photoPath: scenario === 'photos-admin' ? 'neon' : 'disabled' })
+  if (op === 'leads.photoUrls') {
+    const ids = (url.searchParams.get('lead_ids') ?? '').split(',').filter(Boolean)
+    return json({ photos: leadPhotoUrls(scenario, ids) })
+  }
   if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture read failure', operation: op }, 503)
   // Neon Activity's daily series is the one read with no `op`: it is keyed by instance.
   if (!op && url.searchParams.get('instance_id')) {
@@ -773,7 +804,7 @@ export async function fixtureControl(request) {
   const scenario = await currentScenario()
   const url = new URL(request.url)
   const next = url.searchParams.get('scenario')
-  if (request.method !== 'GET' || !next) return json({ scenario, allowed: ['populated-admin', 'populated-member', 'empty-admin', 'empty-member', 'error', 'read-error'] })
+  if (request.method !== 'GET' || !next) return json({ scenario, allowed: ['populated-admin', 'populated-member', 'empty-admin', 'empty-member', 'error', 'read-error', 'photos-admin'] })
   if (!(await setFixtureScenario(next))) return json({ error: 'Unknown fixture scenario', scenario }, 400)
   return json({ ok: true, scenario: next })
 }

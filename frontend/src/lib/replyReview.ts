@@ -105,6 +105,9 @@ export interface RepliesInboxItem {
   company?: string | null
   headline?: string | null
   campaign_id?: string | null
+  /** The conversation's `leads` row, when it has one; photos are fetched by this id. */
+  lead_id?: string | null
+  photo_path?: string | null
   latest_snippet: string | null
   latest_direction: string | null
   latest_sent_at: string | null

@@ -208,6 +208,31 @@ describe('manual reply-review Neon operations', () => {
     expect(newerCursor.text).toContain('(m.sent_at, m.id) > ($4::timestamptz,$5::bigint)')
   })
 
+  it('returns the lead id and photo path with each queue row, and null for a contact with no lead', () => {
+    const statement = inboxOperation.build({ actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' }, params: {
+      scope: 'new', captureStartedAt: null, instanceId: null, campaignId: null, ownerId: null, sentiment: null, reasonId: null,
+      action: null, query: null, view: 'unreviewed', unacknowledged: false, unowned: false, overdue: false, my: false,
+      currentActorId: null, from: null, to: null, metricScope: null,
+    }, page: { limit: 50, cursor: null }, after: undefined, range: undefined })
+    expect(statement.text).toContain('SELECT id, full_name, company, headline, photo_path FROM public.leads ld0')
+    expect(statement.text).toContain('ld.id::text AS lead_id, ld.photo_path')
+    expect(statement.text).toMatch(/SELECT instance_id, profile_url, name, company, headline, lead_id, photo_path,/)
+    const base = { instance_id: 'n1', profile_url: 'https://www.linkedin.com/in/a', pending_count: 1 }
+    expect(inboxOperation.mapRow!({ ...base, name: 'Ann', lead_id: '6f1c0b1e-0000-4000-8000-000000000001', photo_path: 'n1/a.jpg' }))
+      .toMatchObject({ name: 'Ann', lead_id: '6f1c0b1e-0000-4000-8000-000000000001', photo_path: 'n1/a.jpg' })
+    expect(inboxOperation.mapRow!({ ...base, name: null, lead_id: null, photo_path: null }))
+      .toMatchObject({ name: null, lead_id: null, photo_path: null })
+  })
+
+  it('returns each thread message with its source, so an imported message can be marked', () => {
+    const statement = threadOperation.build({ actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' }, params: { instanceId: 'n1', profileUrl: 'p', focusMessageId: null, direction: 'newer' }, page: { limit: 50, cursor: null }, after: undefined, range: undefined })
+    expect(statement.text).toContain('m.sent_at, m.first_seen_at, m.source,')
+    expect(threadOperation.mapRow!({ id: '7', instance_id: 'n1', profile_url: 'p', direction: 'out', sent_at: '2026-09-01T00:00:00.000Z', source: 'manual' }))
+      .toMatchObject({ id: 7, source: 'manual' })
+    expect(threadOperation.mapRow!({ id: '8', instance_id: 'n1', profile_url: 'p', direction: 'in', sent_at: '2026-09-01T00:00:00.000Z' }))
+      .toMatchObject({ id: 8, source: null })
+  })
+
   it('facets aggregate the complete filtered cohort in one parameterized statement', () => {
     const statement = facetsOperation.build({ actor: { kind: 'user', actorId: 'actor', tenantId: 'tenant', role: 'member' }, params: {
       scope: 'new', captureStartedAt: '2026-09-01T00:00:00.000Z', instanceId: 'n1', campaignId: null, ownerId: null,

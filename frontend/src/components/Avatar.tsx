@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { Instance, Lead } from '../lib/types'
+
+/** What `LeadAvatar` needs of a lead: the id its photo is addressed by, whether
+ *  one is synced, and the name or URL its initials fall back to. A `Lead`
+ *  satisfies it, and so does a Replies queue row that carries its lead id. */
+export type LeadAvatarSubject = Pick<Lead, 'id' | 'photo_path' | 'full_name' | 'profile_url'>
 import { instanceName } from '../lib/leads'
 import { leadPhotoUrls, type LeadPhotoSource } from '../lib/leadPhotos'
 
@@ -42,7 +47,7 @@ export function LeadAvatar({
    */
   photos = leadPhotoUrls,
 }: {
-  lead: Lead
+  lead: LeadAvatarSubject
   size?: number
   photos?: LeadPhotoSource
 }) {

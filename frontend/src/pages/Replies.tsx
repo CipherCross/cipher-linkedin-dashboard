@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { AlertCircle, ExternalLink, Filter, Inbox, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react'
 import { Link, UNSAFE_DataRouterContext, useBlocker, useLocation } from 'react-router-dom'
-import { Avatar, InitialsAvatar } from '../components/Avatar'
+import { Avatar, InitialsAvatar, LeadAvatar } from '../components/Avatar'
 import { useData } from '../lib/DataContext'
 import { useConversation } from '../lib/ConversationContext'
 import { replyDate, replyDateKey, replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
@@ -37,6 +37,16 @@ function capabilityMessage(capabilities: ReplyCapabilities | null): string {
 }
 
 type NavigationRequest = { proceed: () => void; cancel?: () => void }
+
+/** A conversation's face: the lead's synced photo when the conversation has a
+ *  lead with one, initials otherwise. A contact with no lead row has no name,
+ *  so its initials come from the profile identifier, never an invented name. */
+function PersonAvatar({ person, size = 32 }: { person: { profile_url: string; name?: string | null; lead_id?: string | null; photo_path?: string | null }; size?: number }) {
+  if (person.lead_id && person.photo_path) {
+    return <LeadAvatar lead={{ id: person.lead_id, photo_path: person.photo_path, full_name: person.name ?? null, profile_url: person.profile_url }} size={size} />
+  }
+  return <InitialsAvatar name={person.name || profileName(person.profile_url)} size={size} />
+}
 
 /**
  * Which layout the workspace container has room for.
@@ -339,10 +349,19 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [observerSupported, loadMore, nextCursor, inbox.error, inbox.items.length])
+  /* The selected conversation stays in sight in the list or rail — after a
+   * deep link, Save and next, or a band change — without moving a list the
+   * viewer is scrolling while the selection stays put. */
+  const selectedRowKey = inbox.scope.thread ? `${inbox.scope.thread.instance_id}|${inbox.scope.thread.profile_url}` : null
+  const selectedRowInList = selectedRowKey !== null && inbox.items.some((item) => `${item.instance_id}|${item.profile_url}` === selectedRowKey)
+  useEffect(() => {
+    if (!selectedRowInList) return
+    listScrollRef.current?.querySelector<HTMLElement>('.replies-list-item[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' })
+  }, [selectedRowKey, selectedRowInList, listMode])
   const instancesById = useMemo(() => new Map((data?.instances ?? []).map((instance) => [instance.id, instance])), [data?.instances])
   const showAccountMark = !inbox.scope.account && (inbox.capabilities?.instances?.length ?? 0) > 1
   const hasData = inbox.loading || inbox.items.length > 0
-  const currentName = selectedItem?.name || UNKNOWN_PERSON_LABEL
+  const currentName = selectedItem?.name || selectedLead?.full_name || UNKNOWN_PERSON_LABEL
   const selectedIsOutboundOnly = hasSelection && !!selectedMessage && selectedMessage.direction !== 'in'
   const ownerOptions = inbox.capabilities?.members?.filter((member) => member.active) ?? []
   const capabilityReady = isReplyManualReady(inbox.capabilities)
@@ -591,7 +610,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
                    selected row carries aria-current="true". */
                 return <button type="button" key={item.instance_id + '|' + item.profile_url} className="replies-list-item" aria-current={selected ? 'true' : undefined} title={listMode === 'rail' ? [name, identifier].filter(Boolean).join(' · ') : undefined} onClick={() => guardedSelect(item)}>
                   <span className="replies-list-avatar">
-                    <InitialsAvatar name={identifier ?? name} size={32} />
+                    <PersonAvatar person={item} />
                     {item.pending_count > 0 && <span className="replies-list-dot" aria-hidden="true" />}
                   </span>
                   <span className="replies-list-text">
@@ -618,7 +637,7 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         {hasSelection ? <>
           <div className="replies-thread-head">
             <div className="replies-thread-identity">
-              <InitialsAvatar name={selectedItem?.name || profileName(inbox.scope.thread?.profile_url ?? '')} size={32} />
+              <PersonAvatar person={selectedItem ?? (selectedLead ? { profile_url: selectedLead.profile_url, name: selectedLead.full_name, lead_id: selectedLead.id, photo_path: selectedLead.photo_path } : { profile_url: inbox.scope.thread?.profile_url ?? '' })} />
               <div>
                 <h2>{currentName}</h2>
                 <p className="text-app-text-muted text-app-meta">{[selectedItem?.name ? selectedItem.headline || selectedItem.company : profileName(inbox.scope.thread?.profile_url ?? ''), accountLabel(inbox.scope.thread?.instance_id ?? '')].filter(Boolean).join(' · ')}</p>
