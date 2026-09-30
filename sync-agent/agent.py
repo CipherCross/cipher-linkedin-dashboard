@@ -43,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.27.0"
+AGENT_VERSION = "1.28.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -3229,7 +3229,7 @@ INGEST_TOKEN_RE = re.compile(
 # every chunk carries the full campaign list, because campaign_steps join their
 # campaign and leads reference one, and a chunk that arrived without its
 # campaigns would be silently short rows rather than loudly wrong.
-INGEST_CHUNKABLE = ("campaign_steps", "leads", "messages", "events")
+INGEST_CHUNKABLE = ("campaign_steps", "leads", "messages", "events", "contacts")
 
 
 def parse_ingest_token(raw):
@@ -3323,6 +3323,14 @@ def _ingest_messages(messages):
              "message_type": m.get("message_type")} for m in messages]
 
 
+def _ingest_contacts(contacts):
+    # Name and headline of each thread's partner (gateway step 022). No
+    # instance_id: the gateway takes the instance from the credential.
+    return [{"profile_url": c["profile_url"],
+             "full_name": c.get("full_name"),
+             "headline": c.get("headline")} for c in contacts]
+
+
 def _ingest_events(events):
     # `raw` is the tracker's channel: a `conversation_refresh` row reports when
     # and how a conversation was re-queued. The gateway takes `row.raw ?? null`,
@@ -3374,6 +3382,7 @@ def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
         "leads": _ingest_leads(leads, demo["edu_map"], demo["job_map"]),
         "messages": _ingest_messages(messages),
         "events": _ingest_events(events),
+        "contacts": _ingest_contacts(demo.get("contacts") or []),
         "sync_run": {"status": status, "error": (error or "")[:2000]},
     }
 
@@ -3477,7 +3486,7 @@ def _parity_note(problems, text):
 
 
 def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
-                         edu_map, job_map):
+                         edu_map, job_map, contacts=()):
     """Compare what the chunks WOULD deliver against the extraction they were
     built from, and return a list of discrepancies (empty means parity).
 
@@ -3549,6 +3558,7 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
                                            r["sent_at"], r["content_hash"]))),
         ("events", events, lambda r: (r["campaign_id"], r["profile_url"],
                                       r["event_type"])),
+        ("contacts", list(contacts), lambda r: r["profile_url"]),
     ):
         rows = seen[name]
         if len(rows) != len(source):
@@ -3564,6 +3574,8 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
                       else _PARITY_STEP_FIELDS if name == "campaign_steps"
                       else ("body", "external_id", "message_type")
                       if name == "messages"
+                      else ("full_name", "headline")
+                      if name == "contacts"
                       else ("occurred_at",))
             for field in fields:
                 if got.get(field) != row.get(field):
@@ -3585,7 +3597,8 @@ def plan_ingest(cfg, payload, campaigns, leads, messages, events, steps, demo,
     an approximation of them."""
     chunks = chunk_ingest_payload(payload, day=day)
     problems = verify_ingest_parity(chunks, campaigns, leads, messages, events,
-                                    steps, demo["edu_map"], demo["job_map"])
+                                    steps, demo["edu_map"], demo["job_map"],
+                                    demo.get("contacts") or [])
     return chunks, problems
 
 
@@ -4973,6 +4986,52 @@ def apply_campaign_excludes(cfg, campaigns, leads, messages, steps):
     return kept
 
 
+# The name and headline LH2 holds for each one-to-one chat partner. The chat
+# store itself carries no names; `person_original_mini_profile` is the table the
+# leads mapping reads names from, and LH2 fills it for chat partners too. Newest
+# row first, so the Python side keeps the latest per person. `?` is own person.
+CHAT_CONTACTS_SQL = """
+SELECT pei.external_id AS slug, pmp.full_name AS full_name, pmp.headline AS headline
+FROM chat_participants cp
+JOIN chats c ON c.id = cp.chat_id
+JOIN """ + PEI_ONE_SLUG_SQL + """ pei ON pei.person_id = cp.person_id
+JOIN person_original_mini_profile pmp ON pmp.person_id = cp.person_id
+WHERE c.type = '""" + CHAT_ONE_TO_ONE + """' AND cp.person_id <> ?
+ORDER BY pmp.rowid DESC
+"""
+
+
+def extract_chat_contacts(con, instance_id, own_id, profile_urls):
+    """Name and headline of the partner of every synced thread, or [].
+
+    Only partners of threads in `profile_urls` (the messages this sync
+    delivers) are returned, one row per profile, and only with a non-empty
+    name. Best-effort like the demographic signals: an LH2 build without the
+    mini-profile table syncs with no contacts and is NOT flagged 'partial' —
+    this is print-only on drift, never note_warning. Never raises."""
+    if own_id is None or not profile_urls:
+        return []
+    try:
+        out = {}
+        for row in con.execute(CHAT_CONTACTS_SQL, (own_id,)):
+            slug = row["slug"]
+            name = (row["full_name"] or "").strip()
+            if not slug or not name:
+                continue
+            profile_url = LINKEDIN_IN_PREFIX + str(slug)
+            if profile_url not in profile_urls or profile_url in out:
+                continue
+            headline = (row["headline"] or "").strip()
+            out[profile_url] = {"instance_id": instance_id,
+                                "profile_url": profile_url,
+                                "full_name": name[:1000],
+                                "headline": headline[:1000] or None}
+        return list(out.values())
+    except Exception as e:  # schema drift must never break a sync
+        print(f"contact names skipped ({e}) — threads without a lead stay unnamed")
+        return []
+
+
 def extract_conversations(con, cfg, instance_id, warnings=None):
     """Produce the conversation feed from the best source this notebook offers.
 
@@ -5177,10 +5236,18 @@ def extract_local(cfg, warnings=None):
     # dry-run coverage counts.
     edu_map, job_map = extract_demographic_years(cfg, con)
 
+    # Names for threads whose person has no lead. Only the chat store knows
+    # the partners, so a notebook on the legacy or mapping source sends none.
+    contacts = []
+    if conversations.get("source") == "chat-store":
+        contacts = extract_chat_contacts(
+            con, instance_id, conversations.get("own_person_id"),
+            {m["profile_url"] for m in messages})
+
     owner = extract_owner(cfg, con, warnings)
     con.close()
     demo = {"edu_map": edu_map, "job_map": job_map,
-            "conversations": conversations}
+            "conversations": conversations, "contacts": contacts}
     return campaigns, leads, messages, steps, owner, demo
 
 
@@ -5266,6 +5333,10 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
     print(f"\n{len(campaigns)} campaigns, {len(leads)} leads, "
           f"{len(messages)} messages, {len(steps)} steps. "
           "Compare against LH2's own numbers, then run `agent.py sync`.")
+    contacts = demo.get("contacts") or []
+    threads = {m["profile_url"] for m in messages}
+    print(f"contact names: {len(contacts)} of {len(threads)} threads named from "
+          "the chat store")
 
 
 def cmd_sync(args):
@@ -5361,7 +5432,7 @@ def sync_machine_only(cfg, instance_id, tracker=None, warnings=None):
 
     status = "partial" if warnings else "ok"
     rows = (len(campaigns) + len(steps) + len(leads) + len(sent_messages)
-            + len(sent_events))
+            + len(sent_events) + len(demo.get("contacts") or []))
     ok, note = run_ingest_transport(
         cfg, campaigns, leads, sent_messages, sent_events, steps, demo,
         status, "; ".join(warnings)[:500], owner)

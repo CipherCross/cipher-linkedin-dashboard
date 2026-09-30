@@ -162,6 +162,8 @@ export function replyFilterBuilder(aliasOrFilter: string | ReplyFilter = 'i', st
   const start = typeof aliasOrFilter === 'string' && typeof startOrAlias === 'number' ? startOrAlias : maybeStart
   const filter = typeof aliasOrFilter === 'string' ? {} : aliasOrFilter
   const p = (offset: number) => `$${start + offset}`
+  // The search text as a LIKE pattern, with its own wildcards escaped.
+  const like = `'%' || lower(replace(replace(replace(${p(6)}::text, '\\', '\\\\'), '%', '\\%'), '_', '\\_')) || '%'`
   return {
     sql: `(${p(0)}::text IS NULL OR ${alias}.instance_id = ${p(0)}::text)
       AND (${p(1)}::text IS NULL OR ${alias}.campaign_id = ${p(1)}::text)
@@ -179,12 +181,16 @@ export function replyFilterBuilder(aliasOrFilter: string | ReplyFilter = 'i', st
                WHERE rf.message_id = ${alias}.id AND rf.reason_id = ${p(3)}::text)))
       AND (${p(4)}::text IS NULL OR EXISTS (SELECT 1 FROM public.reply_reviews sf WHERE sf.message_id = ${alias}.id AND sf.sentiment = ${p(4)}::text))
       AND (${p(5)}::text IS NULL OR EXISTS (SELECT 1 FROM public.conversation_follow_up_state sw WHERE sw.instance_id = ${alias}.instance_id AND sw.profile_url = ${alias}.profile_url AND sw.action = ${p(5)}::text))
-      AND (${p(6)}::text IS NULL OR EXISTS (
-            SELECT 1 FROM public.leads ls
+      AND (${p(6)}::text IS NULL
+        OR EXISTS (SELECT 1 FROM public.leads ls
              WHERE ls.instance_id = ${alias}.instance_id AND ls.profile_url = ${alias}.profile_url
-               AND (lower(coalesce(ls.full_name, '')) LIKE '%' || lower(replace(replace(replace(${p(6)}::text, '\\', '\\\\'), '%', '\\%'), '_', '\\_')) || '%' ESCAPE '\\'
-                 OR lower(coalesce(ls.company, '')) LIKE '%' || lower(replace(replace(replace(${p(6)}::text, '\\', '\\\\'), '%', '\\%'), '_', '\\_')) || '%' ESCAPE '\\'
-                 OR EXISTS (SELECT 1 FROM public.messages sm WHERE sm.instance_id = ${alias}.instance_id AND sm.profile_url = ${alias}.profile_url AND lower(coalesce(sm.body, '')) LIKE '%' || lower(replace(replace(replace(${p(6)}::text, '\\', '\\\\'), '%', '\\%'), '_', '\\_')) || '%' ESCAPE '\\'))))
+               AND (lower(coalesce(ls.full_name, '')) LIKE ${like} ESCAPE '\\' OR lower(coalesce(ls.company, '')) LIKE ${like} ESCAPE '\\'))
+        OR EXISTS (SELECT 1 FROM public.conversation_contacts cs
+             WHERE cs.instance_id = ${alias}.instance_id AND cs.profile_url = ${alias}.profile_url
+               AND lower(coalesce(cs.full_name, '')) LIKE ${like} ESCAPE '\\')
+        OR EXISTS (SELECT 1 FROM public.messages sm
+             WHERE sm.instance_id = ${alias}.instance_id AND sm.profile_url = ${alias}.profile_url
+               AND lower(coalesce(sm.body, '')) LIKE ${like} ESCAPE '\\'))
       AND (${p(7)}::timestamptz IS NULL OR ${alias}.sent_at >= ${p(7)}::timestamptz)
       AND (${p(8)}::timestamptz IS NULL OR ${alias}.sent_at < ${p(8)}::timestamptz)`,
     values: replyFilterValues(filter),
@@ -359,7 +365,8 @@ export const inboxOperation: NeonQueryOperation<ReplyInboxItem, ReplyInboxParams
                     coalesce(wf.do_not_contact,false) = false AND
                     coalesce(rs.inbound_revision,0) <= coalesce(wf.acknowledged_inbound_revision,0) AND wf.action=$21::text))
         ), identity AS (
-          SELECT f.*, ld.full_name AS name, ld.company, ld.headline, ld.id::text AS lead_id, ld.photo_path,
+          SELECT f.*, COALESCE(ld.full_name, cc.full_name) AS name, ld.company,
+                 COALESCE(ld.headline, cc.headline) AS headline, ld.id::text AS lead_id, ld.photo_path,
                  (f.sort_at, f.instance_id, f.profile_url) AS cursor_key,
                  COALESCE(f.pending_message_id, f.latest_inbound_id) AS selected_message_id,
                  CASE WHEN f.pending_message_id IS NOT NULL
@@ -371,6 +378,10 @@ export const inboxOperation: NeonQueryOperation<ReplyInboxItem, ReplyInboxParams
                WHERE ld0.instance_id=f.instance_id AND ld0.profile_url=f.profile_url
                ORDER BY ld0.updated_at DESC, ld0.id DESC LIMIT 1
             ) ld ON true
+            -- A partner with no lead is named from the chat store (step 022);
+            -- a lead's own name always wins.
+            LEFT JOIN public.conversation_contacts cc
+              ON cc.instance_id = f.instance_id AND cc.profile_url = f.profile_url
         )
         SELECT instance_id, profile_url, name, company, headline, lead_id, photo_path, latest_snippet, latest_direction, latest_sent_at,
                selected_message_id, pending_count, owner_id, action, to_char(next_follow_up_date,'YYYY-MM-DD') AS next_follow_up_date,

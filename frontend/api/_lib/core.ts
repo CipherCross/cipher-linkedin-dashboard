@@ -297,6 +297,13 @@ messages — actual message texts; full conversation threads, both directions
     classified — not touched by every sync pass; same only-on-real-change
     semantics apply to leads.updated_at and campaigns.updated_at)
 
+conversation_contacts — the name and headline of a conversation partner, ONE row
+  per LinkedIn conversation (instance_id + profile_url composite PK), read from the
+  LH2 chat store by the sync agent. It labels threads whose person has NO leads row
+  (existing connections, people outside every campaign); a lead's own full_name
+  always wins. A label, not a funnel signal. Outside the AI SQL runner allowlist:
+  do not query it with run_sql.
+
 conversation_follow_up_state — current follow-up task projection, ONE row per
   LinkedIn conversation (instance_id + profile_url), shared across every campaign
   lead row for that exact account/profile pair. This is deliberately separate from

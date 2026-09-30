@@ -133,7 +133,7 @@ describe('the conversation drawer', () => {
   it('draws messages as shared bubbles with the edit controls beside them, never inside', async () => {
     await paint()
     await screen.findByRole('button', { name: 'Edit imported message' })
-    const bubbles = [...document.querySelectorAll('.message-bubble')]
+    const bubbles = Array.from(document.querySelectorAll('.message-bubble'))
     expect(bubbles.length).toBeGreaterThan(0)
     for (const bubble of bubbles) expect(bubble.querySelector('button, a[href], select, input')).toBeNull()
     // The editor is the one control a bubble may hold while a message is edited.

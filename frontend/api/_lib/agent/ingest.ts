@@ -41,7 +41,7 @@
  * is in flight stops being able to write before that batch commits. This file
  * turns those into a 401; it never decides one.
  *
- * **A partial write rolls back.** All nine statements run inside one
+ * **A partial write rolls back.** All ten statements run inside one
  * `DataStore.transaction`. There is no reporting path here for "the leads
  * landed but the messages did not": a failure anywhere aborts, the batch row
  * goes with it, and the agent's retry is an ordinary first attempt against a
@@ -266,6 +266,17 @@ export interface MessageRow {
   readonly message_type: string | null
 }
 
+/**
+ * The name and headline of a conversation partner, from the LH2 chat store.
+ * It labels a thread whose person has no `leads` row (an existing connection,
+ * someone outside every campaign); a lead's own name still wins on read.
+ */
+export interface ContactRow {
+  readonly profile_url: string
+  readonly full_name: string | null
+  readonly headline: string | null
+}
+
 export interface EventRow {
   readonly campaign_id: string | null
   readonly profile_url: string | null
@@ -287,6 +298,13 @@ export interface IngestPayload {
   readonly leads: readonly LeadRow[]
   readonly messages: readonly MessageRow[]
   readonly events: readonly EventRow[]
+  /**
+   * `undefined`, not `[]`, when the batch carries none. `canonicalJson` drops
+   * an undefined key, so a batch from an agent that predates contacts keeps
+   * the digest it had before this field existed — otherwise its retry under
+   * the same idempotency key would read as a different payload and be refused.
+   */
+  readonly contacts?: readonly ContactRow[]
   readonly syncStatus: string
   readonly syncError: string
 }
@@ -602,12 +620,22 @@ export function parseIngestPayload(body: unknown): IngestPayload {
     } satisfies EventRow
   })
 
+  const contacts = collection(root.contacts, 'contacts').map((entry, index) => {
+    const row = record(entry, `contacts[${index}]`)
+    return {
+      profile_url: requiredString(row.profile_url, `contacts[${index}].profile_url`, MAX_URL),
+      full_name: optionalString(row.full_name, `contacts[${index}].full_name`, MAX_TEXT),
+      headline: optionalString(row.headline, `contacts[${index}].headline`, MAX_TEXT),
+    } satisfies ContactRow
+  })
+
   const total =
     campaigns.length +
     campaignSteps.length +
     leads.length +
     messages.length +
-    events.length
+    events.length +
+    contacts.length
   if (total > MAX_TOTAL_ROWS) {
     fail(`a batch must hold at most ${MAX_TOTAL_ROWS} rows in total`)
   }
@@ -632,6 +660,7 @@ export function parseIngestPayload(body: unknown): IngestPayload {
     leads,
     messages,
     events,
+    contacts: contacts.length ? contacts : undefined,
     syncStatus,
     syncError: optionalString(syncRun.error, 'sync_run.error', MAX_TEXT) ?? '',
   }
@@ -680,6 +709,7 @@ export interface IngestRowCounts {
   readonly leads: number
   readonly messages: number
   readonly events: number
+  readonly contacts: number
   readonly sync_runs: number
 }
 
@@ -806,6 +836,21 @@ export async function ingestBatch(
       }),
     )
 
+    // Only a batch that carries contacts runs this statement, so every older
+    // agent's batch writes exactly what it wrote before contacts existed.
+    const contacts = payload.contacts?.length
+      ? await atIngestStage(
+        MACHINE_COMMANDS.upsertContacts,
+        () => transaction.execute<number>({
+          operation: MACHINE_COMMANDS.upsertContacts,
+          params: {
+            instanceId: payload.instanceId,
+            rows: collectionRows(payload.contacts ?? []),
+          },
+        }),
+      )
+      : 0
+
     const rowCounts: IngestRowCounts = {
       instances,
       campaigns,
@@ -813,10 +858,11 @@ export async function ingestBatch(
       leads,
       messages,
       events,
+      contacts,
       sync_runs: 0,
     }
     const rowsWritten =
-      instances + campaigns + campaignSteps + leads + messages + events
+      instances + campaigns + campaignSteps + leads + messages + events + contacts
 
     const syncRuns = await atIngestStage(
       MACHINE_COMMANDS.recordSyncRun,
@@ -874,6 +920,7 @@ function normalizeCounts(counts: Record<string, number>): IngestRowCounts {
     leads: read('leads'),
     messages: read('messages'),
     events: read('events'),
+    contacts: read('contacts'),
     sync_runs: read('sync_runs'),
   }
 }

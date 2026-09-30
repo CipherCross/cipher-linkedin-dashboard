@@ -217,11 +217,25 @@ describe('manual reply-review Neon operations', () => {
     expect(statement.text).toContain('SELECT id, full_name, company, headline, photo_path FROM public.leads ld0')
     expect(statement.text).toContain('ld.id::text AS lead_id, ld.photo_path')
     expect(statement.text).toMatch(/SELECT instance_id, profile_url, name, company, headline, lead_id, photo_path,/)
+    // A partner with no lead is named from the chat store; a lead's own name wins.
+    expect(statement.text).toContain('COALESCE(ld.full_name, cc.full_name) AS name')
+    expect(statement.text).toContain('COALESCE(ld.headline, cc.headline) AS headline')
+    expect(statement.text).toContain('LEFT JOIN public.conversation_contacts cc')
     const base = { instance_id: 'n1', profile_url: 'https://www.linkedin.com/in/a', pending_count: 1 }
     expect(inboxOperation.mapRow!({ ...base, name: 'Ann', lead_id: '6f1c0b1e-0000-4000-8000-000000000001', photo_path: 'n1/a.jpg' }))
       .toMatchObject({ name: 'Ann', lead_id: '6f1c0b1e-0000-4000-8000-000000000001', photo_path: 'n1/a.jpg' })
     expect(inboxOperation.mapRow!({ ...base, name: null, lead_id: null, photo_path: null }))
       .toMatchObject({ name: null, lead_id: null, photo_path: null })
+  })
+
+  it('searches names, companies, contact names and message text without requiring a lead row', () => {
+    const { sql } = replyFilterBuilder({ query: 'glauber' } as never, 'i', 1)
+    // Message text and a chat-store contact name are their own branches: a thread
+    // with no lead used to be unsearchable, even by what was said in it.
+    expect(sql).toMatch(/OR EXISTS \(SELECT 1 FROM public\.conversation_contacts cs/)
+    expect(sql).toMatch(/OR EXISTS \(SELECT 1 FROM public\.messages sm/)
+    const leadBranch = sql.slice(sql.indexOf('FROM public.leads ls'), sql.indexOf('FROM public.conversation_contacts cs'))
+    expect(leadBranch).not.toContain('public.messages')
   })
 
   it('returns each thread message with its source, so an imported message can be marked', () => {

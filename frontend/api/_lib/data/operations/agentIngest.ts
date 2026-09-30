@@ -87,6 +87,8 @@ export const MACHINE_COMMANDS = {
   upsertLeads: 'agent.upsertLeads',
   upsertMessages: 'agent.upsertMessages',
   upsertEvents: 'agent.upsertEvents',
+  /** Name and headline of conversation partners, from the LH2 chat store (step 022). */
+  upsertContacts: 'agent.upsertContacts',
   recordSyncRun: 'agent.recordSyncRun',
   recordBatch: 'agent.recordBatch',
   stampCredentialUse: 'agent.stampCredentialUse',
@@ -660,6 +662,35 @@ export const upsertLeadsOperation: NeonCommandOperation<number, CollectionParams
 }
 
 /**
+ * Conversation contacts (step 022): one row per thread, deduplicated in the
+ * statement so a profile sent twice cannot abort the batch ("cannot affect row
+ * a second time"); the last one sent wins. A NULL name or headline never
+ * erases a known one — the chat store can lose a mini profile it had.
+ */
+export const upsertContactsOperation: NeonCommandOperation<number, CollectionParams> = {
+  build: ({ params }) => ({
+    text:
+      'WITH raw AS (' +
+      '  SELECT r.*, row_number() OVER () AS ord' +
+      '    FROM jsonb_to_recordset($2::jsonb)' +
+      '      AS r(profile_url text, full_name text, headline text)' +
+      '), incoming AS (' +
+      '  SELECT DISTINCT ON (profile_url) * FROM raw ORDER BY profile_url, ord DESC' +
+      ')' +
+      ' INSERT INTO public.conversation_contacts (instance_id, profile_url, full_name, headline)' +
+      ' SELECT $1, i.profile_url, i.full_name, i.headline FROM incoming i' +
+      ' ON CONFLICT (instance_id, profile_url) DO UPDATE SET' +
+      '   full_name = COALESCE(EXCLUDED.full_name, public.conversation_contacts.full_name),' +
+      '   headline = COALESCE(EXCLUDED.headline, public.conversation_contacts.headline)' +
+      ' WHERE (public.conversation_contacts.full_name, public.conversation_contacts.headline)' +
+      '   IS DISTINCT FROM (COALESCE(EXCLUDED.full_name, public.conversation_contacts.full_name),' +
+      '                     COALESCE(EXCLUDED.headline, public.conversation_contacts.headline))',
+    values: [params?.instanceId ?? '', params?.rows ?? '[]'],
+  }),
+  mapResult: (_rows, rowCount) => rowCount,
+}
+
+/**
  * Messages: one statement, three write paths, and one rule that outranks all of
  * them — a row's *classification* is never written here.
  *
@@ -1052,7 +1083,7 @@ export const credentialDirectoryOperation: NeonQueryOperation<
 // ---------------------------------------------------------------------------
 
 /**
- * The machine store's whole vocabulary. Eleven commands, three queries and one
+ * The machine store's whole vocabulary. Twelve commands, three queries and one
  * actorless resolver — and deliberately nothing else: no read of another
  * notebook, no read of the dashboard's own tables, no AI guard. A notebook that
  * wanted to know what the dashboard thinks of its leads would have to ask
@@ -1107,6 +1138,7 @@ export function buildMachineRegistry(): NeonOperationRegistry {
     upsertMessagesOperation,
   )
   registry.registerCommand(MACHINE_COMMANDS.upsertEvents, upsertEventsOperation)
+  registry.registerCommand(MACHINE_COMMANDS.upsertContacts, upsertContactsOperation)
   registry.registerCommand(
     MACHINE_COMMANDS.recordSyncRun,
     recordSyncRunOperation,

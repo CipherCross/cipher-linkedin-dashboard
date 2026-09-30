@@ -163,6 +163,7 @@ function harness(
     command(MACHINE_COMMANDS.upsertLeads, countRows)
     command(MACHINE_COMMANDS.upsertMessages, countRows)
     command(MACHINE_COMMANDS.upsertEvents, countRows)
+    command(MACHINE_COMMANDS.upsertContacts, countRows)
     command(MACHINE_COMMANDS.recordSyncRun, () => 1)
     command(MACHINE_COMMANDS.stampCredentialUse, () => 1)
 
@@ -981,6 +982,7 @@ describe('the handler: an accepted batch', () => {
       leads: 2,
       messages: 1,
       events: 1,
+      contacts: 0,
       sync_runs: 1,
     })
     expect(answered.rows_written).toBe(7)
@@ -995,6 +997,47 @@ describe('the handler: an accepted batch', () => {
       MACHINE_COMMANDS.stampCredentialUse,
       MACHINE_COMMANDS.recordBatch,
     ])
+  })
+
+  it('writes contacts only when the batch carries them, after events and before the run record', async () => {
+    const { handler, executed } = harness()
+    const response = await handler(request(body({
+      contacts: [
+        { profile_url: 'https://example.invalid/in/three', full_name: 'Three Person', headline: 'Head of Sales' },
+        { profile_url: 'https://example.invalid/in/four', full_name: null },
+      ],
+    })))
+    expect(response.status).toBe(200)
+    const answered = await response.json()
+    expect(answered.row_counts.contacts).toBe(2)
+    expect(answered.rows_written).toBe(9)
+    const operations = executed.map((entry) => entry.operation)
+    expect(operations.indexOf(MACHINE_COMMANDS.upsertContacts)).toBe(operations.indexOf(MACHINE_COMMANDS.upsertEvents) + 1)
+    const bound = executed.find((entry) => entry.operation === MACHINE_COMMANDS.upsertContacts)!
+    expect(bound.params.instanceId).toBe(INSTANCE)
+    expect(JSON.parse(String(bound.params.rows))).toEqual([
+      { profile_url: 'https://example.invalid/in/three', full_name: 'Three Person', headline: 'Head of Sales' },
+      { profile_url: 'https://example.invalid/in/four', full_name: null, headline: null },
+    ])
+  })
+
+  it('keeps the digest of a batch with no contacts unchanged, so an older agent can retry its key', () => {
+    // An empty or absent collection is `undefined` in the parsed payload, and
+    // canonicalJson drops it: the digest is the one computed before contacts
+    // existed. A different digest would turn every retry into a 409.
+    const withoutField = parseIngestPayload(body())
+    const withEmpty = parseIngestPayload(body({ contacts: [] }))
+    expect(withoutField.contacts).toBeUndefined()
+    expect(payloadDigest(withEmpty)).toBe(payloadDigest(withoutField))
+    const { contacts: _none, ...legacyShape } = withoutField
+    expect(payloadDigest(withoutField)).toBe(payloadDigest(legacyShape as typeof withoutField))
+    expect(payloadDigest(parseIngestPayload(body({ contacts: [{ profile_url: 'https://example.invalid/in/one', full_name: 'One' }] }))))
+      .not.toBe(payloadDigest(withoutField))
+  })
+
+  it('refuses a contact without a profile and caps its text', () => {
+    expect(() => parseIngestPayload(body({ contacts: [{ full_name: 'Nobody' }] }))).toThrow(/contacts\[0\]\.profile_url/)
+    expect(() => parseIngestPayload(body({ contacts: 'x' }))).toThrow(/contacts must be an array/)
   })
 
   it('records the batch last, with the digest of the payload', async () => {

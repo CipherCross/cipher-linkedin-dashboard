@@ -86,7 +86,8 @@ def a_token():
     return f"lha.3f1a6c52-9b0e-4d7a-8c31-2e5f7a9d0b64.{secret}"
 
 
-def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello"):
+def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello",
+               contacts=0):
     """A synthetic extraction in the exact row shapes `extract_local` returns."""
     now = "2026-08-07T00:00:00+00:00"
     cs = [{"id": f"nb:{i}", "instance_id": "nb", "lh_campaign_id": str(i),
@@ -125,6 +126,10 @@ def extraction(leads=3, messages=2, steps=2, campaigns=1, body="hello"):
     demo = {
         "edu_map": {ls[0]["profile_url"]: 2010} if ls else {},
         "job_map": {ls[0]["profile_url"]: 2014} if ls else {},
+        # Chat-store names for the first `contacts` threads.
+        "contacts": [{"instance_id": "nb", "profile_url": m["profile_url"],
+                      "full_name": f"Partner {i}", "headline": "Head of Sales"}
+                     for i, m in enumerate(ms[:contacts])],
     }
     return cs, ls, ms, ss, demo
 
@@ -484,11 +489,12 @@ class ContractPinTest(unittest.TestCase):
         self.assertIn("SECRET_PATTERN = /^[A-Za-z0-9_-]{43}$/", self.credentials)
 
     def test_payload_carries_exactly_the_contract_fields(self):
-        _, payload, _, _, _ = planned()
+        _, payload, _, _, _ = planned(contacts=1)
         for collection, interface in (("campaigns", "CampaignRow"),
                                       ("campaign_steps", "CampaignStepRow"),
                                       ("leads", "LeadRow"),
-                                      ("messages", "MessageRow")):
+                                      ("messages", "MessageRow"),
+                                      ("contacts", "ContactRow")):
             expected = ts_interface_fields(self.ingest, interface)
             self.assertEqual(set(payload[collection][0]), expected,
                              f"{collection} does not match {interface}")
@@ -503,9 +509,9 @@ class ContractPinTest(unittest.TestCase):
         the gateway's. A field the endpoint ignores must not be in the payload:
         the idempotency key is a digest of it, so an ignored field changing
         would mint a new key for data nobody stored differently."""
-        _, payload, _, _, _ = planned()
+        _, payload, _, _, _ = planned(contacts=1)
         for collection in ("campaigns", "campaign_steps", "leads", "messages",
-                           "events"):
+                           "events", "contacts"):
             for row in payload[collection]:
                 self.assertNotIn("updated_at", row)
                 self.assertNotIn("instance_id", row)
@@ -2405,6 +2411,66 @@ def chat_db(participant_fk="chat_participant_id", message_fk="message_id",
             (1003, 12, 103),   # own -> Bob
         ])
     return con
+
+
+def with_mini_profiles(con, rows):
+    con.execute("CREATE TABLE person_original_mini_profile "
+                "(person_id INTEGER, full_name TEXT, headline TEXT)")
+    con.executemany("INSERT INTO person_original_mini_profile VALUES (?,?,?)", rows)
+    return con
+
+
+class ChatContactsTest(unittest.TestCase):
+    """Names for threads whose person has no lead (gateway step 022). The chat
+    store has no names of its own; the mini profile LH2 keeps per person does."""
+
+    ALICE_URL = agent.LINKEDIN_IN_PREFIX + "alice-a"
+    BOB_URL = agent.LINKEDIN_IN_PREFIX + "bob-b"
+
+    def test_names_the_partner_of_every_synced_thread_by_its_one_slug(self):
+        con = with_mini_profiles(chat_db(), [
+            (ALICE, "Alice Old", "Old title"), (ALICE, "Alice Able", "  CTO  "),
+            (BOB, "Bob Baker", None), (OWN, "Me Myself", "SDR")])
+        rows = agent.extract_chat_contacts(con, "nb", OWN, {self.ALICE_URL, self.BOB_URL})
+        by_url = {r["profile_url"]: r for r in rows}
+        # Keyed on the human slug, never the opaque AC id; the newest mini
+        # profile wins; the SDR is never their own contact.
+        self.assertEqual(set(by_url), {self.ALICE_URL, self.BOB_URL})
+        self.assertEqual(by_url[self.ALICE_URL]["full_name"], "Alice Able")
+        self.assertEqual(by_url[self.ALICE_URL]["headline"], "CTO")
+        self.assertIsNone(by_url[self.BOB_URL]["headline"])
+
+    def test_only_threads_this_sync_delivers_and_only_real_names(self):
+        con = with_mini_profiles(chat_db(), [(ALICE, "Alice Able", "CTO"), (BOB, "   ", "x")])
+        self.assertEqual([r["profile_url"] for r in
+                          agent.extract_chat_contacts(con, "nb", OWN, {self.ALICE_URL})],
+                         [self.ALICE_URL])
+        self.assertEqual(agent.extract_chat_contacts(con, "nb", OWN, {self.BOB_URL}), [])
+        self.assertEqual(agent.extract_chat_contacts(con, "nb", None, {self.ALICE_URL}), [])
+
+    def test_a_build_without_mini_profiles_syncs_with_no_names(self):
+        # chat_db() has no person_original_mini_profile table.
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rows = agent.extract_chat_contacts(chat_db(), "nb", OWN, {self.ALICE_URL})
+        self.assertEqual(rows, [])
+        self.assertIn("contact names skipped", out.getvalue())
+
+    def test_contacts_are_delivered_and_checked_for_parity(self):
+        _, payload, chunks, problems, (cs, ls, ms, es, ss, demo) = planned(contacts=2)
+        self.assertEqual(problems, [])
+        self.assertEqual([c["full_name"] for c in payload["contacts"]], ["Partner 0", "Partner 1"])
+        sent = [row for chunk in chunks for row in chunk["contacts"]]
+        self.assertEqual(len(sent), 2)
+        # A contact lost between projection and chunks refuses the delivery.
+        chunks[0]["contacts"] = chunks[0]["contacts"][:1]
+        lost = agent.verify_ingest_parity(chunks, cs, ls, ms, es, ss, demo["edu_map"],
+                                          demo["job_map"], demo["contacts"])
+        self.assertTrue(any("contacts" in p for p in lost), lost)
+        # And a changed name is caught as a value difference.
+        chunks[0]["contacts"] = [dict(payload["contacts"][0], full_name="Someone else")]
+        changed = agent.verify_ingest_parity(chunks, cs, ls, ms, es, ss, demo["edu_map"],
+                                             demo["job_map"], demo["contacts"])
+        self.assertTrue(any("full_name" in p for p in changed), changed)
 
 
 class ChatStoreExtractionTest(unittest.TestCase):
