@@ -130,6 +130,19 @@ describe('the conversation drawer', () => {
     expect(screen.getByRole('dialog', { name: 'Ada Lovelace' })).toBeTruthy()
   })
 
+  it('draws messages as shared bubbles with the edit controls beside them, never inside', async () => {
+    await paint()
+    await screen.findByRole('button', { name: 'Edit imported message' })
+    const bubbles = [...document.querySelectorAll('.message-bubble')]
+    expect(bubbles.length).toBeGreaterThan(0)
+    for (const bubble of bubbles) expect(bubble.querySelector('button, a[href], select, input')).toBeNull()
+    // The editor is the one control a bubble may hold while a message is edited.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit imported message' }))
+    const editor = screen.getByRole('textbox', { name: 'Edit imported message' })
+    expect(editor.closest('.message-bubble')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Save message' }).closest('.message-bubble')).toBeNull()
+  })
+
   it('nests the lost-reason dialog, which closes on its own and requires a reason', async () => {
     await paint()
     fireEvent.change(screen.getByLabelText('Stage'), { target: { value: 'lost' } })

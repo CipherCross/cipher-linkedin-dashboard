@@ -14,6 +14,9 @@ import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
 import { FollowUpPanel } from './FollowUpPanel'
 import { LeadNotesPanel } from './LeadNotesPanel'
+import { MessageBubble } from './conversation/MessageBubble'
+import { groupMessages } from '../lib/messageGroups'
+import { replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { ReplyReviewPanel } from './conversation/ReplyReviewPanel'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { defaultReplyReadClient, isReplyManualReady } from '../lib/replyReview'
@@ -32,7 +35,6 @@ import {
   followUpStateMap,
 } from '../lib/followUps'
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
-import { clockTime, dayHeading } from '../lib/format'
 import type { ConversationMode } from '../lib/ConversationContext'
 import type { Coaching, Gender, Lead, Message } from '../lib/types'
 import type { ReplyReview } from '../lib/replyReview'
@@ -759,25 +761,22 @@ export function ConversationDrawer({
             }
           />
         )}
-        {rows?.map((m, idx) => {
-          const inbound = m.direction === 'in'
-          const prev = idx > 0 ? rows[idx - 1] : null
-          const newDay =
-            !prev || new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString()
+        {rows && groupMessages(rows).map((group) => {
+          const inbound = group.direction === 'in'
+          const last = group.messages[group.messages.length - 1]
           const busyRow = deleting !== null || savingEdit || editing !== null
           return (
-            <Fragment key={m.id}>
-            {newDay && (
-              <div className="flex items-center gap-app-sm my-app-xs mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{dayHeading(m.sent_at)}</span></div>
+            <Fragment key={group.key}>
+            {group.startsDay && (
+              <div className="flex items-center gap-app-sm my-app-xs mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{replyDayHeading(last.sent_at)}</span></div>
             )}
             <div className={`flex flex-col gap-app-xs max-w-[88%] ${inbound ? 'self-start items-start' : 'self-end items-end'}`}>
-              <div
-                className={[
-                  'px-app-md py-app-sm text-app-table whitespace-pre-wrap [overflow-wrap:anywhere]',
-                  inbound
-                    ? 'bg-app-surface-2 border border-app-border rounded-[10px_10px_10px_2px]'
-                    : 'bg-[var(--bubble-out)] text-(color:--bubble-out-fg) rounded-[10px_10px_2px_10px]',
-                ].join(' ')}
+            {group.messages.map((m, index) => (
+              <Fragment key={m.id}>
+              <MessageBubble
+                direction={group.direction}
+                tail={index === group.messages.length - 1}
+                title={`${replyTime(m.sent_at, true)} · ${REPLY_TIME_ZONE_LABEL}`}
               >
                 {editing?.id === m.id ? (
                   <Textarea
@@ -797,13 +796,12 @@ export function ConversationDrawer({
                     }}
                   />
                 ) : (
-                  m.body || <span className="text-app-text-muted">(empty)</span>
+                  <span className="message-bubble__body">{m.body || <span className="opacity-70">(empty)</span>}</span>
                 )}
-              </div>
-              <div className={`flex items-center gap-app-xs ${inbound ? '' : 'flex-row-reverse'}`}>
-                <span className="text-app-meta text-app-text-muted">{clockTime(m.sent_at)}</span>
-                {m.source === 'manual' && (
-                  <>
+              </MessageBubble>
+              {m.source === 'manual' && (
+                /* The controls sit beside the bubble, never inside it. */
+                <div className={`flex items-center gap-app-xs ${inbound ? '' : 'flex-row-reverse'}`}>
                     <span
                       className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-app-xs cursor-help"
                       title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
@@ -843,9 +841,11 @@ export function ConversationDrawer({
                       disabled={busyRow}
                       onClick={() => deleteMessage(m)}
                     />
-                  </>
-                )}
-              </div>
+                </div>
+              )}
+              </Fragment>
+            ))}
+              <time className="text-app-meta text-app-text-muted" dateTime={last.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(last.sent_at)}</time>
             </div>
             </Fragment>
           )
