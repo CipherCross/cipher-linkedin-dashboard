@@ -267,6 +267,14 @@
       "owner_role_entered_by": "artifact",
       "session": "lead-notes-follow-up-cancel",
       "description": "Additive correction to the step 017 projection guard: a legacy follow-up outcome (cancel, or complete/skip without a next date) that clears the due date now resolves a conversation whose action is still 'follow_up', instead of violating conversation_follow_up_state_follow_up_date_check. No grant, policy, table or data change."
+    },
+    {
+      "step": 22,
+      "artifact": "022_conversation_contacts.sql",
+      "sha256": "ee8cd4fb009363c58b41a1924e3400cf1134ef99b5f76637e9b42ac19ab781a5",
+      "owner_role_entered_by": "artifact",
+      "session": "replies-contact-names",
+      "description": "Adds public.conversation_contacts (instance_id, profile_url, full_name, headline): the name and headline of a conversation partner with no lead row, delivered by the machine ingest path. RLS: app_machine reads and writes only its own instance's rows; active team members read all rows through app_runtime and app_readonly. No DELETE grant, no AI sandbox access, no change to any existing object."
     }
   ]
 }

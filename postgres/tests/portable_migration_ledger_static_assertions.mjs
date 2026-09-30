@@ -138,6 +138,8 @@ const S08_ARTIFACTS = [
   'postgres/tests/portable_reply_review_machine_invalidation_assertions.mjs',
   // Follow-up outcomes resolve a still-'follow_up' action (step 021).
   'postgres/tenant-baseline/v1/021_follow_up_outcome_resolves_action.sql',
+  // Names of conversation partners who have no lead (step 022).
+  'postgres/tenant-baseline/v1/022_conversation_contacts.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -361,8 +363,28 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-one steps in order 1 -> 2 -> ... -> 21',
-  manifest.steps.length === 21 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-two steps in order 1 -> 2 -> ... -> 22',
+  manifest.steps.length === 22 && manifest.steps.every((s, i) => s.step === i + 1));
+
+const contactsStep = manifest.steps.find((s) => s.step === 22);
+const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
+  .replace(/--[^\n]*/g, '');
+check('manifest declares step 022 conversation contacts',
+  contactsStep?.artifact === '022_conversation_contacts.sql' && contactsStep.owner_role_entered_by === 'artifact');
+check('step 022 creates the table as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(contactsSql) && /RESET ROLE;\s*$/.test(contactsSql)
+  && /CREATE TABLE public\.conversation_contacts \(/.test(contactsSql));
+check('step 022 keys contacts on the messages thread key and enables RLS',
+  /PRIMARY KEY \(instance_id, profile_url\)/.test(contactsSql)
+  && /ALTER TABLE public\.conversation_contacts ENABLE ROW LEVEL SECURITY;/.test(contactsSql)
+  && !/FORCE ROW LEVEL SECURITY/.test(contactsSql));
+check('step 022 scopes the machine to its own instance and gives members read only',
+  /FOR ALL TO app_machine\s+USING \(instance_id = public\.machine_actor_instance\(\)\)\s+WITH CHECK \(instance_id = public\.machine_actor_instance\(\)\)/.test(contactsSql)
+  && /FOR SELECT TO app_runtime, app_readonly\s+USING \(public\.is_active_team_member\(\)\)/.test(contactsSql)
+  && /GRANT SELECT, INSERT, UPDATE ON TABLE public\.conversation_contacts TO app_machine;/.test(contactsSql)
+  && /GRANT SELECT ON TABLE public\.conversation_contacts TO app_runtime, app_readonly;/.test(contactsSql));
+check('step 022 grants no DELETE and no AI sandbox access',
+  !/GRANT[^;]*DELETE/.test(contactsSql) && !/app_ai_runner/.test(contactsSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
