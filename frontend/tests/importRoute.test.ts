@@ -179,6 +179,38 @@ describe('/api/import route method dispatch', () => {
     }
   })
 
+  it('logs a machine refusal with its operation and reason, never the secret', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const response = await post('agent.publishProbe')
+      expect(response.status).toBe(400)
+      expect(warn).toHaveBeenCalledWith('machine operation refused', {
+        op: 'agent.publishProbe',
+        method: 'POST',
+        status: 400,
+        reason: 'operation is not allowlisted: agent.publishProbe',
+        credential_id: '9f1b0000-0000-4000-8000-00000000c001',
+      })
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('A'.repeat(43))
+      // The response the caller reads is untouched by the log's own read.
+      expect(await response.json()).toEqual({
+        error: 'operation is not allowlisted: agent.publishProbe',
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('does not log the human import surface', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect((await get()).status).toBe(405)
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('still answers an unknown operation before any authorization', async () => {
     for (const response of [await get('agent.nope'), await post('agent.nope')]) {
       expect(response.status).toBe(400)

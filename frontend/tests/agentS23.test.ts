@@ -7,6 +7,7 @@ import {
   AGENT_CONFIG_OP,
   AGENT_PHOTO_UPLOAD_OP,
   AGENT_PUBLISH_BRANCH_OP,
+  AGENT_PUBLISH_PROBE_OP,
   AGENT_REFRESH_CANDIDATES_OP,
   AGENT_RELEASE_OP,
   createAgentConfigHandler,
@@ -412,5 +413,49 @@ describe('machine publish diagnostics', () => {
     } finally {
       log.mockRestore()
     }
+  })
+})
+
+describe('machine publish compatibility reports', () => {
+  /**
+   * What agents up to 1.28.0 posted from `publish-once` whenever the LH2 probe
+   * failed before measuring (here: CDP unreachable). The gateway records only
+   * measured contracts, so this was refused on every such tick with a bare
+   * `POST /api/import 400`. 1.28.1 no longer sends it; the refusal
+   * now names the absent fields so the next mismatch is legible in the log.
+   */
+  const unmeasured = {
+    machine_key: INSTANCE,
+    account_snapshot: {
+      account_id: '524650', li_account_id: '1', account_name: 'Account',
+      sender_name: 'Sender', workspace_id: '601896',
+    },
+    capability_snapshot: { cdp_host: '127.0.0.1', cdp_port: 50454 },
+    compatible: false,
+    error_code: 'CDP_ENDPOINT_UNREACHABLE',
+    measured_lh_version: null,
+    contract_fingerprint: null,
+    contract_evidence: {},
+  }
+
+  it('refuses an unmeasured report and names exactly what it lacks', async () => {
+    const store = machineStore()
+    const reported = vi.fn(() => [])
+    store.registerCommand(MACHINE_PUBLISH_COMMANDS.reportTarget, reported)
+    const response = await createAgentPublishHandler(
+      { store, tenantId: TENANT },
+      AGENT_PUBLISH_PROBE_OP,
+    )(
+      request(AGENT_PUBLISH_PROBE_OP, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(unmeasured),
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      missing: ['measured_lh_version', 'contract_fingerprint', 'contract_evidence'],
+    })
+    expect(reported).not.toHaveBeenCalled()
   })
 })

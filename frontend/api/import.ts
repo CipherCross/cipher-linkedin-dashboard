@@ -134,18 +134,65 @@ function agentPublishHandler(operation: string): (request: Request) => Promise<R
   return handler
 }
 
+const CREDENTIAL_ID_PATTERN = /^Bearer\s+lha\.([0-9a-fA-F-]{36})\./
+const printable = (text: string, max: number) =>
+  text.replace(/[^\x20-\x7e]/g, '?').slice(0, max)
+
+/**
+ * One structured line for every machine operation answered 4xx.
+ *
+ * The platform log records only `POST /api/import 400` — no operation, no
+ * reason, no notebook — which left a recurring refusal undiagnosable from the
+ * logs. This names all three. The
+ * reason is the response's own `error` (machine refusals name fields, never
+ * values) plus its `missing` list; the notebook is the token's credential id,
+ * which is the half the agent itself prints. The secret, the request body and
+ * the human import actions — whose errors can quote pasted rows — stay out.
+ */
+async function logMachineRefusal(req: Request, op: string, response: Response): Promise<void> {
+  if (response.status < 400 || response.status >= 500) return
+  let reason = 'unreadable'
+  let missing: string[] | undefined
+  try {
+    const body = (await response.clone().json()) as { error?: unknown; missing?: unknown }
+    if (typeof body.error === 'string') reason = printable(body.error, 240)
+    if (Array.isArray(body.missing)) {
+      missing = body.missing.filter((f): f is string => typeof f === 'string')
+        .slice(0, 12).map((f) => printable(f, 40))
+    }
+  } catch {
+    // A refusal without a JSON body is still worth its status line.
+  }
+  const credential = CREDENTIAL_ID_PATTERN.exec(req.headers.get('authorization') ?? '')
+  console.warn('machine operation refused', {
+    op: printable(op, 64),
+    method: req.method.toUpperCase(),
+    status: response.status,
+    reason,
+    ...(missing ? { missing } : {}),
+    credential_id: credential ? credential[1].toLowerCase() : null,
+  })
+}
+
 async function handle(req: Request): Promise<Response> {
   const op = (new URL(req.url).searchParams.get('op') ?? '').trim()
+  if (op === '') return handleHuman(req)
+  const response = await handleMachine(req, op)
+  await logMachineRefusal(req, op, response)
+  return response
+}
+
+async function handleMachine(req: Request, op: string): Promise<Response> {
   if (op === AGENT_INGEST_OP) return agentIngestHandler()(req)
   if (op === AGENT_CONFIG_OP) return agentConfigHandler()(req)
   if (op === AGENT_PHOTO_UPLOAD_OP) return agentPhotoUploadHandler()(req)
   if (op === AGENT_RELEASE_OP) return agentReleaseHandler()(req)
   if (op === AGENT_REFRESH_CANDIDATES_OP) return agentRefreshCandidatesHandler()(req)
   if ([AGENT_PUBLISH_PROBE_OP, AGENT_PUBLISH_CLAIM_OP, AGENT_PUBLISH_HEARTBEAT_OP, AGENT_PUBLISH_STATE_OP, AGENT_PUBLISH_BRANCH_OP, AGENT_PUBLISH_FINISH_OP, AGENT_PUBLISH_CANARY_CLAIM_OP, AGENT_PUBLISH_CANARY_RESULT_OP].includes(op)) return agentPublishHandler(op)(req)
-  if (op !== '') {
-    return json({ error: `operation is not allowlisted: ${op}` }, 400)
-  }
+  return json({ error: `operation is not allowlisted: ${op}` }, 400)
+}
 
+async function handleHuman(req: Request): Promise<Response> {
   // Everything below is the human import surface, and it is POST-only. This
   // route exports GET as well now, because two of the four machine operations
   // above are GETs and a route that exports only POST never runs for them —

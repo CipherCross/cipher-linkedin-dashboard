@@ -143,7 +143,22 @@ export function createAgentPublishHandler(
             machineKey,
           })
           : null
-        if (!machineKey || !account || !capabilityJson || !measuredLhVersion || !contractFingerprint || !/^[0-9a-f]{64}$/.test(contractFingerprint) || !contractEvidenceJson || !validContractEvidence(body.contract_evidence) || typeof body.compatible !== 'boolean') return json({ error: 'machine_key, account_snapshot, capability_snapshot, measured_lh_version, contract_fingerprint, valid contract_evidence and compatible are required' }, 400)
+        // Named, not just refused: agents up to 1.28.0 posted unmeasured probes
+        // (CDP down, no profile) here, and nothing said which field was absent.
+        // Field names only — never a value from the body.
+        const missing = [
+          !machineKey && 'machine_key',
+          !rawAccount && 'account_snapshot',
+          !capabilityJson && 'capability_snapshot',
+          !measuredLhVersion && 'measured_lh_version',
+          !(contractFingerprint && /^[0-9a-f]{64}$/.test(contractFingerprint)) && 'contract_fingerprint',
+          !(contractEvidenceJson && validContractEvidence(body.contract_evidence)) && 'contract_evidence',
+          typeof body.compatible !== 'boolean' && 'compatible',
+        ].filter((field): field is string => typeof field === 'string')
+        // The account is checked last because it needs the version and the
+        // fingerprint; only name it when those two were present to check it.
+        if (rawAccount && machineKey && measuredLhVersion && contractFingerprint && !account) missing.push('account_snapshot')
+        if (missing.length || !machineKey || !account || !capabilityJson || !contractFingerprint || !measuredLhVersion || !contractEvidenceJson) return json({ error: 'machine_key, account_snapshot, capability_snapshot, measured_lh_version, contract_fingerprint, valid contract_evidence and compatible are required', missing }, 400)
         const result = await principal.store.transaction(principal.actor, async (transaction) => {
           const reported = await transaction.execute<{ status: string; effective_compatible: boolean; canary_available: boolean; replacement_job_id: string | null; alert_claimed: boolean }>({
             operation: MACHINE_PUBLISH_COMMANDS.reportTarget,
