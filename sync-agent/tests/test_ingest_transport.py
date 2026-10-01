@@ -48,6 +48,8 @@ INGEST_TS = os.path.join(REPO_DIR, "frontend", "api", "_lib", "agent", "ingest.t
 CREDENTIALS_TS = os.path.join(REPO_DIR, "frontend", "api", "_lib", "agent",
                               "credentials.ts")
 PIPELINE_TS = os.path.join(REPO_DIR, "frontend", "api", "pipeline.ts")
+MACHINE_OPS_TS = os.path.join(REPO_DIR, "frontend", "api", "_lib", "agent",
+                              "machineOps.ts")
 
 sys.path.insert(0, AGENT_DIR)
 import agent  # noqa: E402
@@ -943,10 +945,72 @@ class PublishCycleCompatibilityTest(unittest.TestCase):
         }
 
     def probe(self):
+        # A measured probe in the shape the gateway accepts. (This fixture
+        # used to carry an empty account snapshot and empty evidence, which
+        # the real gateway answers 400 — the very report it was standing in for.)
         return {"compatible": True, "machine_key": "notebook-2",
-                "account_snapshot": {}, "capability_snapshot": {},
+                "account_snapshot": {"account_id": "524650", "li_account_id": "1",
+                                     "account_name": "Account",
+                                     "sender_name": "Sender",
+                                     "workspace_id": "601896"},
+                "capability_snapshot": {},
                 "measured_lh_version": "2.130.35",
-                "contract_fingerprint": "a" * 64, "contract_evidence": {}}
+                "contract_fingerprint": "a" * 64,
+                "contract_evidence": {
+                    "native_contract_version": agent.PUBLISH_NATIVE_CONTRACT_VERSION,
+                    "capabilities": {}, "response_shapes": {},
+                    "schema": {"tables": {}}, "schema_fingerprint": "b" * 64}}
+
+    def unmeasured_probe(self):
+        """What `probe_linked_helper` returns when CDP does not answer."""
+        probe = self.probe()
+        for key in ("measured_lh_version", "contract_fingerprint", "contract_evidence"):
+            probe.pop(key)
+        probe.update(compatible=False, error_code="CDP_ENDPOINT_UNREACHABLE")
+        return probe
+
+    def test_a_measured_probe_is_a_sendable_report(self):
+        report = agent._publish_compatibility_payload(self.probe())
+        self.assertEqual(agent.publish_compatibility_unmeasured(report), [])
+
+    def test_an_unmeasured_probe_names_what_the_gateway_would_refuse(self):
+        report = agent._publish_compatibility_payload(self.unmeasured_probe())
+        self.assertEqual(agent.publish_compatibility_unmeasured(report),
+                         ["measured_lh_version", "contract_fingerprint",
+                          "contract_evidence"])
+        no_profile = agent._publish_compatibility_payload(agent.probe_linked_helper(
+            {"instance_id": "notebook-2", "machine_key": "notebook-2"}))
+        self.assertIn("account_snapshot",
+                      agent.publish_compatibility_unmeasured(no_profile))
+
+    def test_an_unmeasured_probe_is_not_posted(self):
+        # The gateway answers an unmeasured report 400, so it must not be sent.
+        with mock.patch.object(agent, "load_config", return_value=self.cfg()), \
+             mock.patch.object(agent, "self_update", return_value=False), \
+             mock.patch.object(agent, "probe_linked_helper",
+                               return_value=self.unmeasured_probe()), \
+             mock.patch.object(agent, "publish_request") as request, \
+             mock.patch("builtins.print") as printed:
+            agent.cmd_publish_once(mock.Mock())
+        request.assert_not_called()
+        line = printed.call_args[0][0]
+        self.assertIn("blocked CDP_ENDPOINT_UNREACHABLE", line)
+        self.assertIn("not reported", line)
+
+    def test_publish_probe_reports_through_the_allowlisted_operation(self):
+        operations = []
+        def request(cfg, operation, payload=None, timeout=30):
+            operations.append(operation)
+            return {}
+        with mock.patch.object(agent, "load_config", return_value=self.cfg()), \
+             mock.patch.object(agent, "probe_linked_helper", return_value=self.probe()), \
+             mock.patch.object(agent, "publish_request", side_effect=request), \
+             mock.patch("builtins.print"):
+            agent.cmd_publish_probe(mock.Mock())
+        self.assertEqual(operations, [agent.PUBLISH_COMPATIBILITY_OP])
+        machine_ops = read_ts(MACHINE_OPS_TS)
+        self.assertIn(f"AGENT_PUBLISH_PROBE_OP = '{agent.PUBLISH_COMPATIBILITY_OP}'",
+                      machine_ops)
 
     def test_unknown_contract_is_reported_before_any_ordinary_claim(self):
         operations = []

@@ -43,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.28.0"
+AGENT_VERSION = "1.28.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -787,17 +787,16 @@ def cmd_publish_probe(args):
     result = probe_linked_helper(cfg)
     print(json.dumps(result, sort_keys=True))
     if machine_configured(cfg):
+        # `agent.publishProbe` was never an allowlisted operation, so this
+        # report was answered 400 every time; the gateway's name for it is
+        # `agent.publishCompatibility`, and it takes measured reports only.
+        report = _publish_compatibility_payload(result)
+        unmeasured = publish_compatibility_unmeasured(report)
+        if unmeasured:
+            print(f"publish probe not reported — unmeasured ({', '.join(unmeasured)})")
+            return
         try:
-            publish_request(cfg, "agent.publishProbe", {
-                "machine_key": result.get("machine_key", ""),
-                "account_snapshot": result.get("account_snapshot", {}),
-                "capability_snapshot": result.get("capability_snapshot", {}),
-                "compatible": bool(result.get("compatible")),
-                "error_code": result.get("error_code") or "",
-                "measured_lh_version": result.get("measured_lh_version"),
-                "contract_fingerprint": result.get("contract_fingerprint"),
-                "contract_evidence": result.get("contract_evidence", {}),
-            })
+            publish_request(cfg, PUBLISH_COMPATIBILITY_OP, report)
         except Exception as error:
             print(f"publish probe report failed ({type(error).__name__}) — local result retained")
 
@@ -1817,6 +1816,10 @@ def cmd_publish_verify(args):
                      sort_keys=True, ensure_ascii=False))
 
 
+PUBLISH_COMPATIBILITY_OP = "agent.publishCompatibility"
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
 def _publish_compatibility_payload(result):
     return {
         "machine_key": result.get("machine_key", ""),
@@ -1828,6 +1831,49 @@ def _publish_compatibility_payload(result):
         "contract_fingerprint": result.get("contract_fingerprint"),
         "contract_evidence": result.get("contract_evidence", {}),
     }
+
+
+def publish_compatibility_unmeasured(payload):
+    """The fields the gateway requires of a compatibility report that this one lacks.
+
+    `agent.publishCompatibility` records a MEASURED contract, compatible or not,
+    and refuses with a 400 any report without a measured LH2 version, a contract
+    fingerprint, valid contract evidence and a complete account snapshot. A probe
+    that failed before measuring (CDP unreachable or slow, no profile, no
+    readable schema) has none of these; posting it anyway could only ever be
+    answered `POST /api/import 400`, so it told the dashboard nothing. Mirrors `createAgentPublishHandler` in
+    `frontend/api/_lib/agent/machineOps.ts`; an empty list means sendable."""
+    missing = []
+
+    def text(value, max_length):
+        return isinstance(value, str) and bool(value.strip()) and len(value) <= max_length
+
+    if not text(payload.get("machine_key"), 160):
+        missing.append("machine_key")
+    account = payload.get("account_snapshot")
+    if not isinstance(account, dict) or any(
+            not text(account.get(key), 10_000)
+            for key in ("account_id", "account_name", "sender_name", "workspace_id")):
+        missing.append("account_snapshot")
+    if not isinstance(payload.get("capability_snapshot"), dict):
+        missing.append("capability_snapshot")
+    if not text(payload.get("measured_lh_version"), 80):
+        missing.append("measured_lh_version")
+    fingerprint = payload.get("contract_fingerprint")
+    if not isinstance(fingerprint, str) or not _HEX64_RE.match(fingerprint):
+        missing.append("contract_fingerprint")
+    evidence = payload.get("contract_evidence")
+    if not (isinstance(evidence, dict)
+            and isinstance(evidence.get("native_contract_version"), str)
+            and isinstance(evidence.get("capabilities"), dict)
+            and isinstance(evidence.get("response_shapes"), dict)
+            and isinstance(evidence.get("schema"), dict)
+            and isinstance(evidence.get("schema_fingerprint"), str)
+            and _HEX64_RE.match(evidence["schema_fingerprint"])):
+        missing.append("contract_evidence")
+    if not isinstance(payload.get("compatible"), bool):
+        missing.append("compatible")
+    return missing
 
 
 def _run_publish_canary(cfg, profile, probe, publisher):
@@ -1908,9 +1954,16 @@ def cmd_publish_once(args):
         reexec()
     profile, profile_error = _publish_profile(cfg)
     probe = probe_linked_helper(cfg)
+    report = _publish_compatibility_payload(probe)
+    unmeasured = publish_compatibility_unmeasured(report)
+    if unmeasured:
+        # The gateway refuses an unmeasured report, and nothing here may run
+        # without an approved, measured contract anyway: stop before the POST.
+        print(f"publish-once: blocked {probe.get('error_code') or 'PUBLISH_CONTRACT_UNMEASURED'}"
+              f" — probe unmeasured ({', '.join(unmeasured)}), not reported")
+        return
     try:
-        compatibility = publish_request(
-            cfg, "agent.publishCompatibility", _publish_compatibility_payload(probe))
+        compatibility = publish_request(cfg, PUBLISH_COMPATIBILITY_OP, report)
     except Exception as error:
         sys.exit(f"publish-once compatibility report failed ({type(error).__name__})")
     status = compatibility.get("status") if isinstance(compatibility, dict) else None
