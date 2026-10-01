@@ -232,6 +232,48 @@ describe('Leads → Contacts tab', () => {
     expect(await within(panel).findByRole('heading', { name: 'Confirm companies' })).toBeTruthy()
   })
 
+  it('makes the SDR type the title of a lead with several current jobs before anything is created', async () => {
+    const multi = leadsCsv([
+      { person: personFixture({ 'Linkedin URL Public': 'https://linkedin.com/in/lead-2', 'Current Jobs Number': '3' }), company: northwind },
+      { person: personFixture({ 'Linkedin URL Public': 'https://linkedin.com/in/lead-3' }), company: northwind },
+    ])
+    api.previewLeads.mockResolvedValue({
+      rows: [
+        { rowNumber: 2, status: 'ready', groupKey: 'domain:northwind.example' },
+        { rowNumber: 3, status: 'ready', groupKey: 'domain:northwind.example' },
+      ],
+      groups: [preview.groups[0]],
+      counts: {},
+    })
+    const panel = await upload(multi)
+    fireEvent.change(within(panel).getByLabelText(/Added by/), { target: { value: 'David Hamaniuk' } })
+    fireEvent.click(within(row(panel, 'domain:northwind.example')).getByRole('button', { name: 'Confirm' }))
+
+    // Opened without a click because a lead needs a title.
+    const leads = within(panel).getByRole('list', { name: 'Leads of Northwind Health' })
+    const multiTitle = within(leads.querySelector('[data-lead="2"]') as HTMLElement).getByLabelText(/Title/) as HTMLInputElement
+    const singleTitle = within(leads.querySelector('[data-lead="3"]') as HTMLElement).getByLabelText(/Title/) as HTMLInputElement
+    expect(multiTitle.value).toBe('')
+    expect(multiTitle.required).toBe(true)
+    expect(within(leads).getByText(/3 current jobs — enter the title at Northwind Health \(CSV says “Founder & CEO”\)/)).toBeTruthy()
+    expect(singleTitle.value).toBe('Founder & CEO')
+
+    const create = within(panel).getByRole('button', { name: 'Create 2 contacts' }) as HTMLButtonElement
+    expect(create.disabled).toBe(true)
+    expect(within(panel).getByText(/Enter a title for 1 lead first/)).toBeTruthy()
+
+    fireEvent.change(multiTitle, { target: { value: ' CTO ' } })
+    fireEvent.change(singleTitle, { target: { value: 'President' } })
+    expect(create.disabled).toBe(false)
+    await act(async () => {
+      fireEvent.click(create)
+    })
+    expect(api.commitContacts.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ rowNumber: 2, title: 'CTO' }),
+      expect.objectContaining({ rowNumber: 3, title: 'President' }),
+    ])
+  })
+
   it('rejects a companies file with a pointer to the other tab', async () => {
     const panel = await upload(companiesCsv([northwind]))
     expect((await within(panel).findByRole('alert')).textContent).toContain('Companies → DB tab')

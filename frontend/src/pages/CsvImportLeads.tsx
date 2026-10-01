@@ -20,7 +20,7 @@ import type {
 } from '../lib/importApi'
 import { useToast } from '../lib/ToastContext'
 import {
-  Badge, Button, ExternalLinkButton, InlineError, SectionHeader, Table, TableFrame, UpdatingNote, type Tone,
+  Badge, Button, ExternalLinkButton, Field, InlineError, Input, SectionHeader, Table, TableFrame, UpdatingNote, type Tone,
 } from '../ui'
 import {
   AddedByField,
@@ -44,6 +44,11 @@ import {
 // company is in neither DB nor Companies and the headline names exactly one
 // Companies record, the lead is linked to it automatically (with Undo); when
 // the headline names several, the user picks one.
+//
+// The export's title is wrong just as often for such a lead: it names one job
+// of several. Every lead's title can be edited before it is written, and a lead
+// with more than one current job has no title until the SDR types the one for
+// the company it is linked to; Create stays disabled until they do.
 
 type GroupState = LeadGroup['status'] | 'confirmed'
 
@@ -65,6 +70,20 @@ const ROW_STATUS: Record<string, string> = {
 }
 
 type LeadLink = { company: AirtableCompany; auto: boolean }
+
+const TITLE_MAX = 200
+const TITLE_LIST_ID = 'lead-import-titles'
+const COMMON_TITLES = [
+  'CEO', 'Co-Founder & CEO', 'Founder', 'President', 'Owner', 'Managing Director', 'General Manager',
+  'COO', 'CTO', 'CFO', 'CMO', 'CRO', 'CPO', 'Chief Medical Officer',
+  'VP of Sales', 'VP of Engineering', 'VP of Marketing', 'VP of Operations',
+  'Head of Sales', 'Head of Engineering', 'Head of Product', 'Head of Marketing',
+  'Director of Sales', 'Sales Director', 'Lead Sales Representative', 'Sales Representative',
+  'Board Member', 'Advisor', 'Partner',
+]
+
+/** A lead whose export names one of several current jobs; its CSV title cannot be trusted. */
+const needsTitle = (row: LeadImportRow | undefined) => (row?.currentJobs ?? 0) > 1
 type Picker = { groupKey: string; rowNumber?: number }
 
 /** Links made without a click: a not-uploaded company whose lead's headline names exactly one Companies record. */
@@ -100,6 +119,8 @@ export function LeadsImport() {
   const [preview, setPreview] = useState<LeadPreviewResponse | null>(null)
   const [confirmed, setConfirmed] = useState<Record<string, AirtableCompany>>({})
   const [leadLinks, setLeadLinks] = useState<Record<number, LeadLink>>({})
+  /** Titles the SDR typed, by row; they survive Re-check because the file does not change. */
+  const [titles, setTitles] = useState<Record<number, string>>({})
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [picker, setPicker] = useState<Picker | null>(null)
   const [committed, setCommitted] = useState<ContactCommitResponse | null>(null)
@@ -135,6 +156,11 @@ export function LeadsImport() {
       return company ? [{ rowNumber, company }] : []
     }),
   )
+  const titleOf = (rowNumber: number) => {
+    const row = rowsByNumber.get(rowNumber)
+    return titles[rowNumber] ?? (needsTitle(row) ? '' : row?.title ?? '')
+  }
+  const untitled = toCreate.filter(({ rowNumber }) => !titleOf(rowNumber).trim()).length
   const leadsToCreate = toCreate.length
   const companiesToLink = new Set(toCreate.map((item) => item.company.id)).size
   const autoLinked = Object.values(leadLinks).filter((link) => link.auto).length
@@ -162,6 +188,7 @@ export function LeadsImport() {
     try {
       const parsed = await parseLeadCsvFile(file)
       setDocument(parsed)
+      setTitles({})
       setPreview(null)
       setCommitted(null)
       await runPreview(parsed)
@@ -176,6 +203,7 @@ export function LeadsImport() {
     setPreview(null)
     setConfirmed({})
     setLeadLinks({})
+    setTitles({})
     setExpanded({})
     setCommitted(null)
     setError(null)
@@ -201,6 +229,9 @@ export function LeadsImport() {
       return next
     })
 
+  const setTitle = (rowNumber: number, value: string) =>
+    setTitles((current) => ({ ...current, [rowNumber]: value }))
+
   const confirmAllDomainMatches = () =>
     setConfirmed((current) => {
       const next = { ...current }
@@ -209,7 +240,7 @@ export function LeadsImport() {
     })
 
   const commit = async () => {
-    if (!addedBy || !leadsToCreate) return
+    if (!addedBy || !leadsToCreate || untitled) return
     setBusy(true)
     setError(null)
     try {
@@ -220,7 +251,7 @@ export function LeadsImport() {
           personLinkedin: row.personLinkedin,
           firstName: row.firstName,
           fullName: row.fullName,
-          title: row.title,
+          title: titleOf(rowNumber).trim(),
           companyId: company.id,
           companyWebsite: row.companyWebsite,
         }
@@ -262,7 +293,7 @@ export function LeadsImport() {
     downloadCsvReport(
       document.fileName,
       'contacts-import-report',
-      ['Source Row', 'Person LinkedIn', 'Full Name', 'CSV Company', 'Company Status', 'Company Detail', 'Linked Company', 'Linked Company ID', 'Contact Status', 'Contact Detail', 'Contact ID'],
+      ['Source Row', 'Person LinkedIn', 'Full Name', 'CSV Title', 'Title', 'CSV Company', 'Company Status', 'Company Detail', 'Linked Company', 'Linked Company ID', 'Contact Status', 'Contact Detail', 'Contact ID'],
       document.rows.map((row) => {
         const group = groupByRow.get(row.rowNumber)
         const own = leadLinks[row.rowNumber]
@@ -278,6 +309,8 @@ export function LeadsImport() {
           row.rowNumber,
           row.personLinkedin,
           row.fullName,
+          row.title,
+          titleOf(row.rowNumber).trim(),
           row.companyName,
           companyStatus,
           group ? [groupWhere(group), group.reason].filter(Boolean).join(' · ') : '',
@@ -374,6 +407,9 @@ export function LeadsImport() {
             }
           >
             {groups.length === 0 && <Notice>No lead in this file can be imported.</Notice>}
+            <datalist id={TITLE_LIST_ID}>
+              {COMMON_TITLES.map((title) => <option key={title} value={title} />)}
+            </datalist>
             {groups.length > 0 && (
               <TableFrame scrollLabel="Companies to confirm" maxHeight={560}>
                 <Table caption="Companies to confirm" className="min-w-[1040px] [&_td]:align-top">
@@ -392,8 +428,9 @@ export function LeadsImport() {
                       const linked = confirmed[group.key] ?? group.suggestion
                       const ownLinks = group.rowNumbers.filter((rowNumber) => leadLinks[rowNumber]).length
                       const hinted = group.rowNumbers.some((rowNumber) => headlineMatchesOf(group, rowNumber).length)
+                      const multiJob = canLink(group) && group.rowNumbers.some((rowNumber) => needsTitle(rowsByNumber.get(rowNumber)))
                       const open = expanded[group.key]
-                        ?? (group.status === 'pending' || group.status === 'not_uploaded' || hinted || ownLinks > 0)
+                        ?? (group.status === 'pending' || group.status === 'not_uploaded' || hinted || multiJob || ownLinks > 0)
                       return (
                         <Fragment key={group.key}>
                         <tr data-group={group.key}>
@@ -471,6 +508,9 @@ export function LeadsImport() {
                                   if (!lead) return null
                                   const own = leadLinks[rowNumber]
                                   const matches = headlineMatchesOf(group, rowNumber)
+                                  const target = own?.company ?? confirmed[group.key] ?? group.suggestion
+                                  const multi = needsTitle(lead)
+                                  const title = titleOf(rowNumber)
                                   return (
                                     <li key={rowNumber} data-lead={rowNumber} className="flex items-start justify-between gap-app-md">
                                       <div className="min-w-0">
@@ -478,9 +518,31 @@ export function LeadsImport() {
                                           <strong>{lead.fullName || lead.personLinkedin}</strong>
                                           {lead.currentJobs > 1 && <Badge tone="warning">{lead.currentJobs} current jobs</Badge>}
                                         </div>
-                                        <div className="text-app-meta text-app-text-muted">
-                                          {[lead.title, lead.headline].filter(Boolean).join(' · ')}
-                                        </div>
+                                        {lead.headline && (
+                                          <div className="text-app-meta text-app-text-muted">{lead.headline}</div>
+                                        )}
+                                        {canLink(group) && (
+                                          <Field
+                                            className="mt-app-xs w-[360px] max-w-full"
+                                            label="Title"
+                                            required={multi}
+                                            help={multi
+                                              ? `${lead.currentJobs} current jobs — enter the title at ${target?.name || 'the linked company'}${lead.title ? ` (CSV says “${lead.title}”)` : ''}`
+                                              : lead.title && title.trim() !== lead.title.trim() ? `CSV says “${lead.title}”` : undefined}
+                                            error={!title.trim() && titles[rowNumber] !== undefined ? 'Enter a title' : undefined}
+                                          >
+                                            {(args) => (
+                                              <Input
+                                                {...args}
+                                                list={TITLE_LIST_ID}
+                                                maxLength={TITLE_MAX}
+                                                placeholder={multi ? 'e.g. CTO, CEO, President' : undefined}
+                                                value={title}
+                                                onChange={(event) => setTitle(rowNumber, event.target.value)}
+                                              />
+                                            )}
+                                          </Field>
+                                        )}
                                         {own && (
                                           <div className="text-app-meta mt-app-xs">
                                             Linked to <strong>{own.company.name || 'Unnamed company'}</strong>
@@ -571,6 +633,7 @@ export function LeadsImport() {
             {autoLinked > 0 && <> · <strong>{autoLinked}</strong> linked from headline</>}
             {leadCount(heldGroups) > 0 && <> · <strong>{leadCount(heldGroups)}</strong> held</>}
             {leadCount(declinedGroups) > 0 && <> · <strong>{leadCount(declinedGroups)}</strong> declined</>}
+            {untitled > 0 && <span className="text-app-text-muted"> · Enter a title for {plural(untitled, 'lead')} first.</span>}
             {!addedBy && <span className="text-app-text-muted"> · Select Added by first.</span>}
           </>}>
             <Button variant="ghost" icon={<RotateCcw aria-hidden="true" />} onClick={reset} disabled={busy}>Start over</Button>
@@ -581,7 +644,7 @@ export function LeadsImport() {
               variant="primary"
               icon={<Users aria-hidden="true" />}
               loading={busy}
-              disabled={!addedBy || !leadsToCreate}
+              disabled={!addedBy || !leadsToCreate || untitled > 0}
               onClick={() => void commit()}
             >
               Create {plural(leadsToCreate, 'contact')}
