@@ -644,7 +644,8 @@ export interface NeonImportMessage {
 
 export interface NeonImportInput {
   readonly instanceId: string
-  readonly campaignId: string
+  /** `null` for a conversation with no lead: no lead to check, no milestones to fill. */
+  readonly campaignId: string | null
   readonly profileUrl: string
   readonly messages: readonly NeonImportMessage[]
   /** The endpoint's own `normalizeForDedup`, passed in rather than re-implemented. */
@@ -676,17 +677,20 @@ export async function neonImportConversation(
         },
       })
 
-      const found = await transaction.query<LeadForImportRow>({
-        operation: CONVERSATION_WRITE_OPERATIONS.leadForImport,
-        params: { campaignId: input.campaignId, profileUrl: input.profileUrl },
-        page: { limit: 1 },
-      })
-      const lead = found.items[0]
-      if (!lead) {
-        return json({ error: 'unknown lead (campaign_id + profile_url)' }, 404)
-      }
-      if (lead.instance_id !== input.instanceId) {
-        return json({ error: 'instance_id does not match the lead' }, 400)
+      let lead: LeadForImportRow | null = null
+      if (input.campaignId !== null) {
+        const found = await transaction.query<LeadForImportRow>({
+          operation: CONVERSATION_WRITE_OPERATIONS.leadForImport,
+          params: { campaignId: input.campaignId, profileUrl: input.profileUrl },
+          page: { limit: 1 },
+        })
+        lead = found.items[0] ?? null
+        if (!lead) {
+          return json({ error: 'unknown lead (campaign_id + profile_url)' }, 404)
+        }
+        if (lead.instance_id !== input.instanceId) {
+          return json({ error: 'instance_id does not match the lead' }, 400)
+        }
       }
 
       const existing = await readAll<ThreadDedupKeyRow>(
@@ -751,6 +755,10 @@ export async function neonImportConversation(
         [minIn, minOut].filter((time): time is string => time !== null).sort()[0] ??
         null
 
+      // A lead-less conversation has no milestones to fill.
+      if (!lead) {
+        return json({ ok: true, inserted, skipped })
+      }
       const backfilled = await transaction.execute<BackfillMilestonesResult>({
         operation: CONVERSATION_WRITE_COMMANDS.backfillMilestones,
         params: {

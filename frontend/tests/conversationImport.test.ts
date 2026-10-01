@@ -53,6 +53,18 @@ describe('conversation history actions', () => {
     })
   })
 
+  it('imports without a campaign when the conversation has no lead', async () => {
+    neonImportConversation.mockResolvedValue(ok({ ok: true, inserted: 1, skipped: 0 }))
+    const req = new Request('https://example.test/api/import', { method: 'POST' })
+    const messages = [{ direction: 'in', body: 'Hi', sent_at: '2026-09-01T10:00:00Z' }]
+    const response = await handleConversationImport({ instance_id: 'n1', profile_url: 'https://www.linkedin.com/in/x', messages }, req)
+    expect(response.status).toBe(200)
+    expect(neonImportConversation.mock.calls[0][1]).toMatchObject({ instanceId: 'n1', campaignId: null })
+    // A campaign that is given must still be a real string.
+    const bad = await handleConversationImport({ instance_id: 'n1', campaign_id: '', profile_url: 'p', messages }, req)
+    expect(bad.status).toBe(400)
+  })
+
   it('refuses a malformed id before touching the store', async () => {
     const req = new Request('https://example.test/api/import', { method: 'POST' })
     for (const id of [0, -1, 1.5, '42', null]) {

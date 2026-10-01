@@ -1,9 +1,9 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { AlertCircle, ExternalLink, Filter, Inbox, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, BarChart3, ExternalLink, FileInput, Filter, Inbox, PanelLeftClose, PanelLeftOpen, RefreshCw, X } from 'lucide-react'
 import { Link, UNSAFE_DataRouterContext, useBlocker, useLocation } from 'react-router-dom'
 import { Avatar, InitialsAvatar, LeadAvatar } from '../components/Avatar'
+import { ImportHistoryPanel, type ImportSubject } from '../components/ImportHistoryPanel'
 import { useData } from '../lib/DataContext'
-import { useConversation } from '../lib/ConversationContext'
 import { replyDate, replyDateKey, replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { ConversationActionPanel } from '../components/conversation/ConversationActionPanel'
 import { ConversationThread } from '../components/conversation/ConversationThread'
@@ -12,6 +12,7 @@ import { WORKFLOW_LABELS } from '../components/reply-analysis/WorkflowBuckets'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { useRepliesInbox } from '../lib/useRepliesInbox'
 import { ACTION_LABELS, isReplyManualReady, needsAutoResetConfirmation, REASON_LABELS, SENTIMENT_LABELS, nextUnreviewedReply, validateReview, REPLY_SEARCH_DEBOUNCE_MS, type ReplyCapabilities, type ReplyInboxScope, type ReplyReadClient, type ReplyReviewDraft, type ReplyThreadMessage, type ReplyWorkflowMutation } from '../lib/replyReview'
+import { useDirtyGuard } from '../ui/useDirtyGuard'
 import { Button, Checkbox, Dialog, ExternalLinkButton, FilterCount, FilterDialog, IconButton, InlineError, LinkButton, PageHeader, SelectField, Tabs, TextField, EmptyState } from '../ui'
 import { COPY } from '../ui/labels'
 import { UNKNOWN_PERSON_LABEL } from '../ui/Identity'
@@ -170,7 +171,6 @@ const EMPTY_FILTER_DRAFT: RepliesFilterDraft = {
 
 export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const { data } = useData()
-  const { openConversation } = useConversation()
   const inbox = useRepliesInbox(client)
   const pageRef = useRef<HTMLDivElement>(null)
   const listPaneRef = useRef<HTMLElement>(null)
@@ -196,6 +196,10 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
   const reviewDraftRef = useRef<ReplyReviewDraft | null>(null)
   const [mobileStep, setMobileStep] = useState<'list' | 'thread' | 'review'>('list')
   const [newInboundAvailable, setNewInboundAvailable] = useState(false)
+  // Import history opens here, for any thread — one with no lead included.
+  const [importOpen, setImportOpen] = useState(false)
+  const [importDirty, setImportDirty] = useState(false)
+  const importGuard = useDirtyGuard(importDirty)
   const seenInboundRevision = useRef<{ key: string; revision: number } | null>(null)
   const [reviewDirty, setReviewDirty] = useState(false)
   const [workflowUserDirty, setWorkflowUserDirty] = useState(false)
@@ -359,6 +363,9 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
     listScrollRef.current?.querySelector<HTMLElement>('.replies-list-item[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' })
   }, [selectedRowKey, selectedRowInList, listMode])
   const instancesById = useMemo(() => new Map((data?.instances ?? []).map((instance) => [instance.id, instance])), [data?.instances])
+  const threadAccount = inbox.scope.thread ? instancesById.get(inbox.scope.thread.instance_id) : undefined
+  const importSubject: ImportSubject | null = selectedLead
+    ?? (inbox.scope.thread ? { instance_id: inbox.scope.thread.instance_id, profile_url: inbox.scope.thread.profile_url, campaign_id: null, full_name: selectedItem?.name ?? null } : null)
   const showAccountMark = !inbox.scope.account && (inbox.capabilities?.instances?.length ?? 0) > 1
   const hasData = inbox.loading || inbox.items.length > 0
   const currentName = selectedItem?.name || selectedLead?.full_name || UNKNOWN_PERSON_LABEL
@@ -468,25 +475,29 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
         : <p>Discarding removes only the unsaved draft for this conversation.</p>}
     </Dialog>}
 
-    <PageHeader
-      title={COPY.replies}
-      actions={<div className="flex items-center gap-app-md">
-        <LinkButton to="/sentiment-analysis" variant="ghost">Sentiment analysis</LinkButton>
-        <IconButton
-          bordered
-          label={inbox.loading ? 'Refreshing replies' : COPY.refresh}
-          icon={<RefreshCw aria-hidden="true" />}
-          onClick={() => confirmNavigation(inbox.refresh)}
-          loading={inbox.loading}
-        />
-      </div>}
-    />
+    {importOpen && importSubject && <Dialog
+      size="lg"
+      title="Import history"
+      description={`The conversation with ${currentName === UNKNOWN_PERSON_LABEL ? profileName(inbox.scope.thread?.profile_url ?? '') : currentName}, from ${accountLabel(inbox.scope.thread?.instance_id ?? '')}.`}
+      onRequestClose={() => importGuard.guard(() => { setImportOpen(false); setImportDirty(false) })}
+    >
+      <ImportHistoryPanel
+        lead={importSubject}
+        accountName={threadAccount?.account_name ?? null}
+        existing={inbox.thread?.messages ?? null}
+        onImported={() => inbox.refresh()}
+        onClose={() => importGuard.guard(() => { setImportOpen(false); setImportDirty(false) })}
+        onDirtyChange={setImportDirty}
+      />
+    </Dialog>}
+    {importGuard.prompt}
 
-    {inbox.capabilities && !capabilityReady && <div className="replies-unavailable" role="status"><AlertCircle size={18} aria-hidden="true" /> {capabilityMessage(inbox.capabilities)}</div>}
-
-    <div className="flex items-center gap-app-md flex-[0_0_auto] justify-between min-w-0">
+    {/* One row: title, the queue tabs, then the scope and page actions. The
+        two stacked rows it replaces cost the workspace ~60px of height. */}
+    <div className="replies-head">
+      <PageHeader title={COPY.replies} />
       <Tabs
-        className="flex-[1_1_auto] min-w-0 mb-0 border-b-0"
+        className="replies-head-tabs"
         label="Reply queue"
         value={inbox.scope.view}
         onChange={(view) => guardedScope({ view, cursor: null })}
@@ -508,8 +519,18 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
           aria-expanded={filtersOpen}
           onClick={openFilters}
         >{COPY.filters}<FilterCount count={activeFilterCount} /></Button>
+        <LinkButton to="/sentiment-analysis" variant="ghost" icon={<BarChart3 aria-hidden="true" />} title="Sentiment analysis">Analysis</LinkButton>
+        <IconButton
+          bordered
+          label={inbox.loading ? 'Refreshing replies' : COPY.refresh}
+          icon={<RefreshCw aria-hidden="true" />}
+          onClick={() => confirmNavigation(inbox.refresh)}
+          loading={inbox.loading}
+        />
       </div>
     </div>
+
+    {inbox.capabilities && !capabilityReady && <div className="replies-unavailable" role="status"><AlertCircle size={18} aria-hidden="true" /> {capabilityMessage(inbox.capabilities)}</div>}
 
     {/* Filters open OVER the page. Nothing below them moves, so the workspace
         keeps its full height whether they are open or closed. */}
@@ -639,14 +660,20 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
             <div className="replies-thread-identity">
               <PersonAvatar person={selectedItem ?? (selectedLead ? { profile_url: selectedLead.profile_url, name: selectedLead.full_name, lead_id: selectedLead.id, photo_path: selectedLead.photo_path } : { profile_url: inbox.scope.thread?.profile_url ?? '' })} />
               <div>
-                <h2>{currentName}</h2>
-                <p className="text-app-text-muted text-app-meta">{[selectedItem?.name ? selectedItem.headline || selectedItem.company : profileName(inbox.scope.thread?.profile_url ?? ''), accountLabel(inbox.scope.thread?.instance_id ?? '')].filter(Boolean).join(' · ')}</p>
+                <div className="replies-thread-title">
+                  <h2>{currentName}</h2>
+                  {/* Which of our LinkedIn accounts this conversation is with. */}
+                  <span className="replies-via" title={`Reached out from ${accountLabel(inbox.scope.thread?.instance_id ?? '')}`}>
+                    via {threadAccount && <Avatar inst={threadAccount} size={16} />}<span>{accountLabel(inbox.scope.thread?.instance_id ?? '')}</span>
+                  </span>
+                </div>
+                <p className="text-app-text-muted text-app-meta">{(selectedItem?.name || selectedLead?.full_name) ? selectedItem?.headline || selectedItem?.company || selectedLead?.headline || '' : profileName(inbox.scope.thread?.profile_url ?? '')}</p>
               </div>
             </div>
             <div className="flex items-center gap-app-sm flex-[0_0_auto] flex-wrap justify-end">
               {newInboundAvailable && <Button variant="secondary" size="sm" onClick={() => { if (inbox.thread?.newer_cursor) inbox.loadNewer(); else if (latestInbound) confirmNavigation(() => { updateScope({ thread: { instance_id: latestInbound.instance_id, profile_url: latestInbound.profile_url, focus_message_id: latestInbound.id } }); setNewInboundAvailable(false) }) }}>New reply · show it</Button>}
-              {selectedLead && <Button variant="ghost" size="sm" onClick={() => confirmNavigation(() => openConversation(selectedLead, { mode: 'import_history' }))}>Import history</Button>}
-              <ExternalLinkButton variant="ghost" size="sm" icon={<ExternalLink aria-hidden="true" />} href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer" title="Open the profile on LinkedIn">LinkedIn</ExternalLinkButton>
+              <Button variant="secondary" size="sm" icon={<FileInput aria-hidden="true" />} onClick={() => setImportOpen(true)}>Import history</Button>
+              <ExternalLinkButton variant="ghost" size="sm" className="replies-icon-link" icon={<ExternalLink aria-hidden="true" />} href={inbox.scope.thread?.profile_url} target="_blank" rel="noreferrer" title="Open the profile on LinkedIn" aria-label="Open the profile on LinkedIn" />
             </div>
           </div>
           <ConversationThread messages={inbox.thread?.messages ?? []} selectedMessageId={selectedMessage?.id ?? null} focusMessageId={inbox.scope.thread?.focus_message_id} loading={inbox.loadingThread} error={inbox.threadError} olderCursor={inbox.thread?.older_cursor} newerCursor={inbox.thread?.newer_cursor} onSelectMessage={(message) => confirmNavigation(() => updateScope({ thread: { instance_id: message.instance_id, profile_url: message.profile_url, focus_message_id: message.id } }))} onLoadOlder={inbox.loadOlder} onLoadNewer={inbox.loadNewer} />
@@ -664,8 +691,12 @@ export function Replies({ client }: { client?: ReplyReadClient } = {}) {
 
       <aside className="replies-inspector-pane" aria-label="Review reply and next step">
         {hasSelection ? <>
+          <div className="replies-pane-head">
+            <h2>{selectedMessage?.direction === 'in' ? COPY.reviewReply : COPY.nextStep}</h2>
+            {selectedMessage?.direction === 'in' && <time className="text-app-text-muted text-app-meta" dateTime={selectedMessage.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(selectedMessage.sent_at, true)}</time>}
+          </div>
           <div className="flex-[1_1_auto] min-h-0 overflow-auto [overscroll-behavior:contain]">
-            {selectedMessage?.direction === 'in' ? <ReplyReviewPanel message={selectedMessage} review={selectedMessage.review} saving={actions.saving} error={actions.error ?? (actions.conflict ? 'This conversation changed in another tab. Your input is kept — reload the conversation once you have compared them.' : null)} history={inbox.history} historyLoading={inbox.historyLoading} historyCursor={inbox.historyCursor} historyRequested={inbox.historyRequested} onOpenHistory={inbox.requestHistory} onLoadHistoryMore={inbox.loadHistoryMore} onDirtyChange={setReviewDirty} onDraftChange={handleReviewDraftChange} onSave={saveReview} onSaveAndNext={saveReviewAndNext} externalActions />
+            {selectedMessage?.direction === 'in' ? <ReplyReviewPanel message={selectedMessage} review={selectedMessage.review} saving={actions.saving} error={actions.error ?? (actions.conflict ? 'This conversation changed in another tab. Your input is kept — reload the conversation once you have compared them.' : null)} history={inbox.history} historyLoading={inbox.historyLoading} historyCursor={inbox.historyCursor} historyRequested={inbox.historyRequested} onOpenHistory={inbox.requestHistory} onLoadHistoryMore={inbox.loadHistoryMore} onDirtyChange={setReviewDirty} onDraftChange={handleReviewDraftChange} onSave={saveReview} onSaveAndNext={saveReviewAndNext} externalActions headless />
               : <div className="replies-inspector-empty">{selectedIsOutboundOnly ? <>An outbound message is selected. {inbox.thread?.messages.some((message) => message.direction === 'in') ? <Button variant="ghost" size="sm" onClick={() => { const inbound = [...(inbox.thread?.messages ?? [])].reverse().find((message) => message.direction === 'in'); if (inbound) updateScope({ thread: { instance_id: inbound.instance_id, profile_url: inbound.profile_url, focus_message_id: inbound.id } }) }}>Go to the latest inbound reply</Button> : 'There are no inbound messages in the loaded part of this thread.'}</> : inbox.loadingThread ? 'Loading the reply…' : 'Select an inbound reply in the thread.'}</div>}
             <ConversationActionPanel workflow={actionWorkflow} members={inbox.capabilities?.members} inboundRevision={inbox.thread?.inbound_revision ?? selectedItem?.inbound_revision ?? 0} persistedDoNotContact={inbox.thread?.workflow?.do_not_contact ?? selectedItem?.do_not_contact ?? false} saving={actions.saving} error={actions.error} onDirtyChange={handleWorkflowDirtyChange} onDraftChange={handleWorkflowDraftChange} onSave={saveWorkflow} onValidityChange={setWorkflowValid} externalActions />
           </div>

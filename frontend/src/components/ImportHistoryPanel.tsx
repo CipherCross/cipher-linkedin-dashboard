@@ -4,6 +4,12 @@ import { authPost } from '../lib/api'
 import { useToast } from '../lib/ToastContext'
 import { normalizeForDedup, parseLinkedInThread } from '../lib/parseLinkedInThread'
 import type { Lead } from '../lib/types'
+
+/** The conversation the paste belongs to. A `Lead` is one; so is a Replies
+ *  thread with no lead row, which has no campaign and imports with none. */
+export type ImportSubject = Pick<Lead, 'instance_id' | 'profile_url' | 'full_name'> & {
+  readonly campaign_id: string | null
+}
 import {
   Badge, Button, Checkbox, IconButton, InlineError, RadioGroup, TextField, TextareaField,
 } from '../ui'
@@ -82,7 +88,7 @@ export function ImportHistoryPanel({
   onClose,
   onDirtyChange,
 }: {
-  lead: Lead
+  lead: ImportSubject
   accountName: string | null
   existing: ExistingMsg[] | null
   onImported: (result: SaveResult) => void
@@ -207,7 +213,7 @@ export function ImportHistoryPanel({
       const res = await authPost('/api/import', {
         action: 'conversation_import',
         instance_id: lead.instance_id,
-        campaign_id: lead.campaign_id,
+        ...(lead.campaign_id ? { campaign_id: lead.campaign_id } : {}),
         profile_url: lead.profile_url,
         messages: included.map((b) => ({
           direction: b.direction,

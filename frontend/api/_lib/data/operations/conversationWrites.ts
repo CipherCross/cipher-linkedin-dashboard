@@ -232,19 +232,20 @@ export const lockThreadOperation: NeonCommandOperation<
  */
 export interface InsertImportedMessagesParams {
   readonly instanceId: string
-  readonly campaignId: string
+  /** `null` for a conversation with no lead; messages.campaign_id is nullable. */
+  readonly campaignId: string | null
   readonly profileUrl: string
   readonly directions: readonly string[]
   readonly bodies: readonly string[]
   readonly sentAts: readonly string[]
   readonly contentHashes: readonly string[]
-  readonly [key: string]: string | readonly string[]
+  readonly [key: string]: string | null | readonly string[]
 }
 
 const INSERT_IMPORTED_MESSAGES_SQL = `INSERT INTO public.messages
             (instance_id, campaign_id, profile_url,
              direction, body, sent_at, content_hash, source)
-     SELECT $1, $2, $3, d.direction, d.body, d.sent_at, d.content_hash, 'manual'
+     SELECT $1, $2::text, $3, d.direction, d.body, d.sent_at, d.content_hash, 'manual'
        FROM unnest($4::text[], $5::text[], $6::timestamptz[], $7::text[])
               AS d(direction, body, sent_at, content_hash)
 ON CONFLICT (instance_id, profile_url, direction, sent_at, content_hash)
@@ -259,7 +260,7 @@ export const insertImportedMessagesOperation: NeonCommandOperation<
     text: INSERT_IMPORTED_MESSAGES_SQL,
     values: [
       params?.instanceId ?? '',
-      params?.campaignId ?? '',
+      params?.campaignId ?? null,
       params?.profileUrl ?? '',
       params?.directions ?? [],
       params?.bodies ?? [],

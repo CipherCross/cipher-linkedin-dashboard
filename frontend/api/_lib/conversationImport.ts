@@ -79,8 +79,11 @@ export async function handleConversationImport(
   if (typeof instance_id !== 'string' || !instance_id) {
     return json({ error: 'instance_id (string) is required' }, 400)
   }
-  if (typeof campaign_id !== 'string' || !campaign_id) {
-    return json({ error: 'campaign_id (string) is required' }, 400)
+  // Optional: a conversation whose person has no lead (an existing connection,
+  // someone outside every campaign) imports its messages with no campaign and
+  // has no lead milestones to backfill.
+  if (campaign_id !== undefined && campaign_id !== null && (typeof campaign_id !== 'string' || !campaign_id)) {
+    return json({ error: 'campaign_id must be a non-empty string when given' }, 400)
   }
   if (typeof profile_url !== 'string' || !profile_url) {
     return json({ error: 'profile_url (string) is required' }, 400)
@@ -115,7 +118,7 @@ export async function handleConversationImport(
   // the dedup rule has one definition per TS root.
   return neonImportConversation(req, {
     instanceId: instance_id,
-    campaignId: campaign_id,
+    campaignId: typeof campaign_id === 'string' ? campaign_id : null,
     profileUrl: profile_url,
     messages: msgs.map((m) => ({
       direction: m.direction,

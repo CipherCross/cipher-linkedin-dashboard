@@ -681,6 +681,27 @@ describe('conversation_import: the decisions taken in JavaScript', () => {
     )
   })
 
+  it('imports a conversation with no lead: no campaign, no lead lookup, no milestones', async () => {
+    const { executed, deps } = harness()
+    // A lead that would 404 proves the lookup is skipped, not merely found.
+    leadForImport = null
+    const response = await neonImportConversation(
+      request(),
+      { ...importInput([block('in', 'hello', '2026-02-01T09:00:00.000Z')]), campaignId: null },
+      deps,
+    )
+    expect(response.status).toBe(200)
+    const answered = await response.json()
+    expect(answered.ok).toBe(true)
+    expect(answered).not.toHaveProperty('milestones')
+    expect(found(executed, CONVERSATION_WRITE_COMMANDS.insertImportedMessages)?.params).toMatchObject({
+      campaignId: null,
+      instanceId: 'inst',
+      profileUrl: 'https://example.test/in/person',
+    })
+    expect(found(executed, CONVERSATION_WRITE_COMMANDS.backfillMilestones)).toBeUndefined()
+  })
+
   it('refuses an instance_id that does not match the lead', async () => {
     const { executed, deps } = harness()
     leadForImport = { ...leadForImport, instance_id: 'another' }

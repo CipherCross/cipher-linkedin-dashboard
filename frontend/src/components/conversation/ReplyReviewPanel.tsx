@@ -29,9 +29,11 @@ export interface ReplyReviewPanelProps {
   onDirtyChange?: (dirty: boolean) => void
   onDraftChange?: (draft: ReplyReviewDraft) => void
   externalActions?: boolean
+  /** The surface draws the "Review reply" title in its own pane header. */
+  headless?: boolean
 }
 
-export function ReplyReviewPanel({ message, review, saving, error, onSave, onSaveAndNext, history = [], historyLoading, historyCursor, historyRequested, onOpenHistory, onLoadHistoryMore, onDirtyChange, onDraftChange, externalActions = false }: ReplyReviewPanelProps) {
+export function ReplyReviewPanel({ message, review, saving, error, onSave, onSaveAndNext, history = [], historyLoading, historyCursor, historyRequested, onOpenHistory, onLoadHistoryMore, onDirtyChange, onDraftChange, externalActions = false, headless = false }: ReplyReviewPanelProps) {
   const [draft, setDraft] = useState<ReplyReviewDraft>(() => draftFromReview(review))
   const [confirmAuto, setConfirmAuto] = useState(false)
   const [showReasons, setShowReasons] = useState(false)
@@ -64,7 +66,9 @@ export function ReplyReviewPanel({ message, review, saving, error, onSave, onSav
   }
   return (
     <form id="reply-review-form" className="replies-review-panel" aria-label="Review reply" onSubmit={(event) => { event.preventDefault(); const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLElement | null; submit(submitter?.dataset.next === 'true') }}>
-      <div className="replies-panel-heading"><div><h2>Review reply</h2><time className="text-app-text-muted text-app-meta" dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(message.sent_at, true)}</time></div>{review?.provenance === 'legacy_manual' && <span className="replies-legacy-badge">Reviewed by hand earlier</span>}</div>
+      {headless
+        ? review?.provenance === 'legacy_manual' && <div className="replies-panel-heading"><span className="replies-legacy-badge">Reviewed by hand earlier</span></div>
+        : <div className="replies-panel-heading"><div><h2>Review reply</h2><time className="text-app-text-muted text-app-meta" dateTime={message.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(message.sent_at, true)}</time></div>{review?.provenance === 'legacy_manual' && <span className="replies-legacy-badge">Reviewed by hand earlier</span>}</div>}
       <div className="[display:-webkit-box] mb-app-md py-app-sm px-app-md border-l-[3px] border-app-accent rounded-control bg-app-surface-2 text-app-table overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">{message.body || '—'}</div>
       <RadioGroup
         legend="Sentiment"

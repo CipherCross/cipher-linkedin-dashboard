@@ -166,6 +166,20 @@ describe('Replies workspace page', () => {
     expect(aliceRow.getAttribute('aria-current')).toBe('true')
     expect((screen.getByRole('radio', { name: 'Negative' }) as HTMLInputElement).checked).toBe(true)
   })
+  it('names the sending account beside the contact and imports history in place, even with no lead', async () => {
+    const client = makeClient()
+    renderReplies(client)
+    fireEvent.click(await screen.findByRole('button', { name: /Alice Example/ }))
+    await screen.findByRole('radio', { name: 'Negative' })
+    // The thread is with one of our accounts; it says which, beside the name.
+    const via = document.querySelector('.replies-thread-title .replies-via')
+    expect(via?.textContent).toBe('via Notebook one')
+    // Alice has no lead in DataContext here, and the import still opens here.
+    fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Import history' })
+    expect(dialog.textContent).toContain('Alice Example')
+  })
+
   it("says why the dialog's Save did not save, instead of staying silent", async () => {
     // In the two-pane layout the review form sits in a hidden pane, so an error
     // it shows is never seen: Save looked like it did nothing and the reason

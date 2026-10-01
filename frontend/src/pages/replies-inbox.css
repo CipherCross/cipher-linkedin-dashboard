@@ -27,14 +27,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  height: calc(100dvh - 128px);
+  /* The workspace runs to the bottom of the window: the page frame's 24px top
+   * and 48px bottom padding shrink to one 16px step on this route, and the
+   * height is exactly what is left. */
+  height: calc(100dvh - 2 * var(--space-lg));
   min-height: 0;
   min-width: 0;
 }
+.page:has(.replies-page) { padding-top: var(--space-lg); padding-bottom: var(--space-lg); }
+
+/* Title, queue tabs, scope and actions share one row. */
+.replies-head { display: flex; align-items: center; gap: var(--space-lg); flex: 0 0 auto; min-width: 0; }
+.replies-head .ui-page-header { flex: 0 0 auto; margin-bottom: 0; }
+.replies-head .replies-head-tabs { flex: 1 1 auto; min-width: 0; margin-bottom: 0; border-bottom: 0; }
 
 
 .replies-toolbar-tools { display: flex; align-items: center; gap: var(--space-md); flex: 0 0 auto; }
-.replies-toolbar-tools select { max-width: 260px; min-width: 180px; }
+.replies-toolbar-tools select { max-width: 220px; min-width: 150px; }
 
 /* Filter overlay body */
 
@@ -114,7 +123,7 @@
   .replies-pane-switch { display: flex; }
 }
 
-.replies-pane-title, .replies-thread-head, .replies-list-head {
+.replies-pane-title, .replies-thread-head, .replies-list-head, .replies-pane-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -124,6 +133,14 @@
   padding: var(--space-sm) var(--inset-pane);
   border-bottom: 1px solid var(--border);
 }
+/* The three pane heads are ONE height, so their dividers form one line across
+ * the workspace — the list's, the thread's two-line identity, and the review's. */
+.replies-thread-head, .replies-list-head, .replies-pane-head {
+  box-sizing: border-box;
+  height: var(--pane-head-height);
+  padding-block: 0;
+}
+.replies-pane-head h2 { margin: 0; font-size: var(--text-subsection); line-height: var(--leading-subsection); }
 .replies-list-head { gap: var(--space-xs); }
 .replies-list-head .replies-list-search:first-child { flex: 1 1 auto; min-width: 0; }
 .replies-pane-title h2, .replies-thread-head h2, .replies-panel-heading h2 {
@@ -235,11 +252,40 @@
   white-space: nowrap;
 }
 .replies-workspace.list-rail .replies-list-more { padding-inline: 0; }
+.replies-workspace.list-rail .replies-list-more > [role='status'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 .replies-thread-head > div { min-width: 0; }
 .replies-thread-identity { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
 .replies-thread-identity > div { min-width: 0; }
 .replies-thread-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replies-thread-title { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
+/* The name gives way last: the account chip shrinks first. */
+.replies-thread-title h2 { flex: 0 1 auto; min-width: 6em; }
+.replies-thread-title .replies-via { flex: 0 100 auto; }
+.replies-icon-link { width: var(--control-height-sm); padding-inline: 0; justify-content: center; }
+.replies-via {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-sm) 0 var(--space-xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  white-space: nowrap;
+}
+.replies-via > span { overflow: hidden; text-overflow: ellipsis; }
 .replies-thread-head p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .replies-thread-scroll {
@@ -332,5 +378,5 @@
 /* A short window is a stress case, not a separate design: the same hierarchy
  * with one tighter page gap, so the sticky footer still fits. */
 @media (max-height: 720px) {
-  .replies-page { gap: var(--space-sm); height: calc(100dvh - 104px); }
+  .replies-page { gap: var(--space-sm); }
 }

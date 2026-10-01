@@ -255,6 +255,9 @@ wanted. One light theme, still.
   review 340 from a 1120px container; a 64px avatar rail (the list opens over
   the thread) from 900px; the two-pane switch only below that. The rail hides
   row text visually, never with `display: none`, so rows keep their names.
+  The workspace fills the window: its route shrinks the page frame to a 16px
+  top and bottom, puts title, tabs, scope and actions on one row, and gives
+  every pane head the same `--pane-head-height`, so their dividers form one line.
 
 ### Chat threads
 
