@@ -534,12 +534,12 @@ export async function fetchNeonOverviewSystemTotals(
   fetchImpl: ApiFetch = authFetch,
   signal?: AbortSignal,
 ): Promise<OverviewSystemTotals> {
-  return overviewRead(READ_OPS.overviewSystemTotals, range, fetchImpl, signal, async () => {
+  return overviewRead(READ_OPS.overviewSystemTotals, range, fetchImpl, signal, async (sharedSignal) => {
     const page = await readPage<{ totals: OverviewSystemTotals }>(
       READ_OPS.overviewSystemTotals,
       { from: range.from, to: range.to, limit: 1 },
       fetchImpl,
-      signal,
+      sharedSignal,
     )
     const row = page.items[0]
     if (!row) throw new Error(`${READ_OPS.overviewSystemTotals}: response contained no totals row`)
@@ -548,7 +548,22 @@ export async function fetchNeonOverviewSystemTotals(
 }
 
 type OverviewRange = { readonly from: string | null; readonly to: string | null }
-const overviewRequests = new Map<string, Promise<unknown>>()
+
+/**
+ * One in-flight Overview read, shared by every caller asking for the same
+ * operation and range. The network request runs on the entry's own signal, never
+ * on a caller's: a caller that goes away (an unmount, a range change, React
+ * StrictMode's dev-only mount → cleanup → mount) rejects only its own promise.
+ * The request itself is cancelled once no caller is left.
+ */
+type SharedOverviewRead = {
+  readonly promise: Promise<unknown>
+  readonly controller: AbortController
+  callers: number
+}
+const overviewRequests = new Map<string, SharedOverviewRead>()
+
+const abortError = () => new DOMException('The request was aborted.', 'AbortError')
 
 function overviewRangeKey(range: OverviewRange): string {
   const toExclusive = range.to
@@ -562,22 +577,45 @@ function overviewRead<T>(
   range: OverviewRange,
   fetchImpl: ApiFetch,
   signal: AbortSignal | undefined,
-  read: () => Promise<T>,
+  read: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
+  if (signal?.aborted) return Promise.reject(abortError())
   const key = `${operation}|${overviewRangeKey(range)}`
-  const current = overviewRequests.get(key)
-  if (current) return current as Promise<T>
-  if (signal?.aborted) return Promise.reject(new DOMException('The request was aborted.', 'AbortError'))
-  const request = read()
-  overviewRequests.set(key, request)
-  void request.then(
-    () => { if (overviewRequests.get(key) === request) overviewRequests.delete(key) },
-    () => { if (overviewRequests.get(key) === request) overviewRequests.delete(key) },
-  )
+  let entry = overviewRequests.get(key)
+  if (!entry) {
+    const controller = new AbortController()
+    const created: SharedOverviewRead = { promise: read(controller.signal), controller, callers: 0 }
+    const forget = () => { if (overviewRequests.get(key) === created) overviewRequests.delete(key) }
+    void created.promise.then(forget, forget)
+    overviewRequests.set(key, created)
+    entry = created
+  }
+  const shared = entry
+  shared.callers += 1
   // Keep the parameter in the helper's contract: operation + range is the
   // dedupe key; fetchImpl is intentionally not part of it.
   void fetchImpl
-  return request
+  if (!signal) return shared.promise as Promise<T>
+
+  return new Promise<T>((resolve, reject) => {
+    const leave = () => {
+      reject(abortError())
+      shared.callers -= 1
+      // Deferred one microtask so a caller that re-subscribes in the same tick
+      // — StrictMode re-running an effect — joins this request instead of
+      // cancelling it and starting another.
+      queueMicrotask(() => {
+        if (shared.callers > 0) return
+        shared.controller.abort()
+        if (overviewRequests.get(key) === shared) overviewRequests.delete(key)
+      })
+    }
+    signal.addEventListener('abort', leave, { once: true })
+    shared.promise.then(
+      (value) => { signal.removeEventListener('abort', leave); resolve(value as T) },
+      (error) => { signal.removeEventListener('abort', leave); reject(error) },
+    )
+  })
 }
 
 export async function fetchNeonOverviewPerformance(
@@ -585,12 +623,12 @@ export async function fetchNeonOverviewPerformance(
   fetchImpl: ApiFetch = authFetch,
   signal?: AbortSignal,
 ): Promise<OverviewPerformance> {
-  return overviewRead(READ_OPS.overviewPerformance, range, fetchImpl, signal, async () => {
+  return overviewRead(READ_OPS.overviewPerformance, range, fetchImpl, signal, async (sharedSignal) => {
     const page = await readPage<OverviewPerformance>(
       READ_OPS.overviewPerformance,
       { from: range.from, to: range.to, limit: 1 },
       fetchImpl,
-      signal,
+      sharedSignal,
     )
     const row = page.items[0]
     if (!row) throw new Error(`${READ_OPS.overviewPerformance}: response contained no performance row`)
@@ -603,12 +641,12 @@ export async function fetchNeonOverviewAccountCampaigns(
   fetchImpl: ApiFetch = authFetch,
   signal?: AbortSignal,
 ): Promise<OverviewAccountCampaigns> {
-  return overviewRead(READ_OPS.overviewAccountCampaigns, range, fetchImpl, signal, async () => {
+  return overviewRead(READ_OPS.overviewAccountCampaigns, range, fetchImpl, signal, async (sharedSignal) => {
     const page = await readPage<OverviewAccountCampaigns>(
       READ_OPS.overviewAccountCampaigns,
       { from: range.from, to: range.to, limit: 1 },
       fetchImpl,
-      signal,
+      sharedSignal,
     )
     const row = page.items[0]
     if (!row) throw new Error(`${READ_OPS.overviewAccountCampaigns}: response contained no campaigns row`)
@@ -622,12 +660,12 @@ export async function fetchNeonOverviewLeadUploads(
   fetchImpl: ApiFetch = authFetch,
   signal?: AbortSignal,
 ): Promise<OverviewLeadUploads> {
-  return overviewRead(READ_OPS.overviewLeadUploads, range, fetchImpl, signal, async () => {
+  return overviewRead(READ_OPS.overviewLeadUploads, range, fetchImpl, signal, async (sharedSignal) => {
     const page = await readPage<OverviewLeadUploads>(
       READ_OPS.overviewLeadUploads,
       { from: range.from, to: range.to, limit: 1 },
       fetchImpl,
-      signal,
+      sharedSignal,
     )
     const row = page.items[0]
     if (!row) throw new Error(`${READ_OPS.overviewLeadUploads}: response contained no uploads row`)

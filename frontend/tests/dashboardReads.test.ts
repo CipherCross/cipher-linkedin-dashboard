@@ -491,6 +491,56 @@ describe('the dashboard load', () => {
     ])
   })
 
+  describe('an aborted Overview caller', () => {
+    const totals = { leads: 1, invited: 1, connected: 1, messaged: 1, replied: 1 }
+    /** A fetch that honours its signal the way the browser's does. */
+    const abortableFetch = () => {
+      const signals: AbortSignal[] = []
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => { release = resolve })
+      const fetchImpl: ApiFetch = (_url, init) => {
+        const signal = init?.signal as AbortSignal
+        signals.push(signal)
+        return new Promise<Response>((resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('signal is aborted without reason', 'AbortError')))
+          void gate.then(() => resolve(jsonResponse(emptyPage([{ totals }]))))
+        })
+      }
+      return { fetchImpl, signals, release }
+    }
+
+    it('does not poison a caller that remounts with the same range (StrictMode)', async () => {
+      const { fetchImpl, signals, release } = abortableFetch()
+      const range = { from: '2026-04-01', to: '2026-04-07' }
+      const firstMount = new AbortController()
+      const first = fetchNeonOverviewSystemTotals(range, fetchImpl, firstMount.signal)
+      firstMount.abort()
+      const second = fetchNeonOverviewSystemTotals(range, fetchImpl, new AbortController().signal)
+      release()
+      await expect(first).rejects.toMatchObject({ name: 'AbortError' })
+      await expect(second).resolves.toEqual(totals)
+      // The remount joined the request still in flight instead of starting another.
+      expect(signals).toHaveLength(1)
+      expect(signals[0].aborted).toBe(false)
+    })
+
+    it('still cancels the network request once every caller has gone', async () => {
+      const { fetchImpl, signals, release } = abortableFetch()
+      const range = { from: '2026-03-01', to: '2026-03-07' }
+      const only = new AbortController()
+      const read = fetchNeonOverviewSystemTotals(range, fetchImpl, only.signal)
+      only.abort()
+      await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+      await Promise.resolve()
+      expect(signals[0].aborted).toBe(true)
+      // And the next caller starts afresh rather than inheriting the cancelled one.
+      const next = fetchNeonOverviewSystemTotals(range, fetchImpl, new AbortController().signal)
+      release()
+      await expect(next).resolves.toEqual(totals)
+      expect(signals).toHaveLength(2)
+    })
+  })
+
   it('requests one bounded Sequence Hub snapshot', async () => {
     const payload = { items: [], newestReplies: [] }
     const rec = recorder(() => jsonResponse(emptyPage([payload])))
