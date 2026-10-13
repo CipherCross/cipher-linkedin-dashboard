@@ -477,8 +477,23 @@ export function headlineMatches(
 
 // ------------------------------------------------------------------ actions
 
-const isText = (value: unknown) => typeof value === 'string' && value.length <= MAX_TEXT
+const isText = (value: unknown) => typeof value === 'string'
 
+const FIELD_LABEL = {
+  personLinkedin: 'LinkedIn URL',
+  firstName: 'First name',
+  lastName: 'Last name',
+  fullName: 'Full name',
+  title: 'Title',
+  companyName: 'Company name',
+  companyWebsite: 'Company website',
+  companyLinkedin: 'Company LinkedIn',
+  headline: 'Headline',
+} as const
+
+// A request row must be well-formed (the browser builds it), so a malformed one
+// refuses the request. A value that is merely too long is the lead's own data:
+// that lead is skipped and the rest of the file still imports.
 function validPreviewRow(value: unknown): value is LeadRow {
   if (!value || typeof value !== 'object') return false
   const row = value as Partial<LeadRow>
@@ -513,7 +528,13 @@ function validCommitRow(value: unknown): value is CommitRow {
   )
 }
 
-function rowIssue(row: { personLinkedin: string; firstName: string; fullName: string; title: string }): string | null {
+type TextFields = Partial<Record<keyof typeof FIELD_LABEL, string>> &
+  Pick<CommitRow, 'personLinkedin' | 'firstName' | 'fullName' | 'title'>
+
+function rowIssue(row: TextFields): string | null {
+  const long = (Object.keys(FIELD_LABEL) as Array<keyof typeof FIELD_LABEL>)
+    .find((key) => (row[key]?.length ?? 0) > MAX_TEXT)
+  if (long) return `${FIELD_LABEL[long]} is longer than ${MAX_TEXT} characters`
   if (!isCleanPersonLinkedin(row.personLinkedin)) return 'A clean public LinkedIn /in/ URL is required'
   if (!row.firstName.trim() || !row.fullName.trim() || !row.title.trim()) {
     return 'First name, full name, and title are required'

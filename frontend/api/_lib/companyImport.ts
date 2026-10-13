@@ -32,6 +32,9 @@ import {
 
 const MAX_ROWS = 500
 
+// A request row must be well-formed (the browser builds it), so a malformed one
+// refuses the request. A value over its limit is the company's own data: that
+// row is reported invalid and the rest of the file still imports.
 const LIMITS = {
   companyName: 500,
   website: 2048,
@@ -43,6 +46,18 @@ const LIMITS = {
   keywords: 10_000,
   description: 10_000,
 } as const
+
+const FIELD_LABEL: Record<keyof typeof LIMITS, string> = {
+  companyName: 'Company name',
+  website: 'Website',
+  linkedin: 'Company LinkedIn',
+  country: 'Country',
+  employees: 'Employees',
+  foundedYear: 'Founded year',
+  industry: 'Industry',
+  keywords: 'Keywords',
+  description: 'Description',
+}
 
 export interface CompanyImportRow {
   rowNumber: number
@@ -132,9 +147,7 @@ function validRow(value: unknown): value is CompanyImportRow {
   if (typeof row.rowNumber !== 'number' || !Number.isInteger(row.rowNumber) || row.rowNumber <= 1) {
     return false
   }
-  return (Object.keys(LIMITS) as Array<keyof typeof LIMITS>).every(
-    (key) => typeof row[key] === 'string' && row[key]!.length <= LIMITS[key],
-  )
+  return (Object.keys(LIMITS) as Array<keyof typeof LIMITS>).every((key) => typeof row[key] === 'string')
 }
 
 function rowsOrError(payload: Record<string, unknown>): CompanyImportRow[] | Response {
@@ -158,6 +171,8 @@ function optionalInteger(value: string, min: number, max: number): number | null
 }
 
 function rowIssue(row: CompanyImportRow): string | null {
+  const long = (Object.keys(LIMITS) as Array<keyof typeof LIMITS>).find((key) => row[key].length > LIMITS[key])
+  if (long) return `${FIELD_LABEL[long]} is longer than ${LIMITS[long].toLocaleString('en-US')} characters`
   if (!row.companyName.trim()) return 'Company name is required'
   const { issue } = parseDomain(row.website)
   return issue ? DOMAIN_ISSUE_LABEL[issue] : null
@@ -283,8 +298,9 @@ export function dbFields(row: CompanyImportRow, addedBy: string): Record<string,
   return fields
 }
 
+/** Domains worth looking up: an invalid row is never created, so it needs no lookup. */
 function uploadDomains(rows: CompanyImportRow[]): string[] {
-  return rows.map((row) => parseDomain(row.website).domain).filter(Boolean)
+  return rows.filter((row) => !rowIssue(row)).map((row) => parseDomain(row.website).domain)
 }
 
 async function metadata() {
@@ -305,7 +321,7 @@ async function preview(payload: Record<string, unknown>) {
   const [companies, dbByDomain, dbByName] = await Promise.all([
     getCompanies(),
     findDbByDomains(uploadDomains(rows)),
-    findDbByNames(rows.map((row) => row.companyName)),
+    findDbByNames(rows.filter((row) => !rowIssue(row)).map((row) => row.companyName)),
   ])
   const results = classifyCompanyRows(rows, {
     maps: buildCompanyMaps(companies),

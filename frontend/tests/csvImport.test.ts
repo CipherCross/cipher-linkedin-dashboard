@@ -178,9 +178,19 @@ describe('shared parsing rules', () => {
     expect(countryFromLocation('')).toBe('')
   })
 
-  it('rejects duplicate headers, a ragged row and an oversized file', async () => {
+  it('skips a ragged row on its own and keeps the rows around it', async () => {
+    const companies = await parseCompanyCsvFile(csvFile('Company Name,Company Domain\na,a.example\nc,d,e\nf,f.example\n'))
+    expect(companies.rows.map((row) => [row.rowNumber, row.issue])).toEqual([
+      [2, undefined],
+      [3, 'This row has 3 columns; the header has 2'],
+      [4, undefined],
+    ])
+    const leads = await parseLeadCsvFile(csvFile('Linkedin URL Public,First Name,Company Name\nhttps://linkedin.com/in/a,A\nhttps://linkedin.com/in/b,B,Co\n'))
+    expect(leads.rows.map((row) => row.issue)).toEqual(['This row has 2 columns; the header has 3', undefined])
+  })
+
+  it('rejects duplicate headers and an oversized file', async () => {
     await expect(parseCompanyCsvFile(csvFile('Company Name,company name\na,b\n'))).rejects.toThrow('duplicate header')
-    await expect(parseCompanyCsvFile(csvFile('Company Name,Company Domain\na,b\nc,d,e\n'))).rejects.toThrow('row 3 has 3 columns')
     const rows = Array.from({ length: 501 }, (_, index) => `Co ${index},co${index}.example`)
     await expect(
       parseCompanyCsvFile(csvFile(['Company Name,Company Domain', ...rows].join('\n'))),

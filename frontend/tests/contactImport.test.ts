@@ -287,6 +287,19 @@ describe('Leads → Contacts handler', () => {
     expect(dbRequests.every((request) => request.path.endsWith('/listRecords'))).toBe(true)
   })
 
+  it('skips a lead with an over-long value and previews the rest', async () => {
+    const { status, body } = await call(handle, 'contact_preview', {
+      rows: [lead(2), lead(3, { title: 't'.repeat(1001) }), lead(4)],
+    })
+    expect(status).toBe(200)
+    expect(body.rows.map((row: { status: string; reason?: string }) => [row.status, row.reason])).toEqual([
+      ['ready', undefined],
+      ['invalid', 'Title is longer than 1000 characters'],
+      ['ready', undefined],
+    ])
+    expect(body.groups.flatMap((group: { rowNumbers: number[] }) => group.rowNumbers)).toEqual([2, 4])
+  })
+
   it('names Companies records found in a ready lead’s headline', async () => {
     const id = airtable.addCompany('Aiforia Technologies', 'aiforia.com', 'Approved')
     const { body } = await call(handle, 'contact_preview', {
@@ -382,6 +395,17 @@ describe('Leads → Contacts handler', () => {
       rows: [commitRow(lead(4), id)],
     })
     expect(refused.status).toBe(400)
+  })
+
+  it('creates the rest of a commit when one lead has an over-long value', async () => {
+    const id = airtable.addCompany('Northwind Health', 'northwind.example', 'Approved')
+    const { status, body } = await call(handle, 'contact_commit', {
+      addedBy: 'Daria Krut',
+      rows: [commitRow(lead(2), id), commitRow(lead(3, { firstName: 'a'.repeat(1001) }), id), commitRow(lead(4), id)],
+    })
+    expect(status).toBe(200)
+    expect(body.counts).toEqual({ created: 2, duplicate: 0, failed: 1 })
+    expect(body.results[1]).toMatchObject({ rowNumber: 3, status: 'failed', error: 'First name is longer than 1000 characters' })
   })
 
   it('rejects a commit row without a confirmed record ID', async () => {

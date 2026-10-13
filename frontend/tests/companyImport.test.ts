@@ -78,6 +78,18 @@ describe('Companies → DB preview', () => {
     expect(byRow.get(10)).toMatchObject({ status: 'invalid', reason: 'Company name is required' })
   })
 
+  it('reports an over-limit row as invalid and still classifies the rest', async () => {
+    const { status, body } = await call(handle, 'company_preview', {
+      rows: [row(2), row(3, { keywords: 'k'.repeat(10_001) }), row(4)],
+    })
+    expect(status).toBe(200)
+    expect(body.results.map((result: { status: string; reason?: string }) => [result.status, result.reason])).toEqual([
+      ['ready', undefined],
+      ['invalid', 'Keywords is longer than 10,000 characters'],
+      ['ready', undefined],
+    ])
+  })
+
   it('reads DB only through formula-scoped listRecords, never in full', async () => {
     await call(handle, 'company_preview', { rows: [row(2), row(3)] })
     const dbRequests = airtable.requests.filter((request) => request.path.includes(AIRTABLE_IDS.dbTable))
@@ -206,6 +218,21 @@ describe('Companies → DB commit', () => {
     })
     expect(body.counts).toEqual({ created: 2, duplicate: 0, failed: 0 })
     expect(airtable.writes()).toHaveLength(3)
+  })
+
+  it('creates the rest of a commit when one row is over a limit', async () => {
+    const { status, body } = await call(handle, 'company_commit', {
+      addedBy: 'Daria Krut',
+      rows: [row(2), row(3, { description: 'd'.repeat(10_001) }), row(4)],
+    })
+    expect(status).toBe(200)
+    expect(body.counts).toEqual({ created: 2, duplicate: 0, failed: 1 })
+    expect(body.results[1]).toMatchObject({ rowNumber: 3, status: 'failed', error: 'Description is longer than 10,000 characters' })
+  })
+
+  it('still refuses a malformed request row', async () => {
+    const { status } = await call(handle, 'company_preview', { rows: [row(2), { ...row(3), keywords: 7 }] })
+    expect(status).toBe(400)
   })
 
   it('fails closed when the DB schema drifts', async () => {

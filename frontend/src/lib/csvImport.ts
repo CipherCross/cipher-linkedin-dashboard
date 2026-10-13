@@ -39,6 +39,8 @@ export interface CompanyImportRow {
   industry: string
   keywords: string
   description: string
+  /** Why the file itself makes this row unreadable; such a row is skipped, not sent. */
+  issue?: string
 }
 
 export interface LeadImportRow {
@@ -54,6 +56,8 @@ export interface LeadImportRow {
   headline: string
   /** `Current Jobs Number`; 0 when the export does not say. */
   currentJobs: number
+  /** Why the file itself makes this row unreadable; such a row is skipped, not sent. */
+  issue?: string
 }
 
 export interface CompanyCsvDocument extends CsvSource {
@@ -153,17 +157,18 @@ async function parseRawCsv(file: File) {
   if (sourceRows.length > CSV_IMPORT_LIMITS.maxRows) {
     throw new Error(`The CSV contains ${sourceRows.length} rows. The current limit is ${CSV_IMPORT_LIMITS.maxRows}.`)
   }
-  const badWidth = sourceRows.findIndex((row) => row.length !== headers.length)
-  if (badWidth >= 0) {
-    throw new Error(
-      `CSV row ${badWidth + 2} has ${sourceRows[badWidth].length} columns; expected ${headers.length}.`,
-    )
-  }
+  // A row with the wrong number of cells cannot be trusted column by column,
+  // but it says nothing about its neighbours: it is skipped on its own rather
+  // than failing the file. A broken quote stays fatal above — it can swallow
+  // every row after it.
   return {
     headers,
-    rows: sourceRows.map((values) =>
-      Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? '').trim()])),
-    ),
+    rows: sourceRows.map((values) => ({
+      values: Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? '').trim()])),
+      issue: values.length === headers.length
+        ? undefined
+        : `This row has ${values.length} columns; the header has ${headers.length}`,
+    })),
   }
 }
 
@@ -245,7 +250,11 @@ export async function parseCompanyCsvFile(file: File): Promise<CompanyCsvDocumen
     fileSize: file.size,
     headers: parsed.headers,
     rowCount: parsed.rows.length,
-    rows: parsed.rows.map((row, index) => ({ rowNumber: index + 2, ...companyValues(row, map) })),
+    rows: parsed.rows.map(({ values, issue }, index) => ({
+      rowNumber: index + 2,
+      ...companyValues(values, map),
+      ...(issue ? { issue } : {}),
+    })),
   }
 }
 
@@ -264,7 +273,7 @@ export async function parseLeadCsvFile(file: File): Promise<LeadCsvDocument> {
     fileSize: file.size,
     headers: parsed.headers,
     rowCount: parsed.rows.length,
-    rows: parsed.rows.map((row, index) => {
+    rows: parsed.rows.map(({ values: row, issue }, index) => {
       const value = (key: keyof typeof LEAD_COLUMNS) =>
         leadMap[key] ? row[leadMap[key]]?.trim() ?? '' : ''
       const company = companyValues(row, companyMap)
@@ -282,6 +291,7 @@ export async function parseLeadCsvFile(file: File): Promise<LeadCsvDocument> {
         companyLinkedin: company.linkedin,
         headline: value('headline').slice(0, 500),
         currentJobs: Number(lenientInteger(value('currentJobs')) || 0),
+        ...(issue ? { issue } : {}),
       }
     }),
   }

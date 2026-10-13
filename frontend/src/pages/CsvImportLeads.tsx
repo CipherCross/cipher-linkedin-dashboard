@@ -169,7 +169,16 @@ export function LeadsImport() {
     setBusy(true)
     setError(null)
     try {
-      const response = await previewLeads(doc.rows, { forceCompanies: recheck })
+      // A row the file itself left unreadable is skipped here, not sent, so it
+      // cannot hold back the leads around it.
+      const sendable = doc.rows.filter((row) => !row.issue)
+      const checked = sendable.length
+        ? await previewLeads(sendable, { forceCompanies: recheck })
+        : { rows: [], groups: [], counts: {} }
+      const unreadable = doc.rows.flatMap((row): LeadRowResult[] =>
+        row.issue ? [{ rowNumber: row.rowNumber, status: 'invalid', reason: row.issue }] : [],
+      )
+      const response = { ...checked, rows: [...checked.rows, ...unreadable].sort((a, b) => a.rowNumber - b.rowNumber) }
       setPreview(response)
       setConfirmed({})
       setLeadLinks(autoLinks(response))

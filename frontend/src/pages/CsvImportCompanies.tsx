@@ -81,8 +81,14 @@ export function CompaniesImport() {
     setBusy(true)
     setError(null)
     try {
-      const response = await previewCompanies(doc.rows)
-      setPreview(response.results)
+      // A row the file itself left unreadable is skipped here, not sent, so it
+      // cannot hold back the companies around it.
+      const sendable = doc.rows.filter((row) => !row.issue)
+      const checked = sendable.length ? (await previewCompanies(sendable)).results : []
+      const unreadable = doc.rows.flatMap((row): CompanyPreviewResult[] =>
+        row.issue ? [{ rowNumber: row.rowNumber, status: 'invalid', domain: '', reason: row.issue }] : [],
+      )
+      setPreview([...checked, ...unreadable].sort((a, b) => a.rowNumber - b.rowNumber))
       setExcluded(new Set())
       setCommitted(null)
     } catch (reason) {
