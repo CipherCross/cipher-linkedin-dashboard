@@ -3507,5 +3507,172 @@ class TrackerSyncWiringTest(TrackerTestCase):
         self.assertEqual(self.state()["pending_events"], [])
 
 
+# A leads mapping in the shape the live notebooks run: it selects no added_at of
+# its own except for one person, and it picks each person's slug with min(), which
+# is NOT the slug PEI_ONE_SLUG_SQL would pick — exactly the drift that makes a
+# one-slug lookup miss.
+ADDED_AT_MAPPING = {
+    "query": """
+        SELECT m.campaign_id AS campaign_id,
+               'https://www.linkedin.com/in/' ||
+                 (SELECT min(external_id) FROM person_external_ids p
+                   WHERE p.person_id = m.person_id AND p.type_group = 'public')
+                 AS profile_url,
+               i.invited_at AS invited_at,
+               CASE WHEN m.person_id = 14 THEN '2026-09-30T08:00:00Z' END AS added_at
+        FROM (SELECT DISTINCT campaign_id, person_id
+                FROM person_in_campaigns_history) m
+        LEFT JOIN invites i
+          ON i.campaign_id = m.campaign_id AND i.person_id = m.person_id
+    """,
+    "campaign_id": "campaign_id",
+    "profile_url": "profile_url",
+    "invited_at": "invited_at",
+    "added_at": "added_at",
+}
+
+
+def added_at_db(path=":memory:"):
+    con = sqlite3.connect(path)
+    con.row_factory = sqlite3.Row
+    con.executescript("""
+        CREATE TABLE person_in_campaigns_history (
+          campaign_id INTEGER, person_id INTEGER, add_to_target_date
+        );
+        CREATE TABLE person_external_ids (
+          person_id INTEGER, external_id TEXT, type_group TEXT
+        );
+        CREATE TABLE invites (campaign_id INTEGER, person_id INTEGER, invited_at TEXT);
+        INSERT INTO person_external_ids VALUES
+          (11, 'alice-a', 'public'), (11, 'ACalice', 'public'),
+          (12, 'bob-b', 'public'), (12, 'robert-b', 'public'),
+          (12, 'bob-private', 'private'),
+          (13, 'carol-c', 'public'), (14, 'dan-d', 'public'), (15, 'eve-e', 'public');
+        INSERT INTO person_in_campaigns_history VALUES
+          -- Alice, removed and re-added: the re-add is written in a format that
+          -- sorts BEFORE the first add as text, so only a parsed MIN keeps 1 Oct.
+          (7, 11, '2026-10-01T09:00:00Z'),
+          (7, 11, '05.10.2026 09:00'),
+          -- The same person in a second campaign is a second upload.
+          (9, 11, '2026-10-08T07:30:00Z'),
+          (7, 12, '2026-10-02T10:00:00Z'),
+          -- Carol was queued on a build that left the date empty.
+          (7, 13, NULL),
+          (7, 14, '2026-10-06T12:00:00Z'),
+          (7, 15, '');
+        INSERT INTO invites VALUES
+          (7, 11, '2026-10-03T11:00:00Z'),
+          (7, 12, '2026-10-04T11:00:00Z'),
+          (7, 13, '2026-10-04T12:00:00Z'),
+          (7, 14, '2026-10-07T12:00:00Z');
+    """)
+    return con
+
+
+class AddedAtTest(unittest.TestCase):
+    """A lead's added_at is the day it was uploaded into the campaign. The
+    Overview lead-upload tracker counts exactly this column, and until 1.29.0 it
+    held the invite time on every notebook, so the tracker showed invites."""
+
+    def setUp(self):
+        patcher = mock.patch.object(agent, "LOCAL_TZ", dt.timezone.utc)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_lookup_keeps_the_earliest_parsed_add_per_campaign_and_slug(self):
+        con = added_at_db()
+        out = agent.extract_added_dates(con, "nb")
+        con.close()
+        first = "2026-10-01T09:00:00+00:00"
+        self.assertEqual(out[("nb:7", "https://www.linkedin.com/in/alice-a")], first)
+        # Every public slug is a key, the opaque one too; a private one is not.
+        self.assertEqual(out[("nb:7", "https://www.linkedin.com/in/ACalice")], first)
+        self.assertEqual(out[("nb:9", "https://www.linkedin.com/in/alice-a")],
+                         "2026-10-08T07:30:00+00:00")
+        self.assertEqual(out[("nb:7", "https://www.linkedin.com/in/bob-b")],
+                         "2026-10-02T10:00:00+00:00")
+        self.assertEqual(out[("nb:7", "https://www.linkedin.com/in/robert-b")],
+                         "2026-10-02T10:00:00+00:00")
+        self.assertNotIn(("nb:7", "https://www.linkedin.com/in/bob-private"), out)
+        # NULL and empty dates are no date, never a key with None.
+        self.assertNotIn(("nb:7", "https://www.linkedin.com/in/carol-c"), out)
+        self.assertNotIn(("nb:7", "https://www.linkedin.com/in/eve-e"), out)
+
+    def test_a_build_without_the_table_fails_safe_and_says_so(self):
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        warnings = []
+        with mock.patch("builtins.print"):
+            out = agent.extract_added_dates(con, "nb", warnings)
+        con.close()
+        self.assertEqual(out, {})
+        self.assertEqual(len(warnings), 1)
+        self.assertTrue(warnings[0].startswith("added_at:"))
+
+    def extract(self, **cfg_extra):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "lh.db")
+            con = added_at_db(path)
+            con.commit()
+            con.close()
+            cfg = {"instance_id": "nb", "lh2_db_path": path,
+                   "mapping": {"leads": ADDED_AT_MAPPING},
+                   "sync_steps": False, "sync_messages": False, **cfg_extra}
+            with mock.patch("builtins.print"):
+                _, leads, _, _, _, demo = agent.extract_local(cfg, [])
+        return {(l["campaign_id"], agent.slug_from_profile_url(l["profile_url"])): l
+                for l in leads}, demo
+
+    def test_extraction_prefers_mapping_then_lh2_then_the_milestone(self):
+        leads, demo = self.extract()
+        added = {key: lead["added_at"] for key, lead in leads.items()}
+        self.assertEqual(added, {
+            # LH2's date, not the 3 Oct invite.
+            ("nb:7", "ACalice"): "2026-10-01T09:00:00+00:00",
+            ("nb:9", "ACalice"): "2026-10-08T07:30:00+00:00",
+            # The mapping picked bob-b; PEI_ONE_SLUG_SQL would pick robert-b.
+            ("nb:7", "bob-b"): "2026-10-02T10:00:00+00:00",
+            # No LH2 date: the invite is the only date there is.
+            ("nb:7", "carol-c"): "2026-10-04T12:00:00+00:00",
+            # The mapping's own value wins over LH2's 6 Oct.
+            ("nb:7", "dan-d"): "2026-09-30T08:00:00+00:00",
+            ("nb:7", "eve-e"): None,
+        })
+        self.assertEqual(demo["added_sources"],
+                         {"mapping": 1, "lh2": 3, "milestone": 1, "none": 1})
+
+    def test_excluded_campaigns_are_not_counted(self):
+        leads, demo = self.extract(exclude_campaigns=[9])
+        self.assertEqual(len(leads), 5)
+        self.assertEqual(sum(demo["added_sources"].values()), 5)
+        self.assertEqual(demo["added_sources"]["lh2"], 2)
+
+    def test_dry_run_prints_the_sources_and_the_trackers_grid(self):
+        now = dt.datetime.now(dt.timezone.utc)
+        today = now.date()
+        leads = [
+            {"campaign_id": "nb:7", "profile_url": f"https://www.linkedin.com/in/p{n}",
+             "invited_at": None, "connected_at": None, "replied_at": None,
+             "added_at": added.isoformat() if added else None}
+            for n, added in enumerate([now, now, now - dt.timedelta(days=2),
+                                       now - dt.timedelta(days=30), None])
+        ]
+        demo = {"edu_map": {}, "job_map": {}, "conversations": {}, "contacts": [],
+                "added_sources": {"mapping": 0, "lh2": 3, "milestone": 1, "none": 1}}
+        lines = []
+        with mock.patch("builtins.print", side_effect=lambda *a, **k:
+                        lines.append(" ".join(str(x) for x in a))):
+            agent.print_dry_run("nb", [], leads, [], [], None, demo)
+        out = "\n".join(lines)
+        self.assertIn("3 of 5 leads from LH2's add-to-campaign date", out)
+        self.assertIn("1 fall back to the earliest milestone, 1 have none", out)
+        grid = next(line for line in lines if "added per UTC day" in line)
+        self.assertIn(f"{today:%a %d %b} 2", grid)
+        self.assertIn(f"{today - dt.timedelta(days=2):%a %d %b} 1", grid)
+        self.assertIn(f"{today - dt.timedelta(days=1):%a %d %b} 0", grid)
+        # Seven days, today included; the 30-day-old upload is outside it.
+        self.assertEqual(len(grid.split(": ", 1)[1].split(", ")), 7)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

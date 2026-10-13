@@ -190,7 +190,8 @@ mapping:
     # below. KNOWN PITFALLS (verified against a real LH2 lh.db):
     #  - invited_at must come from InvitePerson action results (result=1),
     #    NOT add_to_target_date (that's just "queued into campaign" — which is
-    #    exactly what added_at wants, so map it there instead)
+    #    exactly what added_at wants, so map it there instead; since agent
+    #    1.29.0 the agent reads it itself when the mapping leaves added_at out)
     #  - replied_at lives in action_result_messages (type='Replied', written
     #    by CheckForReplies actions), not on the campaign-history row
     #  - person_external_ids has ~2 'public' rows per person (human slug +

@@ -6,6 +6,25 @@ that the code alone cannot prove done. Delete a line when it is done or dropped.
 
 ## Product / code
 
+- **Lead upload dates need agent 1.29.0 on every notebook.** Until it runs, the Overview
+  "Lead uploads" tracker counts invites. On 2026-10-13, on all four notebooks,
+  `leads.added_at` equalled the earliest milestone on every row that had one, and the
+  invite time on ~89% of rows: no notebook's mapping supplied LH2's `add_to_target_date`.
+  1.29.0 reads it itself (`ADDED_AT_SQL`). This logic is unproven on a real `lh.db`. Rollout:
+  1. After the push, repoint `installer/release.json` per
+     `docs/platform-ops/agent-release-channel.md`. Until then, two `test_installers.py`
+     release-pin tests fail by design.
+  2. On notebook-3, run `python3 agent.py sync --dry-run` and read `added dates:`. The
+     check fails if it shows `0 of N … from LH2's add-to-campaign date` or an `added_at:`
+     warning. In that case the build lacks or empties the column: stop and probe
+     `person_in_campaigns_history` before publishing.
+  3. Compare its `added per UTC day` grid with Anastasia's own upload counts.
+  4. Publish (`deploy.sh`). Each notebook's next sync overwrites `added_at`, because the
+     gateway upsert is `COALESCE(EXCLUDED.added_at, …)`. Then re-check on prod that rows
+     with `added_at = invited_at` have dropped well below 89%.
+
+  Open: the tracker cuts days in UTC while the team works in Kyiv (UTC+3).
+
 - **New lead photos are not mirrored.** Agent 1.27.0 has no photo upload (`sync_photos`
   only prints a notice), so photos stop at what the owner migration copied to R2. Needs a
   machine-path photo candidate query plus upload, and tenants bind no `OBJECT_STORAGE_*`.

@@ -43,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.28.0"
+AGENT_VERSION = "1.29.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -4395,6 +4395,29 @@ WHERE arm.type IN ('Sent', 'Message')
 GROUP BY 1
 """
 
+# When each person was queued into each campaign: LH2's add_to_target_date, the
+# day an SDR's upload put them there. No milestone can stand in for it — a lead
+# uploaded on Monday and invited on Thursday was uploaded on Monday, and one still
+# waiting for its invite has no milestone at all. One row per history row; the
+# caller keeps the earliest per (campaign, profile), so a person removed and
+# re-added keeps the first upload, and the MIN happens on parsed instants rather
+# than on whatever text format this LH2 build stores.
+#
+# This is a LOOKUP keyed by (campaign, profile_url), never counted, so it joins
+# EVERY public slug of the person instead of PEI_ONE_SLUG_SQL: a notebook's own
+# leads mapping may have picked a different slug for the same person, and a key
+# per slug matches whichever one it chose. Fails safe to empty.
+ADDED_AT_SQL = """
+SELECT pic.campaign_id AS campaign_id,
+       'https://www.linkedin.com/in/' || pei.external_id AS profile_url,
+       pic.add_to_target_date AS added_at
+FROM person_in_campaigns_history pic
+JOIN person_external_ids pei
+  ON pei.person_id = pic.person_id AND pei.type_group = 'public'
+WHERE pic.campaign_id IS NOT NULL
+  AND pic.add_to_target_date IS NOT NULL
+"""
+
 
 # One row per inbound reply per person (CheckForReplies writes type='Replied').
 STEP_REPLIES_SQL = f"""
@@ -4902,6 +4925,28 @@ def extract_first_messages(con, warnings=None):
     return out
 
 
+def extract_added_dates(con, instance_id, warnings=None):
+    """Map (campaign_id, profile_url) -> earliest add-to-campaign instant, with
+    campaign_id in the leads' own "<instance>:<lh id>" form. Built-in schema only;
+    fails safe to {} so a schema change never breaks the sync."""
+    out = {}
+    try:
+        for row in con.execute(ADDED_AT_SQL):
+            ts = iso(row["added_at"])
+            if row["campaign_id"] is None or not row["profile_url"] or not ts:
+                continue
+            key = (f"{instance_id}:{row['campaign_id']}", row["profile_url"])
+            cur = out.get(key)
+            if cur is None or dt.datetime.fromisoformat(ts) < dt.datetime.fromisoformat(cur):
+                out[key] = ts
+    except sqlite3.Error as e:
+        note_warning(warnings, "added_at", e)
+        print(f"add-date extraction skipped ({e}) — added_at falls back to "
+              "the earliest milestone")
+        return {}
+    return out
+
+
 def _year_map(con, section, builtin_sql, max_year, label):
     """Build {profile_url -> earliest plausible start_year} for one age signal.
 
@@ -5214,20 +5259,32 @@ def extract_local(cfg, warnings=None):
                 if fm:
                     lead["first_message_at"] = fm
 
-    # added_at = LH2's add_to_target_date when the mapping supplies it; else the
-    # earliest milestone (same fallback as the 025 migration backfill, so mapped
-    # and unmapped notebooks converge on the same values). Runs after the
-    # first_message_at back-fill so the fallback sees the complete milestones.
-    for lead in leads:
-        if not lead.get("added_at"):
-            lead["added_at"] = min(
-                (t for t in (lead["invited_at"], lead["connected_at"],
-                             lead["first_message_at"], lead["replied_at"],
-                             lead["last_action_at"]) if t),
-                default=None)
-
     campaigns, leads, messages, steps = apply_campaign_excludes(
         cfg, campaigns, leads, messages, steps)
+
+    # added_at = the mapping's value when it supplies one; else LH2's own
+    # add_to_target_date (built-in, ADDED_AT_SQL); else the earliest milestone
+    # (same fallback as the 025 migration backfill). Before 1.29.0 the live
+    # notebooks' mappings supplied none, so every lead fell through to the milestone
+    # and the Overview's lead-upload tracker counted invites, not uploads. Runs after the
+    # first_message_at back-fill so the fallback sees the complete milestones, and
+    # after the excludes so the dry run's source counts cover the leads it prints.
+    added_dates = extract_added_dates(con, instance_id, warnings)
+    added_sources = {"mapping": 0, "lh2": 0, "milestone": 0, "none": 0}
+    for lead in leads:
+        if lead.get("added_at"):
+            added_sources["mapping"] += 1
+            continue
+        lead["added_at"] = added_dates.get((lead["campaign_id"], lead["profile_url"]))
+        if lead["added_at"]:
+            added_sources["lh2"] += 1
+            continue
+        lead["added_at"] = min(
+            (t for t in (lead["invited_at"], lead["connected_at"],
+                         lead["first_message_at"], lead["replied_at"],
+                         lead["last_action_at"]) if t),
+            default=None)
+        added_sources["milestone" if lead["added_at"] else "none"] += 1
 
     # Age-inference signals (best-effort): built here while the DB is open, fail
     # safe to empty so a notebook whose LH2 build lacks these tables still syncs
@@ -5247,7 +5304,8 @@ def extract_local(cfg, warnings=None):
     owner = extract_owner(cfg, con, warnings)
     con.close()
     demo = {"edu_map": edu_map, "job_map": job_map,
-            "conversations": conversations, "contacts": contacts}
+            "conversations": conversations, "contacts": contacts,
+            "added_sources": added_sources}
     return campaigns, leads, messages, steps, owner, demo
 
 
@@ -5301,6 +5359,25 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
     print(f"\ndemographics: {edu_n} leads with an education start year, "
           f"{job_n} with a first-job start year "
           "(merged into leads; a NULL year is never sent).")
+
+    # Where added_at came from, and the Overview lead-upload grid it produces, so
+    # the first dry run on a notebook can be checked against the SDR's own count.
+    added = demo.get("added_sources")
+    if added:
+        print(f"\nadded dates: {added['lh2']} of {len(leads)} leads from LH2's "
+              f"add-to-campaign date, {added['mapping']} from the mapping, "
+              f"{added['milestone']} fall back to the earliest milestone, "
+              f"{added['none']} have none.")
+        today = dt.datetime.now(dt.timezone.utc).date()
+        per_day = {today - dt.timedelta(days=n): 0 for n in range(6, -1, -1)}
+        for lead in leads:
+            if lead.get("added_at"):
+                day = dt.datetime.fromisoformat(lead["added_at"]).astimezone(
+                    dt.timezone.utc).date()
+                if day in per_day:
+                    per_day[day] += 1
+        print("  added per UTC day, last 7: " + ", ".join(
+            f"{day:%a %d %b} {n}" for day, n in per_day.items()))
 
     conv = demo.get("conversations") or {}
     print("\nconversations:")

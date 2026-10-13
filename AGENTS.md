@@ -117,11 +117,15 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   via `inspect`) to the normalized schema. `leads`/`campaigns`/`owner` use per-notebook
   mapping; `steps`/`messages` use **built-in queries** baked into `agent.py`
   (`STEP_*_SQL`, `MESSAGES_SQL`, `FIRST_MESSAGE_SQL`), shipped via `deploy.sh`, fail safe
-  to empty on schema drift.
+  to empty on schema drift. `ADDED_AT_SQL` fills a lead's `added_at` (LH2's
+  `add_to_target_date`, the upload date the Overview tracker counts) when the mapping
+  gives none; the earliest milestone is only the last resort.
 - **`person_external_ids` dedup pitfall**: LH2 stores ~2 'public' rows/person (human slug +
   opaque `AC…` id). Raw join double-counts → inflates aggregates ~1.6×. Every query dedupes
   to one slug/person (`PEI_ONE_SLUG_SQL`, `row_number()` window in leads mapping). Suspect a
-  mapping that lost this dedup when over-counting appears.
+  mapping that lost this dedup when over-counting appears. The one exception is a lookup
+  keyed by profile (`ADDED_AT_SQL`), which keys every slug so it matches whichever one the
+  mapping picked.
 - **Idempotent delivery**: the gateway upserts on unique keys, and each batch carries an
   idempotency key (below), so a retried sync never duplicates rows.
 - **Self-update**: `sync` asks the machine API (`agent.release`) for the current release,
