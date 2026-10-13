@@ -212,11 +212,11 @@ Two possible sources:
 
 ## Open work
 
+The owner declined syncing person-level location and profile fields from LH2
+(2026-10-13); don't re-propose it.
+
 1. **Re-run in mid-November 2026**, when the September persona campaigns'
    replies have matured. Steps are in `analysis/outreach-insights/README.md`;
    classify only the new threads.
-2. **Location, connection count and profile language** are still missing. LH2
-   holds them locally, so they need an agent sync change: baseline step, gateway
-   contract, agent release. That is a product change and needs its own session.
-3. **Deep funnel.** 23 agreed calls is too few to profile who books calls. It
+2. **Deep funnel.** 23 agreed calls is too few to profile who books calls. It
    becomes answerable at roughly three times that count.
