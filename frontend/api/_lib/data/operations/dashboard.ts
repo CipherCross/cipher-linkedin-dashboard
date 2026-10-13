@@ -49,6 +49,8 @@ export const DASHBOARD_OPERATIONS = {
   overviewPerformance: 'overview.performance',
   /** Account totals and compact range-scoped campaign rows. */
   overviewAccountCampaigns: 'overview.accountCampaigns',
+  /** Leads queued into campaigns per account per UTC day — the upload tracker. */
+  overviewLeadUploads: 'overview.leadUploads',
   /** Exact route-level aggregates for Overview; never returns raw lead/message rows. */
   overviewSummary: 'overview.summary',
   /** One campaign's latest five replies and synced copy; read only when the preview opens. */
@@ -208,6 +210,10 @@ export interface OverviewAccountCampaignsRow {
     previousCohort: null
   }[]
   readonly campaigns: readonly CampaignMetricsRow[]
+}
+
+export interface OverviewLeadUploadsRow {
+  readonly days: readonly { instance_id: string; day: string; leads: number }[]
 }
 
 // ---------------------------------------------------------------------------
@@ -626,6 +632,43 @@ export const overviewAccountCampaignsOperation: NeonQueryOperation<OverviewAccou
     values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
   }),
   mapRow: (row: NeonRow): OverviewAccountCampaignsRow => row.account_campaigns as OverviewAccountCampaignsRow,
+}
+
+// ---------------------------------------------------------------------------
+// overview.leadUploads
+// ---------------------------------------------------------------------------
+
+/**
+ * How many leads were queued into each account's campaigns on each UTC day of
+ * the range. It counts `added_at` alone — LH2's add-to-target date — and not the
+ * milestone backfill the account totals fall back to, because the tracker
+ * answers "what did the SDR upload that day", and a lead with no add date was
+ * not uploaded on the day it was invited. One row per lead row, the same unit
+ * as a campaign's `leads_added`: the same person queued into two campaigns is
+ * two uploads. Days with no uploads are absent; the browser fills the grid.
+ */
+const OVERVIEW_LEAD_UPLOADS_SQL = `WITH bounds AS (
+  SELECT $1::timestamptz AS cur_from, $2::timestamptz AS cur_to
+), uploads AS (
+  SELECT l.instance_id, to_char((l.added_at AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS day,
+         count(*)::int AS leads
+    FROM public.leads l CROSS JOIN bounds b
+   WHERE l.added_at IS NOT NULL
+     AND (b.cur_from IS NULL OR l.added_at >= b.cur_from)
+     AND (b.cur_to IS NULL OR l.added_at < b.cur_to)
+   GROUP BY 1, 2
+)
+SELECT jsonb_build_object(
+  'days', COALESCE((SELECT jsonb_agg(jsonb_build_object('instance_id', u.instance_id, 'day', u.day, 'leads', u.leads)
+    ORDER BY u.instance_id, u.day) FROM uploads u), '[]'::jsonb)
+) AS lead_uploads`
+
+export const overviewLeadUploadsOperation: NeonQueryOperation<OverviewLeadUploadsRow> = {
+  build: ({ range }) => ({
+    text: OVERVIEW_LEAD_UPLOADS_SQL,
+    values: [range?.fromInclusive ?? null, range?.toExclusive ?? null],
+  }),
+  mapRow: (row: NeonRow): OverviewLeadUploadsRow => row.lead_uploads as OverviewLeadUploadsRow,
 }
 
 // ---------------------------------------------------------------------------

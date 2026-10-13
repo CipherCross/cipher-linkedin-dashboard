@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import {
   fetchNeonOverviewAccountCampaigns,
+  fetchNeonOverviewLeadUploads,
   fetchNeonOverviewPerformance,
   fetchNeonOverviewSystemTotals,
 } from '../lib/dashboardReads'
@@ -10,10 +11,12 @@ import { ALL_TIME_RANGE, rangeFromParam, rangeToParam, presetRanges } from '../l
 import type { DateRange } from '../lib/leads'
 import type {
   OverviewAccountCampaigns,
+  OverviewLeadUploads,
   OverviewPerformance,
   OverviewSystemTotals,
 } from '../lib/types'
 import { OverviewAnalytics } from '../components/overview/OverviewAnalytics'
+import { LeadUploadTracker, uploadTrackerDays } from '../components/overview/LeadUploadTracker'
 import { LinkButton, PageHeader } from '../ui'
 
 type Answer<T> = { key: string; value: T }
@@ -48,6 +51,10 @@ export function Overview() {
   const [systemRetry, setSystemRetry] = useState(0)
   const [performanceRetry, setPerformanceRetry] = useState(0)
   const [campaignsRetry, setCampaignsRetry] = useState(0)
+  const [uploads, setUploads] = useState<Answer<OverviewLeadUploads> | null>(null)
+  const [uploadsLoading, setUploadsLoading] = useState(true)
+  const [uploadsError, setUploadsError] = useState<string | null>(null)
+  const [uploadsRetry, setUploadsRetry] = useState(0)
   // Campaigns waits for the first critical read to settle. This is a one-way
   // latch: once Overview has yielded a connection, a later System or
   // Performance range change must not re-queue the Account analytics read.
@@ -166,6 +173,38 @@ export function Overview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, criticalSettled, campaignsAttempt])
 
+  // The upload tracker is always the last seven UTC days, today included, and
+  // independent of every range picker on the page. Like Account analytics it
+  // waits for the critical reads so it never competes with them.
+  const uploadDays = useMemo(() => uploadTrackerDays(today), [today])
+  const uploadsKey = `${uploadDays[0]}:${uploadDays[uploadDays.length - 1]}`
+  const uploadsAttempt = `${uploadsKey}:${uploadsRetry}`
+
+  useEffect(() => {
+    if (!ready || !criticalSettled) return
+    const controller = new AbortController()
+    setUploadsLoading(true)
+    setUploadsError(null)
+    fetchNeonOverviewLeadUploads(
+      { from: uploadDays[0], to: uploadDays[uploadDays.length - 1] },
+      undefined,
+      controller.signal,
+    )
+      .then((value) => {
+        if (controller.signal.aborted) return
+        setUploads({ key: uploadsKey, value })
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setUploadsError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setUploadsLoading(false)
+      })
+    return () => controller.abort()
+    // `uploadDays` is read for its value; the attempt key controls refetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, criticalSettled, uploadsAttempt])
+
   const currentSystem = system?.key === systemKey ? system.value : null
   const currentPerformance = performance?.key === performanceKey ? performance.value : null
   const currentCampaigns = accountCampaigns?.key === campaignsKey ? accountCampaigns.value : null
@@ -228,6 +267,14 @@ export function Overview() {
           onPerformanceRetry={() => setPerformanceRetry((value) => value + 1)}
           onAccountCampaignsRetry={() => setCampaignsRetry((value) => value + 1)}
         />
+      <LeadUploadTracker
+        uploads={uploads?.key === uploadsKey ? uploads.value : null}
+        instances={data.instances}
+        days={uploadDays}
+        loading={uploadsLoading}
+        error={uploadsError}
+        onRetry={() => setUploadsRetry((value) => value + 1)}
+      />
     </div>
   )
 }

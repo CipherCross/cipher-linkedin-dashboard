@@ -52,6 +52,7 @@ import {
   campaignsSequenceStepsOperation,
   instancesOverviewOperation,
   overviewAccountCampaignsOperation,
+  overviewLeadUploadsOperation,
   overviewPerformanceOperation,
   overviewSystemTotalsOperation,
   overviewSummaryOperation,
@@ -448,6 +449,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewSystemTotals, overviewSystemTotalsOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewPerformance, overviewPerformanceOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewAccountCampaigns, overviewAccountCampaignsOperation)
+  registry.registerQuery(DASHBOARD_OPERATIONS.overviewLeadUploads, overviewLeadUploadsOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation)
   registry.registerQuery(DASHBOARD_OPERATIONS.campaignPreview, campaignPreviewOperation)
   registry.registerQuery(ROUTE_SNAPSHOT_OPERATION, routeSnapshotOperation)
@@ -886,6 +888,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   DASHBOARD_OPERATIONS.overviewSystemTotals,
   DASHBOARD_OPERATIONS.overviewPerformance,
   DASHBOARD_OPERATIONS.overviewAccountCampaigns,
+  DASHBOARD_OPERATIONS.overviewLeadUploads,
   DASHBOARD_OPERATIONS.overviewSummary,
   DASHBOARD_OPERATIONS.campaignPreview,
   ROUTE_SNAPSHOT_OPERATION,

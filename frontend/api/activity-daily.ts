@@ -872,6 +872,10 @@ const READ_OPERATIONS: Readonly<Record<string, ReadOperationSpec>> = {
     operation: DASHBOARD_OPERATIONS.overviewAccountCampaigns,
     ranged: true,
   },
+  [DASHBOARD_OPERATIONS.overviewLeadUploads]: {
+    operation: DASHBOARD_OPERATIONS.overviewLeadUploads,
+    ranged: true,
+  },
   [DASHBOARD_OPERATIONS.overviewSummary]: {
     operation: DASHBOARD_OPERATIONS.overviewSummary,
     ranged: true,

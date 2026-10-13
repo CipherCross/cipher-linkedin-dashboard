@@ -214,7 +214,7 @@ function accountName(instance: Instance | undefined, fallback: string): string {
   return instance?.account_name?.trim() || fallback
 }
 
-function AccountCell({ instance, fallback }: { instance: Instance | undefined; fallback: string }) {
+export function AccountCell({ instance, fallback }: { instance: Instance | undefined; fallback: string }) {
   const name = accountName(instance, fallback)
   const avatar = instance?.account_avatar
     ? <span className="ov-avatar" aria-hidden="true"><img src={instance.account_avatar} alt="" /></span>

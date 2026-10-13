@@ -90,6 +90,7 @@ import {
   overviewSystemTotalsOperation,
   overviewPerformanceOperation,
   overviewAccountCampaignsOperation,
+  overviewLeadUploadsOperation,
   overviewSummaryOperation,
   campaignPreviewOperation,
   syncRecentRunsOperation,
@@ -175,6 +176,7 @@ const READ_SLICE = [
   [DASHBOARD_OPERATIONS.overviewSystemTotals, overviewSystemTotalsOperation],
   [DASHBOARD_OPERATIONS.overviewPerformance, overviewPerformanceOperation],
   [DASHBOARD_OPERATIONS.overviewAccountCampaigns, overviewAccountCampaignsOperation],
+  [DASHBOARD_OPERATIONS.overviewLeadUploads, overviewLeadUploadsOperation],
   [DASHBOARD_OPERATIONS.overviewSummary, overviewSummaryOperation],
   [DASHBOARD_OPERATIONS.campaignPreview, campaignPreviewOperation],
   [ROUTE_SNAPSHOT_OPERATION, routeSnapshotInspectable],
@@ -249,7 +251,7 @@ const ROSTER_READING = [
 ] as readonly string[]
 
 describe('the dispatching read endpoint offers exactly the slice', () => {
-  it('allowlists thirty-seven reads and no more', () => {
+  it('allowlists thirty-eight reads and no more', () => {
     // Spelled out rather than derived from the same constants the endpoint
     // builds its allowlist from: a widening should have to edit this line.
     //
@@ -288,6 +290,7 @@ describe('the dispatching read endpoint offers exactly the slice', () => {
       'messages.outboundRecent',
       'messages.thread',
       'overview.accountCampaigns',
+      'overview.leadUploads',
       'overview.performance',
       'overview.summary',
       'overview.systemTotals',
@@ -506,6 +509,18 @@ describe('no operation on the read path resolves a member id', () => {
       expect(sql).toContain(from)
     },
   )
+})
+
+describe('overview.leadUploads', () => {
+  it('counts lead rows by their own add date, per account and UTC day, never the milestone backfill', () => {
+    const sql = sqlOf(inspectable(overviewLeadUploadsOperation)).toLowerCase()
+    expect(sql).toContain('from public.leads l')
+    expect(sql).toContain("(l.added_at at time zone 'utc')::date")
+    expect(sql).toContain('l.added_at is not null')
+    expect(sql).not.toContain('coalesce(l.added_at')
+    expect(sql).not.toContain('invited_at')
+    expect(sql).toMatch(/group by 1, 2/)
+  })
 })
 
 describe('every read is a paged, ordered, read-only projection', () => {

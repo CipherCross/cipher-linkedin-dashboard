@@ -22,6 +22,7 @@ const fetchPerformance = vi.fn()
 const fetchCampaigns = vi.fn()
 const fetchSystem = vi.fn()
 const fetchPreview = vi.fn()
+const fetchUploads = vi.fn()
 let data: DashboardData
 
 vi.mock('../src/lib/DataContext', () => ({ useData: () => ({ data, phase: 'full' }) }))
@@ -30,6 +31,7 @@ vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonOverviewPerformance: (...args: unknown[]) => fetchPerformance(...args),
   fetchNeonOverviewAccountCampaigns: (...args: unknown[]) => fetchCampaigns(...args),
   fetchNeonCampaignPreview: (...args: unknown[]) => fetchPreview(...args),
+  fetchNeonOverviewLeadUploads: (...args: unknown[]) => fetchUploads(...args),
   resolvePhotoPath: async () => 'disabled',
 }))
 
@@ -102,6 +104,7 @@ beforeEach(() => {
   fetchPerformance.mockReset().mockResolvedValue(performance())
   fetchCampaigns.mockReset().mockResolvedValue(accountCampaigns())
   fetchPreview.mockReset()
+  fetchUploads.mockReset().mockResolvedValue({ days: [] })
 })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
@@ -409,5 +412,51 @@ describe('Overview section chrome (Phase 9)', () => {
     fireEvent.click(within(invited).getByRole('button', { name: 'Invited' }))
     expect(invited.getAttribute('aria-sort')).toBe('ascending')
     expect(within(table).getByRole('columnheader', { name: 'Account' }).hasAttribute('aria-sort')).toBe(false)
+  })
+})
+
+describe('Lead upload tracker', () => {
+  it('reads the last seven UTC days once, after the critical reads, independent of every range', async () => {
+    fetchUploads.mockResolvedValue({ days: [
+      { instance_id: 'one', day: '2026-09-02', leads: 40 },
+      { instance_id: 'one', day: '2026-09-06', leads: 1250 },
+    ] })
+    renderOverview(['/?range=last-30&accountRange=last-30'])
+    const table = await screen.findByRole('table', { name: 'Lead uploads by account and day' })
+    expect(fetchUploads).toHaveBeenCalledTimes(1)
+    expect(fetchUploads.mock.calls[0][0]).toEqual({ from: '2026-08-31', to: '2026-09-06' })
+    const headers = within(table).getAllByRole('columnheader').map((cell) => cell.textContent)
+    // ICU spells September "Sep" or "Sept" depending on its version.
+    expect(headers.map((text) => text?.replace('Sept', 'Sep'))).toEqual(
+      ['Account', 'Mon31 Aug', 'Tue1 Sep', 'Wed2 Sep', 'Thu3 Sep', 'Fri4 Sep', 'Sat5 Sep', 'Today6 Sep', '7 days'],
+    )
+    const row = within(table).getAllByRole('row')[1]
+    expect(within(row).getByText('Alice')).toBeTruthy()
+    expect(within(row).getAllByRole('cell').map((cell) => cell.textContent).slice(1))
+      .toEqual(['—', '—', '40', '—', '—', '—', '1,250', '1,290'])
+  })
+
+  it('keeps every rostered account visible, including one that uploaded nothing', async () => {
+    data.instances = [...data.instances, { ...data.instances[0], id: 'two', label: 'Notebook two', account_name: 'Bob' }]
+    fetchUploads.mockResolvedValue({ days: [{ instance_id: 'one', day: '2026-09-05', leads: 7 }] })
+    renderOverview()
+    const table = await screen.findByRole('table', { name: 'Lead uploads by account and day' })
+    const rows = within(table).getAllByRole('row').map((row) => row.textContent)
+    expect(rows[1]).toContain('Alice')
+    expect(rows[2]).toContain('Bob')
+    expect(rows[3]).toMatch(/^All accounts/)
+  })
+
+  it('fails on its own and retries only itself', async () => {
+    fetchUploads.mockRejectedValueOnce(new Error('uploads down'))
+    renderOverview()
+    expect(await screen.findByText('Lead uploads could not load.')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Campaign comparison' })).toBeTruthy()
+    const alert = screen.getByText('Lead uploads could not load.').closest('[role="alert"]') as HTMLElement
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('table', { name: 'Lead uploads by account and day' })).toBeTruthy()
+    expect(fetchUploads).toHaveBeenCalledTimes(2)
+    expect(fetchCampaigns).toHaveBeenCalledTimes(1)
+    expect(fetchSystem).toHaveBeenCalledTimes(1)
   })
 })

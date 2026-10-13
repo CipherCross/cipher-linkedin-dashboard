@@ -252,6 +252,11 @@ export interface OverviewAccountCampaigns {
   campaigns: CampaignMetrics[]
 }
 
+/** Leads queued into each account's campaigns per UTC day; empty days are absent. */
+export interface OverviewLeadUploads {
+  days: Array<{ instance_id: string; day: string; leads: number }>
+}
+
 export interface OverviewAnalyticsAccount {
   instance_id: string
   totals: OverviewAnalyticsTotals

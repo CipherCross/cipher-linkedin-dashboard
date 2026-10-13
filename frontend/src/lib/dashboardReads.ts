@@ -50,7 +50,7 @@ import type {
   DashboardData, FollowUpEvent, FollowUpState, Hypothesis, HypothesisCampaign, Icp,
   IcpIndustry, IcpPersona, Instance, Lead, LeadNote, Message, PipelineEvent,
   OverviewSummary, SavedSearch, SyncRun, TeamMember,
-  OverviewAccountCampaigns, OverviewPerformance, OverviewSystemTotals,
+  OverviewAccountCampaigns, OverviewLeadUploads, OverviewPerformance, OverviewSystemTotals,
   LeadsSearchPage, SequenceHubSnapshot, CampaignPreview,
 } from './types'
 
@@ -76,6 +76,7 @@ export const READ_OPS = {
   overviewSystemTotals: 'overview.systemTotals',
   overviewPerformance: 'overview.performance',
   overviewAccountCampaigns: 'overview.accountCampaigns',
+  overviewLeadUploads: 'overview.leadUploads',
   overviewSummary: 'overview.summary',
   campaignPreview: 'campaign.preview',
   sequenceHub: 'sequences.hub',
@@ -611,6 +612,25 @@ export async function fetchNeonOverviewAccountCampaigns(
     )
     const row = page.items[0]
     if (!row) throw new Error(`${READ_OPS.overviewAccountCampaigns}: response contained no campaigns row`)
+    return row
+  })
+}
+
+/** Per-account, per-day lead uploads for the Overview upload tracker. */
+export async function fetchNeonOverviewLeadUploads(
+  range: OverviewRange,
+  fetchImpl: ApiFetch = authFetch,
+  signal?: AbortSignal,
+): Promise<OverviewLeadUploads> {
+  return overviewRead(READ_OPS.overviewLeadUploads, range, fetchImpl, signal, async () => {
+    const page = await readPage<OverviewLeadUploads>(
+      READ_OPS.overviewLeadUploads,
+      { from: range.from, to: range.to, limit: 1 },
+      fetchImpl,
+      signal,
+    )
+    const row = page.items[0]
+    if (!row) throw new Error(`${READ_OPS.overviewLeadUploads}: response contained no uploads row`)
     return row
   })
 }

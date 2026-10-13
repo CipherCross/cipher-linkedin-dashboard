@@ -725,6 +725,17 @@ export async function activityFixture(request) {
       }],
     }]))
   }
+  if (op === 'overview.leadUploads') {
+    // Synthetic and relative to the requested window, so the tracker always has
+    // something to draw: two upload days and a gap, on the one fixture account.
+    const to = url.searchParams.get('to')
+    if (isEmpty(scenario) || !to) return json(page([{ days: [] }]))
+    const dayBefore = (n) => new Date(new Date(`${to}T00:00:00Z`).getTime() - n * 86_400_000).toISOString().slice(0, 10)
+    return json(page([{ days: [
+      { instance_id: instance.id, day: dayBefore(4), leads: 40 },
+      { instance_id: instance.id, day: dayBefore(1), leads: 25 },
+    ] }]))
+  }
   if (op === 'campaign.preview') {
     if (url.searchParams.get('campaign_id') !== campaign.campaign_id || isEmpty(scenario)) return json(page([{ campaign: null, leads: [], steps: [] }]))
     return json(page([campaignPreview(scenario)]))
