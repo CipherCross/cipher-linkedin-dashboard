@@ -1,6 +1,8 @@
 # Outreach data insights: audit and question catalog
 
-Status: phase 1 (data audit) done 2026-10-13. Phase 2 (the fact book) not started.
+Status: phases 1 and 2 done 2026-10-13. The fact book is the dashboard artifact
+"Outreach fact book" (https://claude.ai/artifact/QyK4SrJwMkFZXFX3qnVJwB), built by
+`analysis/outreach-insights/`. Open work is at the end of this file.
 
 Goal: find facts in the outreach data (correlations with sizes, confidence ranges
 and stated limits), not recommendations. This file records what the data can and
@@ -187,29 +189,34 @@ Two possible sources:
 - Apollo CSV imports in Airtable carry company industry, headcount and country for
   imported leads.
 
-## Open decisions (owner)
+## Decisions (owner, 2026-10-13)
 
-1. **Reply labelling for category B.** Two options:
-   - the team labels about 335 replies in the existing UI;
-   - an analysis-only classification of reply texts, kept outside the product,
-     which leaves the manual-only sentiment policy untouched.
-2. **Whether to enrich** with location, industry and company size (agent sync of
-   LH2 profile fields, or the Airtable join) before or after the first fact book.
+1. Replies are classified by Claude for the analysis only, outside the product
+   (codebook: `analysis/outreach-insights/labels/CODEBOOK.md`). 359 threads were
+   labelled. A blind re-read agreed on 20 of 20 for substantive-or-not, and the
+   labels match the pipeline board.
+2. Enrichment was done now through the Airtable join: 87% of invited rows matched
+   a contact, which brings company size, founding year, HQ country and industry.
 
-## Phase 2 plan
+## Phase 2 as built
 
-1. Snapshot the tables above into local DuckDB through the same read-only guard
-   (keyset pages of ≤1000 rows). Lead data stays in the session scratchpad.
-2. Build a per-person-per-campaign feature table. Exclude the traps listed above.
-3. Scan every category A question. Report the rate, a 95% Wilson interval and the
-   lift, with Benjamini–Hochberg correction.
-4. Re-test the survivors:
-   - acceptance and reply with account and campaign as controls (logistic
-     regression with fixed effects or stratified tests);
-   - time-to-event models for the timing questions.
-5. Run the paired re-invite comparison (McNemar's test) and a time-to-accept
-   survival curve.
-6. Replicate: discover on invites before 2026-08-01, confirm on later mature
-   invites.
-7. Output a fact book. Each fact gets its n, interval, whether it survives the
-   controls and whether it replicates. Add a "checked, nothing there" section.
+- The snapshot is JSON through the read-only guard, not DuckDB.
+- First touch per person, fixed windows (accepted within 14 days, replied within
+  21 days).
+- Mantel–Haenszel within campaign, a joint logistic model with campaign fixed
+  effects, Benjamini–Hochberg correction.
+- Replication split at 2026-07-01, not 2026-08-01: the September grid left too
+  few mature invites after August.
+- Re-invites are compared with fresh invites in the same campaigns, not with
+  McNemar's test, because nearly no first invite was accepted before the second.
+
+## Open work
+
+1. **Re-run in mid-November 2026**, when the September persona campaigns'
+   replies have matured. Steps are in `analysis/outreach-insights/README.md`;
+   classify only the new threads.
+2. **Location, connection count and profile language** are still missing. LH2
+   holds them locally, so they need an agent sync change: baseline step, gateway
+   contract, agent release. That is a product change and needs its own session.
+3. **Deep funnel.** 23 agreed calls is too few to profile who books calls. It
+   becomes answerable at roughly three times that count.
