@@ -6,24 +6,16 @@ that the code alone cannot prove done. Delete a line when it is done or dropped.
 
 ## Product / code
 
-- **Lead upload dates need agent 1.29.0 on every notebook.** Until it runs, the Overview
-  "Lead uploads" tracker counts invites. On 2026-10-13, on all four notebooks,
-  `leads.added_at` equalled the earliest milestone on every row that had one, and the
-  invite time on ~89% of rows: no notebook's mapping supplied LH2's `add_to_target_date`.
-  1.29.0 reads it itself (`ADDED_AT_SQL`). This logic is unproven on a real `lh.db`. Rollout:
-  1. After the push, repoint `installer/release.json` per
-     `docs/platform-ops/agent-release-channel.md`. Until then, two `test_installers.py`
-     release-pin tests fail by design.
-  2. On notebook-3, run `python3 agent.py sync --dry-run` and read `added dates:`. The
-     check fails if it shows `0 of N … from LH2's add-to-campaign date` or an `added_at:`
-     warning. In that case the build lacks or empties the column: stop and probe
-     `person_in_campaigns_history` before publishing.
-  3. Compare its `added per UTC day` grid with Anastasia's own upload counts.
-  4. Publish (`deploy.sh`). Each notebook's next sync overwrites `added_at`, because the
-     gateway upsert is `COALESCE(EXCLUDED.added_at, …)`. Then re-check on prod that rows
-     with `added_at = invited_at` have dropped well below 89%.
+- **Lead upload tracker: two small gaps against the SDR's own count.** Agent 1.29.0
+  (published 2026-10-13, all four notebooks on it) fills `leads.added_at` from LH2's
+  `add_to_target_date`. Against Anastasia's counts, 4 of 6 days match exactly. Notebook-1
+  on 5 Oct is 51 vs 57 and notebook-3 on 8 Oct is 33 vs 37. Unconfirmed causes:
+  - the leads were removed from the campaign afterwards, so LH2 no longer lists them;
+  - they were re-added people, whose earliest add date is kept;
+  - they sit in a campaign this dashboard excludes.
 
-  Open: the tracker cuts days in UTC while the team works in Kyiv (UTC+3).
+  Ask her which campaigns those uploads went to. The tracker cuts days in UTC; every
+  upload checked fell between 06:00 and 12:00 UTC, so Kyiv days would show the same.
 
 - **New lead photos are not mirrored.** Agent 1.27.0 has no photo upload (`sync_photos`
   only prints a notice), so photos stop at what the owner migration copied to R2. Needs a
