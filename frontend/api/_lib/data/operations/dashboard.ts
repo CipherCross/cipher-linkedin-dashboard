@@ -1095,6 +1095,8 @@ pipeline_ranked AS (
          CASE stage
            WHEN 'lost' THEN 0
            WHEN 'first_contact' THEN 0
+           WHEN 'replied' THEN 1
+           -- Retired by ledger step 025; kept for pipeline_events history.
            WHEN 'interested' THEN 1
            WHEN 'neutral' THEN 1
            WHEN 'negative' THEN 1

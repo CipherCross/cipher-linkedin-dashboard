@@ -9,9 +9,7 @@ import { leadKey } from './leads'
 
 export type PipelineStageId =
   | 'first_contact'
-  | 'interested'
-  | 'neutral'
-  | 'negative'
+  | 'replied'
   | 'following_up'
   | 'negotiations_call'
   | 'call_booked'
@@ -24,7 +22,7 @@ export type PipelineStageId =
 export interface PipelineStage {
   id: PipelineStageId
   label: string
-  /** Funnel depth. Several stages can share a rank (rank-1 sentiment split,
+  /** Funnel depth. Several stages can share a rank (rank-1 replied/following up,
    *  rank-7 win/loss) — rank is "how far down the happy path", not a unique key. */
   rank: number
   /** Allowed substatus slugs for this stage ([] = no substatus picker). */
@@ -34,9 +32,9 @@ export interface PipelineStage {
 // Order matters: this is the left-to-right board column order.
 export const PIPELINE_STAGES: PipelineStage[] = [
   { id: 'first_contact', label: 'First Contact', rank: 0, substatuses: [] },
-  { id: 'interested', label: 'Interested', rank: 1, substatuses: [] },
-  { id: 'neutral', label: 'Neutral', rank: 1, substatuses: [] },
-  { id: 'negative', label: 'Negative', rank: 1, substatuses: ['soft_no', 'hard_no', 'lost'] },
+  // The lead replied and a human is handling the thread. How the reply felt is
+  // the reply review's sentiment, never a stage (ledger step 025).
+  { id: 'replied', label: 'Replied', rank: 1, substatuses: [] },
   // Semi-warm holding lane: replied at least once, then went silent on recorded
   // follow-ups. Shares rank 1 — a parking spot, not deeper funnel progress.
   { id: 'following_up', label: 'Following Up', rank: 1, substatuses: [] },
@@ -54,6 +52,22 @@ export const PIPELINE_STAGES: PipelineStage[] = [
   // 'lost' requires a free-text lost_reason (captured on the move, not a substatus).
   { id: 'lost', label: 'Lost', rank: 7, substatuses: [] },
 ]
+
+// Stages that only survive in pipeline_events history: step 025 moved their leads
+// to 'replied' (interested, neutral) or 'lost' (negative). Looked up for labels
+// and funnel rank, never offered by a picker.
+const RETIRED_STAGES: PipelineStage[] = [
+  { id: 'interested' as PipelineStageId, label: 'Interested (retired)', rank: 1, substatuses: [] },
+  { id: 'neutral' as PipelineStageId, label: 'Neutral (retired)', rank: 1, substatuses: [] },
+  { id: 'negative' as PipelineStageId, label: 'Negative (retired)', rank: 1, substatuses: [] },
+]
+
+/** Old ?pipe= values (saved searches, bookmarked URLs) → their current stage. */
+export const LEGACY_PIPE_FILTER: Partial<Record<string, PipelineStageId>> = {
+  interested: 'replied',
+  neutral: 'replied',
+  negative: 'lost',
+}
 
 // Explicit display labels for substatus slugs; fall back to a generic humanizer
 // for anything unmapped.
@@ -82,7 +96,9 @@ export function substatusLabel(slug: string | null | undefined): string {
 /** Convenience map for callers that want to iterate labels directly. */
 export const SUBSTATUS_LABEL: Record<string, string> = { ...SUBSTATUS_OVERRIDE }
 
-const BY_ID = new Map<string, PipelineStage>(PIPELINE_STAGES.map((s) => [s.id, s]))
+const BY_ID = new Map<string, PipelineStage>(
+  [...PIPELINE_STAGES, ...RETIRED_STAGES].map((s) => [s.id, s]),
+)
 
 export function stageById(id: string | null | undefined): PipelineStage | undefined {
   return id ? BY_ID.get(id) : undefined
@@ -109,9 +125,7 @@ export function stageAllowsSubstatus(
 // :root). Distinct enough to read a column at a glance; all resolve per-theme.
 export const STAGE_COLOR: Record<PipelineStageId, string> = {
   first_contact: 'var(--text-muted)',
-  interested: 'var(--success)',
-  neutral: 'var(--info)',
-  negative: 'var(--chart-cat-pink)',
+  replied: 'var(--info)',
   following_up: 'var(--chart-cat-yellow)',
   negotiations_call: 'var(--accent)',
   call_booked: 'var(--chart-cat-teal)',
@@ -146,7 +160,7 @@ export const PIPELINE_CHECKPOINTS: Array<{
   rank: number
   terminalId?: PipelineStageId
 }> = [
-  { id: 'interested', label: 'Interested', rank: 1 },
+  { id: 'replied', label: 'Engaged', rank: 1 },
   { id: 'negotiations_call', label: 'Negotiations about Call', rank: 2 },
   { id: 'call_booked', label: 'Call Booked', rank: 3 },
   { id: 'call_done', label: 'Call Done', rank: 4 },

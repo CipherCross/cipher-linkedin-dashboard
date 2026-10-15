@@ -38,7 +38,7 @@ interface FunnelRow {
 // Short verbs for the manual checkpoints, keyed by checkpoint id — parallel to
 // the automated "invited / accepted / replied" transitions.
 const PIPELINE_VERB: Record<string, string> = {
-  interested: 'interested',
+  replied: 'engaged',
   negotiations_call: 'to negotiations',
   call_booked: 'call booked',
   call_done: 'call done',
@@ -99,7 +99,7 @@ export function Funnel({
     : null
   const summaryCounts: Record<string, number> = summary
     ? {
-        interested: summary.interested,
+        replied: summary.interested,
         negotiations_call: summary.negotiationsCall,
         call_booked: summary.callBooked,
         call_done: summary.callDone,
@@ -124,7 +124,8 @@ export function Funnel({
     let prev = replied
     pipelineRows.forEach((r, i) => {
       rows.push({
-        key: r.id,
+        // Prefixed: the 'replied' checkpoint shares its id with the LH2 row above.
+        key: `pipeline:${r.id}`,
         label: r.label,
         count: r.count,
         color: '',

@@ -14,12 +14,12 @@ export interface PipelineStage {
 }
 
 // Order matters: this is the funnel order shown in the UI. Rank can repeat
-// (interested/neutral/negative share rank 1; client/lost share rank 7).
+// (replied/following_up share rank 1; client/lost share rank 7). The old
+// interested/neutral/negative stages repeated reply sentiment and were retired
+// by ledger step 025; set_stage rejects them.
 export const PIPELINE_STAGES: PipelineStage[] = [
   { id: 'first_contact', label: 'First Contact', rank: 0, substatuses: [] },
-  { id: 'interested', label: 'Interested', rank: 1, substatuses: [] },
-  { id: 'neutral', label: 'Neutral', rank: 1, substatuses: [] },
-  { id: 'negative', label: 'Negative', rank: 1, substatuses: ['soft_no', 'hard_no', 'lost'] },
+  { id: 'replied', label: 'Replied', rank: 1, substatuses: [] },
   // Semi-warm holding lane: replied at least once, then went silent on recorded
   // follow-ups. Shares rank 1 — a parking spot, not deeper funnel progress.
   { id: 'following_up', label: 'Following Up', rank: 1, substatuses: [] },

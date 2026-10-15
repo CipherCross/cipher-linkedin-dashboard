@@ -197,10 +197,10 @@ describe('the conversation drawer', () => {
     // page), so patchLead's edit reaches the drawer only through leadEdits.
     // Before, the save landed and the selects kept showing the old values.
     leadsInData = []
-    leadEdits = new Map([[LEAD.id, { patch: { pipeline_stage: 'interested', assigned_to: null }, at: Date.now() }]])
+    leadEdits = new Map([[LEAD.id, { patch: { pipeline_stage: 'replied', assigned_to: null }, at: Date.now() }]])
     await paint()
     fireEvent.click(screen.getByText('Lead details'))
-    expect((screen.getByLabelText('Stage') as HTMLSelectElement).value).toBe('interested')
+    expect((screen.getByLabelText('Stage') as HTMLSelectElement).value).toBe('replied')
   })
 
   it("asks for this conversation's follow-up state, which a page-local route does not carry", async () => {

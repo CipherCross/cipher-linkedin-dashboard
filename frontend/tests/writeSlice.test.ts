@@ -149,7 +149,7 @@ function harness(): Harness {
     rowCount: 1,
     row: {
       id: LEAD_ID,
-      pipeline_stage: 'interested',
+      pipeline_stage: 'replied',
       pipeline_substatus: null,
       lost_reason: null,
       pipeline_stage_changed_at: '2026-08-05T10:00:00.000Z',
@@ -286,7 +286,7 @@ describe('set_stage: what the handler decides before the statement runs', () => 
     const { executed, deps } = harness()
     const response = await neonSetStage(
       request(),
-      { leadId: LEAD_ID, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_ID, stage: 'replied', substatus: null, lostReason: null },
       deps,
     )
     expect(response.status).toBe(200)
@@ -300,7 +300,7 @@ describe('set_stage: what the handler decides before the statement runs', () => 
     const { executed, deps } = harness()
     await neonSetStage(
       request(),
-      { leadId: LEAD_ID, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_ID, stage: 'replied', substatus: null, lostReason: null },
       deps,
     )
     const update = found(executed, PIPELINE_WRITE_COMMANDS.setStage)
@@ -341,13 +341,13 @@ describe('set_stage: what the handler decides before the statement runs', () => 
     const { executed, deps } = harness()
     await neonSetStage(
       request(),
-      { leadId: LEAD_ID, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_ID, stage: 'replied', substatus: null, lostReason: null },
       deps,
     )
     expect(found(executed, PIPELINE_WRITE_COMMANDS.appendStageEvent)?.params).toMatchObject(
       {
         fromStage: 'first_contact',
-        toStage: 'interested',
+        toStage: 'replied',
         actor: 'Fixture Reviewer',
       },
     )
@@ -374,7 +374,7 @@ describe('set_stage: what the handler decides before the statement runs', () => 
     leadFields = null
     const response = await neonSetStage(
       request(),
-      { leadId: LEAD_ID, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_ID, stage: 'replied', substatus: null, lostReason: null },
       deps,
     )
     expect(response.status).toBe(404)
@@ -388,7 +388,7 @@ describe('set_stage: what the handler decides before the statement runs', () => 
     })
     const response = await neonSetStage(
       request(),
-      { leadId: LEAD_ID, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_ID, stage: 'replied', substatus: null, lostReason: null },
       deps,
     )
     expect(response.status).toBe(500)

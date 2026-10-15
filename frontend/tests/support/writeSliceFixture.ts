@@ -171,7 +171,7 @@ export async function seedWriteFixture(
         PROFILE_URLS.import,
       ],
       ['Stage Subject', 'Notes Subject', 'Gender Subject', 'Gender Sibling', 'Import Subject'],
-      // The stage lead starts at `first_contact`, so a move to `interested` is a
+      // The stage lead starts at `first_contact`, so a move to `replied` is a
       // real transition with a non-null `from_stage` in the audit row.
       ['first_contact', null, null, null, null],
       // The gender leads start machine-labelled, so an override has a prediction

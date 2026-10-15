@@ -269,7 +269,7 @@ describe('DataProvider lead edits', () => {
       <div>
         <span data-testid="phase">{phase}</span>
         <span data-testid="edit">{leadEdits.get('page-local-lead')?.patch.pipeline_stage ?? ''}</span>
-        <button onClick={() => patchLead('page-local-lead', { pipeline_stage: 'interested' })}>Move</button>
+        <button onClick={() => patchLead('page-local-lead', { pipeline_stage: 'replied' })}>Move</button>
       </div>
     )
   }
@@ -281,7 +281,7 @@ describe('DataProvider lead edits', () => {
     render(<HashRouter><DataProvider><EditProbe /></DataProvider></HashRouter>)
     await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('full'))
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move' })) })
-    expect(screen.getByTestId('edit').textContent).toBe('interested')
+    expect(screen.getByTestId('edit').textContent).toBe('replied')
   })
 })
 

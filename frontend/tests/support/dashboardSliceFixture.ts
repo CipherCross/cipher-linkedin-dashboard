@@ -110,7 +110,7 @@ export const ASSIGNED_LEADS = LEAD_COUNT / ASSIGNED_EVERY // 230
 
 const PIPELINE_STAGES = [
   'first_contact',
-  'interested',
+  'replied',
   'following_up',
   'call_booked',
   'client',

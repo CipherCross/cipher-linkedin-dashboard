@@ -52,7 +52,7 @@ const lead = (over: Partial<Lead>): Lead => ({
   profile_url: 'https://www.linkedin.com/in/ada', full_name: 'Ada Lovelace', headline: 'CTO',
   company: 'Engines', added_at: null, invited_at: '2026-09-01T00:00:00Z', connected_at: null,
   first_message_at: null, replied_at: '2026-09-05T00:00:00Z', last_action_at: '2026-09-05T00:00:00Z',
-  pipeline_stage: 'negative', pipeline_substatus: null, lost_reason: null,
+  pipeline_stage: 'call_done', pipeline_substatus: null, lost_reason: null,
   pipeline_stage_changed_at: '2026-09-05T00:00:00Z', assigned_to: 7,
   ...over,
 }) as Lead
@@ -113,11 +113,11 @@ describe('a card', () => {
     const stage = screen.getByRole('combobox', { name: 'Pipeline stage' })
     const owner = screen.getByRole('combobox', { name: 'Lead owner' })
 
-    fireEvent.change(substatus, { target: { value: 'soft_no' } })
-    expect(setStage).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 'negative', { substatus: 'soft_no' })
+    fireEvent.change(substatus, { target: { value: 'later' } })
+    expect(setStage).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 'call_done', { substatus: 'later' })
 
-    fireEvent.change(stage, { target: { value: 'interested' } })
-    expect(setStage).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 'interested')
+    fireEvent.change(stage, { target: { value: 'replied' } })
+    expect(setStage).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 'replied')
 
     fireEvent.change(owner, { target: { value: '8' } })
     expect(assign).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 8)

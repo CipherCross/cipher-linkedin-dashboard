@@ -549,7 +549,7 @@ async function seedPipelineEvents(client: PoolClient): Promise<void> {
     leadIds.push(restLeadId(index % REST_LEAD_COUNT))
     kinds.push(stageEvent ? 'stage' : 'assignment')
     fromStages.push(stageEvent ? 'first_contact' : null)
-    toStages.push(stageEvent ? 'interested' : null)
+    toStages.push(stageEvent ? 'replied' : null)
     // A member *name*, not an id — the one reference to a team member in this
     // schema that needs no roster to read. See `operations/pipeline.ts`.
     assignees.push(stageEvent ? null : `S13R Owner ${index % 3}`)

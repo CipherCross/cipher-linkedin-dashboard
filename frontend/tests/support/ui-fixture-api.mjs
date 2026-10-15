@@ -109,7 +109,7 @@ function leadRows(scenario) {
     first_message_at: '2026-09-20T11:00:00.000Z',
     replied_at: '2026-09-21T12:00:00.000Z',
     last_action_at: '2026-09-21T12:00:00.000Z',
-    pipeline_stage: 'interested',
+    pipeline_stage: 'replied',
     pipeline_substatus: null,
     lost_reason: null,
     pipeline_stage_changed_at: '2026-09-21T12:00:00.000Z',

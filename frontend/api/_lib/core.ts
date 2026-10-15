@@ -415,9 +415,7 @@ pipeline_events — append-only log of every manual pipeline change on a lead.
 
 STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses)
   rank 0  first_contact          "First Contact"            (no substatuses)
-  rank 1  interested             "Interested"               (no substatuses)
-  rank 1  neutral                "Neutral"                  (no substatuses)
-  rank 1  negative               "Negative"                 substatus: soft_no | hard_no | lost
+  rank 1  replied                "Replied"                  (no substatuses)
   rank 1  following_up           "Following Up"             (no substatuses)
   rank 2  negotiations_call      "Negotiations about Call"  (no substatuses)
   rank 3  call_booked            "Call Booked"              (no substatuses)
@@ -427,13 +425,18 @@ STAGE VOCABULARY (pipeline_stage slug -> label, funnel rank; allowed substatuses
   rank 7  client                 "Client (Contracted)"      (no substatuses)
   rank 7  lost                   "Lost"                     (no substatuses; free-text lost_reason applies here)
   Higher rank = further down the sales funnel. Some ranks hold several stages
-  (interested/neutral/negative/following_up all rank 1; client/lost both rank 7).
+  (replied/following_up both rank 1; client/lost both rank 7).
+  replied = the lead answered and a human is working the thread. The stage says
+  NOTHING about tone: reply sentiment (positive/neutral/negative/...) lives ONLY
+  in reply_reviews.sentiment / messages.sentiment. Never read tone from a stage.
   following_up = the semi-warm holding lane: the lead replied at least once, a
-  follow-up was RECORDED after their last inbound, and they have been silent
-  >= 14 days ("replied once, now ghosting our follow-ups"). pipeline_auto_advance
-  parks interested/neutral leads here automatically (pipeline_events actor='auto');
-  humans can also move leads in/out by hand, and auto never overrides a human-set
-  stage. It is a holding state, NOT funnel progress — hence the shared rank 1.
+  follow-up was RECORDED after their last inbound, and they went silent ("replied
+  once, now ghosting our follow-ups"). Humans set it by hand. It is a holding
+  state, NOT funnel progress — hence the shared rank 1.
+  RETIRED slugs interested / neutral / negative (rank 1) appear ONLY in
+  pipeline_events history (from_stage/to_stage) before 2026-10-15; on that date
+  their leads moved to 'replied' (interested, neutral) or 'lost' (negative, with
+  lost_reason 'Negative reply…'). Treat them as 'replied' when counting history.
 
 saved_searches — the Search Library: shared, named sourcing-search RECIPES
   (Apollo / Sales Navigator / esun / …) that data sourcers reproduce BY HAND on the
@@ -701,7 +704,7 @@ ANALYSIS GUIDANCE
     old, whatever its sentiment label says — say "replied positively N days ago,
     silent since" instead.
   - The 'following_up' pipeline stage is an EARLIER, broader version of this
-    signal — auto-applied at 14 silent days (not 30) with a recorded follow-up.
+    signal — set by the team once a lead goes quiet on a recorded follow-up.
     Counting following_up leads via pipeline_overview / pipeline_metrics is a
     safe way to quantify "going quiet on recorded follow-ups" without
     re-deriving it from threads, but call them "in follow-up / gone quiet", not

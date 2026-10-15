@@ -1218,6 +1218,15 @@ function readRequiredUuid(url: URL, name: string): string {
   return raw
 }
 
+// Ledger step 025 moved interested/neutral leads to 'replied' and negative ones
+// to 'lost'; an old filter value finds them where they went.
+// Mirrors LEGACY_PIPE_FILTER in src/lib/pipeline.ts.
+function legacyPipeFilter(value: string | null): string | null {
+  if (value === 'interested' || value === 'neutral') return 'replied'
+  if (value === 'negative') return 'lost'
+  return value
+}
+
 function readOptionalEnum(
   url: URL,
   name: string,
@@ -1269,11 +1278,13 @@ function readLeadsSearch(url: URL): DataStoreParams {
     campaignId: readOptionalBoundedText(url, 'camp'),
     stage: readOptionalEnum(url, 'stage', ['queued', 'invited', 'accepted', 'replied']),
     risk: readOptionalEnum(url, 'risk', ['pending_2w', 'no_reply_2w']),
-    pipeline: readOptionalEnum(url, 'pipe', [
-      'untriaged', 'first_contact', 'interested', 'neutral', 'negative',
+    pipeline: legacyPipeFilter(readOptionalEnum(url, 'pipe', [
+      'untriaged', 'first_contact', 'replied',
       'following_up', 'negotiations_call', 'call_booked', 'call_done',
       'proposal_in_progress', 'proposal_presented', 'client', 'lost',
-    ]),
+      // Retired by ledger step 025; still arrive from saved searches and URLs.
+      'interested', 'neutral', 'negative',
+    ])),
     owner,
     gender: readOptionalEnum(url, 'gender', ['male', 'female', 'unknown', 'pending']),
     ageBucket: readOptionalEnum(url, 'agebucket', [
