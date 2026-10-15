@@ -94,7 +94,7 @@ import type {
   NeonRow,
   NeonStatement,
 } from '../neon.js'
-import type { Page } from '../contracts.js'
+import type { DataStoreParams, Page } from '../contracts.js'
 
 import { guardStatement, mapGuardRow } from './ai.js'
 import {
@@ -144,6 +144,9 @@ export const SYSTEM_OPERATIONS = {
   // mcp.ts save_search — the machine-authenticated library write.
   insertSavedSearch: 'system.insertSavedSearch',
   updateSavedSearch: 'system.updateSavedSearch',
+  // notify-replies.ts and the classify cron — rebuild the derived
+  // message→campaign-step attribution (ledger step 024).
+  refreshStepAttribution: 'system.refreshStepAttribution',
 } as const
 
 /** Every system read under a minted `system.` name, for assertions. */
@@ -165,6 +168,7 @@ export const SYSTEM_COMMAND_OPERATIONS = [
   SYSTEM_OPERATIONS.notifyUnclaim,
   SYSTEM_OPERATIONS.insertSavedSearch,
   SYSTEM_OPERATIONS.updateSavedSearch,
+  SYSTEM_OPERATIONS.refreshStepAttribution,
 ] as const
 
 /**
@@ -213,6 +217,40 @@ export const SYSTEM_CRON_COMMAND_OPERATIONS = [
   AI_WRITE_OPERATIONS.briefingStaleError,
   AI_WRITE_OPERATIONS.briefingUpsertBriefing,
 ] as const
+
+export interface RefreshStepAttributionParams extends DataStoreParams {
+  readonly instanceId: string
+  readonly full: boolean
+}
+
+/** The attribution summary `refresh_message_step_attribution` returns. */
+export interface StepAttributionRefresh {
+  readonly instance_id: string
+  readonly full: boolean
+  readonly written: number
+  readonly matched: number
+  readonly unmatched: number
+  readonly ambiguous: number
+  readonly instance_template: number
+}
+
+/**
+ * Rebuild the derived message→step attribution for one instance (step 024).
+ * A direct call, not a guard call: it writes its own cache table, and the
+ * guard is SELECT-only. `app_system` holds EXECUTE on this one SECURITY
+ * DEFINER function and no grant on the table it writes. The function refuses
+ * an empty instance id itself, so the registry does not duplicate that check.
+ */
+export const refreshStepAttributionOperation: NeonCommandOperation<
+  StepAttributionRefresh | null,
+  RefreshStepAttributionParams
+> = {
+  build: ({ params }): NeonStatement => ({
+    text: 'SELECT public.refresh_message_step_attribution($1, $2) AS result',
+    values: [params?.instanceId ?? '', params?.full === true],
+  }),
+  mapResult: (rows) => (rows[0]?.result ?? null) as StepAttributionRefresh | null,
+}
 
 const text = (row: NeonRow, column: string): string => String(row[column])
 const nullableText = (row: NeonRow, column: string): string | null =>
@@ -607,6 +645,10 @@ export function registerSystemOperations(
   registry.registerCommand(
     SYSTEM_OPERATIONS.updateSavedSearch,
     updateSavedSearchOperation,
+  )
+  registry.registerCommand(
+    SYSTEM_OPERATIONS.refreshStepAttribution,
+    refreshStepAttributionOperation,
   )
 
   return registerCronOperations(registry)

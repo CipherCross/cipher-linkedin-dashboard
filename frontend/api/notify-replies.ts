@@ -44,6 +44,7 @@ import { machineStoreConfigured } from './_lib/data/neonConfig.js'
 import type { DataStore } from './_lib/data/contracts.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import { unavailableResponse } from './_lib/data/availability.js'
+import { refreshStepAttribution } from './_lib/stepAttribution.js'
 import {
   DataStoreContractError,
   MAX_PAGE_SIZE,
@@ -450,7 +451,14 @@ async function handle(req: Request): Promise<Response> {
     if (unavailable) return unavailable
     throw error
   }
-  return announce(data)
+  const response = await announce(data)
+  // After a sync ping (POST), attribute the messages that sync just brought in.
+  // Best effort and after the Slack work, so it can only ever cost time.
+  if (req.method === 'POST') {
+    const run = await refreshStepAttribution(false)
+    if (run.failed) console.error(`step attribution: ${run.failed} failure(s) after sync ping`)
+  }
+  return response
 }
 
 export const GET = (req: Request) => handle(req)

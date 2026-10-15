@@ -173,7 +173,11 @@ describe('the formatters', () => {
       follow_up: { action: 'needs_reply', do_not_contact: false },
       message_total: 130,
       messages: [
-        { id: 1, direction: 'out', sent_at: '2026-09-01T10:22:00Z', body: 'Hi {{firstName}}', source: 'sync', has_external_id: false },
+        { id: 1, direction: 'out', sent_at: '2026-09-01T10:22:00Z', body: 'Hi {{firstName}}', source: 'sync', has_external_id: false,
+          step_campaign_id: 'notebook-1:42', step_type: 'InvitePerson', message_ordinal: 0, step_ambiguous: false },
+        { id: 4, direction: 'out', sent_at: '2026-09-02T10:00:00Z', body: 'Follow-up', source: 'sync', has_external_id: true,
+          step_campaign_id: 'notebook-1:42', step_type: 'MessageToPerson', message_ordinal: 2, step_ambiguous: true },
+        { id: 5, direction: 'out', sent_at: '2026-09-02T11:00:00Z', body: 'typed by hand', source: 'sync', has_external_id: true },
         inbound,
         { id: 3, direction: 'out', sent_at: '2026-09-04T09:00:00Z', body: 'Pasted reply', source: 'manual', has_external_id: false },
       ],
@@ -181,8 +185,10 @@ describe('the formatters', () => {
     expect(text).toContain('Person: Ann Lee — CEO @ Acme')
     expect(text).toContain('hypothesis: H1')
     expect(text).toContain('pipeline: call_booked')
-    expect(text).toContain('latest 3 of 130')
-    expect(text).toContain('[2026-09-01 10:22 OUT · time ≈ LH2 action run] Hi {{firstName}}')
+    expect(text).toContain('latest 5 of 130')
+    expect(text).toContain('[2026-09-01 10:22 OUT · connection note of notebook-1:42 · time ≈ LH2 action run] Hi {{firstName}}')
+    expect(text).toContain('[2026-09-02 10:00 OUT · message 2 of notebook-1:42 (ambiguous)] Follow-up')
+    expect(text).toContain('[2026-09-02 11:00 OUT · no template match] typed by hand')
     expect(text).toContain('label: positive, P3, reasons: timing, note: "asked for pricing"')
     expect(text).toContain('imported by hand')
     expect(text.indexOf('10:22 OUT')).toBeLessThan(text.indexOf('08:00 IN'))
@@ -236,13 +242,17 @@ describe('the formatters', () => {
       campaigns: [{ campaign_id: 'notebook-1:42', name: 'Founders A', account_name: 'Ivan' }],
       steps: [{ campaign_id: 'notebook-1:42', step_index: 2, step_type: 'MessageToPerson',
         template_body: 'Struggling with X, {{firstName}}?', sent_count: 80, replied_count: 6, current_count: 3 }],
+      performance: [{ campaign_id: 'notebook-1:42', step_index: 2, sent: 78, people: 77, replied: 7,
+        mature_sent: 60, mature_replied: 6, positive_replies: 2, p3_replies: 1, ambiguous_sent: 0,
+        first_sent_at: '2026-08-01T00:00:00Z', last_sent_at: '2026-10-01T00:00:00Z' }],
     }, { campaign_id: 'notebook-1:42' })
     expect(text).toContain('Step 2 — message 1:')
     expect(text).toContain('• Proof: We helped Y')
     expect(text).toContain('A "Pain": step 1=Short, step 2=Pain')
     expect(text).toContain('B "Proof": step 1=Short, step 2=Proof')
     expect(text).toContain('branch A, from revision 3, via published')
-    expect(text).toContain('[2] MessageToPerson — sent 80, replied 6')
+    expect(text).toContain('[2] MessageToPerson — LH2: sent 80, replied 6')
+    expect(text).toContain('Matched: 78 sent to 77 people, 7 replied (9.0%); mature 6/60 (10.0%); positive 2, P3 1; sent 2026-08-01..2026-10-01')
   })
 
   it('says when a campaign has no Builder document', () => {

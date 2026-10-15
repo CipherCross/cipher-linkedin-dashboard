@@ -63,6 +63,12 @@ function labelOf(m: Row): string {
 /** One message as a transcript line: [time DIR · flags · labels] body. */
 export function messageLine(m: Row, bodyCap: number): string {
   const tags = [`${utcMinute(m.sent_at)} ${m.direction === 'out' ? 'OUT' : 'IN'}`]
+  if (m.step_campaign_id) {
+    const step = m.step_type === 'InvitePerson' ? 'connection note' : `message ${str(m.message_ordinal)}`
+    tags.push(`${step} of ${str(m.step_campaign_id)}${m.step_ambiguous ? ' (ambiguous)' : ''}`)
+  } else if (m.direction === 'out' && m.source !== 'manual') {
+    tags.push('no template match')
+  }
   if (m.source === 'manual') tags.push('imported by hand')
   else if (m.has_external_id === false) tags.push('time ≈ LH2 action run')
   if (m.message_type && !['DEFAULT', 'MEMBER_TO_MEMBER'].includes(str(m.message_type))) tags.push(str(m.message_type).toLowerCase())
@@ -144,6 +150,20 @@ interface DocVariation { id?: string; label?: string; text?: string }
 interface DocStep { id?: string; kind?: string; variations?: DocVariation[] }
 interface DocBranch { id?: string; name?: string; selections?: Record<string, string> }
 
+function pct(n: unknown, d: unknown): string {
+  const num = Number(n), den = Number(d)
+  return den > 0 ? `${((100 * num) / den).toFixed(1)}%` : '—'
+}
+
+/** One step's attributed performance, mature rate first because recent sends
+ *  have not had time to be answered. */
+export function performanceLine(p: Record<string, unknown>): string {
+  return `Matched: ${str(p.sent)} sent to ${str(p.people)} people, ${str(p.replied)} replied (${pct(p.replied, p.sent)}); ` +
+    `mature ${str(p.mature_replied)}/${str(p.mature_sent)} (${pct(p.mature_replied, p.mature_sent)}); ` +
+    `positive ${str(p.positive_replies)}, P3 ${str(p.p3_replies)}` +
+    `${Number(p.ambiguous_sent) > 0 ? `; ${str(p.ambiguous_sent)} ambiguous` : ''}; sent ${utcDay(p.first_sent_at)}..${utcDay(p.last_sent_at)}`
+}
+
 function stepName(step: DocStep, index: number): string {
   return index === 0 && step.kind === 'connection' ? 'Step 1 — connection request' : `Step ${index + 1} — message ${index}`
 }
@@ -154,6 +174,7 @@ export function formatSequence(row: Row | undefined, request: { campaign_id?: st
   const deployments = arr(row.deployments)
   const campaigns = arr(row.campaigns)
   const steps = arr(row.steps)
+  const performance = arr(row.performance)
   const detailed = Boolean(request.campaign_id || request.sequence)
   const out: string[] = []
 
@@ -201,13 +222,16 @@ export function formatSequence(row: Row | undefined, request: { campaign_id?: st
     out.push(`Campaign ${request.campaign_id} has no Sequence Builder document (built directly in Linked Helper, or not linked). Its synced steps are below.`)
   }
   if (campaigns.length) {
-    out.push('# Synced LH2 steps — the copy actually running (LH2 variables look like {{firstName}}; only the first LH2 variant of a step is synced). sent/replied are LH2-derived per-step counts; replied credits the last messaging step sent before the first reply.')
+    out.push('# Synced LH2 steps — the copy actually running (LH2 variables look like {{firstName}}; only the first LH2 variant of a step is synced). "LH2" counts come from Linked Helper (replied credits the last messaging step before the first reply). "Matched" counts come from matching each sent message to its step template: a reply is credited to the latest outbound before it; mature = sent more than 14 days ago.')
     for (const c of campaigns) {
       out.push(`## ${str(c.name)} (${str(c.campaign_id)}) on ${str(c.account_name) || str(c.instance_id)}${c.runtime_status ? `, runtime ${str(c.runtime_status)}` : ''}${c.is_archived ? ', archived' : ''}`)
       const own = steps.filter((s) => s.campaign_id === c.campaign_id)
       if (!own.length) out.push('  (no synced message steps)')
       for (const s of own) {
-        out.push(`  [${str(s.step_index)}] ${str(s.step_type)} — sent ${str(s.sent_count)}, replied ${str(s.replied_count)}, in queue ${str(s.current_count)}${s.template_body ? `\n      ${clip(s.template_body, 2000).replace(/\n/g, '\n      ')}` : ''}`)
+        out.push(`  [${str(s.step_index)}] ${str(s.step_type)} — LH2: sent ${str(s.sent_count)}, replied ${str(s.replied_count)}, in queue ${str(s.current_count)}`)
+        const p = performance.find((x) => x.campaign_id === c.campaign_id && Number(x.step_index) === Number(s.step_index))
+        if (p) out.push(`      ${performanceLine(p)}`)
+        if (s.template_body) out.push(`      ${clip(s.template_body, 2000).replace(/\n/g, '\n      ')}`)
       }
     }
   } else if (request.campaign_id) {

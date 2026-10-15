@@ -63,9 +63,14 @@ function demographicsStore() {
   const query = vi.fn(async (_actor: unknown, request: { operation: string }) =>
     request.operation === 'classify.genderBatch'
       ? { items: [lead], hasMore: false, nextCursor: null }
-      : { items: [{ remaining: 0 }], hasMore: false, nextCursor: null },
+      : request.operation === 'system.instanceNames'
+        ? { items: [[{ id: 'notebook-1', account_name: 'Ivan', label: null }]], hasMore: false, nextCursor: null }
+        : { items: [{ remaining: 0 }], hasMore: false, nextCursor: null },
   )
-  const execute = vi.fn(async () => ({ updated: 1 }))
+  const execute = vi.fn(async (request: { operation: string }) =>
+    request.operation === 'system.refreshStepAttribution'
+      ? { instance_id: 'notebook-1', full: true, written: 3, matched: 2, unmatched: 1, ambiguous: 0, instance_template: 0 }
+      : { updated: 1 })
   const transaction = vi.fn(async (_actor: unknown, callback: (tx: unknown) => Promise<unknown>) =>
     callback({ execute }),
   )
@@ -92,17 +97,24 @@ describe('reply-classification AI cutover', () => {
       manual_only: true,
       reason: 'manual_review_required',
       demographics: { processed: 1, failed: 0 },
+      step_attribution: { instances: 1, failed: 0 },
     })
     expect(body).not.toHaveProperty('auto_advanced')
     expect(generateObject).toHaveBeenCalledTimes(1)
     expect(anthropic).toHaveBeenCalledWith('claude-haiku-5-5')
-    expect(fixture.transaction).toHaveBeenCalledTimes(1)
+    expect(fixture.transaction).toHaveBeenCalledTimes(2)
     expect(fixture.execute).toHaveBeenCalledWith(expect.objectContaining({
       operation: 'classify.writeGender',
     }))
+    // The daily full pass of the message→step attribution cache (step 024).
+    expect(fixture.execute).toHaveBeenCalledWith({
+      operation: 'system.refreshStepAttribution',
+      params: { instanceId: 'notebook-1', full: true },
+    })
     expect(fixture.query.mock.calls.map(([, request]) => request.operation)).toEqual([
       'classify.genderBatch',
       'classify.genderBacklog',
+      'system.instanceNames',
     ])
   })
 

@@ -283,6 +283,14 @@
       "owner_role_entered_by": "artifact",
       "session": "ai-sequences-threads",
       "description": "Grants the AI SQL sandbox (app_ai_runner) SELECT, each behind a FOR SELECT USING (true) policy, on reply_reviews, reply_review_reasons, conversation_reply_review_state, conversation_contacts, sequence_documents and sequence_versions, plus column-scoped SELECT on sequence_publish_jobs, sequence_publish_branches and campaign_sequence_links (no machine keys, leases, credential ids, idempotency keys or verification payloads). No write, DELETE, function or view change."
+    },
+    {
+      "step": 24,
+      "artifact": "024_message_step_attribution.sql",
+      "sha256": "eeec624ea71dfd051fe5639fb6ac98d8c07f236f4437e306244195c11ff1733b",
+      "owner_role_entered_by": "artifact",
+      "session": "ai-sequences-threads",
+      "description": "Adds public.message_step_attribution (one row per outbound message: the campaign step whose template its text matches, or method 'none'), the SECURITY DEFINER writer refresh_message_step_attribution(instance, full) executable only by app_system (upsert, never DELETE; rows go with their message through ON DELETE CASCADE), two IMMUTABLE helpers normalize_message_text and message_template_pattern, and the security_invoker view step_attribution_performance. Read access: app_ai_runner plus app_runtime/app_readonly for active members. No change to any existing object or funnel semantics."
     }
   ]
 }

@@ -113,9 +113,12 @@ with lead_rows as (
          rr.sentiment as review_sentiment, rr.intent_state as review_intent_state,
          rr.intent_level as review_intent, to_jsonb(rr) ->> 'comment' as review_note,
          (select array_agg(r.reason_id order by r.reason_id)
-            from reply_review_reasons r where r.message_id = m.id) as review_reasons
+            from reply_review_reasons r where r.message_id = m.id) as review_reasons,
+         sa.campaign_id as step_campaign_id, sa.step_type, sa.message_ordinal,
+         (sa.candidates > 1) as step_ambiguous
     from messages m
     left join reply_reviews rr on rr.message_id = m.id
+    left join message_step_attribution sa on sa.message_id = m.id and sa.campaign_id is not null
    where m.instance_id = ${inst} and m.profile_url = ${prof}
    order by m.sent_at desc, m.id desc
    limit ${THREAD_MESSAGE_CAP}
@@ -177,9 +180,12 @@ select
   (select coalesce(jsonb_agg(to_jsonb(pk) || jsonb_build_object('recent_messages', (
       select coalesce(jsonb_agg(to_jsonb(x) order by x.sent_at, x.id), '[]'::jsonb) from (
         select m.id, m.direction, m.sent_at, m.body, m.source,
-               rr.sentiment as review_sentiment, rr.intent_level as review_intent
+               rr.sentiment as review_sentiment, rr.intent_level as review_intent,
+               sa.campaign_id as step_campaign_id, sa.step_type, sa.message_ordinal,
+               (sa.candidates > 1) as step_ambiguous
           from messages m
           left join reply_reviews rr on rr.message_id = m.id
+          left join message_step_attribution sa on sa.message_id = m.id and sa.campaign_id is not null
          where m.instance_id = pk.instance_id and m.profile_url = pk.profile_url
          order by m.sent_at desc, m.id desc
          limit ${CONVERSATION_MESSAGE_CAP}) x))
@@ -296,8 +302,11 @@ select
       'current_count', s.current_count) order by s.campaign_id, s.step_index), '[]'::jsonb)
      from campaign_steps s
     where s.campaign_id in (select campaign_id from involved)
-      and (s.step_type in ('InvitePerson', 'MessageToPerson') or coalesce(btrim(s.template_body), '') <> '')) as steps`
-    : `'[]'::jsonb as campaigns, '[]'::jsonb as steps`}
+      and (s.step_type in ('InvitePerson', 'MessageToPerson') or coalesce(btrim(s.template_body), '') <> '')) as steps,
+  (select coalesce(jsonb_agg(to_jsonb(p) order by p.campaign_id, p.step_index), '[]'::jsonb)
+     from step_attribution_performance p
+    where p.campaign_id in (select campaign_id from involved)) as performance`
+    : `'[]'::jsonb as campaigns, '[]'::jsonb as steps, '[]'::jsonb as performance`}
 `.trim()
 }
 

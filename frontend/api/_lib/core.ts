@@ -365,6 +365,30 @@ campaign_steps — the FULL campaign sequence per campaign with aggregates,
   before the InvitePerson step to see how many leads are still warming up.
   (Synced by agent v1.5.0+; instances on older agents only show messaging steps.)
 
+message_step_attribution — which campaign step produced each OUTBOUND message,
+  found by matching the message text to the synced step templates (variables
+  match any short text). One row per outbound message with text:
+  message_id PK -> messages, instance_id, profile_url, campaign_id, step_index,
+  step_type ('InvitePerson' = connection note | 'MessageToPerson'),
+  message_ordinal int (0 = connection note, k = the k-th message step),
+  method ('lead_campaign' = a step of a campaign the person is a lead of |
+    'message_campaign' = the message's own campaign_id | 'instance_template' =
+    any step on the same account | 'none' = no template matched, usually a
+    hand-typed message), candidates int (>1 = ambiguous, the earliest step won),
+  attributed_at. ~94% of outbound messages to campaign leads match. Only LH2's
+  first variant of a step is synced, so messages from other LH2 variants read
+  as 'none'. Refreshed after every sync and fully once a day.
+
+step_attribution_performance — per campaign step, from the attribution above:
+  campaign_id, step_index, step_type, message_ordinal, sent (messages), people,
+  replied (an inbound message arrived after this outbound and before the
+  thread's next outbound — each reply credits ONE outbound), mature_sent /
+  mature_replied (sent more than 14 days ago), positive_replies and p3_replies
+  (manual labels on those replies), ambiguous_sent, first_sent_at, last_sent_at.
+  Prefer this over campaign_steps.replied_count when comparing steps or
+  variations; use mature_* for rates. A Builder branch is its own campaign, so
+  comparing a step's variations = comparing the branch campaigns' rows.
+
 annotations — manual notes pinned to dates (e.g. "changed template on X")
   id bigint PK, instance_id (null = all accounts), campaign_id (null = all),
   note text, noted_at date, created_at

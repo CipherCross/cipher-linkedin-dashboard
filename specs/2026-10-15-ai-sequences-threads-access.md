@@ -195,3 +195,41 @@ change to funnel semantics.
   <campaign> gets the most replies? Show me two of those threads." This needs a signed-in member, so the owner
   runs it.
 - Commit in logical pieces: grants step, tools plus schema doc, attribution.
+
+## Status (2026-10-15)
+
+Built on `main`. Not applied to any database, not deployed.
+
+- **Phase 1:** ledger step 023 is written.
+- **Phase 2:** the four context tools are wired into chat, MCP and the briefing. They live in
+  `frontend/api/_lib/aiContext.ts` and `frontend/api/_lib/data/operations/aiContext.ts`.
+- **Phase 3a** was measured read-only on production through the guard:
+  - 13,271 outbound messages in total; 9,320 of them went to campaign leads.
+  - **8,735 matched a template (94% of lead outbound).**
+  - 100 matched more than one step (about 1%).
+  - Unmatched messages are mostly hand-typed, plus LH2 variants that were never synced.
+  - The full-corpus match took 9.3 s. That is too slow for a view under the guard's 10 s limit, so this
+    became the table form.
+  - A notebook-1 dry run took 4.3 s. All 20 sampled matches were correct by hand check.
+- **Phase 3b:** ledger step 024 is written.
+  - Contents: the `message_step_attribution` table, `refresh_message_step_attribution`, and the
+    `step_attribution_performance` view.
+  - Incremental refresh runs after each sync ping (`/api/notify-replies` POST). A full refresh runs in the
+    daily `/api/classify` cron.
+  - `get_thread` tags each outbound line with its step. `get_sequence` shows matched per-step performance.
+
+### Rollout order (owner approval needed for each)
+1. Apply ledger steps 023 and 024 to production as `app_migration`.
+   - The memory recipe is "neon-ledger-apply-needs-docker-psql".
+   - Steps 023 and 024 must be applied **before** the deploy: the tools join tables and views they create.
+2. Deploy to Vercel. The first sync ping after the deploy fills the attribution cache. A full pass on
+   prod is about 10 s across all instances.
+3. Run the plan's verification checks on prod:
+   - `get_thread` against the Replies page
+   - `get_sequence` on one Builder campaign and one LH2-native campaign
+   - the briefing seed no longer reads `(query failed`
+4. In the next session, promote 023 and 024 to `PROTECTED_PATHS`.
+
+### Follow-ups
+- Sync every LH2 variant of a step, not only variant 0. This needs an agent change and would raise
+  coverage for LH2-native A/B steps.

@@ -142,6 +142,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/022_conversation_contacts.sql',
   // AI sandbox reads of reply reviews, contact names and sequence lineage (step 023).
   'postgres/tenant-baseline/v1/023_ai_read_sequences_reviews.sql',
+  // Derived message-to-step attribution cache and its performance view (step 024).
+  'postgres/tenant-baseline/v1/024_message_step_attribution.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -365,8 +367,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-three steps in order 1 -> 2 -> ... -> 23',
-  manifest.steps.length === 23 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-four steps in order 1 -> 2 -> ... -> 24',
+  manifest.steps.length === 24 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -411,6 +413,33 @@ check('step 023 keeps machine plumbing out of the AI view of publish lineage',
   !/\b(target_machine_key|claimed_by_credential_id|idempotency_key|payload_digest|lease_expires_at|verification_summary|target_account_snapshot)\b/.test(aiReadSql)
   && !/GRANT SELECT ON TABLE[^;]*sequence_publish_(jobs|branches)/.test(aiReadSql)
   && !/sequence_comment_|sequence_publish_targets|reply_review_events|reply_review_mutations|legacy_reply_classifications/.test(aiReadSql));
+
+const attributionStep = manifest.steps.find((s) => s.step === 24);
+const attributionPath = join(BASELINE_DIR, '024_message_step_attribution.sql');
+const attributionSql = stripComments('024_message_step_attribution.sql', readFileSync(attributionPath, 'utf8'));
+check('manifest declares step 024 message step attribution',
+  attributionStep?.artifact === '024_message_step_attribution.sql' && attributionStep.owner_role_entered_by === 'artifact');
+check('step 024 manifest digest matches its artifact',
+  attributionStep?.sha256 === sha256(attributionPath), `manifest ${attributionStep?.sha256}, disk ${sha256(attributionPath)}`);
+check('step 024 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(attributionSql) && /RESET ROLE;\s*$/.test(attributionSql));
+check('step 024 keys attribution on the message and cascades with it',
+  /PRIMARY KEY \(message_id\)/.test(attributionSql)
+  && /REFERENCES public\.messages\(id\) ON DELETE CASCADE/.test(attributionSql)
+  && /ALTER TABLE public\.message_step_attribution ENABLE ROW LEVEL SECURITY;/.test(attributionSql));
+check('step 024 grants reads only, and the refresh only to app_system',
+  /GRANT SELECT ON TABLE public\.message_step_attribution TO app_ai_runner, app_runtime, app_readonly;/.test(attributionSql)
+  && /GRANT EXECUTE ON FUNCTION public\.refresh_message_step_attribution\(text, boolean\) TO app_system;/.test(attributionSql)
+  && (attributionSql.match(/\bGRANT EXECUTE\b/g) ?? []).length === 1
+  && !/GRANT[^;]*\b(INSERT|UPDATE|DELETE|TRUNCATE)\b/i.test(attributionSql)
+  && ['normalize_message_text(text)', 'message_template_pattern(text)', 'refresh_message_step_attribution(text, boolean)']
+    .every((f) => attributionSql.includes(`REVOKE ALL ON FUNCTION public.${f} FROM PUBLIC;`)));
+check('step 024 never deletes and changes no existing object',
+  !/\b(DELETE|TRUNCATE|DROP)\b/i.test(attributionSql.replace(/ON DELETE CASCADE/g, ''))
+  && !/ALTER TABLE public\.(messages|leads|campaigns|campaign_steps)\b/.test(attributionSql)
+  && !/CREATE OR REPLACE/i.test(attributionSql));
+check('step 024 performance view runs with the reader\'s rights',
+  /CREATE VIEW public\.step_attribution_performance WITH \(security_invoker='true'\)/.test(attributionSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');

@@ -24,6 +24,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { guardMachine, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
+import { refreshStepAttribution } from './_lib/stepAttribution.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './_lib/data/aiStore.js'
 import {
   DataStoreContractError,
@@ -120,9 +121,14 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
     // classification. Preserve that supported gender work while retiring only
     // the reply AI phase.
     try {
+      const demographics = await runDemographicsOnNeon(getAiDataStore(), SYSTEM_ACTOR)
+      // The daily full pass of the message→step attribution cache (ledger step
+      // 024): picks up edited templates the sync-ping incremental pass skips.
+      const attribution = await refreshStepAttribution(true)
       return json({
         ...REPLY_CLASSIFICATION_DISABLED,
-        demographics: await runDemographicsOnNeon(getAiDataStore(), SYSTEM_ACTOR),
+        demographics,
+        step_attribution: { instances: attribution.instances.length, failed: attribution.failed },
       })
     } catch (error) {
       const unavailable = unavailableResponse(error)
