@@ -67,7 +67,40 @@ const IMMUTABLE_BASELINE = {
   '009_machine_ingest_path.sql':
     'ae8e9fb9ad11aef10e58a773451bafb8aae5b35ec58d438a8047c6d888dd8267',
   '010_machine_schema_usage.sql':
-    'b993324b7b741754284cdea213e5f7aa79a842706dfbf32e6a94df67e0f939c2',
+    'b993324b7b741754284cdea213e5f7aa79a842706dfbf32e6a94df67e0f939c2',  // 011..025 joined in the session after 025's apply, together: every one of
+  // them was recorded in production's app_ledger.applied_migration on
+  // 2026-10-15 (status 25/25, digests below equal to the ledger's), but none
+  // had been pinned here, and 014..022 had not reached PROTECTED_PATHS either.
+  '011_sequence_builder_workspace.sql':
+    'b4612536015860a46f8a46fa9e0b9ecbb3168c0e52587939b180021b5dca8904',
+  '012_sequence_publish_jobs.sql':
+    '44be8a9bb0876ae79ea81d699925aa0d8a4f98c827e107e3294fef0a4f91af5c',
+  '013_sequence_campaign_links.sql':
+    '53d14448536e3d27b570150d20b8a16ecee918504f5eaa01c05aca0de70dfe19',
+  '014_campaign_runtime_status.sql':
+    '91d283f0dfbd199a1850fb66655c08c2e58ee5e9321cb34dd532cf9333626732',
+  '015_sequence_publish_compatibility.sql':
+    '5e8ae8312695e501d5375752079e50ed42243d94913e7a17e7f6107ef8db84f5',
+  '016_sequence_publish_replacement_write.sql':
+    '2ad81230278e4dabf98069b66d1cfe7ebcaeb32e2a2fe640bd4a47f7af1a660c',
+  '017_manual_reply_review.sql':
+    '3c74cc0b1f6a9f9ce115350084dc6d95bd4454b4c82166b6796cf01c42c8e744',
+  '018_manual_reply_review_activation_fix.sql':
+    'd4a1090213b5f8963c1825561fc1d7962bd9940706c7fa15d231340c1b725cad',
+  '019_messages_chat_store_identity.sql':
+    '256dff364d2692d0794dc9e58fb26b0d110685878bd2f9617ca657cbe70ba6c3',
+  '020_reply_review_machine_invalidation.sql':
+    'e30fdf5ad9cf03a1144d2d55f54bf2a806a95cb06dc4cefd77b09f29a7aa4a53',
+  '021_follow_up_outcome_resolves_action.sql':
+    '39c1121429e5bb21f14af243560eced426a8f9eef5f155ac8621913914db081a',
+  '022_conversation_contacts.sql':
+    'ee8cd4fb009363c58b41a1924e3400cf1134ef99b5f76637e9b42ac19ab781a5',
+  '023_ai_read_sequences_reviews.sql':
+    '6e9b12defe6a699d23d29a6d111d4e8f3471bf494941b1a3a7dc6fbbc2dc93bd',
+  '024_message_step_attribution.sql':
+    'eeec624ea71dfd051fe5639fb6ac98d8c07f236f4437e306244195c11ff1733b',
+  '025_pipeline_replied_stage.sql':
+    'a9db4be5223dfe7592820d2d4c489b968d29bda9573698fc59ce2d001b589e2e',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -238,6 +271,23 @@ const PROTECTED_PATHS = [
   // answered 500. A read must not ship ahead of the step that creates what it
   // names.
   'postgres/tenant-baseline/v1/013_sequence_campaign_links.sql',
+  // 014..025, promoted together by the session after 025's apply. Production's
+  // ledger status read 25/25 on 2026-10-15 with every digest matching the
+  // manifest, so each is applied and as immutable as 001..013. 014..022 were
+  // applied sessions earlier and should have been promoted then; the gap was
+  // only noticed here. A correction to any of them is a new step.
+  'postgres/tenant-baseline/v1/014_campaign_runtime_status.sql',
+  'postgres/tenant-baseline/v1/015_sequence_publish_compatibility.sql',
+  'postgres/tenant-baseline/v1/016_sequence_publish_replacement_write.sql',
+  'postgres/tenant-baseline/v1/017_manual_reply_review.sql',
+  'postgres/tenant-baseline/v1/018_manual_reply_review_activation_fix.sql',
+  'postgres/tenant-baseline/v1/019_messages_chat_store_identity.sql',
+  'postgres/tenant-baseline/v1/020_reply_review_machine_invalidation.sql',
+  'postgres/tenant-baseline/v1/021_follow_up_outcome_resolves_action.sql',
+  'postgres/tenant-baseline/v1/022_conversation_contacts.sql',
+  'postgres/tenant-baseline/v1/023_ai_read_sequences_reviews.sql',
+  'postgres/tenant-baseline/v1/024_message_step_attribution.sql',
+  'postgres/tenant-baseline/v1/025_pipeline_replied_stage.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
