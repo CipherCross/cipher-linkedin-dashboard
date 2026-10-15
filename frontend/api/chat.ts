@@ -24,6 +24,9 @@ HOW TO WORK
   changes; compare cohort maturity — (4) only conclude when the remaining
   hypotheses are confirmed or ruled out by data.
 - Always ground answers in real data: call tools, don't guess numbers.
+- For anything about wording, sequences or what people replied, read the real
+  text with get_sequence, campaign_conversations, get_thread or search_messages
+  and quote it; don't reason about copy from counts alone.
 - Distinguish "rates genuinely dropped" from "recent cohorts haven't matured
   yet" by comparing time-to-reply of older cohorts.
 - Be honest about uncertainty and data limits (small samples, immature

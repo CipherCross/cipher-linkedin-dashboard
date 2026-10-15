@@ -57,6 +57,7 @@
 import { NeonOperationRegistry, type NeonRow } from '../neon.js'
 import type { DataStoreParams } from '../contracts.js'
 import { registerSystemOperations } from './aiSystem.js'
+import { registerContextOperations } from './aiContext.js'
 
 export const AI_OPERATIONS = {
   executeSql: 'ai.executeSql',
@@ -387,6 +388,10 @@ export function buildAiRegistry(): NeonOperationRegistry {
       mapRow: mapGuardRow,
     })
   }
+
+  // The model-facing context reads (`aiContext.ts`): guard calls too, kept out
+  // of AI_OPERATIONS because each takes arguments and fixed queries do not.
+  registerContextOperations(registry)
 
   return registerSystemOperations(registry)
 }

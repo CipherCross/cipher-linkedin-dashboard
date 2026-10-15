@@ -8,6 +8,12 @@ import {
   executeNamedSql,
   executeSql,
 } from './core.js'
+import {
+  getCampaignConversations,
+  getSequence,
+  getThread,
+  searchMessages,
+} from './aiContext.js'
 import { validateSearch } from './savedSearch.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './data/aiStore.js'
 import { DataStoreConstraintError } from './data/contracts.js'
@@ -87,6 +93,65 @@ export const toolDefs = {
       'winning" or "how is ICP X performing" questions; use run_sql for deeper drilldowns ' +
       '(per-campaign breakdown, cohorts, keyword lists) once you know which hypothesis.',
     inputShape: {},
+  },
+
+  get_sequence: {
+    name: 'get_sequence',
+    description:
+      'Read what we SEND: the outreach copy. With a campaign_id: that campaign\'s Sequence Builder ' +
+      'document (every step with ALL its variations and the A/B/C branches) if it has one, where each ' +
+      'branch was deployed, and the synced LH2 steps actually running with per-step sent/replied counts. ' +
+      'With sequence (a Builder id or part of its name): the same for that document. With neither: a ' +
+      'catalog of Builder documents and their deployments. Use this first for any question about ' +
+      'message copy, variations or which wording performs better.',
+    inputShape: {
+      campaign_id: z.string().max(200).optional().describe('Campaign id, e.g. "notebook-1:42".'),
+      sequence: z.string().max(200).optional().describe('A Sequence Builder document id or part of its name.'),
+    },
+  },
+
+  get_thread: {
+    name: 'get_thread',
+    description:
+      'Read one whole conversation as a transcript: the person, every campaign they were in with ' +
+      'milestones and hypothesis, follow-up state, and the latest 120 messages in both directions ' +
+      '(oldest first) with the team\'s manual review labels (sentiment, P1-P3 intent, reasons, note) on ' +
+      'inbound replies. A thread is keyed by instance_id + profile_url — always both, because the same ' +
+      'person can be reached from two accounts. Get keys from campaign_conversations, search_messages or run_sql.',
+    inputShape: {
+      instance_id: z.string().min(1).max(200),
+      profile_url: z.string().min(1).max(2000),
+    },
+  },
+
+  campaign_conversations: {
+    name: 'campaign_conversations',
+    description:
+      'Read the conversations of one campaign at once: each person (newest reply first) with the last ' +
+      '8 messages of their thread and the review labels. Defaults to people who replied. The right ' +
+      'call for "what are people answering to campaign X", objections, or judging copy against real ' +
+      'replies. Bodies are clipped at 700 characters; open a single thread with get_thread.',
+    inputShape: {
+      campaign_id: z.string().min(1).max(200),
+      only_replied: z.boolean().optional().describe('Default true: only threads with an inbound message.'),
+      since: z.string().max(40).optional().describe('ISO date: only threads whose latest reply is on/after it.'),
+      limit: z.number().int().min(1).max(40).optional().describe('Threads to return, default 25, max 40.'),
+    },
+  },
+
+  search_messages: {
+    name: 'search_messages',
+    description:
+      'Find messages whose text contains a phrase (case-insensitive substring, not semantic), newest ' +
+      'first, with a snippet, the person and the thread key. Use it for "who mentioned budget", ' +
+      '"which replies talk about a competitor", or to find where a sentence of our copy was sent.',
+    inputShape: {
+      text: z.string().min(2).max(200),
+      direction: z.enum(['in', 'out']).optional().describe("'in' = their replies, 'out' = our messages."),
+      campaign_id: z.string().max(200).optional().describe('Only people who are leads of this campaign.'),
+      since: z.string().max(40).optional().describe('ISO date lower bound on the message time.'),
+      limit: z.number().int().min(1).max(50).optional().describe('Default 25, max 50.'),
+    },
   },
 
   save_search: {
@@ -288,6 +353,30 @@ export function buildTools(deps: BuildToolsDeps = {}) {
       description: toolDefs.hypothesis_overview.description,
       inputSchema: z.object(toolDefs.hypothesis_overview.inputShape),
       execute: async () => executeNamedSql('hypothesisOverview'),
+    }),
+
+    get_sequence: tool({
+      description: toolDefs.get_sequence.description,
+      inputSchema: z.object(toolDefs.get_sequence.inputShape),
+      execute: async (args) => getSequence(args),
+    }),
+
+    get_thread: tool({
+      description: toolDefs.get_thread.description,
+      inputSchema: z.object(toolDefs.get_thread.inputShape),
+      execute: async (args) => getThread(args),
+    }),
+
+    campaign_conversations: tool({
+      description: toolDefs.campaign_conversations.description,
+      inputSchema: z.object(toolDefs.campaign_conversations.inputShape),
+      execute: async (args) => getCampaignConversations(args),
+    }),
+
+    search_messages: tool({
+      description: toolDefs.search_messages.description,
+      inputSchema: z.object(toolDefs.search_messages.inputShape),
+      execute: async (args) => searchMessages(args),
     }),
 
     save_search: tool({

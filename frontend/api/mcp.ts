@@ -14,6 +14,12 @@ import {
   executeSql,
 } from './_lib/core.js'
 import { executeSaveSearchAsSystem, toolDefs } from './_lib/tools.js'
+import {
+  getCampaignConversations,
+  getSequence,
+  getThread,
+  searchMessages,
+} from './_lib/aiContext.js'
 import { guardMachine } from './_lib/auth.js'
 
 function asText(value: unknown) {
@@ -30,7 +36,7 @@ function asText(value: unknown) {
 // The `server` object handed to the createMcpHandler construction callback.
 type McpServer = Parameters<Parameters<typeof createMcpHandler>[0]>[0]
 
-/** Register the five READ-ONLY analytics tools shared by both handlers. */
+/** Register the READ-ONLY analytics and context tools. */
 function registerReadOnlyTools(server: McpServer) {
   server.tool(
     toolDefs.run_sql.name,
@@ -72,6 +78,34 @@ function registerReadOnlyTools(server: McpServer) {
     toolDefs.hypothesis_overview.description,
     toolDefs.hypothesis_overview.inputShape,
     async () => asText(await executeNamedSql('hypothesisOverview'))
+  )
+
+  server.tool(
+    toolDefs.get_sequence.name,
+    toolDefs.get_sequence.description,
+    toolDefs.get_sequence.inputShape,
+    async (args) => asText(await getSequence(args))
+  )
+
+  server.tool(
+    toolDefs.get_thread.name,
+    toolDefs.get_thread.description,
+    toolDefs.get_thread.inputShape,
+    async (args) => asText(await getThread(args))
+  )
+
+  server.tool(
+    toolDefs.campaign_conversations.name,
+    toolDefs.campaign_conversations.description,
+    toolDefs.campaign_conversations.inputShape,
+    async (args) => asText(await getCampaignConversations(args))
+  )
+
+  server.tool(
+    toolDefs.search_messages.name,
+    toolDefs.search_messages.description,
+    toolDefs.search_messages.inputShape,
+    async (args) => asText(await searchMessages(args))
   )
 }
 

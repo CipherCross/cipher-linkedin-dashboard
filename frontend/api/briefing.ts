@@ -379,6 +379,8 @@ ANALYSIS SAFEGUARDS
   going cold, or being ignored from message chronology. The only exceptions are the deterministic
   following_up pipeline stage and the exact P3-ghosting rule documented in the schema.
 - Never claim the team completed an action. Describe only what the numbers now show.
+- When a conclusion is about copy or reply content, read it with get_sequence or
+  campaign_conversations before stating it. Quote at most a short phrase, never a full message.
 - Preserve P1/P2/P3 intent as separate from sentiment. Use only the manual
   reply_reviews source for current sentiment and intent; legacy AI values are
   historical context, not current labels. Intent never auto-advances CRM stages.
