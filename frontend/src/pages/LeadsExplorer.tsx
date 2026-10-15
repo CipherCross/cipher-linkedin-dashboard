@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   ChevronDown, ChevronRight, Columns3, Download, Filter, GraduationCap, SearchX, Sparkles,
 } from 'lucide-react'
@@ -21,7 +21,7 @@ import {
 } from '../ui'
 import type { Tone } from '../ui'
 import { COPY } from '../ui/labels'
-import { LeadMilestoneBadge, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
+import { LeadMilestoneBadge, LeadReplyBadges, LeadReplyIdentity } from '../components/leads-and-replies/LeadReplyIdentity'
 import { LostReasonModal } from '../components/LostReasonModal'
 import { RowOpenButton } from '../components/RowOpenButton'
 import type {
@@ -33,7 +33,7 @@ import {
   accountLabeller, leadKey, riskOf, stageOf, toCsv,
 } from '../lib/leads'
 import type { RiskFlag } from '../lib/leads'
-import { PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
+import { LEGACY_PIPE_FILTER, PIPELINE_STAGES, stageLabel } from '../lib/pipeline'
 import { num, shortDate } from '../lib/format'
 import {
   activeFollowUp,
@@ -119,7 +119,9 @@ export function LeadsExplorer() {
   const camp = params.get('camp') ?? 'all'
   const stage = params.get('stage') ?? 'all'
   const risk = params.get('risk') ?? 'all'
-  const pipe = params.get('pipe') ?? 'all'
+  const pipeRaw = params.get('pipe') ?? 'all'
+  // Saved searches and old links can still carry a retired stage (step 025).
+  const pipe = LEGACY_PIPE_FILTER[pipeRaw] ?? pipeRaw
   const who = params.get('who') ?? 'all'
   const genderF = params.get('gender') ?? 'all'
   const ageF = params.get('agebucket') ?? 'all'
@@ -137,8 +139,8 @@ export function LeadsExplorer() {
       : null
   const repliedRaw = params.get('replied')
   const repliedDays = REPLIED_DAYS.has(repliedRaw ?? '') ? Number(repliedRaw) : 0
-  // Reply-mode = either reply filter is engaged; it flips on the snippet/badge in
-  // rows and defaults the sort to newest reply first (the old Replies ordering).
+  // Reply-mode = either reply filter is engaged; it defaults the sort to newest
+  // reply first (the old Replies ordering).
   const replyActive = sent != null || intent != null || repliedDays > 0
 
   // Sort / page / column toggle all live in the URL so the page is fully
@@ -152,8 +154,8 @@ export function LeadsExplorer() {
   const sortAsc = params.get('dir') === 'asc'
   const page = Math.max(0, (Number(params.get('page')) || 1) - 1)
   const showAdded = params.get('added') === '1'
-  /* Default columns are the standard's six: Lead, Account / campaign, Milestone,
-   * Pipeline, Next follow-up, Latest activity. Headline, age and gender are real
+  /* Default columns: Lead, Reply (reviewed sentiment + intent), Account /
+   * campaign, Milestone, Pipeline, Next follow-up, Latest activity. Headline, age and gender are real
    * data but not what the page is scanned for, so they move behind Columns
    * rather than being dropped. The filters and the export are unchanged. */
   const showDetailColumns = params.get('cols') === 'all'
@@ -162,6 +164,9 @@ export function LeadsExplorer() {
   const [serverLoading, setServerLoading] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const [serverRefresh, setServerRefresh] = useState(0)
+  // Set just before a refresh that should keep the current rows on screen
+  // until the new page lands (a stage edit under a pipeline filter).
+  const quietRefresh = useRef(false)
   // When the page on screen was requested: edits made after it (in the
   // conversation drawer, say) are laid over its rows until the next fetch.
   const [serverFetchedAt, setServerFetchedAt] = useState<number | null>(null)
@@ -233,9 +238,11 @@ export function LeadsExplorer() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      const quiet = quietRefresh.current
+      quietRefresh.current = false
       setServerLoading(true)
       setServerError(null)
-      setServerPage(null)
+      if (!quiet) setServerPage(null)
       const startedAt = Date.now()
       try {
         const next = await fetchNeonLeadsSearchPage(serverQuery)
@@ -255,6 +262,17 @@ export function LeadsExplorer() {
     }
   }, [serverQuery, serverRefresh])
 
+  /* A stage edit already shows on its row: setStage patches the lead and the
+   * leadEdits overlay lays it over the server rows. Refetching would blank the
+   * table and lose the scroll, so it happens only when the edit can move the
+   * row in or out of the result (a pipeline or owner filter), and then quietly,
+   * with the current rows kept until the new page arrives. */
+  const refreshAfterStageEdit = () => {
+    if (pipe === 'all' && who === 'all') return
+    quietRefresh.current = true
+    setServerRefresh((value) => value + 1)
+  }
+
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params)
     if (value === 'all' || value === '') next.delete(key)
@@ -270,7 +288,7 @@ export function LeadsExplorer() {
 
   const openFilters = () => {
     setFilterDraft(Object.fromEntries(
-      SHEET_FILTER_KEYS.map((key) => [key, params.get(key) ?? 'all']),
+      SHEET_FILTER_KEYS.map((key) => [key, key === 'pipe' ? pipe : params.get(key) ?? 'all']),
     ))
   }
   const setDraftFilter = (key: string, value: string) => {
@@ -302,7 +320,7 @@ export function LeadsExplorer() {
   }
 
   // Latest inbound reply (body + classification) per lead — powers the sentiment
-  // buckets/counts and the per-row snippet shown in reply mode.
+  // buckets/counts and the Reply column.
   const snippets = useMemo(() => {
     return new Map(
       (serverPage?.items ?? [])
@@ -388,7 +406,9 @@ export function LeadsExplorer() {
     return () => {
       cancelled = true
     }
-  }, [data])
+    // Keyed on the instances list, not all of `data`: a stage edit patches one
+    // lead and must not re-fetch every account's digest.
+  }, [data?.instances])
 
   async function refreshDigest(instance_id: string) {
     setDigestBusy(instance_id)
@@ -448,7 +468,7 @@ export function LeadsExplorer() {
   )
   // Lead, Account / campaign, Milestone, Pipeline, Next follow-up + the date
   // columns, plus Headline / Age / Gender when the detail columns are shown.
-  const colSpan = 5 + (showDetailColumns ? 3 : 0) + dateColumns.length
+  const colSpan = 6 + (showDetailColumns ? 3 : 0) + dateColumns.length
 
   /* How many of the sheet's filters are engaged. The search box and the account
    * selector are on the page and visibly set, so they are not counted here. */
@@ -829,6 +849,7 @@ export function LeadsExplorer() {
           <thead>
             <tr>
               {sortHeader('full_name', 'Lead')}
+              <th scope="col">Reply</th>
               {showDetailColumns && <th scope="col">Headline</th>}
               <th scope="col">Account / campaign</th>
               <th scope="col">Milestone</th>
@@ -841,11 +862,9 @@ export function LeadsExplorer() {
           </thead>
           <tbody>
             {pageRows.map((l) => {
-              // In reply mode surface the latest inbound snippet + sentiment badge
-              // (the old ReplyRow presentation, inlined into the table cell).
-              const reply = replyActive
-                ? snippets.get(leadKey(l.instance_id, l.profile_url))
-                : undefined
+              // The latest inbound's reviewed sentiment, shown in the Reply
+              // column. Its text lives in the conversation drawer.
+              const reply = snippets.get(leadKey(l.instance_id, l.profile_url))
               const reachedIntent = conversationIntents.get(
                 leadKey(l.instance_id, l.profile_url),
               )?.highest
@@ -854,7 +873,7 @@ export function LeadsExplorer() {
               return (
               <tr
                 key={l.id}
-                className="group/row relative cursor-pointer"
+                className="ui-table__row--identity group/row relative cursor-pointer"
                 // The pointer path: a click anywhere on the row that is not one
                 // of its own controls opens the conversation. The keyboard path
                 // is the row's button below.
@@ -862,17 +881,14 @@ export function LeadsExplorer() {
               >
                 <td onClick={(e) => e.stopPropagation()}>
                   <RowOpenButton label={`Open conversation with ${name}`} onOpen={() => openConversation(l)} />
-                  <LeadReplyIdentity
-                    lead={l}
-                    reply={reply}
-                    highestIntent={reachedIntent}
-                    showSnippet={replyActive}
-                  />
-                  {l.replied_at && <Link
-                    className="text-app-meta text-app-text-secondary no-underline hover:text-app-accent hover:underline"
-                    to={`/replies?view=all&scope=all&thread=${encodeURIComponent(`${l.instance_id}|${l.profile_url}`)}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >Open in Replies</Link>}
+                  <LeadReplyIdentity lead={l} showSnippet={false} showBadges={false} />
+                </td>
+                <td>
+                  {reply?.sentiment || reachedIntent ? (
+                    <div className="flex items-center gap-app-xs whitespace-nowrap">
+                      <LeadReplyBadges reply={reply} highestIntent={reachedIntent} />
+                    </div>
+                  ) : <span className="text-app-text-muted">—</span>}
                 </td>
                 {showDetailColumns && (
                   <td className="max-w-[240px] truncate text-app-text-muted" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
@@ -899,9 +915,7 @@ export function LeadsExplorer() {
                     onChange={(e) => {
                       const v = e.target.value
                       if (v === 'lost') setPendingLost(l)
-                      else void setStage(l, v || null).then(() => {
-                        setServerRefresh((value) => value + 1)
-                      })
+                      else void setStage(l, v || null).then(refreshAfterStageEdit)
                     }}
                   >
                     <option value="">—</option>
@@ -1028,9 +1042,7 @@ export function LeadsExplorer() {
           onConfirm={(reason) => {
             const lead = pendingLost
             setPendingLost(null)
-            void setStage(lead, 'lost', { lostReason: reason }).then(() => {
-              setServerRefresh((value) => value + 1)
-            })
+            void setStage(lead, 'lost', { lostReason: reason }).then(refreshAfterStageEdit)
           }}
         />
       )}

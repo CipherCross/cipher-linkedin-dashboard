@@ -20,13 +20,23 @@ const openConversation = vi.fn()
 const setStage = vi.fn(async () => {})
 
 const leads = vi.hoisted(() => ({ value: [] as Lead[] }))
+// Per-lead latest reply and highest intent the fake server page carries.
+const replies = vi.hoisted(() => ({
+  value: {} as Record<string, { body: string; sentiment: string; sent_at: string; reason: null }>,
+  intents: {} as Record<string, string>,
+}))
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonCoachingDigests: vi.fn(async () => []),
   fetchNeonLeadsSearchPage: vi.fn(async (query: { q?: string }) => {
     const needle = (query.q ?? '').toLowerCase()
     const matched = leads.value.filter((l) => (l.full_name ?? '').toLowerCase().includes(needle))
     return {
-      items: matched.map((lead) => ({ lead, reply: null, highestIntent: null, followUp: null })),
+      items: matched.map((lead) => ({
+        lead,
+        reply: replies.value[lead.id] ?? null,
+        highestIntent: replies.intents[lead.id] ?? null,
+        followUp: null,
+      })),
       total: matched.length,
       allTotal: leads.value.length,
       replyCounts: { total: 0, c: {} },
@@ -69,6 +79,8 @@ vi.mock('../src/lib/DataContext', () => ({
 }))
 
 const { LeadsExplorer } = await import('../src/pages/LeadsExplorer')
+const { fetchNeonLeadsSearchPage } = await import('../src/lib/dashboardReads')
+const fetchPage = vi.mocked(fetchNeonLeadsSearchPage)
 
 function dataWith(rows: Lead[]): DashboardData {
   leads.value = rows
@@ -101,6 +113,8 @@ const search = () => screen.getByLabelText('search').textContent
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
+  replies.value = {}
+  replies.intents = {}
   data.value = dataWith([
     lead({}),
     lead({ id: 'l2', profile_url: 'https://www.linkedin.com/in/bob', full_name: 'Bob Babbage', assigned_to: 7 }),
@@ -169,9 +183,9 @@ describe('the leads table', () => {
     await paint()
     const select = screen.getByRole('combobox', { name: 'Pipeline stage for Ada Lovelace' })
     fireEvent.click(select)
-    fireEvent.change(select, { target: { value: 'interested' } })
+    fireEvent.change(select, { target: { value: 'replied' } })
     expect(openConversation).not.toHaveBeenCalled()
-    expect(setStage).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 'interested')
+    expect(setStage).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1' }), 'replied')
   })
 
   it('tells an empty dataset from a filtered-out one', async () => {
@@ -181,5 +195,83 @@ describe('the leads table', () => {
     data.value = dataWith([])
     await paint()
     expect(screen.getByText('No leads yet').closest('[data-empty-kind]')?.getAttribute('data-empty-kind')).toBe('empty')
+  })
+})
+
+describe('changing a stage', () => {
+  it('keeps the table on screen and does not refetch the page', async () => {
+    await paint()
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    const select = screen.getByRole('combobox', { name: 'Pipeline stage for Ada Lovelace' })
+    await act(async () => {
+      fireEvent.change(select, { target: { value: 'replied' } })
+    })
+    expect(setStage).toHaveBeenCalledTimes(1)
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Open conversation with Ada Lovelace' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open conversation with Bob Babbage' })).toBeTruthy()
+  })
+
+  it('refetches under a pipeline filter, keeping the current rows until the new page lands', async () => {
+    await paint('/leads?pipe=first_contact')
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    // The refetch never settles: whatever is on screen is the old page.
+    fetchPage.mockImplementationOnce(() => new Promise(() => {}))
+    const select = screen.getByRole('combobox', { name: 'Pipeline stage for Ada Lovelace' })
+    await act(async () => {
+      fireEvent.change(select, { target: { value: 'replied' } })
+    })
+    expect(fetchPage).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: 'Open conversation with Ada Lovelace' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open conversation with Bob Babbage' })).toBeTruthy()
+  })
+})
+
+describe('the pipeline vocabulary', () => {
+  it('offers no stage that repeats reply sentiment', async () => {
+    await paint()
+    const select = screen.getByRole('combobox', { name: 'Pipeline stage for Ada Lovelace' })
+    const labels = Array.from((select as HTMLSelectElement).options).map((o) => o.textContent)
+    expect(labels).toContain('Replied')
+    for (const retired of ['Interested', 'Neutral', 'Negative']) expect(labels).not.toContain(retired)
+  })
+
+  it('reads a retired stage in an old link as the stage its leads moved to', async () => {
+    await paint('/leads?pipe=neutral')
+    expect(fetchPage.mock.calls[0][0]).toMatchObject({ pipe: 'replied' })
+    cleanup()
+    fetchPage.mockClear()
+    await paint('/leads?pipe=negative')
+    expect(fetchPage.mock.calls[0][0]).toMatchObject({ pipe: 'lost' })
+  })
+})
+
+describe('the lead and reply columns', () => {
+  it('keeps the Lead cell to name and company and shows sentiment and intent in Reply', async () => {
+    replies.value = {
+      l1: { body: 'Sounds great, tell me more', sentiment: 'positive', sent_at: '2026-09-05T00:00:00Z', reason: null },
+    }
+    replies.intents = { l1: 'p3' }
+    data.value = dataWith([
+      lead({ replied_at: '2026-09-05T00:00:00Z' }),
+      lead({ id: 'l2', profile_url: 'https://www.linkedin.com/in/bob', full_name: 'Bob Babbage' }),
+    ])
+    await paint('/leads?sentiment=positive')
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
+    expect(headers.slice(0, 2)).toEqual([expect.stringMatching(/^Lead/), 'Reply'])
+
+    const ada = screen.getByRole('button', { name: 'Open conversation with Ada Lovelace' }).closest('tr')!
+    const [leadCell, replyCell] = Array.from(ada.querySelectorAll('td'))
+    expect(leadCell.textContent).toContain('Ada Lovelace')
+    expect(leadCell.textContent).toContain('Engines')
+    expect(leadCell.textContent).not.toContain('Sounds great')
+    expect(leadCell.textContent).not.toContain('Positive')
+    expect(within(ada).queryByText('Open in Replies')).toBeNull()
+    expect(replyCell.textContent).toContain('Positive')
+    expect(replyCell.textContent).toContain('P3')
+    expect(ada.classList.contains('ui-table__row--identity')).toBe(true)
+
+    const bob = screen.getByRole('button', { name: 'Open conversation with Bob Babbage' }).closest('tr')!
+    expect(bob.querySelectorAll('td')[1].textContent).toBe('—')
   })
 })
