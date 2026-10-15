@@ -144,6 +144,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/023_ai_read_sequences_reviews.sql',
   // Derived message-to-step attribution cache and its performance view (step 024).
   'postgres/tenant-baseline/v1/024_message_step_attribution.sql',
+  // The pipeline stops repeating reply sentiment: one 'replied' stage (step 025).
+  'postgres/tenant-baseline/v1/025_pipeline_replied_stage.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -367,8 +369,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-four steps in order 1 -> 2 -> ... -> 24',
-  manifest.steps.length === 24 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-five steps in order 1 -> 2 -> ... -> 25',
+  manifest.steps.length === 25 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -440,6 +442,25 @@ check('step 024 never deletes and changes no existing object',
   && !/CREATE OR REPLACE/i.test(attributionSql));
 check('step 024 performance view runs with the reader\'s rights',
   /CREATE VIEW public\.step_attribution_performance WITH \(security_invoker='true'\)/.test(attributionSql));
+
+const repliedStageStep = manifest.steps.find((s) => s.step === 25);
+const repliedStagePath = join(BASELINE_DIR, '025_pipeline_replied_stage.sql');
+const repliedStageSql = stripComments('025_pipeline_replied_stage.sql', readFileSync(repliedStagePath, 'utf8'));
+check('manifest declares step 025 pipeline replied stage',
+  repliedStageStep?.artifact === '025_pipeline_replied_stage.sql' && repliedStageStep.owner_role_entered_by === 'artifact');
+check('step 025 manifest digest matches its artifact',
+  repliedStageStep?.sha256 === sha256(repliedStagePath), `manifest ${repliedStageStep?.sha256}, disk ${sha256(repliedStagePath)}`);
+check('step 025 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(repliedStageSql) && /RESET ROLE;\s*$/.test(repliedStageSql));
+check('step 025 allows replied and keeps the old stages allowed for the rollout window',
+  /'replied'::text/.test(repliedStageSql)
+  && ['interested', 'neutral', 'negative'].every((s) => new RegExp(`'${s}'::text`).test(repliedStageSql)));
+check('step 025 moves interested/neutral to replied and negative to lost',
+  /SET pipeline_stage = 'replied'[\s\S]*WHERE pipeline_stage IN \('interested', 'neutral'\)/.test(repliedStageSql)
+  && /SET pipeline_stage = 'lost'[\s\S]*WHERE pipeline_stage = 'negative'/.test(repliedStageSql));
+check('step 025 auto-advance can only write replied',
+  /CREATE OR REPLACE FUNCTION public\.pipeline_auto_advance\(\)/.test(repliedStageSql)
+  && !/then 'interested'|then 'negative'|else 'neutral'/.test(repliedStageSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');

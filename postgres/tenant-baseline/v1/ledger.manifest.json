@@ -291,6 +291,14 @@
       "owner_role_entered_by": "artifact",
       "session": "ai-sequences-threads",
       "description": "Adds public.message_step_attribution (one row per outbound message: the campaign step whose template its text matches, or method 'none'), the SECURITY DEFINER writer refresh_message_step_attribution(instance, full) executable only by app_system (upsert, never DELETE; rows go with their message through ON DELETE CASCADE), two IMMUTABLE helpers normalize_message_text and message_template_pattern, and the security_invoker view step_attribution_performance. Read access: app_ai_runner plus app_runtime/app_readonly for active members. No change to any existing object or funnel semantics."
+    },
+    {
+      "step": 25,
+      "artifact": "025_pipeline_replied_stage.sql",
+      "sha256": "a9db4be5223dfe7592820d2d4c489b968d29bda9573698fc59ce2d001b589e2e",
+      "owner_role_entered_by": "artifact",
+      "session": "pipeline-replied-stage",
+      "description": "The CRM pipeline stops repeating reply sentiment: widens leads_pipeline_stage_check with 'replied' (the old 'interested', 'neutral' and 'negative' stay allowed for the rollout window), moves interested/neutral leads to 'replied' and negative leads to 'lost' with lost_reason 'Negative reply' (plus the old soft/hard-no substatus), and replaces the retired pipeline_auto_advance so it can only write 'replied'. pipeline_events history, grants, policies and the substatus CHECK are unchanged."
     }
   ]
 }
