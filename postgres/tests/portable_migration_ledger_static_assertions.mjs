@@ -179,6 +179,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/024_message_step_attribution.sql',
   // The pipeline stops repeating reply sentiment: one 'replied' stage (step 025).
   'postgres/tenant-baseline/v1/025_pipeline_replied_stage.sql',
+  // The lead CHECKs stop accepting the slugs 025 retired (step 026).
+  'postgres/tenant-baseline/v1/026_pipeline_retired_slugs_check.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -275,7 +277,8 @@ const PROTECTED_PATHS = [
   // ledger status read 25/25 on 2026-10-15 with every digest matching the
   // manifest, so each is applied and as immutable as 001..013. 014..022 were
   // applied sessions earlier and should have been promoted then; the gap was
-  // only noticed here. A correction to any of them is a new step.
+  // only noticed here. A correction to any of them is a new step (026 is the
+  // first: it narrows the stage CHECK 025 widened).
   'postgres/tenant-baseline/v1/014_campaign_runtime_status.sql',
   'postgres/tenant-baseline/v1/015_sequence_publish_compatibility.sql',
   'postgres/tenant-baseline/v1/016_sequence_publish_replacement_write.sql',
@@ -419,8 +422,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-five steps in order 1 -> 2 -> ... -> 25',
-  manifest.steps.length === 25 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-six steps in order 1 -> 2 -> ... -> 26',
+  manifest.steps.length === 26 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -511,6 +514,38 @@ check('step 025 moves interested/neutral to replied and negative to lost',
 check('step 025 auto-advance can only write replied',
   /CREATE OR REPLACE FUNCTION public\.pipeline_auto_advance\(\)/.test(repliedStageSql)
   && !/then 'interested'|then 'negative'|else 'neutral'/.test(repliedStageSql));
+
+const retiredSlugsStep = manifest.steps.find((s) => s.step === 26);
+const retiredSlugsPath = join(BASELINE_DIR, '026_pipeline_retired_slugs_check.sql');
+const retiredSlugsSql = stripComments('026_pipeline_retired_slugs_check.sql', readFileSync(retiredSlugsPath, 'utf8'));
+const retiredSlugsChecks = (name) => retiredSlugsSql
+  .match(new RegExp(`ADD CONSTRAINT ${name} CHECK \\(([\\s\\S]*?)\\);`))?.[1] ?? '';
+const stageCheck026 = retiredSlugsChecks('leads_pipeline_stage_check');
+const substatusCheck026 = retiredSlugsChecks('leads_pipeline_substatus_check');
+check('manifest declares step 026 retired pipeline slugs',
+  retiredSlugsStep?.artifact === '026_pipeline_retired_slugs_check.sql' && retiredSlugsStep.owner_role_entered_by === 'artifact');
+check('step 026 manifest digest matches its artifact',
+  retiredSlugsStep?.sha256 === sha256(retiredSlugsPath), `manifest ${retiredSlugsStep?.sha256}, disk ${sha256(retiredSlugsPath)}`);
+check('step 026 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(retiredSlugsSql) && /RESET ROLE;\s*$/.test(retiredSlugsSql));
+check('step 026 stage CHECK is exactly the live vocabulary, without the retired three',
+  ['first_contact', 'replied', 'following_up', 'negotiations_call', 'call_booked', 'call_done',
+    'proposal_in_progress', 'proposal_presented', 'client', 'lost']
+    .every((slug) => stageCheck026.includes(`'${slug}'::text`))
+  && (stageCheck026.match(/'[a-z_]+'::text/g) ?? []).length === 10
+  && !/'(interested|neutral|negative)'/.test(stageCheck026));
+check('step 026 substatus CHECK drops soft_no, hard_no and lost and keeps the six live ones',
+  ['proposal', 'later', 'not_a_fit', 'waiting_decision', 'contract', 'needs_changes']
+    .every((slug) => substatusCheck026.includes(`'${slug}'::text`))
+  && (substatusCheck026.match(/'[a-z_]+'::text/g) ?? []).length === 6
+  && !/'(soft_no|hard_no|lost)'/.test(substatusCheck026));
+check('step 026 refuses to run while a lead still holds a retired slug',
+  /RAISE EXCEPTION 'step 026:/.test(retiredSlugsSql)
+  && /pipeline_stage IN \('interested', 'neutral', 'negative'\)/.test(retiredSlugsSql)
+  && /pipeline_substatus IN \('soft_no', 'hard_no', 'lost'\)/.test(retiredSlugsSql));
+check('step 026 changes no data, history, grant, policy, function or view',
+  !/\b(UPDATE|INSERT|DELETE|TRUNCATE|GRANT|REVOKE|CREATE POLICY|ALTER POLICY|CREATE (OR REPLACE )?(FUNCTION|VIEW))\b/i.test(retiredSlugsSql)
+  && !/pipeline_events/.test(retiredSlugsSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');

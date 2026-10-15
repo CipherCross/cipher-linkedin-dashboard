@@ -185,7 +185,7 @@ describe('authorization', () => {
   it('refuses an unauthenticated caller and writes nothing', async () => {
     const response = await neonSetStage(
       request('anonymous'),
-      { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_IDS.stage, stage: 'negotiations_call', substatus: null, lostReason: null },
       { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(401)
@@ -204,7 +204,7 @@ describe('authorization', () => {
   it('refuses an inactive team member, and the refusal is indistinguishable from unknown', async () => {
     const response = await neonSetStage(
       request('inactive'),
-      { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_IDS.stage, stage: 'negotiations_call', substatus: null, lostReason: null },
       { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(403)
@@ -218,7 +218,7 @@ describe('authorization', () => {
   it('an ordinary member may move a stage', async () => {
     const response = await neonSetStage(
       request('activeMember'),
-      { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_IDS.stage, stage: 'negotiations_call', substatus: null, lostReason: null },
       { store, ...fixtureIdentity.deps },
     )
     expect(response.status).toBe(200)
@@ -321,7 +321,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
   it('holds pipeline_stage_changed_at still for a substatus-only edit', async () => {
     await neonSetStage(
       request('activeMember'),
-      { leadId: LEAD_IDS.stage, stage: 'lost', substatus: null, lostReason: null },
+      { leadId: LEAD_IDS.stage, stage: 'call_done', substatus: null, lostReason: null },
       { store, ...fixtureIdentity.deps },
     )
     const first = await read(
@@ -334,9 +334,11 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
       request('activeMember'),
       {
         leadId: LEAD_IDS.stage,
-        stage: 'lost',
-        substatus: 'hard_no',
-        lostReason: 'budget',
+        // A live substatus: step 026 drops the retired 'negative' stage's
+        // soft_no/hard_no/lost from the CHECK.
+        stage: 'call_done',
+        substatus: 'later',
+        lostReason: null,
       },
       { store, ...fixtureIdentity.deps },
     )
@@ -345,8 +347,8 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
          FROM public.leads WHERE id = $1`,
       [LEAD_IDS.stage],
     )
-    expect(second[0]?.pipeline_substatus).toBe('hard_no')
-    expect(second[0]?.lost_reason).toBe('budget')
+    expect(second[0]?.pipeline_stage).toBe('call_done')
+    expect(second[0]?.pipeline_substatus).toBe('later')
     // Time-in-stage must not reset because a label changed.
     expect(second[0]?.pipeline_stage_changed_at).toEqual(stamped)
   })
@@ -354,7 +356,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
   it('clears the timestamp when the lead leaves the pipeline', async () => {
     await neonSetStage(
       request('activeMember'),
-      { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
+      { leadId: LEAD_IDS.stage, stage: 'negotiations_call', substatus: null, lostReason: null },
       { store, ...fixtureIdentity.deps },
     )
     const response = await neonSetStage(
@@ -381,7 +383,7 @@ describe('set_stage: the mutation and its audit row are one commit', () => {
       request('activeMember'),
       {
         leadId: '5a140000-0000-4000-8000-0000000000ff',
-        stage: 'interested',
+        stage: 'negotiations_call',
         substatus: null,
         lostReason: null,
       },
@@ -1251,7 +1253,7 @@ describe('set_stage: two concurrent moves of one lead', () => {
 
       const first = neonSetStage(
         request('activeMember'),
-        { leadId: LEAD_IDS.stage, stage: 'interested', substatus: null, lostReason: null },
+        { leadId: LEAD_IDS.stage, stage: 'negotiations_call', substatus: null, lostReason: null },
         { store: slow, ...fixtureIdentity.deps },
       )
       // Long enough for `first` to have taken the row lock and entered the
@@ -1281,7 +1283,7 @@ describe('set_stage: two concurrent moves of one lead', () => {
       expect(events[0]?.from_stage).toBe('first_contact')
       expect(events[1]?.from_stage).toBe(events[0]?.to_stage)
       expect(new Set(events.map((event) => event.to_stage))).toEqual(
-        new Set(['interested', 'call_booked']),
+        new Set(['negotiations_call', 'call_booked']),
       )
       expect(
         (

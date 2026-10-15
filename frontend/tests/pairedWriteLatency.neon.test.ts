@@ -144,7 +144,7 @@ describe('the cost of two operations instead of one', () => {
     const RUNS = 15
     const WARMUP = 3
 
-    const stages = ['interested', 'call_booked']
+    const stages = ['negotiations_call', 'call_booked']
     const now = () => new Date().toISOString()
 
     const pair = async (index: number) => {

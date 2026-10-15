@@ -299,6 +299,14 @@
       "owner_role_entered_by": "artifact",
       "session": "pipeline-replied-stage",
       "description": "The CRM pipeline stops repeating reply sentiment: widens leads_pipeline_stage_check with 'replied' (the old 'interested', 'neutral' and 'negative' stay allowed for the rollout window), moves interested/neutral leads to 'replied' and negative leads to 'lost' with lost_reason 'Negative reply' (plus the old soft/hard-no substatus), and replaces the retired pipeline_auto_advance so it can only write 'replied'. pipeline_events history, grants, policies and the substatus CHECK are unchanged."
+    },
+    {
+      "step": 26,
+      "artifact": "026_pipeline_retired_slugs_check.sql",
+      "sha256": "3e00b2df9ccf8393be7a06527cc6993b639a7af6ca9dd135c637b55c97f88cca",
+      "owner_role_entered_by": "artifact",
+      "session": "pipeline-replied-stage-follow-up",
+      "description": "Narrows the two lead pipeline CHECKs to the live vocabulary: leads_pipeline_stage_check drops 'interested', 'neutral' and 'negative' (retired by step 025, kept allowed only for its rollout window) and leads_pipeline_substatus_check drops 'soft_no', 'hard_no' and 'lost' (the retired 'negative' stage's substatuses). A precondition aborts with a named error if any lead still holds one. pipeline_events history, grants, policies, functions and views are unchanged."
     }
   ]
 }
