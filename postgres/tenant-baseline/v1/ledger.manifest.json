@@ -275,6 +275,14 @@
       "owner_role_entered_by": "artifact",
       "session": "replies-contact-names",
       "description": "Adds public.conversation_contacts (instance_id, profile_url, full_name, headline): the name and headline of a conversation partner with no lead row, delivered by the machine ingest path. RLS: app_machine reads and writes only its own instance's rows; active team members read all rows through app_runtime and app_readonly. No DELETE grant, no AI sandbox access, no change to any existing object."
+    },
+    {
+      "step": 23,
+      "artifact": "023_ai_read_sequences_reviews.sql",
+      "sha256": "6e9b12defe6a699d23d29a6d111d4e8f3471bf494941b1a3a7dc6fbbc2dc93bd",
+      "owner_role_entered_by": "artifact",
+      "session": "ai-sequences-threads",
+      "description": "Grants the AI SQL sandbox (app_ai_runner) SELECT, each behind a FOR SELECT USING (true) policy, on reply_reviews, reply_review_reasons, conversation_reply_review_state, conversation_contacts, sequence_documents and sequence_versions, plus column-scoped SELECT on sequence_publish_jobs, sequence_publish_branches and campaign_sequence_links (no machine keys, leases, credential ids, idempotency keys or verification payloads). No write, DELETE, function or view change."
     }
   ]
 }

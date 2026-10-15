@@ -140,6 +140,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/021_follow_up_outcome_resolves_action.sql',
   // Names of conversation partners who have no lead (step 022).
   'postgres/tenant-baseline/v1/022_conversation_contacts.sql',
+  // AI sandbox reads of reply reviews, contact names and sequence lineage (step 023).
+  'postgres/tenant-baseline/v1/023_ai_read_sequences_reviews.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -363,8 +365,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-two steps in order 1 -> 2 -> ... -> 22',
-  manifest.steps.length === 22 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-three steps in order 1 -> 2 -> ... -> 23',
+  manifest.steps.length === 23 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -385,6 +387,30 @@ check('step 022 scopes the machine to its own instance and gives members read on
   && /GRANT SELECT ON TABLE public\.conversation_contacts TO app_runtime, app_readonly;/.test(contactsSql));
 check('step 022 grants no DELETE and no AI sandbox access',
   !/GRANT[^;]*DELETE/.test(contactsSql) && !/app_ai_runner/.test(contactsSql));
+
+// Step 022 was written with no AI access; step 023 is where that changed, so the
+// 022 check above still describes 022's own bytes and stays true.
+const aiReadStep = manifest.steps.find((s) => s.step === 23);
+const aiReadPath = join(BASELINE_DIR, '023_ai_read_sequences_reviews.sql');
+const aiReadSql = stripComments('023_ai_read_sequences_reviews.sql', readFileSync(aiReadPath, 'utf8'));
+check('manifest declares step 023 AI sandbox reads',
+  aiReadStep?.artifact === '023_ai_read_sequences_reviews.sql' && aiReadStep.owner_role_entered_by === 'artifact');
+check('step 023 manifest digest matches its artifact',
+  aiReadStep?.sha256 === sha256(aiReadPath), `manifest ${aiReadStep?.sha256}, disk ${sha256(aiReadPath)}`);
+check('step 023 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(aiReadSql) && /RESET ROLE;\s*$/.test(aiReadSql));
+check('step 023 grants the AI sandbox SELECT only, with a read policy per relation',
+  ['reply_reviews', 'reply_review_reasons', 'conversation_reply_review_state', 'conversation_contacts',
+    'sequence_documents', 'sequence_versions', 'sequence_publish_jobs', 'sequence_publish_branches',
+    'campaign_sequence_links'].every((t) =>
+    new RegExp(`CREATE POLICY ${t}_ai_read ON public\\.${t} FOR SELECT TO app_ai_runner USING \\(true\\);`).test(aiReadSql))
+  && !/\b(INSERT|UPDATE|DELETE|TRUNCATE|DROP|ALTER|REVOKE|FUNCTION|VIEW)\b/i.test(aiReadSql)
+  && (aiReadSql.match(/\bGRANT\b/g) ?? []).length === (aiReadSql.match(/\bGRANT SELECT\b/g) ?? []).length
+  && /TO app_ai_runner;/.test(aiReadSql) && !/TO (app_runtime|app_readonly|app_system|app_machine|PUBLIC)\b/.test(aiReadSql));
+check('step 023 keeps machine plumbing out of the AI view of publish lineage',
+  !/\b(target_machine_key|claimed_by_credential_id|idempotency_key|payload_digest|lease_expires_at|verification_summary|target_account_snapshot)\b/.test(aiReadSql)
+  && !/GRANT SELECT ON TABLE[^;]*sequence_publish_(jobs|branches)/.test(aiReadSql)
+  && !/sequence_comment_|sequence_publish_targets|reply_review_events|reply_review_mutations|legacy_reply_classifications/.test(aiReadSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
