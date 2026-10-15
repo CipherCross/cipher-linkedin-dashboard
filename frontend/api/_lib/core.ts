@@ -220,7 +220,7 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
   gender_model_version text (prompt/taxonomy version; NULL for manual overrides),
   demo_inferred_at timestamptz (LEGACY combined stamp, now mirrors gender lifecycle
     for clients deployed before migration 048),
-  demo_model text ('claude-haiku-4-5' = AI inference; 'manual' = SDR-reviewed
+  demo_model text (a claude-haiku-* model id = AI inference; 'manual' = SDR-reviewed
     override via the dashboard. Manual prevents re-inference but is not evidence
     of the person's self-identified gender).
   NOTE: gender/age are INFERRED for internal analytics; always describe them as

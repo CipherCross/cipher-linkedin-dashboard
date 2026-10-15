@@ -95,7 +95,7 @@ describe('reply-classification AI cutover', () => {
     })
     expect(body).not.toHaveProperty('auto_advanced')
     expect(generateObject).toHaveBeenCalledTimes(1)
-    expect(anthropic).toHaveBeenCalledWith('claude-haiku-4-5')
+    expect(anthropic).toHaveBeenCalledWith('claude-haiku-5-5')
     expect(fixture.transaction).toHaveBeenCalledTimes(1)
     expect(fixture.execute).toHaveBeenCalledWith(expect.objectContaining({
       operation: 'classify.writeGender',
@@ -132,7 +132,7 @@ describe('reply-classification AI cutover', () => {
     expect(response.status).toBe(200)
     expect((await responseBody(response)).demographics).toMatchObject({ processed: 1, failed: 0 })
     expect(generateObject).toHaveBeenCalledTimes(1)
-    expect(anthropic).toHaveBeenCalledWith('claude-haiku-4-5')
+    expect(anthropic).toHaveBeenCalledWith('claude-haiku-5-5')
     expect(fixture.transaction).toHaveBeenCalledTimes(1)
     expect(fixture.execute).toHaveBeenCalledWith(expect.objectContaining({
       operation: 'classify.writeGender',

@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     : SYSTEM_BASE
 
   const result = streamText({
-    model: anthropic('claude-opus-4-8'),
+    model: anthropic('claude-opus-5-5'),
     system: SYSTEM,
     messages: await convertToModelMessages(messages),
     tools: buildTools({ req }),
@@ -74,6 +74,7 @@ export async function POST(req: Request) {
     providerOptions: {
       anthropic: {
         thinking: { type: 'adaptive', display: 'summarized' },
+        effort: 'high',
       },
     },
   })

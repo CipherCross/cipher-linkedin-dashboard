@@ -68,9 +68,9 @@ import { neonWriter, type NeonWriteDeps } from './_lib/neonWrites.js'
 
 export const maxDuration = 300
 
-const INVESTIGATE_MODEL = 'claude-opus-5'
-const VERIFY_MODEL = 'claude-opus-5'
-const STRUCTURE_MODEL = 'claude-opus-5'
+const INVESTIGATE_MODEL = 'claude-opus-5-5'
+const VERIFY_MODEL = 'claude-opus-5-5'
+const STRUCTURE_MODEL = 'claude-opus-5-5'
 const ENSEMBLE_MODEL_LABEL = Array.from(
   new Set([INVESTIGATE_MODEL, VERIFY_MODEL, STRUCTURE_MODEL]),
 ).join(' + ')
@@ -724,7 +724,7 @@ async function runInvestigateStage(
           stopWhen: stepCountIs(kind === 'daily' ? 20 : 40),
           maxOutputTokens: kind === 'daily' ? 6000 : 10000,
           providerOptions: {
-            anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
+            anthropic: { thinking: { type: 'adaptive', display: 'summarized' }, effort: 'high' },
           },
         })
         return { label, text }
@@ -787,7 +787,7 @@ async function runVerifyStage(
       stopWhen: stepCountIs(kind === 'daily' ? 20 : 30),
       maxOutputTokens: kind === 'daily' ? 5000 : 9000,
       providerOptions: {
-        anthropic: { thinking: { type: 'adaptive', display: 'summarized' } },
+        anthropic: { thinking: { type: 'adaptive', display: 'summarized' }, effort: 'high' },
       },
     })
 
@@ -842,7 +842,8 @@ async function runStructureStage(
         : claimed.verified_text) ?? '',
       maxOutputTokens: kind === 'daily' ? 3000 : 5000,
       providerOptions: {
-        anthropic: { thinking: { type: 'disabled' } },
+        // Opus 5.5 rejects disabled thinking; low effort keeps extraction cheap.
+        anthropic: { effort: 'low' },
       },
     })
     const object = constrainBriefing(kind, rawObject)

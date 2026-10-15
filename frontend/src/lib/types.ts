@@ -452,7 +452,7 @@ export interface Lead {
   gender_model_version?: string | null
   /** Legacy combined stamp retained for clients deployed before migration 048. */
   demo_inferred_at?: string | null
-  /** 'claude-haiku-4-5' = AI-inferred; 'manual' = SDR-reviewed override. */
+  /** A claude-haiku-* model id = AI-inferred; 'manual' = SDR-reviewed override. */
   demo_model?: string | null
   /** Bucket-relative path in the private `lead-photos` Storage bucket. Display
    * only through authenticated/signed delivery; never an inference input. */

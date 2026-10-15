@@ -54,7 +54,7 @@ import {
 
 export const maxDuration = 300
 
-const MODEL = 'claude-haiku-4-5'
+const MODEL = 'claude-haiku-5-5'
 
 const BODY_CAP = 600 // chars per message shown to the model
 
@@ -282,6 +282,8 @@ async function runDemographicsOnNeon(
           }),
           system: GENDER_SYSTEM,
           prompt,
+          maxOutputTokens: 8000,
+          providerOptions: { anthropic: { effort: 'low' } },
         })
         results = object.results
       } catch (e) {

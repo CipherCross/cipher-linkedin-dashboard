@@ -43,8 +43,8 @@ import { neonWriter, type NeonWriteDeps } from './_lib/neonWrites.js'
 
 export const maxDuration = 300
 
-const CONV_MODEL = 'claude-sonnet-4-6' // per-conversation coaching
-const DIGEST_MODEL = 'claude-opus-4-8' // cross-conversation self-correction digest
+const CONV_MODEL = 'claude-sonnet-5-5' // per-conversation coaching
+const DIGEST_MODEL = 'claude-opus-5-5' // cross-conversation self-correction digest
 
 const MAX_MSGS = 30 // most recent thread messages shown to the model
 const BODY_CAP = 800 // chars per message
@@ -429,6 +429,7 @@ async function coachConversation(
     schema: convSchema,
     system: systemFor(playbook, icpText),
     prompt: renderThread(thread),
+    providerOptions: { anthropic: { effort: 'low' } },
   })
 
   const now = new Date().toISOString()
