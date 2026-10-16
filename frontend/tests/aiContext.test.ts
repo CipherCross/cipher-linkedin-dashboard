@@ -21,6 +21,8 @@ import { DataStoreAuthorizationError } from '../api/_lib/data/contracts.js'
 import {
   capText,
   formatCampaignConversations,
+  formatLeads,
+  formatReplies,
   formatSearch,
   formatSequence,
   formatThread,
@@ -70,6 +72,18 @@ const SAMPLE_PARAMS: Record<AiContextOperation, Record<string, unknown>[]> = {
     { text: "budget 100%_ \\ isn't", direction: 'in', campaign_id: 'notebook-1:42', since: '2026-09-01T00:00:00Z', limit: 50 },
   ],
   sequence: [{}, { campaign_id: 'notebook-1:42' }, { sequence: "Founders' outreach" }],
+  leads: [
+    {},
+    { campaign_id: 'notebook-1:42', instance_id: 'notebook-1', stage: 'untriaged', milestone: 'replied',
+      since: '2026-09-01', until: '2026-10-01', query: "O'Brien 100%", limit: 200 },
+    { stage: 'call_booked', query: 'set up into' },
+  ],
+  replies: [
+    {},
+    { campaign_id: 'notebook-1:42', instance_id: 'notebook-1', since: '2026-09-01', until: '2026-10-01T00:00:00Z',
+      sentiment: 'positive', intent: 'p3', review: 'reviewed', limit: 100 },
+    { review: 'unreviewed' },
+  ],
 }
 
 describe('sqlLiteral and friends', () => {
@@ -127,16 +141,48 @@ describe('the context statements', () => {
     expect(() => buildContextSql('campaignConversations', { campaign_id: 'c', limit: 0 })).toThrow()
     expect(() => buildContextSql('searchMessages', { text: 'x', direction: 'both' })).toThrow()
     expect(() => buildContextSql('searchMessages', { text: 'x', since: 'last week' })).toThrow()
+    expect(() => buildContextSql('leads', { milestone: 'booked' })).toThrow()
+    expect(() => buildContextSql('leads', { stage: "lost' or 1=1" })).toThrow()
+    expect(() => buildContextSql('leads', { until: 'tomorrow' })).toThrow()
+    expect(() => buildContextSql('replies', { sentiment: 'happy' })).toThrow()
+    expect(() => buildContextSql('replies', { intent: 'p4' })).toThrow()
+    expect(() => buildContextSql('replies', { review: 'maybe' })).toThrow()
+    expect(() => buildContextSql('replies', { limit: 0 })).toThrow()
   })
 
   it('caps limits at the documented maxima', () => {
     expect(buildContextSql('campaignConversations', { campaign_id: 'c', limit: 999 })).toMatch(/limit 40\n/)
     expect(buildContextSql('searchMessages', { text: 'hello', limit: 999 })).toMatch(/limit 50$/)
+    expect(buildContextSql('leads', { limit: 999 })).toMatch(/limit 200\n/)
+    expect(buildContextSql('leads', {})).toMatch(/limit 50\n/)
+    expect(buildContextSql('replies', { limit: 999 })).toMatch(/limit 100\n/)
+    expect(buildContextSql('replies', {})).toMatch(/limit 30\n/)
+  })
+
+  it('dates, sorts and requires the chosen lead milestone', () => {
+    const sql = buildContextSql('leads', { milestone: 'messaged', since: '2026-09-01' })
+    expect(sql).toContain('l.first_message_at as sort_at')
+    expect(sql).toContain('l.first_message_at is not null')
+    expect(sql).toContain("l.first_message_at >= ('2026-09-01'::timestamptz)")
+    const plain = buildContextSql('leads', { since: '2026-09-01' })
+    expect(plain).toContain('l.added_at as sort_at')
+    expect(plain).not.toContain('is not null')
+    expect(buildContextSql('leads', { stage: 'untriaged' })).toContain('l.pipeline_stage is null')
+  })
+
+  it('reads only inbound messages and filters on the current review', () => {
+    const sql = buildContextSql('replies', { sentiment: 'objection', intent: 'p2', review: 'unreviewed' })
+    expect(sql).toContain("m.direction = 'in'")
+    expect(sql).toContain("rr.sentiment = 'objection'")
+    expect(sql).toContain("rr.intent_level = 'p2'")
+    expect(sql).toContain('rr.sentiment is null')
   })
 
   it('scopes campaign reads through leads, not the guessed messages.campaign_id', () => {
     expect(buildContextSql('campaignConversations', { campaign_id: 'c' })).toContain("where l.campaign_id = 'c'")
     expect(buildContextSql('searchMessages', { text: 'hi', campaign_id: 'c' })).toContain("l.campaign_id = 'c'")
+    expect(buildContextSql('replies', { campaign_id: 'c' })).toContain("exists (select 1 from leads l where l.campaign_id = 'c'")
+    expect(buildContextSql('replies', { campaign_id: 'c' })).not.toContain('m.campaign_id =')
   })
 
   it('registers each as a guard query and never as a command', () => {
@@ -262,13 +308,46 @@ describe('the formatters', () => {
     expect(text).toContain('(no synced message steps)')
   })
 
+  it('renders leads with the people count, thread key, milestones and stage', () => {
+    expect(formatLeads({ total: 0, people: 0, leads: [] }, {})).toBe('No leads match.')
+    const text = formatLeads({ total: 120, people: 95, leads: [
+      { instance_id: 'notebook-1', profile_url: 'p1', campaign_id: 'notebook-1:42', campaign_name: 'Founders A',
+        full_name: 'Ann Lee', headline: 'CEO', company: 'Acme', status: '2',
+        added_at: '2026-08-01T00:00:00Z', invited_at: '2026-08-02T00:00:00Z', replied_at: '2026-09-03T08:00:00Z',
+        pipeline_stage: 'call_done', pipeline_substatus: 'proposal' },
+      { instance_id: 'notebook-2', profile_url: 'p2', campaign_id: 'notebook-2:7', full_name: 'Bo', status: '-1' },
+    ] }, { milestone: 'replied' })
+    expect(text).toContain('120 lead row(s), 95 distinct people, match; newest 2 by replied date shown')
+    expect(text).toContain('- Ann Lee — CEO @ Acme')
+    expect(text).toContain('campaign "Founders A" (notebook-1:42) · thread notebook-1 | p1 · added 2026-08-01, invited 2026-08-02, replied 2026-09-03 · stage: call_done/proposal')
+    expect(text).not.toContain('LH2 status 2')
+    expect(text).toContain('no milestones · stage: untriaged · LH2 status -1 (excluded/failed)')
+  })
+
+  it('renders the reply feed with campaigns, labels and the unlabelled count', () => {
+    expect(formatReplies({ total: 0, replies: [] })).toBe('No inbound replies match.')
+    const text = formatReplies({ total: 41, people: 30, unreviewed_total: 6, replies: [
+      { ...inbound, instance_id: 'notebook-1', profile_url: 'p1', person: 'Ann Lee', headline: 'CEO', company: 'Acme',
+        campaigns: 'Founders A (notebook-1:42)' },
+      { id: 9, direction: 'in', sent_at: '2026-09-02T08:00:00Z', body: 'Who are you?', instance_id: 'n', profile_url: 'p9' },
+    ] })
+    expect(text).toContain('41 inbound replies from 30 people match (6 not yet labelled by the team); newest 2 shown')
+    expect(text).toContain('## Ann Lee — CEO @ Acme')
+    expect(text).toContain('thread: notebook-1 | p1 · campaigns: Founders A (notebook-1:42)')
+    expect(text).toContain('label: positive, P3, reasons: timing, note: "asked for pricing"] Sounds good, what does it cost?')
+    expect(text).toContain('campaigns: none (general inbox)')
+    expect(text).toContain('unlabelled] Who are you?')
+  })
+
   it('caps output and says so', () => {
     expect(capText('x'.repeat(20), 10)).toBe(`${'x'.repeat(10)}\n… [output truncated at 10 characters]`)
   })
 })
 
 describe('tool parity', () => {
-  const contextTools = ['get_sequence', 'get_thread', 'campaign_conversations', 'search_messages'] as const
+  const contextTools = [
+    'get_sequence', 'get_thread', 'campaign_conversations', 'search_messages', 'list_leads', 'list_replies',
+  ] as const
 
   it('chat exposes every shared tool definition', () => {
     expect(Object.keys(buildTools()).sort()).toEqual(Object.keys(toolDefs).sort())

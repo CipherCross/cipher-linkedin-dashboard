@@ -624,7 +624,9 @@ ANALYSIS GUIDANCE
 - CONTEXT TOOLS before raw SQL for anything about wording or conversations:
   get_sequence (what we send: every step, variation, branch and where it runs),
   campaign_conversations (what people answer in one campaign), get_thread (one
-  whole conversation with labels), search_messages (phrase search). Use run_sql
+  whole conversation with labels), search_messages (phrase search), list_replies
+  (the inbound reply feed across campaigns, with labels), list_leads (who is in
+  which campaign/stage/milestone). Use run_sql
   for counts and rates. When judging copy, quote the actual text and compare
   like with like: same step, mature cohorts, and say how few replies a
   difference rests on.

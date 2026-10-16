@@ -1,6 +1,6 @@
 /**
  * The AI's context reads: one thread, one campaign's conversations, a message
- * search and one sequence — the whole picture of what we send and what comes
+ * search, one sequence, a lead list and a cross-campaign reply feed — the whole picture of what we send and what comes
  * back, in a shape a model can read without assembling it from raw SQL.
  *
  * ## Why these take arguments when the fixed queries in `ai.ts` do not
@@ -38,6 +38,8 @@ export const AI_CONTEXT_OPERATIONS = {
   campaignConversations: 'ai.context.campaignConversations',
   searchMessages: 'ai.context.searchMessages',
   sequence: 'ai.context.sequence',
+  leads: 'ai.context.leads',
+  replies: 'ai.context.replies',
 } as const
 
 export type AiContextOperation = keyof typeof AI_CONTEXT_OPERATIONS
@@ -310,6 +312,152 @@ select
 `.trim()
 }
 
+export const LEAD_MILESTONES = ['added', 'invited', 'connected', 'messaged', 'replied'] as const
+export type LeadMilestone = (typeof LEAD_MILESTONES)[number]
+const MILESTONE_COLUMN: Record<LeadMilestone, string> = {
+  added: 'added_at',
+  invited: 'invited_at',
+  connected: 'connected_at',
+  messaged: 'first_message_at',
+  replied: 'replied_at',
+}
+
+export interface LeadsArgs {
+  campaignId?: string
+  instanceId?: string
+  /** A pipeline_stage slug, or 'untriaged' for NULL. */
+  stage?: string
+  /** Require this milestone, and date/sort by it (default: added, not required). */
+  milestone?: LeadMilestone
+  since?: string
+  until?: string
+  /** Substring of name, headline or company. */
+  query?: string
+  limit: number
+}
+
+/** Lead rows (one per person per campaign) matching the filters, newest by
+ *  the chosen milestone first, with the total and distinct-people counts so a
+ *  page is never mistaken for the whole set. */
+export function leadsSql(args: LeadsArgs): string {
+  const column = `l.${MILESTONE_COLUMN[args.milestone ?? 'added']}`
+  const where: string[] = []
+  if (args.campaignId) where.push(`l.campaign_id = ${sqlLiteral(args.campaignId)}`)
+  if (args.instanceId) where.push(`l.instance_id = ${sqlLiteral(args.instanceId)}`)
+  if (args.stage === 'untriaged') where.push('l.pipeline_stage is null')
+  else if (args.stage) where.push(`l.pipeline_stage = ${sqlLiteral(args.stage)}`)
+  if (args.milestone) where.push(`${column} is not null`)
+  if (args.since) where.push(`${column} >= ${timestampLiteral(args.since)}`)
+  if (args.until) where.push(`${column} < ${timestampLiteral(args.until)}`)
+  if (args.query) {
+    const pattern = containsPattern(args.query)
+    where.push(`(l.full_name ilike ${pattern} or l.headline ilike ${pattern} or l.company ilike ${pattern})`)
+  }
+  return `
+with matched as (
+  select l.id, l.instance_id, l.profile_url, l.campaign_id, c.name as campaign_name,
+         l.full_name, l.headline, l.company, l.status,
+         l.added_at, l.invited_at, l.connected_at, l.first_message_at, l.replied_at,
+         l.pipeline_stage, l.pipeline_substatus, l.pipeline_stage_changed_at,
+         ${column} as sort_at
+    from leads l
+    left join campaigns c on c.id = l.campaign_id
+   where ${where.length ? where.join('\n     and ') : 'true'}
+), page as (
+  select * from matched
+   order by sort_at desc nulls last, profile_url, campaign_id
+   limit ${args.limit}
+)
+select
+  (select count(*) from matched) as total,
+  (select count(distinct (instance_id, profile_url)) from matched) as people,
+  (select coalesce(jsonb_agg(to_jsonb(p) - 'sort_at' - 'id' order by p.sort_at desc nulls last, p.profile_url, p.campaign_id), '[]'::jsonb)
+     from page p) as leads
+`.trim()
+}
+
+export const REPLY_SENTIMENTS = ['positive', 'neutral', 'negative', 'objection', 'referral', 'auto'] as const
+export const REPLY_INTENTS = ['p1', 'p2', 'p3'] as const
+
+export interface RepliesArgs {
+  campaignId?: string
+  instanceId?: string
+  since?: string
+  until?: string
+  sentiment?: (typeof REPLY_SENTIMENTS)[number]
+  intent?: (typeof REPLY_INTENTS)[number]
+  review?: 'reviewed' | 'unreviewed'
+  limit: number
+}
+
+/** Inbound messages across every campaign and account, newest first, with the
+ *  person, the campaigns they are a lead of, and the team's current review. A
+ *  campaign filter goes through leads, never the guessed messages.campaign_id. */
+export function repliesSql(args: RepliesArgs): string {
+  const where = [`m.direction = 'in'`]
+  if (args.instanceId) where.push(`m.instance_id = ${sqlLiteral(args.instanceId)}`)
+  if (args.since) where.push(`m.sent_at >= ${timestampLiteral(args.since)}`)
+  if (args.until) where.push(`m.sent_at < ${timestampLiteral(args.until)}`)
+  if (args.sentiment) where.push(`rr.sentiment = ${sqlLiteral(args.sentiment)}`)
+  if (args.intent) where.push(`rr.intent_level = ${sqlLiteral(args.intent)}`)
+  if (args.review === 'unreviewed') where.push('rr.sentiment is null')
+  if (args.review === 'reviewed') where.push('rr.sentiment is not null')
+  if (args.campaignId) {
+    where.push(`exists (select 1 from leads l where l.campaign_id = ${sqlLiteral(args.campaignId)}
+                   and l.instance_id = m.instance_id and l.profile_url = m.profile_url)`)
+  }
+  return `
+with matched as (
+  select m.id, m.instance_id, m.profile_url, m.sent_at, (rr.sentiment is null) as unreviewed
+    from messages m
+    left join reply_reviews rr on rr.message_id = m.id
+   where ${where.join('\n     and ')}
+), page as (
+  select mt.id from matched mt
+   order by mt.sent_at desc, mt.id desc
+   limit ${args.limit}
+)
+select
+  (select count(*) from matched) as total,
+  (select count(*) from matched where unreviewed) as unreviewed_total,
+  (select count(distinct (instance_id, profile_url)) from matched) as people,
+  (select coalesce(jsonb_agg(to_jsonb(x) order by x.sent_at desc, x.id desc), '[]'::jsonb) from (
+    select m.id, m.instance_id, m.profile_url, m.direction, m.sent_at, m.body, m.source, m.message_type,
+           (m.external_id is not null) as has_external_id,
+           rr.sentiment as review_sentiment, rr.intent_state as review_intent_state,
+           rr.intent_level as review_intent, to_jsonb(rr) ->> 'comment' as review_note,
+           (select array_agg(r.reason_id order by r.reason_id)
+              from reply_review_reasons r where r.message_id = m.id) as review_reasons,
+           coalesce((select max(l.full_name) from leads l
+                      where l.instance_id = m.instance_id and l.profile_url = m.profile_url),
+                    (select cc.full_name from conversation_contacts cc
+                      where cc.instance_id = m.instance_id and cc.profile_url = m.profile_url)) as person,
+           (select max(l.headline) from leads l
+             where l.instance_id = m.instance_id and l.profile_url = m.profile_url) as headline,
+           (select max(l.company) from leads l
+             where l.instance_id = m.instance_id and l.profile_url = m.profile_url) as company,
+           (select string_agg(distinct coalesce(c.name, l.campaign_id) || ' (' || l.campaign_id || ')', '; ')
+              from leads l left join campaigns c on c.id = l.campaign_id
+             where l.instance_id = m.instance_id and l.profile_url = m.profile_url) as campaigns
+      from page pg
+      join messages m on m.id = pg.id
+      left join reply_reviews rr on rr.message_id = m.id) x) as replies
+`.trim()
+}
+
+function optionalEnum<T extends string>(
+  params: DataStoreParams | undefined,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = optionalText(params, key)
+  if (value === undefined) return undefined
+  if (!(allowed as readonly string[]).includes(value)) {
+    throw new Error(`${key} must be one of ${allowed.join(', ')}`)
+  }
+  return value as T
+}
+
 /** Build the statement for one context operation from its params. Exported so
  *  a test can assert the SQL each tool would run without a database. */
 export function buildContextSql(name: AiContextOperation, params: DataStoreParams | undefined): string {
@@ -340,6 +488,31 @@ export function buildContextSql(name: AiContextOperation, params: DataStoreParam
       return sequenceSql({
         campaignId: optionalText(params, 'campaign_id'),
         sequence: optionalText(params, 'sequence'),
+      })
+    case 'leads': {
+      const stage = optionalText(params, 'stage')
+      if (stage !== undefined && !/^[a-z_]{1,40}$/.test(stage)) throw new Error('stage must be a pipeline stage slug or untriaged')
+      return leadsSql({
+        campaignId: optionalText(params, 'campaign_id'),
+        instanceId: optionalText(params, 'instance_id'),
+        stage,
+        milestone: optionalEnum(params, 'milestone', LEAD_MILESTONES),
+        since: optionalText(params, 'since'),
+        until: optionalText(params, 'until'),
+        query: optionalText(params, 'query'),
+        limit: boundedInt(params?.limit, 50, 200),
+      })
+    }
+    case 'replies':
+      return repliesSql({
+        campaignId: optionalText(params, 'campaign_id'),
+        instanceId: optionalText(params, 'instance_id'),
+        since: optionalText(params, 'since'),
+        until: optionalText(params, 'until'),
+        sentiment: optionalEnum(params, 'sentiment', REPLY_SENTIMENTS),
+        intent: optionalEnum(params, 'intent', REPLY_INTENTS),
+        review: optionalEnum(params, 'review', ['reviewed', 'unreviewed'] as const),
+        limit: boundedInt(params?.limit, 30, 100),
       })
   }
 }

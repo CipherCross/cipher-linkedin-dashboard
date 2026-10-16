@@ -12,8 +12,11 @@ import {
   getCampaignConversations,
   getSequence,
   getThread,
+  listLeads,
+  listReplies,
   searchMessages,
 } from './aiContext.js'
+import { LEAD_MILESTONES, REPLY_INTENTS, REPLY_SENTIMENTS } from './data/operations/aiContext.js'
 import { validateSearch } from './savedSearch.js'
 import { getAiDataStore, SYSTEM_ACTOR } from './data/aiStore.js'
 import { DataStoreConstraintError } from './data/contracts.js'
@@ -151,6 +154,52 @@ export const toolDefs = {
       campaign_id: z.string().max(200).optional().describe('Only people who are leads of this campaign.'),
       since: z.string().max(40).optional().describe('ISO date lower bound on the message time.'),
       limit: z.number().int().min(1).max(50).optional().describe('Default 25, max 50.'),
+    },
+  },
+
+  list_leads: {
+    name: 'list_leads',
+    description:
+      'List leads — one row per person per campaign — with name, headline, company, campaign, thread key, ' +
+      'funnel milestones (added/invited/connected/first message/replied) and manual pipeline stage. Filter ' +
+      'by campaign, account (instance), pipeline stage, a milestone reached in a date window, or a name/' +
+      'headline/company substring. Returns the total and distinct-people counts plus a page, newest first by ' +
+      'the chosen milestone. Use it to find WHO; use run_sql or weekly_funnel for counts and rates (replies ' +
+      'lag invites by days or weeks, so compare by invite cohort, never raw weekly counts).',
+    inputShape: {
+      campaign_id: z.string().max(200).optional().describe('Campaign id, e.g. "notebook-1:42".'),
+      instance_id: z.string().max(200).optional().describe('Account / notebook id, e.g. "notebook-1".'),
+      stage: z.string().max(40).optional().describe(
+        "pipeline_stage slug (first_contact, replied, following_up, negotiations_call, call_booked, call_done, " +
+        "proposal_in_progress, proposal_presented, client, lost) or 'untriaged' for no stage yet."),
+      milestone: z.enum(LEAD_MILESTONES).optional().describe(
+        'Only leads that reached this milestone; since/until and the sort then apply to it. Default: sort and ' +
+        'date by added (upload date), no milestone required.'),
+      since: z.string().max(40).optional().describe('ISO date: milestone on/after it.'),
+      until: z.string().max(40).optional().describe('ISO date: milestone before it.'),
+      query: z.string().min(2).max(200).optional().describe('Case-insensitive substring of name, headline or company.'),
+      limit: z.number().int().min(1).max(200).optional().describe('Rows to return, default 50, max 200.'),
+    },
+  },
+
+  list_replies: {
+    name: 'list_replies',
+    description:
+      'The reply feed across every campaign and account: inbound messages newest first, each with the ' +
+      "person, the campaigns they are a lead of, the thread key, the full reply text (clipped at 1000 " +
+      "characters) and the team's manual review (sentiment, P1-P3 intent, reasons, note). Filter by " +
+      'campaign, account, date window, sentiment, intent or review state. Use it for "what came in this ' +
+      'week", "show the P3 replies", or "which replies are still unlabelled"; for one campaign\'s threads ' +
+      'with our side too, use campaign_conversations.',
+    inputShape: {
+      campaign_id: z.string().max(200).optional().describe('Only people who are leads of this campaign.'),
+      instance_id: z.string().max(200).optional().describe('Account / notebook id, e.g. "notebook-1".'),
+      since: z.string().max(40).optional().describe('ISO date lower bound on the reply time.'),
+      until: z.string().max(40).optional().describe('ISO date upper bound (exclusive) on the reply time.'),
+      sentiment: z.enum(REPLY_SENTIMENTS).optional().describe("The team's review sentiment."),
+      intent: z.enum(REPLY_INTENTS).optional().describe('p1 polite positive, p2 problem interest, p3 buying intent.'),
+      review: z.enum(['reviewed', 'unreviewed']).optional().describe('Only labelled, or only not-yet-labelled, replies.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 30, max 100.'),
     },
   },
 
@@ -377,6 +426,18 @@ export function buildTools(deps: BuildToolsDeps = {}) {
       description: toolDefs.search_messages.description,
       inputSchema: z.object(toolDefs.search_messages.inputShape),
       execute: async (args) => searchMessages(args),
+    }),
+
+    list_leads: tool({
+      description: toolDefs.list_leads.description,
+      inputSchema: z.object(toolDefs.list_leads.inputShape),
+      execute: async (args) => listLeads(args),
+    }),
+
+    list_replies: tool({
+      description: toolDefs.list_replies.description,
+      inputSchema: z.object(toolDefs.list_replies.inputShape),
+      execute: async (args) => listReplies(args),
     }),
 
     save_search: tool({

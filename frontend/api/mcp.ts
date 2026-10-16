@@ -18,6 +18,8 @@ import {
   getCampaignConversations,
   getSequence,
   getThread,
+  listLeads,
+  listReplies,
   searchMessages,
 } from './_lib/aiContext.js'
 import { guardMachine } from './_lib/auth.js'
@@ -106,6 +108,20 @@ function registerReadOnlyTools(server: McpServer) {
     toolDefs.search_messages.description,
     toolDefs.search_messages.inputShape,
     async (args) => asText(await searchMessages(args))
+  )
+
+  server.tool(
+    toolDefs.list_leads.name,
+    toolDefs.list_leads.description,
+    toolDefs.list_leads.inputShape,
+    async (args) => asText(await listLeads(args))
+  )
+
+  server.tool(
+    toolDefs.list_replies.name,
+    toolDefs.list_replies.description,
+    toolDefs.list_replies.inputShape,
+    async (args) => asText(await listReplies(args))
   )
 }
 

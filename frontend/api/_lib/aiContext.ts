@@ -1,5 +1,5 @@
 // Readable context for the AI: threads, a campaign's conversations, message
-// search and sequences. The SQL lives in data/operations/aiContext.ts (guard
+// search, sequences, lead lists and the cross-campaign reply feed. The SQL lives in data/operations/aiContext.ts (guard
 // calls); this module runs it and turns the jsonb into compact text a model
 // reads faster and more reliably than raw rows. Shared by /api/chat, /api/mcp
 // and the briefing through _lib/tools.ts.
@@ -16,6 +16,7 @@ import type { DataStoreParams } from './data/contracts.js'
 export const CONTEXT_MAX_CHARS = 60_000
 const THREAD_BODY_CAP = 2000
 const CONVERSATION_BODY_CAP = 700
+const REPLY_BODY_CAP = 1000
 
 type Row = Record<string, unknown>
 
@@ -92,10 +93,7 @@ export function formatThread(row: Row | undefined, instanceId: string, profileUr
   out.push(`Person: ${name}${headline ? ` — ${headline}` : ''}${first?.company ? ` @ ${str(first.company)}` : ''}`)
   if (!leads.length) out.push('Campaigns: none (a general-inbox conversation, not a campaign lead).')
   for (const l of leads) {
-    const milestones = [
-      ['added', l.added_at], ['invited', l.invited_at], ['connected', l.connected_at],
-      ['first message', l.first_message_at], ['replied', l.replied_at],
-    ].filter(([, v]) => v).map(([k, v]) => `${k} ${utcDay(v)}`).join(', ')
+    const milestones = leadMilestones(l)
     const crm = l.pipeline_stage ? `; pipeline: ${str(l.pipeline_stage)}${l.pipeline_substatus ? `/${str(l.pipeline_substatus)}` : ''}` : ''
     out.push(`Campaign "${str(l.campaign_name) || str(l.campaign_id)}" (${str(l.campaign_id)}${l.hypotheses ? `; hypothesis: ${str(l.hypotheses)}` : ''}): ${milestones || 'no milestones'}${crm}`)
   }
@@ -142,6 +140,49 @@ export function formatSearch(rows: Row[], text: string): string {
   const out = [`${total} message(s) contain "${text}"${total > rows.length ? `; newest ${rows.length} shown` : ''} (times UTC):`]
   for (const r of rows) {
     out.push(`- ${utcMinute(r.sent_at)} ${r.direction === 'out' ? 'OUT' : 'IN'} · ${str(r.person) || 'unknown'} · thread ${str(r.instance_id)} | ${str(r.profile_url)}${r.source === 'manual' ? ' · imported by hand' : ''}\n  …${clip(r.snippet, 420)}…`)
+  }
+  return capText(out.join('\n'))
+}
+
+function leadMilestones(l: Row): string {
+  return [
+    ['added', l.added_at], ['invited', l.invited_at], ['connected', l.connected_at],
+    ['first message', l.first_message_at], ['replied', l.replied_at],
+  ].filter(([, v]) => v).map(([k, v]) => `${k} ${utcDay(v)}`).join(', ')
+}
+
+export function formatLeads(row: Row | undefined, request: { milestone?: string }): string {
+  const leads = arr(row?.leads)
+  if (!row || !leads.length) return 'No leads match.'
+  const total = Number(row.total ?? leads.length)
+  const sortedBy = request.milestone ?? 'added'
+  const out = [
+    `${total} lead row(s), ${str(row.people)} distinct people, match${total > leads.length ? `; newest ${leads.length} by ${sortedBy} date shown` : ''}. ` +
+    'A lead row is one person in one campaign: the same person can appear under several campaigns, so count people, not rows, across campaigns. ' +
+    'Pipeline stage NULL = not yet triaged. Open a conversation with get_thread (times UTC).',
+  ]
+  for (const l of leads) {
+    const who = `${str(l.full_name) || 'unknown'}${l.headline ? ` — ${clip(l.headline, 160)}` : ''}${l.company ? ` @ ${str(l.company)}` : ''}`
+    const stage = l.pipeline_stage ? `${str(l.pipeline_stage)}${l.pipeline_substatus ? `/${str(l.pipeline_substatus)}` : ''}` : 'untriaged'
+    const status = str(l.status).startsWith('-') ? ` · LH2 status ${str(l.status)} (excluded/failed)` : ''
+    out.push(`- ${who}\n  campaign "${str(l.campaign_name) || str(l.campaign_id)}" (${str(l.campaign_id)}) · thread ${str(l.instance_id)} | ${str(l.profile_url)} · ${leadMilestones(l) || 'no milestones'} · stage: ${stage}${status}`)
+  }
+  return capText(out.join('\n'))
+}
+
+export function formatReplies(row: Row | undefined): string {
+  const replies = arr(row?.replies)
+  if (!row || !replies.length) return 'No inbound replies match.'
+  const total = Number(row.total ?? replies.length)
+  const out = [
+    `${total} inbound repl${total === 1 ? 'y' : 'ies'} from ${str(row.people)} people match (${str(row.unreviewed_total)} not yet labelled by the team)` +
+    `${total > replies.length ? `; newest ${replies.length} shown` : ''}. Labels are the team's manual review; times UTC. Open a thread with get_thread.`,
+  ]
+  for (const r of replies) {
+    out.push('')
+    out.push(`## ${str(r.person) || 'unknown'}${r.headline ? ` — ${clip(r.headline, 160)}` : ''}${r.company ? ` @ ${str(r.company)}` : ''}`)
+    out.push(`thread: ${str(r.instance_id)} | ${str(r.profile_url)} · campaigns: ${str(r.campaigns) || 'none (general inbox)'}`)
+    out.push(messageLine(r, REPLY_BODY_CAP))
   }
   return capText(out.join('\n'))
 }
@@ -273,6 +314,34 @@ export async function searchMessages(args: {
 export async function getSequence(args: { campaign_id?: string; sequence?: string }): Promise<string> {
   const rows = await runContext('sequence', args)
   return formatSequence(rows[0], args)
+}
+
+export async function listLeads(args: {
+  campaign_id?: string
+  instance_id?: string
+  stage?: string
+  milestone?: string
+  since?: string
+  until?: string
+  query?: string
+  limit?: number
+}): Promise<string> {
+  const rows = await runContext('leads', args)
+  return formatLeads(rows[0], args)
+}
+
+export async function listReplies(args: {
+  campaign_id?: string
+  instance_id?: string
+  since?: string
+  until?: string
+  sentiment?: string
+  intent?: string
+  review?: 'reviewed' | 'unreviewed'
+  limit?: number
+}): Promise<string> {
+  const rows = await runContext('replies', args)
+  return formatReplies(rows[0])
 }
 
 export { THREAD_MESSAGE_CAP }
