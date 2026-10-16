@@ -158,8 +158,11 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
 - `core.ts` — `executeSql()` / `executeNamedSql()` (run through the AI store's
   `ai_execute_sql`), `loadIcpRoster()`, and `SCHEMA_DOC`. **`SCHEMA_DOC` is the model's only schema knowledge — update it whenever you
   change tables/columns/views.**
-- `tools.ts` — `run_sql` / `get_schema` / `weekly_funnel` / `campaign_overview`. `chat.ts`
-  (streaming copilot) and `mcp.ts` (`/api/mcp`) expose the **same** ops — keep them in sync.
+- `tools.ts` — `toolDefs`: SQL/overview tools plus the context reads in `aiContext.ts`
+  (`get_sequence`, `get_thread`, `campaign_conversations`, `search_messages`, `list_leads`,
+  `list_replies`). `chat.ts` (streaming copilot) and `mcp.ts` (`/api/mcp`) expose the **same**
+  ops — keep them in sync (`tests/aiContext.test.ts` checks parity). The repo's `.mcp.json`
+  wires Claude Code to `/api/mcp` with the bearer from `LINKEDIN_DASHBOARD_MCP_SECRET`.
 - `briefing.ts` — Slack-only briefings written in natural **Ukrainian**:
   short daily notes Mon–Fri plus a longer completed-week review on Monday. Daily/weekly
   jobs and rows are keyed separately. The pipeline preloads `campaigns.briefing_context`,

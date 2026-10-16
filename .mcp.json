@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "linkedin-dashboard": {
+      "type": "http",
+      "url": "${LINKEDIN_DASHBOARD_MCP_URL:-https://cipher-linkedin-dashboard.vercel.app/api/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${LINKEDIN_DASHBOARD_MCP_SECRET}"
+      }
+    }
+  }
+}

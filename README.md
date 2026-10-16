@@ -126,6 +126,23 @@ fallback. Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC,
 `/api/briefing?kind=daily` Mon–Fri 07:30 UTC. `frontend/api/` holds exactly 12
 functions, the Vercel Hobby cap — adding one means merging another.
 
+## Data access from Claude Code (MCP)
+
+`/api/mcp` serves the copilot's tools over MCP (Streamable HTTP), and the
+repo's `.mcp.json` registers it as `linkedin-dashboard`. Export the
+production `MCP_SECRET` before starting Claude Code in this repo:
+
+```bash
+export LINKEDIN_DASHBOARD_MCP_SECRET='<MCP_SECRET from Vercel>'
+```
+
+Set `LINKEDIN_DASHBOARD_MCP_URL` to point at another deployment. The tools
+match `/api/chat` (`frontend/api/_lib/tools.ts`): `list_leads`, `list_replies`,
+`get_thread`, `campaign_conversations`, `search_messages`, `get_sequence`,
+the overview tools, and `run_sql`/`get_schema`. All of them are read-only
+except `save_search`, which writes to the Search Library as `app_system`.
+Anyone holding the secret can read every lead and message.
+
 ## Pages
 
 - **Main**: Overview, Sequences, Follow-ups, Replies, Pipeline, Leads, CSV Import
