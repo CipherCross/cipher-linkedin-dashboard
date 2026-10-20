@@ -177,3 +177,18 @@
 }
 .coach-training-diff [data-kind='add'] { color: var(--success); background: var(--success-subtle); }
 .coach-training-diff [data-kind='del'] { color: var(--danger); background: var(--danger-subtle); text-decoration: line-through; }
+
+/* The lead context the coach reads, folded above the thread. */
+.coach-training-insights {
+  margin-bottom: var(--gap-group);
+  padding-bottom: var(--gap-group);
+  border-bottom: 1px solid var(--border);
+}
+.coach-training-insights > summary {
+  cursor: pointer;
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: var(--gap-stack);
+}

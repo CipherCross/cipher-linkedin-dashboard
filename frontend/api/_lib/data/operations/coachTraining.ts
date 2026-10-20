@@ -724,7 +724,28 @@ export const leakSourcesOperation: NeonQueryOperation<LeakSourceRow> = {
              FROM public.coach_training_feedback f
              JOIN public.coach_training_runs r ON r.id = f.run_id
             WHERE f.target = 'idea' AND f.verdict = 'good'
-              AND r.output -> 'ideas' -> f.target_index ->> 'message' IS NOT NULL`,
+              AND r.output -> 'ideas' -> f.target_index ->> 'message' IS NOT NULL
+           UNION ALL
+           SELECT 'company description', concat_ws(' ', k.description, k.keywords)
+             FROM public.coach_training_cases c
+             JOIN public.lead_company_context k ON k.instance_id = c.instance_id AND k.profile_url = c.profile_url
+            WHERE c.archived_at IS NULL AND k.found AND coalesce(k.description, k.keywords) IS NOT NULL
+           UNION ALL
+           SELECT 'company website', w.body
+             FROM public.coach_training_cases c
+             JOIN public.lead_company_context k ON k.instance_id = c.instance_id AND k.profile_url = c.profile_url
+             JOIN public.company_site_snapshots w
+               ON w.domain = lower(regexp_replace(regexp_replace(coalesce(k.website, ''), '^https?://(www\\.)?', '', 'i'), '[/:?#].*$', ''))
+            WHERE c.archived_at IS NULL AND w.body IS NOT NULL
+           UNION ALL
+           SELECT 'lead profile', concat_ws(' ', p.about, p.positions::text)
+             FROM public.coach_training_cases c
+             JOIN public.lead_profiles p ON p.instance_id = c.instance_id AND p.profile_url = c.profile_url
+            WHERE c.archived_at IS NULL
+           UNION ALL
+           SELECT 'our company text', b.our_company
+             FROM public.playbook b
+            WHERE b.our_company <> ''`,
   }),
   mapRow: (row) => ({ label: text(row, 'label'), body: text(row, 'body') }),
 }

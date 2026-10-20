@@ -102,6 +102,18 @@ import {
   versionsOperation as coachTrainingVersionsOperation,
 } from './coachTraining.js'
 import {
+  COACH_CONTEXT_COMMANDS,
+  COACH_CONTEXT_OPERATIONS,
+  companyOperation as coachContextCompanyOperation,
+  ourCompanyOperation as coachContextOurCompanyOperation,
+  profileOperation as coachContextProfileOperation,
+  saveOurCompanyOperation as coachContextSaveOurCompanyOperation,
+  schemaReportsOperation as coachContextSchemaReportsOperation,
+  siteOperation as coachContextSiteOperation,
+  upsertCompanyOperation as coachContextUpsertCompanyOperation,
+  upsertSiteOperation as coachContextUpsertSiteOperation,
+} from './coachContext.js'
+import {
   LEADS_OPERATIONS,
   leadNotesOperation,
   leadPhotoObjectsOperation,
@@ -304,6 +316,15 @@ export {
   type TrainingFeedbackRow,
   type TrainingRunRow,
 } from './coachTraining.js'
+export {
+  COACH_CONTEXT_COMMANDS,
+  COACH_CONTEXT_OPERATIONS,
+  type CompanyContextRow,
+  type LeadProfileContextRow,
+  type OurCompanyRow,
+  type SchemaReportRow,
+  type SiteSnapshotRow,
+} from './coachContext.js'
 export {
   ROUTE_SNAPSHOT_OPERATION,
   ROUTE_SNAPSHOT_ROUTES,
@@ -797,6 +818,15 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   // under the same active-member policies as S14's writes. The cron halves of
   // these handlers are not here: they have no actor, and stay declared
   // blocked until ledger step 007 is applied.
+  // Ledger step 028 — the coach's lead context.
+  registry.registerQuery(COACH_CONTEXT_OPERATIONS.profile, coachContextProfileOperation)
+  registry.registerQuery(COACH_CONTEXT_OPERATIONS.company, coachContextCompanyOperation)
+  registry.registerQuery(COACH_CONTEXT_OPERATIONS.site, coachContextSiteOperation)
+  registry.registerQuery(COACH_CONTEXT_OPERATIONS.ourCompany, coachContextOurCompanyOperation)
+  registry.registerQuery(COACH_CONTEXT_OPERATIONS.schemaReports, coachContextSchemaReportsOperation)
+  registry.registerCommand(COACH_CONTEXT_COMMANDS.upsertCompany, coachContextUpsertCompanyOperation)
+  registry.registerCommand(COACH_CONTEXT_COMMANDS.upsertSite, coachContextUpsertSiteOperation)
+  registry.registerCommand(COACH_CONTEXT_COMMANDS.saveOurCompany, coachContextSaveOurCompanyOperation)
   // Ledger step 027 — the coach's versioned prompt and its training workspace.
   registry.registerQuery(COACH_TRAINING_OPERATIONS.promptState, coachTrainingPromptStateOperation)
   registry.registerQuery(COACH_TRAINING_OPERATIONS.versions, coachTrainingVersionsOperation)
@@ -1009,6 +1039,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   CONVERSATION_WRITE_OPERATIONS.leadForImport,
   CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
   ...Object.values(COACH_TRAINING_OPERATIONS),
+  ...Object.values(COACH_CONTEXT_OPERATIONS),
   AI_WRITE_OPERATIONS.coachThread,
   AI_WRITE_OPERATIONS.coachExisting,
   AI_WRITE_OPERATIONS.coachPlaybook,
@@ -1095,6 +1126,7 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   SEQUENCE_PUBLISH_COMMANDS.createJob,
   SEQUENCE_PUBLISH_COMMANDS.createBranches,
   ...Object.values(COACH_TRAINING_COMMANDS),
+  ...Object.values(COACH_CONTEXT_COMMANDS),
   AI_WRITE_OPERATIONS.coachUpsert,
   AI_WRITE_OPERATIONS.coachDigestUpsert,
   AI_WRITE_OPERATIONS.classifyWriteGender,

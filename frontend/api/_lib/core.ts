@@ -535,7 +535,8 @@ sync_runs — sync agent run log
   rows_upserted int, error text
 
 playbook — a SINGLETON (one row, id=true) holding the team's global sales
-  playbook as Markdown: content text, updated_at. Grounds the coach and the
+  playbook as Markdown: content text, updated_at; plus our_company text (what we
+  sell, to whom, our proof points — sent to every coach) and our_website text. Grounds the coach and the
   briefings; analytical questions about "what do we tell SDRs to do" can read it.
 
 briefings — delivered AI briefings, one row per (briefing_date, briefing_kind)

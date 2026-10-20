@@ -32,6 +32,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const fetchNeonPlaybook = vi.fn()
 const authPost = vi.fn()
 
+vi.mock('../src/lib/coachContext', () => ({
+  coachContextClient: {
+    context: async () => ({ profile: null, company: null, company_checked_at: null, website: null, our_company_configured: true, as_the_coach_sees_it: '' }),
+    ourCompany: async () => ({ our_company: '', our_website: null, updated_at: null }),
+    saveOurCompany: async () => ({ our_company: '', our_website: null, updated_at: null }),
+    fetchWebsite: async () => ({ url: '', title: null, text: '', thin: true }),
+  },
+}))
 vi.mock('../src/lib/dashboardReads', () => ({
   fetchNeonPlaybook: (...a: unknown[]) => fetchNeonPlaybook(...a),
 }))
@@ -56,7 +64,7 @@ vi.mock('remark-gfm', () => ({ default: () => undefined }))
 
 const { Playbook } = await import('../src/pages/Playbook')
 
-const editor = () => screen.getByRole('textbox') as HTMLTextAreaElement
+const editor = () => screen.getByRole('textbox', { name: 'Playbook (Markdown)' }) as HTMLTextAreaElement
 const saveButton = () =>
   screen
     .getAllByRole('button')

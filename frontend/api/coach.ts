@@ -55,6 +55,15 @@ import {
   loadPromptState,
 } from './_lib/coachData.js'
 import { handleTraining, isTrainingMode } from './_lib/coachTraining.js'
+import {
+  EMPTY_CONTEXT,
+  contextStamp,
+  contextView,
+  loadCoachContext,
+  renderContextBlocks,
+  type CoachContext,
+} from './_lib/coachContext.js'
+import { handleOurCompany, isOurCompanyMode } from './_lib/ourCompany.js'
 
 // Re-exported for the tests that pin the coach's scope rules.
 export { issuesOnHandWritten, originOf, renderThread } from './_lib/coachCore.js'
@@ -115,6 +124,7 @@ interface CoachData {
   loadPlaybook(): Promise<string>
   loadIcpForCampaign(campaign_id: string | null | undefined): Promise<string>
   loadLivePrompt(): Promise<LivePrompt>
+  loadContext(instance_id: string, profile_url: string): Promise<CoachContext>
   actionableProfiles(instance_id: string): Promise<string[]>
   loadIssues(instance_id: string): Promise<{ issues: unknown[] }[]>
   saveDigest(row: {
@@ -164,6 +174,13 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
         return { id: state.published_version_id, n: state.published_n, prompt: state.published_prompt }
       }
       return { id: null, n: null, prompt: DEFAULT_COACH_PROMPT }
+    },
+    async loadContext(instance_id, profile_url) {
+      try {
+        return await loadCoachContext(store, actor, { instance_id, profile_url }, { refresh: true })
+      } catch {
+        return EMPTY_CONTEXT
+      }
     },
     async actionableProfiles(instance_id) {
       // Newest-first walk, keep each profile's first (newest) direction, keep
@@ -230,8 +247,11 @@ async function coachConversation(
 ): Promise<CoachingOut | null> {
   const thread = await data.loadThread(instance_id, profile_url)
   if (!thread.length) return null
-  const prompt = live ?? await data.loadLivePrompt()
-  const marker = coachingMarkerOf(thread, prompt.id)
+  const [prompt, context] = await Promise.all([
+    live ? Promise.resolve(live) : data.loadLivePrompt(),
+    data.loadContext(instance_id, profile_url),
+  ])
+  const marker = coachingMarkerOf(thread, prompt.id, new Date(), contextStamp(context))
   const scope = scopeOf(thread)
   const promptVersion = { id: prompt.id, n: prompt.n }
 
@@ -255,7 +275,9 @@ async function coachConversation(
   }
 
   const icpText = await data.loadIcpForCampaign(campaign_id)
-  const result = await runCoach(composeCoachSystem(prompt.prompt, playbook, icpText), thread)
+  const result = await runCoach(
+    composeCoachSystem(prompt.prompt, playbook, icpText, renderContextBlocks(context)), thread,
+  )
   const now = new Date().toISOString()
   await data.saveCoaching({
     instance_id,
@@ -443,6 +465,25 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
     return json({ error: 'invalid JSON body' }, 400)
   }
   if (!body || typeof body !== 'object') return json({ error: 'invalid JSON body' }, 400)
+
+  if (body.mode === 'context' || isOurCompanyMode(body.mode)) {
+    const writer = await resolveWriter(req, deps)
+    if (writer instanceof Response) return writer
+    try {
+      if (body.mode !== 'context') {
+        return await handleOurCompany(body.mode as never, body as Record<string, unknown>, writer.store, writer.actor)
+      }
+      if (typeof body.instance_id !== 'string' || typeof body.profile_url !== 'string') {
+        return json({ error: 'instance_id and profile_url are required' }, 400)
+      }
+      const company = typeof (body as { company?: unknown }).company === 'string' ? (body as { company: string }).company : null
+      const context = await loadCoachContext(writer.store, writer.actor,
+        { instance_id: body.instance_id, profile_url: body.profile_url, company }, { refresh: true })
+      return json(contextView(context))
+    } catch (error) {
+      return failure(error, 'Coach context failed')
+    }
+  }
 
   if (isTrainingMode(body.mode)) {
     const writer = await resolveWriter(req, deps)

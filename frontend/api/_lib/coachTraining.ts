@@ -56,6 +56,7 @@ import {
 } from './coachData.js'
 import { editorInput, runEditor, type EarlierRound, type ReviewedCase } from './coachEditor.js'
 import { findLeaks } from './coachLeaks.js'
+import { loadCoachContext, renderContextBlocks } from './coachContext.js'
 
 export const TRAINING_MODES = [
   'training.state',
@@ -209,14 +210,20 @@ class Training {
     let output: string | null = null
     let error: string | null = null
     try {
-      const [playbook, icp] = await Promise.all([
+      const [playbook, icp, context] = await Promise.all([
         loadPlaybook(this.store, this.actor),
         loadIcpForCampaign(this.store, this.actor, caseRow.campaign_id),
+        loadCoachContext(this.store, this.actor,
+          { instance_id: caseRow.instance_id, profile_url: caseRow.profile_url }, { refresh: true })
+          .catch(() => null),
       ])
       // A cut is coached at the moment the next message actually arrived, so
       // the gaps the coach sees are the ones the SDR faced.
       const asOf = asOfForCut(full, caseRow.cut_after_message_id)
-      const result = await runCoach(composeCoachSystem(version.prompt ?? '', playbook, icp), thread, asOf)
+      const result = await runCoach(
+        composeCoachSystem(version.prompt ?? '', playbook, icp, context ? renderContextBlocks(context) : ''),
+        thread, asOf,
+      )
       output = JSON.stringify({ ...result, scope: scopeOf(thread) })
     } catch (e) {
       // A model failure is a result worth keeping on the card; a database one is not.

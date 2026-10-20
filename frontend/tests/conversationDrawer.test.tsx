@@ -50,6 +50,14 @@ vi.mock('../src/lib/useReplyReviewActions', () => ({
 }))
 const authFetch = vi.fn()
 vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: (...a: unknown[]) => authFetch(...a) }))
+vi.mock('../src/lib/coachContext', () => ({
+  coachContextClient: {
+    context: async () => ({ profile: null, company: null, company_checked_at: null, website: null, our_company_configured: true, as_the_coach_sees_it: '' }),
+    ourCompany: async () => ({ our_company: '', our_website: null, updated_at: null }),
+    saveOurCompany: async () => ({ our_company: '', our_website: null, updated_at: null }),
+    fetchWebsite: async () => ({ url: '', title: null, text: '', thin: true }),
+  },
+}))
 vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: true }) }))
 vi.mock('../src/lib/ToastContext', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),

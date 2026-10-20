@@ -89,13 +89,15 @@ describe('the coach scope', () => {
   it('makes a published prompt invalidate every cached take', () => {
     const now = new Date('2026-10-01T12:00:00Z')
     expect(coachingMarkerOf(THREAD, null, now)).not.toBe(coachingMarkerOf(THREAD, 7, now))
-    expect(coachingMarkerOf(THREAD, 7, now)).toBe(`v4|p7|${threadMarkerOf(THREAD)}|d0`)
+    expect(coachingMarkerOf(THREAD, 7, now)).toBe(`v4|p7|${threadMarkerOf(THREAD)}|d0|c0`)
+    // New context (a profile synced, a company found) regenerates the take too.
+    expect(coachingMarkerOf(THREAD, 7, now, 'abc')).not.toBe(coachingMarkerOf(THREAD, 7, now))
   })
 
   it('lets a cached take expire as days pass, since timing advice goes out of date', () => {
     const sameDay = coachingMarkerOf(THREAD, 7, new Date('2026-10-01T20:00:00Z'))
     expect(coachingMarkerOf(THREAD, 7, new Date('2026-10-01T23:00:00Z'))).toBe(sameDay)
-    expect(coachingMarkerOf(THREAD, 7, new Date('2026-10-09T12:00:00Z'))).toMatch(/\|d8$/)
+    expect(coachingMarkerOf(THREAD, 7, new Date('2026-10-09T12:00:00Z'))).toMatch(/\|d8\|c0$/)
   })
 
   it('tells the coach what time it is and how old every message is', () => {

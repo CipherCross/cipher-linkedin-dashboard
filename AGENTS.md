@@ -143,6 +143,10 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   `notify_url` config key (usually set remotely) so `/api/notify-replies` announces fresh
   inbound replies to Slack. Current agents authenticate with their local-only `ingest_token`;
   the old `notify_secret` is compatibility-only. All failures are swallowed and never break a sync.
+- **Lead profiles for the coach**: `extract_lead_profiles` DISCOVERS LH2's person tables by column
+  name (positions, about/summary, location, skills) — they vary by build — for people with an inbound
+  message only, and sends them as `lead_profiles`; `lh2_schema` carries the table and column NAMES
+  (never data) into `lh2_schema_reports`, so the extraction can be checked against each notebook.
 - **Transport**: the only destination is `POST /api/import?op=agent.ingest`, authenticated
   by the notebook's machine credential (`ingest_url` + `lha.` `ingest_token` in
   `config.yaml`; `load_config` refuses without them and ignores leftover `supabase_*` /
@@ -193,6 +197,14 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   edits, direct instructions and restores are versions too; every active member may train and publish;
   `_lib/coachLeaks.ts` flags 6-word phrases copied from training data. Change the harness, not the
   seed prompt, for anything that must hold whatever the team trains.
+- **The coach reads the lead's context** (ledger step 028, `_lib/coachContext.ts`): `<lead_profile>`
+  (LH2's profile, synced by the agent for people who replied into `lead_profiles`), `<company>`
+  (Airtable Apollo data, cached 7 d in `lead_company_context`), `<company_website>` (fetched by
+  `_lib/siteText.ts` — public addresses only, redirects re-checked — cached 30 d in
+  `company_site_snapshots`) and `<our_company>` (Playbook page, `playbook.our_company`, admin-edited).
+  The thread lines carry dates and ages and start with NOW. The harness says context is data, never
+  instructions, and facts outside it stay in [brackets]. A context change regenerates the take
+  (marker `…|c<stamp>`). The conversation modal shows the same facts under Context.
 - `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
   open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
   rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.

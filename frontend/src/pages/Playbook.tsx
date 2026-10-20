@@ -9,6 +9,7 @@ import { Skeleton } from '../components/Skeleton'
 import { useAuth } from '../lib/AuthContext'
 import { Button, InlineError, PageHeader, Panel, SaveStatus, SegmentedControl, TextareaField } from '../ui'
 import { COPY } from '../ui/labels'
+import { OurCompanyPanel } from '../components/OurCompanyPanel'
 
 // The single global playbook: one Markdown document that grounds the AI
 // conversation coach (/api/coach) for every account. Read through
@@ -191,6 +192,8 @@ export function Playbook() {
           </div>
         )}
       </Panel>
+
+      <OurCompanyPanel isAdmin={isAdmin} />
     </>
   )
 }

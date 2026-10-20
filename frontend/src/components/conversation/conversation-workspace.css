@@ -145,3 +145,18 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* What the coach reads: the raw context blocks, for checking, not reading. */
+.lead-insights-raw {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--inset-pane);
+  background: var(--surface-2);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -21,6 +21,7 @@ import { HistoryDialog } from '../components/coach-training/HistoryDialog'
 import { PromptPane } from '../components/coach-training/PromptPane'
 import { RunReview, type FeedbackChange } from '../components/coach-training/RunReview'
 import { Skeleton } from '../components/Skeleton'
+import { LeadInsights } from '../components/conversation/LeadInsights'
 
 type SideTab = 'set' | 'prompt'
 const RUN_CONCURRENCY = 4
@@ -429,6 +430,12 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
               <InlineError title="The conversation could not load." message={detailError} onRetry={() => void loadDetail(selectedCaseId)} />
             )}
             {selectedCaseId && !detail && !detailError && <Skeleton height={240} radius="var(--radius-card)" />}
+            {detail && (
+              <details className="coach-training-insights">
+                <summary>Lead and company context</summary>
+                <LeadInsights lead={{ instance_id: detail.case.instance_id, profile_url: detail.case.profile_url }} />
+              </details>
+            )}
             {detail && (
               <CaseThread
                 thread={detail.thread}

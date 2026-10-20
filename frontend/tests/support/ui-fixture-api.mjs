@@ -1110,6 +1110,36 @@ export async function coachFixture(request) {
   const scenario = await currentScenario()
   let body = null
   try { body = await request.clone().json() } catch { /* not JSON */ }
+  if (request.method === 'POST' && body?.mode === 'context') {
+    if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture context failure' }, 503)
+    const known = body.profile_url === FIXTURE_LEAD_PROFILE
+    return json({
+      profile: known ? {
+        about: 'Product leader building payout tooling for marketplaces. Previously scaled onboarding at two fintechs.\n\nInterested in automation, reliability and fast feedback loops.',
+        location: 'Lisbon, Portugal', current_title: 'Head of Product', current_company: 'Fixture Labs',
+        positions: [
+          { title: 'Head of Product', company: 'Fixture Labs', start_year: 2022, end_year: null },
+          { title: 'Senior PM', company: 'Example Pay', start_year: 2018, end_year: 2022 },
+        ],
+        skills: ['Product strategy', 'Payments', 'B2B SaaS'], synced_at: '2026-10-19T09:00:00.000Z',
+      } : null,
+      company: known ? {
+        company_name: 'Fixture Labs', website: 'https://fixture-labs.example', industry: 'Financial services', employees: '85',
+        founded_year: '2019', country: 'Portugal', keywords: 'payouts, marketplaces',
+        description: 'Fixture Labs builds payout infrastructure for online marketplaces, handling KYC, split payments and reconciliation.',
+        fetched_at: '2026-10-19T09:00:00.000Z',
+      } : null,
+      company_checked_at: '2026-10-19T09:00:00.000Z',
+      website: known ? { url: 'https://fixture-labs.example/', title: 'Fixture Labs', usable: true, error: null, fetched_at: '2026-10-19T09:00:00.000Z', excerpt: 'Get paid faster.' } : null,
+      our_company_configured: false,
+      as_the_coach_sees_it: known ? '<lead_profile source="LinkedIn profile as Linked Helper scraped it" synced="Sun, 19 Oct 2026">\nCurrent role: Head of Product at Fixture Labs\n…\n</lead_profile>\n\n<company source="Apollo data in our CRM">\nName: Fixture Labs\nIndustry: Financial services\n…\n</company>' : '',
+    })
+  }
+  if (request.method === 'POST' && typeof body?.mode === 'string' && body.mode.startsWith('ourCompany.')) {
+    if (body.mode === 'ourCompany.get') return json({ our_company: '', our_website: 'https://ciphercross.com', updated_at: null })
+    if (body.mode === 'ourCompany.fetch') return json({ url: 'https://ciphercross.com/', title: 'CipherCross', text: 'CipherCross — QA and test automation teams for fintech.\nWe embed senior QA engineers within two weeks.', thin: false })
+    return mutationRefusal()
+  }
   if (request.method === 'POST' && typeof body?.mode === 'string' && body.mode.startsWith('training.')) {
     if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture training failure' }, 503)
     return trainingFixture(body)

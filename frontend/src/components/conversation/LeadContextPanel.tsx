@@ -12,6 +12,7 @@ import type { Gender, Instance, Lead } from '../../lib/types'
 import { Badge, SelectField, businessDate } from '../../ui'
 import { Avatar } from '../Avatar'
 import { LeadNotesPanel } from '../LeadNotesPanel'
+import { LeadInsights } from './LeadInsights'
 
 const MILESTONES: { key: keyof Lead; label: string }[] = [
   { key: 'added_at', label: 'Added' },
@@ -177,6 +178,8 @@ export function LeadContextPanel({
           })}
         </ol>
       </section>
+
+      <LeadInsights lead={{ instance_id: lead.instance_id, profile_url: lead.profile_url, company: lead.company }} />
 
       <section className="flex flex-col gap-group" aria-label="Lead details">
         <ContextHeading>Lead details</ContextHeading>
