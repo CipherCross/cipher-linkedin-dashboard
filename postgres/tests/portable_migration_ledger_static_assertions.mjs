@@ -101,6 +101,11 @@ const IMMUTABLE_BASELINE = {
     'eeec624ea71dfd051fe5639fb6ac98d8c07f236f4437e306244195c11ff1733b',
   '025_pipeline_replied_stage.sql':
     'a9db4be5223dfe7592820d2d4c489b968d29bda9573698fc59ce2d001b589e2e',
+  // 026 and 027 joined once production's ledger read 27/27 (2026-10-20).
+  '026_pipeline_retired_slugs_check.sql':
+    '3e00b2df9ccf8393be7a06527cc6993b639a7af6ca9dd135c637b55c97f88cca',
+  '027_coach_prompt_training.sql':
+    '80d419180441d2fc7fc8fc25dfff82d544fb80b3bcae909774fa6b3723eb7e41',
 };
 
 // Everything the ledger sessions add. Every one of these is swept for markers
@@ -183,6 +188,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/026_pipeline_retired_slugs_check.sql',
   // The coach's versioned prompt and its training workspace (step 027).
   'postgres/tenant-baseline/v1/027_coach_prompt_training.sql',
+  // The coach's lead context: profiles, company, website, our company (step 028).
+  'postgres/tenant-baseline/v1/028_coach_lead_context.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -293,6 +300,9 @@ const PROTECTED_PATHS = [
   'postgres/tenant-baseline/v1/023_ai_read_sequences_reviews.sql',
   'postgres/tenant-baseline/v1/024_message_step_attribution.sql',
   'postgres/tenant-baseline/v1/025_pipeline_replied_stage.sql',
+  // Applied on production 2026-10-20 (ledger 27/27).
+  'postgres/tenant-baseline/v1/026_pipeline_retired_slugs_check.sql',
+  'postgres/tenant-baseline/v1/027_coach_prompt_training.sql',
 ];
 
 // Provider surfaces the portable baseline must not depend on.
@@ -424,8 +434,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-seven steps in order 1 -> 2 -> ... -> 27',
-  manifest.steps.length === 27 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-eight steps in order 1 -> 2 -> ... -> 28',
+  manifest.steps.length === 28 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -574,6 +584,28 @@ check('step 027 writes no rows and changes no existing object except conversatio
   && /ADD COLUMN prompt_version_id bigint/.test(coachTrainingSql));
 check('step 027 allows one active training case per conversation',
   /CREATE UNIQUE INDEX coach_training_cases_thread_key[\s\S]*\(instance_id, profile_url\) WHERE archived_at IS NULL/.test(coachTrainingSql));
+
+const leadContextStep = manifest.steps.find((s) => s.step === 28);
+const leadContextPath = join(BASELINE_DIR, '028_coach_lead_context.sql');
+const leadContextSql = stripComments('028_coach_lead_context.sql', readFileSync(leadContextPath, 'utf8'));
+const CONTEXT_TABLES = ['lead_profiles', 'lh2_schema_reports', 'lead_company_context', 'company_site_snapshots'];
+check('manifest declares step 028 coach lead context',
+  leadContextStep?.artifact === '028_coach_lead_context.sql' && leadContextStep.owner_role_entered_by === 'artifact');
+check('step 028 manifest digest matches its artifact',
+  leadContextStep?.sha256 === sha256(leadContextPath), `manifest ${leadContextStep?.sha256}, disk ${sha256(leadContextPath)}`);
+check('step 028 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(leadContextSql) && /RESET ROLE;\s*$/.test(leadContextSql));
+check('step 028 enables RLS on every new table with an active-member policy',
+  CONTEXT_TABLES.every((t) => new RegExp(`ALTER TABLE public\\.${t} ENABLE ROW LEVEL SECURITY`).test(leadContextSql)
+    && new RegExp(`CREATE POLICY ${t}_active_member ON public\\.${t}[\\s\\S]*?is_active_team_member\\(\\)`).test(leadContextSql)));
+check('step 028 scopes the machine to its own instance on the two tables it writes, and nowhere else',
+  ['lead_profiles', 'lh2_schema_reports'].every((t) => new RegExp(`CREATE POLICY ${t}_machine_actor ON public\\.${t}[\\s\\S]*?machine_actor_instance\\(\\)[\\s\\S]*?machine_actor_instance\\(\\)`).test(leadContextSql))
+  && (leadContextSql.match(/TO app_machine/g) ?? []).length === 3);
+check('step 028 grants no DELETE, no TRUNCATE and nothing to the AI sandbox',
+  !/GRANT[^;]*\b(DELETE|TRUNCATE)\b/i.test(leadContextSql) && !/app_ai_runner|app_system/.test(leadContextSql));
+check('step 028 writes no rows and only adds columns to playbook',
+  !/\bINSERT INTO\b|\bUPDATE public\./i.test(leadContextSql)
+  && (leadContextSql.match(/ALTER TABLE public\.(\w+)\s+ADD/g) ?? []).every((m) => m.includes('playbook')));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');

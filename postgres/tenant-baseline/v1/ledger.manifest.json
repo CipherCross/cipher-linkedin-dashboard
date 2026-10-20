@@ -315,6 +315,14 @@
       "owner_role_entered_by": "artifact",
       "session": "coach-trainer",
       "description": "Adds the AI coach's versioned prompt and its training workspace: coach_prompt_versions (append-only history, scope 'global'), coach_prompt_state (working and published pointers with an optimistic revision, one row per scope), coach_training_cases (one active case per live conversation, optional cut point), coach_training_runs (append-only coach outputs with the marker of the thread read) and coach_training_feedback (verdict/comment per take, idea or issue; consumed_by_version_id when an improve round used it). Adds conversation_coaching.prompt_version_id. RLS: active team members read and write through app_runtime/app_readonly; versions and runs are INSERT-only, no DELETE anywhere, no AI sandbox access. No seed row: the app writes version 1 from its built-in prompt on first use."
+    },
+    {
+      "step": 28,
+      "artifact": "028_coach_lead_context.sql",
+      "sha256": "eb3b30e8982c1912aa2f1f6ba95dda2739058c20fd2afb39ab170a2c63dff40b",
+      "owner_role_entered_by": "artifact",
+      "session": "coach-lead-context",
+      "description": "Adds the AI coach's lead context: lead_profiles (the lead's LH2-scraped profile, written by the machine ingest path for its own instance) and lh2_schema_reports (names of LH2 person tables/columns per notebook, machine-written), lead_company_context (the lead's company from the Airtable Apollo import, cached by the server) and company_site_snapshots (company website text by domain, cached by the server), plus playbook.our_company and playbook.our_website. Members read all four tables through RLS; the server caches are INSERT/UPDATE for app_runtime; no DELETE anywhere; no new AI sandbox grant."
     }
   ]
 }
