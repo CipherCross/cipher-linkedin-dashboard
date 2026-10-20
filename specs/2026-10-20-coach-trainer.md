@@ -39,15 +39,16 @@ The goal is to bring that loop into Outreach Deck for the coach.
 
 ## The user flow
 
-1. An admin opens **Strategy → Coach training** (`#/coach-training`).
+1. A team member opens **Strategy → Coach training** (`#/coach-training`).
 2. The left pane shows the **working prompt** (the draft version), and above it which version is live.
 3. They pick a lead. The search covers replied conversations and the full lead list. The lead joins the
    **training set**.
-4. The center pane shows that lead's thread. Each outbound message is tagged SEQUENCE, TEMPLATE or
-   HAND-WRITTEN, exactly as the coach sees it.
+4. The center pane shows that lead's **live** thread. Each outbound message is tagged SEQUENCE, TEMPLATE or
+   HAND-WRITTEN, exactly as the coach sees it. Clicking a message sets the **cut point**: the coach runs as
+   of that message. With no cut, it runs on the whole thread as it is now.
 5. The right pane shows the **coach output for the working version**: summary, next move, 10–15 ideas and
    feedback.
-6. The admin marks the output:
+6. They mark the output:
    - 👍 or 👎 on individual ideas;
    - a comment on any idea or issue;
    - one comment on the take as a whole.
@@ -99,7 +100,8 @@ coach_prompt_versions
   note text, created_by text, created_at timestamptz
   -- append-only: no UPDATE/DELETE grant
 
-coach_prompt_state            -- singleton (id = 1)
+coach_prompt_state            -- one row per scope; v1 has only scope = 'global'
+  scope text PK DEFAULT 'global',    -- later 'instance:<id>' for a per-account variant
   published_version_id → coach_prompt_versions,
   working_version_id   → coach_prompt_versions,
   revision bigint        -- optimistic concurrency for publish / new version
@@ -107,15 +109,16 @@ coach_prompt_state            -- singleton (id = 1)
 
 coach_training_cases
   id bigserial PK, instance_id, profile_url, campaign_id,
-  cut_after_message_id bigint NULL,   -- "as of" replay point; NULL = whole thread
-  snapshot jsonb NOT NULL,            -- frozen coach input: messages with origin tags, lead, contact
-  snapshot_at timestamptz, note text, archived_at, created_by, created_at
+  cut_after_message_id bigint NULL,   -- "as of" cut point; NULL = the whole live thread
+  note text, archived_at, created_by, created_at
   UNIQUE (instance_id, profile_url, cut_after_message_id)
 
 coach_training_runs
   id bigserial PK, case_id → cases, version_id → versions,
+  cut_after_message_id bigint NULL,   -- the cut this run used
+  thread_marker text NOT NULL,        -- message count + last id + hash of what the coach read
   output jsonb NOT NULL, model text, error text, created_at
-  UNIQUE (case_id, version_id)
+  UNIQUE (case_id, version_id, cut_after_message_id)
 
 coach_training_feedback
   id bigserial PK, case_id, run_id → runs, version_id,
@@ -128,17 +131,20 @@ coach_training_feedback
 The live coach pays nothing extra: it adds one read of `coach_prompt_state` + `coach_prompt_versions`,
 which it can cache in module scope per instance for 60 s.
 
-**Why a snapshot, not the live thread:** a thread keeps growing after it joins the set, so a comparison between
-versions would compare different inputs. The snapshot is exactly what the coach saw:
+**Live threads, by the owner's choice.** A case points at a conversation, not a copy. Each run is coached on
+the thread as it is at run time, read through the same `coach.thread` operation as the live coach, so
+origins and template detection match production exactly. Two things keep comparisons honest:
 
-- the `coach.thread` rows with origins;
-- `reused_threads`;
-- the lead row;
-- the playbook and ICP **by reference** (read live, so the editor never sees stale text).
+- **The cut point.** A cut at message X means the coach sees only the messages up to and including X, ordered
+  by `(sent_at, id)`. A later message can't change a cut run; only an edited or deleted earlier message can.
+- **The thread marker.** Every run records the marker of what it read. When the live thread no longer matches,
+  the run is labelled "thread changed since this run" and comparisons between versions are flagged. Re-running
+  brings the run up to date.
 
-A **Refresh snapshot** button re-reads the thread. Old runs stay labelled with the snapshot they used.
+The editor model receives each case's thread as the coach read it for the run being commented on, so its
+input always matches the output under review.
 
-**Why a replay point (`cut_after_message_id`):** it's the cheapest way to get many situations out of one
+**The cut point is also the replay mechanism.** It's the cheapest way to get many situations out of one
 conversation. Cut a thread right after a prospect reply, run the coach, and compare with what the SDR really
 sent next. That message is shown as **reference only**: it's labelled "what was actually sent" and is never
 fed to the editor as a target. This keeps the "don't trust history blindly" rule.
@@ -150,18 +156,21 @@ before relying on this). So training is a set of `mode` values on the existing `
 
 | mode | Who | Does |
 |---|---|---|
-| `training.state` | admin | Working version, published version, history (n, source, changelog, created_at), cases with their run/feedback status, leak warnings |
-| `training.version` | admin | One version's full prompt, plus a diff against its parent |
-| `training.addCase` / `refreshCase` / `archiveCase` | admin | Builds the snapshot from `coach.thread` + the lead |
-| `training.run` | admin | `{case_id, version_id}` → runs the coach on the snapshot with that version and upserts `coach_training_runs`. One case per request, so the client runs them six at a time with a card per case and no 300 s ceiling |
-| `training.feedback` | admin | Upserts one feedback row on a run |
-| `training.improve` | admin | Editor call over the pending feedback → new working version; marks the feedback consumed |
-| `training.instruct` | admin | Direct instruction → new working version |
-| `training.saveManual` / `revert` | admin | New version from text, or a copy of an old one |
-| `training.publish` | admin | `{version_id, expected_revision}` → sets `published_version_id`. A 409 on a stale revision |
+| `training.state` | member | Working version, published version, history (n, source, changelog, created_at), cases with their run/feedback status, leak warnings |
+| `training.version` | member | One version's full prompt, plus a diff against its parent |
+| `training.addCase` / `setCut` / `archiveCase` | member | Adds a lead to the set, or sets or clears its cut point |
+| `training.run` | member | `{case_id, version_id}` → runs the coach on the live thread (up to the cut) with that version and upserts `coach_training_runs`. One case per request, so the client runs them six at a time with a card per case and no 300 s ceiling |
+| `training.feedback` | member | Upserts one feedback row on a run |
+| `training.improve` | member | Editor call over the pending feedback → new working version; marks the feedback consumed |
+| `training.instruct` | member | Direct instruction → new working version |
+| `training.saveManual` / `revert` | member | New version from text, or a copy of an old one |
+| `training.publish` | member | `{version_id, expected_revision}` → sets `published_version_id`. A 409 on a stale revision |
 
 Rules:
-- `team_members.role = 'admin'` is enforced in the handler and again by RLS on the training tables.
+- **Access, by the owner's choice:** every active team member can train and publish. The handler resolves the
+  actor before any database call, and RLS limits reads and writes to active members. Every version, piece of
+  feedback and publish records who did it, and the publish confirm names the version going live and the one it
+  replaces.
 - Every write goes through named operations in `operations/coachTraining.ts`, the same pattern as
   `aiWrites.ts`.
 - **Models:**
@@ -195,7 +204,7 @@ The coach-specific rules added to humanizer's nine:
 
 Port `find_leaks` to TS (`api/_lib/coachLeaks.ts`). It looks for 6-word n-grams shared by the working prompt
 and:
-- case snapshots;
+- the training cases' threads;
 - comments;
 - 👍 ideas;
 - the playbook and ICP text.
@@ -239,16 +248,15 @@ It's a split-pane workspace, built on the Replies / conversation-workspace grid 
   - A version picker and a side-by-side **Compare with vN**.
 - **Feedback bar:** pending counts, general feedback, **Improve prompt**. When that finishes, it shows the
   changelog and unaddressed items and re-runs the set.
-- **Access:** the route renders for admins only (`navigation.ts` under Strategy, next to Playbook). Others
-  get a no-access state.
+- **Access:** the route is listed for every active member (`navigation.ts` under Strategy, next to Playbook).
 
 ### 7. Cost and safety
 
 - One Improve round costs one Opus call plus N Sonnet runs. The set is soft-capped at 25 active cases, and
   **Run all** shows its count before it starts.
 - Runs never write `conversation_coaching`. Training can't change what the team sees until Publish.
-- Thread text in snapshots is the team's own data, already readable by every active member. The training
-  tables get the same RLS: read for active members, write for admins.
+- The training tables hold no thread text, only references and outputs. They get the same RLS as the rest:
+  active members read and write.
 
 ## Phases
 
@@ -260,8 +268,8 @@ It's a split-pane workspace, built on the Replies / conversation-workspace grid 
 2. **Training API.**
    - `operations/coachTraining.ts`, the training modes in `/api/coach`, the editor, and the leak check.
    - Tests:
-     - an admin-only refusal for non-admins;
-     - snapshot building with a cut;
+     - a refusal for an inactive member;
+     - a cut run reads only messages up to the cut, and a later message doesn't change its marker;
      - the improve round marks feedback consumed;
      - publish 409s on a stale revision;
      - the leak check, with a mutation pass;
@@ -276,10 +284,11 @@ It's a split-pane workspace, built on the Replies / conversation-workspace grid 
 Deploy order (see `deployed-reads-need-applied-ledger-step`): apply and promote ledger step 027 **before** the
 Vercel deploy that reads it. uitop also needs steps 022–027.
 
-## Open questions for the owner
+## Decisions (owner, 2026-10-20)
 
-1. **Who can publish:** admins only (recommended), or any active member?
-2. **Snapshot or live thread** for training cases: snapshot plus Refresh is recommended.
-3. **After publish:** regenerate cached takes lazily as each coach is opened (recommended), or re-coach
-   every recently active conversation in the background?
-4. **Account scope:** one prompt for all accounts (recommended for now), or per-account variants later?
+1. **Who can train and publish:** every active team member.
+2. **Training cases:** the live thread, which the user sees in full and can cut at any message. No snapshots.
+3. **After publish:** no background re-coaching. A take made with an older prompt is stale. It regenerates when
+   someone asks for the coach on that conversation, and the panel says which version produced it until then.
+4. **Scope:** one prompt for every account. `coach_prompt_state` is keyed by scope (`'global'` only) so a
+   per-account variant can be added later without a migration of the existing rows.
