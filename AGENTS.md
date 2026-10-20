@@ -175,7 +175,12 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
 - `classify.ts` no longer classifies replies — its reply entry points return an explicit
   disabled result. Its only model call (Haiku) is the demographics phase: versioned
   name/headline gender inference. Age is derived separately in the database whenever
-  synced education/job years change. `coach.ts` coaches the SDR.
+  synced education/job years change. `coach.ts` coaches the SDR on demand: 10–15
+  ready-to-send next-message ideas plus feedback on **hand-written** messages only.
+  Sequence messages (step attribution, ledger step 024) and unmatched openings reused in
+  ≥5 conversations (unsynced template variants) are context, never critiqued; the
+  server drops any issue that doesn't quote a hand-written message. Ideas are stored in
+  `conversation_coaching.tips`; `v2|` markers invalidate older cached takes.
 - `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
   open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
   rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.

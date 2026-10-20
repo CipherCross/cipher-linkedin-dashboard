@@ -170,6 +170,7 @@ import {
   coachIcpPersonasOperation,
   coachIssuesByInstanceOperation,
   coachPlaybookOperation,
+  coachThreadOperation,
   coachUpsertOperation,
 } from './aiWrites.js'
 import {
@@ -389,6 +390,7 @@ export {
   type CoachThreadKeyParams,
   type CoachUpsertParams,
   type CoachingRow,
+  type CoachThreadRow,
   type DigestUpsertParams,
   type GenderBatchParams,
   type GenderBatchRow,
@@ -756,6 +758,7 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   // under the same active-member policies as S14's writes. The cron halves of
   // these handlers are not here: they have no actor, and stay declared
   // blocked until ledger step 007 is applied.
+  registry.registerQuery(AI_WRITE_OPERATIONS.coachThread, coachThreadOperation)
   registry.registerQuery(AI_WRITE_OPERATIONS.coachExisting, coachExistingOperation)
   registry.registerQuery(AI_WRITE_OPERATIONS.coachPlaybook, coachPlaybookOperation)
   registry.registerQuery(
@@ -944,6 +947,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   PIPELINE_WRITE_OPERATIONS.actorDisplayName,
   CONVERSATION_WRITE_OPERATIONS.leadForImport,
   CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
+  AI_WRITE_OPERATIONS.coachThread,
   AI_WRITE_OPERATIONS.coachExisting,
   AI_WRITE_OPERATIONS.coachPlaybook,
   AI_WRITE_OPERATIONS.coachHypothesisAssignment,

@@ -29,6 +29,7 @@ import type {
 
 export const AI_WRITE_OPERATIONS = {
   // coach.ts
+  coachThread: 'coach.thread',
   coachExisting: 'coach.existing',
   coachUpsert: 'coach.upsert',
   coachPlaybook: 'coach.playbook',
@@ -82,6 +83,93 @@ export interface CoachThreadKeyParams {
 // ---------------------------------------------------------------------------
 // coach.ts — reads, then the two upserts
 // ---------------------------------------------------------------------------
+
+/**
+ * One conversation for the coach, oldest first, with what produced each
+ * outbound message. `step_method` is the step-attribution row's method (ledger
+ * step 024): anything but `'none'` means the body matched a campaign step
+ * template, so the sequence sent it; `'none'` means it matched no template and
+ * was written by hand; NULL means the message has not been attributed yet (the
+ * incremental refresh runs on each sync ping). `chat_store` marks a row read
+ * from LH2's own chat store, which also captures hand-typed messages.
+ *
+ * `reused_threads` is set on unmatched messages only: how many conversations
+ * on the same account have an outbound message opening with the same 50
+ * normalized characters. Only variant 0 of a step template is synced, so an
+ * A/B variant matches nothing; measured on production 2026-10-20, 508 of
+ * 4,325 unmatched messages open identically in five or more conversations —
+ * template variants and reused snippets, not hand-written replies.
+ *
+ * Offset paging, like `messages.thread`: a thread is tens of messages.
+ */
+export interface CoachThreadRow {
+  readonly id: number
+  readonly direction: string
+  readonly body: string | null
+  readonly sent_at: string
+  readonly source: string | null
+  readonly chat_store: boolean
+  readonly step_method: string | null
+  readonly step_type: string | null
+  readonly message_ordinal: number | null
+  readonly reused_threads: number | null
+}
+
+const NORMALIZED_HEAD = (column: string) =>
+  `left(lower(regexp_replace(btrim(${column}), '\\s+', ' ', 'g')), 50)`
+
+export const coachThreadOperation: NeonQueryOperation<
+  CoachThreadRow,
+  CoachThreadKeyParams
+> = {
+  build: ({ params }): NeonStatement => ({
+    // One pass over the account's outbound messages, keyed by the openings
+    // of this thread's unmatched ones — a correlated count per message took
+    // 3.5 s on a 44-message production thread.
+    text: `WITH thread AS (
+             SELECT m.id, m.direction, m.body, m.sent_at, m.source,
+                    (m.external_id IS NOT NULL) AS chat_store,
+                    sa.method AS step_method, sa.step_type, sa.message_ordinal,
+                    ${NORMALIZED_HEAD('m.body')} AS head
+               FROM public.messages m
+               LEFT JOIN public.message_step_attribution sa ON sa.message_id = m.id
+              WHERE m.instance_id = $1 AND m.profile_url = $2
+           ), reuse AS (
+             SELECT ${NORMALIZED_HEAD('o.body')} AS head, count(DISTINCT o.profile_url) AS threads
+               FROM public.messages o
+              WHERE o.instance_id = $1
+                AND o.direction = 'out'
+                AND ${NORMALIZED_HEAD('o.body')} IN (
+                      SELECT t.head FROM thread t WHERE t.step_method = 'none')
+              GROUP BY 1
+           )
+           SELECT t.id::text AS id, t.direction, t.body, t.sent_at, t.source, t.chat_store,
+                  t.step_method, t.step_type, t.message_ordinal,
+                  CASE WHEN t.step_method = 'none' THEN coalesce(r.threads, 1) END AS reused_threads
+             FROM thread t
+             LEFT JOIN reuse r ON r.head = t.head
+            ORDER BY t.sent_at, t.id`,
+    values: [params?.instanceId ?? null, params?.profileUrl ?? null],
+  }),
+  mapRow: (row): CoachThreadRow => ({
+    id: Number(row.id),
+    direction: text(row, 'direction'),
+    body: nullableText(row, 'body'),
+    sent_at: text(row, 'sent_at'),
+    source: nullableText(row, 'source'),
+    chat_store: row.chat_store === true,
+    step_method: nullableText(row, 'step_method'),
+    step_type: nullableText(row, 'step_type'),
+    message_ordinal:
+      row.message_ordinal === null || row.message_ordinal === undefined
+        ? null
+        : Number(row.message_ordinal),
+    reused_threads:
+      row.reused_threads === null || row.reused_threads === undefined
+        ? null
+        : Number(row.reused_threads),
+  }),
+}
 
 export interface CoachingRow {
   readonly next_action: string | null

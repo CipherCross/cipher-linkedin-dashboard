@@ -1,10 +1,19 @@
-// Conversation coach. A layer on top of the reply classifier (/api/classify):
-// instead of labelling the latest inbound reply, it reads the whole negotiation
-// and coaches the SDR — flags what they did wrong in their OWN messages, how to
-// respond now (guidance, never a ghost-written message), and the best next action.
-// Results are cached per conversation in `conversation_coaching` and rolled up per
-// account into `coaching_digest`. Reuses the same Anthropic key as /api/classify
-// and /api/chat; nothing runs on the notebooks.
+// Conversation coach. Reads one whole conversation and helps the SDR with the
+// next message: a short read of the state of play, feedback on the messages the
+// SDR wrote BY HAND (sequence messages are reviewed separately, on the Sequences
+// side, and are never critiqued here), and 10–15 ready-to-send options for the
+// next message to choose from. Results are cached per conversation in
+// `conversation_coaching` and rolled up per account into `coaching_digest`.
+//
+// What produced each outbound message comes from the step attribution (ledger
+// step 024): a body that matches a campaign step template was sent by the
+// sequence. Issues are filtered server-side to quotes from hand-written
+// messages, so a model that critiques a template anyway is overruled.
+//
+// Storage: the drafts live in the `tips` jsonb column (it held the old
+// free-text "how to respond" pointers) — no schema change. Markers carry a
+// `v2|` prefix, so a row cached in the old shape never matches and is
+// regenerated on the next request.
 //
 // POST body:
 //   { instance_id, profile_url }          → coach one conversation (Mode A)
@@ -25,6 +34,7 @@ import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import {
   DataStoreContractError,
+  DataStoreSchemaError,
   MAX_PAGE_SIZE,
   type ActorContext,
   type DataStore,
@@ -35,6 +45,7 @@ import {
   AI_WRITE_OPERATIONS,
   MESSAGES_OPERATIONS,
   type CoachIcpPersonaRow,
+  type CoachThreadRow,
   type CoachingRow,
   type IcpDetailRow,
   type ThreadMessageRow,
@@ -49,6 +60,8 @@ const DIGEST_MODEL = 'claude-opus-5-5' // cross-conversation self-correction dig
 const MAX_MSGS = 30 // most recent thread messages shown to the model
 const BODY_CAP = 800 // chars per message
 const DIGEST_BATCH = 25 // actionable threads back-filled before a digest
+const MAX_IDEAS = 15
+const MARKER_VERSION = 'v2'
 
 const NEXT_ACTIONS = ['reply', 'wait', 'book_call', 'refer', 'close', 'none'] as const
 const ISSUE_KINDS = [
@@ -65,18 +78,26 @@ const ISSUE_KINDS = [
 
 const convSchema = z.object({
   next_action: z.enum(NEXT_ACTIONS),
+  summary: z.string(),
   issues: z
     .array(
       z.object({
         kind: z.enum(ISSUE_KINDS),
         severity: z.enum(['low', 'med', 'high']),
-        quote: z.string(), // the SDR's own outbound snippet that was the problem
+        quote: z.string(), // exact snippet from a HAND-WRITTEN SDR message
         fix: z.string(), // how to do it better
       })
     )
     .max(4),
-  tips: z.array(z.string()).max(4), // how to respond *now* — direction, not the message
-  summary: z.string(),
+  ideas: z
+    .array(
+      z.object({
+        angle: z.string(), // 2–5 word label for the approach
+        message: z.string(), // the ready-to-send next message
+        why: z.string(), // one line on when this option is the right pick
+      })
+    )
+    .max(MAX_IDEAS),
 })
 
 const digestSchema = z.object({
@@ -93,39 +114,76 @@ const digestSchema = z.object({
 })
 
 const SYSTEM_BASE = `You are an elite LinkedIn outreach coach for an SDR (sales development rep).
-You read one full conversation between the SDR and a prospect. The SDR sent the SDR messages;
-the prospect sent the PROSPECT messages. The ONLY goal is to earn the next genuine reply and move
-toward a call — never to close a sale in a single message.
+You read one full conversation between the SDR and a prospect. PROSPECT lines are the prospect's;
+SDR lines are the SDR's. The ONLY goal is to earn the next genuine reply and move toward a call —
+never to close a sale in a single message.
 
-Coach the SDR; do NOT write their message for them. Return:
-- issues: up to 4 concrete mistakes in the SDR's OWN messages, each with the exact "quote" from an
-  SDR message and a short, specific "fix". Judge tone, length, relevance, whether a direct question
-  was ignored, generic copy-paste, too many asks at once, pushiness, a missing/weak call to action,
-  and slow follow-up. If there is genuinely nothing to flag, return an empty array — do not invent
-  problems.
-- tips: up to 4 short, imperative pointers on how to respond RIGHT NOW to earn a reply. Give
-  direction, NOT the literal message (e.g. "Answer the pricing question in one line, then ask for
-  15 minutes Thursday" — never a full drafted message).
-- next_action: the single best next move — reply, wait, book_call, refer, close, or none. Use
-  "close" when the thread is dead or hostile and it makes sense to end it gracefully; "wait" when
-  the ball is in the prospect's court and chasing now would hurt.
+Every SDR line is tagged with what produced it:
+- [SEQUENCE …] — sent automatically by a campaign sequence step (a template). Sequences are reviewed
+  and rewritten separately by the team. NEVER critique, quote or "fix" a SEQUENCE message. Use them only
+  as context for what the prospect has already been told.
+- [TEMPLATE] — the same text was sent in many other conversations (a sequence variant or a saved
+  snippet). Treat it exactly like a SEQUENCE message.
+- [HAND-WRITTEN] — typed by the SDR by hand. These, and only these, are what you give feedback on.
+- [UNVERIFIED] — not yet matched against the templates. Treat it as hand-written only if it clearly
+  reads like a personal reply to this prospect; if it reads like a template, leave it alone.
+
+Return:
 - summary: one or two sentences on the state of play and the path to a reply.
+- next_action: the single best next move — reply, wait, book_call, refer, close, or none. Use "close"
+  when the thread is dead or hostile and it makes sense to end it gracefully; "wait" when the ball is in
+  the prospect's court and chasing now would hurt.
+- issues: up to 4 concrete mistakes in the SDR's HAND-WRITTEN messages, each with the exact "quote" copied
+  verbatim from a HAND-WRITTEN message and a short, specific "fix". Judge tone, length, relevance, whether
+  a direct question was ignored, generic copy-paste, too many asks at once, pushiness, a missing/weak call
+  to action, and slow follow-up. With no hand-written messages, or nothing genuinely wrong in them, return
+  an empty array — never invent problems.
+- ideas: ${MAX_IDEAS - 3} to ${MAX_IDEAS} distinct, ready-to-send options for the SDR's NEXT message, so they
+  have a real choice. Each has a short "angle" label (2-5 words, e.g. "Answer + propose a slot",
+  "Clarifying question", "Relevant case study", "Low-friction resource", "Graceful close"), the full
+  "message", and a one-line "why" saying when this option is the right pick. Make them genuinely
+  different — vary the approach (direct answer, question, insight, proof, call to action, soft nudge,
+  rapport, graceful exit where it fits), the length (most under 300 characters, a few one-liners, at most
+  two longer ones) and the ask. Order them best first. Every message must:
+  * answer anything the prospect asked that is still open, before asking for anything;
+  * be written in the language the prospect writes in (the conversation's language if the prospect
+    has not written), in a natural first-person LinkedIn tone — no subject line, no signature;
+  * never repeat what a sequence message already said;
+  * never invent facts, prices, names or results: where a specific the SDR must supply is needed, mark
+    it in square brackets, e.g. [price range], [case study client];
+  * stay consistent with the playbook and the ICP below.
+  When next_action is "wait", write the options as the follow-up to send later, and say so in "why".
 
-Be specific to THIS thread.
+Be specific to THIS thread.`
 
-MANUAL-REPLY BLIND SPOT: the auto-sync captures only the scripted funnel (invite → first templated
-message → the inbound reply). Outbound messages the SDR types by HAND after a reply are captured ONLY
-once the thread is manually imported (tagged [imported] above). So on a SYNC-ONLY thread, later SDR
-follow-ups may be missing from what you see — NEVER scold the SDR for "not replying", "going slow", or
-"ignoring" a prospect, and never make slow_followup the issue, when the thread has no imported messages.
-In that case the only safe next step is to import the thread's full history so the real exchange becomes
-visible; say so in tips/summary instead of assuming a lapse.`
+/** Who wrote an outbound message, as far as the step attribution knows.
+ *  `template`: matched no synced step, but opens like messages sent in many
+ *  other conversations — an unsynced template variant or a reused snippet. */
+type OutboundOrigin = 'sequence' | 'template' | 'manual' | 'unverified'
+
+/** Conversations an unmatched opening must recur in to count as a template. */
+const TEMPLATE_REUSE_THREADS = 5
 
 interface Msg {
   direction: string
   body: string | null
   sent_at: string
   source: string | null
+  /** Read from LH2's chat store, which captures hand-typed messages too. */
+  chat_store: boolean
+  /** Outbound only. */
+  origin: OutboundOrigin | null
+  step_type: string | null
+  message_ordinal: number | null
+}
+
+export function originOf(
+  row: Pick<CoachThreadRow, 'direction' | 'step_method'> & Partial<Pick<CoachThreadRow, 'reused_threads'>>,
+): OutboundOrigin | null {
+  if (row.direction !== 'out') return null
+  if (row.step_method === null) return 'unverified'
+  if (row.step_method !== 'none') return 'sequence'
+  return (row.reused_threads ?? 0) >= TEMPLATE_REUSE_THREADS ? 'template' : 'manual'
 }
 
 const json = (body: unknown, status = 200) =>
@@ -147,34 +205,61 @@ function systemFor(playbook: string, icpText: string): string {
   return sys
 }
 
-function renderThread(thread: Msg[]): string {
+function sdrTag(m: Msg): string {
+  if (m.origin === 'sequence') {
+    const step = m.step_type === 'InvitePerson'
+      ? 'connection note'
+      : m.message_ordinal ? `message ${m.message_ordinal}` : 'step'
+    return `[SEQUENCE ${step}]`
+  }
+  if (m.origin === 'template') return '[TEMPLATE]'
+  return m.origin === 'manual' ? '[HAND-WRITTEN]' : '[UNVERIFIED]'
+}
+
+export function renderThread(thread: Msg[]): string {
   const recent = thread.slice(-MAX_MSGS)
   const lines = recent.map((m) => {
-    const who = m.direction === 'in' ? 'PROSPECT' : 'SDR'
-    const tag = m.source === 'manual' ? ' [imported]' : ''
-    return `${who}${tag}: ${(m.body ?? '').slice(0, BODY_CAP)}`
+    const who = m.direction === 'in' ? 'PROSPECT' : `SDR ${sdrTag(m)}`
+    return `${who}: ${(m.body ?? '').slice(0, BODY_CAP)}`
   })
-  // The LH2 agent can't see hand-typed SDR follow-ups; those only appear once a
-  // thread is manually imported (source='manual'). A sync-only thread may be
-  // MISSING later SDR messages that were actually sent — so "who is waiting" can't
-  // be trusted on it. Only trust the last-message direction when at least one
-  // message was manually imported.
-  const hasManual = recent.some((m) => m.source === 'manual')
+  // Agents before the chat-store sync could not see hand-typed SDR follow-ups;
+  // those only appear once a thread is manually imported (source='manual').
+  // On such a thread "who is waiting" can't be trusted. A chat-store row, or an
+  // import, means hand-typed messages are captured.
+  const complete = recent.some((m) => m.source === 'manual' || m.chat_store)
   const last = recent[recent.length - 1]
   let waiting: string
-  if (last?.direction === 'in' && !hasManual) {
+  if (last?.direction === 'in' && !complete) {
     waiting =
-      'This thread is SYNC-ONLY (no manually imported messages), so any hand-typed SDR follow-up ' +
-      'after the prospect replied is NOT captured here. The latest message being from the PROSPECT ' +
-      'may simply mean the SDR replied by hand and the thread has not been re-imported — do NOT assume ' +
-      'the SDR ignored them. If the thread genuinely stops at the prospect, the right move is to import ' +
-      'its full history (dashboard "Import history") so the real state is visible.'
+      'This thread may be INCOMPLETE: it was synced before hand-typed messages were captured, and has no ' +
+      'imported history. The latest message being from the PROSPECT may simply mean the SDR replied by ' +
+      'hand and it is not visible here — do NOT scold the SDR for "not replying" or "going slow", and never ' +
+      'flag slow_followup. Mention in the summary that importing the thread history would confirm the state.'
   } else if (last?.direction === 'in') {
     waiting = 'The latest message is from the PROSPECT — they are waiting on the SDR to respond.'
   } else {
     waiting = 'The latest message is from the SDR — we are waiting on the prospect to reply.'
   }
-  return `${waiting}\n\nCONVERSATION (oldest first; [imported] = manually imported, others are auto-synced):\n${lines.join('\n')}`
+  const handWritten = recent.filter((m) => m.origin === 'manual' || m.origin === 'unverified').length
+  const scope = handWritten
+    ? ''
+    : '\nThe SDR has sent no hand-written messages in this thread, so "issues" must be empty.'
+  return `${waiting}${scope}\n\nCONVERSATION (oldest first):\n${lines.join('\n')}`
+}
+
+const normalize = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').trim()
+
+/** Keep only issues that quote a hand-written (or not yet attributed) SDR
+ *  message. The prompt already says so; this is what makes it true. */
+export function issuesOnHandWritten<T extends { quote: string }>(issues: readonly T[], thread: readonly Msg[]): T[] {
+  const bodies = thread
+    .filter((m) => m.origin === 'manual' || m.origin === 'unverified')
+    .map((m) => normalize(m.body ?? ''))
+    .filter(Boolean)
+  return issues.filter((issue) => {
+    const quote = normalize(issue.quote.replace(/^["“'«]+|["”'»]+$/g, ''))
+    return quote.length > 0 && bodies.some((body) => body.includes(quote))
+  })
 }
 
 /** djb2 hash of a string → short hex, so the staleness marker also changes when the
@@ -187,7 +272,45 @@ function hashStr(s: string): string {
 
 const markerOf = (thread: Msg[]) => {
   const last = thread[thread.length - 1]
-  return `${last?.sent_at ?? ''}|${thread.length}|${last?.body ? hashStr(last.body) : '0'}`
+  return `${MARKER_VERSION}|${last?.sent_at ?? ''}|${thread.length}|${last?.body ? hashStr(last.body) : '0'}`
+}
+
+interface CoachScope {
+  /** Outbound messages the coach reviewed (hand-written or not yet attributed). */
+  readonly hand_written: number
+  /** Outbound messages a sequence step or a reused template sent, which the coach skips. */
+  readonly sequence: number
+  /** The thread the take was generated against, for the client's staleness check. */
+  readonly message_count: number
+  readonly last_sent_at: string | null
+}
+
+function scopeOf(thread: readonly Msg[]): CoachScope {
+  return {
+    hand_written: thread.filter((m) => m.origin === 'manual' || m.origin === 'unverified').length,
+    sequence: thread.filter((m) => m.origin === 'sequence' || m.origin === 'template').length,
+    message_count: thread.length,
+    last_sent_at: thread[thread.length - 1]?.sent_at ?? null,
+  }
+}
+
+interface CoachIdea {
+  angle: string
+  message: string
+  why: string
+}
+
+/** The drafts stored in `tips`; anything not in the v2 shape is dropped. */
+function ideasFrom(value: readonly unknown[]): CoachIdea[] {
+  return value.flatMap((item) => {
+    const idea = item as Partial<CoachIdea> | null
+    if (!idea || typeof idea !== 'object' || typeof idea.message !== 'string' || !idea.message.trim()) return []
+    return [{
+      angle: typeof idea.angle === 'string' ? idea.angle : '',
+      message: idea.message,
+      why: typeof idea.why === 'string' ? idea.why : '',
+    }]
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -273,15 +396,34 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
 
   return {
     async loadThread(instance_id, profile_url) {
-      const rows = await allPages<ThreadMessageRow>(MESSAGES_OPERATIONS.thread, {
-        instanceId: instance_id,
-        profileUrl: profile_url,
-      })
+      const params = { instanceId: instance_id, profileUrl: profile_url }
+      try {
+        const rows = await allPages<CoachThreadRow>(AI_WRITE_OPERATIONS.coachThread, params)
+        return rows.map((m) => ({
+          direction: m.direction,
+          body: m.body,
+          sent_at: m.sent_at,
+          source: m.source,
+          chat_store: m.chat_store,
+          origin: originOf(m),
+          step_type: m.step_type,
+          message_ordinal: m.message_ordinal,
+        }))
+      } catch (error) {
+        // A tenant that predates ledger step 024 has no attribution table:
+        // coach it with every outbound message unverified rather than not at all.
+        if (!(error instanceof DataStoreSchemaError)) throw error
+      }
+      const rows = await allPages<ThreadMessageRow>(MESSAGES_OPERATIONS.thread, params)
       return rows.map((m) => ({
         direction: m.direction,
         body: m.body,
         sent_at: m.sent_at,
         source: m.source,
+        chat_store: false,
+        origin: m.direction === 'out' ? 'unverified' as const : null,
+        step_type: null,
+        message_ordinal: null,
       }))
     },
     async loadExisting(instance_id, profile_url) {
@@ -393,12 +535,13 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
 interface CoachingOut {
   next_action: string
   issues: unknown[]
-  tips: unknown[]
+  ideas: CoachIdea[]
   summary: string | null
   last_msg_marker: string | null
   coached_at: string | null
   model: string | null
   cached: boolean
+  scope: CoachScope
 }
 
 /** Coach one conversation. Serves a cached row when the thread is unchanged
@@ -415,11 +558,22 @@ async function coachConversation(
   const thread = await data.loadThread(instance_id, profile_url)
   if (!thread.length) return null
   const marker = markerOf(thread)
+  const scope = scopeOf(thread)
 
   if (!force) {
     const existing = await data.loadExisting(instance_id, profile_url)
     if (existing && existing.last_msg_marker === marker) {
-      return { ...(existing as Omit<CoachingOut, 'cached'>), cached: true }
+      return {
+        next_action: existing.next_action ?? 'none',
+        issues: existing.issues,
+        ideas: ideasFrom(existing.tips),
+        summary: existing.summary,
+        last_msg_marker: existing.last_msg_marker,
+        coached_at: existing.coached_at,
+        model: existing.model,
+        cached: true,
+        scope,
+      }
     }
   }
 
@@ -432,20 +586,32 @@ async function coachConversation(
     providerOptions: { anthropic: { effort: 'low' } },
   })
 
+  const ideas = ideasFrom(object.ideas).slice(0, MAX_IDEAS)
+  const issues = issuesOnHandWritten(object.issues, thread)
   const now = new Date().toISOString()
   const row = {
     instance_id,
     profile_url,
     next_action: object.next_action,
-    issues: object.issues,
-    tips: object.tips,
+    issues,
+    tips: ideas,
     summary: object.summary.slice(0, 1000),
     last_msg_marker: marker,
     coached_at: now,
     model: CONV_MODEL,
   }
   await data.saveCoaching(row)
-  return { ...row, cached: false }
+  return {
+    next_action: row.next_action,
+    issues,
+    ideas,
+    summary: row.summary,
+    last_msg_marker: marker,
+    coached_at: now,
+    model: CONV_MODEL,
+    cached: false,
+    scope,
+  }
 }
 
 async function digest(data: CoachData, instance_id: string): Promise<Response> {
