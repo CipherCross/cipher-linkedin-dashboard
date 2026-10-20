@@ -1,0 +1,147 @@
+/* ===========================================================================
+ * The conversation workspace — one lead's modal: Context · Conversation ·
+ * Actions, each pane scrolling on its own under a pane head of the same
+ * height, so the three dividers form one line. The AI coach opens in place of
+ * the Actions pane (which stays mounted, hidden, so a review draft survives)
+ * and takes a wider track; the thread is what gives way.
+ * ======================================================================== */
+.conversation-workspace {
+  --conversation-context: 300px;
+  --conversation-side: 360px;
+  --conversation-coach: 440px;
+  display: grid;
+  grid-template-columns: var(--conversation-context) minmax(0, 1fr) var(--conversation-side);
+  height: 100%;
+  min-height: 0;
+}
+.conversation-workspace[data-coach='open'] {
+  grid-template-columns: var(--conversation-context) minmax(0, 1fr) var(--conversation-coach);
+}
+@media (max-width: 1365px) {
+  .conversation-workspace {
+    --conversation-context: 264px;
+    --conversation-side: 320px;
+    --conversation-coach: 400px;
+  }
+}
+
+.conversation-pane,
+.conversation-coach {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.conversation-pane + .conversation-pane,
+.conversation-coach { border-left: 1px solid var(--border); }
+.conversation-pane[hidden] { display: none; }
+.conversation-coach { animation: conv-slide-in 0.25s var(--ease-out); }
+
+.conversation-pane-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  height: var(--pane-head-height);
+  padding: 0 var(--inset-pane);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.conversation-pane-title {
+  margin: 0;
+  font-size: var(--text-subsection);
+  line-height: var(--leading-subsection);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.conversation-pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--inset-pane);
+}
+
+/* Context: label/value facts and the funnel milestones. */
+.conversation-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--gap-stack) var(--gap-group);
+  margin: 0;
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+}
+.conversation-facts dt { color: var(--text-muted); }
+.conversation-facts dd { margin: 0; min-width: 0; }
+
+.conversation-milestones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.conversation-milestones li {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap-inline);
+  padding: var(--space-xs) 0 var(--space-xs) var(--space-xl);
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+  color: var(--text-muted);
+}
+.conversation-milestones li::before {
+  content: '';
+  position: absolute;
+  left: var(--space-xs);
+  top: 50%;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--border-strong);
+  background: var(--surface-1);
+  transform: translateY(-50%);
+  z-index: 1;
+}
+.conversation-milestones li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-xs) + var(--space-sm) / 2 - 0.5px);
+  top: 50%;
+  height: 100%;
+  width: 1px;
+  background: var(--border);
+}
+.conversation-milestones li[data-reached='true'] { color: var(--text); }
+.conversation-milestones li[data-reached='true']:has(+ li[data-reached='true'])::after { background: var(--accent); }
+.conversation-milestones li[data-reached='true']::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Coach: ideas are rows with dividers, not nested cards. */
+.conversation-idea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--border);
+}
+.conversation-idea:first-child { padding-top: 0; }
+.conversation-idea:last-child { border-bottom: 0; }
+.conversation-idea__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  border-radius: var(--radius-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

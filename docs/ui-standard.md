@@ -201,7 +201,7 @@ a domain adapter maps values to labels and variants.
 | `TableFrame` / `TableToolbar` / `Table` | Frame, toolbar, local scroll, sticky head. Sorting, paging and filtering stay with the screen. |
 | `Toolbar` / `ActiveFilters` | Search plus one or two primary selectors on the page; everything else in a `FilterDialog`. |
 | `FilterDialog` | End-placed modal `Dialog`, 560px at most, fixed header and footer. The route owns the draft; Apply commits every key at once; Cancel, Escape and the backdrop change nothing; Clear all clears the draft only. |
-| `Dialog` | `placement="center"` (sizes `sm`–`xl`) or `"end"`. Role and name, initial focus (`initialFocusRef`), focus trap, background hidden from assistive technology, Escape, scroll lock, returned focus (`finalFocusRef`, else the element focused at open). Close is Base UI `Dialog.Close`. While `busy`, every close path is refused and `busyMessage` is announced. A persistent pane is not a modal and must not use it. |
+| `Dialog` | `placement="center"` (sizes `sm`–`xl`, or `workspace` — the window up to 1600px, fixed height, for a multi-pane surface) or `"end"`. `headerActions` puts navigation or a pane toggle before Close. Role and name, initial focus (`initialFocusRef`), focus trap, background hidden from assistive technology, Escape, scroll lock, returned focus (`finalFocusRef`, else the element focused at open). Close is Base UI `Dialog.Close`. While `busy`, every close path is refused and `busyMessage` is announced. A persistent pane is not a modal and must not use it. |
 | `useDirtyGuard` | A clean form closes at once; a dirty one asks `Keep editing` / `Discard changes` — for Escape, Close, the backdrop and navigation alike. |
 | `UpdatingNote` / `InlineError` / `EmptyState` | Initial load, refresh, empty, and failure are four different things. `EmptyState` says `kind="empty"` (no rows exist) or `kind="no-match"` (filters exclude them all). |
 | `SaveStatus` | Presentation of a route's existing save state (`saved`, `dirty`, `saving`, `conflict`, `error`). Owns no timer, draft or conflict logic. |
@@ -213,7 +213,8 @@ navigation as a button for assistive technology.
 
 `Drawer` and `RefreshingRegion` were removed: neither had a consumer. A
 refreshing region sets `aria-busy` itself and shows `UpdatingNote`. The product
-`ConversationDrawer` is a modal conversation surface and keeps its name.
+`ConversationDrawer` is a modal conversation surface and keeps its name; it is
+a `workspace` dialog, laid out under **Layout → Conversation workspace**.
 
 Base UI queues a dialog's initial focus through `requestAnimationFrame`, so one
 opened while the tab is hidden receives focus late; it still lands when the tab
@@ -258,6 +259,20 @@ wanted. One light theme, still.
   The workspace fills the window: its route shrinks the page frame to a 16px
   top and bottom, puts title, tabs, scope and actions on one row, and gives
   every pane head the same `--pane-head-height`, so their dividers form one line.
+
+### Conversation workspace
+
+- One lead's conversation is a centered `workspace` dialog in three panes:
+  **Context** (outreach, funnel milestones, pipeline fields, notes) 300px ·
+  **Conversation** (the thread, or the import view in its place) · **Actions**
+  (next-message entry, follow-up, the reply review) 360px; 264 / 320 below
+  1366px. Every pane has a `--pane-head-height` head and scrolls on its own;
+  the thread is the pane that gives way.
+- The AI coach opens from the header toggle (or "Get message ideas") in place
+  of Actions, on a 440px track (400 below 1366px). Actions stays mounted and
+  `hidden`, as the review stays under the follow-up view, so no draft is lost
+  by switching; only closing the dialog asks to discard.
+- Coach ideas are rows with dividers inside the pane, not nested cards.
 
 ### Chat threads
 

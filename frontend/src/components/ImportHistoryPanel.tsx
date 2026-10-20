@@ -270,7 +270,7 @@ export function ImportHistoryPanel({
 
   if (result) {
     return (
-      <div className="flex-1 overflow-y-auto pt-app-md px-dialog pb-app-lg flex flex-col gap-group">
+      <div className="flex-1 min-h-0 overflow-y-auto p-pane flex flex-col gap-group">
         {stepsHeader}
         <div>
           Imported <strong>{result.inserted}</strong> new message{result.inserted === 1 ? '' : 's'}
@@ -294,7 +294,7 @@ export function ImportHistoryPanel({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto pt-app-md px-dialog pb-app-lg flex flex-col gap-group">
+    <div className="flex-1 min-h-0 overflow-y-auto p-pane flex flex-col gap-group">
       {stepsHeader}
       {!blocks && (
         <>

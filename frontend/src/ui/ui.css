@@ -568,6 +568,9 @@
 .ui-dialog--sm { width: min(100%, 480px); }
 .ui-dialog--lg { width: min(100%, 880px); }
 .ui-dialog--xl { width: min(100%, 1120px); }
+/* A multi-pane workspace (the conversation): the whole window up to 1600px,
+ * and a fixed height so each pane scrolls on its own. */
+.ui-dialog--workspace { width: min(100%, 1600px); height: 100%; max-height: none; }
 /* The popup takes focus only as a fallback, when the control that had it is
  * removed; a ring round the whole dialog then marks nothing actionable. */
 .ui-dialog:focus-visible { outline: none; }
@@ -603,6 +606,9 @@
   color: var(--text-secondary);
 }
 .ui-dialog__busy { margin: var(--space-xs) 0 0; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
+.ui-dialog__heading { min-width: 0; }
+.ui-dialog__header-actions { display: flex; align-items: center; gap: var(--gap-inline); margin-left: auto; flex-shrink: 0; }
+.ui-dialog__header-actions + .ui-dialog__close { margin-left: 0; }
 .ui-dialog__close { margin-left: auto; flex-shrink: 0; }
 .ui-dialog__body { padding: var(--inset-dialog); overflow-y: auto; flex: 1; min-height: 0; }
 .ui-dialog__footer {

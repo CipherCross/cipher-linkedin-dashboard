@@ -10,7 +10,7 @@
  * the form holds; a rejected mutation surfaces in `role="alert"` without
  * dropping the operator's draft; a pending submit disables the button so a
  * second click cannot fire a second request; and Back returns to the
- * overview without leaving the panel (`onBack`, which "← Conversation" alone
+ * overview without leaving the panel (`onBack`, which "← Actions" alone
  * calls, must not fire).
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'

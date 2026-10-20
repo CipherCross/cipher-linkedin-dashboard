@@ -32,8 +32,11 @@ export interface DialogProps {
   /** Where focus returns on close. Defaults to the element focused at open. */
   finalFocusRef?: RefObject<HTMLElement | null>
   placement?: 'center' | 'end'
-  /** Width of a centered dialog. An end dialog is always 560px at most. */
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** Width of a centered dialog. An end dialog is always 560px at most.
+   *  `workspace` fills the window (up to 1600px) for a multi-pane surface. */
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'workspace'
+  /** Controls in the header, before Close — navigation or a pane toggle. */
+  headerActions?: ReactNode
   closeLabel?: string
   className?: string
   /** Replaces the body's default padding and scrolling, for a dialog that
@@ -48,7 +51,7 @@ const BODY_FOCUS_TARGETS = 'input:not([disabled]):not([type="hidden"]), select:n
 
 export function Dialog({
   title, description, children, footer, footerNote, onRequestClose,
-  initialFocusRef, finalFocusRef, placement = 'center', size = 'md',
+  initialFocusRef, finalFocusRef, placement = 'center', size = 'md', headerActions,
   closeLabel = 'Close', className = '', bodyClassName, busy,
   busyMessage = 'Wait for the current action to finish before closing.',
 }: DialogProps) {
@@ -100,11 +103,12 @@ export function Dialog({
             className={['ui-dialog', placement === 'end' ? 'ui-dialog--end' : `ui-dialog--${size}`, className].filter(Boolean).join(' ')}
           >
             <div className="ui-dialog__header">
-              <div>
+              <div className="ui-dialog__heading">
                 <BaseDialog.Title className="ui-dialog__title">{title}</BaseDialog.Title>
                 {description && <BaseDialog.Description className="ui-dialog__description">{description}</BaseDialog.Description>}
                 {busy && <p id={busyId} className="ui-dialog__busy" role="status">{busyMessage}</p>}
               </div>
+              {headerActions && <div className="ui-dialog__header-actions">{headerActions}</div>}
               <BaseDialog.Close
                 disabled={busy}
                 aria-describedby={busy ? busyId : undefined}

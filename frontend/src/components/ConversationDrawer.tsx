@@ -1,48 +1,44 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Trash2, X,
+  CalendarCheck2, Check, ExternalLink, MessagesSquare, Pencil, Sparkles, Trash2, X,
 } from 'lucide-react'
 import { authPost } from '../lib/api'
-import { authFetch } from '../lib/api'
 import { fetchNeonThread } from '../lib/dashboardReads'
-import { useAuth } from '../lib/AuthContext'
 import { useData } from '../lib/DataContext'
 import { withLeadEdits } from '../lib/leadEdits'
 import { useToast } from '../lib/ToastContext'
 import { usePipelineActions } from '../lib/usePipelineActions'
 import { ImportHistoryPanel } from './ImportHistoryPanel'
 import { FollowUpPanel } from './FollowUpPanel'
-import { LeadNotesPanel } from './LeadNotesPanel'
 import { MessageBubble } from './conversation/MessageBubble'
+import { CoachPanel, useCoaching } from './conversation/CoachPanel'
+import { ContextHeading, LeadContextPanel } from './conversation/LeadContextPanel'
 import { groupMessages } from '../lib/messageGroups'
 import { replyDayHeading, replyTime, REPLY_TIME_ZONE_LABEL } from '../lib/replyTime'
 import { ReplyReviewPanel } from './conversation/ReplyReviewPanel'
 import { useReplyReviewActions } from '../lib/useReplyReviewActions'
 import { defaultReplyReadClient, isReplyManualReady } from '../lib/replyReview'
 import { LostReasonModal } from './LostReasonModal'
-import { Avatar, LeadAvatar } from './Avatar'
+import { LeadAvatar } from './Avatar'
 import { Skeleton } from './Skeleton'
-import {
-  INTENT_META, ISSUE_KIND_LABEL, NEXT_ACTION_META, SENTIMENT_META,
-  SEVERITY_TONE,
-  ageRange, instanceName, leadKey,
-} from '../lib/leads'
+import { INTENT_META, SENTIMENT_META, instanceName } from '../lib/leads'
 import {
   activeFollowUp,
   followUpDueLabel,
   followUpKey,
   followUpStateMap,
 } from '../lib/followUps'
-import { PIPELINE_STAGES, stageById, substatusLabel } from '../lib/pipeline'
 import type { ConversationMode } from '../lib/ConversationContext'
-import type { Coaching, Gender, Lead, Message } from '../lib/types'
+import type { Lead, Message } from '../lib/types'
 import type { ReplyReview } from '../lib/replyReview'
 import {
   Badge, Button, Dialog, EmptyState, ExternalLinkButton, IconButton, InlineError, LinkButton,
-  SelectField, Textarea, useDirtyGuard,
+  Textarea, useDirtyGuard,
 } from '../ui'
-import { ConversationSection } from './ConversationSection'
+
+/** The reply-review thread read pages at this size; a full page may be capped. */
+const THREAD_LIMIT = 100
 
 // Only the thread fields the drawer renders — fetched on demand (the global
 // DataContext caps messages at 90 days / 2000 rows, too narrow for "whole chain").
@@ -67,8 +63,11 @@ function repliesHref(lead: Lead, focusMessageId: number | null = null): string {
   return `/replies?${params.toString()}`
 }
 
-/** Slide-in panel showing one lead's full conversation, both directions, oldest
- *  first. The latest inbound reply can be reviewed manually in the shared panel. */
+/** One lead's conversation as a modal workspace in three panes: Context (who
+ *  this is, the funnel, pipeline fields, notes), the Conversation (both
+ *  directions, oldest first, or the import view in its place), and Actions
+ *  (follow-up and the manual review of the latest reply). The AI coach opens
+ *  as a side panel in place of Actions. */
 export function ConversationDrawer({
   lead,
   initialMode = 'thread',
@@ -78,10 +77,9 @@ export function ConversationDrawer({
   initialMode?: ConversationMode
   onClose: () => void
 }) {
-  const { isAdmin } = useAuth()
-  const { data, refetch, patchLead, leadEdits, loadFollowUpState } = useData()
+  const { data, refetch, leadEdits, loadFollowUpState } = useData()
   const toast = useToast()
-  const { setStage, assign, members } = usePipelineActions()
+  const { setStage } = usePipelineActions()
   const [pendingLost, setPendingLost] = useState(false)
   const [rows, setRows] = useState<ThreadMsg[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -90,26 +88,26 @@ export function ConversationDrawer({
   const [deleting, setDeleting] = useState<number | null>(null)
   const [editing, setEditing] = useState<{ id: number; body: string } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
-  // True while a gender override is being saved (disables the select).
-  const [savingGender, setSavingGender] = useState(false)
   const [replyCapabilities, setReplyCapabilities] = useState<Awaited<ReturnType<typeof defaultReplyReadClient.capabilities>> | null>(null)
-  const [coaching, setCoaching] = useState<Coaching | null>(null)
-  const [coachLoading, setCoachLoading] = useState(false)
-  const [coachError, setCoachError] = useState<string | null>(null)
+  const coach = useCoaching(lead)
   const [coachOpen, setCoachOpen] = useState(false)
+  const coachId = useId()
   const [importOpen, setImportOpen] = useState(initialMode === 'import_history')
   const [followUpOpen, setFollowUpOpen] = useState(initialMode === 'follow_up')
   const [followUpReturnAction, setFollowUpReturnAction] = useState<
     'complete' | 'skip' | undefined
   >()
   const threadRef = useRef<HTMLDivElement>(null)
-  // The import or follow-up view, when one replaces the thread.
-  const viewRef = useRef<HTMLDivElement>(null)
+  // The import view, when it replaces the thread.
+  const importRef = useRef<HTMLDivElement>(null)
+  // The follow-up view, when it replaces the actions, and the button that opens it.
+  const followUpRef = useRef<HTMLDivElement>(null)
+  const followUpTriggerRef = useRef<HTMLButtonElement>(null)
+  const coachTriggerRef = useRef<HTMLButtonElement>(null)
   // Bumped after a manual import so the thread effect refetches the new rows.
   const [reloadKey, setReloadKey] = useState(0)
   const [importDirty, setImportDirty] = useState(false)
-  // A typed note that has not been added. The notes panel stays mounted in
-  // every view, so only closing or navigating away can lose it.
+  // A typed note that has not been added. Only closing can lose it.
   const [noteDirty, setNoteDirty] = useState(false)
   // The inbound message whose review form has unsaved edits. Keyed by message
   // so a newer reply (which remounts the form with a fresh draft) is not
@@ -117,10 +115,10 @@ export function ConversationDrawer({
   const [reviewDirtyFor, setReviewDirtyFor] = useState<number | null>(null)
   const replyActions = useReplyReviewActions(() => { setReloadKey((value) => value + 1); refetch() })
   // The review revision the server reported in a 409 — the reply was reviewed
-  // meanwhile, by a teammate or the AI classifier. The next save is checked
-  // against it, so Save again overwrites deliberately instead of conflicting
-  // forever; reloading the thread instead would remount the form and drop the
-  // SDR's input. Cleared whenever the thread reloads.
+  // meanwhile, by a teammate. The next save is checked against it, so Save
+  // again overwrites deliberately instead of conflicting forever; reloading the
+  // thread instead would remount the form and drop the SDR's input. Cleared
+  // whenever the thread reloads.
   const [conflictRevision, setConflictRevision] = useState<number | null>(null)
   useEffect(() => { setConflictRevision(null) }, [reloadKey, lead?.id])
   useEffect(() => {
@@ -129,9 +127,6 @@ export function ConversationDrawer({
     const current = conflict.current as { revision?: unknown } | null | undefined
     setConflictRevision(typeof current?.revision === 'number' ? current.revision : 0)
   }, [replyActions.conflict])
-  // Identifies the conversation a coach request was issued for, so a slow
-  // response can't land on a drawer the user has since switched away from.
-  const coachReqKey = useRef('')
 
   // Switching leads (or opening one from the worklist) resets the transient
   // workflow and honors the caller's requested destination.
@@ -141,29 +136,40 @@ export function ConversationDrawer({
     setFollowUpReturnAction(undefined)
     setEditing(null)
     setSavingEdit(false)
+    setCoachOpen(false)
   }, [lead, initialMode])
 
   // The thread renders oldest-first; triage users click a recent reply, so open
   // at the newest message. Re-runs after an import bumps reloadKey.
   useEffect(() => {
-    if (!rows || importOpen || followUpOpen) return
+    if (!rows || importOpen) return
     const el = threadRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [rows, reloadKey, importOpen, followUpOpen])
+  }, [rows, reloadKey, importOpen])
 
-  // Closing the import or follow-up view unmounts the control that had focus.
-  // Hand it to the messages, which is where that view returns to.
-  // Opening one can unmount the focused message control the same way; then
-  // focus goes to the view itself.
-  const wasSubView = useRef(importOpen || followUpOpen)
+  // A view that replaces a pane unmounts the control that opened or closed it.
+  // Focus goes to what the pane returns to — the messages, the follow-up
+  // button — or, on opening, to the view itself when focus was lost.
+  const focusLost = () => !document.activeElement || document.activeElement === document.body
+    || document.activeElement.getAttribute('role') === 'dialog'
+  const wasImport = useRef(importOpen)
   useEffect(() => {
-    const subView = importOpen || followUpOpen
-    const lost = !document.activeElement || document.activeElement === document.body
-      || document.activeElement.getAttribute('role') === 'dialog'
-    if (wasSubView.current && !subView) threadRef.current?.focus()
-    else if (subView && lost) viewRef.current?.focus()
-    wasSubView.current = subView
-  }, [importOpen, followUpOpen])
+    if (wasImport.current && !importOpen) threadRef.current?.focus()
+    else if (importOpen && focusLost()) importRef.current?.focus()
+    wasImport.current = importOpen
+  }, [importOpen])
+  const wasFollowUp = useRef(followUpOpen)
+  useEffect(() => {
+    if (wasFollowUp.current && !followUpOpen && focusLost()) followUpTriggerRef.current?.focus()
+    else if (followUpOpen && focusLost()) followUpRef.current?.focus()
+    wasFollowUp.current = followUpOpen
+  }, [followUpOpen])
+  // Closing the coach unmounts its close button; return focus to the toggle.
+  const wasCoach = useRef(coachOpen)
+  useEffect(() => {
+    if (wasCoach.current && !coachOpen && focusLost()) coachTriggerRef.current?.focus()
+    wasCoach.current = coachOpen
+  }, [coachOpen])
 
   // Saving or cancelling an edit unmounts its text box; return focus to that
   // message's edit button rather than letting it fall to the dialog itself.
@@ -197,7 +203,7 @@ export function ConversationDrawer({
     ;(async () => {
       try {
         const thread = isReplyManualReady(replyCapabilities)
-          ? (await defaultReplyReadClient.thread({ instance_id: lead.instance_id, profile_url: lead.profile_url, limit: 100 })).messages
+          ? (await defaultReplyReadClient.thread({ instance_id: lead.instance_id, profile_url: lead.profile_url, limit: THREAD_LIMIT })).messages
           : await fetchNeonThread(lead.instance_id, lead.profile_url)
         if (cancelled) return
         setRows(thread as ThreadMsg[])
@@ -205,8 +211,8 @@ export function ConversationDrawer({
         if (cancelled) return
         // The reply-review thread read answers 404 for a conversation with no
         // messages at all — a lead invited or accepted but never written to.
-        // For the drawer that is an empty thread, not a failure: it is exactly
-        // the lead whose history the SDR has come here to import.
+        // Here that is an empty thread, not a failure: it is exactly the lead
+        // whose history the SDR has come here to import.
         if ((e as { code?: string }).code === 'REPLY_REVIEW_NOT_FOUND') setRows([])
         else setError(e instanceof Error ? e.message : String(e))
       }
@@ -224,70 +230,18 @@ export function ConversationDrawer({
     return () => { cancelled = true }
   }, [lead])
 
-  // On-demand coaching: ask /api/coach for this conversation. The endpoint serves
-  // a cached take instantly when the thread is unchanged, else generates a fresh
-  // one (a few seconds). `force` bypasses the cache for the Regenerate button.
-  const loadCoaching = useCallback(
-    async (force: boolean) => {
-      if (!lead) return
-      const k = leadKey(lead.instance_id, lead.profile_url)
-      coachReqKey.current = k
-      setCoachLoading(true)
-      setCoachError(null)
-      if (force) setCoaching(null)
-      try {
-        const res = await authFetch('/api/coach', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            instance_id: lead.instance_id,
-            profile_url: lead.profile_url,
-            campaign_id: lead.campaign_id,
-            force,
-          }),
-        })
-        const j = await res.json()
-        if (coachReqKey.current !== k) return // user switched conversations
-        if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-        setCoaching(j as Coaching)
-      } catch (e) {
-        if (coachReqKey.current === k)
-          setCoachError(e instanceof Error ? e.message : String(e))
-      } finally {
-        if (coachReqKey.current === k) setCoachLoading(false)
-      }
-    },
-    [lead],
-  )
-
-  // Coaching is generated on demand via the button only — auto-loading on every
-  // drawer open burned model credits for conversations nobody wanted coached.
-  useEffect(() => {
-    coachReqKey.current = ''
-    setCoaching(null)
-    setCoachError(null)
-    setCoachLoading(false)
-    setCoachOpen(false)
-  }, [lead])
-
-  // Unsaved work: a pasted/parsed import that has not been saved, or edits to
-  // the review form. Closing the drawer — Escape, backdrop, Close, or one of
-  // its navigation links — or switching to a view that unmounts the form asks
-  // Keep editing / Discard changes first.
+  // Unsaved work: a pasted/parsed import that has not been saved, edits to the
+  // review form, or a typed note. Every pane stays mounted while another view
+  // is open (the review hides under follow-up and the coach), so only closing
+  // the workspace — Escape, backdrop, Close, or one of its navigation links —
+  // can lose it, and that asks Keep editing / Discard changes first.
   const navigate = useNavigate()
-  const latestInboundId = rows
-    ? [...rows].reverse().find((m) => m.direction === 'in' && m.body)?.id ?? null
-    : null
-  const reviewUnsaved = !importOpen && !followUpOpen && reviewDirtyFor !== null && reviewDirtyFor === latestInboundId
-  const viewUnsaved = (importOpen && importDirty) || reviewUnsaved
-  const { guard, prompt: discardPrompt } = useDirtyGuard(viewUnsaved)
-  // Closing also drops a note draft; switching views does not.
-  const { guard: closeGuard, prompt: closePrompt } = useDirtyGuard(viewUnsaved || noteDirty)
-  const discardAnd = (action: () => void) => guard(() => {
-    setImportDirty(false)
-    setReviewDirtyFor(null)
-    action()
-  })
+  const latestInbound = rows
+    ? [...rows].reverse().find((m) => m.direction === 'in' && m.body)
+    : undefined
+  const reviewUnsaved = reviewDirtyFor !== null && reviewDirtyFor === (latestInbound?.id ?? null)
+  const unsaved = (importOpen && importDirty) || reviewUnsaved || noteDirty
+  const { guard: closeGuard, prompt: closePrompt } = useDirtyGuard(unsaved)
   const discardAllAnd = (action: () => void) => closeGuard(() => {
     setImportDirty(false)
     setReviewDirtyFor(null)
@@ -295,10 +249,10 @@ export function ConversationDrawer({
     action()
   })
   const requestClose = () => discardAllAnd(onClose)
-  /** A link inside the drawer both navigates and closes it; with unsaved work
-   *  the navigation waits for the answer. */
+  /** A link inside the workspace both navigates and closes it; with unsaved
+   *  work the navigation waits for the answer. */
   const guardedLinkClick = (to: string) => (event: React.MouseEvent) => {
-    if (!viewUnsaved && !noteDirty) {
+    if (!unsaved) {
       onClose()
       return
     }
@@ -308,48 +262,52 @@ export function ConversationDrawer({
 
   if (!lead) return null
 
-  // The `lead` prop is a snapshot captured when the drawer opened; pipeline
+  // The `lead` prop is a snapshot captured when the workspace opened; pipeline
   // fields (stage/substatus/assignee) mutate in place via patchLead, so read
   // the live row from context for those controls. Leads reads its rows
   // page-locally, so a lead opened there is not in data.leads at all — its
   // saved edits come from leadEdits instead.
   const live = data?.leads.find((x) => x.id === lead.id) ?? withLeadEdits(lead, leadEdits)
-  const liveStage = stageById(live.pipeline_stage)
   const followUpState = followUpStateMap(data?.followUpStates ?? []).get(
     followUpKey(lead.instance_id, lead.profile_url),
   )
+  const followUpActive = activeFollowUp(followUpState)
 
   const campaignName =
     data?.campaigns.find((c) => c.campaign_id === lead.campaign_id)?.campaign_name ??
     lead.campaign_id
   const outreachAccount = data?.instances.find((i) => i.id === lead.instance_id)
-  const accountLabel = instanceName(
-    outreachAccount,
-    lead.instance_id,
-  )
+  const accountLabel = instanceName(outreachAccount, lead.instance_id)
 
   // The lead's effective status = its most recent classified inbound reply.
-  const latestInbound = rows
-    ? [...rows].reverse().find((m) => m.direction === 'in' && m.body)
-    : undefined
   const latestSentiment = latestInbound?.review?.sentiment ?? latestInbound?.sentiment
   const latestReason = latestInbound?.review?.reason_ids?.join(', ') ?? latestInbound?.reason
-  const statusMeta = latestSentiment
-    ? SENTIMENT_META[latestSentiment]
-    : null
+  const statusMeta = latestSentiment ? SENTIMENT_META[latestSentiment] : null
   const latestIntent = latestInbound?.review?.intent_level ?? latestInbound?.intent_level
-  const latestIntentMeta = latestIntent
-    ? INTENT_META[latestIntent]
-    : null
-
-  // Compare the live thread to what the coaching was generated against, so we can
-  // nudge for a Regenerate when new messages have arrived since.
-  const liveMarker =
-    rows && rows.length ? `${rows[rows.length - 1].sent_at}|${rows.length}` : null
-  const coachStale =
-    !!coaching?.last_msg_marker && !!liveMarker && coaching.last_msg_marker !== liveMarker
-  const actionMeta = coaching ? NEXT_ACTION_META[coaching.next_action] : null
+  const latestIntentMeta = latestIntent ? INTENT_META[latestIntent] : null
   const manualReviewReady = isReplyManualReady(replyCapabilities)
+
+  const status = (
+    <>
+      {statusMeta ? (
+        <Badge tone={statusMeta.tone} title={latestReason ?? 'Follows the most recent reply'}>
+          {statusMeta.label}
+        </Badge>
+      ) : (
+        <Badge tone="neutral">{latestInbound ? 'Not reviewed' : 'No reply yet'}</Badge>
+      )}
+      {latestIntentMeta && (
+        <Badge tone={latestIntentMeta.tone} title={latestInbound?.intent_reason ?? 'Commercial intent on latest reply'}>
+          {latestIntentMeta.short} · {latestIntentMeta.label}
+        </Badge>
+      )}
+    </>
+  )
+
+  const openCoach = (generate: boolean) => {
+    setCoachOpen(true)
+    if (generate && !coach.coaching && !coach.loading) void coach.load(false)
+  }
 
   // Only source='manual' rows are deletable — sync rows are LH2 ground truth and
   // would be resurrected by the next agent sync anyway. The endpoint recomputes
@@ -407,74 +365,13 @@ export function ConversationDrawer({
     }
   }
 
-  // Gender override → /api/pipeline set_gender. A non-null value marks the row
-  // SDR-reviewed (demo_model='manual', confidence 1); null clears only the gender
-  // lifecycle so the next classify run re-infers it. Age remains independent.
-  // Optimistic via
-  // patchLead, reverting the snapshot on failure; on success the response already
-  // carries the authoritative fields, so patch those directly instead of refetching.
-  async function setGender(gender: Gender | null) {
-    setSavingGender(true)
-    const snapshot: Partial<Lead> = {
-      gender: live.gender ?? null,
-      gender_confidence: live.gender_confidence ?? null,
-      gender_inferred_at: live.gender_inferred_at ?? null,
-      gender_model_version: live.gender_model_version ?? null,
-      demo_model: live.demo_model ?? null,
-      demo_inferred_at: live.demo_inferred_at ?? null,
-    }
-    patchLead(
-      lead!.id,
-      gender === null
-        ? {
-            gender: null,
-            gender_confidence: null,
-            gender_inferred_at: null,
-            gender_model_version: null,
-            demo_model: null,
-            demo_inferred_at: null,
-          }
-        : {
-            gender,
-            gender_confidence: 1,
-            gender_inferred_at: new Date().toISOString(),
-            gender_model_version: null,
-            demo_model: 'manual',
-          },
-    )
-    try {
-      const res = await authPost('/api/pipeline', {
-        action: 'set_gender',
-        lead_id: lead!.id,
-        gender,
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
-      patchLead(lead!.id, {
-        gender: (j.gender ?? null) as Gender | null,
-        gender_confidence: j.gender_confidence ?? null,
-        gender_inferred_at: j.gender_inferred_at ?? null,
-        gender_model_version: j.gender_model_version ?? null,
-        demo_model: j.demo_model ?? null,
-        demo_inferred_at: j.demo_inferred_at ?? null,
-      })
-      // The API applies a confirmation to every campaign row for this account/profile.
-      // Refresh so duplicates elsewhere in the explorer receive the same value.
-      refetch()
-    } catch (e) {
-      patchLead(lead!.id, snapshot) // revert
-      toast.error(`Couldn't update gender: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setSavingGender(false)
-    }
-  }
-
   const name = lead.full_name || lead.profile_url.replace('https://www.linkedin.com/in/', '')
   const identityLine = [lead.headline, lead.company].filter(Boolean).join(' · ')
+  const lastRow = rows && rows.length ? rows[rows.length - 1] : null
 
   return (
     <Dialog
-      placement="end"
+      size="workspace"
       title={
         <span className="flex items-center gap-app-md min-w-0">
           {/* The avatar's initials would otherwise be read as part of the name. */}
@@ -483,64 +380,8 @@ export function ConversationDrawer({
         </span>
       }
       description={identityLine || '—'}
-      onRequestClose={requestClose}
-      // Focus starts in whatever the drawer opened on: the messages, so the
-      // keyboard can scroll the thread at once, or the import / follow-up view.
-      initialFocusRef={importOpen || followUpOpen ? viewRef : threadRef}
-      className="animate-[conv-slide-in_0.25s_var(--ease-out)]"
-      // One scroll area for the whole body. It used to be overflow-hidden with a
-      // fixed-share thread and a 45%-capped review form, which on a 680px-tall
-      // window (a MacBook Air with the browser chrome) squeezed the form to a
-      // 35px strip and clipped an opened Notes panel below the bottom edge with
-      // no way to scroll to it. Now the thread keeps a readable minimum and
-      // everything below it is reached by scrolling the drawer.
-      bodyClassName="p-0 overflow-y-auto flex flex-col"
-    >
-      <div className="shrink-0 flex flex-col gap-group px-dialog py-app-md border-b border-app-border">
-        <div className="flex items-center gap-app-sm flex-wrap">
-          <Link
-            className="text-app-meta text-app-text-muted no-underline hover:text-app-accent hover:underline"
-            to={`/campaign/${encodeURIComponent(lead.campaign_id)}`}
-            onClick={guardedLinkClick(`/campaign/${encodeURIComponent(lead.campaign_id)}`)}
-          >
-            {campaignName}
-          </Link>
-          {outreachAccount ? (
-            <a
-              className="inline-flex items-center gap-app-sm text-app-meta text-app-text-muted no-underline [&[href]:hover]:text-app-text"
-              href={outreachAccount.account_url ?? undefined}
-              target={outreachAccount.account_url ? '_blank' : undefined}
-              rel={outreachAccount.account_url ? 'noreferrer' : undefined}
-              title={`Outreach account: ${accountLabel}`}
-              onClick={outreachAccount.account_url ? undefined : (e) => e.preventDefault()}
-            >
-              <Avatar key={outreachAccount.id} inst={outreachAccount} size={22} />
-              <span>{accountLabel}</span>
-            </a>
-          ) : (
-            <span className="text-app-meta text-app-text-muted">· {accountLabel}</span>
-          )}
-          {statusMeta ? (
-            <Badge
-              tone={statusMeta.tone}
-              title={latestReason ?? 'Follows the most recent reply'}
-            >
-              {statusMeta.label}
-            </Badge>
-          ) : (
-            <Badge tone="neutral">No reply yet</Badge>
-          )}
-          {latestIntentMeta && (
-            <Badge
-              tone={latestIntentMeta.tone}
-              title={latestInbound?.intent_reason ?? 'Commercial intent on latest reply'}
-            >
-              {latestIntentMeta.short} · {latestIntentMeta.label}
-            </Badge>
-          )}
-        </div>
-
-        <div className="flex items-center gap-app-sm flex-wrap">
+      headerActions={
+        <>
           <ExternalLinkButton
             variant="ghost"
             size="sm"
@@ -561,405 +402,332 @@ export function ConversationDrawer({
               Open in Replies
             </LinkButton>
           )}
-          {/* Hidden while the empty state shows — that state carries its own
-              Import-history action, and two identical actions one viewport
-              apart read as clutter. */}
-          {!importOpen && !followUpOpen && !(rows && rows.length === 0) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => discardAnd(() => setImportOpen(true))}
-              disabled={!rows}
-              title="Paste a conversation copied from LinkedIn"
-            >
-              Import history
-            </Button>
-          )}
-          {data?.followUpsAvailable && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="ml-auto"
-              icon={<CalendarCheck2 aria-hidden="true" />}
-              aria-pressed={followUpOpen}
-              onClick={() => discardAnd(() => {
-                setImportOpen(false)
-                setFollowUpReturnAction(undefined)
-                setFollowUpOpen((open) => !open)
-              })}
-            >
-              {activeFollowUp(followUpState)
-                ? followUpDueLabel(followUpState)
-                : 'Schedule follow-up'}
-            </Button>
-          )}
-        </div>
-
-        {/* Everything below is lead metadata, not the conversation. It sits
-            behind one disclosure so the thread starts near the top of the
-            drawer instead of below four rows of controls. */}
-        <details className="[&>summary]:flex [&>summary]:items-center [&>summary]:min-h-control-sm [&>summary]:text-app-accent [&>summary]:text-app-table [&>summary]:font-semibold [&>summary]:cursor-pointer">
-          <summary>Lead details</summary>
-          <div className="grid grid-cols-2 gap-app-md mt-app-md">
-            <SelectField
-              label="Stage"
-              value={live.pipeline_stage ?? ''}
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === 'lost') setPendingLost(true)
-                else void setStage(live, v || null)
-              }}
-            >
-              <option value="">Not in pipeline</option>
-              {PIPELINE_STAGES.map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
-            </SelectField>
-            {liveStage && liveStage.substatuses.length > 0 && (
-              <SelectField
-                label="Substatus"
-                value={live.pipeline_substatus ?? ''}
-                onChange={(e) =>
-                  void setStage(live, live.pipeline_stage, { substatus: e.target.value || null })
-                }
-              >
-                <option value="">—</option>
-                {liveStage.substatuses.map((s) => (
-                  <option key={s} value={s}>{substatusLabel(s)}</option>
-                ))}
-              </SelectField>
-            )}
-            <SelectField
-              label="Owner"
-              value={String(live.assigned_to ?? '')}
-              onChange={(e) => void assign(live, e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.id} value={String(m.id)}>{m.name}</option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="Gender"
-              value={live.gender ?? ''}
-              disabled={savingGender || !isAdmin}
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === '') return
-                void setGender(v === 'clear' ? null : (v as Gender))
-              }}
-              help={live.gender
-                ? live.demo_model === 'manual'
-                  ? <Badge title="Reviewed by an SDR — manual override">Reviewed</Badge>
-                  : (
-                    <Badge title="Inferred by AI from name + headline — pick a value to confirm">
-                      AI{live.gender_confidence != null ? ` ·${Math.round(live.gender_confidence * 100)}%` : ''}
-                    </Badge>
-                  )
-                : undefined}
-            >
-              {!live.gender && (
-                <option value="" disabled>
-                  Set gender…
-                </option>
-              )}
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="unknown">Unknown</option>
-              {live.gender && <option value="clear">Clear override → re-infer</option>}
-            </SelectField>
-            <div className="flex flex-col gap-app-xs">
-              <span className="text-app-meta font-semibold text-app-text-secondary">Age</span>
-              <span className="tabular-nums font-semibold">{ageRange(live) ?? '—'}</span>
-            </div>
+          <Button
+            ref={coachTriggerRef}
+            variant={coachOpen ? 'primary' : 'secondary'}
+            size="sm"
+            icon={<Sparkles aria-hidden="true" />}
+            aria-expanded={coachOpen}
+            aria-controls={coachId}
+            onClick={() => (coachOpen ? setCoachOpen(false) : openCoach(false))}
+          >
+            AI coach
+          </Button>
+        </>
+      }
+      onRequestClose={requestClose}
+      // Focus starts in whatever the workspace opened on: the messages, so the
+      // keyboard can scroll the thread at once, or the import / follow-up view.
+      initialFocusRef={importOpen ? importRef : followUpOpen ? followUpRef : threadRef}
+      bodyClassName="p-0 overflow-hidden"
+    >
+      <div className="conversation-workspace" data-coach={coachOpen ? 'open' : 'closed'}>
+        <section className="conversation-pane" aria-label="Context">
+          <div className="conversation-pane-head">
+            <h3 className="conversation-pane-title">Context</h3>
           </div>
-        </details>
-      </div>
-
-      <LeadNotesPanel lead={lead} onDirtyChange={setNoteDirty} />
-
-      {error && (
-        <div className="shrink-0 px-dialog pt-app-md">
-          <InlineError
-            title="The conversation could not load."
-            message={error}
-            onRetry={() => setReloadKey((k) => k + 1)}
+          <LeadContextPanel
+            lead={lead}
+            live={live}
+            campaignName={campaignName}
+            account={outreachAccount}
+            accountLabel={accountLabel}
+            status={status}
+            onLinkClick={guardedLinkClick}
+            onRequestLost={() => setPendingLost(true)}
+            onNoteDirtyChange={setNoteDirty}
           />
-        </div>
-      )}
+        </section>
 
-      {(importOpen || followUpOpen) && (
-      <div
-        ref={viewRef}
-        tabIndex={-1}
-        role="region"
-        aria-label={importOpen ? 'Import history' : 'Follow-up'}
-        className="flex-1 min-h-0 flex flex-col focus:outline-none"
-      >
-      {importOpen && (
-        <ImportHistoryPanel
-          lead={lead}
-          accountName={
-            data?.instances.find((i) => i.id === lead.instance_id)?.account_name ?? null
-          }
-          existing={rows}
-          onImported={() => {
-            setReloadKey((k) => k + 1)
-            refetch()
-          }}
-          onClose={() => setImportOpen(false)}
-          onDirtyChange={setImportDirty}
-        />
-      )}
-
-      {!importOpen && followUpOpen && (
-        <FollowUpPanel
-          lead={live}
-          initialAction={followUpReturnAction}
-          onBack={() => {
-            setFollowUpOpen(false)
-            setFollowUpReturnAction(undefined)
-          }}
-          onImport={(returnTo) => {
-            setFollowUpReturnAction(returnTo)
-            setImportOpen(true)
-          }}
-          onCompleted={() => {
-            setFollowUpOpen(false)
-            setFollowUpReturnAction(undefined)
-          }}
-        />
-      )}
-      </div>
-      )}
-
-      {!importOpen && !followUpOpen && (
-      <>
-      <div
-        className="flex-[1_1_0] min-h-[240px] overflow-y-auto px-dialog py-app-md flex flex-col gap-group [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
-        ref={threadRef}
-        role="region"
-        aria-label="Messages"
-        tabIndex={0}
-      >
-        {loading && (
-          <div className="flex flex-col gap-group" aria-hidden="true">
-            <Skeleton className="self-start" width="68%" height={44} radius="10px 10px 10px 2px" />
-            <Skeleton className="self-end" width="54%" height={32} radius="10px 10px 2px 10px" />
-            <Skeleton className="self-start" width="60%" height={38} radius="10px 10px 10px 2px" />
-          </div>
-        )}
-        {rows && rows.length === 0 && !loading && (
-          <EmptyState
-            icon={MessagesSquare}
-            title="No messages yet"
-            hint="LH2 stops capturing a thread once you take it over by hand. Paste the LinkedIn conversation to import its history."
-            action={
-              <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+        <section className="conversation-pane" aria-label="Conversation">
+          <div className="conversation-pane-head">
+            <h3 className="conversation-pane-title">{importOpen ? 'Import history' : 'Conversation'}</h3>
+            {!importOpen && rows && rows.length > 0 && (
+              <span className="text-app-meta text-app-text-muted">
+                {rows.length >= THREAD_LIMIT ? `Latest ${rows.length}` : rows.length} {rows.length === 1 ? 'message' : 'messages'}
+              </span>
+            )}
+            {/* Hidden while the empty state shows — that state carries its own
+                Import-history action. */}
+            {!importOpen && !(rows && rows.length === 0) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                onClick={() => setImportOpen(true)}
+                disabled={!rows}
+                title="Paste a conversation copied from LinkedIn"
+              >
                 Import history
               </Button>
-            }
-          />
-        )}
-        {rows && groupMessages(rows).map((group) => {
-          const inbound = group.direction === 'in'
-          const last = group.messages[group.messages.length - 1]
-          const busyRow = deleting !== null || savingEdit || editing !== null
-          return (
-            <Fragment key={group.key}>
-            {group.startsDay && (
-              <div className="flex items-center gap-app-sm my-app-xs mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{replyDayHeading(last.sent_at)}</span></div>
             )}
-            <div className={`flex flex-col gap-app-xs max-w-[88%] ${inbound ? 'self-start items-start' : 'self-end items-end'}`}>
-            {group.messages.map((m, index) => (
-              <Fragment key={m.id}>
-              <MessageBubble
-                direction={group.direction}
-                tail={index === group.messages.length - 1}
-                title={`${replyTime(m.sent_at, true)} · ${REPLY_TIME_ZONE_LABEL}`}
-              >
-                {editing?.id === m.id ? (
-                  <Textarea
-                    aria-label="Edit imported message"
-                    className="block w-[min(340px,65vw)] min-h-[72px] text-app-table"
-                    value={editing.body}
-                    maxLength={5000}
-                    autoFocus
-                    onChange={(e) => setEditing({ id: m.id, body: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        // Cancels the edit, not the whole conversation.
-                        e.stopPropagation()
-                        setEditing(null)
-                      }
-                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void editMessage(m)
-                    }}
-                  />
-                ) : (
-                  <span className="message-bubble__body">{m.body || <span className="opacity-70">(empty)</span>}</span>
-                )}
-              </MessageBubble>
-              {m.source === 'manual' && (
-                /* The controls sit beside the bubble, never inside it. */
-                <div className={`flex items-center gap-app-xs ${inbound ? '' : 'flex-row-reverse'}`}>
-                    <span
-                      className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted border border-app-border rounded-sm px-app-xs cursor-help"
-                      title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time"
-                    >
-                      imported
-                    </span>
-                    {editing?.id === m.id ? (
-                      <>
-                        <IconButton
-                          label="Save message"
-                          icon={<Check aria-hidden="true" />}
-                          loading={savingEdit}
-                          disabled={!editing.body.trim()}
-                          onClick={() => void editMessage(m)}
-                        />
-                        <IconButton
-                          label="Cancel editing"
-                          icon={<X aria-hidden="true" />}
-                          disabled={savingEdit}
-                          onClick={() => setEditing(null)}
-                        />
-                      </>
-                    ) : (
-                      <IconButton
-                        data-edit-for={m.id}
-                        label="Edit imported message"
-                        icon={<Pencil aria-hidden="true" />}
-                        disabled={busyRow}
-                        onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
-                      />
-                    )}
-                    <IconButton
-                      tone="danger"
-                      label="Delete imported message"
-                      icon={<Trash2 aria-hidden="true" />}
-                      loading={deleting === m.id}
-                      disabled={busyRow}
-                      onClick={() => deleteMessage(m)}
-                    />
+          </div>
+
+          {error && (
+            <div className="shrink-0 px-pane pt-pane">
+              <InlineError
+                title="The conversation could not load."
+                message={error}
+                onRetry={() => setReloadKey((k) => k + 1)}
+              />
+            </div>
+          )}
+
+          {importOpen ? (
+            <div
+              ref={importRef}
+              tabIndex={-1}
+              role="region"
+              aria-label="Import history"
+              className="flex-1 min-h-0 flex flex-col focus:outline-none"
+            >
+              <ImportHistoryPanel
+                lead={lead}
+                accountName={outreachAccount?.account_name ?? null}
+                existing={rows}
+                onImported={() => {
+                  setReloadKey((k) => k + 1)
+                  refetch()
+                }}
+                onClose={() => setImportOpen(false)}
+                onDirtyChange={setImportDirty}
+              />
+            </div>
+          ) : (
+            <div
+              className="flex-1 min-h-0 overflow-y-auto p-pane flex flex-col gap-group [overscroll-behavior:contain] focus-visible:outline-2 focus-visible:outline-app-accent focus-visible:-outline-offset-2"
+              ref={threadRef}
+              role="region"
+              aria-label="Messages"
+              tabIndex={0}
+            >
+              {loading && (
+                <div className="flex flex-col gap-group" aria-hidden="true">
+                  <Skeleton className="self-start" width="68%" height={44} radius="10px 10px 10px 2px" />
+                  <Skeleton className="self-end" width="54%" height={32} radius="10px 10px 2px 10px" />
+                  <Skeleton className="self-start" width="60%" height={38} radius="10px 10px 10px 2px" />
                 </div>
               )}
-              </Fragment>
-            ))}
-              <time className="text-app-meta text-app-text-muted" dateTime={last.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(last.sent_at)}</time>
-            </div>
-            </Fragment>
-          )
-        })}
-      </div>
-
-      {/* Full height: the drawer body scrolls, so the form, the coach and the
-          notes below it are all reachable however short the window is. */}
-      {manualReviewReady && latestInbound && (
-        <div className="shrink-0 border-t border-app-border px-dialog py-app-md">
-        <ReplyReviewPanel
-          message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
-          review={latestInbound.review ?? null}
-          saving={replyActions.saving}
-          error={replyActions.error ?? (replyActions.conflict
-            ? 'This reply was reviewed meanwhile (by a teammate or the AI classifier). Your choices are kept — Save again to replace that review.'
-            : null)}
-          onDirtyChange={(dirty) => setReviewDirtyFor(dirty ? latestInbound.id : null)}
-          onSave={async (draft) => {
-            const saved = await replyActions.saveReview({
-              instance_id: lead.instance_id,
-              profile_url: lead.profile_url,
-              message_id: latestInbound.id,
-              expected_review_revision: conflictRevision ?? latestInbound.review?.revision ?? 0,
-              review: draft,
-            })
-            // A refused or failed save keeps the draft, and so keeps asking.
-            if (saved) setReviewDirtyFor(null)
-            return saved
-          }}
-        />
-        </div>
-      )}
-
-      <ConversationSection
-        title="AI coach"
-        open={coachOpen}
-        onToggle={() => setCoachOpen((o) => !o)}
-        badges={actionMeta && (
-          <Badge tone={actionMeta.tone} title="Suggested next action">
-            {actionMeta.label}
-          </Badge>
-        )}
-        actions={
-          <Button
-            variant="ghost"
-            size="sm"
-            loading={coachLoading}
-            loadingLabel="Coaching…"
-            onClick={() => {
-              setCoachOpen(true)
-              loadCoaching(!!coaching)
-            }}
-          >
-            {coaching ? 'Regenerate' : 'Get coaching'}
-          </Button>
-        }
-      >
-        {coachError && <InlineError title="Coaching failed." message={coachError} />}
-        {coachLoading && !coaching && (
-          <p className="m-0 text-app-meta text-app-text-muted">Reading the conversation…</p>
-        )}
-        {!coaching && !coachLoading && !coachError && (
-          <p className="m-0 text-app-meta text-app-text-muted">Get an AI read on what to say next to earn a reply.</p>
-        )}
-
-        {coaching && (
-          <div className="flex flex-col gap-app-md text-app-table">
-            {coaching.cached && <p className="m-0 text-app-meta text-app-text-muted">Cached take</p>}
-
-            {coaching.summary && <p className="m-0">{coaching.summary}</p>}
-
-            {coaching.issues.length > 0 && (
-              <div>
-                <h3 className="m-0 mb-app-xs text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted">What hurt your reply odds</h3>
-                <div className="flex flex-col gap-app-sm">
-                  {coaching.issues.map((iss, i) => (
-                    <div className="flex flex-col items-start gap-app-xs pl-app-sm border-l-2 border-app-border" key={i}>
-                      <Badge tone={SEVERITY_TONE[iss.severity]}>
-                        {ISSUE_KIND_LABEL[iss.kind]}
-                      </Badge>
-                      <div>
-                        {iss.quote && <div className="italic mb-0.5 [overflow-wrap:anywhere] text-app-text-muted">“{iss.quote}”</div>}
-                        <div>{iss.fix}</div>
+              {rows && rows.length === 0 && !loading && (
+                <EmptyState
+                  className="my-auto"
+                  icon={MessagesSquare}
+                  title="No messages yet"
+                  hint="LH2 stops capturing a thread once you take it over by hand. Paste the LinkedIn conversation to import its history."
+                  action={
+                    <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+                      Import history
+                    </Button>
+                  }
+                />
+              )}
+              {rows && groupMessages(rows).map((group) => {
+                const inbound = group.direction === 'in'
+                const last = group.messages[group.messages.length - 1]
+                const busyRow = deleting !== null || savingEdit || editing !== null
+                return (
+                  <Fragment key={group.key}>
+                  {group.startsDay && (
+                    <div className="flex items-center gap-app-sm my-app-xs mx-0 text-app-text-muted before:content-[''] before:flex-1 before:h-px before:bg-app-border after:content-[''] after:flex-1 after:h-px after:bg-app-border"><span className="text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] whitespace-nowrap">{replyDayHeading(last.sent_at)}</span></div>
+                  )}
+                  <div className={`flex flex-col gap-app-xs max-w-[min(80%,560px)] ${inbound ? 'self-start items-start' : 'self-end items-end'}`}>
+                  {group.messages.map((m, index) => (
+                    <Fragment key={m.id}>
+                    <MessageBubble
+                      direction={group.direction}
+                      tail={index === group.messages.length - 1}
+                      title={`${replyTime(m.sent_at, true)} · ${REPLY_TIME_ZONE_LABEL}`}
+                    >
+                      {editing?.id === m.id ? (
+                        <Textarea
+                          aria-label="Edit imported message"
+                          className="block w-[min(420px,50vw)] min-h-[72px] text-app-table"
+                          value={editing.body}
+                          maxLength={5000}
+                          autoFocus
+                          onChange={(e) => setEditing({ id: m.id, body: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              // Cancels the edit, not the whole conversation.
+                              e.stopPropagation()
+                              setEditing(null)
+                            }
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void editMessage(m)
+                          }}
+                        />
+                      ) : (
+                        <span className="message-bubble__body">{m.body || <span className="opacity-70">(empty)</span>}</span>
+                      )}
+                    </MessageBubble>
+                    {m.source === 'manual' && (
+                      /* The controls sit beside the bubble, never inside it. */
+                      <div className={`flex items-center gap-app-xs ${inbound ? '' : 'flex-row-reverse'}`}>
+                          <Badge title="Imported from a pasted LinkedIn thread — this time is the real message time, not an LH2 action-run time">
+                            Imported
+                          </Badge>
+                          {editing?.id === m.id ? (
+                            <>
+                              <IconButton
+                                label="Save message"
+                                icon={<Check aria-hidden="true" />}
+                                loading={savingEdit}
+                                disabled={!editing.body.trim()}
+                                onClick={() => void editMessage(m)}
+                              />
+                              <IconButton
+                                label="Cancel editing"
+                                icon={<X aria-hidden="true" />}
+                                disabled={savingEdit}
+                                onClick={() => setEditing(null)}
+                              />
+                            </>
+                          ) : (
+                            <IconButton
+                              data-edit-for={m.id}
+                              label="Edit imported message"
+                              icon={<Pencil aria-hidden="true" />}
+                              disabled={busyRow}
+                              onClick={() => setEditing({ id: m.id, body: m.body ?? '' })}
+                            />
+                          )}
+                          <IconButton
+                            tone="danger"
+                            label="Delete imported message"
+                            icon={<Trash2 aria-hidden="true" />}
+                            loading={deleting === m.id}
+                            disabled={busyRow}
+                            onClick={() => deleteMessage(m)}
+                          />
                       </div>
-                    </div>
+                    )}
+                    </Fragment>
                   ))}
-                </div>
+                    <time className="text-app-meta text-app-text-muted" dateTime={last.sent_at} title={REPLY_TIME_ZONE_LABEL}>{replyTime(last.sent_at)}</time>
+                  </div>
+                  </Fragment>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Hidden, never unmounted, while the coach is open: an edited review
+            keeps its draft. */}
+        <section className="conversation-pane" aria-label="Actions" hidden={coachOpen}>
+          <div className="conversation-pane-head">
+            <h3 className="conversation-pane-title">{followUpOpen ? 'Follow-up' : 'Actions'}</h3>
+          </div>
+
+          {followUpOpen && (
+            <div
+              ref={followUpRef}
+              tabIndex={-1}
+              role="region"
+              aria-label="Follow-up"
+              className="flex-1 min-h-0 flex flex-col focus:outline-none"
+            >
+              <FollowUpPanel
+                lead={live}
+                initialAction={followUpReturnAction}
+                onBack={() => {
+                  setFollowUpOpen(false)
+                  setFollowUpReturnAction(undefined)
+                }}
+                onImport={(returnTo) => {
+                  setFollowUpReturnAction(returnTo)
+                  setImportOpen(true)
+                }}
+                onCompleted={() => {
+                  setFollowUpOpen(false)
+                  setFollowUpReturnAction(undefined)
+                }}
+              />
+            </div>
+          )}
+
+          {/* Kept mounted under the follow-up view, so a review draft survives it. */}
+          <div className="flex-1 min-h-0 overflow-y-auto [overscroll-behavior:contain]" hidden={followUpOpen}>
+            <div className="flex flex-col gap-stack p-pane border-b border-app-border">
+              <ContextHeading>Next message</ContextHeading>
+              <p className="m-0 text-app-table text-app-text-secondary">
+                Get 10–15 options for what to write next, and feedback on the messages you wrote by hand.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start"
+                icon={<Sparkles aria-hidden="true" />}
+                onClick={() => openCoach(true)}
+              >
+                {coach.coaching ? 'Show message ideas' : 'Get message ideas'}
+              </Button>
+            </div>
+
+            {data?.followUpsAvailable && (
+              <div className="flex flex-col gap-stack p-pane border-b border-app-border">
+                <ContextHeading>Follow-up</ContextHeading>
+                <p className={`m-0 text-app-table ${followUpActive ? 'font-semibold text-app-text' : 'text-app-text-secondary'}`}>
+                  {followUpActive ? followUpDueLabel(followUpState) : 'No follow-up scheduled.'}
+                </p>
+                <Button
+                  ref={followUpTriggerRef}
+                  variant="secondary"
+                  size="sm"
+                  className="self-start"
+                  icon={<CalendarCheck2 aria-hidden="true" />}
+                  onClick={() => {
+                    setFollowUpReturnAction(undefined)
+                    setFollowUpOpen(true)
+                  }}
+                >
+                  {followUpActive ? 'Manage follow-up' : 'Schedule follow-up'}
+                </Button>
               </div>
             )}
 
-            {coaching.tips.length > 0 && (
-              <div>
-                <h3 className="m-0 mb-app-xs text-app-meta font-semibold uppercase tracking-[var(--tracking-caps)] text-app-text-muted">How to respond now</h3>
-                <ul className="m-0 pl-app-lg flex flex-col gap-app-xs">
-                  {coaching.tips.map((t, i) => (
-                    <li key={i}>{t}</li>
-                  ))}
-                </ul>
-              </div>
+            {manualReviewReady && latestInbound && (
+              <ReplyReviewPanel
+                message={latestInbound as unknown as import('../lib/replyReview').ReplyThreadMessage}
+                review={latestInbound.review ?? null}
+                saving={replyActions.saving}
+                error={replyActions.error ?? (replyActions.conflict
+                  ? 'This reply was reviewed meanwhile by a teammate. Your choices are kept — Save again to replace that review.'
+                  : null)}
+                onDirtyChange={(dirty) => setReviewDirtyFor(dirty ? latestInbound.id : null)}
+                onSave={async (draft) => {
+                  const saved = await replyActions.saveReview({
+                    instance_id: lead.instance_id,
+                    profile_url: lead.profile_url,
+                    message_id: latestInbound.id,
+                    expected_review_revision: conflictRevision ?? latestInbound.review?.revision ?? 0,
+                    review: draft,
+                  })
+                  // A refused or failed save keeps the draft, and so keeps asking.
+                  if (saved) setReviewDirtyFor(null)
+                  return saved
+                }}
+              />
             )}
-
-            {coachStale && (
-              <p className="m-0 text-app-meta text-app-text-muted italic">
-                New messages since this was generated — Regenerate for an updated take.
+            {manualReviewReady && rows && !latestInbound && (
+              <p className="m-0 p-pane text-app-meta text-app-text-muted">
+                The reply review appears here once the prospect replies.
               </p>
             )}
           </div>
-        )}
-      </ConversationSection>
-      </>
-      )}
+        </section>
 
-      {discardPrompt}
+        {coachOpen && (
+          <CoachPanel
+            id={coachId}
+            state={coach}
+            threadSize={rows?.length ?? 0}
+            threadLastSentAt={lastRow?.sent_at ?? null}
+            threadCapped={!!rows && rows.length >= THREAD_LIMIT}
+            onClose={() => setCoachOpen(false)}
+          />
+        )}
+      </div>
+
       {closePrompt}
       {pendingLost && (
         <LostReasonModal

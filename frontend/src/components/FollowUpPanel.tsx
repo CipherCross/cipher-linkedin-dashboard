@@ -203,8 +203,8 @@ export function FollowUpPanel({
 
   if (!data?.followUpsAvailable) {
     return (
-      <div className="flex-1 min-h-0 overflow-y-auto p-dialog flex flex-col gap-group">
-        <Button variant="ghost" size="sm" onClick={onBack}>← Conversation</Button>
+      <div className="flex-1 min-h-0 overflow-y-auto p-pane flex flex-col gap-group">
+        <Button variant="ghost" size="sm" onClick={onBack}>← Actions</Button>
         <InlineError
           title="Follow-up tracking unavailable"
           message="Apply database migration 046 to enable follow-up tracking."
@@ -230,9 +230,9 @@ export function FollowUpPanel({
           mode === 'reschedule' ? 'Save new date' : 'Schedule'
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-dialog flex flex-col gap-group">
+    <div className="flex-1 min-h-0 overflow-y-auto p-pane flex flex-col gap-group">
       <div className="flex items-center justify-between gap-app-sm">
-        <Button variant="ghost" size="sm" onClick={onBack}>← Conversation</Button>
+        <Button variant="ghost" size="sm" onClick={onBack}>← Actions</Button>
         <span className="inline-flex items-center gap-app-xs font-semibold text-app-text">
           <CalendarCheck2 size={16} aria-hidden="true" /> Follow-up
         </span>

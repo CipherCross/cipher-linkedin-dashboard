@@ -699,16 +699,30 @@ export interface CoachingIssue {
   fix: string // how to do it better
 }
 
-/** Per-conversation coaching as returned by POST /api/coach. */
+/** One ready-to-send option for the SDR's next message. */
+export interface CoachingIdea {
+  angle: string
+  message: string
+  why: string
+}
+
+/** Per-conversation coaching as returned by POST /api/coach. Issues cover the
+ *  SDR's hand-written messages only; sequence messages are never critiqued. */
 export interface Coaching {
   next_action: NextAction
   issues: CoachingIssue[]
-  tips: string[]
+  ideas: CoachingIdea[]
   summary: string | null
   last_msg_marker: string | null
   coached_at: string | null
   model: string | null
   cached?: boolean
+  scope: {
+    hand_written: number
+    sequence: number
+    message_count: number
+    last_sent_at: string | null
+  }
 }
 
 export interface CoachingPattern {

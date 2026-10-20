@@ -882,6 +882,53 @@ export async function importFixture(request) {
   return mutationRefusal()
 }
 
+/** `/api/coach` writes a cache row in production; here it only answers, so the
+ *  coach panel's populated state can be checked. A digest request is refused. */
+export async function coachFixture(request) {
+  const scenario = await currentScenario()
+  let body = null
+  try { body = await request.clone().json() } catch { /* not JSON */ }
+  if (request.method !== 'POST' || !body?.profile_url || body.mode === 'digest') return mutationRefusal()
+  if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture coaching failure' }, 503)
+  const angles = [
+    ['Confirm the slot', 'Great — Tuesday 10:00 it is. I\'ll send a calendar invite with a short agenda so we use the 20 minutes well.'],
+    ['Agenda question', 'Looking forward to it. Anything specific you\'d like me to prepare — pricing, the integration, or a case from your industry?'],
+    ['Low-friction resource', 'Before Tuesday, here\'s a 2-minute overview of how [case study client] cut onboarding time: [link]. Happy to go deeper on the call.'],
+    ['Bring a colleague', 'Would it help to bring whoever owns [team/process] on your side? Then we can answer the technical questions in one go.'],
+    ['Short confirmation', 'Perfect, see you Tuesday at 10:00.'],
+    ['Offer an alternative', 'Tuesday 10:00 works. If anything moves, Wednesday afternoon is open too — just say.'],
+    ['Value preview', 'Ahead of Tuesday: the main thing teams like yours get out of this is [key outcome]. I\'ll show exactly how in the first five minutes.'],
+    ['Personal touch', 'Saw your post on [topic] — would love to hear how that\'s going on Tuesday too.'],
+    ['Set expectations', 'Tuesday 10:00 is booked. Plan: 5 min on your current setup, 10 min demo, 5 min questions. Sound right?'],
+    ['Graceful flex', 'If Tuesday gets busy, no stress — reply with a better time and I\'ll move it.'],
+    ['Social proof', 'Great. Fun fact: [similar company] started with the same question you asked — I\'ll share what they found.'],
+    ['Logistics', 'Do you prefer Google Meet or Zoom for Tuesday?'],
+  ]
+  return json({
+    next_action: 'book_call',
+    summary: 'The prospect agreed to a call; lock in the time and set a clear agenda so it actually happens.',
+    issues: [
+      { kind: 'no_cta', severity: 'low', quote: 'Great — does Tuesday 10:00 work?', fix: 'Good ask — next time add a fallback slot so a "no" still moves forward.' },
+    ],
+    ideas: angles.map(([angle, message], index) => ({
+      angle, message, why: index === 0 ? 'Best when the time is already agreed.' : 'A different way to keep momentum toward the call.',
+    })),
+    last_msg_marker: 'v2|fixture',
+    coached_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    model: 'fixture',
+    cached: false,
+    scope: (() => {
+      const rows = threadRows(scenario)
+      return {
+        hand_written: rows.filter((m) => m.direction === 'out' && m.source === 'manual').length,
+        sequence: rows.filter((m) => m.direction === 'out' && m.source !== 'manual').length,
+        message_count: rows.length,
+        last_sent_at: rows.at(-1)?.sent_at ?? null,
+      }
+    })(),
+  })
+}
+
 export function mutationRefusal() {
   return json({ error: 'Local fixture is read-only; mutation was refused' }, 403)
 }

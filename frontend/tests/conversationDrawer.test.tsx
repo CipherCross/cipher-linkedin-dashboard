@@ -48,7 +48,8 @@ vi.mock('../src/lib/replyReview', async () => {
 vi.mock('../src/lib/useReplyReviewActions', () => ({
   useReplyReviewActions: () => ({ saving: false, error: null, conflict: replyConflict, saveReview: (request: unknown) => saveReview(request) }),
 }))
-vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: vi.fn() }))
+const authFetch = vi.fn()
+vi.mock('../src/lib/api', () => ({ authPost: vi.fn(), authFetch: (...a: unknown[]) => authFetch(...a) }))
 vi.mock('../src/lib/AuthContext', () => ({ useAuth: () => ({ isAdmin: true }) }))
 vi.mock('../src/lib/ToastContext', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
@@ -224,13 +225,66 @@ describe('the conversation drawer', () => {
     expect(saveReview).toHaveBeenLastCalledWith(expect.objectContaining({ expected_review_revision: 4 }))
   })
 
-  it('makes the coach a disclosure', async () => {
+  it('lays the conversation out in three panes: context, conversation, actions', async () => {
+    await paint()
+    const dialog = screen.getByRole('dialog', { name: 'Ada Lovelace' })
+    const panes = ['Context', 'Conversation', 'Actions'].map((name) => within(dialog).getByRole('region', { name }))
+    expect(panes[0].compareDocumentPosition(panes[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(panes[1].compareDocumentPosition(panes[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(panes[0]).getByLabelText('Stage')).toBeTruthy()
+    expect(within(panes[1]).getByRole('region', { name: 'Messages' })).toBeTruthy()
+  })
+
+  it('opens the coach as a side panel in place of the actions', async () => {
     await paint()
     const coach = screen.getByRole('button', { name: 'AI coach' })
     expect(coach.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(coach)
     expect(coach.getAttribute('aria-expanded')).toBe('true')
-    expect(document.getElementById(coach.getAttribute('aria-controls')!)).not.toBeNull()
+    const panel = document.getElementById(coach.getAttribute('aria-controls')!)
+    expect(panel?.getAttribute('aria-label')).toBe('AI coach')
+    // Hidden, not unmounted: hidden content leaves the accessibility tree.
+    expect(screen.queryByRole('region', { name: 'Actions' })).toBeNull()
+    expect(authFetch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close AI coach' }))
+    expect(coach.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('region', { name: 'Actions' })).toBeTruthy()
+  })
+
+  it('generates message ideas on request and keeps feedback one tab away', async () => {
+    authFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        next_action: 'reply',
+        summary: 'Ada is open to a chat.',
+        issues: [{ kind: 'too_long', severity: 'med', quote: 'Pasted by hand', fix: 'Cut it to one line.' }],
+        ideas: [
+          { angle: 'Propose a slot', message: 'Would Tuesday at 10:00 work?', why: 'She already said yes.' },
+          { angle: 'Clarifying question', message: 'What would you like to cover?', why: 'Sets the agenda.' },
+        ],
+        last_msg_marker: 'v2|x',
+        coached_at: '2026-09-20T12:30:00Z',
+        model: 'claude-sonnet-5-5',
+        cached: false,
+        scope: { hand_written: 1, sequence: 1, message_count: 3, last_sent_at: '2026-09-20T12:00:00Z' },
+      }),
+    })
+    await paint()
+    await screen.findByText('Hello!')
+    fireEvent.click(screen.getByRole('button', { name: 'Get message ideas' }))
+    await act(async () => {})
+    expect(authFetch).toHaveBeenCalledWith('/api/coach', expect.objectContaining({ method: 'POST' }))
+    const panel = screen.getByRole('complementary', { name: 'AI coach' })
+    const ideas = within(panel).getByRole('list', { name: 'Message ideas' })
+    expect(within(ideas).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(ideas).getByText('Would Tuesday at 10:00 work?')).toBeTruthy()
+    expect(within(panel).getByRole('button', { name: 'Copy idea 1' })).toBeTruthy()
+    expect(within(panel).getByText(/1 hand-written message reviewed · 1 sequence message skipped/)).toBeTruthy()
+    // The take matches the thread on screen, so it is not called stale.
+    expect(within(panel).queryByText(/New messages since/)).toBeNull()
+    fireEvent.click(within(panel).getByRole('radio', { name: /Feedback/ }))
+    expect(within(panel).getByText('Cut it to one line.')).toBeTruthy()
   })
 
   it('puts the notes under the header, open, above the thread', async () => {
@@ -330,17 +384,20 @@ describe('the conversation drawer', () => {
       expect(onClose).toHaveBeenCalledTimes(1)
     })
 
-    it('asks before closing or switching views over an edited review, and stops asking once it is saved', async () => {
+    it('keeps an edited review across views, asks before closing over it, and stops asking once it is saved', async () => {
       capabilities.mockResolvedValue({ available: true })
       await paint()
       await screen.findByRole('group', { name: 'Sentiment' })
       fireEvent.click(screen.getByRole('radio', { name: 'Neutral' }))
 
-      // Opening Import would unmount the form and drop the edit.
+      // Import opens in the conversation pane and the coach in place of the
+      // actions; neither unmounts the form, so neither asks.
       fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
-      expect(prompt()).not.toBeNull()
-      keepEditing()
-      expect(screen.getByRole('group', { name: 'Sentiment' })).toBeTruthy()
+      expect(prompt()).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'AI coach' }))
+      expect(prompt()).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Close AI coach' }))
+      expect((screen.getByRole('radio', { name: 'Neutral' }) as HTMLInputElement).checked).toBe(true)
 
       // A refused save keeps the draft, so closing still asks.
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))

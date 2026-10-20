@@ -54,6 +54,7 @@ const controlEntry = `import { fixtureControl } from './ui-fixture-api.mjs'; imp
 const importEntry = `import { importFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(importFixture)\n`
 const readOnlyEntry = `import { mutationRefusal } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(mutationRefusal)\n`
 const playbookEntry = `import { playbookFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(playbookFixture)\n`
+const coachEntry = `import { coachFixture } from './ui-fixture-api.mjs'; import { bridge } from './bridge.mjs'; export default bridge(coachFixture)\n`
 const viteConfig = `
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -88,7 +89,8 @@ await writeFile(join(api, 'activity-daily.mjs'), activityEntry)
 await writeFile(join(api, 'ui-fixture.mjs'), controlEntry)
 await writeFile(join(api, 'import.mjs'), importEntry)
 await writeFile(join(api, 'playbook.mjs'), playbookEntry)
-for (const name of ['pipeline', 'coach', 'review-digest', 'classify', 'briefing', 'notify-replies']) {
+await writeFile(join(api, 'coach.mjs'), coachEntry)
+for (const name of ['pipeline', 'review-digest', 'classify', 'briefing', 'notify-replies']) {
   await writeFile(join(api, `${name}.mjs`), readOnlyEntry)
 }
 await writeFile(join(root, 'vite.config.mjs'), viteConfig)
