@@ -35,6 +35,7 @@ import {
 import {
   CONV_MODEL,
   DEFAULT_COACH_PROMPT,
+  asOfForCut,
   composeCoachSystem,
   cutThread,
   renderThread,
@@ -212,7 +213,10 @@ class Training {
         loadPlaybook(this.store, this.actor),
         loadIcpForCampaign(this.store, this.actor, caseRow.campaign_id),
       ])
-      const result = await runCoach(composeCoachSystem(version.prompt ?? '', playbook, icp), thread)
+      // A cut is coached at the moment the next message actually arrived, so
+      // the gaps the coach sees are the ones the SDR faced.
+      const asOf = asOfForCut(full, caseRow.cut_after_message_id)
+      const result = await runCoach(composeCoachSystem(version.prompt ?? '', playbook, icp), thread, asOf)
       output = JSON.stringify({ ...result, scope: scopeOf(thread) })
     } catch (e) {
       // A model failure is a result worth keeping on the card; a database one is not.
@@ -418,9 +422,12 @@ export async function handleTraining(
         const first = rows[0]
         const key = `${first.instance_id}|${first.profile_url}`
         if (!threads.has(key)) threads.set(key, await loadCoachThread(store, actor, first.instance_id, first.profile_url))
-        const thread = cutThread(threads.get(key)!, first.run_cut_after_message_id)
+        const full = threads.get(key)!
+        const thread = cutThread(full, first.run_cut_after_message_id)
+        // The thread at the time its run saw it.
+        const asOf = asOfForCut(full, first.run_cut_after_message_id, new Date(first.run_created_at))
         cases.push({
-          conversation: renderThread(thread),
+          conversation: renderThread(thread, asOf),
           promptVersion: first.version_n,
           output: (first.run_output ?? {}) as ReviewedCase['output'],
           feedback: rows.map((f) => ({ target: f.target, target_index: f.target_index, verdict: f.verdict, comment: f.comment })),

@@ -580,13 +580,15 @@ export interface PendingFeedbackRow extends TrainingFeedbackRow {
   readonly version_n: number
   readonly run_cut_after_message_id: number | null
   readonly run_output: Record<string, unknown> | null
+  readonly run_created_at: string
 }
 
 /** Everything an improve round would use, grouped by run in id order. */
 export const pendingFeedbackOperation: NeonQueryOperation<PendingFeedbackRow> = {
   build: () => ({
     text: `SELECT ${FEEDBACK_COLUMNS}, c.instance_id, c.profile_url, v.n AS version_n,
-                  r.cut_after_message_id AS run_cut_after_message_id, r.output AS run_output
+                  r.cut_after_message_id AS run_cut_after_message_id, r.output AS run_output,
+                  r.created_at AS run_created_at
              FROM public.coach_training_feedback f
              JOIN public.coach_training_runs r ON r.id = f.run_id
              JOIN public.coach_training_cases c ON c.id = f.case_id
@@ -603,6 +605,7 @@ export const pendingFeedbackOperation: NeonQueryOperation<PendingFeedbackRow> = 
     version_n: Number(row.version_n),
     run_cut_after_message_id: nullableNumber(row, 'run_cut_after_message_id'),
     run_output: row.run_output && typeof row.run_output === 'object' ? (row.run_output as Record<string, unknown>) : null,
+    run_created_at: text(row, 'run_created_at'),
   }),
 }
 

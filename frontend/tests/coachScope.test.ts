@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { issuesOnHandWritten, originOf, renderThread } from '../api/coach'
 import {
-  COACH_HARNESS, DEFAULT_COACH_PROMPT, coachingMarkerOf, composeCoachSystem, cutThread, threadMarkerOf,
+  COACH_HARNESS, DEFAULT_COACH_PROMPT, asOfForCut, coachingMarkerOf, composeCoachSystem, cutThread, threadMarkerOf,
 } from '../api/_lib/coachCore'
 
 type Msg = Parameters<typeof renderThread>[0][number]
@@ -87,8 +87,36 @@ describe('the coach scope', () => {
   })
 
   it('makes a published prompt invalidate every cached take', () => {
-    expect(coachingMarkerOf(THREAD, null)).not.toBe(coachingMarkerOf(THREAD, 7))
-    expect(coachingMarkerOf(THREAD, 7)).toBe(`v3|p7|${threadMarkerOf(THREAD)}`)
+    const now = new Date('2026-10-01T12:00:00Z')
+    expect(coachingMarkerOf(THREAD, null, now)).not.toBe(coachingMarkerOf(THREAD, 7, now))
+    expect(coachingMarkerOf(THREAD, 7, now)).toBe(`v4|p7|${threadMarkerOf(THREAD)}|d0`)
+  })
+
+  it('lets a cached take expire as days pass, since timing advice goes out of date', () => {
+    const sameDay = coachingMarkerOf(THREAD, 7, new Date('2026-10-01T20:00:00Z'))
+    expect(coachingMarkerOf(THREAD, 7, new Date('2026-10-01T23:00:00Z'))).toBe(sameDay)
+    expect(coachingMarkerOf(THREAD, 7, new Date('2026-10-09T12:00:00Z'))).toMatch(/\|d8$/)
+  })
+
+  it('tells the coach what time it is and how old every message is', () => {
+    const thread = [
+      msg({ body: 'Hi Ada', sent_at: '2026-10-01T10:00:00Z' }),
+      msg({ direction: 'in', origin: null, body: 'Let me think about it', sent_at: '2026-10-12T09:00:00Z' }),
+    ]
+    const prompt = renderThread(thread, new Date('2026-10-20T09:00:00Z'))
+    expect(prompt).toMatch(/^NOW: Tue, 20 Oct 2026, 11:00 \(Europe\/Madrid time\)\. The last message was sent 8 days ago\./)
+    expect(prompt).toContain('[Mon, 12 Oct 2026, 11:00 · 8 days ago] PROSPECT: Let me think about it')
+    expect(prompt).toContain('[Thu, 1 Oct 2026, 12:00 · 19 days ago] SDR [SEQUENCE message 1]: Hi Ada')
+    // The fixed harness owns the rule, so a trained prompt cannot drop it.
+    expect(COACH_HARNESS).toContain('Never advise waiting for a period that has already passed')
+  })
+
+  it('coaches a cut as of the moment the next message arrived', () => {
+    const thread = THREAD.map((m, i) => ({ ...m, id: 10 + i, sent_at: `2026-10-0${i + 1}T10:00:00Z` }))
+    const now = new Date('2026-10-20T10:00:00Z')
+    expect(asOfForCut(thread, 10, now).toISOString()).toBe('2026-10-02T10:00:00.000Z')
+    expect(asOfForCut(thread, 12, now)).toBe(now) // nothing after the cut
+    expect(asOfForCut(thread, null, now)).toBe(now)
   })
 
   it('puts the trainable prompt first, then the fixed harness, then the context', () => {
