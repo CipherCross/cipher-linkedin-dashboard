@@ -179,6 +179,8 @@ export interface CoachingRow {
   readonly last_msg_marker: string | null
   readonly coached_at: string | null
   readonly model: string | null
+  /** The prompt version that produced the take; NULL is the built-in prompt. */
+  readonly prompt_version_id: number | null
 }
 
 export const coachExistingOperation: NeonQueryOperation<
@@ -186,7 +188,7 @@ export const coachExistingOperation: NeonQueryOperation<
   CoachThreadKeyParams
 > = {
   build: ({ params }): NeonStatement => ({
-    text: `SELECT next_action, issues, tips, summary, last_msg_marker, coached_at, model
+    text: `SELECT next_action, issues, tips, summary, last_msg_marker, coached_at, model, prompt_version_id
              FROM public.conversation_coaching
             WHERE instance_id = $1 AND profile_url = $2`,
     values: [params?.instanceId ?? null, params?.profileUrl ?? null],
@@ -199,6 +201,10 @@ export const coachExistingOperation: NeonQueryOperation<
     last_msg_marker: nullableText(row, 'last_msg_marker'),
     coached_at: nullableText(row, 'coached_at'),
     model: nullableText(row, 'model'),
+    prompt_version_id:
+      row.prompt_version_id === null || row.prompt_version_id === undefined
+        ? null
+        : Number(row.prompt_version_id),
   }),
 }
 
@@ -212,7 +218,8 @@ export interface CoachUpsertParams {
   readonly lastMsgMarker: string
   readonly coachedAt: string
   readonly model: string
-  readonly [key: string]: string
+  readonly promptVersionId: number | null
+  readonly [key: string]: string | number | null
 }
 
 export const coachUpsertOperation: NeonCommandOperation<
@@ -224,8 +231,8 @@ export const coachUpsertOperation: NeonCommandOperation<
     return {
       text: `INSERT INTO public.conversation_coaching
                     (instance_id, profile_url, next_action, issues, tips, summary,
-                     last_msg_marker, coached_at, model)
-             VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9)
+                     last_msg_marker, coached_at, model, prompt_version_id)
+             VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10::bigint)
              ON CONFLICT (instance_id, profile_url) DO UPDATE
                 SET next_action = EXCLUDED.next_action,
                     issues = EXCLUDED.issues,
@@ -233,7 +240,8 @@ export const coachUpsertOperation: NeonCommandOperation<
                     summary = EXCLUDED.summary,
                     last_msg_marker = EXCLUDED.last_msg_marker,
                     coached_at = EXCLUDED.coached_at,
-                    model = EXCLUDED.model`,
+                    model = EXCLUDED.model,
+                    prompt_version_id = EXCLUDED.prompt_version_id`,
       values: [
         params.instanceId,
         params.profileUrl,
@@ -244,6 +252,7 @@ export const coachUpsertOperation: NeonCommandOperation<
         params.lastMsgMarker,
         params.coachedAt,
         params.model,
+        params.promptVersionId,
       ],
     }
   },
@@ -436,7 +445,8 @@ export const coachDigestUpsertOperation: NeonCommandOperation<
                 SET summary = EXCLUDED.summary,
                     patterns = EXCLUDED.patterns,
                     computed_at = EXCLUDED.computed_at,
-                    model = EXCLUDED.model`,
+                    model = EXCLUDED.model,
+                    prompt_version_id = EXCLUDED.prompt_version_id`,
       values: [
         params.instanceId,
         params.summary,

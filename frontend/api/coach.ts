@@ -5,28 +5,23 @@
 // next message to choose from. Results are cached per conversation in
 // `conversation_coaching` and rolled up per account into `coaching_digest`.
 //
-// What produced each outbound message comes from the step attribution (ledger
-// step 024): a body that matches a campaign step template was sent by the
-// sequence. Issues are filtered server-side to quotes from hand-written
-// messages, so a model that critiques a template anyway is overruled.
-//
-// Storage: the drafts live in the `tips` jsonb column (it held the old
-// free-text "how to respond" pointers) — no schema change. Markers carry a
-// `v2|` prefix, so a row cached in the old shape never matches and is
-// regenerated on the next request.
+// The prompt, the thread rendering and the model call live in
+// `_lib/coachCore.ts`, shared with the trainer. The coach runs the PUBLISHED
+// prompt version (ledger step 027), or the built-in prompt when none is
+// published. The cache marker carries the version, so a publish makes every
+// cached take stale; it regenerates the next time the coach is asked for.
 //
 // POST body:
 //   { instance_id, profile_url }          → coach one conversation (Mode A)
 //   { instance_id, profile_url, force }   → ignore the cache and recompute
 //   { instance_id, mode: 'digest' }       → roll up recurring patterns (Mode B)
+//   { mode: 'training.<op>', ... }        → the Coach training page (`_lib/coachTraining.ts`)
 //
-// Requires an active dashboard member. Mode A short-circuits on an unchanged
-// thread (last_msg_marker); Mode B is bounded and manual.
+// Training lives here rather than in its own function because the deployment
+// is at its function limit.
 //
-// Every caller is a signed-in human, so the handler runs on the shared Neon
-// runtime store under the caller's resolved actor. Data access sits behind the
-// `CoachData` seam; the prompts, the model calls, the marker math and the
-// response bodies live above it.
+// Requires an active dashboard member. Every caller is a signed-in human, so the
+// handler runs on the shared Neon runtime store under the caller's resolved actor.
 import { generateObject } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
@@ -34,71 +29,40 @@ import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import {
   DataStoreContractError,
-  DataStoreSchemaError,
-  MAX_PAGE_SIZE,
   type ActorContext,
   type DataStore,
-  type DataStoreParams,
-  type Page,
 } from './_lib/data/contracts.js'
-import {
-  AI_WRITE_OPERATIONS,
-  MESSAGES_OPERATIONS,
-  type CoachIcpPersonaRow,
-  type CoachThreadRow,
-  type CoachingRow,
-  type IcpDetailRow,
-  type ThreadMessageRow,
-} from './_lib/data/operations/index.js'
+import { AI_WRITE_OPERATIONS, type CoachingRow } from './_lib/data/operations/index.js'
 import { neonWriter, type NeonWriteDeps } from './_lib/neonWrites.js'
+import {
+  CONV_MODEL,
+  DEFAULT_COACH_PROMPT,
+  coachingMarkerOf,
+  composeCoachSystem,
+  ideasFrom,
+  runCoach,
+  scopeOf,
+  type CoachIdea,
+  type CoachScope,
+  type Msg,
+} from './_lib/coachCore.js'
+import {
+  allPages,
+  firstRow,
+  loadCoachThread,
+  loadIcpForCampaign,
+  loadPlaybook,
+  loadPromptState,
+} from './_lib/coachData.js'
+import { handleTraining, isTrainingMode } from './_lib/coachTraining.js'
+
+// Re-exported for the tests that pin the coach's scope rules.
+export { issuesOnHandWritten, originOf, renderThread } from './_lib/coachCore.js'
 
 export const maxDuration = 300
 
-const CONV_MODEL = 'claude-sonnet-5-5' // per-conversation coaching
 const DIGEST_MODEL = 'claude-opus-5-5' // cross-conversation self-correction digest
-
-const MAX_MSGS = 30 // most recent thread messages shown to the model
-const BODY_CAP = 800 // chars per message
 const DIGEST_BATCH = 25 // actionable threads back-filled before a digest
-const MAX_IDEAS = 15
-const MARKER_VERSION = 'v2'
-
-const NEXT_ACTIONS = ['reply', 'wait', 'book_call', 'refer', 'close', 'none'] as const
-const ISSUE_KINDS = [
-  'ignored_question',
-  'too_long',
-  'too_salesy',
-  'generic',
-  'slow_followup',
-  'no_cta',
-  'multiple_asks',
-  'pushy',
-  'other',
-] as const
-
-const convSchema = z.object({
-  next_action: z.enum(NEXT_ACTIONS),
-  summary: z.string(),
-  issues: z
-    .array(
-      z.object({
-        kind: z.enum(ISSUE_KINDS),
-        severity: z.enum(['low', 'med', 'high']),
-        quote: z.string(), // exact snippet from a HAND-WRITTEN SDR message
-        fix: z.string(), // how to do it better
-      })
-    )
-    .max(4),
-  ideas: z
-    .array(
-      z.object({
-        angle: z.string(), // 2–5 word label for the approach
-        message: z.string(), // the ready-to-send next message
-        why: z.string(), // one line on when this option is the right pick
-      })
-    )
-    .max(MAX_IDEAS),
-})
 
 const digestSchema = z.object({
   summary: z.string(),
@@ -113,220 +77,16 @@ const digestSchema = z.object({
     .max(6),
 })
 
-const SYSTEM_BASE = `You are an elite LinkedIn outreach coach for an SDR (sales development rep).
-You read one full conversation between the SDR and a prospect. PROSPECT lines are the prospect's;
-SDR lines are the SDR's. The ONLY goal is to earn the next genuine reply and move toward a call —
-never to close a sale in a single message.
-
-Every SDR line is tagged with what produced it:
-- [SEQUENCE …] — sent automatically by a campaign sequence step (a template). Sequences are reviewed
-  and rewritten separately by the team. NEVER critique, quote or "fix" a SEQUENCE message. Use them only
-  as context for what the prospect has already been told.
-- [TEMPLATE] — the same text was sent in many other conversations (a sequence variant or a saved
-  snippet). Treat it exactly like a SEQUENCE message.
-- [HAND-WRITTEN] — typed by the SDR by hand. These, and only these, are what you give feedback on.
-- [UNVERIFIED] — not yet matched against the templates. Treat it as hand-written only if it clearly
-  reads like a personal reply to this prospect; if it reads like a template, leave it alone.
-
-Return:
-- summary: one or two sentences on the state of play and the path to a reply.
-- next_action: the single best next move — reply, wait, book_call, refer, close, or none. Use "close"
-  when the thread is dead or hostile and it makes sense to end it gracefully; "wait" when the ball is in
-  the prospect's court and chasing now would hurt.
-- issues: up to 4 concrete mistakes in the SDR's HAND-WRITTEN messages, each with the exact "quote" copied
-  verbatim from a HAND-WRITTEN message and a short, specific "fix". Judge tone, length, relevance, whether
-  a direct question was ignored, generic copy-paste, too many asks at once, pushiness, a missing/weak call
-  to action, and slow follow-up. With no hand-written messages, or nothing genuinely wrong in them, return
-  an empty array — never invent problems.
-- ideas: ${MAX_IDEAS - 3} to ${MAX_IDEAS} distinct, ready-to-send options for the SDR's NEXT message, so they
-  have a real choice. Each has a short "angle" label (2-5 words, e.g. "Answer + propose a slot",
-  "Clarifying question", "Relevant case study", "Low-friction resource", "Graceful close"), the full
-  "message", and a one-line "why" saying when this option is the right pick. Make them genuinely
-  different — vary the approach (direct answer, question, insight, proof, call to action, soft nudge,
-  rapport, graceful exit where it fits), the length (most under 300 characters, a few one-liners, at most
-  two longer ones) and the ask. Order them best first. Every message must:
-  * answer anything the prospect asked that is still open, before asking for anything;
-  * be written in the language the prospect writes in (the conversation's language if the prospect
-    has not written), in a natural first-person LinkedIn tone — no subject line, no signature;
-  * never repeat what a sequence message already said;
-  * never invent facts, prices, names or results: where a specific the SDR must supply is needed, mark
-    it in square brackets, e.g. [price range], [case study client];
-  * stay consistent with the playbook and the ICP below.
-  When next_action is "wait", write the options as the follow-up to send later, and say so in "why".
-
-Be specific to THIS thread.`
-
-/** Who wrote an outbound message, as far as the step attribution knows.
- *  `template`: matched no synced step, but opens like messages sent in many
- *  other conversations — an unsynced template variant or a reused snippet. */
-type OutboundOrigin = 'sequence' | 'template' | 'manual' | 'unverified'
-
-/** Conversations an unmatched opening must recur in to count as a template. */
-const TEMPLATE_REUSE_THREADS = 5
-
-interface Msg {
-  direction: string
-  body: string | null
-  sent_at: string
-  source: string | null
-  /** Read from LH2's chat store, which captures hand-typed messages too. */
-  chat_store: boolean
-  /** Outbound only. */
-  origin: OutboundOrigin | null
-  step_type: string | null
-  message_ordinal: number | null
-}
-
-export function originOf(
-  row: Pick<CoachThreadRow, 'direction' | 'step_method'> & Partial<Pick<CoachThreadRow, 'reused_threads'>>,
-): OutboundOrigin | null {
-  if (row.direction !== 'out') return null
-  if (row.step_method === null) return 'unverified'
-  if (row.step_method !== 'none') return 'sequence'
-  return (row.reused_threads ?? 0) >= TEMPLATE_REUSE_THREADS ? 'template' : 'manual'
-}
-
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
   })
 
-/** Inject the global playbook (Markdown) + this conversation's ICP (if its campaign
- *  is assigned to a hypothesis) into the system prompt. Either piece is optional —
- *  the coach stays generic where one or both are unconfigured. */
-function systemFor(playbook: string, icpText: string): string {
-  let sys = SYSTEM_BASE
-  sys += playbook
-    ? `\n\nPLAYBOOK — ground every suggestion in this:\n${playbook}`
-    : `\n\nNo playbook is configured — keep product claims generic and note in "summary" that ` +
-      `writing a playbook (the dashboard's Playbook page) will sharpen the coaching.`
-  if (icpText) sys += `\n\nICP — this conversation's target profile:\n${icpText}`
-  return sys
-}
-
-function sdrTag(m: Msg): string {
-  if (m.origin === 'sequence') {
-    const step = m.step_type === 'InvitePerson'
-      ? 'connection note'
-      : m.message_ordinal ? `message ${m.message_ordinal}` : 'step'
-    return `[SEQUENCE ${step}]`
-  }
-  if (m.origin === 'template') return '[TEMPLATE]'
-  return m.origin === 'manual' ? '[HAND-WRITTEN]' : '[UNVERIFIED]'
-}
-
-export function renderThread(thread: Msg[]): string {
-  const recent = thread.slice(-MAX_MSGS)
-  const lines = recent.map((m) => {
-    const who = m.direction === 'in' ? 'PROSPECT' : `SDR ${sdrTag(m)}`
-    return `${who}: ${(m.body ?? '').slice(0, BODY_CAP)}`
-  })
-  // Agents before the chat-store sync could not see hand-typed SDR follow-ups;
-  // those only appear once a thread is manually imported (source='manual').
-  // On such a thread "who is waiting" can't be trusted. A chat-store row, or an
-  // import, means hand-typed messages are captured.
-  const complete = recent.some((m) => m.source === 'manual' || m.chat_store)
-  const last = recent[recent.length - 1]
-  let waiting: string
-  if (last?.direction === 'in' && !complete) {
-    waiting =
-      'This thread may be INCOMPLETE: it was synced before hand-typed messages were captured, and has no ' +
-      'imported history. The latest message being from the PROSPECT may simply mean the SDR replied by ' +
-      'hand and it is not visible here — do NOT scold the SDR for "not replying" or "going slow", and never ' +
-      'flag slow_followup. Mention in the summary that importing the thread history would confirm the state.'
-  } else if (last?.direction === 'in') {
-    waiting = 'The latest message is from the PROSPECT — they are waiting on the SDR to respond.'
-  } else {
-    waiting = 'The latest message is from the SDR — we are waiting on the prospect to reply.'
-  }
-  const handWritten = recent.filter((m) => m.origin === 'manual' || m.origin === 'unverified').length
-  const scope = handWritten
-    ? ''
-    : '\nThe SDR has sent no hand-written messages in this thread, so "issues" must be empty.'
-  return `${waiting}${scope}\n\nCONVERSATION (oldest first):\n${lines.join('\n')}`
-}
-
-const normalize = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').trim()
-
-/** Keep only issues that quote a hand-written (or not yet attributed) SDR
- *  message. The prompt already says so; this is what makes it true. */
-export function issuesOnHandWritten<T extends { quote: string }>(issues: readonly T[], thread: readonly Msg[]): T[] {
-  const bodies = thread
-    .filter((m) => m.origin === 'manual' || m.origin === 'unverified')
-    .map((m) => normalize(m.body ?? ''))
-    .filter(Boolean)
-  return issues.filter((issue) => {
-    const quote = normalize(issue.quote.replace(/^["“'«]+|["”'»]+$/g, ''))
-    return quote.length > 0 && bodies.some((body) => body.includes(quote))
-  })
-}
-
-/** djb2 hash of a string → short hex, so the staleness marker also changes when the
- *  last message's BODY changes (not just its timestamp/count). */
-function hashStr(s: string): string {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-  return (h >>> 0).toString(36)
-}
-
-const markerOf = (thread: Msg[]) => {
-  const last = thread[thread.length - 1]
-  return `${MARKER_VERSION}|${last?.sent_at ?? ''}|${thread.length}|${last?.body ? hashStr(last.body) : '0'}`
-}
-
-interface CoachScope {
-  /** Outbound messages the coach reviewed (hand-written or not yet attributed). */
-  readonly hand_written: number
-  /** Outbound messages a sequence step or a reused template sent, which the coach skips. */
-  readonly sequence: number
-  /** The thread the take was generated against, for the client's staleness check. */
-  readonly message_count: number
-  readonly last_sent_at: string | null
-}
-
-function scopeOf(thread: readonly Msg[]): CoachScope {
-  return {
-    hand_written: thread.filter((m) => m.origin === 'manual' || m.origin === 'unverified').length,
-    sequence: thread.filter((m) => m.origin === 'sequence' || m.origin === 'template').length,
-    message_count: thread.length,
-    last_sent_at: thread[thread.length - 1]?.sent_at ?? null,
-  }
-}
-
-interface CoachIdea {
-  angle: string
-  message: string
-  why: string
-}
-
-/** The drafts stored in `tips`; anything not in the v2 shape is dropped. */
-function ideasFrom(value: readonly unknown[]): CoachIdea[] {
-  return value.flatMap((item) => {
-    const idea = item as Partial<CoachIdea> | null
-    if (!idea || typeof idea !== 'object' || typeof idea.message !== 'string' || !idea.message.trim()) return []
-    return [{
-      angle: typeof idea.angle === 'string' ? idea.angle : '',
-      message: idea.message,
-      why: typeof idea.why === 'string' ? idea.why : '',
-    }]
-  })
-}
-
 // ---------------------------------------------------------------------------
 // The data seam: the reads and writes the coaching flows need, and their Neon
 // implementation.
 // ---------------------------------------------------------------------------
-
-interface ExistingCoaching {
-  next_action: string | null
-  issues: unknown[]
-  tips: unknown[]
-  summary: string | null
-  last_msg_marker: string | null
-  coached_at: string | null
-  model: string | null
-}
 
 interface CoachingWrite {
   instance_id: string
@@ -338,14 +98,23 @@ interface CoachingWrite {
   last_msg_marker: string
   coached_at: string
   model: string
+  prompt_version_id: number | null
+}
+
+/** The prompt the live coach runs: the published version, else the built-in. */
+interface LivePrompt {
+  readonly id: number | null
+  readonly n: number | null
+  readonly prompt: string
 }
 
 interface CoachData {
   loadThread(instance_id: string, profile_url: string): Promise<Msg[]>
-  loadExisting(instance_id: string, profile_url: string): Promise<ExistingCoaching | null>
+  loadExisting(instance_id: string, profile_url: string): Promise<CoachingRow | null>
   saveCoaching(row: CoachingWrite): Promise<void>
   loadPlaybook(): Promise<string>
   loadIcpForCampaign(campaign_id: string | null | undefined): Promise<string>
+  loadLivePrompt(): Promise<LivePrompt>
   actionableProfiles(instance_id: string): Promise<string[]>
   loadIssues(instance_id: string): Promise<{ issues: unknown[] }[]>
   saveDigest(row: {
@@ -357,83 +126,17 @@ interface CoachData {
   }): Promise<void>
 }
 
-/** This conversation's ICP text. */
-function renderIcpText(
-  hypothesisName: string,
-  icp: IcpDetailRow,
-  personas: readonly CoachIcpPersonaRow[],
-): string {
-  const lines = [`ICP "${icp.name}" (hypothesis "${hypothesisName}")`]
-  const context = [icp.main_product, icp.core_sphere, icp.secondary_sphere].filter(Boolean)
-  if (context.length) lines.push(`Product/sphere: ${context.join(' — ')}`)
-  if (icp.purchase_triggers?.length) lines.push(`Why they buy: ${icp.purchase_triggers.join('; ')}`)
-  for (const p of personas) {
-    const titles = p.job_titles?.length ? p.job_titles.slice(0, 6).join(', ') : ''
-    lines.push(`Buyer persona (${p.kind}): ${titles}${p.background ? ` — ${p.background}` : ''}`)
-  }
-  return lines.join('\n')
-}
-
 /** The Neon implementation: the shared runtime store under the caller's
  *  resolved actor. Reads and writes both run actor-scoped — the coach has a
  *  human, so it needs none of the blocked system path. */
 function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
-  async function allPages<TRow>(operation: string, params: DataStoreParams): Promise<TRow[]> {
-    const rows: TRow[] = []
-    let cursor: string | null = null
-    for (;;) {
-      const page: Page<TRow> = await store.query<TRow>(actor, {
-        operation,
-        params,
-        page: { limit: MAX_PAGE_SIZE, cursor },
-      })
-      rows.push(...page.items)
-      if (!page.hasMore || page.nextCursor === null) break
-      cursor = page.nextCursor
-    }
-    return rows
-  }
-
   return {
-    async loadThread(instance_id, profile_url) {
-      const params = { instanceId: instance_id, profileUrl: profile_url }
-      try {
-        const rows = await allPages<CoachThreadRow>(AI_WRITE_OPERATIONS.coachThread, params)
-        return rows.map((m) => ({
-          direction: m.direction,
-          body: m.body,
-          sent_at: m.sent_at,
-          source: m.source,
-          chat_store: m.chat_store,
-          origin: originOf(m),
-          step_type: m.step_type,
-          message_ordinal: m.message_ordinal,
-        }))
-      } catch (error) {
-        // A tenant that predates ledger step 024 has no attribution table:
-        // coach it with every outbound message unverified rather than not at all.
-        if (!(error instanceof DataStoreSchemaError)) throw error
-      }
-      const rows = await allPages<ThreadMessageRow>(MESSAGES_OPERATIONS.thread, params)
-      return rows.map((m) => ({
-        direction: m.direction,
-        body: m.body,
-        sent_at: m.sent_at,
-        source: m.source,
-        chat_store: false,
-        origin: m.direction === 'out' ? 'unverified' as const : null,
-        step_type: null,
-        message_ordinal: null,
-      }))
-    },
-    async loadExisting(instance_id, profile_url) {
-      const page = await store.query<CoachingRow>(actor, {
-        operation: AI_WRITE_OPERATIONS.coachExisting,
-        params: { instanceId: instance_id, profileUrl: profile_url },
-        page: { limit: 1 },
-      })
-      return page.items[0] ?? null
-    },
+    loadThread: (instance_id, profile_url) => loadCoachThread(store, actor, instance_id, profile_url),
+    loadExisting: (instance_id, profile_url) =>
+      firstRow<CoachingRow>(store, actor, AI_WRITE_OPERATIONS.coachExisting, {
+        instanceId: instance_id,
+        profileUrl: profile_url,
+      }),
     async saveCoaching(row) {
       await store.transaction(actor, async (transaction) => {
         await transaction.execute({
@@ -448,57 +151,25 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
             lastMsgMarker: row.last_msg_marker,
             coachedAt: row.coached_at,
             model: row.model,
+            promptVersionId: row.prompt_version_id,
           },
         })
       })
     },
-    async loadPlaybook() {
-      const page = await store.query<{ content: string }>(actor, {
-        operation: AI_WRITE_OPERATIONS.coachPlaybook,
-        page: { limit: 1 },
-      })
-      return (page.items[0]?.content ?? '').trim()
-    },
-    async loadIcpForCampaign(campaign_id) {
-      if (!campaign_id) return ''
-      const assignment = await store.query<{ hypothesis_id: number }>(actor, {
-        operation: AI_WRITE_OPERATIONS.coachHypothesisAssignment,
-        params: { campaignId: campaign_id },
-        page: { limit: 1 },
-      })
-      const hypothesisId = assignment.items[0]?.hypothesis_id
-      if (hypothesisId === undefined) return ''
-
-      const hypPage = await store.query<{ name: string; icp_id: number | null }>(actor, {
-        operation: AI_WRITE_OPERATIONS.coachHypothesisIcp,
-        params: { hypothesisId },
-        page: { limit: 1 },
-      })
-      const hyp = hypPage.items[0]
-      if (!hyp?.icp_id) return ''
-
-      const [icpPage, personasPage] = await Promise.all([
-        store.query<IcpDetailRow>(actor, {
-          operation: AI_WRITE_OPERATIONS.coachIcpDetail,
-          params: { icpId: hyp.icp_id },
-          page: { limit: 1 },
-        }),
-        store.query<CoachIcpPersonaRow>(actor, {
-          operation: AI_WRITE_OPERATIONS.coachIcpPersonas,
-          params: { icpId: hyp.icp_id },
-          page: { limit: MAX_PAGE_SIZE },
-        }),
-      ])
-      const icp = icpPage.items[0]
-      if (!icp) return ''
-      return renderIcpText(hyp.name, icp, personasPage.items)
+    loadPlaybook: () => loadPlaybook(store, actor),
+    loadIcpForCampaign: (campaign_id) => loadIcpForCampaign(store, actor, campaign_id),
+    async loadLivePrompt() {
+      const state = await loadPromptState(store, actor)
+      if (state?.published_version_id && state.published_prompt) {
+        return { id: state.published_version_id, n: state.published_n, prompt: state.published_prompt }
+      }
+      return { id: null, n: null, prompt: DEFAULT_COACH_PROMPT }
     },
     async actionableProfiles(instance_id) {
       // Newest-first walk, keep each profile's first (newest) direction, keep
       // the inbound ones.
       const rows = await allPages<{ profile_url: string; direction: string }>(
-        AI_WRITE_OPERATIONS.coachActionableProfiles,
-        { instanceId: instance_id },
+        store, actor, AI_WRITE_OPERATIONS.coachActionableProfiles, { instanceId: instance_id },
       )
       const latestDir = new Map<string, string>()
       for (const m of rows) {
@@ -506,11 +177,10 @@ function neonCoachData(store: DataStore, actor: ActorContext): CoachData {
       }
       return [...latestDir.entries()].filter(([, d]) => d === 'in').map(([p]) => p)
     },
-    async loadIssues(instance_id) {
-      return allPages<{ issues: unknown[] }>(AI_WRITE_OPERATIONS.coachIssuesByInstance, {
+    loadIssues: (instance_id) =>
+      allPages<{ issues: unknown[] }>(store, actor, AI_WRITE_OPERATIONS.coachIssuesByInstance, {
         instanceId: instance_id,
-      })
-    },
+      }),
     async saveDigest(row) {
       await store.transaction(actor, async (transaction) => {
         await transaction.execute({
@@ -542,11 +212,13 @@ interface CoachingOut {
   model: string | null
   cached: boolean
   scope: CoachScope
+  /** The prompt version that produced this take; null id = the built-in prompt. */
+  prompt_version: { id: number | null; n: number | null }
 }
 
-/** Coach one conversation. Serves a cached row when the thread is unchanged
- *  (unless force), otherwise calls the model and upserts. Returns null for an
- *  empty thread. */
+/** Coach one conversation. Serves a cached row when the thread and the prompt
+ *  are unchanged (unless force), otherwise calls the model and upserts.
+ *  Returns null for an empty thread. */
 async function coachConversation(
   data: CoachData,
   instance_id: string,
@@ -554,14 +226,18 @@ async function coachConversation(
   playbook: string,
   force: boolean,
   campaign_id?: string | null,
+  live?: LivePrompt,
 ): Promise<CoachingOut | null> {
   const thread = await data.loadThread(instance_id, profile_url)
   if (!thread.length) return null
-  const marker = markerOf(thread)
+  const prompt = live ?? await data.loadLivePrompt()
+  const marker = coachingMarkerOf(thread, prompt.id)
   const scope = scopeOf(thread)
+  const promptVersion = { id: prompt.id, n: prompt.n }
 
   if (!force) {
     const existing = await data.loadExisting(instance_id, profile_url)
+    // The marker carries the prompt version, so a hit was made with this one.
     if (existing && existing.last_msg_marker === marker) {
       return {
         next_action: existing.next_action ?? 'none',
@@ -573,44 +249,37 @@ async function coachConversation(
         model: existing.model,
         cached: true,
         scope,
+        prompt_version: promptVersion,
       }
     }
   }
 
   const icpText = await data.loadIcpForCampaign(campaign_id)
-  const { object } = await generateObject({
-    model: anthropic(CONV_MODEL),
-    schema: convSchema,
-    system: systemFor(playbook, icpText),
-    prompt: renderThread(thread),
-    providerOptions: { anthropic: { effort: 'low' } },
-  })
-
-  const ideas = ideasFrom(object.ideas).slice(0, MAX_IDEAS)
-  const issues = issuesOnHandWritten(object.issues, thread)
+  const result = await runCoach(composeCoachSystem(prompt.prompt, playbook, icpText), thread)
   const now = new Date().toISOString()
-  const row = {
+  await data.saveCoaching({
     instance_id,
     profile_url,
-    next_action: object.next_action,
-    issues,
-    tips: ideas,
-    summary: object.summary.slice(0, 1000),
+    next_action: result.next_action,
+    issues: result.issues,
+    tips: result.ideas,
+    summary: result.summary,
     last_msg_marker: marker,
     coached_at: now,
     model: CONV_MODEL,
-  }
-  await data.saveCoaching(row)
+    prompt_version_id: prompt.id,
+  })
   return {
-    next_action: row.next_action,
-    issues,
-    ideas,
-    summary: row.summary,
+    next_action: result.next_action,
+    issues: result.issues,
+    ideas: result.ideas,
+    summary: result.summary,
     last_msg_marker: marker,
     coached_at: now,
     model: CONV_MODEL,
     cached: false,
     scope,
+    prompt_version: promptVersion,
   }
 }
 
@@ -692,9 +361,34 @@ function safeErrorLabel(error: unknown): string {
   return 'UnknownError'
 }
 
+type ResolvedWriter = Awaited<ReturnType<typeof neonWriter>>
+
 /** Resolve the actor against the database being written — the only place the
  *  membership can be checked without a race, the same argument `neonWrites.ts`
- *  makes — then coach. */
+ *  makes. Answers a Response when it cannot. */
+async function resolveWriter(req: Request, deps: NeonWriteDeps): Promise<ResolvedWriter | Response> {
+  try {
+    return await neonWriter(req, deps)
+  } catch (error) {
+    const denial = authorizationResponse(error)
+    if (denial) return denial
+    // The database was not reached, so no membership decision was taken and
+    // the answer below would be a claim about one. Named cause, honest status.
+    const unavailable = unavailableResponse(error)
+    if (unavailable) return unavailable
+    console.error('Neon coach failed (verify team access):', safeErrorLabel(error))
+    return json({ error: 'Could not verify team access' }, 500)
+  }
+}
+
+function failure(error: unknown, label: string): Response {
+  const denial = authorizationResponse(error)
+  if (denial) return denial
+  if (error instanceof AuthorizationError) return json({ error: 'Unauthorized' }, error.status)
+  console.error(`${label}:`, safeErrorLabel(error))
+  return json({ error: 'Coaching failed — check server logs.' }, 500)
+}
+
 async function coachOnNeon(
   req: Request,
   body: {
@@ -706,19 +400,8 @@ async function coachOnNeon(
   },
   deps: NeonWriteDeps = {},
 ): Promise<Response> {
-  let writer
-  try {
-    writer = await neonWriter(req, deps)
-  } catch (error) {
-    const denial = authorizationResponse(error)
-    if (denial) return denial
-    // The database was not reached, so no membership decision was taken and
-    // the answer below would be a claim about one. Named cause, honest status.
-    const unavailable = unavailableResponse(error)
-    if (unavailable) return unavailable
-    console.error('Neon coach failed (verify team access):', safeErrorLabel(error))
-    return json({ error: 'Could not verify team access' }, 500)
-  }
+  const writer = await resolveWriter(req, deps)
+  if (writer instanceof Response) return writer
 
   const data = neonCoachData(writer.store, writer.actor)
   try {
@@ -742,11 +425,7 @@ async function coachOnNeon(
     if (!out) return json({ error: 'no messages in this conversation' }, 404)
     return json(out)
   } catch (error) {
-    const denial = authorizationResponse(error)
-    if (denial) return denial
-    if (error instanceof AuthorizationError) return authorizationResponse(error) ?? json({ error: 'Unauthorized' }, error.status)
-    console.error('Neon coach failed:', safeErrorLabel(error))
-    return json({ error: 'Coaching failed — check server logs.' }, 500)
+    return failure(error, 'Neon coach failed')
   }
 }
 
@@ -763,6 +442,17 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
   } catch {
     return json({ error: 'invalid JSON body' }, 400)
   }
+  if (!body || typeof body !== 'object') return json({ error: 'invalid JSON body' }, 400)
+
+  if (isTrainingMode(body.mode)) {
+    const writer = await resolveWriter(req, deps)
+    if (writer instanceof Response) return writer
+    try {
+      return await handleTraining(body.mode, body as Record<string, unknown>, writer.store, writer.actor)
+    } catch (error) {
+      return failure(error, 'Coach training failed')
+    }
+  }
 
   const instance_id = body.instance_id
   if (typeof instance_id !== 'string' || !instance_id) {
@@ -771,5 +461,8 @@ async function handle(req: Request, deps: NeonWriteDeps = {}): Promise<Response>
 
   return coachOnNeon(req, { ...body, instance_id }, deps)
 }
+
+/** Exported for tests, which inject the store and identity. */
+export const handleCoach = handle
 
 export const POST = (req: Request) => handle(req)

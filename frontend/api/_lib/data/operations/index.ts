@@ -77,6 +77,31 @@ import {
 } from './conversations.js'
 import { COACHING_OPERATIONS, coachingDigestsOperation } from './coaching.js'
 import {
+  COACH_TRAINING_COMMANDS,
+  COACH_TRAINING_OPERATIONS,
+  addCaseOperation as coachTrainingAddCaseOperation,
+  archiveCaseOperation as coachTrainingArchiveCaseOperation,
+  caseByIdOperation as coachTrainingCaseByIdOperation,
+  caseFeedbackOperation as coachTrainingCaseFeedbackOperation,
+  caseRunsOperation as coachTrainingCaseRunsOperation,
+  casesOperation as coachTrainingCasesOperation,
+  consumedFeedbackOperation as coachTrainingConsumedFeedbackOperation,
+  ensureSeedOperation as coachTrainingEnsureSeedOperation,
+  insertRunOperation as coachTrainingInsertRunOperation,
+  insertVersionOperation as coachTrainingInsertVersionOperation,
+  leakSourcesOperation as coachTrainingLeakSourcesOperation,
+  markConsumedOperation as coachTrainingMarkConsumedOperation,
+  pendingFeedbackOperation as coachTrainingPendingFeedbackOperation,
+  promptStateOperation as coachTrainingPromptStateOperation,
+  publishOperation as coachTrainingPublishOperation,
+  runByIdOperation as coachTrainingRunByIdOperation,
+  searchConversationsOperation as coachTrainingSearchConversationsOperation,
+  setCutOperation as coachTrainingSetCutOperation,
+  upsertFeedbackOperation as coachTrainingUpsertFeedbackOperation,
+  versionOperation as coachTrainingVersionOperation,
+  versionsOperation as coachTrainingVersionsOperation,
+} from './coachTraining.js'
+import {
   LEADS_OPERATIONS,
   leadNotesOperation,
   leadPhotoObjectsOperation,
@@ -265,6 +290,20 @@ export {
   type FollowUpStateRow,
 } from './conversations.js'
 export { COACHING_OPERATIONS, type CoachingDigestRow } from './coaching.js'
+export {
+  COACH_TRAINING_COMMANDS,
+  COACH_TRAINING_OPERATIONS,
+  type ConsumedFeedbackRow,
+  type ConversationSearchRow,
+  type LeakSourceRow,
+  type MovedPointer,
+  type PendingFeedbackRow,
+  type PromptStateRow,
+  type PromptVersionRow,
+  type TrainingCaseRow,
+  type TrainingFeedbackRow,
+  type TrainingRunRow,
+} from './coachTraining.js'
 export {
   ROUTE_SNAPSHOT_OPERATION,
   ROUTE_SNAPSHOT_ROUTES,
@@ -758,6 +797,28 @@ export function buildApplicationRegistry(): NeonOperationRegistry {
   // under the same active-member policies as S14's writes. The cron halves of
   // these handlers are not here: they have no actor, and stay declared
   // blocked until ledger step 007 is applied.
+  // Ledger step 027 — the coach's versioned prompt and its training workspace.
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.promptState, coachTrainingPromptStateOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.versions, coachTrainingVersionsOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.version, coachTrainingVersionOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.cases, coachTrainingCasesOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.caseById, coachTrainingCaseByIdOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.caseRuns, coachTrainingCaseRunsOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.runById, coachTrainingRunByIdOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.caseFeedback, coachTrainingCaseFeedbackOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.pendingFeedback, coachTrainingPendingFeedbackOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.consumedFeedback, coachTrainingConsumedFeedbackOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.leakSources, coachTrainingLeakSourcesOperation)
+  registry.registerQuery(COACH_TRAINING_OPERATIONS.searchConversations, coachTrainingSearchConversationsOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.ensureSeed, coachTrainingEnsureSeedOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.insertVersion, coachTrainingInsertVersionOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.publish, coachTrainingPublishOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.markConsumed, coachTrainingMarkConsumedOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.addCase, coachTrainingAddCaseOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.setCut, coachTrainingSetCutOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.archiveCase, coachTrainingArchiveCaseOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.insertRun, coachTrainingInsertRunOperation)
+  registry.registerCommand(COACH_TRAINING_COMMANDS.upsertFeedback, coachTrainingUpsertFeedbackOperation)
   registry.registerQuery(AI_WRITE_OPERATIONS.coachThread, coachThreadOperation)
   registry.registerQuery(AI_WRITE_OPERATIONS.coachExisting, coachExistingOperation)
   registry.registerQuery(AI_WRITE_OPERATIONS.coachPlaybook, coachPlaybookOperation)
@@ -947,6 +1008,7 @@ export const APPLICATION_QUERY_OPERATIONS = [
   PIPELINE_WRITE_OPERATIONS.actorDisplayName,
   CONVERSATION_WRITE_OPERATIONS.leadForImport,
   CONVERSATION_WRITE_OPERATIONS.threadDedupKeys,
+  ...Object.values(COACH_TRAINING_OPERATIONS),
   AI_WRITE_OPERATIONS.coachThread,
   AI_WRITE_OPERATIONS.coachExisting,
   AI_WRITE_OPERATIONS.coachPlaybook,
@@ -1032,6 +1094,7 @@ export const APPLICATION_COMMAND_OPERATIONS = [
   SEQUENCE_COMMANDS.setCommentResolved,
   SEQUENCE_PUBLISH_COMMANDS.createJob,
   SEQUENCE_PUBLISH_COMMANDS.createBranches,
+  ...Object.values(COACH_TRAINING_COMMANDS),
   AI_WRITE_OPERATIONS.coachUpsert,
   AI_WRITE_OPERATIONS.coachDigestUpsert,
   AI_WRITE_OPERATIONS.classifyWriteGender,

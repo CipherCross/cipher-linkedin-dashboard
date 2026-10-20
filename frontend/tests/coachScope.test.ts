@@ -6,6 +6,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { issuesOnHandWritten, originOf, renderThread } from '../api/coach'
+import {
+  COACH_HARNESS, DEFAULT_COACH_PROMPT, coachingMarkerOf, composeCoachSystem, cutThread, threadMarkerOf,
+} from '../api/_lib/coachCore'
 
 type Msg = Parameters<typeof renderThread>[0][number]
 
@@ -72,5 +75,30 @@ describe('the coach scope', () => {
     const synced = THREAD.slice(0, 2).map((m) => ({ ...m, chat_store: false }))
     expect(renderThread(synced)).toContain('may be INCOMPLETE')
     expect(renderThread(THREAD.slice(0, 2))).toContain('waiting on the SDR to respond')
+  })
+
+  it('cuts the thread after a message, and ignores a cut that is no longer in it', () => {
+    const thread = THREAD.map((m, i) => ({ ...m, id: 10 + i }))
+    expect(cutThread(thread, 11).map((m) => m.id)).toEqual([10, 11])
+    expect(cutThread(thread, null)).toHaveLength(3)
+    expect(cutThread(thread, 999)).toHaveLength(3)
+    // A cut run renders only what the coach may see.
+    expect(renderThread(cutThread(thread, 11))).not.toContain('We build')
+  })
+
+  it('makes a published prompt invalidate every cached take', () => {
+    expect(coachingMarkerOf(THREAD, null)).not.toBe(coachingMarkerOf(THREAD, 7))
+    expect(coachingMarkerOf(THREAD, 7)).toBe(`v3|p7|${threadMarkerOf(THREAD)}`)
+  })
+
+  it('puts the trainable prompt first, then the fixed harness, then the context', () => {
+    const sys = composeCoachSystem('TRAINED PROMPT', 'PLAYBOOK TEXT', 'ICP TEXT')
+    expect(sys.indexOf('TRAINED PROMPT')).toBe(0)
+    expect(sys.indexOf(COACH_HARNESS)).toBeGreaterThan(0)
+    expect(sys.indexOf('PLAYBOOK TEXT')).toBeGreaterThan(sys.indexOf(COACH_HARNESS))
+    expect(sys.indexOf('ICP TEXT')).toBeGreaterThan(sys.indexOf('PLAYBOOK TEXT'))
+    // The harness, not the trainable prompt, owns the never-critique-sequence rule.
+    expect(COACH_HARNESS).toContain('NEVER critique')
+    expect(DEFAULT_COACH_PROMPT).not.toContain('NEVER critique')
   })
 })
