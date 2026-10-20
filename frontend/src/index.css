@@ -63,6 +63,7 @@
 @import './components/layout.css' layer(app);
 @import './pages/csv-import.css' layer(app);
 @import './pages/playbook.css' layer(app);
+@import './pages/coach-training.css' layer(app);
 @import './components/markdown.css' layer(app);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";

@@ -23,6 +23,7 @@ const LeadsExplorer = lazy(() => import('./pages/LeadsExplorer').then((m) => ({ 
 const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
 const FollowUps = lazy(() => import('./pages/FollowUps').then((m) => ({ default: m.FollowUps })))
 const Playbook = lazy(() => import('./pages/Playbook').then((m) => ({ default: m.Playbook })))
+const CoachTraining = lazy(() => import('./pages/CoachTraining').then((m) => ({ default: m.CoachTraining })))
 const SearchLibrary = lazy(() => import('./pages/SearchLibrary').then((m) => ({ default: m.SearchLibrary })))
 const Icp = lazy(() => import('./pages/Icp').then((m) => ({ default: m.Icp })))
 const Hypotheses = lazy(() => import('./pages/Hypotheses').then((m) => ({ default: m.Hypotheses })))
@@ -93,6 +94,7 @@ export default function App() {
                     <Route path={APP_ROUTE_SEGMENTS.review} element={<Review />} />
                     <Route path={APP_ROUTE_SEGMENTS.csvImport} element={<AdminOnly><CsvImport /></AdminOnly>} />
                     <Route path={APP_ROUTE_SEGMENTS.playbook} element={<Playbook />} />
+                    <Route path={APP_ROUTE_SEGMENTS.coachTraining} element={<CoachTraining />} />
                     <Route path={APP_ROUTE_SEGMENTS.searches} element={<SearchLibrary />} />
                     {/* Legacy: off the rail since sequences became the operating
                         object, but still routed. Briefings and coaching read

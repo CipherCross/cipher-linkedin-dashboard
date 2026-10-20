@@ -882,12 +882,238 @@ export async function importFixture(request) {
   return mutationRefusal()
 }
 
+/* Coach training, in memory for the life of the fixture process: enough of
+ * every training.* mode to drive the page. Runs return canned output; an
+ * improve round appends a sentence to the prompt so the version changes. */
+// Every request may run in a fresh function process, so the store lives in a
+// JSON file beside the scenario file and is read and written per request.
+let trainingDb = null
+const trainingFile = () => `${process.env.UI_FIXTURE_STATE_FILE ?? '/tmp/ui-fixture'}.coach-training.json`
+async function trainingLoad() {
+  try { trainingDb = JSON.parse(await readFile(trainingFile(), 'utf8')) } catch {
+    trainingDb = { versions: [], state: null, cases: [], runs: [], feedback: [], ids: { v: 0, c: 0, r: 0, f: 0 } }
+  }
+}
+async function trainingSave() { await writeFile(trainingFile(), JSON.stringify(trainingDb)) }
+const FIXTURE_COACH_PROMPT = 'You are an elite LinkedIn outreach coach for an SDR.\n\n## Ideas for the next message\n- Give the SDR a real choice.\n- Answer open questions before asking for anything.'
+function trainingConversations() {
+  const ada = threadRows('populated-admin').map((m, index) => ({
+    id: m.id, direction: m.direction, body: m.body, sent_at: m.sent_at, source: m.source,
+    origin: m.direction === 'in' ? null : index === 0 ? 'sequence' : 'manual',
+    step_type: m.direction === 'in' ? null : index === 0 ? 'MessageToPerson' : null,
+    message_ordinal: m.direction === 'in' ? null : index === 0 ? 1 : null,
+  }))
+  const casey = [
+    { id: 901, direction: 'out', body: 'Thanks for connecting, Casey.\n\nQuick question: how does your team run follow-ups today?', sent_at: '2026-09-18T09:00:00.000Z', source: 'sync', origin: 'sequence', step_type: 'MessageToPerson', message_ordinal: 1 },
+    { id: 902, direction: 'in', body: 'Could you send more detail on pricing and onboarding for a 40-person team?', sent_at: '2026-09-19T10:00:00.000Z', source: 'sync', origin: null, step_type: null, message_ordinal: null },
+  ]
+  return [
+    { instance_id: instance.id, profile_url: FIXTURE_LEAD_PROFILE, campaign_id: campaign.campaign_id, full_name: 'Alex Fixture', headline: 'Product leader · Fixture Labs', thread: ada },
+    { instance_id: instance.id, profile_url: 'https://example.test/casey', campaign_id: campaign.campaign_id, full_name: 'Casey Example', headline: 'Ops lead · Example Group', thread: casey },
+  ]
+}
+function trainingNow() { return new Date().toISOString() }
+function trainingVersion(v, full = false) {
+  const parent = trainingDb.versions.find((x) => x.id === v.parent_id)
+  return { ...v, prompt: full ? v.prompt : null, parent_prompt: full ? parent?.prompt ?? null : null }
+}
+function trainingEnsure() {
+  if (trainingDb.state) return
+  const v = { id: ++trainingDb.ids.v, n: 1, source: 'seed', parent_id: null, changelog: ['Seeded from the built-in coach prompt'], unaddressed: [], note: null, created_by_name: 'Fixture Admin', created_at: trainingNow(), prompt: FIXTURE_COACH_PROMPT }
+  trainingDb.versions.push(v)
+  trainingDb.state = { revision: 1, working_version_id: v.id, published: null }
+}
+function trainingNewVersion(source, prompt, changelog, unaddressed = [], note = null) {
+  const parent = trainingDb.versions.find((x) => x.id === trainingDb.state.working_version_id)
+  const v = { id: ++trainingDb.ids.v, n: trainingDb.versions.length + 1, source, parent_id: parent.id, changelog, unaddressed, note, created_by_name: 'Fixture Admin', created_at: trainingNow(), prompt }
+  trainingDb.versions.push(v)
+  trainingDb.state.working_version_id = v.id
+  trainingDb.state.revision += 1
+  return { version_id: v.id, n: v.n, revision: trainingDb.state.revision, changelog, unaddressed }
+}
+function trainingConversation(c) {
+  return trainingConversations().find((x) => x.instance_id === c.instance_id && x.profile_url === c.profile_url)
+}
+function trainingMarker(thread, cut) {
+  const index = cut == null ? thread.length - 1 : thread.findIndex((m) => m.id === cut)
+  const last = thread[index] ?? thread[thread.length - 1]
+  return `${last?.sent_at}|${index + 1}`
+}
+function trainingCaseRow(c) {
+  const conv = trainingConversation(c)
+  const working = trainingDb.state.working_version_id
+  const run = trainingDb.runs.filter((r) => r.case_id === c.id && r.version_id === working).at(-1)
+  return {
+    id: c.id, instance_id: c.instance_id, profile_url: c.profile_url, campaign_id: c.campaign_id, cut_after_message_id: c.cut_after_message_id,
+    note: null, created_at: c.created_at, full_name: conv?.full_name ?? null, headline: conv?.headline ?? null,
+    message_count: conv?.thread.length ?? 0, last_in_at: conv?.thread.filter((m) => m.direction === 'in').at(-1)?.sent_at ?? null,
+    run_id: run?.id ?? null, run_at: run?.created_at ?? null, run_error: run?.error ?? null, run_cut_after_message_id: run?.cut_after_message_id ?? null,
+    pending_feedback: trainingDb.feedback.filter((f) => f.case_id === c.id && !f.consumed_by_version_id && (f.verdict || f.comment)).length,
+  }
+}
+function trainingOutput(version) {
+  const ideas = [
+    ['Answer the open question', 'Happy to — onboarding for 40 people takes about [timeframe], and pricing is [price range]. Want me to walk you through it on a 15-minute call?'],
+    ['Clarifying question', 'Good question. To give you a real number: is it the whole 40-person team, or a pilot group first?'],
+    ['Low-friction resource', 'Here is a one-page overview of pricing tiers and the onboarding plan: [link]. Happy to answer anything after you skim it.'],
+    ['Propose a slot', 'Easier to show than write — would Thursday at 11:00 work for 15 minutes?'],
+    ['Short and direct', 'Pricing starts at [price range]; onboarding is guided. Shall I send the detail?'],
+    ['Relevant proof', '[similar company] onboarded a team of 35 in two weeks — I can share how they rolled it out.'],
+    ['Soft nudge', 'No rush — when would be a good time to go through it together?'],
+    ['Two options', 'I can send a written breakdown, or we take 15 minutes — which do you prefer?'],
+    ['Rapport', 'Thanks for the clear question, Casey — 40 people is exactly the size we work best with.'],
+    ['Graceful flex', 'If now is not the right moment, I can follow up next quarter instead.'],
+    ['Logistics', 'Who else would be involved in choosing the tool? Happy to include them.'],
+    ['Value preview', 'The main thing teams your size get is [key outcome] in the first month.'],
+  ]
+  return {
+    next_action: 'reply',
+    summary: `Prompt v${version.n}: the prospect asked a concrete question about pricing and onboarding; answer it first, then offer a short call.`,
+    issues: [],
+    ideas: ideas.map(([angle, message], i) => ({ angle, message, why: i === 0 ? 'Best when the question is concrete.' : 'A different way to keep momentum.' })),
+    scope: { hand_written: 0, sequence: 1, message_count: 2, last_sent_at: null },
+  }
+}
+async function trainingFixture(body) {
+  // The model "thinks" before the store is read, so parallel runs don't
+  // overwrite each other's rows.
+  if (body.mode === 'training.run') await new Promise((resolve) => setTimeout(resolve, 600 + Math.random() * 400))
+  if (body.mode === 'training.improve') await new Promise((resolve) => setTimeout(resolve, 900))
+  await trainingLoad()
+  trainingEnsure()
+  try {
+    return await trainingMode(body)
+  } finally {
+    await trainingSave()
+  }
+}
+async function trainingMode(body) {
+  const mode = body.mode
+  const st = trainingDb.state
+  const working = () => trainingDb.versions.find((v) => v.id === st.working_version_id)
+  const staleRev = () => json({ error: 'The prompt changed meanwhile.', code: 'STALE_REVISION' }, 409)
+  const active = () => trainingDb.cases.filter((c) => !c.archived_at)
+  switch (mode) {
+    case 'training.state': {
+      const pending = trainingDb.feedback.filter((f) => !f.consumed_by_version_id && (f.verdict || f.comment))
+      const pub = trainingDb.versions.find((v) => v.id === st.published)
+      return json({
+        scope: 'global', revision: st.revision, working: trainingVersion(working(), true),
+        published: pub ? { id: pub.id, n: pub.n, published_at: st.published_at, published_by_name: 'Fixture Admin' } : null,
+        versions: [...trainingDb.versions].reverse().map((v) => trainingVersion(v)),
+        cases: active().reverse().map(trainingCaseRow),
+        pending: { feedback: pending.length, comments: pending.filter((f) => f.comment).length, good: pending.filter((f) => f.verdict === 'good').length, bad: pending.filter((f) => f.verdict === 'bad').length, cases: new Set(pending.map((f) => f.case_id)).size },
+        leaks: [], max_cases: 25,
+      })
+    }
+    case 'training.version': {
+      const v = trainingDb.versions.find((x) => x.id === body.version_id)
+      return v ? json({ version: trainingVersion(v, true) }) : json({ error: 'Version not found' }, 404)
+    }
+    case 'training.search': {
+      const q = String(body.query ?? '').toLowerCase()
+      return json({ results: trainingConversations().filter((c) => !q || `${c.full_name} ${c.headline}`.toLowerCase().includes(q)).map((c) => ({
+        instance_id: c.instance_id, profile_url: c.profile_url, campaign_id: c.campaign_id, full_name: c.full_name, headline: c.headline,
+        message_count: c.thread.length, hand_written: c.thread.filter((m) => m.origin === 'manual').length,
+        last_in_at: c.thread.filter((m) => m.direction === 'in').at(-1)?.sent_at ?? null,
+        in_training: active().some((x) => x.profile_url === c.profile_url),
+      })) })
+    }
+    case 'training.addCase': {
+      const existing = active().find((c) => c.profile_url === body.profile_url)
+      if (existing) return json({ case_id: existing.id })
+      const c = { id: ++trainingDb.ids.c, instance_id: body.instance_id, profile_url: body.profile_url, campaign_id: body.campaign_id ?? null, cut_after_message_id: null, archived_at: null, created_at: trainingNow() }
+      trainingDb.cases.push(c)
+      return json({ case_id: c.id })
+    }
+    case 'training.archiveCase': {
+      const c = active().find((x) => x.id === body.case_id)
+      if (!c) return json({ error: 'Case not found' }, 404)
+      c.archived_at = trainingNow()
+      return json({ ok: true })
+    }
+    case 'training.setCut': {
+      const c = active().find((x) => x.id === body.case_id)
+      if (!c) return json({ error: 'Case not found' }, 404)
+      c.cut_after_message_id = body.cut_after_message_id ?? null
+      return json({ ok: true })
+    }
+    case 'training.case': {
+      const c = active().find((x) => x.id === body.case_id)
+      if (!c) return json({ error: 'Case not found' }, 404)
+      const thread = trainingConversation(c)?.thread ?? []
+      return json({
+        case: trainingCaseRow(c), thread,
+        runs: trainingDb.runs.filter((r) => r.case_id === c.id).slice().reverse().map((r) => ({ ...r, stale: trainingMarker(thread, r.cut_after_message_id) !== r.thread_marker })),
+        feedback: trainingDb.feedback.filter((f) => f.case_id === c.id && (f.verdict || f.comment)),
+      })
+    }
+    case 'training.run': {
+      const c = active().find((x) => x.id === body.case_id)
+      const v = trainingDb.versions.find((x) => x.id === (body.version_id ?? st.working_version_id))
+      if (!c || !v) return json({ error: 'Case or version not found' }, 404)
+      const thread = trainingConversation(c)?.thread ?? []
+      const r = { id: ++trainingDb.ids.r, case_id: c.id, version_id: v.id, version_n: v.n, cut_after_message_id: c.cut_after_message_id, thread_marker: trainingMarker(thread, c.cut_after_message_id), output: trainingOutput(v), model: 'fixture', error: null, created_at: trainingNow() }
+      trainingDb.runs.push(r)
+      return json({ run: { ...r, stale: false } })
+    }
+    case 'training.feedback': {
+      const run = trainingDb.runs.find((r) => r.id === body.run_id)
+      if (!run) return json({ error: 'Run not found' }, 404)
+      const index = body.target === 'take' ? null : body.target_index
+      let f = trainingDb.feedback.find((x) => x.run_id === run.id && x.target === body.target && x.target_index === index)
+      if (f?.consumed_by_version_id) return json({ error: 'Already used.', code: 'CONSUMED' }, 409)
+      if (!f) { f = { id: ++trainingDb.ids.f, run_id: run.id, case_id: run.case_id, version_id: run.version_id, target: body.target, target_index: index, consumed_by_version_id: null, created_by_name: 'Fixture Admin' }; trainingDb.feedback.push(f) }
+      f.verdict = body.verdict ?? null
+      f.comment = typeof body.comment === 'string' && body.comment.trim() ? body.comment.trim() : null
+      f.updated_at = trainingNow()
+      return json({ feedback: f })
+    }
+    case 'training.improve': {
+      if (body.expected_revision !== st.revision) return staleRev()
+      const pending = trainingDb.feedback.filter((f) => !f.consumed_by_version_id && (f.verdict || f.comment))
+      const moved = trainingNewVersion('feedback', `${working().prompt}\n- When the prospect asks a concrete question, answer it in the first sentence.`,
+        ['Comment on answering first → "answer a concrete question in the first sentence"'], [], body.general || null)
+      for (const f of pending) f.consumed_by_version_id = moved.version_id
+      return json(moved)
+    }
+    case 'training.instruct': {
+      if (body.expected_revision !== st.revision) return staleRev()
+      return json(trainingNewVersion('instruction', `${working().prompt}\n- ${body.instruction}`, [`Applied: ${body.instruction}`], [], body.instruction))
+    }
+    case 'training.saveManual': {
+      if (body.expected_revision !== st.revision) return staleRev()
+      if (String(body.prompt).trim() === working().prompt.trim()) return json({ version_id: st.working_version_id, n: working().n, revision: st.revision, unchanged: true })
+      return json(trainingNewVersion('manual', String(body.prompt).trim(), ['Edited by hand']))
+    }
+    case 'training.revert': {
+      if (body.expected_revision !== st.revision) return staleRev()
+      const old = trainingDb.versions.find((v) => v.id === body.version_id)
+      return old ? json(trainingNewVersion('revert', old.prompt, [`Restored v${old.n}`])) : json({ error: 'Version not found' }, 404)
+    }
+    case 'training.publish': {
+      if (body.expected_revision !== st.revision) return staleRev()
+      st.published = body.version_id
+      st.published_at = trainingNow()
+      st.revision += 1
+      const v = trainingDb.versions.find((x) => x.id === body.version_id)
+      return json({ version_id: v.id, n: v.n, revision: st.revision })
+    }
+    default:
+      return json({ error: 'Unknown training mode' }, 400)
+  }
+}
+
 /** `/api/coach` writes a cache row in production; here it only answers, so the
  *  coach panel's populated state can be checked. A digest request is refused. */
 export async function coachFixture(request) {
   const scenario = await currentScenario()
   let body = null
   try { body = await request.clone().json() } catch { /* not JSON */ }
+  if (request.method === 'POST' && typeof body?.mode === 'string' && body.mode.startsWith('training.')) {
+    if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture training failure' }, 503)
+    return trainingFixture(body)
+  }
   if (request.method !== 'POST' || !body?.profile_url || body.mode === 'digest') return mutationRefusal()
   if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture coaching failure' }, 503)
   const angles = [

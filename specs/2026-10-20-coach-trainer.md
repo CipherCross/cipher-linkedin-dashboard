@@ -292,3 +292,22 @@ Vercel deploy that reads it. uitop also needs steps 022–027.
    someone asks for the coach on that conversation, and the panel says which version produced it until then.
 4. **Scope:** one prompt for every account. `coach_prompt_state` is keyed by scope (`'global'` only) so a
    per-account variant can be added later without a migration of the existing rows.
+
+## Status (2026-10-20)
+
+All four phases are built. What is left before this spec can be deleted: apply ledger step 027 to production
+and deploy (step 027 first — the live coach reads `coach_prompt_state` and writes
+`conversation_coaching.prompt_version_id`), then promote 027 to `PROTECTED_PATHS` in the session after.
+
+Where the build differs from the plan above:
+- **One active case per conversation**, with a cut point that can be moved, instead of a unique row per
+  `(conversation, cut)`. Each run records the cut it used.
+- **Re-runs:** opening a conversation runs the working version on it once; after Improve, the conversations
+  that had feedback re-run. Everything else runs from "Run N on vX", so a round costs what it needs.
+- **No 60 s module cache** of the published prompt: the read is one small query and a publish takes effect at
+  once.
+- **Version 1 is written by the app**, from `DEFAULT_COACH_PROMPT`, the first time the page opens; step 027
+  holds no prompt text, so the prompt has a single home.
+- Verified on a clean PostgreSQL 17 with the whole ledger (001–027) applied: every training mode end to end
+  through the real driver and RLS, with the model calls stubbed. The real editor and coach model outputs have
+  not been exercised.

@@ -64,6 +64,7 @@ describe('sidebar information architecture', () => {
       'Review',
       'Sentiment Analysis',
       'Playbook',
+      'Coach training',
       'Searches',
     ])
   })

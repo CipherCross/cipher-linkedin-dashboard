@@ -274,6 +274,17 @@ wanted. One light theme, still.
   by switching; only closing the dialog asks to discard.
 - Coach ideas are rows with dividers inside the pane, not nested cards.
 
+### Coach training
+
+- The same full-window workspace frame as Replies (16px page top and bottom), three panes under one
+  pane-head line: **Conversations | Prompt** tabs 360px (520px while the Prompt tab is open, so the
+  editor has room) · the conversation 1fr · the coach output 440px; 300 / 440 / 380 below a 1180px
+  container. An improve bar sits under the workspace.
+- Comparing two versions puts the compared take in the conversation pane, side by side with the
+  working one; "Show conversation" brings the thread back.
+- Marks are controls beside the coach output (`CoachOutput` slots), never inside an idea's text.
+  Marks a finished improve round used are read-only and say so.
+
 ### Chat threads
 
 - One bubble language, `MessageBubble` (`src/components/conversation/`), for

@@ -180,7 +180,19 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   Sequence messages (step attribution, ledger step 024) and unmatched openings reused in
   ≥5 conversations (unsynced template variants) are context, never critiqued; the
   server drops any issue that doesn't quote a hand-written message. Ideas are stored in
-  `conversation_coaching.tips`; `v2|` markers invalidate older cached takes.
+  `conversation_coaching.tips`.
+- **The coach's prompt is trained, not hard-coded** (ledger step 027). `_lib/coachCore.ts` is the one
+  implementation (live coach and trainer): trainable prompt → fixed `COACH_HARNESS` (tags, output
+  contract, never-critique-sequence) → playbook → ICP. The live coach runs the **published**
+  `coach_prompt_versions` row (`DEFAULT_COACH_PROMPT` until one is published); its cache marker
+  `v3|p<version>|…` makes a publish invalidate every cached take, which regenerates when next requested.
+  **Strategy → Coach training** (`src/pages/CoachTraining.tsx`, `_lib/coachTraining.ts`, served as
+  `mode: 'training.*'` on `/api/coach` because the deployment is at its function limit) is the
+  humanizer-style loop: live conversations (optional cut point) → runs on the working version →
+  👍/👎/comments → `_lib/coachEditor.ts` (Opus) writes a new version with a changelog → Publish. Hand
+  edits, direct instructions and restores are versions too; every active member may train and publish;
+  `_lib/coachLeaks.ts` flags 6-word phrases copied from training data. Change the harness, not the
+  seed prompt, for anything that must hold whatever the team trains.
 - `notify-replies.ts` — Slack alert per new inbound reply. The sync agent pings it (POST,
   open + self-limiting) after every successful push; claims `messages.notified_at IS NULL`
   rows via atomic UPDATE (concurrent pings are the common case), un-claims on Slack failure.

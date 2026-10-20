@@ -1,0 +1,179 @@
+/* ===========================================================================
+ * Coach training — a full-window workspace like Replies: the page frame
+ * shrinks to a 16px top and bottom, and three panes (training set or prompt ·
+ * conversation · coach output) scroll on their own under pane heads of one
+ * height. The improve bar sits under the workspace.
+ * ======================================================================== */
+.coach-training-page {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-group);
+  height: calc(100dvh - 2 * var(--space-lg));
+  min-height: 0;
+  min-width: 0;
+}
+.page:has(.coach-training-page) { padding-top: var(--space-lg); padding-bottom: var(--space-lg); }
+.coach-training-head .ui-page-header { margin-bottom: 0; }
+
+.coach-training-workspace {
+  --coach-training-side: 360px;
+  --coach-training-output: 440px;
+  display: grid;
+  grid-template-columns: var(--coach-training-side) minmax(0, 1fr) var(--coach-training-output);
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+/* Editing the prompt needs width more than the thread does. */
+.coach-training-workspace[data-side='prompt'] { --coach-training-side: 520px; }
+@container (max-width: 1180px) {
+  .coach-training-workspace {
+    --coach-training-side: 300px;
+    --coach-training-output: 380px;
+  }
+  .coach-training-workspace[data-side='prompt'] { --coach-training-side: 440px; }
+}
+
+.coach-training-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.coach-training-pane + .coach-training-pane { border-left: 1px solid var(--border); }
+.coach-training-pane-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  height: var(--pane-head-height);
+  padding: 0 var(--inset-pane);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.coach-training-pane-head .ui-tabs { border-bottom: 0; margin-bottom: 0; }
+.coach-training-pane-title {
+  margin: 0;
+  font-size: var(--text-subsection);
+  line-height: var(--leading-subsection);
+  font-weight: 600;
+  min-width: 0;
+}
+.coach-training-pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--inset-pane);
+}
+.coach-training-pane-foot {
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--inset-pane);
+  border-top: 1px solid var(--border);
+}
+
+.coach-training-version-select { width: auto; }
+.coach-training-version-select .ui-select { height: var(--control-height-sm); }
+
+/* The training set: one row per conversation, the open button stretched. */
+.coach-training-case {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+}
+.coach-training-case:last-child { border-bottom: 0; }
+.coach-training-case[data-selected='true'] { background: var(--surface-2); }
+.coach-training-case__open.ui-btn {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  justify-content: flex-start;
+  padding: var(--space-sm);
+  font-weight: 400;
+  color: var(--text);
+}
+.coach-training-case__remove { flex-shrink: 0; margin-right: var(--space-xs); }
+
+.coach-training-hit {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-group);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-table);
+  line-height: var(--leading-table);
+}
+.coach-training-hit:last-child { border-bottom: 0; }
+
+.coach-training-prompt.ui-textarea {
+  min-height: 320px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  resize: vertical;
+}
+
+.coach-training-cut {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  color: var(--accent);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  font-weight: 600;
+}
+.coach-training-cut::before,
+.coach-training-cut::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 2px dashed var(--accent);
+}
+
+.coach-training-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-group);
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--inset-card);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.coach-training-bar .ui-field { min-width: 0; }
+
+/* History: version list beside the selected version's diff. */
+.coach-training-history {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  height: min(70vh, 640px);
+  min-height: 0;
+}
+.coach-training-version.ui-btn {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  padding: var(--space-sm) var(--inset-pane);
+  border-radius: 0;
+  font-weight: 400;
+  color: var(--text);
+}
+.coach-training-version[aria-current='true'] { background: var(--surface-2); }
+.coach-training-diff {
+  margin: 0;
+  padding: var(--inset-pane);
+  background: var(--surface-2);
+  border-radius: var(--radius-control);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.coach-training-diff [data-kind='add'] { color: var(--success); background: var(--success-subtle); }
+.coach-training-diff [data-kind='del'] { color: var(--danger); background: var(--danger-subtle); text-decoration: line-through; }

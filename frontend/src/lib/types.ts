@@ -723,6 +723,8 @@ export interface Coaching {
     message_count: number
     last_sent_at: string | null
   }
+  /** The coach prompt version that produced the take; `n` null = the built-in prompt. */
+  prompt_version?: { id: number | null; n: number | null }
 }
 
 export interface CoachingPattern {
