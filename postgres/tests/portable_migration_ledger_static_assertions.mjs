@@ -181,6 +181,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/025_pipeline_replied_stage.sql',
   // The lead CHECKs stop accepting the slugs 025 retired (step 026).
   'postgres/tenant-baseline/v1/026_pipeline_retired_slugs_check.sql',
+  // The coach's versioned prompt and its training workspace (step 027).
+  'postgres/tenant-baseline/v1/027_coach_prompt_training.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -422,8 +424,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-six steps in order 1 -> 2 -> ... -> 26',
-  manifest.steps.length === 26 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-seven steps in order 1 -> 2 -> ... -> 27',
+  manifest.steps.length === 27 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -546,6 +548,32 @@ check('step 026 refuses to run while a lead still holds a retired slug',
 check('step 026 changes no data, history, grant, policy, function or view',
   !/\b(UPDATE|INSERT|DELETE|TRUNCATE|GRANT|REVOKE|CREATE POLICY|ALTER POLICY|CREATE (OR REPLACE )?(FUNCTION|VIEW))\b/i.test(retiredSlugsSql)
   && !/pipeline_events/.test(retiredSlugsSql));
+
+const coachTrainingStep = manifest.steps.find((s) => s.step === 27);
+const coachTrainingPath = join(BASELINE_DIR, '027_coach_prompt_training.sql');
+const coachTrainingSql = stripComments('027_coach_prompt_training.sql', readFileSync(coachTrainingPath, 'utf8'));
+const COACH_TABLES = ['coach_prompt_versions', 'coach_prompt_state', 'coach_training_cases', 'coach_training_runs', 'coach_training_feedback'];
+check('manifest declares step 027 coach prompt training',
+  coachTrainingStep?.artifact === '027_coach_prompt_training.sql' && coachTrainingStep.owner_role_entered_by === 'artifact');
+check('step 027 manifest digest matches its artifact',
+  coachTrainingStep?.sha256 === sha256(coachTrainingPath), `manifest ${coachTrainingStep?.sha256}, disk ${sha256(coachTrainingPath)}`);
+check('step 027 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(coachTrainingSql) && /RESET ROLE;\s*$/.test(coachTrainingSql));
+check('step 027 enables RLS with an active-member policy on every new table',
+  COACH_TABLES.every((t) => new RegExp(`ALTER TABLE public\\.${t} ENABLE ROW LEVEL SECURITY`).test(coachTrainingSql)
+    && new RegExp(`CREATE POLICY ${t}_active_member ON public\\.${t}[\\s\\S]*?is_active_team_member\\(\\)`).test(coachTrainingSql)));
+check('step 027 keeps versions and runs append-only and grants no DELETE',
+  /GRANT INSERT ON TABLE\s+public\.coach_prompt_versions,\s+public\.coach_training_runs\s+TO app_runtime;/.test(coachTrainingSql)
+  && !/GRANT[^;]*\b(DELETE|TRUNCATE|UPDATE)\b[^;]*ON TABLE[^;]*coach_(prompt_versions|training_runs)/i.test(coachTrainingSql)
+  && !/GRANT[^;]*\b(DELETE|TRUNCATE)\b/i.test(coachTrainingSql));
+check('step 027 gives the AI sandbox and the machine no access',
+  !/app_ai_runner|app_machine|app_system/.test(coachTrainingSql));
+check('step 027 writes no rows and changes no existing object except conversation_coaching',
+  !/\bINSERT INTO\b|\bUPDATE public\./i.test(coachTrainingSql)
+  && (coachTrainingSql.match(/ALTER TABLE public\.(?!coach_)(\w+)/g) ?? []).every((m) => m.endsWith('conversation_coaching'))
+  && /ADD COLUMN prompt_version_id bigint/.test(coachTrainingSql));
+check('step 027 allows one active training case per conversation',
+  /CREATE UNIQUE INDEX coach_training_cases_thread_key[\s\S]*\(instance_id, profile_url\) WHERE archived_at IS NULL/.test(coachTrainingSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');

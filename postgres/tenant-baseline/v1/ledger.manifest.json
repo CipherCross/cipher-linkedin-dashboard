@@ -307,6 +307,14 @@
       "owner_role_entered_by": "artifact",
       "session": "pipeline-replied-stage-follow-up",
       "description": "Narrows the two lead pipeline CHECKs to the live vocabulary: leads_pipeline_stage_check drops 'interested', 'neutral' and 'negative' (retired by step 025, kept allowed only for its rollout window) and leads_pipeline_substatus_check drops 'soft_no', 'hard_no' and 'lost' (the retired 'negative' stage's substatuses). A precondition aborts with a named error if any lead still holds one. pipeline_events history, grants, policies, functions and views are unchanged."
+    },
+    {
+      "step": 27,
+      "artifact": "027_coach_prompt_training.sql",
+      "sha256": "80d419180441d2fc7fc8fc25dfff82d544fb80b3bcae909774fa6b3723eb7e41",
+      "owner_role_entered_by": "artifact",
+      "session": "coach-trainer",
+      "description": "Adds the AI coach's versioned prompt and its training workspace: coach_prompt_versions (append-only history, scope 'global'), coach_prompt_state (working and published pointers with an optimistic revision, one row per scope), coach_training_cases (one active case per live conversation, optional cut point), coach_training_runs (append-only coach outputs with the marker of the thread read) and coach_training_feedback (verdict/comment per take, idea or issue; consumed_by_version_id when an improve round used it). Adds conversation_coaching.prompt_version_id. RLS: active team members read and write through app_runtime/app_readonly; versions and runs are INSERT-only, no DELETE anywhere, no AI sandbox access. No seed row: the app writes version 1 from its built-in prompt on first use."
     }
   ]
 }
