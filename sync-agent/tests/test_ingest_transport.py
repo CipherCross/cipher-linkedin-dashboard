@@ -3674,5 +3674,94 @@ class AddedAtTest(unittest.TestCase):
         self.assertEqual(len(grid.split(": ", 1)[1].split(", ")), 7)
 
 
+
+class LeadProfilesTest(unittest.TestCase):
+    """The coach's profile context (gateway step 028). LH2's person tables vary
+    by build, so the extraction discovers columns by name; the schema report
+    carries names only, never data."""
+
+    def lh(self):
+        con = sqlite3.connect(":memory:")
+        con.executescript("""
+            CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+            INSERT INTO person_external_ids VALUES (1, 'ada', 'public'), (1, 'ACoAAA1', 'public'),
+                                                   (2, 'bob', 'public'), (3, 'cy', 'public');
+            CREATE TABLE person_positions (person_id INTEGER, title TEXT, company_name TEXT,
+                                           description TEXT, start_year INTEGER, end_year INTEGER);
+            INSERT INTO person_positions VALUES
+              (1, 'Engineer', 'Old Co', NULL, 2012, 2018),
+              (1, 'CTO', 'Engines', 'Leads   payout platform', 2019, NULL),
+              (1, NULL, NULL, 'no title or company', 2005, 2006),
+              (2, 'Head of Ops', 'Bob Corp', NULL, 1900, NULL);
+            CREATE TABLE persons (id INTEGER, summary TEXT, location_name TEXT, secret_note TEXT);
+            INSERT INTO persons VALUES (1, 'Builds payout infrastructure.', 'Madrid, Spain', 'x');
+            CREATE TABLE person_skills (person_id INTEGER, name TEXT);
+            INSERT INTO person_skills VALUES (1, 'Payments'), (1, 'Go'), (1, 'Payments');
+            CREATE TABLE unrelated (person_id INTEGER, summary TEXT);
+        """)
+        return con
+
+    def test_reports_person_table_and_column_names_only(self):
+        schema = agent.lh2_person_schema(self.lh())
+        self.assertEqual(sorted(schema), ["person_external_ids", "person_positions", "person_skills", "persons"])
+        self.assertIn("summary", schema["persons"])
+        self.assertNotIn("unrelated", schema)
+        self.assertNotIn("Builds", json.dumps(schema))
+
+    def test_extracts_profiles_for_the_people_asked_about(self):
+        con = self.lh()
+        urls = {"https://www.linkedin.com/in/ada", "https://www.linkedin.com/in/bob"}
+        profiles = agent.extract_lead_profiles(con, agent.lh2_person_schema(con), urls)
+        self.assertEqual([p["profile_url"] for p in profiles], sorted(urls))
+        ada = profiles[0]
+        self.assertEqual(ada["about"], "Builds payout infrastructure.")
+        self.assertEqual(ada["location"], "Madrid, Spain")
+        self.assertEqual((ada["current_title"], ada["current_company"]), ("CTO", "Engines"))
+        # Current job first, then newest; a row with neither title nor company is dropped.
+        self.assertEqual([p["title"] for p in ada["positions"]], ["CTO", "Engineer"])
+        self.assertEqual(ada["positions"][0]["description"], "Leads payout platform")
+        self.assertEqual(ada["skills"], ["Payments", "Go"])
+        bob = profiles[1]
+        self.assertIsNone(bob["positions"][0]["start_year"])  # 1900 is a placeholder
+        self.assertIsNone(bob["about"])
+
+    def test_fails_safe_on_a_build_without_the_tables(self):
+        con = sqlite3.connect(":memory:")
+        self.assertEqual(agent.lh2_person_schema(con), {})
+        self.assertEqual(agent.extract_lead_profiles(con, {}, {"https://www.linkedin.com/in/ada"}), [])
+        con.execute("CREATE TABLE person_positions (person_id INTEGER, title TEXT)")
+        # No person_external_ids: skipped with a print, never raised.
+        self.assertEqual(agent.extract_lead_profiles(
+            con, agent.lh2_person_schema(con), {"https://www.linkedin.com/in/ada"}), [])
+
+    def test_profiles_travel_in_the_batch_and_parity_catches_a_lost_one(self):
+        cfg, payload, chunks, problems, (cs, ls, ms, es, ss, demo) = planned()
+        self.assertEqual(problems, [])
+        self.assertEqual(payload["lead_profiles"], [])
+        self.assertNotIn("lh2_schema", payload)
+        demo = dict(demo, profiles=[{"profile_url": ls[0]["profile_url"], "about": "A", "location": None,
+                                     "current_title": "CTO", "current_company": "Engines",
+                                     "positions": [], "skills": ["Go"]}],
+                    lh2_schema={"person_positions": ["person_id", "title"]})
+        payload = agent.build_ingest_payload(cfg, cs, ls, ms, es, ss, demo, "ok", "")
+        self.assertEqual(payload["lh2_schema"], {"person_positions": ["person_id", "title"]})
+        chunks, problems = agent.plan_ingest(cfg, payload, cs, ls, ms, es, ss, demo, day="20260807")
+        self.assertEqual(problems, [])
+        self.assertEqual(sum(len(c["lead_profiles"]) for c in chunks), 1)
+        for chunk in chunks:
+            chunk["lead_profiles"] = []
+        lost = agent.verify_ingest_parity(chunks, cs, ls, ms, es, ss, demo["edu_map"], demo["job_map"],
+                                          demo.get("contacts") or [], demo["profiles"])
+        self.assertTrue(any("lead_profiles" in p for p in lost))
+
+    def test_the_gateway_caps_match_the_agent_caps(self):
+        source = open(INGEST_TS, encoding="utf-8").read()
+        self.assertEqual(int(re.search(r"MAX_PROFILE_POSITIONS = (\d+)", source).group(1)), agent.MAX_PROFILE_POSITIONS)
+        self.assertEqual(int(re.search(r"MAX_PROFILE_SKILLS = (\d+)", source).group(1)), agent.MAX_PROFILE_SKILLS)
+        body = re.search(r"export interface LeadProfileRow \{(.*?)\n\}", source, re.S).group(1)
+        fields = set(re.findall(r"readonly (\w+):", body))
+        row = agent._ingest_lead_profiles([{"profile_url": "u"}])[0]
+        self.assertEqual(set(row), fields)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -89,6 +89,8 @@ export const MACHINE_COMMANDS = {
   upsertEvents: 'agent.upsertEvents',
   /** Name and headline of conversation partners, from the LH2 chat store (step 022). */
   upsertContacts: 'agent.upsertContacts',
+  upsertLeadProfiles: 'agent.upsertLeadProfiles',
+  recordLh2Schema: 'agent.recordLh2Schema',
   recordSyncRun: 'agent.recordSyncRun',
   recordBatch: 'agent.recordBatch',
   stampCredentialUse: 'agent.stampCredentialUse',
@@ -691,6 +693,59 @@ export const upsertContactsOperation: NeonCommandOperation<number, CollectionPar
 }
 
 /**
+ * Lead profiles (step 028): one row per thread, last one sent wins, written in
+ * full each time — the agent sends what LH2 holds now, so a field LH2 lost is
+ * cleared rather than kept stale. A profile identical to the stored one is not
+ * rewritten, so `synced_at` dates the last real change.
+ */
+export const upsertLeadProfilesOperation: NeonCommandOperation<number, CollectionParams> = {
+  build: ({ params }) => ({
+    text:
+      'WITH raw AS (' +
+      '  SELECT r.*, row_number() OVER () AS ord' +
+      '    FROM jsonb_to_recordset($2::jsonb)' +
+      '      AS r(profile_url text, about text, location text, current_title text,' +
+      '           current_company text, positions jsonb, skills jsonb)' +
+      '), incoming AS (' +
+      '  SELECT DISTINCT ON (profile_url) * FROM raw ORDER BY profile_url, ord DESC' +
+      ')' +
+      ' INSERT INTO public.lead_profiles' +
+      '   (instance_id, profile_url, about, location, current_title, current_company, positions, skills, synced_at)' +
+      ' SELECT $1, i.profile_url, i.about, i.location, i.current_title, i.current_company,' +
+      "        coalesce(i.positions, '[]'::jsonb), coalesce(i.skills, '[]'::jsonb), now()" +
+      '   FROM incoming i' +
+      ' ON CONFLICT (instance_id, profile_url) DO UPDATE SET' +
+      '   about = EXCLUDED.about, location = EXCLUDED.location,' +
+      '   current_title = EXCLUDED.current_title, current_company = EXCLUDED.current_company,' +
+      '   positions = EXCLUDED.positions, skills = EXCLUDED.skills, synced_at = now()' +
+      ' WHERE (public.lead_profiles.about, public.lead_profiles.location, public.lead_profiles.current_title,' +
+      '        public.lead_profiles.current_company, public.lead_profiles.positions, public.lead_profiles.skills)' +
+      '   IS DISTINCT FROM (EXCLUDED.about, EXCLUDED.location, EXCLUDED.current_title,' +
+      '        EXCLUDED.current_company, EXCLUDED.positions, EXCLUDED.skills)',
+    values: [params?.instanceId ?? '', params?.rows ?? '[]'],
+  }),
+  mapResult: (_rows, rowCount) => rowCount,
+}
+
+export interface Lh2SchemaParams {
+  readonly instanceId: string
+  readonly tables: string
+  readonly [key: string]: string
+}
+
+/** The names of LH2's person tables and columns on this notebook (step 028). */
+export const recordLh2SchemaOperation: NeonCommandOperation<number, Lh2SchemaParams> = {
+  build: ({ params }) => ({
+    text:
+      'INSERT INTO public.lh2_schema_reports (instance_id, person_tables, reported_at)' +
+      ' VALUES ($1, $2::jsonb, now())' +
+      ' ON CONFLICT (instance_id) DO UPDATE SET person_tables = EXCLUDED.person_tables, reported_at = now()',
+    values: [params?.instanceId ?? '', params?.tables ?? '{}'],
+  }),
+  mapResult: (_rows, rowCount) => rowCount,
+}
+
+/**
  * Messages: one statement, three write paths, and one rule that outranks all of
  * them — a row's *classification* is never written here.
  *
@@ -1139,6 +1194,8 @@ export function buildMachineRegistry(): NeonOperationRegistry {
   )
   registry.registerCommand(MACHINE_COMMANDS.upsertEvents, upsertEventsOperation)
   registry.registerCommand(MACHINE_COMMANDS.upsertContacts, upsertContactsOperation)
+  registry.registerCommand(MACHINE_COMMANDS.upsertLeadProfiles, upsertLeadProfilesOperation)
+  registry.registerCommand(MACHINE_COMMANDS.recordLh2Schema, recordLh2SchemaOperation)
   registry.registerCommand(
     MACHINE_COMMANDS.recordSyncRun,
     recordSyncRunOperation,

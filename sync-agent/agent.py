@@ -43,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.29.0"
+AGENT_VERSION = "1.30.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -3229,7 +3229,8 @@ INGEST_TOKEN_RE = re.compile(
 # every chunk carries the full campaign list, because campaign_steps join their
 # campaign and leads reference one, and a chunk that arrived without its
 # campaigns would be silently short rows rather than loudly wrong.
-INGEST_CHUNKABLE = ("campaign_steps", "leads", "messages", "events", "contacts")
+INGEST_CHUNKABLE = ("campaign_steps", "leads", "messages", "events", "contacts",
+                    "lead_profiles")
 
 
 def parse_ingest_token(raw):
@@ -3331,6 +3332,18 @@ def _ingest_contacts(contacts):
              "headline": c.get("headline")} for c in contacts]
 
 
+def _ingest_lead_profiles(profiles):
+    # The profile LH2 scraped for each person who replied (gateway step 028):
+    # context for the AI coach. Already capped by the extraction.
+    return [{"profile_url": p["profile_url"],
+             "about": p.get("about"),
+             "location": p.get("location"),
+             "current_title": p.get("current_title"),
+             "current_company": p.get("current_company"),
+             "positions": list(p.get("positions") or []),
+             "skills": list(p.get("skills") or [])} for p in profiles]
+
+
 def _ingest_events(events):
     # `raw` is the tracker's channel: a `conversation_refresh` row reports when
     # and how a conversation was re-queued. The gateway takes `row.raw ?? null`,
@@ -3368,7 +3381,7 @@ def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
     one for a notebook whose avatar comes from the LH2 mapping, invisibly,
     because the gateway COALESCEs an empty value away."""
     identity = dict(owner or {})
-    return {
+    payload = {
         "instance_id": cfg["instance_id"],
         "agent_version": AGENT_VERSION,
         "instance": {
@@ -3383,8 +3396,14 @@ def build_ingest_payload(cfg, campaigns, leads, messages, events, steps, demo,
         "messages": _ingest_messages(messages),
         "events": _ingest_events(events),
         "contacts": _ingest_contacts(demo.get("contacts") or []),
+        "lead_profiles": _ingest_lead_profiles(demo.get("profiles") or []),
         "sync_run": {"status": status, "error": (error or "")[:2000]},
     }
+    # Names only (tables and columns), never data: lets the server check the
+    # profile extraction against this notebook's real LH2 schema.
+    if demo.get("lh2_schema"):
+        payload["lh2_schema"] = demo["lh2_schema"]
+    return payload
 
 
 def ingest_idempotency_key(payload, day=None):
@@ -3486,7 +3505,7 @@ def _parity_note(problems, text):
 
 
 def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
-                         edu_map, job_map, contacts=()):
+                         edu_map, job_map, contacts=(), profiles=()):
     """Compare what the chunks WOULD deliver against the extraction they were
     built from, and return a list of discrepancies (empty means parity).
 
@@ -3559,6 +3578,7 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
         ("events", events, lambda r: (r["campaign_id"], r["profile_url"],
                                       r["event_type"])),
         ("contacts", list(contacts), lambda r: r["profile_url"]),
+        ("lead_profiles", list(profiles), lambda r: r["profile_url"]),
     ):
         rows = seen[name]
         if len(rows) != len(source):
@@ -3576,6 +3596,9 @@ def verify_ingest_parity(chunks, campaigns, leads, messages, events, steps,
                       if name == "messages"
                       else ("full_name", "headline")
                       if name == "contacts"
+                      else ("about", "location", "current_title", "current_company",
+                            "positions", "skills")
+                      if name == "lead_profiles"
                       else ("occurred_at",))
             for field in fields:
                 if got.get(field) != row.get(field):
@@ -3598,7 +3621,8 @@ def plan_ingest(cfg, payload, campaigns, leads, messages, events, steps, demo,
     chunks = chunk_ingest_payload(payload, day=day)
     problems = verify_ingest_parity(chunks, campaigns, leads, messages, events,
                                     steps, demo["edu_map"], demo["job_map"],
-                                    demo.get("contacts") or [])
+                                    demo.get("contacts") or [],
+                                    demo.get("profiles") or [])
     return chunks, problems
 
 
@@ -5046,6 +5070,190 @@ ORDER BY pmp.rowid DESC
 """
 
 
+# ------------------------------ lead profiles -------------------------------
+# Context for the AI coach (gateway step 028): the profile LH2 scraped for each
+# person who replied — about, location, positions, skills. LH2's person tables
+# vary by build and were never probed on every notebook, so the extraction
+# DISCOVERS them: it reads the table and column names, picks the columns it
+# recognises, and leaves out what it cannot find. The same names (never any
+# data) travel with the sync as `lh2_schema`, so the server can see each
+# notebook's real layout. Best-effort like the demographic signals: print-only
+# on drift, never note_warning, never raises.
+
+PROFILE_TABLE_PREFIXES = ("person", "people")
+MAX_PROFILE_POSITIONS = 10
+MAX_PROFILE_SKILLS = 40
+_TITLE_COLS = ("title", "position", "job_title", "position_title")
+_COMPANY_COLS = ("company_name", "company", "organization", "organization_name",
+                 "company_title")
+_DESCRIPTION_COLS = ("description", "summary")
+_ABOUT_COLS = ("summary", "about", "about_text", "bio")
+_LOCATION_COLS = ("location", "location_name", "geo_location", "locality", "city")
+_SKILL_COLS = ("name", "skill", "skill_name", "title")
+# Tables the profile never reads about/location from: they are rows per
+# position / school / id, not one row per person.
+_NOT_PROFILE_TABLES = ("person_positions", "person_education", "person_external_ids",
+                       "person_in_campaigns_history")
+
+
+def _ident(name):
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def lh2_person_schema(con):
+    """{table: [column, ...]} for LH2's person/people tables. Names only."""
+    try:
+        names = [r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")]
+    except sqlite3.Error as e:
+        print(f"lh2 schema report skipped ({e})")
+        return {}
+    out = {}
+    for name in names:
+        if not str(name).lower().startswith(PROFILE_TABLE_PREFIXES):
+            continue
+        try:
+            cols = [r[1] for r in con.execute(f"PRAGMA table_info({_ident(name)})")]
+        except sqlite3.Error:
+            continue
+        out[str(name)[:100]] = [str(c)[:100] for c in cols[:200]]
+        if len(out) >= 80:
+            break
+    return out
+
+
+def _pick_column(columns, candidates):
+    lower = {str(c).lower(): c for c in columns}
+    for cand in candidates:
+        if cand in lower:
+            return lower[cand]
+    return None
+
+
+def _clip_text(value, limit, keep_lines=False):
+    """Trimmed and capped; runs of whitespace collapse unless `keep_lines`
+    (an "about" keeps its paragraphs)."""
+    if value is None:
+        return None
+    text = str(value).strip() if keep_lines else " ".join(str(value).split())
+    return text[:limit] if text else None
+
+
+def _plausible_year(value):
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return year if 1950 <= year <= 2100 else None
+
+
+def _person_key(columns, table):
+    """The column holding the person id: `person_id`, or `id` on a table that is
+    one row per person (`persons`, `people`, `person`)."""
+    key = _pick_column(columns, ("person_id",))
+    if key is None and str(table).lower() in ("persons", "people", "person"):
+        key = _pick_column(columns, ("id",))
+    return key
+
+
+def extract_lead_profiles(con, schema, profile_urls):
+    """One compact profile per person in `profile_urls` that LH2 holds any
+    profile data for, or []. Keyed by the same slug-format profile_url the
+    leads and messages use."""
+    if not profile_urls or not schema:
+        return []
+    try:
+        slugs = con.execute(
+            "SELECT person_id, 'https://www.linkedin.com/in/' || external_id "
+            f"FROM {PEI_ONE_SLUG_SQL}").fetchall()
+    except sqlite3.Error as e:
+        print(f"lead profiles skipped ({e}) — the coach gets no profile context")
+        return []
+    url_of = {pid: url for pid, url in slugs if url in profile_urls}
+    if not url_of:
+        return []
+    found = {pid: {"about": None, "location": None, "positions": [], "skills": []}
+             for pid in url_of}
+
+    def rows(sql):
+        try:
+            return con.execute(sql).fetchall()
+        except sqlite3.Error as e:
+            print(f"lead profiles: a table was skipped ({e})")
+            return []
+
+    # Positions: one row per job.
+    positions = next((t for t in schema if t.lower() == "person_positions"), None)
+    if positions and _pick_column(schema[positions], ("person_id",)):
+        cols = schema[positions]
+        picked = [_pick_column(cols, _TITLE_COLS), _pick_column(cols, _COMPANY_COLS),
+                  _pick_column(cols, _DESCRIPTION_COLS), _pick_column(cols, ("start_year",)),
+                  _pick_column(cols, ("end_year",))]
+        if picked[0] or picked[1]:
+            select = ", ".join(_ident(c) if c else "NULL" for c in picked)
+            for pid, title, company, description, start, end in rows(
+                    f"SELECT person_id, {select} FROM {_ident(positions)}"):
+                if pid in found:
+                    found[pid]["positions"].append({
+                        "title": _clip_text(title, 500),
+                        "company": _clip_text(company, 500),
+                        "start_year": _plausible_year(start),
+                        "end_year": _plausible_year(end),
+                        "description": _clip_text(description, 1000),
+                    })
+
+    # About and location: the first one-row-per-person table that has them.
+    for field, candidates, limit, keep_lines in (("about", _ABOUT_COLS, 4000, True),
+                                                 ("location", _LOCATION_COLS, 300, False)):
+        for table, cols in schema.items():
+            if table.lower() in _NOT_PROFILE_TABLES or "skill" in table.lower():
+                continue
+            key, column = _person_key(cols, table), _pick_column(cols, candidates)
+            if not key or not column:
+                continue
+            for pid, value in rows(f"SELECT {_ident(key)}, {_ident(column)} "
+                                   f"FROM {_ident(table)}"):
+                text = _clip_text(value, limit, keep_lines)
+                if pid in found and text and not found[pid][field]:
+                    found[pid][field] = text
+            break
+
+    # Skills: any person table with 'skill' in its name.
+    for table, cols in schema.items():
+        if "skill" not in table.lower():
+            continue
+        key, column = _pick_column(cols, ("person_id",)), _pick_column(cols, _SKILL_COLS)
+        if not key or not column:
+            continue
+        for pid, value in rows(f"SELECT {_ident(key)}, {_ident(column)} FROM {_ident(table)}"):
+            skill = _clip_text(value, 100)
+            bucket = found.get(pid)
+            if bucket is not None and skill and skill not in bucket["skills"] \
+                    and len(bucket["skills"]) < MAX_PROFILE_SKILLS:
+                bucket["skills"].append(skill)
+        break
+
+    out = []
+    for pid, data in found.items():
+        jobs = sorted(data["positions"],
+                      key=lambda p: (p["end_year"] is not None, -(p["start_year"] or 0)))
+        jobs = [p for p in jobs if p["title"] or p["company"]][:MAX_PROFILE_POSITIONS]
+        current = next((p for p in jobs if p["end_year"] is None), None)
+        if not (data["about"] or data["location"] or jobs or data["skills"]):
+            continue
+        out.append({
+            "profile_url": url_of[pid],
+            "about": data["about"],
+            "location": data["location"],
+            "current_title": current["title"] if current else None,
+            "current_company": current["company"] if current else None,
+            "positions": jobs,
+            "skills": data["skills"],
+        })
+    out.sort(key=lambda p: p["profile_url"])
+    return out
+
+
 def extract_chat_contacts(con, instance_id, own_id, profile_urls):
     """Name and headline of the partner of every synced thread, or [].
 
@@ -5301,11 +5509,18 @@ def extract_local(cfg, warnings=None):
             con, instance_id, conversations.get("own_person_id"),
             {m["profile_url"] for m in messages})
 
+    # The coach's profile context, for people who replied: the coach runs on
+    # conversations, and this keeps a sync's volume bounded by its threads.
+    lh2_schema = lh2_person_schema(con)
+    profiles = extract_lead_profiles(
+        con, lh2_schema, {m["profile_url"] for m in messages if m.get("direction") == "in"})
+
     owner = extract_owner(cfg, con, warnings)
     con.close()
     demo = {"edu_map": edu_map, "job_map": job_map,
             "conversations": conversations, "contacts": contacts,
-            "added_sources": added_sources}
+            "added_sources": added_sources,
+            "profiles": profiles, "lh2_schema": lh2_schema}
     return campaigns, leads, messages, steps, owner, demo
 
 
@@ -5414,6 +5629,14 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
     threads = {m["profile_url"] for m in messages}
     print(f"contact names: {len(contacts)} of {len(threads)} threads named from "
           "the chat store")
+    profiles = demo.get("profiles") or []
+    replied = {m["profile_url"] for m in messages if m.get("direction") == "in"}
+    filled = {f: sum(1 for p in profiles if p.get(f)) for f in ("about", "location", "positions", "skills")}
+    print(f"lead profiles: {len(profiles)} of {len(replied)} people who replied "
+          f"(about {filled['about']}, location {filled['location']}, "
+          f"positions {filled['positions']}, skills {filled['skills']})")
+    schema = demo.get("lh2_schema") or {}
+    print("lh2 person tables: " + (", ".join(sorted(schema)) or "none found"))
 
 
 def cmd_sync(args):

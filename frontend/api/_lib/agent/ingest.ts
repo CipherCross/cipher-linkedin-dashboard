@@ -277,6 +277,34 @@ export interface ContactRow {
   readonly headline: string | null
 }
 
+/**
+ * The lead's LinkedIn profile as LH2 scraped it (step 028): context for the AI
+ * coach. Text fields are clipped rather than refused — a long "about" must not
+ * fail a sync.
+ */
+export interface LeadProfilePosition {
+  readonly title: string | null
+  readonly company: string | null
+  readonly start_year: number | null
+  readonly end_year: number | null
+  readonly description: string | null
+}
+
+export interface LeadProfileRow {
+  readonly profile_url: string
+  readonly about: string | null
+  readonly location: string | null
+  readonly current_title: string | null
+  readonly current_company: string | null
+  readonly positions: readonly LeadProfilePosition[]
+  readonly skills: readonly string[]
+}
+
+export const MAX_PROFILE_POSITIONS = 10
+export const MAX_PROFILE_SKILLS = 40
+const MAX_SCHEMA_TABLES = 80
+const MAX_SCHEMA_COLUMNS = 200
+
 export interface EventRow {
   readonly campaign_id: string | null
   readonly profile_url: string | null
@@ -305,6 +333,10 @@ export interface IngestPayload {
    * the same idempotency key would read as a different payload and be refused.
    */
   readonly contacts?: readonly ContactRow[]
+  /** Undefined when absent, for the same digest reason as `contacts`. */
+  readonly leadProfiles?: readonly LeadProfileRow[]
+  /** Names of LH2's person tables and their columns — never data. */
+  readonly lh2Schema?: Readonly<Record<string, readonly string[]>>
   readonly syncStatus: string
   readonly syncError: string
 }
@@ -629,13 +661,59 @@ export function parseIngestPayload(body: unknown): IngestPayload {
     } satisfies ContactRow
   })
 
+  const leadProfiles = collection(root.lead_profiles, 'lead_profiles').map((entry, index) => {
+    const at = `lead_profiles[${index}]`
+    const row = record(entry, at)
+    const positionsIn = row.positions === undefined || row.positions === null ? [] : row.positions
+    if (!Array.isArray(positionsIn)) fail(`${at}.positions must be an array`)
+    const skillsIn = row.skills === undefined || row.skills === null ? [] : row.skills
+    if (!Array.isArray(skillsIn)) fail(`${at}.skills must be an array`)
+    return {
+      profile_url: requiredString(row.profile_url, `${at}.profile_url`, MAX_URL),
+      about: optionalString(row.about, `${at}.about`, 4000),
+      location: optionalString(row.location, `${at}.location`, 300),
+      current_title: optionalString(row.current_title, `${at}.current_title`, 500),
+      current_company: optionalString(row.current_company, `${at}.current_company`, 500),
+      positions: positionsIn.slice(0, MAX_PROFILE_POSITIONS).map((p, i) => {
+        const position = record(p, `${at}.positions[${i}]`)
+        return {
+          title: optionalString(position.title, `${at}.positions[${i}].title`, 500),
+          company: optionalString(position.company, `${at}.positions[${i}].company`, 500),
+          start_year: optionalInteger(position.start_year, `${at}.positions[${i}].start_year`),
+          end_year: optionalInteger(position.end_year, `${at}.positions[${i}].end_year`),
+          description: optionalString(position.description, `${at}.positions[${i}].description`, 1000),
+        } satisfies LeadProfilePosition
+      }),
+      skills: skillsIn.slice(0, MAX_PROFILE_SKILLS)
+        .map((skill, i) => optionalString(skill, `${at}.skills[${i}]`, 100))
+        .filter((skill): skill is string => skill !== null),
+    } satisfies LeadProfileRow
+  })
+
+  let lh2Schema: Record<string, string[]> | undefined
+  if (root.lh2_schema !== undefined && root.lh2_schema !== null) {
+    const tables = record(root.lh2_schema, 'lh2_schema')
+    const names = Object.keys(tables)
+    if (names.length > MAX_SCHEMA_TABLES) fail(`lh2_schema must name at most ${MAX_SCHEMA_TABLES} tables`)
+    lh2Schema = {}
+    for (const name of names) {
+      const columns = tables[name]
+      if (!Array.isArray(columns) || columns.length > MAX_SCHEMA_COLUMNS) {
+        fail(`lh2_schema.${name.slice(0, 60)} must be an array of at most ${MAX_SCHEMA_COLUMNS} column names`)
+      }
+      lh2Schema[requiredString(name, 'lh2_schema table name', 100)] = columns
+        .map((c, i) => requiredString(c, `lh2_schema.${name.slice(0, 60)}[${i}]`, 100))
+    }
+  }
+
   const total =
     campaigns.length +
     campaignSteps.length +
     leads.length +
     messages.length +
     events.length +
-    contacts.length
+    contacts.length +
+    leadProfiles.length
   if (total > MAX_TOTAL_ROWS) {
     fail(`a batch must hold at most ${MAX_TOTAL_ROWS} rows in total`)
   }
@@ -661,6 +739,8 @@ export function parseIngestPayload(body: unknown): IngestPayload {
     messages,
     events,
     contacts: contacts.length ? contacts : undefined,
+    leadProfiles: leadProfiles.length ? leadProfiles : undefined,
+    lh2Schema,
     syncStatus,
     syncError: optionalString(syncRun.error, 'sync_run.error', MAX_TEXT) ?? '',
   }
@@ -710,6 +790,8 @@ export interface IngestRowCounts {
   readonly messages: number
   readonly events: number
   readonly contacts: number
+  readonly lead_profiles: number
+  readonly lh2_schema: number
   readonly sync_runs: number
 }
 
@@ -851,6 +933,34 @@ export async function ingestBatch(
       )
       : 0
 
+    // Profiles and the schema report (step 028) run only for a batch that
+    // carries them, so an older agent's batch writes what it always wrote.
+    const leadProfiles = payload.leadProfiles?.length
+      ? await atIngestStage(
+        MACHINE_COMMANDS.upsertLeadProfiles,
+        () => transaction.execute<number>({
+          operation: MACHINE_COMMANDS.upsertLeadProfiles,
+          params: {
+            instanceId: payload.instanceId,
+            rows: collectionRows(payload.leadProfiles ?? []),
+          },
+        }),
+      )
+      : 0
+
+    const lh2Schema = payload.lh2Schema
+      ? await atIngestStage(
+        MACHINE_COMMANDS.recordLh2Schema,
+        () => transaction.execute<number>({
+          operation: MACHINE_COMMANDS.recordLh2Schema,
+          params: {
+            instanceId: payload.instanceId,
+            tables: JSON.stringify(payload.lh2Schema),
+          },
+        }),
+      )
+      : 0
+
     const rowCounts: IngestRowCounts = {
       instances,
       campaigns,
@@ -859,10 +969,12 @@ export async function ingestBatch(
       messages,
       events,
       contacts,
+      lead_profiles: leadProfiles,
+      lh2_schema: lh2Schema,
       sync_runs: 0,
     }
     const rowsWritten =
-      instances + campaigns + campaignSteps + leads + messages + events + contacts
+      instances + campaigns + campaignSteps + leads + messages + events + contacts + leadProfiles
 
     const syncRuns = await atIngestStage(
       MACHINE_COMMANDS.recordSyncRun,
@@ -921,6 +1033,8 @@ function normalizeCounts(counts: Record<string, number>): IngestRowCounts {
     messages: read('messages'),
     events: read('events'),
     contacts: read('contacts'),
+    lead_profiles: read('lead_profiles'),
+    lh2_schema: read('lh2_schema'),
     sync_runs: read('sync_runs'),
   }
 }

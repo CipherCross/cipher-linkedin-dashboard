@@ -164,6 +164,8 @@ function harness(
     command(MACHINE_COMMANDS.upsertMessages, countRows)
     command(MACHINE_COMMANDS.upsertEvents, countRows)
     command(MACHINE_COMMANDS.upsertContacts, countRows)
+    command(MACHINE_COMMANDS.upsertLeadProfiles, countRows)
+    command(MACHINE_COMMANDS.recordLh2Schema, () => 1)
     command(MACHINE_COMMANDS.recordSyncRun, () => 1)
     command(MACHINE_COMMANDS.stampCredentialUse, () => 1)
 
@@ -983,6 +985,8 @@ describe('the handler: an accepted batch', () => {
       messages: 1,
       events: 1,
       contacts: 0,
+      lead_profiles: 0,
+      lh2_schema: 0,
       sync_runs: 1,
     })
     expect(answered.rows_written).toBe(7)
@@ -1033,6 +1037,63 @@ describe('the handler: an accepted batch', () => {
     expect(payloadDigest(withoutField)).toBe(payloadDigest(legacyShape as typeof withoutField))
     expect(payloadDigest(parseIngestPayload(body({ contacts: [{ profile_url: 'https://example.invalid/in/one', full_name: 'One' }] }))))
       .not.toBe(payloadDigest(withoutField))
+  })
+
+  it('writes lead profiles and the LH2 schema report only when the batch carries them', async () => {
+    const { handler, executed } = harness()
+    const response = await handler(request(body({
+      lead_profiles: [{
+        profile_url: 'https://example.invalid/in/three',
+        about: 'Builds payout infrastructure.',
+        current_title: 'CTO',
+        positions: [{ title: 'CTO', company: 'Engines', start_year: 2021, end_year: null }],
+        skills: ['Payments', '', 'Go'],
+      }],
+      lh2_schema: { person_positions: ['person_id', 'title', 'company_name'] },
+    })))
+    expect(response.status).toBe(200)
+    const answered = await response.json()
+    expect(answered.row_counts.lead_profiles).toBe(1)
+    expect(answered.row_counts.lh2_schema).toBe(1)
+    const operations = executed.map((entry) => entry.operation)
+    expect(operations.indexOf(MACHINE_COMMANDS.upsertLeadProfiles)).toBeGreaterThan(operations.indexOf(MACHINE_COMMANDS.upsertEvents))
+    expect(operations.indexOf(MACHINE_COMMANDS.recordLh2Schema)).toBeLessThan(operations.indexOf(MACHINE_COMMANDS.recordSyncRun))
+    const bound = executed.find((entry) => entry.operation === MACHINE_COMMANDS.upsertLeadProfiles)!
+    expect(JSON.parse(String(bound.params.rows))).toEqual([{
+      profile_url: 'https://example.invalid/in/three',
+      about: 'Builds payout infrastructure.',
+      location: null,
+      current_title: 'CTO',
+      current_company: null,
+      positions: [{ title: 'CTO', company: 'Engines', start_year: 2021, end_year: null, description: null }],
+      skills: ['Payments', 'Go'],
+    }])
+    const schema = executed.find((entry) => entry.operation === MACHINE_COMMANDS.recordLh2Schema)!
+    expect(JSON.parse(String(schema.params.tables))).toEqual({ person_positions: ['person_id', 'title', 'company_name'] })
+
+    const older = harness()
+    await older.handler(request(body()))
+    expect(older.executed.map((entry) => entry.operation)).not.toContain(MACHINE_COMMANDS.upsertLeadProfiles)
+    expect(older.executed.map((entry) => entry.operation)).not.toContain(MACHINE_COMMANDS.recordLh2Schema)
+  })
+
+  it('keeps an older batch digest unchanged and clips long profile text instead of refusing it', () => {
+    const withoutField = parseIngestPayload(body())
+    expect(payloadDigest(parseIngestPayload(body({ lead_profiles: [] })))).toBe(payloadDigest(withoutField))
+    const parsed = parseIngestPayload(body({
+      lead_profiles: [{
+        profile_url: 'https://example.invalid/in/one',
+        about: 'x'.repeat(5000),
+        positions: Array.from({ length: 14 }, (_, i) => ({ title: `T${i}` })),
+        skills: Array.from({ length: 50 }, (_, i) => `S${i}`),
+      }],
+    }))
+    const profile = parsed.leadProfiles![0]
+    expect(profile.about).toHaveLength(4000)
+    expect(profile.positions).toHaveLength(10)
+    expect(profile.skills).toHaveLength(40)
+    expect(() => parseIngestPayload(body({ lead_profiles: [{ about: 'no url' }] }))).toThrow(/lead_profiles\[0\]\.profile_url/)
+    expect(() => parseIngestPayload(body({ lh2_schema: { t: 'not a list' } }))).toThrow(/lh2_schema\.t/)
   })
 
   it('refuses a contact without a profile and caps its text', () => {
