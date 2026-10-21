@@ -1053,7 +1053,23 @@ async function trainingMode(body) {
       const v = trainingDb.versions.find((x) => x.id === (body.version_id ?? st.working_version_id))
       if (!c || !v) return json({ error: 'Case or version not found' }, 404)
       const thread = trainingConversation(c)?.thread ?? []
-      const r = { id: ++trainingDb.ids.r, case_id: c.id, version_id: v.id, version_n: v.n, cut_after_message_id: c.cut_after_message_id, thread_marker: trainingMarker(thread, c.cut_after_message_id), output: trainingOutput(v), model: 'fixture', error: null, created_at: trainingNow() }
+      const base = { case_id: c.id, version_id: v.id, version_n: v.n, cut_after_message_id: c.cut_after_message_id, thread_marker: trainingMarker(thread, c.cut_after_message_id), model: 'fixture', error: null, created_at: trainingNow() }
+      if (body.critic) {
+        const pair = `pair-${trainingDb.ids.r + 1}`
+        const first = trainingOutput(v)
+        const draftIdeas = first.ideas.map((idea, i) => i < 3 ? { ...idea, message: `I hope this message finds you well! ${idea.message} Looking forward to hearing from you!` } : idea)
+        const draft = { ...base, id: ++trainingDb.ids.r, output: { ...first, ideas: draftIdeas, loop: { pair, role: 'draft' } } }
+        const final = { ...base, id: ++trainingDb.ids.r, output: { ...first, loop: { pair, role: 'final', agreed: true, stopped: null, revised: true, rounds: [
+          { critique: { approve: false, summary: 'Three openers read like a template; the answer to the price question comes too late.', points: [
+            { target: 'idea', index: 0, criterion: 'sounds_ai', severity: 'blocking', problem: 'Opens with "I hope this message finds you well!" — a stock phrase nobody types on LinkedIn.', suggestion: 'Start with the answer to their question.' },
+            { target: 'idea', index: 1, criterion: 'too_long', severity: 'minor', problem: 'Two sentences of pleasantries before the point.', suggestion: 'Cut to one line plus the ask.' },
+          ] }, error: null, ideas: draftIdeas, notes_to_reviewer: [] },
+          { critique: { approve: true, summary: 'Openers fixed; every idea answers the question first. Good to send.', points: [] }, error: null, ideas: first.ideas, notes_to_reviewer: ['Kept [price range] as a placeholder: the price is not in the context.'] },
+        ] } }, model: 'fixture + critic' }
+        trainingDb.runs.push(draft, final)
+        return json({ run: { ...final, stale: false }, draft: { ...draft, stale: false } })
+      }
+      const r = { ...base, id: ++trainingDb.ids.r, output: trainingOutput(v) }
       trainingDb.runs.push(r)
       return json({ run: { ...r, stale: false } })
     }

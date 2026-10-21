@@ -57,6 +57,8 @@ import {
 import { editorInput, runEditor, type EarlierRound, type ReviewedCase } from './coachEditor.js'
 import { findLeaks } from './coachLeaks.js'
 import { loadCoachContext, renderContextBlocks } from './coachContext.js'
+import { CRITIC_MODEL, runCriticLoop } from './coachCritic.js'
+import { randomUUID } from 'node:crypto'
 
 export const TRAINING_MODES = [
   'training.state',
@@ -199,15 +201,20 @@ class Training {
 
   // -- runs ----------------------------------------------------------------
 
+  /** One coach run — or, with `critic`, the experimental coach/critic loop,
+   *  stored as two runs: the first draft and the final take, so the two can
+   *  be compared and marked like any other runs. */
   async run(
     caseRow: TrainingCaseRow,
     version: PromptVersionRow,
-  ): Promise<{ ok: false; error: string } | { ok: true; run: (TrainingRunRow & { stale: boolean }) | null }> {
+    critic = false,
+  ): Promise<{ ok: false; error: string } | { ok: true; run: (TrainingRunRow & { stale: boolean }) | null; draft?: (TrainingRunRow & { stale: boolean }) | null }> {
     const full = await loadCoachThread(this.store, this.actor, caseRow.instance_id, caseRow.profile_url)
     const thread = cutThread(full, caseRow.cut_after_message_id)
     if (!thread.length) return { ok: false, error: 'This conversation has no messages.' }
     const marker = threadMarkerOf(thread)
     let output: string | null = null
+    let draftOutput: string | null = null
     let error: string | null = null
     try {
       const [playbook, icp, context] = await Promise.all([
@@ -220,29 +227,52 @@ class Training {
       // A cut is coached at the moment the next message actually arrived, so
       // the gaps the coach sees are the ones the SDR faced.
       const asOf = asOfForCut(full, caseRow.cut_after_message_id)
-      const result = await runCoach(
-        composeCoachSystem(version.prompt ?? '', playbook, icp, context ? renderContextBlocks(context) : ''),
-        thread, asOf,
-      )
-      output = JSON.stringify({ ...result, scope: scopeOf(thread) })
+      const system = composeCoachSystem(version.prompt ?? '', playbook, icp, context ? renderContextBlocks(context) : '')
+      if (critic) {
+        const loop = await runCriticLoop(system, thread, asOf)
+        const pair = randomUUID()
+        const revised = loop.rounds.length > 1
+        if (revised) {
+          draftOutput = JSON.stringify({ ...loop.first, scope: scopeOf(thread), loop: { pair, role: 'draft' } })
+        }
+        output = JSON.stringify({
+          ...loop.final,
+          scope: scopeOf(thread),
+          loop: {
+            pair, role: 'final', agreed: loop.agreed, stopped: loop.stopped ?? null, revised,
+            rounds: loop.rounds.map((r) => ({ critique: r.critique, error: r.error ?? null, ideas: r.draft.ideas, notes_to_reviewer: r.draft.notes_to_reviewer ?? [] })),
+          },
+        })
+      } else {
+        const result = await runCoach(system, thread, asOf)
+        output = JSON.stringify({ ...result, scope: scopeOf(thread) })
+      }
     } catch (e) {
       // A model failure is a result worth keeping on the card; a database one is not.
       if (e instanceof DataStoreSchemaError) throw e
       error = (e instanceof Error ? e.message : String(e)).slice(0, 500) || 'The coach failed.'
     }
-    const run = await this.store.transaction(this.actor, (tx) => tx.execute<TrainingRunRow | null>({
-      operation: COACH_TRAINING_COMMANDS.insertRun,
-      params: {
-        caseId: caseRow.id,
-        versionId: version.id,
-        cutAfterMessageId: caseRow.cut_after_message_id,
-        threadMarker: marker,
-        output,
-        model: output ? CONV_MODEL : null,
-        error,
-      },
-    }))
-    return { ok: true, run: run ? { ...run, stale: false } : null }
+    const insert = (body: string | null, model: string | null, failure: string | null) =>
+      this.store.transaction(this.actor, (tx) => tx.execute<TrainingRunRow | null>({
+        operation: COACH_TRAINING_COMMANDS.insertRun,
+        params: {
+          caseId: caseRow.id,
+          versionId: version.id,
+          cutAfterMessageId: caseRow.cut_after_message_id,
+          threadMarker: marker,
+          output: body,
+          model,
+          error: failure,
+        },
+      }))
+    // The draft first, so the final take is the newest run of the pair.
+    const draft = draftOutput ? await insert(draftOutput, CONV_MODEL, null) : null
+    const run = await insert(output, output ? (critic ? `${CONV_MODEL} + critic ${CRITIC_MODEL}` : CONV_MODEL) : null, error)
+    return {
+      ok: true,
+      run: run ? { ...run, stale: false } : null,
+      ...(draft ? { draft: { ...draft, stale: false } } : {}),
+    }
   }
 }
 
@@ -380,9 +410,9 @@ export async function handleTraining(
       if (!caseId) return bad('case_id is required')
       const [caseRow, version] = await Promise.all([t.caseById(caseId, versionId), t.version(versionId)])
       if (!caseRow || !version) return json({ error: 'Case or version not found' }, 404)
-      const result = await t.run(caseRow, version)
+      const result = await t.run(caseRow, version, body.critic === true)
       if (!result.ok) return bad(result.error)
-      return json({ run: result.run })
+      return json({ run: result.run, draft: result.draft ?? null })
     }
 
     case 'training.feedback': {

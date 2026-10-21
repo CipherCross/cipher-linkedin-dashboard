@@ -63,12 +63,58 @@ export interface TrainingMessage {
   message_ordinal: number | null
 }
 
+export type CriticCriterion =
+  | 'follows_instructions' | 'sounds_ai' | 'too_long' | 'generic' | 'invents_facts' | 'ignores_question'
+  | 'multiple_asks' | 'wrong_language' | 'off_playbook' | 'bad_timing' | 'unfair_feedback' | 'other'
+
+export interface CriticPoint {
+  target: 'take' | 'idea' | 'feedback'
+  index: number | null
+  criterion: CriticCriterion
+  severity: 'blocking' | 'minor'
+  problem: string
+  suggestion: string
+}
+
+export interface CriticRoundView {
+  critique: { approve: boolean; summary: string; points: CriticPoint[] } | null
+  error: string | null
+  ideas: CoachingIdea[]
+  notes_to_reviewer: string[]
+}
+
+/** The experimental coach/critic loop (training only). */
+export interface CriticLoopView {
+  pair: string
+  role: 'draft' | 'final'
+  agreed?: boolean
+  stopped?: 'rounds' | 'time' | 'critic_error' | null
+  revised?: boolean
+  rounds?: CriticRoundView[]
+}
+
 export interface CoachOutputBody {
   next_action: NextAction
   summary: string
   issues: CoachingIssue[]
   ideas: CoachingIdea[]
   scope?: { hand_written: number; sequence: number; message_count: number; last_sent_at: string | null }
+  loop?: CriticLoopView
+}
+
+export const CRITERION_LABEL: Record<CriticCriterion, string> = {
+  follows_instructions: 'Instructions',
+  sounds_ai: 'Sounds AI',
+  too_long: 'Too long',
+  generic: 'Generic',
+  invents_facts: 'Invents facts',
+  ignores_question: 'Ignores question',
+  multiple_asks: 'Several asks',
+  wrong_language: 'Language',
+  off_playbook: 'Off playbook',
+  bad_timing: 'Timing',
+  unfair_feedback: 'Unfair feedback',
+  other: 'Other',
 }
 
 export interface TrainingRun {
@@ -167,8 +213,10 @@ export const coachTraining = {
   setCut: (caseId: number, cutAfterMessageId: number | null) =>
     call<{ ok: true }>('training.setCut', { case_id: caseId, cut_after_message_id: cutAfterMessageId }),
   archiveCase: (caseId: number) => call<{ ok: true }>('training.archiveCase', { case_id: caseId }),
-  run: (caseId: number, versionId?: number) =>
-    call<{ run: TrainingRun | null }>('training.run', { case_id: caseId, version_id: versionId }),
+  run: (caseId: number, versionId?: number, critic = false) =>
+    call<{ run: TrainingRun | null; draft?: TrainingRun | null }>('training.run', {
+      case_id: caseId, version_id: versionId, ...(critic ? { critic: true } : {}),
+    }),
   feedback: (args: { runId: number; target: FeedbackTarget; targetIndex: number | null; verdict: Verdict | null; comment: string | null }) =>
     call<{ feedback: TrainingFeedback }>('training.feedback', {
       run_id: args.runId, target: args.target, target_index: args.targetIndex, verdict: args.verdict, comment: args.comment,

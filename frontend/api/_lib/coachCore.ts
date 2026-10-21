@@ -414,19 +414,52 @@ export interface CoachResult {
   ideas: CoachIdea[]
 }
 
-/** One coach call over a thread, with the nets applied. */
-export async function runCoach(system: string, thread: Msg[], now: Date = new Date()): Promise<CoachResult> {
+const revisionSchema = convSchema.extend({
+  // Points of the critique the coach chose not to follow, and why.
+  notes_to_reviewer: z.array(z.string()).max(8),
+})
+
+/** A previous take and a reviewer's critique of it (Coach training's critic loop). */
+export interface CoachRevision {
+  readonly previous: CoachResult
+  readonly critique: string
+}
+
+export function revisionPrompt(revision: CoachRevision): string {
+  return `YOUR PREVIOUS OUTPUT (as JSON):
+${JSON.stringify(revision.previous, null, 1)}
+
+A REVIEWER'S CRITIQUE OF IT:
+${revision.critique}
+
+Revise your output. Fix every blocking point; take the minor ones where they make the message better.
+If following a point would break your instructions or the facts, keep your version and say why in
+"notes_to_reviewer". Return the COMPLETE output again — every idea, not only the changed ones.`
+}
+
+/** One coach call over a thread, with the nets applied. With `revision`, the
+ *  coach rewrites its previous take against a critique (training only). */
+export async function runCoach(
+  system: string,
+  thread: Msg[],
+  now: Date = new Date(),
+  revision?: CoachRevision,
+): Promise<CoachResult & { notes_to_reviewer?: string[] }> {
+  const prompt = renderThread(thread, now) + (revision ? `\n\n${revisionPrompt(revision)}` : '')
   const { object } = await generateObject({
     model: anthropic(CONV_MODEL),
-    schema: convSchema,
+    schema: revision ? revisionSchema : convSchema,
     system,
-    prompt: renderThread(thread, now),
+    prompt,
     providerOptions: { anthropic: { effort: 'low' } },
   })
-  return {
+  const result: CoachResult & { notes_to_reviewer?: string[] } = {
     next_action: object.next_action,
     summary: object.summary.slice(0, 1000),
     issues: issuesOnHandWritten(object.issues, thread),
     ideas: ideasFrom(object.ideas).slice(0, MAX_IDEAS),
   }
+  const notes = (object as { notes_to_reviewer?: string[] }).notes_to_reviewer
+  if (revision && notes?.length) result.notes_to_reviewer = notes.map((n) => n.trim()).filter(Boolean)
+  return result
 }

@@ -197,6 +197,11 @@ Vercel functions using Vercel AI SDK + `@ai-sdk/anthropic`. Shared core `fronten
   edits, direct instructions and restores are versions too; every active member may train and publish;
   `_lib/coachLeaks.ts` flags 6-word phrases copied from training data. Change the harness, not the
   seed prompt, for anything that must hold whatever the team trains.
+  **Experiment, training only:** "Run with critic" (`_lib/coachCritic.ts`) has Opus critique the coach's take
+  against the coach's full system prompt and the coach revise, up to 3 drafts or a 180 s budget, stopping
+  at the first approval with nothing blocking. It stores the first draft and the final take as two runs
+  (`output.loop.pair`) so they can be compared and marked. The live coach never calls it; removing the file
+  and its call in `coachTraining.ts` is the rollback.
 - **The coach reads the lead's context** (ledger step 028, `_lib/coachContext.ts`): `<lead_profile>`
   (LH2's profile, synced by the agent for people who replied into `lead_profiles`), `<company>`
   (Airtable Apollo data, cached 7 d in `lead_company_context`), `<company_website>` (fetched by

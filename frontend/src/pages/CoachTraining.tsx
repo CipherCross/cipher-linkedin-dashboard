@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { GraduationCap, MessagesSquare, Play, Rocket, Sparkles } from 'lucide-react'
+import { GraduationCap, MessagesSquare, Play, Rocket, ShieldCheck, Sparkles } from 'lucide-react'
 import {
   TrainingError,
   coachTraining,
@@ -22,6 +22,7 @@ import { PromptPane } from '../components/coach-training/PromptPane'
 import { RunReview, type FeedbackChange } from '../components/coach-training/RunReview'
 import { Skeleton } from '../components/Skeleton'
 import { LeadInsights } from '../components/conversation/LeadInsights'
+import { CriticRounds } from '../components/coach-training/CriticRounds'
 
 type SideTab = 'set' | 'prompt'
 const RUN_CONCURRENCY = 4
@@ -55,6 +56,8 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
   const [running, setRunning] = useState<ReadonlySet<number>>(new Set())
   const [viewVersionId, setViewVersionId] = useState<number | null>(null)
   const [compareVersionId, setCompareVersionId] = useState<number | null>(null)
+  // Experimental critic loop: show the first draft beside the final take.
+  const [compareDraft, setCompareDraft] = useState(false)
   const [draft, setDraft] = useState('')
   const [general, setGeneral] = useState('')
   const [busy, setBusy] = useState<null | 'save' | 'instruct' | 'improve' | 'publish' | 'restore' | 'cut'>(null)
@@ -122,13 +125,13 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
   }
 
   /** Run the given cases on a version, a few at a time; each card shows its own progress. */
-  const runCases = useCallback(async (caseIds: readonly number[], versionId: number) => {
+  const runCases = useCallback(async (caseIds: readonly number[], versionId: number, critic = false) => {
     const queue = [...caseIds]
     setRunning((prev) => new Set([...prev, ...queue]))
     const worker = async () => {
       for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
         try {
-          await client.run(id, versionId)
+          await client.run(id, versionId, critic)
         } catch (e) {
           fail(e, 'The coach run failed')
         } finally {
@@ -156,6 +159,16 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
   const viewedVersionId = viewVersionId ?? working?.id ?? null
   const viewedRun = detail && viewedVersionId ? runFor(detail.runs, viewedVersionId, detail.case.cut_after_message_id) : null
   const compareRun = detail && compareVersionId ? runFor(detail.runs, compareVersionId, detail.case.cut_after_message_id) : null
+  const loop = viewedRun?.output?.loop?.role === 'final' ? viewedRun.output.loop : null
+  const draftRun = loop && detail
+    ? detail.runs.find((r) => r.output?.loop?.pair === loop.pair && r.output.loop.role === 'draft') ?? null
+    : null
+  useEffect(() => { setCompareDraft(false) }, [viewedRun?.id])
+  const middle = detail && compareDraft && draftRun
+    ? { title: 'First draft — before the critic', run: draftRun as TrainingRun | null, versionId: null as number | null }
+    : detail && compareVersionId
+      ? { title: `Compared: v${state?.versions.find((v) => v.id === compareVersionId)?.n ?? ''}`, run: compareRun, versionId: compareVersionId }
+      : null
 
   const versionOptions = useMemo(() => {
     if (!state) return []
@@ -382,19 +395,17 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
           )}
         </section>
 
-        {detail && compareVersionId ? (
+        {detail && middle ? (
           <section className="coach-training-pane" aria-label="Compared version">
             <div className="coach-training-pane-head">
-              <h2 className="coach-training-pane-title">
-                Compared: v{state.versions.find((v) => v.id === compareVersionId)?.n}
-              </h2>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setCompareVersionId(null)}>
+              <h2 className="coach-training-pane-title">{middle.title}</h2>
+              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => { setCompareVersionId(null); setCompareDraft(false) }}>
                 Show conversation
               </Button>
             </div>
             <div className="coach-training-pane-body flex flex-col gap-group">
-              {compareRun
-                ? <RunReview run={compareRun} feedback={detail.feedback} onFeedback={(change) => onFeedback(compareRun, change)} />
+              {middle.run
+                ? <RunReview run={middle.run} feedback={detail.feedback} onFeedback={(change) => onFeedback(middle.run!, change)} />
                 : (
                   <div className="flex flex-col items-start gap-group">
                     <p className="m-0 text-app-meta text-app-text-muted">No run on that version for this conversation yet.</p>
@@ -403,9 +414,9 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
                       size="sm"
                       icon={<Play aria-hidden="true" />}
                       loading={running.has(detail.case.id)}
-                      onClick={() => void runCases([detail.case.id], compareVersionId)}
+                      onClick={() => void runCases([detail.case.id], middle.versionId ?? working.id)}
                     >
-                      Run on v{state.versions.find((v) => v.id === compareVersionId)?.n}
+                      Run on v{state.versions.find((v) => v.id === middle.versionId)?.n}
                     </Button>
                   </div>
                 )}
@@ -487,6 +498,16 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
                 >
                   {viewedRun ? 'Run again' : 'Run'} on v{state.versions.find((v) => v.id === viewedVersionId)?.n ?? working.n}
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<ShieldCheck aria-hidden="true" />}
+                  disabled={running.has(detail.case.id)}
+                  title="Experimental: a second AI critiques the ideas and the coach revises, up to 3 rounds. Takes a few minutes."
+                  onClick={() => void runCases([detail.case.id], viewedVersionId, true)}
+                >
+                  Run with critic
+                </Button>
                 {state.versions.length > 1 && (
                   <SelectField
                     label="Compare with"
@@ -502,6 +523,13 @@ export function CoachTraining({ client = coachTraining }: { client?: CoachTraini
                   </SelectField>
                 )}
               </div>
+            )}
+            {detail && viewedRun && loop && (
+              <CriticRounds
+                loop={loop}
+                comparing={compareDraft}
+                onCompareDraft={draftRun ? () => { setCompareVersionId(null); setCompareDraft((v) => !v) } : undefined}
+              />
             )}
             {detail && viewedRun && (
               <RunReview run={viewedRun} feedback={detail.feedback} onFeedback={(change) => onFeedback(viewedRun, change)} />

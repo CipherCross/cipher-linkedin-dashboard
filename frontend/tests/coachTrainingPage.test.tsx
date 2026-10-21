@@ -64,12 +64,20 @@ function makeClient() {
     addCase: vi.fn(async () => ({ case_id: 5 })),
     setCut: vi.fn(async () => ({ ok: true as const })),
     archiveCase: vi.fn(async () => ({ ok: true as const })),
-    run: vi.fn(async (caseId: number, versionId?: number) => {
+    run: vi.fn(async (caseId: number, versionId?: number, critic = false) => {
       const v = versions.find((x) => x.id === versionId) ?? versions[versions.length - 1]
-      const run: TrainingRun = {
-        id: runs.length + 100, case_id: caseId, version_id: v.id, version_n: v.n, cut_after_message_id: null,
-        thread_marker: 'm', output, model: 'test', error: null, created_at: '2026-10-20T10:00:00Z', stale: false,
+      const base = { case_id: caseId, version_id: v.id, version_n: v.n, cut_after_message_id: null,
+        thread_marker: 'm', model: 'test', error: null, created_at: '2026-10-20T10:00:00Z', stale: false }
+      if (critic) {
+        const draft: TrainingRun = { ...base, id: runs.length + 100, output: { ...output, ideas: [{ angle: 'Draft', message: 'Hope you are well! Pricing is great!', why: 'w' }], loop: { pair: 'p1', role: 'draft' } } }
+        const final: TrainingRun = { ...base, id: runs.length + 101, output: { ...output, loop: { pair: 'p1', role: 'final', agreed: true, stopped: null, revised: true, rounds: [
+          { critique: { approve: false, summary: 'Sounds robotic.', points: [{ target: 'idea', index: 0, criterion: 'sounds_ai', severity: 'blocking', problem: 'Stock opener.', suggestion: 'Lead with the answer.' }] }, error: null, ideas: [], notes_to_reviewer: [] },
+          { critique: { approve: true, summary: 'Good to send.', points: [] }, error: null, ideas: [], notes_to_reviewer: ['Kept the price range.'] },
+        ] } } }
+        runs = [...runs, draft, final]
+        return { run: final, draft }
       }
+      const run: TrainingRun = { ...base, id: runs.length + 100, output }
       runs = [...runs, run]
       return { run }
     }),
@@ -112,7 +120,7 @@ beforeEach(() => {
 describe('the Coach training page', () => {
   it('runs the working prompt on an opened conversation once, and shows its take', async () => {
     await paint()
-    await waitFor(() => expect(client.run).toHaveBeenCalledWith(5, 1))
+    await waitFor(() => expect(client.run).toHaveBeenCalledWith(5, 1, false))
     const coach = screen.getByRole('region', { name: 'Coach output' })
     expect(await within(coach).findByText('Pricing is [price range].')).toBeTruthy()
     // The thread is tagged with what produced each message.
@@ -138,7 +146,7 @@ describe('the Coach training page', () => {
     expect(client.improve).toHaveBeenCalledWith(1, 'Be brief')
     expect(await screen.findByRole('dialog', { name: 'v2 — what changed' })).toBeTruthy()
     expect(screen.getByText('Answer price questions first')).toBeTruthy()
-    await waitFor(() => expect(client.run).toHaveBeenCalledWith(5, 2))
+    await waitFor(() => expect(client.run).toHaveBeenCalledWith(5, 2, false))
   })
 
   it('blocks Publish while the prompt has an unsaved hand edit, and asks before publishing', async () => {
@@ -157,5 +165,22 @@ describe('the Coach training page', () => {
     fireEvent.click(within(confirm).getByRole('button', { name: 'Publish v1' }))
     await act(async () => {})
     expect(client.publish).toHaveBeenCalledWith(1, 1)
+  })
+
+  it('runs the critic loop on request and puts the first draft beside the approved take', async () => {
+    await paint()
+    await screen.findByText('Pricing is [price range].')
+    fireEvent.click(screen.getByRole('button', { name: 'Run with critic' }))
+    await act(async () => {})
+    expect(client.run).toHaveBeenLastCalledWith(5, 1, true)
+    const critic = await screen.findByRole('region', { name: 'Critic' })
+    expect(within(critic).getByText('The critic approved draft 2.')).toBeTruthy()
+    fireEvent.click(within(critic).getByRole('button', { name: 'Show 2 rounds' }))
+    expect(within(critic).getByText('Stock opener.')).toBeTruthy()
+    expect(within(critic).getByText('Kept the price range.')).toBeTruthy()
+    fireEvent.click(within(critic).getByRole('button', { name: 'Compare with first draft' }))
+    const draft = screen.getByRole('region', { name: 'Compared version' })
+    expect(within(draft).getByText('First draft — before the critic')).toBeTruthy()
+    expect(within(draft).getByText('Hope you are well! Pricing is great!')).toBeTruthy()
   })
 })
