@@ -3763,5 +3763,31 @@ class LeadProfilesTest(unittest.TestCase):
         row = agent._ingest_lead_profiles([{"profile_url": "u"}])[0]
         self.assertEqual(set(row), fields)
 
+
+class RepeatedOutboundTest(unittest.TestCase):
+    """A connection-request note appears twice in LinkedIn's thread (sent, then
+    again on acceptance); the agent sends it once, at its real send time."""
+
+    def row(self, ext, sent_at, body, direction="out", profile="https://www.linkedin.com/in/eg"):
+        return {"instance_id": "nb", "profile_url": profile, "direction": direction, "body": body,
+                "sent_at": sent_at, "content_hash": agent.content_hash(body), "external_id": ext,
+                "campaign_id": "nb:20", "source": "sync"}
+
+    def test_keeps_the_first_copy_of_a_repeated_note_only(self):
+        note = "Hi Ekaterina, saw you in suggestions"
+        rows = [self.row("li:2", "2026-10-20T22:13:37Z", note), self.row("li:1", "2026-10-20T16:47:01Z", note),
+                self.row("li:3", "2026-10-20T22:14:58Z", "Thanks", direction="in")]
+        kept = agent.dedupe_messages(rows)
+        self.assertEqual([r["external_id"] for r in kept], ["li:1", "li:3"])
+
+    def test_leaves_inbound_repeats_other_threads_and_legacy_rows_alone(self):
+        rows = [self.row("li:1", "2026-10-20T10:00:00Z", "Thanks", direction="in"),
+                self.row("li:2", "2026-10-21T10:00:00Z", "Thanks", direction="in"),
+                self.row("li:3", "2026-10-20T10:00:00Z", "Hi", profile="https://www.linkedin.com/in/a"),
+                self.row("li:4", "2026-10-20T11:00:00Z", "Hi", profile="https://www.linkedin.com/in/b"),
+                self.row(None, "2026-10-20T12:00:00Z", "Hello again"),
+                self.row(None, "2026-10-20T13:00:00Z", "Hello again")]
+        self.assertEqual(len(agent.dedupe_messages(rows)), 6)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

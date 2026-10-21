@@ -5770,7 +5770,32 @@ def dedupe_messages(messages):
              (m["instance_id"], m["profile_url"], m["direction"],
               m["sent_at"], m["content_hash"]))
         seen.setdefault(k, m)
-    return list(seen.values())
+    return drop_repeated_outbound(list(seen.values()))
+
+
+def drop_repeated_outbound(messages):
+    """Keep the FIRST of identical outbound chat-store messages in a thread.
+
+    LinkedIn records a connection-request note twice: once when the invite is
+    sent, and again — under a new message id — when the conversation is
+    created on acceptance. LH2's chat store keeps both, so every accepted
+    invite with a note showed its note twice (424 of 429 repeated outbound
+    texts on production, 2026-10-21, were exactly that). The first copy is the
+    real send time. A rare genuine resend of the same text collapses too,
+    which reads correctly: the prospect saw the same words.
+
+    Only chat-store rows (with an external id) are collapsed; legacy and
+    imported rows keep their own dedupe. Input is in send order."""
+    first = set()
+    kept = []
+    for m in messages:
+        if m.get("external_id") and m.get("direction") == "out" and m.get("content_hash"):
+            key = (m["instance_id"], m["profile_url"], m["content_hash"])
+            if key in first:
+                continue
+            first.add(key)
+        kept.append(m)
+    return kept
 
 
 def dedupe_events(events):

@@ -323,6 +323,14 @@
       "owner_role_entered_by": "artifact",
       "session": "coach-lead-context",
       "description": "Adds the AI coach's lead context: lead_profiles (the lead's LH2-scraped profile, written by the machine ingest path for its own instance) and lh2_schema_reports (names of LH2 person tables/columns per notebook, machine-written), lead_company_context (the lead's company from the Airtable Apollo import, cached by the server) and company_site_snapshots (company website text by domain, cached by the server), plus playbook.our_company and playbook.our_website. Members read all four tables through RLS; the server caches are INSERT/UPDATE for app_runtime; no DELETE anywhere; no new AI sandbox grant."
+    },
+    {
+      "step": 29,
+      "artifact": "029_repeated_outbound_cleanup.sql",
+      "sha256": "93f4b5111818bee23d4d3316a340e944a631034c07828d042cc1f9d93d77ba5a",
+      "owner_role_entered_by": "artifact",
+      "session": "repeated-outbound-cleanup",
+      "description": "Data correction: deletes the later copies of identical outbound chat-store messages in a thread (same instance, profile and content_hash; external_id set), keeping the earliest — LinkedIn records a connection-request note twice (on send and again on acceptance). Inbound, legacy and imported rows are untouched; step attribution cascades, follow-up supporting_message_id and training cut points are SET NULL by their own keys. No schema, grant or policy change. Apply only after every notebook runs agent 1.30.0, which stops re-delivering the copy."
     }
   ]
 }

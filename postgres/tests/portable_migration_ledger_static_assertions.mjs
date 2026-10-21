@@ -190,6 +190,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/027_coach_prompt_training.sql',
   // The coach's lead context: profiles, company, website, our company (step 028).
   'postgres/tenant-baseline/v1/028_coach_lead_context.sql',
+  // Repeated outbound chat-store copies removed (step 029).
+  'postgres/tenant-baseline/v1/029_repeated_outbound_cleanup.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -434,8 +436,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-eight steps in order 1 -> 2 -> ... -> 28',
-  manifest.steps.length === 28 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares twenty-nine steps in order 1 -> 2 -> ... -> 29',
+  manifest.steps.length === 29 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -606,6 +608,22 @@ check('step 028 grants no DELETE, no TRUNCATE and nothing to the AI sandbox',
 check('step 028 writes no rows and only adds columns to playbook',
   !/\bINSERT INTO\b|\bUPDATE public\./i.test(leadContextSql)
   && (leadContextSql.match(/ALTER TABLE public\.(\w+)\s+ADD/g) ?? []).every((m) => m.includes('playbook')));
+
+const cleanupStep = manifest.steps.find((s) => s.step === 29);
+const cleanupPath = join(BASELINE_DIR, '029_repeated_outbound_cleanup.sql');
+const cleanupSql = stripComments('029_repeated_outbound_cleanup.sql', readFileSync(cleanupPath, 'utf8'));
+check('manifest declares step 029 repeated outbound cleanup',
+  cleanupStep?.artifact === '029_repeated_outbound_cleanup.sql' && cleanupStep.owner_role_entered_by === 'artifact');
+check('step 029 manifest digest matches its artifact',
+  cleanupStep?.sha256 === sha256(cleanupPath), `manifest ${cleanupStep?.sha256}, disk ${sha256(cleanupPath)}`);
+check('step 029 deletes only later outbound chat-store copies and keeps the earliest',
+  /DELETE FROM public\.messages m/.test(cleanupSql)
+  && /m\.direction = 'out'/.test(cleanupSql) && /m\.external_id IS NOT NULL/.test(cleanupSql)
+  && /PARTITION BY m\.instance_id, m\.profile_url, m\.content_hash\s+ORDER BY m\.sent_at, m\.id/.test(cleanupSql)
+  && /r\.copy > 1/.test(cleanupSql));
+check('step 029 changes no schema, grant or policy and touches no other table',
+  !/\b(CREATE|ALTER|DROP|GRANT|REVOKE|TRUNCATE|UPDATE|INSERT)\b/i.test(cleanupSql.replace(/DO \$\$|\$\$;/g, ''))
+  && (cleanupSql.match(/public\.(\w+)/g) ?? []).every((t) => t === 'public.messages'));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
