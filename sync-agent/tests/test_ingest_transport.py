@@ -3725,6 +3725,50 @@ class LeadProfilesTest(unittest.TestCase):
         self.assertIsNone(bob["positions"][0]["start_year"])  # 1900 is a placeholder
         self.assertIsNone(bob["about"])
 
+    def test_reads_the_real_lh2_layout_and_never_the_team_notes(self):
+        # The layout notebook-1 reported on 2026-10-21 through lh2_schema_reports.
+        con = sqlite3.connect(":memory:")
+        con.executescript("""
+            CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+            INSERT INTO person_external_ids VALUES (1, 'eg', 'public');
+            CREATE TABLE person_positions (id INTEGER, person_id INTEGER, title TEXT, company_name TEXT, start_year INTEGER,
+                                           end_year INTEGER, location_name TEXT, description TEXT, is_default INTEGER);
+            INSERT INTO person_positions VALUES (1, 1, 'Director of Engineering', 'Peak Medical', 2022, NULL, 'Yerevan', NULL, 1);
+            CREATE TABLE person_note (id INTEGER, person_id INTEGER, text TEXT);
+            INSERT INTO person_note VALUES (1, 1, 'PRIVATE: call her after Friday');
+            CREATE TABLE person_summary (id INTEGER, person_id INTEGER, text TEXT);
+            INSERT INTO person_summary VALUES (1, 1, 'Engineering leader in medtech.');
+            CREATE TABLE person_location (id INTEGER, person_id INTEGER, location_id INTEGER);
+            INSERT INTO person_location VALUES (1, 1, 7);
+            CREATE TABLE locations (id INTEGER, name TEXT);
+            INSERT INTO locations VALUES (7, 'Berlin, Germany');
+            CREATE TABLE person_skill (id INTEGER, person_id INTEGER, skill_id INTEGER, endorsements_count INTEGER);
+            INSERT INTO person_skill VALUES (1, 1, 3, 9), (2, 1, 4, 2);
+            CREATE TABLE skills (id INTEGER, name TEXT);
+            INSERT INTO skills VALUES (3, 'Team Leadership'), (4, 'Medical Devices');
+        """)
+        schema = agent.lh2_person_schema(con)
+        self.assertIn("locations", schema)  # lookup tables are reported too, names only
+        self.assertIn("skills", schema)
+        [profile] = agent.extract_lead_profiles(con, schema, {"https://www.linkedin.com/in/eg"})
+        self.assertEqual(profile["about"], "Engineering leader in medtech.")
+        self.assertEqual(profile["location"], "Berlin, Germany")
+        self.assertEqual(profile["skills"], ["Team Leadership", "Medical Devices"])
+        self.assertNotIn("PRIVATE", json.dumps(profile))
+        self.assertNotIn("location", profile["positions"][0])  # job locations stay internal
+
+    def test_falls_back_to_the_current_job_location(self):
+        con = sqlite3.connect(":memory:")
+        con.executescript("""
+            CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+            INSERT INTO person_external_ids VALUES (1, 'eg', 'public');
+            CREATE TABLE person_positions (person_id INTEGER, title TEXT, company_name TEXT, start_year INTEGER,
+                                           end_year INTEGER, location_name TEXT);
+            INSERT INTO person_positions VALUES (1, 'CTO', 'Acme', 2021, NULL, 'Yerevan, Armenia'), (1, 'Dev', 'Old', 2015, 2020, 'Paris');
+        """)
+        [profile] = agent.extract_lead_profiles(con, agent.lh2_person_schema(con), {"https://www.linkedin.com/in/eg"})
+        self.assertEqual(profile["location"], "Yerevan, Armenia")
+
     def test_fails_safe_on_a_build_without_the_tables(self):
         con = sqlite3.connect(":memory:")
         self.assertEqual(agent.lh2_person_schema(con), {})

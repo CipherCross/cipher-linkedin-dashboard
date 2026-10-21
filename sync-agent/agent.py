@@ -43,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.30.0"
+AGENT_VERSION = "1.30.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -5119,7 +5119,47 @@ def lh2_person_schema(con):
         out[str(name)[:100]] = [str(c)[:100] for c in cols[:200]]
         if len(out) >= 80:
             break
+    # The lookup tables those person tables point at (person_location.location_id
+    # -> locations, ...): names only, so the server can see where the values live.
+    table_names = set(map(str, names))
+    for cols in list(out.values()):
+        for col in cols:
+            if not col.lower().endswith("_id") or col.lower() == "person_id" or len(out) >= 80:
+                continue
+            table = _lookup_table(col[:-3], table_names)
+            if table and table not in out:
+                try:
+                    out[table[:100]] = [str(r[1])[:100] for r in
+                                        con.execute(f"PRAGMA table_info({_ident(table)})")][:200]
+                except sqlite3.Error:
+                    pass
     return out
+
+
+def _lookup_table(base, table_names):
+    """The table an `<base>_id` column points at, by LH2's naming: `locations`,
+    `industries`, `skills`, or the bare name. None when there is none."""
+    base = base.lower()
+    candidates = [f"{base}s", f"{base}es", base]
+    if base.endswith("y"):
+        candidates.insert(0, f"{base[:-1]}ies")
+    lower = {t.lower(): t for t in table_names}
+    return next((lower[c] for c in candidates if c in lower), None)
+
+
+_LOOKUP_NAME_COLS = ("name", "title", "text", "value", "label", "default_name", "localized_name")
+
+
+def _lookup_names(con, table, rows_fn):
+    """{id: display name} for a lookup table, or {}."""
+    try:
+        cols = [r[1] for r in con.execute(f"PRAGMA table_info({_ident(table)})")]
+    except sqlite3.Error:
+        return {}
+    key, name = _pick_column(cols, ("id",)), _pick_column(cols, _LOOKUP_NAME_COLS)
+    if not key or not name:
+        return {}
+    return {k: v for k, v in rows_fn(f"SELECT {_ident(key)}, {_ident(name)} FROM {_ident(table)}") if v}
 
 
 def _pick_column(columns, candidates):
@@ -5188,10 +5228,10 @@ def extract_lead_profiles(con, schema, profile_urls):
         cols = schema[positions]
         picked = [_pick_column(cols, _TITLE_COLS), _pick_column(cols, _COMPANY_COLS),
                   _pick_column(cols, _DESCRIPTION_COLS), _pick_column(cols, ("start_year",)),
-                  _pick_column(cols, ("end_year",))]
+                  _pick_column(cols, ("end_year",)), _pick_column(cols, ("location_name", "location"))]
         if picked[0] or picked[1]:
             select = ", ".join(_ident(c) if c else "NULL" for c in picked)
-            for pid, title, company, description, start, end in rows(
+            for pid, title, company, description, start, end, place in rows(
                     f"SELECT person_id, {select} FROM {_ident(positions)}"):
                 if pid in found:
                     found[pid]["positions"].append({
@@ -5200,32 +5240,58 @@ def extract_lead_profiles(con, schema, profile_urls):
                         "start_year": _plausible_year(start),
                         "end_year": _plausible_year(end),
                         "description": _clip_text(description, 1000),
+                        "location": _clip_text(place, 300),
                     })
 
-    # About and location: the first one-row-per-person table that has them.
-    for field, candidates, limit, keep_lines in (("about", _ABOUT_COLS, 4000, True),
-                                                 ("location", _LOCATION_COLS, 300, False)):
-        for table, cols in schema.items():
-            if table.lower() in _NOT_PROFILE_TABLES or "skill" in table.lower():
+    table_names = set(schema)
+    try:
+        table_names |= {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    except sqlite3.Error:
+        pass
+
+    def person_values(table, field_candidates):
+        """(person_id, value) pairs from one person table: the value column
+        itself, or its `<x>_id` resolved through the lookup table."""
+        cols = schema.get(table) or []
+        key = _pick_column(cols, ("person_id",))
+        if not key:
+            return []
+        column = _pick_column(cols, field_candidates)
+        if column:
+            return rows(f"SELECT {_ident(key)}, {_ident(column)} FROM {_ident(table)}")
+        id_col = next((c for c in cols if c.lower().endswith("_id") and c.lower() not in ("person_id", "id")), None)
+        lookup = _lookup_table(id_col[:-3], table_names) if id_col else None
+        names = _lookup_names(con, lookup, rows) if lookup else {}
+        if not names:
+            return []
+        return [(pid, names.get(ref)) for pid, ref in
+                rows(f"SELECT {_ident(key)}, {_ident(id_col)} FROM {_ident(table)}")]
+
+    # About and location. LH2 keeps each in its own table — person_summary(text),
+    # person_location(location_id -> lookup) — and those are read first. The
+    # generic fallback is deliberately narrow: person_note and person_tag also
+    # have text columns, and they are the team's own notes, not the profile.
+    for field, own_table, candidates, limit, keep_lines in (
+            ("about", "person_summary", ("text",) + _ABOUT_COLS, 4000, True),
+            ("location", "person_location", _LOCATION_COLS, 300, False)):
+        sources = [own_table] + [t for t in ("persons", "people", "person") if t in schema]
+        for table in sources:
+            if table not in schema:
                 continue
-            key, column = _person_key(cols, table), _pick_column(cols, candidates)
-            if not key or not column:
-                continue
-            for pid, value in rows(f"SELECT {_ident(key)}, {_ident(column)} "
-                                   f"FROM {_ident(table)}"):
+            pairs = person_values(table, candidates) if table == own_table else (
+                rows(f"SELECT {_ident(_person_key(schema[table], table))}, "
+                     f"{_ident(_pick_column(schema[table], candidates))} FROM {_ident(table)}")
+                if _person_key(schema[table], table) and _pick_column(schema[table], candidates) else [])
+            for pid, value in pairs:
                 text = _clip_text(value, limit, keep_lines)
                 if pid in found and text and not found[pid][field]:
                     found[pid][field] = text
-            break
+            if pairs:
+                break
 
-    # Skills: any person table with 'skill' in its name.
-    for table, cols in schema.items():
-        if "skill" not in table.lower():
-            continue
-        key, column = _pick_column(cols, ("person_id",)), _pick_column(cols, _SKILL_COLS)
-        if not key or not column:
-            continue
-        for pid, value in rows(f"SELECT {_ident(key)}, {_ident(column)} FROM {_ident(table)}"):
+    # Skills: person_skill / person_skills, by name or through the skills lookup.
+    for table in [t for t in schema if t.lower() in ("person_skill", "person_skills")]:
+        for pid, value in person_values(table, _SKILL_COLS):
             skill = _clip_text(value, 100)
             bucket = found.get(pid)
             if bucket is not None and skill and skill not in bucket["skills"] \
@@ -5233,11 +5299,18 @@ def extract_lead_profiles(con, schema, profile_urls):
                 bucket["skills"].append(skill)
         break
 
+    # A location LH2 never filled per person falls back to the current job's.
+    for data in found.values():
+        if not data["location"]:
+            data["location"] = next((p.get("location") for p in data["positions"]
+                                     if p.get("end_year") is None and p.get("location")), None)
+
     out = []
     for pid, data in found.items():
         jobs = sorted(data["positions"],
                       key=lambda p: (p["end_year"] is not None, -(p["start_year"] or 0)))
-        jobs = [p for p in jobs if p["title"] or p["company"]][:MAX_PROFILE_POSITIONS]
+        jobs = [{k: v for k, v in p.items() if k != "location"}
+                for p in jobs if p["title"] or p["company"]][:MAX_PROFILE_POSITIONS]
         current = next((p for p in jobs if p["end_year"] is None), None)
         if not (data["about"] or data["location"] or jobs or data["skills"]):
             continue
