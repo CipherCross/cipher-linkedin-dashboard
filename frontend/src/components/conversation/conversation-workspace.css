@@ -61,7 +61,7 @@
   padding: var(--inset-pane);
 }
 
-/* Context: label/value facts and the funnel milestones. */
+/* Context: label/value facts. */
 .conversation-facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -73,52 +73,6 @@
 }
 .conversation-facts dt { color: var(--text-muted); }
 .conversation-facts dd { margin: 0; min-width: 0; }
-
-.conversation-milestones {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.conversation-milestones li {
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  gap: var(--gap-inline);
-  padding: var(--space-xs) 0 var(--space-xs) var(--space-xl);
-  font-size: var(--text-table);
-  line-height: var(--leading-table);
-  color: var(--text-muted);
-}
-.conversation-milestones li::before {
-  content: '';
-  position: absolute;
-  left: var(--space-xs);
-  top: 50%;
-  width: var(--space-sm);
-  height: var(--space-sm);
-  border-radius: var(--radius-pill);
-  border: 2px solid var(--border-strong);
-  background: var(--surface-1);
-  transform: translateY(-50%);
-  z-index: 1;
-}
-.conversation-milestones li:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  left: calc(var(--space-xs) + var(--space-sm) / 2 - 0.5px);
-  top: 50%;
-  height: 100%;
-  width: 1px;
-  background: var(--border);
-}
-.conversation-milestones li[data-reached='true'] { color: var(--text); }
-.conversation-milestones li[data-reached='true']:has(+ li[data-reached='true'])::after { background: var(--accent); }
-.conversation-milestones li[data-reached='true']::before {
-  background: var(--accent);
-  border-color: var(--accent);
-}
 
 /* Coach: ideas are rows with dividers, not nested cards. */
 .conversation-idea {

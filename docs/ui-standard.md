@@ -262,12 +262,13 @@ wanted. One light theme, still.
 
 ### Conversation workspace
 
-- One lead's conversation is a centered `workspace` dialog in three panes:
-  **Context** (outreach, funnel milestones, pipeline fields, notes) 300px ·
-  **Conversation** (the thread, or the import view in its place) · **Actions**
-  (next-message entry, follow-up, the reply review) 360px; 264 / 320 below
-  1366px. Every pane has a `--pane-head-height` head and scrolls on its own;
-  the thread is the pane that gives way.
+- One lead's conversation is a centered `workspace` dialog in three panes: context (outreach, the
+  lead's profile and company, pipeline fields, notes) 300px · the thread (or the import view in its
+  place) · actions (next-message entry, follow-up, the reply review) 360px; 264 / 320 below 1366px.
+  The panes have **no visible titles** — what each holds is obvious, and the space goes to the
+  content; each keeps its accessible name. Thread actions (Import history) sit in the dialog header
+  beside LinkedIn, Open in Replies and AI coach. Every pane scrolls on its own; the thread is the pane
+  that gives way.
 - The AI coach opens from the header toggle (or "Get message ideas") in place
   of Actions, on a 440px track (400 below 1366px). Actions stays mounted and
   `hidden`, as the review stays under the follow-up view, so no draft is lost

@@ -402,6 +402,19 @@ export function ConversationDrawer({
               Open in Replies
             </LinkButton>
           )}
+          {/* Hidden while the import view is open, and while the empty state
+              shows — that state carries its own Import-history action. */}
+          {!importOpen && !(rows && rows.length === 0) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setImportOpen(true)}
+              disabled={!rows}
+              title="Paste a conversation copied from LinkedIn"
+            >
+              Import history
+            </Button>
+          )}
           <Button
             ref={coachTriggerRef}
             variant={coachOpen ? 'primary' : 'secondary'}
@@ -422,10 +435,9 @@ export function ConversationDrawer({
       bodyClassName="p-0 overflow-hidden"
     >
       <div className="conversation-workspace" data-coach={coachOpen ? 'open' : 'closed'}>
+        {/* The panes carry no visible titles: what they hold is obvious, and
+            the space goes to the content. Each keeps its accessible name. */}
         <section className="conversation-pane" aria-label="Context">
-          <div className="conversation-pane-head">
-            <h3 className="conversation-pane-title">Context</h3>
-          </div>
           <LeadContextPanel
             lead={lead}
             live={live}
@@ -440,28 +452,6 @@ export function ConversationDrawer({
         </section>
 
         <section className="conversation-pane" aria-label="Conversation">
-          <div className="conversation-pane-head">
-            <h3 className="conversation-pane-title">{importOpen ? 'Import history' : 'Conversation'}</h3>
-            {!importOpen && rows && rows.length > 0 && (
-              <span className="text-app-meta text-app-text-muted">
-                {rows.length >= THREAD_LIMIT ? `Latest ${rows.length}` : rows.length} {rows.length === 1 ? 'message' : 'messages'}
-              </span>
-            )}
-            {/* Hidden while the empty state shows — that state carries its own
-                Import-history action. */}
-            {!importOpen && !(rows && rows.length === 0) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto"
-                onClick={() => setImportOpen(true)}
-                disabled={!rows}
-                title="Paste a conversation copied from LinkedIn"
-              >
-                Import history
-              </Button>
-            )}
-          </div>
 
           {error && (
             <div className="shrink-0 px-pane pt-pane">
@@ -614,9 +604,6 @@ export function ConversationDrawer({
         {/* Hidden, never unmounted, while the coach is open: an edited review
             keeps its draft. */}
         <section className="conversation-pane" aria-label="Actions" hidden={coachOpen}>
-          <div className="conversation-pane-head">
-            <h3 className="conversation-pane-title">{followUpOpen ? 'Follow-up' : 'Actions'}</h3>
-          </div>
 
           {followUpOpen && (
             <div

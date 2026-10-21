@@ -9,18 +9,10 @@ import { usePipelineActions } from '../../lib/usePipelineActions'
 import { ageRange } from '../../lib/leads'
 import { PIPELINE_STAGES, stageById, substatusLabel } from '../../lib/pipeline'
 import type { Gender, Instance, Lead } from '../../lib/types'
-import { Badge, SelectField, businessDate } from '../../ui'
+import { Badge, SelectField } from '../../ui'
 import { Avatar } from '../Avatar'
 import { LeadNotesPanel } from '../LeadNotesPanel'
 import { LeadInsights } from './LeadInsights'
-
-const MILESTONES: { key: keyof Lead; label: string }[] = [
-  { key: 'added_at', label: 'Added' },
-  { key: 'invited_at', label: 'Invited' },
-  { key: 'connected_at', label: 'Connected' },
-  { key: 'first_message_at', label: 'First message' },
-  { key: 'replied_at', label: 'Replied' },
-]
 
 export function ContextHeading({ children }: { children: ReactNode }) {
   return (
@@ -32,8 +24,8 @@ export function ContextHeading({ children }: { children: ReactNode }) {
 
 /**
  * The workspace's first column: who this is and where the outreach stands —
- * campaign and account, the funnel milestones, the pipeline fields, and the
- * team's notes. Everything is visible at once; the column scrolls on its own.
+ * campaign and account, who the lead and their company are, the pipeline
+ * fields, and the team's notes. Everything is visible at once; the column scrolls on its own.
  */
 export function LeadContextPanel({
   lead,
@@ -162,21 +154,6 @@ export function LeadContextPanel({
           <dt>Reply</dt>
           <dd className="flex flex-wrap gap-app-xs">{status}</dd>
         </dl>
-      </section>
-
-      <section className="flex flex-col gap-stack" aria-label="Funnel">
-        <ContextHeading>Funnel</ContextHeading>
-        <ol className="conversation-milestones">
-          {MILESTONES.map(({ key, label }) => {
-            const at = live[key] as string | null | undefined
-            return (
-              <li key={key} data-reached={at ? 'true' : 'false'}>
-                <span>{label}</span>
-                <span className="tabular-nums">{at ? businessDate(at) : '—'}</span>
-              </li>
-            )
-          })}
-        </ol>
       </section>
 
       <LeadInsights lead={{ instance_id: lead.instance_id, profile_url: lead.profile_url, company: lead.company }} />
