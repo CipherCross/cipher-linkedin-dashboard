@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AIRTABLE_IDS } from '../api/_lib/airtable'
 import type { CompanyImportRow } from '../api/_lib/companyImport'
-import { FakeAirtable, call } from './fixtures/fakeAirtable'
+import { FINTECH_BASE_ID, FakeAirtable, call } from './fixtures/fakeAirtable'
 
 type Handler = typeof import('../api/_lib/companyImport').handleCompanyImport
 
@@ -248,5 +248,52 @@ describe('Companies → DB commit', () => {
     const { status, body } = await call(handle, 'company_metadata')
     expect(status).toBe(503)
     expect(body.error).toContain('schema mismatch')
+  })
+})
+
+describe('Companies → DB across bases', () => {
+  let fintech: FakeAirtable
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    fintech = new FakeAirtable(FINTECH_BASE_ID)
+    airtable.install(fintech)
+  })
+
+  it('checks and writes only the Fintech (Arabic) base when it is named', async () => {
+    // Already in Web 2 Mob, so only a leak across bases would call it a duplicate.
+    airtable.addDb('https://company2.example', 'Company 2', 'New')
+    fintech.addDb('https://company3.example', 'Company 3', 'Manual review')
+
+    const preview = await call(handle, 'company_preview', { base: 'fintech_arabic', rows: [row(2), row(3)] })
+    expect(preview.body.results.map((result: { status: string }) => result.status)).toEqual(['ready', 'duplicate'])
+
+    const { body } = await call(handle, 'company_commit', { base: 'fintech_arabic', addedBy: 'Daria Krut', rows: [row(2), row(3)] })
+    expect(body.counts).toEqual({ created: 1, duplicate: 1, failed: 0 })
+    expect(fintech.writes()).toHaveLength(1)
+    expect(fintech.writes()[0].path).toBe(`/v0/${FINTECH_BASE_ID}/${AIRTABLE_IDS.dbTable}`)
+    expect(airtable.requests).toHaveLength(0)
+    expect(airtable.records(AIRTABLE_IDS.dbTable)).toHaveLength(1)
+  })
+
+  it('treats a request without base as Web 2 Mob', async () => {
+    const { body } = await call(handle, 'company_metadata')
+    expect(body.base).toBe('web2mob')
+    expect(fintech.requests).toHaveLength(0)
+  })
+
+  it('refuses an unknown base before reaching Airtable', async () => {
+    const { status } = await call(handle, 'company_preview', { base: 'Fintech (Arabic)', rows: [row(2)] })
+    expect(status).toBe(400)
+    expect(airtable.requests).toHaveLength(0)
+    expect(fintech.requests).toHaveLength(0)
+  })
+
+  it('answers 503 naming the env var when the Fintech base is not configured', async () => {
+    vi.stubEnv('AIRTABLE_FINTECH_ARABIC_BASE_ID', '')
+    const { status, body } = await call(handle, 'company_metadata', { base: 'fintech_arabic' })
+    expect(status).toBe(503)
+    expect(body.error).toContain('AIRTABLE_FINTECH_ARABIC_BASE_ID')
+    expect(airtable.requests).toHaveLength(0)
   })
 })

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Building2 } from 'lucide-react'
+import type { AirtableBaseId } from '../lib/airtableBases'
 import type { AirtableCompany } from '../lib/importApi'
 import { searchAirtableCompanies } from '../lib/importApi'
 import { Badge, Button, Dialog, InlineError, TextField, UpdatingNote } from '../ui'
@@ -9,10 +10,11 @@ const isRejected = (company: AirtableCompany) => company.approveStatus.trim().to
 /**
  * Picks the Companies record a group of leads — or, with `leadName`, one lead
  * of it — is linked to. It lists the
- * group's candidates and searches Companies by name, domain or LinkedIn. A
- * Rejected record is shown but cannot be chosen.
+ * group's candidates and searches Companies (in `base` only) by name, domain
+ * or LinkedIn. A Rejected record is shown but cannot be chosen.
  */
 export function CompanyResolutionModal({
+  base,
   sourceCompany,
   affectedRows,
   leadName,
@@ -21,6 +23,7 @@ export function CompanyResolutionModal({
   onSelect,
   onClose,
 }: {
+  base: AirtableBaseId
   sourceCompany: string
   affectedRows: number
   leadName?: string
@@ -45,7 +48,7 @@ export function CompanyResolutionModal({
       setBusy(true)
       setError(null)
       try {
-        const companies = await searchAirtableCompanies(trimmed)
+        const companies = await searchAirtableCompanies(base, trimmed)
         if (!cancelled) {
           const found = new Set(companies.map((company) => company.id))
           setResults([...suggestions.filter((company) => !found.has(company.id)), ...companies])
@@ -63,7 +66,7 @@ export function CompanyResolutionModal({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [query, suggestions])
+  }, [base, query, suggestions])
 
   return (
     <Dialog

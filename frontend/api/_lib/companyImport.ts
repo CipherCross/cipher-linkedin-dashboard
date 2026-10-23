@@ -7,12 +7,16 @@
 // or in Companies, or repeated earlier in the same file, is skipped and
 // reported with where it was found. A name-only match is a warning: the row is
 // still created unless the user unticks it.
+//
+// Every action runs against the one base the request names: a domain already
+// in another base's DB or Companies is not a duplicate here.
 import { DOMAIN_ISSUE_LABEL, parseDomain } from '../../src/lib/domain.js'
-import { AIRTABLE_IDS, AirtableError, getAirtableSchema } from './airtable.js'
+import { AIRTABLE_IDS, AirtableError, getAirtableSchema, type AirtableBaseId } from './airtable.js'
 import {
   CACHE_MS,
   COMPANIES_SCHEMA,
   asString,
+  baseOf,
   buildCompanyMaps,
   canonicalCompanyLinkedin,
   choicesOf,
@@ -102,13 +106,14 @@ interface CommitResult {
   matches?: CompanyLocation[]
 }
 
-let schemaCache: { at: number; addedBy: string[] } | null = null
+const schemaCache = new Map<AirtableBaseId, { at: number; addedBy: string[] }>()
 
-async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
-  if (!force && schemaCache && Date.now() - schemaCache.at < CACHE_MS) {
-    return { addedBy: schemaCache.addedBy }
+async function getImportSchema(base: AirtableBaseId, force = false): Promise<{ addedBy: string[] }> {
+  const cached = schemaCache.get(base)
+  if (!force && cached && Date.now() - cached.at < CACHE_MS) {
+    return { addedBy: cached.addedBy }
   }
-  const tables = await getAirtableSchema()
+  const tables = await getAirtableSchema(base)
   const db = tables.find((table) => table.id === AIRTABLE_IDS.dbTable)
   const companies = tables.find((table) => table.id === AIRTABLE_IDS.companiesTable)
   if (!db || !companies) {
@@ -137,7 +142,7 @@ async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
   const addedBy = importAddedByChoices(choicesOf(db, AIRTABLE_IDS.db.addedBy))
   if (!addedBy.length) throw new AirtableError('DB.Added by has no available choices', 503)
 
-  schemaCache = { at: Date.now(), addedBy }
+  schemaCache.set(base, { at: Date.now(), addedBy })
   return { addedBy }
 }
 
@@ -303,25 +308,26 @@ function uploadDomains(rows: CompanyImportRow[]): string[] {
   return rows.filter((row) => !rowIssue(row)).map((row) => parseDomain(row.website).domain)
 }
 
-async function metadata() {
-  const schema = await getImportSchema()
+async function metadata(base: AirtableBaseId) {
+  const schema = await getImportSchema(base)
   return json({
     ok: true,
     target: 'db',
+    base,
     addedBy: schema.addedBy,
     limits: { maxRows: MAX_ROWS, maxFileBytes: 5_000_000 },
   })
 }
 
-async function preview(payload: Record<string, unknown>) {
+async function preview(base: AirtableBaseId, payload: Record<string, unknown>) {
   const rows = rowsOrError(payload)
   if (rows instanceof Response) return rows
 
-  await getImportSchema()
+  await getImportSchema(base)
   const [companies, dbByDomain, dbByName] = await Promise.all([
-    getCompanies(),
-    findDbByDomains(uploadDomains(rows)),
-    findDbByNames(rows.filter((row) => !rowIssue(row)).map((row) => row.companyName)),
+    getCompanies(base),
+    findDbByDomains(base, uploadDomains(rows)),
+    findDbByNames(base, rows.filter((row) => !rowIssue(row)).map((row) => row.companyName)),
   ])
   const results = classifyCompanyRows(rows, {
     maps: buildCompanyMaps(companies),
@@ -338,12 +344,12 @@ async function preview(payload: Record<string, unknown>) {
   })
 }
 
-async function commit(payload: Record<string, unknown>) {
+async function commit(base: AirtableBaseId, payload: Record<string, unknown>) {
   const addedBy = asString(payload.addedBy)
   const rows = rowsOrError(payload)
   if (rows instanceof Response) return rows
 
-  const schema = await getImportSchema(true)
+  const schema = await getImportSchema(base, true)
   if (!schema.addedBy.includes(addedBy)) {
     return json({ error: 'Added by must be one of the current DB choices' }, 400)
   }
@@ -351,8 +357,8 @@ async function commit(payload: Record<string, unknown>) {
   // DB has no uniqueness constraint, so the duplicate check is re-run against
   // fresh reads immediately before creating. Preview results are never trusted.
   const [companies, dbByDomain] = await Promise.all([
-    getCompanies(true),
-    findDbByDomains(uploadDomains(rows)),
+    getCompanies(base, true),
+    findDbByDomains(base, uploadDomains(rows)),
   ])
   const classified = classifyCompanyRows(rows, { maps: buildCompanyMaps(companies), dbByDomain })
 
@@ -374,7 +380,7 @@ async function commit(payload: Record<string, unknown>) {
     }
   })
 
-  const outcomes = await createAll(AIRTABLE_IDS.dbTable, creatable, (row) => dbFields(row, addedBy))
+  const outcomes = await createAll(base, AIRTABLE_IDS.dbTable, creatable, (row) => dbFields(row, addedBy))
   for (const outcome of outcomes) {
     const domain = parseDomain(outcome.item.website).domain
     results.push(
@@ -399,10 +405,12 @@ export async function handleCompanyImport(
   action: string,
   payload: Record<string, unknown>,
 ): Promise<Response> {
+  const base = baseOf(payload)
+  if (base instanceof Response) return base
   try {
-    if (action === 'company_metadata') return await metadata()
-    if (action === 'company_preview') return await preview(payload)
-    if (action === 'company_commit') return await commit(payload)
+    if (action === 'company_metadata') return await metadata(base)
+    if (action === 'company_preview') return await preview(base, payload)
+    if (action === 'company_commit') return await commit(base, payload)
     return json({ error: 'unknown Company import action' }, 400)
   } catch (error) {
     return errorResponse(error)

@@ -4,10 +4,25 @@
 // the schema checks in companyImport.ts and contactImport.ts fail closed if a
 // field is deleted or retyped.
 //
+// Every call names its base. The bases in `AIRTABLE_BASES` (Web 2 Mob,
+// Fintech (Arabic)) are copies of one layout with the same table and field
+// IDs, so `AIRTABLE_IDS` holds for each; a base's schema check still runs
+// against that base alone, so a field deleted in one base fails only that one.
+//
 // Writes go to exactly two tables. New companies land in DB for approval, and
 // Airtable automations — not this code — copy approved rows into Companies.
 // `createRecords` refuses every other table, so no import path can write
 // Companies even by mistake.
+
+import { airtableBaseLabel, type AirtableBaseId } from '../../src/lib/airtableBases.js'
+
+export type { AirtableBaseId }
+
+/** The env var holding each base's ID. An unset one disables that base only. */
+export const BASE_ENV: Record<AirtableBaseId, string> = {
+  web2mob: 'AIRTABLE_BASE_ID',
+  fintech_arabic: 'AIRTABLE_FINTECH_ARABIC_BASE_ID',
+}
 
 export const AIRTABLE_IDS = {
   dbTable: 'tblEYOgRDRg0aYfzI',
@@ -104,17 +119,18 @@ let nextRequestAt = 0
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function config() {
+function config(base: AirtableBaseId) {
   const token = process.env.AIRTABLE_TOKEN
-  const baseId = process.env.AIRTABLE_BASE_ID
+  const envName = BASE_ENV[base]
+  const baseId = envName ? process.env[envName] : undefined
   if (!token || !baseId) {
     throw new AirtableError(
-      'Airtable is not configured (AIRTABLE_TOKEN and AIRTABLE_BASE_ID are required)',
+      `Airtable ${airtableBaseLabel(base)} is not configured (AIRTABLE_TOKEN and ${envName} are required)`,
       503,
     )
   }
   if (!/^app[a-zA-Z0-9]{14}$/.test(baseId)) {
-    throw new AirtableError('AIRTABLE_BASE_ID is invalid', 503)
+    throw new AirtableError(`${envName} is invalid`, 503)
   }
   return { token, baseId }
 }
@@ -134,14 +150,16 @@ function errorMessage(body: unknown, status: number): string {
 }
 
 async function airtableFetch<T>(
+  base: AirtableBaseId,
   path: string,
   init: RequestInit = {},
   attempt = 0,
 ): Promise<T> {
-  const { token } = config()
+  const { token } = config(base)
 
   // Airtable permits five requests/second/base. A 225 ms gap stays below that
-  // ceiling even when one warm serverless process handles concurrent actions.
+  // ceiling even when one warm serverless process handles concurrent actions;
+  // it is shared across bases, which only makes it stricter.
   const now = Date.now()
   const wait = Math.max(0, nextRequestAt - now)
   nextRequestAt = Math.max(now, nextRequestAt) + 225
@@ -167,11 +185,11 @@ async function airtableFetch<T>(
 
   if (response.status === 429 && attempt < 2) {
     await delay(30_000)
-    return airtableFetch<T>(path, init, attempt + 1)
+    return airtableFetch<T>(base, path, init, attempt + 1)
   }
   if (response.status >= 500 && attempt < 2) {
     await delay(1_000 * 2 ** attempt)
-    return airtableFetch<T>(path, init, attempt + 1)
+    return airtableFetch<T>(base, path, init, attempt + 1)
   }
 
   throw new AirtableError(
@@ -181,19 +199,21 @@ async function airtableFetch<T>(
   )
 }
 
-export async function getAirtableSchema(): Promise<AirtableTableSchema[]> {
-  const { baseId } = config()
+export async function getAirtableSchema(base: AirtableBaseId): Promise<AirtableTableSchema[]> {
+  const { baseId } = config(base)
   const response = await airtableFetch<AirtableSchemaResponse>(
+    base,
     `/v0/meta/bases/${encodeURIComponent(baseId)}/tables`,
   )
   return response.tables ?? []
 }
 
 export async function listAllRecords(
+  base: AirtableBaseId,
   tableId: string,
   fieldIds: readonly string[],
 ): Promise<AirtableRecord[]> {
-  const { baseId } = config()
+  const { baseId } = config(base)
   const records: AirtableRecord[] = []
   let offset: string | undefined
 
@@ -206,6 +226,7 @@ export async function listAllRecords(
     if (offset) params.set('offset', offset)
 
     const response = await airtableFetch<AirtableListResponse>(
+      base,
       `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params}`,
     )
     records.push(...(response.records ?? []))
@@ -221,16 +242,18 @@ export async function listAllRecords(
  * values they have already constrained or escaped (see `formulaString`).
  */
 export async function findRecordsByFormula(
+  base: AirtableBaseId,
   tableId: string,
   formula: string,
   fieldIds: readonly string[],
 ): Promise<AirtableRecord[]> {
-  const { baseId } = config()
+  const { baseId } = config(base)
   const records: AirtableRecord[] = []
   let offset: string | undefined
 
   do {
     const response = await airtableFetch<AirtableListResponse>(
+      base,
       `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}/listRecords`,
       {
         method: 'POST',
@@ -271,6 +294,7 @@ export const WRITABLE_TABLES: ReadonlySet<string> = new Set([
 ])
 
 export async function createRecords(
+  base: AirtableBaseId,
   tableId: string,
   fields: Array<Record<string, unknown>>,
 ): Promise<AirtableRecord[]> {
@@ -280,9 +304,10 @@ export async function createRecords(
   if (fields.length === 0 || fields.length > 10) {
     throw new AirtableError('Airtable create batch must contain 1–10 records', 500)
   }
-  const { baseId } = config()
+  const { baseId } = config(base)
   const params = new URLSearchParams({ returnFieldsByFieldId: 'true' })
   const response = await airtableFetch<AirtableCreateResponse>(
+    base,
     `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}?${params}`,
     {
       method: 'POST',

@@ -263,8 +263,11 @@ entering credentials or making data-changing actions.
 - Server-only (Vercel settings, **never** `VITE_`): `ANTHROPIC_API_KEY`, `CRON_SECRET` (guards GET cron paths of `/api/classify` +
   `/api/notify-replies` + `/api/briefing`), `NOTIFY_SECRET` (sync-agent ping),
   `MCP_SECRET` (all MCP tools),
-  `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (server-only Airtable access for Apollo CSV Contact
-  and Company imports; restrict the PAT to the target base and schema-read/record read-write scopes),
+  `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (Web 2 Mob) + `AIRTABLE_FINTECH_ARABIC_BASE_ID`
+  (server-only Airtable access for Apollo CSV Contact and Company imports; the CSV import page
+  switches between the bases, which share one table/field-ID layout (`src/lib/airtableBases.ts`);
+  an unset base ID disables only that base; restrict the PAT to the target bases and
+  schema-read/record read-write scopes),
   `SLACK_WEBHOOK_URL`,
   `SLACK_REPLIES_WEBHOOK_URL` (optional; new-reply alerts channel, falls back to
   `SLACK_WEBHOOK_URL`), `DASHBOARD_URL` (optional; deep links in reply alerts).

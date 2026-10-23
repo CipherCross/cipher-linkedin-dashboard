@@ -20,7 +20,7 @@ import {
   type LeadGroup,
   type LeadRow,
 } from '../api/_lib/contactImport'
-import { FakeAirtable, call } from './fixtures/fakeAirtable'
+import { FINTECH_BASE_ID, FakeAirtable, call } from './fixtures/fakeAirtable'
 
 const lead = (rowNumber: number, overrides: Partial<LeadRow> = {}): LeadRow => ({
   rowNumber,
@@ -101,7 +101,7 @@ describe('identity keys', () => {
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
     await expect(
-      createRecords(AIRTABLE_IDS.companiesTable, [{ [AIRTABLE_IDS.companies.name]: 'X' }]),
+      createRecords('web2mob', AIRTABLE_IDS.companiesTable, [{ [AIRTABLE_IDS.companies.name]: 'X' }]),
     ).rejects.toThrow('only create records in DB or Contacts')
     expect(fetcher).not.toHaveBeenCalled()
     vi.unstubAllEnvs()
@@ -421,5 +421,55 @@ describe('Leads → Contacts handler', () => {
     airtable.addCompany('Northwind Health', 'https://www.northwind.example', 'Rejected')
     const { body } = await call(handle, 'company_search', { query: 'northwind.example' })
     expect(body.companies).toEqual([expect.objectContaining({ name: 'Northwind Health', approveStatus: 'Rejected' })])
+  })
+
+  describe('in the Fintech (Arabic) base', () => {
+    let fintech: FakeAirtable
+
+    beforeEach(() => {
+      vi.restoreAllMocks()
+      fintech = new FakeAirtable(FINTECH_BASE_ID)
+      airtable.install(fintech)
+    })
+
+    it('matches, searches and links only against that base’s Companies', async () => {
+      // The same company in Web 2 Mob must not satisfy a Fintech lead.
+      airtable.addCompany('Northwind Health', 'northwind.example', 'Approved')
+      fintech.addDb('https://northwind.example', 'Northwind Health', 'Manual review')
+      const preview = await call(handle, 'contact_preview', { base: 'fintech_arabic', rows: [lead(2)] })
+      expect(preview.body.groups[0].status).toBe('pending')
+
+      const search = await call(handle, 'company_search', { base: 'fintech_arabic', query: 'northwind' })
+      expect(search.body.companies).toEqual([])
+
+      const id = fintech.addCompany('Northwind Health', 'northwind.example', 'Approved')
+      const { body } = await call(handle, 'contact_commit', {
+        base: 'fintech_arabic',
+        addedBy: 'Daria Krut',
+        rows: [commitRow(lead(2), id)],
+      })
+      expect(body.counts).toEqual({ created: 1, duplicate: 0, failed: 0 })
+      expect(fintech.writes()[0].path).toBe(`/v0/${FINTECH_BASE_ID}/${AIRTABLE_IDS.contactsTable}`)
+      expect(airtable.requests).toHaveLength(0)
+    })
+
+    it('refuses a Web 2 Mob Companies record ID', async () => {
+      const id = airtable.addCompany('Northwind Health', 'northwind.example', 'Approved')
+      const { body } = await call(handle, 'contact_commit', {
+        base: 'fintech_arabic',
+        addedBy: 'Daria Krut',
+        rows: [commitRow(lead(2), id)],
+      })
+      expect(body.results[0]).toMatchObject({ status: 'failed', error: 'The confirmed Company no longer exists in Airtable' })
+      expect(fintech.writes()).toHaveLength(0)
+    })
+
+    it('keeps a separate contact cache per base', async () => {
+      airtable.addContact('https://linkedin.com/in/person-2')
+      const web2mob = await call(handle, 'contact_preview', { rows: [lead(2)] })
+      expect(web2mob.body.rows[0].status).toBe('existing')
+      const fin = await call(handle, 'contact_preview', { base: 'fintech_arabic', rows: [lead(2)] })
+      expect(fin.body.rows[0].status).toBe('ready')
+    })
   })
 })

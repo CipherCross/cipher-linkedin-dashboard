@@ -78,6 +78,9 @@ const asText = (value: unknown): string | null => {
   return text || null
 }
 
+/** The coach reads company facts from Web 2 Mob only; Fintech (Arabic) is an import target, not a coach source yet. */
+const COACH_BASE = 'web2mob' as const
+
 const COMPANY_FIELDS = [
   AIRTABLE_IDS.companies.name, AIRTABLE_IDS.companies.website, AIRTABLE_IDS.companies.industry,
   AIRTABLE_IDS.companies.employees, AIRTABLE_IDS.companies.foundedYear, AIRTABLE_IDS.companies.country,
@@ -124,6 +127,7 @@ export async function airtableCompanyFor(profileUrl: string, companyName: string
   const needle = personLinkedinNeedle(profileUrl)
   if (needle) {
     const contacts = await findRecordsByFormula(
+      COACH_BASE,
       AIRTABLE_IDS.contactsTable,
       `FIND(${formulaString(needle, 300)}, LOWER({${AIRTABLE_IDS.contacts.personaLinkedin}}&"") & "/")`,
       [AIRTABLE_IDS.contacts.company],
@@ -133,7 +137,7 @@ export async function airtableCompanyFor(profileUrl: string, companyName: string
       .find((link): link is string[] => Array.isArray(link) && typeof link[0] === 'string')?.[0]
     if (companyId && /^rec[a-zA-Z0-9]{14}$/.test(companyId)) {
       const [company] = await findRecordsByFormula(
-        AIRTABLE_IDS.companiesTable, `RECORD_ID()=${formulaString(companyId)}`, COMPANY_FIELDS,
+        COACH_BASE, AIRTABLE_IDS.companiesTable, `RECORD_ID()=${formulaString(companyId)}`, COMPANY_FIELDS,
       )
       if (company) return factsOf(company)
     }
@@ -141,6 +145,7 @@ export async function airtableCompanyFor(profileUrl: string, companyName: string
   const name = companyName?.trim()
   if (name) {
     const matches = await findRecordsByFormula(
+      COACH_BASE,
       AIRTABLE_IDS.companiesTable,
       `LOWER(TRIM({${AIRTABLE_IDS.companies.name}}&""))=LOWER(${formulaString(name, 200)})`,
       COMPANY_FIELDS,

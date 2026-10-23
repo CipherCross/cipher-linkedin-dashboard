@@ -19,12 +19,22 @@
 // Commit accepts only rows that carry a confirmed Companies record ID, and
 // re-verifies it: the record must still exist, must not be Rejected, and the
 // lead's own company must not have been declined. It never re-matches.
-import { AIRTABLE_IDS, AirtableError, getAirtableSchema, listAllRecords } from './airtable.js'
+//
+// Every action runs against the one base the request names; Companies, DB and
+// Contacts are all read from and written to that base only.
+import {
+  AIRTABLE_IDS,
+  AirtableError,
+  getAirtableSchema,
+  listAllRecords,
+  type AirtableBaseId,
+} from './airtable.js'
 import {
   CACHE_MS,
   COMPANIES_SCHEMA,
   RECORD_ID,
   asString,
+  baseOf,
   buildCompanyMaps,
   choicesOf,
   companyLinkedinKey,
@@ -130,14 +140,15 @@ interface CommitResult {
   error?: string
 }
 
-let schemaCache: { at: number; addedBy: string[] } | null = null
-let contactCache: { at: number; records: ContactRecord[] } | null = null
+const schemaCache = new Map<AirtableBaseId, { at: number; addedBy: string[] }>()
+const contactCache = new Map<AirtableBaseId, { at: number; records: ContactRecord[] }>()
 
-async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
-  if (!force && schemaCache && Date.now() - schemaCache.at < CACHE_MS) {
-    return { addedBy: schemaCache.addedBy }
+async function getImportSchema(base: AirtableBaseId, force = false): Promise<{ addedBy: string[] }> {
+  const cached = schemaCache.get(base)
+  if (!force && cached && Date.now() - cached.at < CACHE_MS) {
+    return { addedBy: cached.addedBy }
   }
-  const tables = await getAirtableSchema()
+  const tables = await getAirtableSchema(base)
   const companies = tables.find((table) => table.id === AIRTABLE_IDS.companiesTable)
   const contacts = tables.find((table) => table.id === AIRTABLE_IDS.contactsTable)
   const db = tables.find((table) => table.id === AIRTABLE_IDS.dbTable)
@@ -172,22 +183,23 @@ async function getImportSchema(force = false): Promise<{ addedBy: string[] }> {
   const addedBy = importAddedByChoices(choicesOf(contacts, AIRTABLE_IDS.contacts.addedBy))
   if (!addedBy.length) throw new AirtableError('Contacts.Added by has no available choices', 503)
 
-  schemaCache = { at: Date.now(), addedBy }
+  schemaCache.set(base, { at: Date.now(), addedBy })
   return { addedBy }
 }
 
-async function getContacts(force = false): Promise<ContactRecord[]> {
-  if (!force && contactCache && Date.now() - contactCache.at < CONTACT_CACHE_MS) {
-    return contactCache.records
+async function getContacts(base: AirtableBaseId, force = false): Promise<ContactRecord[]> {
+  const cached = contactCache.get(base)
+  if (!force && cached && Date.now() - cached.at < CONTACT_CACHE_MS) {
+    return cached.records
   }
-  const records = await listAllRecords(AIRTABLE_IDS.contactsTable, [
+  const records = await listAllRecords(base, AIRTABLE_IDS.contactsTable, [
     AIRTABLE_IDS.contacts.personaLinkedin,
   ])
   const contacts = records.map((record) => ({
     id: record.id,
     personaLinkedin: asString(record.fields[AIRTABLE_IDS.contacts.personaLinkedin]),
   }))
-  contactCache = { at: Date.now(), records: contacts }
+  contactCache.set(base, { at: Date.now(), records: contacts })
   return contacts
 }
 
@@ -542,17 +554,18 @@ function rowIssue(row: TextFields): string | null {
   return null
 }
 
-async function metadata() {
-  const schema = await getImportSchema()
+async function metadata(base: AirtableBaseId) {
+  const schema = await getImportSchema(base)
   return json({
     ok: true,
     target: 'contacts',
+    base,
     addedBy: schema.addedBy,
     limits: { maxRows: MAX_ROWS, maxFileBytes: 5_000_000 },
   })
 }
 
-async function preview(payload: Record<string, unknown>) {
+async function preview(base: AirtableBaseId, payload: Record<string, unknown>) {
   if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
     return json({ error: 'rows (non-empty array) is required' }, 400)
   }
@@ -564,12 +577,12 @@ async function preview(payload: Record<string, unknown>) {
   }
   const rows = payload.rows as LeadRow[]
 
-  await getImportSchema()
+  await getImportSchema(base)
   // Re-check after an approval must see the new Companies record, so the
   // caller can bypass the cache.
   const [companies, contacts] = await Promise.all([
-    getCompanies(payload.forceCompanies === true),
-    getContacts(payload.forceCompanies === true),
+    getCompanies(base, payload.forceCompanies === true),
+    getContacts(base, payload.forceCompanies === true),
   ])
   const existing = contactMap(contacts)
   const maps = buildCompanyMaps(companies)
@@ -609,8 +622,8 @@ async function preview(payload: Record<string, unknown>) {
   const drafts = groupRows(ready)
   const lookup = needsDbLookup(drafts, maps)
   const [byDomain, byName] = await Promise.all([
-    findDbByDomains(lookup.domains),
-    findDbByNames(lookup.names),
+    findDbByDomains(base, lookup.domains),
+    findDbByNames(base, lookup.names),
   ])
   const groups = classifyGroups(drafts, maps, { byDomain, byName })
 
@@ -625,13 +638,13 @@ async function preview(payload: Record<string, unknown>) {
   })
 }
 
-async function searchCompanies(payload: Record<string, unknown>) {
+async function searchCompanies(base: AirtableBaseId, payload: Record<string, unknown>) {
   const query = asString(payload.query)
   if (query.length < 2 || query.length > 200) {
     return json({ error: 'query must contain 2–200 characters' }, 400)
   }
-  await getImportSchema()
-  const companies = await getCompanies()
+  await getImportSchema(base)
+  const companies = await getCompanies(base)
   const qName = normalizeName(query)
   const qDomain = normalizeDomain(query)
   const qLinkedin = companyLinkedinKey(query) || normalizeLinkedin(query)
@@ -675,7 +688,7 @@ export function commitRefusal(
   return null
 }
 
-async function commit(payload: Record<string, unknown>) {
+async function commit(base: AirtableBaseId, payload: Record<string, unknown>) {
   const addedBy = asString(payload.addedBy)
   if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
     return json({ error: 'rows (non-empty array) is required' }, 400)
@@ -688,20 +701,20 @@ async function commit(payload: Record<string, unknown>) {
   }
   const rows = payload.rows as CommitRow[]
 
-  const schema = await getImportSchema(true)
+  const schema = await getImportSchema(base, true)
   if (!schema.addedBy.includes(addedBy)) {
     return json({ error: 'Added by must be one of the current Contacts choices' }, 400)
   }
 
   // Fresh identity reads: preview caches make the UI fast, but they are never
   // the final authority for a write.
-  const [companies, contacts] = await Promise.all([getCompanies(true), getContacts(true)])
+  const [companies, contacts] = await Promise.all([getCompanies(base, true), getContacts(base, true)])
   const byId = new Map(companies.map((company) => [company.id, company]))
   const maps = buildCompanyMaps(companies)
   const dbDomains = rows
     .map((row) => normalizeDomain(row.companyWebsite))
     .filter((domain) => domain && !maps.domain.has(domain))
-  const dbByDomain = await findDbByDomains(dbDomains)
+  const dbByDomain = await findDbByDomains(base, dbDomains)
   const existing = contactMap(contacts)
 
   const results: CommitResult[] = []
@@ -737,7 +750,7 @@ async function commit(payload: Record<string, unknown>) {
     creatable.push(row)
   }
 
-  const outcomes = await createAll(AIRTABLE_IDS.contactsTable, creatable, (row) => ({
+  const outcomes = await createAll(base, AIRTABLE_IDS.contactsTable, creatable, (row) => ({
     [AIRTABLE_IDS.contacts.personaLinkedin]: `https://www.${normalizeLinkedin(row.personLinkedin)}/`,
     [AIRTABLE_IDS.contacts.fullName]: row.fullName.trim(),
     [AIRTABLE_IDS.contacts.firstName]: row.firstName.trim(),
@@ -754,7 +767,7 @@ async function commit(payload: Record<string, unknown>) {
     )
   }
 
-  contactCache = null
+  contactCache.delete(base)
   results.sort((a, b) => a.rowNumber - b.rowNumber)
   const counts = results.reduce<Record<RowResultStatus, number>>(
     (summary, result) => {
@@ -770,11 +783,13 @@ export async function handleContactImport(
   action: string,
   payload: Record<string, unknown>,
 ): Promise<Response> {
+  const base = baseOf(payload)
+  if (base instanceof Response) return base
   try {
-    if (action === 'contact_metadata') return await metadata()
-    if (action === 'contact_preview') return await preview(payload)
-    if (action === 'company_search') return await searchCompanies(payload)
-    if (action === 'contact_commit') return await commit(payload)
+    if (action === 'contact_metadata') return await metadata(base)
+    if (action === 'contact_preview') return await preview(base, payload)
+    if (action === 'company_search') return await searchCompanies(base, payload)
+    if (action === 'contact_commit') return await commit(base, payload)
     return json({ error: 'unknown contact import action' }, 400)
   } catch (error) {
     return errorResponse(error)

@@ -39,7 +39,7 @@ beforeEach(() => {
     ],
     counts: { ready: 2, name_match: 1, duplicate: 1 },
   })
-  api.commitCompanies.mockImplementation(async (_addedBy: string, rows: Array<{ rowNumber: number; website: string }>) => ({
+  api.commitCompanies.mockImplementation(async (_base: string, _addedBy: string, rows: Array<{ rowNumber: number; website: string }>) => ({
     results: rows.map((row) => ({ rowNumber: row.rowNumber, status: 'created', domain: row.website, recordId: `recDB00000000000${row.rowNumber}` })),
     counts: { created: rows.length, duplicate: 0, failed: 0 },
   }))
@@ -81,7 +81,8 @@ describe('Companies → DB tab', () => {
     })
 
     expect(api.commitCompanies).toHaveBeenCalledTimes(1)
-    const [addedBy, rows] = api.commitCompanies.mock.calls[0]
+    const [base, addedBy, rows] = api.commitCompanies.mock.calls[0]
+    expect(base).toBe('web2mob')
     expect(addedBy).toBe('David Gamanuk')
     expect(rows.map((row: { rowNumber: number }) => row.rowNumber)).toEqual([2, 5])
 
@@ -95,7 +96,7 @@ describe('Companies → DB tab', () => {
   it('sends only allowlisted columns to the server', async () => {
     await upload()
     await waitFor(() => expect(api.previewCompanies).toHaveBeenCalled())
-    const payload = JSON.stringify(api.previewCompanies.mock.calls[0][0])
+    const payload = JSON.stringify(api.previewCompanies.mock.calls[0][1])
     for (const value of PRIVATE_VALUES) expect(payload).not.toContain(value)
   })
 
@@ -117,7 +118,63 @@ describe('Companies → DB tab', () => {
       fireEvent.click(within(panel).getByRole('button', { name: 'Re-check' }))
     })
     expect(api.previewCompanies).toHaveBeenCalledTimes(2)
-    expect(api.previewCompanies.mock.calls[1][0]).toEqual(api.previewCompanies.mock.calls[0][0])
+    expect(api.previewCompanies.mock.calls[1][1]).toEqual(api.previewCompanies.mock.calls[0][1])
     expect(await within(panel).findByRole('heading', { name: 'Review companies' })).toBeTruthy()
+  })
+})
+
+describe('Airtable base switch', () => {
+  let store: Map<string, string>
+
+  beforeEach(() => {
+    // Node's own localStorage shadows jsdom's and has no working store.
+    store = new Map()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+      clear: () => store.clear(),
+    })
+  })
+
+  it('runs the Fintech (Arabic) base on its own, keeping the Web 2 Mob file loaded', async () => {
+    const { panel: web2mob } = await upload()
+    await within(web2mob).findByRole('table', { name: 'Companies in this file' })
+    expect(api.fetchCompanyImportMetadata).toHaveBeenCalledWith('web2mob')
+    expect(api.previewCompanies.mock.calls[0][0]).toBe('web2mob')
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Fintech (Arabic)' }))
+    expect(store.get('csv-import-base')).toBe('fintech_arabic')
+    const fintech = screen.getByRole('tabpanel', { name: 'Companies → DB' })
+    expect(fintech).not.toBe(web2mob)
+    await within(fintech).findByLabelText(/Added by/)
+    expect(api.fetchCompanyImportMetadata).toHaveBeenCalledWith('fintech_arabic')
+    expect(api.fetchContactImportMetadata).toHaveBeenCalledWith('fintech_arabic')
+    expect(within(fintech).getByText(/Choices come from the Fintech \(Arabic\) DB table/)).toBeTruthy()
+
+    const input = fintech.querySelector('input[type="file"]') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file(csv)] } })
+    })
+    await within(fintech).findByRole('table', { name: 'Companies in this file' })
+    expect(api.previewCompanies.mock.calls[1][0]).toBe('fintech_arabic')
+
+    fireEvent.change(within(fintech).getByLabelText(/Added by/), { target: { value: 'David Gamanuk' } })
+    await act(async () => {
+      fireEvent.click(within(fintech).getByRole('button', { name: 'Add 3 companies to DB' }))
+    })
+    expect(api.commitCompanies.mock.calls[0][0]).toBe('fintech_arabic')
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Web 2 Mob' }))
+    expect(screen.getByRole('tabpanel', { name: 'Companies → DB' })).toBe(web2mob)
+    expect(within(web2mob).getByRole('heading', { name: 'Review companies' })).toBeTruthy()
+  })
+
+  it('opens on the base picked last time', async () => {
+    store.set('csv-import-base', 'fintech_arabic')
+    render(<CsvImport />)
+    expect(screen.getByRole('radio', { name: 'Fintech (Arabic)' }).getAttribute('aria-checked')).toBe('true')
+    await waitFor(() => expect(api.fetchCompanyImportMetadata).toHaveBeenCalledWith('fintech_arabic'))
+    expect(api.fetchCompanyImportMetadata).not.toHaveBeenCalledWith('web2mob')
   })
 })

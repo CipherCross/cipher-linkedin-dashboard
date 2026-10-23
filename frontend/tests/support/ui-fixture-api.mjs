@@ -837,7 +837,7 @@ export async function importFixture(request) {
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
   if (scenario === 'error' || scenario === 'read-error') return json({ error: 'Fixture import read failure' }, 503)
   const body = await request.json().catch(() => ({}))
-  const metadata = { target: body.action === 'company_metadata' ? 'db' : 'contacts', addedBy: ['Fixture Admin'], limits: { maxRows: 500, maxFileBytes: 5000000 } }
+  const metadata = { target: body.action === 'company_metadata' ? 'db' : 'contacts', base: body.base ?? 'web2mob', addedBy: ['Fixture Admin'], limits: { maxRows: 500, maxFileBytes: 5000000 } }
   if (body.action === 'contact_metadata' || body.action === 'company_metadata') return json(metadata)
   if (body.action === 'company_search') return json({ companies: [FIXTURE_COMPANY] })
   if (body.action === 'company_preview') {

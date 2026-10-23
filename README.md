@@ -118,7 +118,7 @@ Set on the Vercel project; server values must **never** carry a `VITE_` prefix.
 - **Secrets**: `CRON_SECRET`, `NOTIFY_SECRET`, `MCP_SECRET` — each fails closed.
 - **Integrations**: `ANTHROPIC_API_KEY`, `SLACK_WEBHOOK_URL`
   (`SLACK_REPLIES_WEBHOOK_URL`, `DASHBOARD_URL` optional), `AIRTABLE_TOKEN` +
-  `AIRTABLE_BASE_ID` for CSV import.
+  `AIRTABLE_BASE_ID` (Web 2 Mob) and `AIRTABLE_FINTECH_ARABIC_BASE_ID` for CSV import.
 
 A missing Neon or identity credential fails with a named 500, never a silent
 fallback. Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC,

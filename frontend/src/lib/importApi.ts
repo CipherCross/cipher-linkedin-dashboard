@@ -1,8 +1,13 @@
 import type { CompanyImportRow, LeadImportRow } from './csvImport'
 import { authFetch } from './api'
+import type { AirtableBaseId } from './airtableBases'
+
+// Every call names the Airtable base it reads and writes; the server never
+// mixes bases inside one request.
 
 export interface ImportMetadata {
   target: 'db' | 'contacts'
+  base: AirtableBaseId
   addedBy: string[]
   limits: { maxRows: number; maxFileBytes: number }
 }
@@ -144,47 +149,58 @@ async function importPost<T>(body: Record<string, unknown>): Promise<T> {
   return payload as T
 }
 
-export function fetchCompanyImportMetadata(): Promise<ImportMetadata> {
-  return importPost<ImportMetadata>({ action: 'company_metadata' })
+export function fetchCompanyImportMetadata(base: AirtableBaseId): Promise<ImportMetadata> {
+  return importPost<ImportMetadata>({ action: 'company_metadata', base })
 }
 
-export function previewCompanies(rows: CompanyImportRow[]): Promise<CompanyPreviewResponse> {
-  return importPost<CompanyPreviewResponse>({ action: 'company_preview', rows })
+export function previewCompanies(
+  base: AirtableBaseId,
+  rows: CompanyImportRow[],
+): Promise<CompanyPreviewResponse> {
+  return importPost<CompanyPreviewResponse>({ action: 'company_preview', base, rows })
 }
 
 export function commitCompanies(
+  base: AirtableBaseId,
   addedBy: string,
   rows: CompanyImportRow[],
 ): Promise<CompanyCommitResponse> {
-  return importPost<CompanyCommitResponse>({ action: 'company_commit', addedBy, rows })
+  return importPost<CompanyCommitResponse>({ action: 'company_commit', base, addedBy, rows })
 }
 
-export function fetchContactImportMetadata(): Promise<ImportMetadata> {
-  return importPost<ImportMetadata>({ action: 'contact_metadata' })
+export function fetchContactImportMetadata(base: AirtableBaseId): Promise<ImportMetadata> {
+  return importPost<ImportMetadata>({ action: 'contact_metadata', base })
 }
 
 export function previewLeads(
+  base: AirtableBaseId,
   rows: LeadImportRow[],
   options: { forceCompanies?: boolean } = {},
 ): Promise<LeadPreviewResponse> {
   return importPost<LeadPreviewResponse>({
     action: 'contact_preview',
+    base,
     rows,
     forceCompanies: options.forceCompanies === true,
   })
 }
 
-export async function searchAirtableCompanies(query: string): Promise<AirtableCompany[]> {
+export async function searchAirtableCompanies(
+  base: AirtableBaseId,
+  query: string,
+): Promise<AirtableCompany[]> {
   const response = await importPost<{ companies: AirtableCompany[] }>({
     action: 'company_search',
+    base,
     query,
   })
   return response.companies
 }
 
 export function commitContacts(
+  base: AirtableBaseId,
   addedBy: string,
   rows: ContactCommitRow[],
 ): Promise<ContactCommitResponse> {
-  return importPost<ContactCommitResponse>({ action: 'contact_commit', addedBy, rows })
+  return importPost<ContactCommitResponse>({ action: 'contact_commit', base, addedBy, rows })
 }

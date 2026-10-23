@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CheckCircle2, Download, RefreshCw, RotateCcw, Upload } from 'lucide-react'
 import { downloadCsvReport, parseCompanyCsvFile } from '../lib/csvImport'
 import type { CompanyCsvDocument } from '../lib/csvImport'
+import { airtableBaseLabel } from '../lib/airtableBases'
+import type { AirtableBaseId } from '../lib/airtableBases'
 import {
   commitCompanies,
   fetchCompanyImportMetadata,
@@ -29,7 +31,8 @@ import {
 
 // Companies export → Airtable DB. New companies land in DB with
 // `Initial status = New`; SDRs approve them in Airtable and its automations
-// copy approved rows into Companies. This tab never writes Companies.
+// copy approved rows into Companies. This tab never writes Companies, and it
+// reads and writes only the base it was mounted for.
 
 type RowStatus = CompanyPreviewResult['status'] | 'created' | 'failed' | 'excluded'
 
@@ -59,9 +62,10 @@ interface Outcome {
   recordId?: string
 }
 
-export function CompaniesImport() {
+export function CompaniesImport({ base }: { base: AirtableBaseId }) {
   const toast = useToast()
-  const metadata = useImportMetadata(fetchCompanyImportMetadata)
+  const baseLabel = airtableBaseLabel(base)
+  const metadata = useImportMetadata(useCallback(() => fetchCompanyImportMetadata(base), [base]))
   const [addedBy, setAddedBy] = useState('')
   const [document, setDocument] = useState<CompanyCsvDocument | null>(null)
   const [preview, setPreview] = useState<CompanyPreviewResult[] | null>(null)
@@ -84,7 +88,7 @@ export function CompaniesImport() {
       // A row the file itself left unreadable is skipped here, not sent, so it
       // cannot hold back the companies around it.
       const sendable = doc.rows.filter((row) => !row.issue)
-      const checked = sendable.length ? (await previewCompanies(sendable)).results : []
+      const checked = sendable.length ? (await previewCompanies(base, sendable)).results : []
       const unreadable = doc.rows.flatMap((row): CompanyPreviewResult[] =>
         row.issue ? [{ rowNumber: row.rowNumber, status: 'invalid', domain: '', reason: row.issue }] : [],
       )
@@ -126,10 +130,10 @@ export function CompaniesImport() {
     setError(null)
     try {
       const wanted = new Set(selected.map((result) => result.rowNumber))
-      const response = await commitCompanies(addedBy, document.rows.filter((row) => wanted.has(row.rowNumber)))
+      const response = await commitCompanies(base, addedBy, document.rows.filter((row) => wanted.has(row.rowNumber)))
       setCommitted(response)
       toast.success(
-        `${plural(response.counts.created, 'company', 'companies')} added to DB` +
+        `${plural(response.counts.created, 'company', 'companies')} added to ${baseLabel} DB` +
           (response.counts.duplicate ? ` · ${response.counts.duplicate} duplicates skipped` : '') +
           (response.counts.failed ? ` · ${response.counts.failed} failed` : ''),
       )
@@ -186,7 +190,7 @@ export function CompaniesImport() {
     if (!document) return
     downloadCsvReport(
       document.fileName,
-      'db-import-report',
+      `${base}-db-import-report`,
       ['Source Row', 'Company', 'Domain', 'Status', 'Found In', 'Detail', 'DB Record ID'],
       outcomes.map((outcome) => [
         outcome.rowNumber,
@@ -265,16 +269,16 @@ export function CompaniesImport() {
       {!committed && (
         <Stage
           title="Who is importing"
-          description="Written to the DB “Added by” field on every new row."
+          description={`Written to the ${baseLabel} DB “Added by” field on every new row.`}
         >
-          <AddedByField state={metadata} value={addedBy} onChange={setAddedBy} tableLabel="DB" />
+          <AddedByField state={metadata} value={addedBy} onChange={setAddedBy} tableLabel={`${baseLabel} DB`} />
         </Stage>
       )}
 
       {!document && (
         <CsvUploadCard
           title="Upload a companies CSV"
-          hint={<>New companies go to the Airtable DB table for approval, never straight into Companies. Up to 500 rows · maximum 5 MB. Revenue, growth, headcounts and other unmapped columns are ignored.</>}
+          hint={<>New companies go to the <strong>{baseLabel}</strong> DB table for approval, never straight into Companies. Up to 500 rows · maximum 5 MB. Revenue, growth, headcounts and other unmapped columns are ignored.</>}
           disabled={metadata.busy || !!metadata.error}
           onFile={(file) => void chooseFile(file)}
         />
@@ -282,7 +286,7 @@ export function CompaniesImport() {
 
       {document && !preview && busy && (
         <Stage title="Checking Airtable" description={`${document.fileName} · ${plural(document.rowCount, 'row')}`}>
-          <UpdatingNote>Looking for these domains in DB and Companies…</UpdatingNote>
+          <UpdatingNote>Looking for these domains in {baseLabel} DB and Companies…</UpdatingNote>
         </Stage>
       )}
 
@@ -318,7 +322,7 @@ export function CompaniesImport() {
             {companyTable(outcomes, 'Companies in this file', true)}
           </Stage>
           <StageActions summary={<>
-            <strong>{selected.length}</strong> of {document.rowCount} will be added to DB with Initial status <strong>New</strong>.
+            <strong>{selected.length}</strong> of {document.rowCount} will be added to <strong>{baseLabel}</strong> DB with Initial status <strong>New</strong>.
             {!addedBy && <span className="text-app-text-muted"> Select Added by first.</span>}
           </>}>
             <Button variant="ghost" icon={<RotateCcw aria-hidden="true" />} onClick={reset} disabled={busy}>Start over</Button>
@@ -339,7 +343,7 @@ export function CompaniesImport() {
         <>
           <Stage
             title="Import results"
-            description={`${plural(counts.created ?? 0, 'company', 'companies')} added to DB · ${plural(duplicates.length, 'duplicate')} skipped · ${plural(problems.length, 'row')} not imported`}
+            description={`${plural(counts.created ?? 0, 'company', 'companies')} added to ${baseLabel} DB · ${plural(duplicates.length, 'duplicate')} skipped · ${plural(problems.length, 'row')} not imported`}
             aside={<CheckCircle2 size={28} aria-hidden="true" className="text-app-success shrink-0" />}
           >
             {duplicates.length > 0 && (

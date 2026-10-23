@@ -6,10 +6,14 @@
 // The two formula shapes the importers send are evaluated for real: the
 // domain REGEX_MATCH prefilter and the name FIND list. Anything else is a test
 // failure, so a new unscoped DB query cannot slip through.
+//
+// One instance is one base. `install(fintech)` serves a second instance as the
+// Fintech (Arabic) base, each recording only the requests sent to its own base.
 import { vi } from 'vitest'
 import { AIRTABLE_IDS } from '../../api/_lib/airtable'
 
 export const BASE_ID = 'app12345678901234'
+export const FINTECH_BASE_ID = 'app98765432109876'
 
 type Fields = Record<string, unknown>
 interface StoredRecord {
@@ -112,6 +116,8 @@ function matchesFormula(formula: string, fields: Fields): boolean {
 }
 
 export class FakeAirtable {
+  constructor(readonly baseId = BASE_ID) {}
+
   tables = new Map<string, StoredRecord[]>([
     [AIRTABLE_IDS.dbTable, []],
     [AIRTABLE_IDS.companiesTable, []],
@@ -159,36 +165,42 @@ export class FakeAirtable {
     return this.requests.filter((request) => request.method !== 'GET' && !request.path.endsWith('/listRecords'))
   }
 
-  install() {
+  install(fintech?: FakeAirtable) {
     vi.stubEnv('AIRTABLE_TOKEN', 'pat-test-token')
-    vi.stubEnv('AIRTABLE_BASE_ID', BASE_ID)
+    vi.stubEnv('AIRTABLE_BASE_ID', this.baseId)
+    if (fintech) vi.stubEnv('AIRTABLE_FINTECH_ARABIC_BASE_ID', fintech.baseId)
+    const bases = [this, ...(fintech ? [fintech] : [])]
     // The adapter spaces requests 225 ms apart. A clock that jumps ahead on
     // every read keeps that gap at zero without changing the adapter.
     let clock = Date.parse('2026-09-25T00:00:00Z')
     vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1_000))
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => this.handle(input, init)))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname
+      const owner = bases.find((base) => path.split('/').includes(base.baseId))
+      return owner ? owner.handle(input, init) : this.respond({ error: 'NOT_FOUND' }, 404)
+    }))
   }
 
   private respond(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   }
 
-  private handle(input: RequestInfo | URL, init?: RequestInit): Response {
+  handle(input: RequestInfo | URL, init?: RequestInit): Response {
     const url = new URL(String(input))
     const method = (init?.method ?? 'GET').toUpperCase()
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null
     this.requests.push({ method, path: url.pathname, body })
 
-    if (url.pathname === `/v0/meta/bases/${BASE_ID}/tables`) return this.respond(schema())
+    if (url.pathname === `/v0/meta/bases/${this.baseId}/tables`) return this.respond(schema())
 
-    const list = new RegExp(`^/v0/${BASE_ID}/(tbl\\w+)/listRecords$`).exec(url.pathname)
+    const list = new RegExp(`^/v0/${this.baseId}/(tbl\\w+)/listRecords$`).exec(url.pathname)
     if (list && method === 'POST') {
       const formula = String(body?.filterByFormula ?? '')
       const records = this.records(list[1]).filter((record) => matchesFormula(formula, record.fields))
       return this.respond({ records })
     }
 
-    const table = new RegExp(`^/v0/${BASE_ID}/(tbl\\w+)$`).exec(url.pathname)
+    const table = new RegExp(`^/v0/${this.baseId}/(tbl\\w+)$`).exec(url.pathname)
     if (table && method === 'GET') return this.respond({ records: this.records(table[1]) })
     if (table && method === 'POST') {
       if (this.failNextCreate) {

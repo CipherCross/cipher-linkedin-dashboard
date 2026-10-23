@@ -1,6 +1,10 @@
 // Shared lookups for the two CSV importers: how a company is identified, where
 // it already is (DB or Companies), and how records are created.
 //
+// Every lookup is scoped to one base (Web 2 Mob or Fintech (Arabic)); a
+// company found in one base says nothing about the other, and the caches are
+// kept per base.
+//
 // Companies (≈5k rows) is read in full and cached, because lead → company
 // matching needs every record. DB (≈22k rows) is never read in full — that is
 // ~218 pages, about 50 s at the adapter's request gap, against a 60 s function
@@ -9,6 +13,7 @@
 // through the same normalizer the browser uses.
 import { domainToUnicode } from 'node:url'
 import { normalizeDomain } from '../../src/lib/domain.js'
+import { DEFAULT_AIRTABLE_BASE, isAirtableBase } from '../../src/lib/airtableBases.js'
 import {
   AIRTABLE_IDS,
   AirtableError,
@@ -16,6 +21,7 @@ import {
   findRecordsByFormula,
   formulaString,
   listAllRecords,
+  type AirtableBaseId,
   type AirtableFieldSchema,
   type AirtableRecord,
   type AirtableTableSchema,
@@ -44,6 +50,16 @@ export function errorResponse(error: unknown): Response {
 }
 
 export const asString = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * The base a request names. A request without `base` comes from a page loaded
+ * before bases existed and means Web 2 Mob; an unknown value is refused.
+ */
+export function baseOf(payload: Record<string, unknown>): AirtableBaseId | Response {
+  if (payload.base === undefined) return DEFAULT_AIRTABLE_BASE
+  if (isAirtableBase(payload.base)) return payload.base
+  return json({ error: 'base must be one of the known Airtable bases' }, 400)
+}
 
 function field(record: { fields: Record<string, unknown> }, id: string): string {
   const value = record.fields[id]
@@ -170,7 +186,7 @@ export interface CompanyRecord {
 
 export const isRejected = (status: string) => status.trim().toLowerCase() === 'rejected'
 
-let companyCache: { at: number; records: CompanyRecord[] } | null = null
+const companyCache = new Map<AirtableBaseId, { at: number; records: CompanyRecord[] }>()
 
 const COMPANY_FIELDS = [
   AIRTABLE_IDS.companies.name,
@@ -189,20 +205,21 @@ export function companyFromRecord(record: AirtableRecord): CompanyRecord {
   }
 }
 
-/** Every Companies record. Cached for previews; `force` for anything that writes. */
-export async function getCompanies(force = false): Promise<CompanyRecord[]> {
-  if (!force && companyCache && Date.now() - companyCache.at < CACHE_MS) {
-    return companyCache.records
+/** Every Companies record in `base`. Cached for previews; `force` for anything that writes. */
+export async function getCompanies(base: AirtableBaseId, force = false): Promise<CompanyRecord[]> {
+  const cached = companyCache.get(base)
+  if (!force && cached && Date.now() - cached.at < CACHE_MS) {
+    return cached.records
   }
-  const records = (await listAllRecords(AIRTABLE_IDS.companiesTable, COMPANY_FIELDS)).map(
+  const records = (await listAllRecords(base, AIRTABLE_IDS.companiesTable, COMPANY_FIELDS)).map(
     companyFromRecord,
   )
-  companyCache = { at: Date.now(), records }
+  companyCache.set(base, { at: Date.now(), records })
   return records
 }
 
 export function resetDirectoryCache() {
-  companyCache = null
+  companyCache.clear()
 }
 
 function toMap<T>(records: T[], key: (record: T) => string): Map<string, T[]> {
@@ -295,13 +312,16 @@ function formulaName(value: string): string {
   return value.trim().toLowerCase().replace(/[|\u0000-\u001f\u007f]+/g, ' ').slice(0, 200)
 }
 
-/** DB rows whose `Company Website` normalizes to one of `domains`. */
-export async function findDbByDomains(domains: string[]): Promise<Map<string, DbRecord[]>> {
+/** DB rows in `base` whose `Company Website` normalizes to one of `domains`. */
+export async function findDbByDomains(
+  base: AirtableBaseId,
+  domains: string[],
+): Promise<Map<string, DbRecord[]>> {
   const wanted = [...new Set(domains.map(normalizeDomain).filter(Boolean))]
   const found = new Map<string, DbRecord>()
   for (let index = 0; index < wanted.length; index += DOMAINS_PER_QUERY) {
     const chunk = wanted.slice(index, index + DOMAINS_PER_QUERY)
-    for (const record of await findRecordsByFormula(AIRTABLE_IDS.dbTable, domainFormula(chunk), DB_FIELDS)) {
+    for (const record of await findRecordsByFormula(base, AIRTABLE_IDS.dbTable, domainFormula(chunk), DB_FIELDS)) {
       found.set(record.id, dbFromRecord(record))
     }
   }
@@ -312,8 +332,11 @@ export async function findDbByDomains(domains: string[]): Promise<Map<string, Db
   )
 }
 
-/** DB rows whose `Company name` equals one of `names` after `normalizeName`. */
-export async function findDbByNames(names: string[]): Promise<Map<string, DbRecord[]>> {
+/** DB rows in `base` whose `Company name` equals one of `names` after `normalizeName`. */
+export async function findDbByNames(
+  base: AirtableBaseId,
+  names: string[],
+): Promise<Map<string, DbRecord[]>> {
   const wanted = [...new Set(names.map(formulaName).filter(Boolean))]
   const chunks: string[][] = []
   let current: string[] = []
@@ -331,7 +354,7 @@ export async function findDbByNames(names: string[]): Promise<Map<string, DbReco
 
   const found = new Map<string, DbRecord>()
   for (const chunk of chunks) {
-    for (const record of await findRecordsByFormula(AIRTABLE_IDS.dbTable, nameFormula(chunk), DB_FIELDS)) {
+    for (const record of await findRecordsByFormula(base, AIRTABLE_IDS.dbTable, nameFormula(chunk), DB_FIELDS)) {
       found.set(record.id, dbFromRecord(record))
     }
   }
@@ -358,6 +381,7 @@ export interface CreateOutcome<T> {
  * fresh duplicate check before any second attempt.
  */
 export async function createAll<T>(
+  base: AirtableBaseId,
   tableId: string,
   items: T[],
   fieldsOf: (item: T) => Record<string, unknown>,
@@ -366,7 +390,7 @@ export async function createAll<T>(
   for (let index = 0; index < items.length; index += 10) {
     const chunk = items.slice(index, index + 10)
     try {
-      const created = await createRecords(tableId, chunk.map(fieldsOf))
+      const created = await createRecords(base, tableId, chunk.map(fieldsOf))
       chunk.forEach((item, itemIndex) => {
         const record = created[itemIndex]
         outcomes.push(
@@ -386,7 +410,7 @@ export async function createAll<T>(
       }
       for (const item of chunk) {
         try {
-          const [created] = await createRecords(tableId, [fieldsOf(item)])
+          const [created] = await createRecords(base, tableId, [fieldsOf(item)])
           outcomes.push(
             created ? { item, id: created.id } : { item, error: 'Airtable did not return the created record' },
           )

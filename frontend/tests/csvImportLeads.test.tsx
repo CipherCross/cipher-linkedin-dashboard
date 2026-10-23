@@ -64,7 +64,7 @@ beforeEach(() => {
   api.fetchContactImportMetadata.mockResolvedValue({ target: 'contacts', addedBy: ['David Hamaniuk'], limits: { maxRows: 500, maxFileBytes: 5_000_000 } })
   api.previewLeads.mockResolvedValue(preview)
   api.searchAirtableCompanies.mockResolvedValue([OTHER, company('recC00000000000008', 'Tailspin Rejected', 'Rejected')])
-  api.commitContacts.mockImplementation(async (_addedBy: string, rows: Array<{ rowNumber: number }>) => ({
+  api.commitContacts.mockImplementation(async (_base: string, _addedBy: string, rows: Array<{ rowNumber: number }>) => ({
     results: rows.map((row) => ({ rowNumber: row.rowNumber, status: 'created', contactId: `recK0000000000000${row.rowNumber}` })),
     counts: { created: rows.length, duplicate: 0, failed: 0 },
   }))
@@ -108,7 +108,8 @@ describe('Leads → Contacts tab', () => {
     await act(async () => {
       fireEvent.click(within(panel).getByRole('button', { name: 'Create 2 contacts' }))
     })
-    const [addedBy, rows] = api.commitContacts.mock.calls[0]
+    const [base, addedBy, rows] = api.commitContacts.mock.calls[0]
+    expect(base).toBe('web2mob')
     expect(addedBy).toBe('David Hamaniuk')
     expect(rows).toEqual([
       expect.objectContaining({ rowNumber: 2, companyId: NORTHWIND.id, companyWebsite: 'northwind.example' }),
@@ -147,7 +148,7 @@ describe('Leads → Contacts tab', () => {
     await act(async () => {
       fireEvent.click(within(panel).getByRole('button', { name: 'Create 1 contact' }))
     })
-    expect(api.commitContacts.mock.calls[0][1]).toEqual([
+    expect(api.commitContacts.mock.calls[0][2]).toEqual([
       expect.objectContaining({ rowNumber: 4, companyId: AIFORIA.id, companyWebsite: 'tailspin.example' }),
     ])
   })
@@ -188,7 +189,7 @@ describe('Leads → Contacts tab', () => {
     await act(async () => {
       fireEvent.click(within(panel).getByRole('button', { name: 'Create 2 contacts' }))
     })
-    expect(api.commitContacts.mock.calls[0][1]).toEqual([
+    expect(api.commitContacts.mock.calls[0][2]).toEqual([
       expect.objectContaining({ rowNumber: 2, companyId: NORTHWIND.id }),
       expect.objectContaining({ rowNumber: 3, companyId: OTHER.id }),
     ])
@@ -228,7 +229,7 @@ describe('Leads → Contacts tab', () => {
       fireEvent.click(within(panel).getByRole('button', { name: 'Re-check' }))
     })
     expect(api.previewLeads).toHaveBeenCalledTimes(2)
-    expect(api.previewLeads.mock.calls[1][1]).toEqual({ forceCompanies: true })
+    expect(api.previewLeads.mock.calls[1][2]).toEqual({ forceCompanies: true })
     expect(await within(panel).findByRole('heading', { name: 'Confirm companies' })).toBeTruthy()
   })
 
@@ -268,7 +269,7 @@ describe('Leads → Contacts tab', () => {
     await act(async () => {
       fireEvent.click(create)
     })
-    expect(api.commitContacts.mock.calls[0][1]).toEqual([
+    expect(api.commitContacts.mock.calls[0][2]).toEqual([
       expect.objectContaining({ rowNumber: 2, title: 'CTO' }),
       expect.objectContaining({ rowNumber: 3, title: 'President' }),
     ])

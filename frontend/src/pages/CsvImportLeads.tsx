@@ -1,10 +1,12 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useCallback, useMemo, useState } from 'react'
 import {
   CheckCircle2, ChevronDown, ChevronRight, Download, ExternalLink, RefreshCw, RotateCcw, Search, Undo2, Users,
 } from 'lucide-react'
 import { CompanyResolutionModal } from '../components/CompanyResolutionModal'
 import { downloadCsvReport, parseLeadCsvFile } from '../lib/csvImport'
 import type { LeadCsvDocument, LeadImportRow } from '../lib/csvImport'
+import { airtableBaseLabel } from '../lib/airtableBases'
+import type { AirtableBaseId } from '../lib/airtableBases'
 import {
   commitContacts,
   fetchContactImportMetadata,
@@ -111,9 +113,10 @@ function groupWhere(group: LeadGroup): string {
   return ''
 }
 
-export function LeadsImport() {
+export function LeadsImport({ base }: { base: AirtableBaseId }) {
   const toast = useToast()
-  const metadata = useImportMetadata(fetchContactImportMetadata)
+  const baseLabel = airtableBaseLabel(base)
+  const metadata = useImportMetadata(useCallback(() => fetchContactImportMetadata(base), [base]))
   const [addedBy, setAddedBy] = useState('')
   const [document, setDocument] = useState<LeadCsvDocument | null>(null)
   const [preview, setPreview] = useState<LeadPreviewResponse | null>(null)
@@ -173,7 +176,7 @@ export function LeadsImport() {
       // cannot hold back the leads around it.
       const sendable = doc.rows.filter((row) => !row.issue)
       const checked = sendable.length
-        ? await previewLeads(sendable, { forceCompanies: recheck })
+        ? await previewLeads(base, sendable, { forceCompanies: recheck })
         : { rows: [], groups: [], counts: {} }
       const unreadable = doc.rows.flatMap((row): LeadRowResult[] =>
         row.issue ? [{ rowNumber: row.rowNumber, status: 'invalid', reason: row.issue }] : [],
@@ -265,10 +268,10 @@ export function LeadsImport() {
           companyWebsite: row.companyWebsite,
         }
       })
-      const response = await commitContacts(addedBy, rows)
+      const response = await commitContacts(base, addedBy, rows)
       setCommitted(response)
       toast.success(
-        `${plural(response.counts.created, 'contact')} created` +
+        `${plural(response.counts.created, 'contact')} created in ${baseLabel}` +
           (response.counts.duplicate ? ` · ${response.counts.duplicate} existing` : '') +
           (response.counts.failed ? ` · ${response.counts.failed} failed` : ''),
       )
@@ -301,7 +304,7 @@ export function LeadsImport() {
     const rowResult = new Map(preview.rows.map((row) => [row.rowNumber, row]))
     downloadCsvReport(
       document.fileName,
-      'contacts-import-report',
+      `${base}-contacts-import-report`,
       ['Source Row', 'Person LinkedIn', 'Full Name', 'CSV Title', 'Title', 'CSV Company', 'Company Status', 'Company Detail', 'Linked Company', 'Linked Company ID', 'Contact Status', 'Contact Detail', 'Contact ID'],
       document.rows.map((row) => {
         const group = groupByRow.get(row.rowNumber)
@@ -369,16 +372,16 @@ export function LeadsImport() {
       {!committed && (
         <Stage
           title="Who is importing"
-          description="Written to the Contacts “Added by” field on every new contact."
+          description={`Written to the ${baseLabel} Contacts “Added by” field on every new contact.`}
         >
-          <AddedByField state={metadata} value={addedBy} onChange={setAddedBy} tableLabel="Contacts" />
+          <AddedByField state={metadata} value={addedBy} onChange={setAddedBy} tableLabel={`${baseLabel} Contacts`} />
         </Stage>
       )}
 
       {!document && (
         <CsvUploadCard
           title="Upload a leads CSV"
-          hint={<>Each lead is linked to a Companies record you confirm. Leads whose company is still waiting in DB are held, not dropped. A lead can also be linked on its own when its CSV company is not the right one. Up to 500 rows · maximum 5 MB. Email, phone and profile summary are ignored; the headline is used only to suggest a company.</>}
+          hint={<>Each lead is linked to a <strong>{baseLabel}</strong> Companies record you confirm. Leads whose company is still waiting in DB are held, not dropped. A lead can also be linked on its own when its CSV company is not the right one. Up to 500 rows · maximum 5 MB. Email, phone and profile summary are ignored; the headline is used only to suggest a company.</>}
           disabled={metadata.busy || !!metadata.error}
           onFile={(file) => void chooseFile(file)}
         />
@@ -386,7 +389,7 @@ export function LeadsImport() {
 
       {document && !preview && busy && (
         <Stage title="Checking Airtable" description={`${document.fileName} · ${plural(document.rowCount, 'lead')}`}>
-          <UpdatingNote>Matching companies in Companies and DB…</UpdatingNote>
+          <UpdatingNote>Matching companies in {baseLabel} Companies and DB…</UpdatingNote>
         </Stage>
       )}
 
@@ -638,7 +641,7 @@ export function LeadsImport() {
             )}
           </Stage>
           <StageActions summary={<>
-            <strong>{leadsToCreate}</strong> {leadsToCreate === 1 ? 'lead' : 'leads'} in {plural(companiesToLink, 'company', 'companies')} will be created in Contacts
+            <strong>{leadsToCreate}</strong> {leadsToCreate === 1 ? 'lead' : 'leads'} in {plural(companiesToLink, 'company', 'companies')} will be created in {baseLabel} Contacts
             {autoLinked > 0 && <> · <strong>{autoLinked}</strong> linked from headline</>}
             {leadCount(heldGroups) > 0 && <> · <strong>{leadCount(heldGroups)}</strong> held</>}
             {leadCount(declinedGroups) > 0 && <> · <strong>{leadCount(declinedGroups)}</strong> declined</>}
@@ -712,6 +715,7 @@ export function LeadsImport() {
 
       {pickerGroup && (
         <CompanyResolutionModal
+          base={base}
           sourceCompany={pickerGroup.companyName}
           affectedRows={groupRowsOf(pickerGroup).length}
           leadName={pickerLead ? pickerLead.fullName || pickerLead.personLinkedin : undefined}
