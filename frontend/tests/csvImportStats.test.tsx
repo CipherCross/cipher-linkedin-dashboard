@@ -84,7 +84,7 @@ describe('CSV import Team stats', () => {
     expect(api.fetchImportStats).toHaveBeenCalledTimes(1)
     expect(api.fetchImportStats).toHaveBeenCalledWith('web2mob', '2026-09-24', '2026-10-07', { force: false })
     expect(within(panel).getByRole('button', { name: 'Team stats period' }).textContent).toContain('Past 14 days')
-    expect(within(panel).getAllByRole('table')).toHaveLength(4)
+    expect(within(panel).getAllByRole('table')).toHaveLength(2)
   })
 
   it('shows every person, with explicit zeros, a Not set row, and All/New/Approve/Reject totals', async () => {
@@ -100,20 +100,24 @@ describe('CSV import Team stats', () => {
     expect(within(table).getByRole('rowheader', { name: 'All people' })).toBeTruthy()
   })
 
-  it('shows Approve per day in Lead approvals, and lets the cells switch to Reject', async () => {
+  it('lets the Lead additions day cells switch between Approve and Reject', async () => {
     const panel = await openStats()
-    const table = within(panel).getByRole('table', { name: /Lead approvals/ })
+    const table = within(panel).getByRole('table', { name: /Lead additions/ })
+    const group = within(panel).getByRole('radiogroup', { name: 'Lead additions: cells show' })
     // 5 Oct is the 12th day column of 24 Sep – 7 Oct.
+    fireEvent.click(within(group).getByRole('radio', { name: 'Approve' }))
     expect(cellsOf(rowOf(table, 'Daria Krut'))[11]).toBe('4')
-    const group = within(panel).getByRole('radiogroup', { name: 'Lead approvals: cells show' })
     fireEvent.click(within(group).getByRole('radio', { name: 'Reject' }))
     expect(cellsOf(rowOf(table, 'Daria Krut'))[11]).toBe('1')
   })
 
-  it('sums the KPI tiles from the four blocks', async () => {
+  it('shows only the two addition blocks and their KPI tiles', async () => {
     const panel = await openStats()
     expect(within(panel).getByText('Companies added').parentElement?.textContent).toContain('6')
-    expect(within(panel).getByText('Leads approved').parentElement?.textContent).toMatch(/^Leads approved4of 5 added/)
+    expect(within(panel).getByText('Leads added').parentElement?.textContent).toMatch(/^Leads added5/)
+    expect(within(panel).queryByText('Companies approved')).toBeNull()
+    expect(within(panel).queryByText('Leads approved')).toBeNull()
+    expect(within(panel).queryByRole('table', { name: /approvals/ })).toBeNull()
   })
 
   it('says a base is not configured instead of failing', async () => {

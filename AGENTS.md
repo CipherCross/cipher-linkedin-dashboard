@@ -228,9 +228,10 @@ names one base from `AIRTABLE_BASES` (`src/lib/airtableBases.ts`, env var per ba
 - **Companies → DB** / **Leads → Contacts** (`companyImport.ts`, `contactImport.ts`) write, and
   only to DB and Contacts — `createRecords` refuses Companies; automations copy approved DB rows.
 - **Team stats** (`import_stats`, `_lib/importStats.ts`, `src/pages/CsvImportStats.tsx`) is
-  **read-only**: per `Added by` person and UTC day, records created in DB (company additions),
-  Companies (≈ company approvals) and Contacts (lead additions/approvals), grouped by current
-  status through the one `STATUS_GROUPS` constant (`Old` is excluded everywhere). Each table is
+  **read-only**: per `Added by` person and UTC day, records created in DB (company additions)
+  and Contacts (lead additions), grouped by current status through the one `STATUS_GROUPS`
+  constant (`Old` is excluded everywhere); the Approve/Reject columns are the approvals. The
+  server still also reads Companies, which the tab no longer shows. Each table is
   read with a `CREATED_TIME()` formula and two fields, at most `MAX_PAGES_PER_TABLE` pages (a clear
   422 past that), periods ≤ 92 days, cached 5 min per (base, table, period). The server answers
   daily buckets; columns, weeks and the All bases sum are computed in `src/lib/teamStats.ts`. A

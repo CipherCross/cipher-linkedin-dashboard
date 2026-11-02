@@ -30,7 +30,7 @@ numbers over every configured base.
 - A new serverless function (the deployment is at Vercel Hobby's 12).
 - Any change to the importers (`companyImport.ts`, `contactImport.ts`) or the coach.
 
-## The four blocks
+## The two blocks
 
 Every block reads records **created** in the period (`CREATED_TIME()` / `createdTime`,
 UTC), grouped by the record's `Added by` and its **current** status.
@@ -38,13 +38,15 @@ UTC), grouped by the record's `Added by` and its **current** status.
 | Block | Table | Status field | Added by |
 | --- | --- | --- | --- |
 | Company additions | DB `AIRTABLE_IDS.dbTable` | `db.initialStatus` | `db.addedBy` |
-| Company approvals | Companies `AIRTABLE_IDS.companiesTable` (a row lands here when an automation copies an approved DB row, so its creation ≈ the approval) | `companies.approveStatus` | `companies.addedBy` |
 | Lead additions | Contacts `AIRTABLE_IDS.contactsTable` | `contacts.approveStatus` | `contacts.addedBy` |
-| Lead approvals | the same Contacts records | `contacts.approveStatus` | `contacts.addedBy` |
 
 Columns in every block: **All / New / Approve / Reject**. The day (or week) cells show one
-of those; the default is All for the three addition-like blocks and Approve for Lead
-approvals, and each block can switch it.
+of those (All by default), and each block can switch it.
+
+The first release (2026-11-02) also had Company approvals (records created in Companies)
+and Lead approvals (the same Contacts records, cells on Approve). The owner dropped both
+the same day: the Approve/Reject columns of the two addition blocks already show it. The
+server still reads Companies (`TABLES` in `importStats.ts`); nothing on the tab uses it.
 
 ## Status mapping
 
@@ -107,7 +109,7 @@ Airtable count like any other.
 
 ## Client
 
-- `src/lib/teamStats.ts`: response types, `teamStatsColumns` (days or weeks), the four
+- `src/lib/teamStats.ts`: response types, `teamStatsColumns` (days or weeks), the two
   block definitions, and the aggregation (per person × column, totals, summing several
   bases for All bases).
 - `importApi.ts`: `fetchImportStats(base, from, to, { force })`.

@@ -53,7 +53,7 @@ export type TeamStatsResponse =
 export type ConfiguredTeamStats = Extract<TeamStatsResponse, { configured: true }>
 
 export interface TeamStatsBlock {
-  id: 'companyAdditions' | 'companyApprovals' | 'leadAdditions' | 'leadApprovals'
+  id: 'companyAdditions' | 'leadAdditions'
   table: TeamStatsTable
   title: string
   description: string
@@ -70,25 +70,11 @@ export const TEAM_STATS_BLOCKS: TeamStatsBlock[] = [
     defaultMetric: 'all',
   },
   {
-    id: 'companyApprovals',
-    table: 'companies',
-    title: 'Company approvals',
-    description: 'Records created in Companies — an approved DB row lands there, so the day is about when it was approved. By Approve status.',
-    defaultMetric: 'all',
-  },
-  {
     id: 'leadAdditions',
     table: 'contacts',
     title: 'Lead additions',
     description: 'Leads added to Contacts, by Approve status.',
     defaultMetric: 'all',
-  },
-  {
-    id: 'leadApprovals',
-    table: 'contacts',
-    title: 'Lead approvals',
-    description: 'The same Contacts records: how many are approved or rejected now. There is no separate approval date.',
-    defaultMetric: 'approve',
   },
 ]
 

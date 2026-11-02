@@ -16,7 +16,7 @@ import {
 import {
   Button, EmptyState, InlineError, Panel, SectionHeader, SegmentedControl, Table, TableFrame, UpdatingNote,
 } from '../ui'
-import { Notice, messageOf, plural } from './CsvImportShared'
+import { Notice, messageOf } from './CsvImportShared'
 
 // Team stats: who added how many companies and leads to Airtable, and how many
 // are approved now. It reads, never writes. The base is the one picked in the
@@ -215,7 +215,7 @@ export function TeamStats({ base }: { base: AirtableBaseId }) {
   const nothingYet = stats.length === 0 && loading
   const allFailed = scope === 'all' && !loading && stats.length === 0
 
-  const [companyAdds, companyApprovals, leadAdds, leadApprovals] = tables
+  const [companyAdds, leadAdds] = tables
 
   return (
     <div aria-busy={loading}>
@@ -291,19 +291,9 @@ export function TeamStats({ base }: { base: AirtableBaseId }) {
               sub={`${num(companyAdds.totals.approve)} approve · ${num(companyAdds.totals.reject)} reject · ${num(companyAdds.totals.new)} new`}
             />
             <KpiTile
-              label="Companies approved"
-              value={num(companyApprovals.totals.all)}
-              sub={`Records created in Companies · ${plural(companyApprovals.rows.filter((row) => row.person && row.totals.all > 0).length, 'person', 'people')}`}
-            />
-            <KpiTile
               label="Leads added"
               value={num(leadAdds.totals.all)}
               sub={`${num(leadAdds.totals.approve)} approve · ${num(leadAdds.totals.reject)} reject · ${num(leadAdds.totals.new)} new`}
-            />
-            <KpiTile
-              label="Leads approved"
-              value={num(leadApprovals.totals.approve)}
-              sub={`of ${num(leadApprovals.totals.all)} added in the period · ${num(leadApprovals.totals.reject)} rejected`}
             />
           </KpiGrid>
           {TEAM_STATS_BLOCKS.map((block, index) => (
