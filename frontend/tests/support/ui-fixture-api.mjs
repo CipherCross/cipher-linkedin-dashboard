@@ -832,6 +832,42 @@ const HEADLINE_COMPANIES = [
  * synthetic answers; both commit actions are writes and are refused, so the
  * browser can walk both tabs up to the commit without any path to Airtable.
  */
+/* Team stats: deterministic synthetic counts for Web 2 Mob; Fintech (Arabic)
+ * answers "not configured", so both states show without a real base. */
+const STATS_PEOPLE = ['Daria Krut', 'David Gamanuk', 'Fixture Admin']
+const STATS_STATUSES = [
+  { name: 'New', group: 'new' }, { name: 'Manual review', group: 'new' }, { name: 'Manual approve', group: 'approve' },
+  { name: 'Approve', group: 'approve' }, { name: 'Rejected', group: 'reject' }, { name: 'Old', group: 'excluded' },
+]
+function fixtureImportStats(body) {
+  const { base = 'web2mob', from, to } = body
+  if (base !== 'web2mob') return { ok: true, base, configured: false, from, to }
+  const buckets = []
+  const groups = ['new', 'approve', 'reject']
+  for (let day = from, n = 0; day <= to; n++, day = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)) {
+    const weekday = new Date(`${day}T00:00:00Z`).getUTCDay()
+    if (weekday === 0 || weekday === 6) continue
+    // Daria uploads daily, David on alternate days, Fixture Admin never.
+    for (const [index, addedBy] of ['Daria Krut', 'David Gamanuk', ''].entries()) {
+      if (index === 1 && n % 2) continue
+      if (index === 2 && n % 5) continue
+      for (const [g, group] of groups.entries()) {
+        const count = (n * 7 + index * 5 + g * 3) % (g === 0 ? 9 : 5)
+        if (count) {
+          buckets.push({ table: 'db', day, addedBy, group, count: count * 2 })
+          buckets.push({ table: 'contacts', day, addedBy, group, count: count * 3 })
+          if (group === 'approve') buckets.push({ table: 'companies', day, addedBy, group: 'approve', count })
+        }
+      }
+    }
+  }
+  const table = { people: STATS_PEOPLE, statuses: STATS_STATUSES }
+  return {
+    ok: true, base, configured: true, from, to, fetchedAt: new Date().toISOString(),
+    tables: { db: table, companies: table, contacts: table }, buckets,
+  }
+}
+
 export async function importFixture(request) {
   const scenario = await currentScenario()
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -840,6 +876,7 @@ export async function importFixture(request) {
   const metadata = { target: body.action === 'company_metadata' ? 'db' : 'contacts', base: body.base ?? 'web2mob', addedBy: ['Fixture Admin'], limits: { maxRows: 500, maxFileBytes: 5000000 } }
   if (body.action === 'contact_metadata' || body.action === 'company_metadata') return json(metadata)
   if (body.action === 'company_search') return json({ companies: [FIXTURE_COMPANY] })
+  if (body.action === 'import_stats') return json(fixtureImportStats(body))
   if (body.action === 'company_preview') {
     const rows = Array.isArray(body.rows) ? body.rows : []
     const results = rows.map((row, index) => index === 0

@@ -50,9 +50,14 @@ interface Props {
   value: DateRange
   onChange: (r: DateRange) => void
   ariaLabel?: string
+  /** The longest custom range, in days including both ends. After the first
+   *  click, days that would make the range longer are disabled. */
+  maxDays?: number
 }
 
-export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date range' }: Props) {
+const addLocalDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+
+export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date range', maxDays }: Props) {
   const [open, setOpen] = useState(false)
   // The half-picked range between the first and second click. react-day-picker's
   // own range logic can't be used for this: with `min` 0 its first click
@@ -124,6 +129,10 @@ export function DateRangePicker({ presets, value, onChange, ariaLabel = 'Date ra
           selected={draft ? { from: draft, to: draft } : selected.from ? selected : undefined}
           onSelect={() => {}}
           onDayClick={onDayClick}
+          disabled={draft && maxDays
+            ? [{ before: addLocalDays(draft, 1 - maxDays) }, { after: addLocalDays(draft, maxDays - 1) }]
+            : undefined}
+          footer={maxDays ? <p className="m-0 pt-app-xs text-app-meta text-app-text-muted">Custom range: up to {maxDays} days</p> : undefined}
         />
       </PopoverContent>
     </Popover>

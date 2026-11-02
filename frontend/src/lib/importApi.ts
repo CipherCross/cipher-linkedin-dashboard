@@ -1,6 +1,7 @@
 import type { CompanyImportRow, LeadImportRow } from './csvImport'
 import { authFetch } from './api'
 import type { AirtableBaseId } from './airtableBases'
+import type { TeamStatsResponse } from './teamStats'
 
 // Every call names the Airtable base it reads and writes; the server never
 // mixes bases inside one request.
@@ -203,4 +204,16 @@ export function commitContacts(
   rows: ContactCommitRow[],
 ): Promise<ContactCommitResponse> {
   return importPost<ContactCommitResponse>({ action: 'contact_commit', base, addedBy, rows })
+}
+
+// ------------------------------------------------------------ Team stats
+
+/** Read-only counts for one base and an inclusive UTC period; `force` skips the server's 5-minute cache. */
+export function fetchImportStats(
+  base: AirtableBaseId,
+  from: string,
+  to: string,
+  options: { force?: boolean } = {},
+): Promise<TeamStatsResponse> {
+  return importPost<TeamStatsResponse>({ action: 'import_stats', base, from, to, force: options.force === true })
 }

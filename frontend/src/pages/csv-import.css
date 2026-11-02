@@ -15,3 +15,20 @@
 .csv-upload-card h2 { margin: 0; }
 .csv-upload-card p { max-width: 600px; margin: 0 0 var(--space-xs); line-height: var(--leading-body); }
 .csv-upload-card[data-disabled] > svg { color: var(--text-muted); }
+
+/* Team stats: the person column stays in view while day columns scroll past,
+ * and a rule separates the day columns from the All/New/Approve/Reject totals.
+ * verify: CSV import → Team stats at 1280 with a 31-day period. */
+.team-stats-table th:first-child,
+.team-stats-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-1);
+  white-space: nowrap;
+}
+.team-stats-table thead th:first-child { z-index: 2; }
+.team-stats-table tbody tr:hover td:first-child { background: var(--surface-2); }
+.team-stats-table .team-stats-split { border-left: 1px solid var(--border); }
+/* `.ui-table td` outranks the bare `.ui-table__num` rule; restate it here. */
+.team-stats-table .ui-table__num { text-align: right; }

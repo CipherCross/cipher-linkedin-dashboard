@@ -386,6 +386,31 @@ export function presetRanges(now: Date = new Date()): DateRange[] {
   ]
 }
 
+/** The periods Team stats on CSV import offers, relative to `now`; UTC days,
+ *  weeks from Monday (`weekStart`). Every one is at most 31 days, so each shows
+ *  day columns. Kept apart from `presetRanges`, which other pages share. */
+export function teamStatsRanges(now: Date = new Date()): DateRange[] {
+  const today = dayStr(now)
+  const shift = (base: string, n: number) => {
+    const d = new Date(`${base}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return dayStr(d)
+  }
+  const monday = weekStart(`${today}T00:00:00Z`)
+  const monthStart = `${today.slice(0, 7)}-01`
+  const lastMonthEnd = shift(monthStart, -1)
+  return [
+    { id: 'today', label: 'Today', from: today, to: today },
+    { id: 'yesterday', label: 'Yesterday', from: shift(today, -1), to: shift(today, -1) },
+    { id: 'this_week', label: 'This week', from: monday, to: today },
+    { id: 'last_week', label: 'Last week', from: shift(monday, -7), to: shift(monday, -1) },
+    { id: '14_days', label: 'Past 14 days', from: shift(today, -13), to: today },
+    { id: 'this_month', label: 'This month', from: monthStart, to: today },
+    { id: 'last_month', label: 'Last month', from: `${lastMonthEnd.slice(0, 7)}-01`, to: lastMonthEnd },
+    { id: '30_days', label: 'Past 30 days', from: shift(today, -29), to: today },
+  ]
+}
+
 /** The open-ended range covering everything — the default when a hypothesis
  *  funnel is shown without an explicit date filter. */
 export const ALL_TIME_RANGE: DateRange = { id: 'all', label: 'All time', from: null, to: null }
