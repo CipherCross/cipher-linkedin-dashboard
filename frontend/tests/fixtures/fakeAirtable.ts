@@ -3,9 +3,10 @@
 // records every request so a test can assert which table was queried or
 // written and how.
 //
-// The two formula shapes the importers send are evaluated for real: the
-// domain REGEX_MATCH prefilter and the name FIND list. Anything else is a test
-// failure, so a new unscoped DB query cannot slip through.
+// The formula shapes the importers and Team stats send are evaluated for real:
+// the domain REGEX_MATCH prefilter, the name FIND list, and the stats
+// created-time window. Anything else is a test failure, so a new unscoped DB
+// query cannot slip through. `listRecords` pages at the requested page size.
 //
 // One instance is one base. `install(fintech)` serves a second instance as the
 // Fintech (Arabic) base, each recording only the requests sent to its own base.
@@ -18,8 +19,12 @@ export const FINTECH_BASE_ID = 'app98765432109876'
 type Fields = Record<string, unknown>
 interface StoredRecord {
   id: string
+  createdTime: string
   fields: Fields
 }
+
+/** What a record's `createdTime` is when a test does not set one. */
+export const DEFAULT_CREATED_TIME = '2026-09-24T12:00:00.000Z'
 
 export interface FakeRequest {
   method: string
@@ -31,6 +36,7 @@ const choices = (...names: string[]) => ({ choices: names.map((name, index) => (
 
 export const DB_ADDED_BY = ['Daria Krut', 'David Gamanuk', 'AI', 'Company Phone']
 export const CONTACTS_ADDED_BY = ['Daria Krut', 'David Hamaniuk', 'David', 'Smith']
+export const COMPANIES_ADDED_BY = ['Daria Krut', 'David Gamanuk']
 
 function schema() {
   const db = AIRTABLE_IDS.db
@@ -70,6 +76,7 @@ function schema() {
           { id: companies.website, name: 'Website URL', type: 'url' },
           { id: companies.linkedin, name: 'LinkedIn URL', type: 'url' },
           { id: companies.approveStatus, name: 'Approve Status', type: 'singleSelect', options: choices('New', 'Approved', 'Rejected', 'Edits') },
+          { id: companies.addedBy, name: 'Added by', type: 'singleSelect', options: choices(...COMPANIES_ADDED_BY) },
         ],
       },
       {
@@ -101,8 +108,26 @@ function unescapeFormulaString(literal: string): string {
   return literal.replace(/\\(.)/g, '$1')
 }
 
-/** Evaluates the importers' two DB formula shapes against one record. */
-function matchesFormula(formula: string, fields: Fields): boolean {
+const STATS_FORMULA = new RegExp(
+  '^AND\\(IS_AFTER\\(CREATED_TIME\\(\\), DATETIME_PARSE\\("([^"]+)"\\)\\), '
+  + 'IS_BEFORE\\(CREATED_TIME\\(\\), DATETIME_PARSE\\("([^"]+)"\\)\\), '
+  + 'LOWER\\(TRIM\\(\\{(fld\\w+)\\}&""\\)\\) != "([^"]+)"\\)$',
+)
+
+/** A select cell as a formula's `{field}&""` reads it. */
+const selectText = (value: unknown) =>
+  value && typeof value === 'object' ? String((value as { name?: unknown }).name ?? '') : String(value ?? '')
+
+/** Evaluates the importers' two DB formula shapes and the stats window against one record. */
+function matchesFormula(formula: string, record: StoredRecord): boolean {
+  const { fields } = record
+  const stats = STATS_FORMULA.exec(formula)
+  if (stats) {
+    const created = Date.parse(record.createdTime)
+    return created > Date.parse(stats[1])
+      && created < Date.parse(stats[2])
+      && selectText(fields[stats[3]]).trim().toLowerCase() !== stats[4]
+  }
   const regex = /^REGEX_MATCH\(LOWER\(\{(fld\w+)\}&""\), "(.*)"\)$/.exec(formula)
   if (regex) {
     return new RegExp(regex[2]).test(String(fields[regex[1]] ?? '').toLowerCase())
@@ -127,9 +152,9 @@ export class FakeAirtable {
   /** When set, the next create request answers with this status. */
   failNextCreate: number | null = null
 
-  add(tableId: string, fields: Fields): string {
+  add(tableId: string, fields: Fields, createdTime = DEFAULT_CREATED_TIME): string {
     const id = recordId()
-    this.tables.get(tableId)!.push({ id, fields })
+    this.tables.get(tableId)!.push({ id, createdTime, fields })
     return id
   }
 
@@ -196,8 +221,12 @@ export class FakeAirtable {
     const list = new RegExp(`^/v0/${this.baseId}/(tbl\\w+)/listRecords$`).exec(url.pathname)
     if (list && method === 'POST') {
       const formula = String(body?.filterByFormula ?? '')
-      const records = this.records(list[1]).filter((record) => matchesFormula(formula, record.fields))
-      return this.respond({ records })
+      const records = this.records(list[1]).filter((record) => matchesFormula(formula, record))
+      const pageSize = Number(body?.pageSize ?? 100)
+      const start = Number(body?.offset ?? 0)
+      const page = records.slice(start, start + pageSize)
+      const next = start + pageSize < records.length ? { offset: String(start + pageSize) } : {}
+      return this.respond({ records: page, ...next })
     }
 
     const table = new RegExp(`^/v0/${this.baseId}/(tbl\\w+)$`).exec(url.pathname)

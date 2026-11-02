@@ -115,9 +115,25 @@ export class AirtableError extends Error {
   }
 }
 
+/** A read that would need more pages than its caller allowed. */
+export class AirtablePageLimitError extends AirtableError {
+  maxPages: number
+
+  constructor(maxPages: number) {
+    super(`More than ${maxPages * 100} Airtable records match`, 422)
+    this.name = 'AirtablePageLimitError'
+    this.maxPages = maxPages
+  }
+}
+
 let nextRequestAt = 0
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Whether `base` has a token and a base ID set; says nothing about their validity. */
+export function airtableConfigured(base: AirtableBaseId): boolean {
+  return Boolean(process.env.AIRTABLE_TOKEN && process.env[BASE_ENV[base]])
+}
 
 function config(base: AirtableBaseId) {
   const token = process.env.AIRTABLE_TOKEN
@@ -240,18 +256,26 @@ export async function listAllRecords(
  * Records matching `formula`, read through the POST `listRecords` endpoint so a
  * long formula is not bounded by the URL length. Callers build the formula from
  * values they have already constrained or escaped (see `formulaString`).
+ * `maxPages` stops a read that would outrun its caller's time budget with an
+ * `AirtablePageLimitError` instead of a function timeout.
  */
 export async function findRecordsByFormula(
   base: AirtableBaseId,
   tableId: string,
   formula: string,
   fieldIds: readonly string[],
+  options: { maxPages?: number } = {},
 ): Promise<AirtableRecord[]> {
   const { baseId } = config(base)
   const records: AirtableRecord[] = []
   let offset: string | undefined
+  let pages = 0
 
   do {
+    if (options.maxPages !== undefined && pages >= options.maxPages) {
+      throw new AirtablePageLimitError(options.maxPages)
+    }
+    pages++
     const response = await airtableFetch<AirtableListResponse>(
       base,
       `/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}/listRecords`,

@@ -124,6 +124,7 @@ describe('/api/import route method dispatch', () => {
   const CSV_ACTIONS = [
     'company_metadata', 'company_preview', 'company_commit',
     'contact_metadata', 'contact_preview', 'company_search', 'contact_commit',
+    'import_stats',
   ] as const
 
   const csvPost = (action: string) =>

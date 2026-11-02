@@ -11,6 +11,7 @@
 import { handleCompanyImport } from './_lib/companyImport.js'
 import { handleContactImport } from './_lib/contactImport.js'
 import { handleConversationImport } from './_lib/conversationImport.js'
+import { handleImportStats } from './_lib/importStats.js'
 import { AuthorizationError, authorizationResponse } from './_lib/auth.js'
 import { unavailableResponse } from './_lib/data/availability.js'
 import {
@@ -56,6 +57,8 @@ const COMPANY_ACTIONS = new Set([
   'company_preview',
   'company_commit',
 ])
+// Read-only Team stats over the same Airtable bases; never writes.
+const STATS_ACTIONS = new Set(['import_stats'])
 const CONVERSATION_ACTIONS = new Set([
   'conversation_import',
   'delete_message',
@@ -201,6 +204,10 @@ async function handle(req: Request): Promise<Response> {
 
   if (COMPANY_ACTIONS.has(action)) {
     return handleCompanyImport(action, payload)
+  }
+
+  if (STATS_ACTIONS.has(action)) {
+    return handleImportStats(payload)
   }
 
   if (CONVERSATION_ACTIONS.has(action)) {
