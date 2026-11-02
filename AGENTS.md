@@ -221,6 +221,21 @@ subquery, 10s timeout: `postgres/tenant-baseline/v1/003_functions_triggers_ai_gu
 (lexical scan + keyword deny-list, reached through `app_system`). **Don't loosen this
 to add a write path.**
 
+### CSV import (Airtable)
+`#/csv-import`, admin-only (the `/api/import` admin guard, checked server-side). Every action
+names one base from `AIRTABLE_BASES` (`src/lib/airtableBases.ts`, env var per base in
+`BASE_ENV`); the bases share one table/field-ID layout (`AIRTABLE_IDS`). Three tabs:
+- **Companies → DB** / **Leads → Contacts** (`companyImport.ts`, `contactImport.ts`) write, and
+  only to DB and Contacts — `createRecords` refuses Companies; automations copy approved DB rows.
+- **Team stats** (`import_stats`, `_lib/importStats.ts`, `src/pages/CsvImportStats.tsx`) is
+  **read-only**: per `Added by` person and UTC day, records created in DB (company additions),
+  Companies (≈ company approvals) and Contacts (lead additions/approvals), grouped by current
+  status through the one `STATUS_GROUPS` constant (`Old` is excluded everywhere). Each table is
+  read with a `CREATED_TIME()` formula and two fields, at most `MAX_PAGES_PER_TABLE` pages (a clear
+  422 past that), periods ≤ 92 days, cached 5 min per (base, table, period). The server answers
+  daily buckets; columns, weeks and the All bases sum are computed in `src/lib/teamStats.ts`. A
+  base without its env var answers `configured: false`.
+
 ### Frontend
 React 18 + Vite + React Router (`HashRouter`), Recharts, `react-markdown`. `AuthContext.tsx`
 gates startup and resolves the signed-in team member; only then does `DataContext.tsx`
