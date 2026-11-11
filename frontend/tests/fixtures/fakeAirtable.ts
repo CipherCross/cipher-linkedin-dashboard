@@ -9,12 +9,14 @@
 // query cannot slip through. `listRecords` pages at the requested page size.
 //
 // One instance is one base. `install(fintech)` serves a second instance as the
-// Fintech (Arabic) base, each recording only the requests sent to its own base.
+// Fintech (Arabic) base (and `install(fintech, healthcare)` a third as
+// Healthcare (Services)), each recording only the requests sent to its own base.
 import { vi } from 'vitest'
 import { AIRTABLE_IDS } from '../../api/_lib/airtable'
 
 export const BASE_ID = 'app12345678901234'
 export const FINTECH_BASE_ID = 'app98765432109876'
+export const HEALTHCARE_BASE_ID = 'app11223344556677'
 
 type Fields = Record<string, unknown>
 interface StoredRecord {
@@ -190,11 +192,12 @@ export class FakeAirtable {
     return this.requests.filter((request) => request.method !== 'GET' && !request.path.endsWith('/listRecords'))
   }
 
-  install(fintech?: FakeAirtable) {
+  install(fintech?: FakeAirtable, healthcare?: FakeAirtable) {
     vi.stubEnv('AIRTABLE_TOKEN', 'pat-test-token')
     vi.stubEnv('AIRTABLE_BASE_ID', this.baseId)
     if (fintech) vi.stubEnv('AIRTABLE_FINTECH_ARABIC_BASE_ID', fintech.baseId)
-    const bases = [this, ...(fintech ? [fintech] : [])]
+    if (healthcare) vi.stubEnv('AIRTABLE_HEALTHCARE_SERVICES_BASE_ID', healthcare.baseId)
+    const bases = [this, ...(fintech ? [fintech] : []), ...(healthcare ? [healthcare] : [])]
     // The adapter spaces requests 225 ms apart. A clock that jumps ahead on
     // every read keeps that gap at zero without changing the adapter.
     let clock = Date.parse('2026-09-25T00:00:00Z')

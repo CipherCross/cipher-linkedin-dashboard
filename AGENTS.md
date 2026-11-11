@@ -280,6 +280,7 @@ entering credentials or making data-changing actions.
   `/api/notify-replies` + `/api/briefing`), `NOTIFY_SECRET` (sync-agent ping),
   `MCP_SECRET` (all MCP tools),
   `AIRTABLE_TOKEN` + `AIRTABLE_BASE_ID` (Web 2 Mob) + `AIRTABLE_FINTECH_ARABIC_BASE_ID`
+  + `AIRTABLE_HEALTHCARE_SERVICES_BASE_ID`
   (server-only Airtable access for Apollo CSV Contact and Company imports; the CSV import page
   switches between the bases, which share one table/field-ID layout (`src/lib/airtableBases.ts`);
   an unset base ID disables only that base; restrict the PAT to the target bases and

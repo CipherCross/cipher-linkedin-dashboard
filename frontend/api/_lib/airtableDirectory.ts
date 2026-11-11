@@ -1,8 +1,8 @@
 // Shared lookups for the two CSV importers: how a company is identified, where
 // it already is (DB or Companies), and how records are created.
 //
-// Every lookup is scoped to one base (Web 2 Mob or Fintech (Arabic)); a
-// company found in one base says nothing about the other, and the caches are
+// Every lookup is scoped to one base (Web 2 Mob, Fintech (Arabic) or
+// Healthcare (Services)); a company found in one base says nothing about another, and the caches are
 // kept per base.
 //
 // Companies (≈5k rows) is read in full and cached, because lead → company

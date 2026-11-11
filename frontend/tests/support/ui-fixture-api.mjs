@@ -832,7 +832,7 @@ const HEADLINE_COMPANIES = [
  * synthetic answers; both commit actions are writes and are refused, so the
  * browser can walk both tabs up to the commit without any path to Airtable.
  */
-/* Team stats: deterministic synthetic counts for Web 2 Mob; Fintech (Arabic)
+/* Team stats: deterministic synthetic counts for Web 2 Mob; every other base
  * answers "not configured", so both states show without a real base. */
 const STATS_PEOPLE = ['Daria Krut', 'David Gamanuk', 'Fixture Admin']
 const STATS_STATUSES = [

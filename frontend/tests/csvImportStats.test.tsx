@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CsvImport } from '../src/pages/CsvImport'
 import { DateRangePicker } from '../src/components/DateRangePicker'
 import type { TeamStatsBucket, TeamStatsResponse } from '../src/lib/teamStats'
+import type { AirtableBaseId } from '../src/lib/airtableBases'
 
 const api = vi.hoisted(() => ({
   fetchCompanyImportMetadata: vi.fn(),
@@ -51,7 +52,7 @@ beforeEach(() => {
   window.localStorage.clear()
   api.fetchCompanyImportMetadata.mockResolvedValue({ target: 'db', addedBy: ['David Gamanuk'], limits: { maxRows: 500, maxFileBytes: 5_000_000 } })
   api.fetchContactImportMetadata.mockResolvedValue({ target: 'contacts', addedBy: ['David Hamaniuk'], limits: { maxRows: 500, maxFileBytes: 5_000_000 } })
-  api.fetchImportStats.mockImplementation(async (base: 'web2mob' | 'fintech_arabic', from: string, to: string) =>
+  api.fetchImportStats.mockImplementation(async (base: AirtableBaseId, from: string, to: string) =>
     base === 'web2mob'
       ? configured(base, from, to, WEB2MOB)
       : { base, configured: false, from, to })
@@ -131,9 +132,11 @@ describe('CSV import Team stats', () => {
     const panel = await openStats()
     api.fetchImportStats.mockClear()
     await act(async () => { fireEvent.click(within(panel).getByRole('radio', { name: 'All bases' })) })
-    expect(await within(panel).findByText(/Not included in All bases: Fintech \(Arabic\) \(not configured\)/)).toBeTruthy()
-    // Web 2 Mob is already loaded for this period; only Fintech (Arabic) is asked for.
-    expect(api.fetchImportStats.mock.calls.map((call) => call[0])).toEqual(['fintech_arabic'])
+    expect(await within(panel).findByText(
+      /Not included in All bases: Fintech \(Arabic\) \(not configured\), Healthcare \(Services\) \(not configured\)/,
+    )).toBeTruthy()
+    // Web 2 Mob is already loaded for this period; only the other bases are asked for, in order.
+    expect(api.fetchImportStats.mock.calls.map((call) => call[0])).toEqual(['fintech_arabic', 'healthcare_services'])
     const table = within(panel).getByRole('table', { name: /Company additions by person and day · All bases/ })
     expect(cellsOf(rowOf(table, 'Daria Krut')).slice(-4)).toEqual(['5', '3', '2', '0'])
   })

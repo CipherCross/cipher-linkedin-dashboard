@@ -7,6 +7,7 @@
 export const AIRTABLE_BASES = [
   { id: 'web2mob', label: 'Web 2 Mob' },
   { id: 'fintech_arabic', label: 'Fintech (Arabic)' },
+  { id: 'healthcare_services', label: 'Healthcare (Services)' },
 ] as const
 
 export type AirtableBaseId = (typeof AIRTABLE_BASES)[number]['id']

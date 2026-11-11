@@ -5,7 +5,7 @@
 // field is deleted or retyped.
 //
 // Every call names its base. The bases in `AIRTABLE_BASES` (Web 2 Mob,
-// Fintech (Arabic)) are copies of one layout with the same table and field
+// Fintech (Arabic), Healthcare (Services)) are copies of one layout with the same table and field
 // IDs, so `AIRTABLE_IDS` holds for each; a base's schema check still runs
 // against that base alone, so a field deleted in one base fails only that one.
 //
@@ -22,6 +22,7 @@ export type { AirtableBaseId }
 export const BASE_ENV: Record<AirtableBaseId, string> = {
   web2mob: 'AIRTABLE_BASE_ID',
   fintech_arabic: 'AIRTABLE_FINTECH_ARABIC_BASE_ID',
+  healthcare_services: 'AIRTABLE_HEALTHCARE_SERVICES_BASE_ID',
 }
 
 export const AIRTABLE_IDS = {

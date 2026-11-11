@@ -9,8 +9,8 @@ import { TeamStats } from './CsvImportStats'
 // Two uploads that do not depend on each other, in either order:
 //   Companies → DB        new companies go to DB for approval in Airtable;
 //   Leads → Contacts      leads are linked to Companies records you confirm.
-// Both run against the Airtable base picked in the header (Web 2 Mob or
-// Fintech (Arabic)); each base has its own DB, Companies and Contacts.
+// Both run against the Airtable base picked in the header (Web 2 Mob,
+// Fintech (Arabic) or Healthcare (Services)); each base has its own DB, Companies and Contacts.
 // A base's tabs mount the first time it is picked and then stay mounted, as
 // both tabs do, so switching base or tab never discards a loaded file.
 //

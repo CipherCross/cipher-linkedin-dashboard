@@ -193,6 +193,19 @@ describe('import_stats', () => {
     expect(airtable.requests).toEqual([])
   })
 
+  it('reads the Healthcare (Services) base when it is configured, and only that base', async () => {
+    const fintech = new FakeAirtable('app98765432109876')
+    const healthcare = new FakeAirtable('app11223344556677')
+    vi.unstubAllGlobals()
+    airtable.install(fintech, healthcare)
+    healthcare.add(AIRTABLE_IDS.contactsTable, { [contacts.addedBy]: 'David Gamanuk', [contacts.approveStatus]: 'New' }, '2026-10-03T12:00:00.000Z')
+    const { body } = await run({ ...october, base: 'healthcare_services' })
+    expect(body.base).toBe('healthcare_services')
+    expect(bucketsOf(body, 'contacts')).toEqual([{ table: 'contacts', day: '2026-10-03', addedBy: 'David Gamanuk', group: 'new', count: 1 }])
+    expect(airtable.requests).toEqual([])
+    expect(fintech.requests).toEqual([])
+  })
+
   it('refuses an unknown base', async () => {
     const { status, body } = await run({ ...october, base: 'nowhere' })
     expect(status).toBe(400)

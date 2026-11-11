@@ -78,7 +78,7 @@ const asText = (value: unknown): string | null => {
   return text || null
 }
 
-/** The coach reads company facts from Web 2 Mob only; Fintech (Arabic) is an import target, not a coach source yet. */
+/** The coach reads company facts from Web 2 Mob only; the other bases are import targets, not coach sources yet. */
 const COACH_BASE = 'web2mob' as const
 
 const COMPANY_FIELDS = [

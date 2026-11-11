@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AIRTABLE_IDS } from '../api/_lib/airtable'
 import type { CompanyImportRow } from '../api/_lib/companyImport'
-import { FINTECH_BASE_ID, FakeAirtable, call } from './fixtures/fakeAirtable'
+import { FINTECH_BASE_ID, FakeAirtable, HEALTHCARE_BASE_ID, call } from './fixtures/fakeAirtable'
 
 type Handler = typeof import('../api/_lib/companyImport').handleCompanyImport
 
@@ -285,6 +285,35 @@ describe('Companies → DB across bases', () => {
   it('refuses an unknown base before reaching Airtable', async () => {
     const { status } = await call(handle, 'company_preview', { base: 'Fintech (Arabic)', rows: [row(2)] })
     expect(status).toBe(400)
+    expect(airtable.requests).toHaveLength(0)
+    expect(fintech.requests).toHaveLength(0)
+  })
+
+  it('checks and writes only the Healthcare (Services) base when it is named', async () => {
+    const healthcare = new FakeAirtable(HEALTHCARE_BASE_ID)
+    vi.unstubAllGlobals()
+    airtable.install(fintech, healthcare)
+    // Already in the other two bases, so only a leak across bases would call it a duplicate.
+    airtable.addDb('https://company2.example', 'Company 2', 'New')
+    fintech.addDb('https://company2.example', 'Company 2', 'New')
+    healthcare.addDb('https://company3.example', 'Company 3', 'Manual review')
+
+    const preview = await call(handle, 'company_preview', { base: 'healthcare_services', rows: [row(2), row(3)] })
+    expect(preview.body.results.map((result: { status: string }) => result.status)).toEqual(['ready', 'duplicate'])
+
+    const { body } = await call(handle, 'company_commit', { base: 'healthcare_services', addedBy: 'Daria Krut', rows: [row(2), row(3)] })
+    expect(body.counts).toEqual({ created: 1, duplicate: 1, failed: 0 })
+    expect(healthcare.writes()).toHaveLength(1)
+    expect(healthcare.writes()[0].path).toBe(`/v0/${HEALTHCARE_BASE_ID}/${AIRTABLE_IDS.dbTable}`)
+    expect(airtable.requests).toHaveLength(0)
+    expect(fintech.requests).toHaveLength(0)
+  })
+
+  it('answers 503 naming the env var when the Healthcare base is not configured', async () => {
+    const { status, body } = await call(handle, 'company_metadata', { base: 'healthcare_services' })
+    expect(status).toBe(503)
+    expect(body.error).toContain('Healthcare (Services)')
+    expect(body.error).toContain('AIRTABLE_HEALTHCARE_SERVICES_BASE_ID')
     expect(airtable.requests).toHaveLength(0)
     expect(fintech.requests).toHaveLength(0)
   })
