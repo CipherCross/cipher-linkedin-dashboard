@@ -194,6 +194,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/029_repeated_outbound_cleanup.sql',
   // Companies from Airtable, the lead <-> company link, and countries (step 030).
   'postgres/tenant-baseline/v1/030_companies_countries.sql',
+  // The lead <-> company link refresh as one definer call (step 031).
+  'postgres/tenant-baseline/v1/031_lead_company_link_refresh.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -438,8 +440,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares thirty steps in order 1 -> 2 -> ... -> 30',
-  manifest.steps.length === 30 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares thirty-one steps in order 1 -> 2 -> ... -> 31',
+  manifest.steps.length === 31 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -656,6 +658,24 @@ check('step 030 only adds location and country_code to leads, with the country k
 check('step 030 writes rows only into the country reference tables',
   (companiesSql.match(/INSERT INTO public\.(\w+)/g) ?? []).every((m) => /public\.(countries|country_aliases)$/.test(m))
   && !/\bUPDATE public\./i.test(companiesSql) && !/\bDELETE FROM\b/i.test(companiesSql));
+
+const linkRefreshStep = manifest.steps.find((s) => s.step === 31);
+const linkRefreshPath = join(BASELINE_DIR, '031_lead_company_link_refresh.sql');
+const linkRefreshSql = stripComments('031_lead_company_link_refresh.sql', readFileSync(linkRefreshPath, 'utf8'));
+check('manifest declares step 031 lead company link refresh',
+  linkRefreshStep?.artifact === '031_lead_company_link_refresh.sql' && linkRefreshStep.owner_role_entered_by === 'artifact');
+check('step 031 manifest digest matches its artifact',
+  linkRefreshStep?.sha256 === sha256(linkRefreshPath), `manifest ${linkRefreshStep?.sha256}, disk ${sha256(linkRefreshPath)}`);
+check('step 031 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(linkRefreshSql) && /RESET ROLE;\s*$/.test(linkRefreshSql));
+check('step 031 authorizes its caller before any work and grants EXECUTE only to the runtime and the system',
+  /if not \(coalesce\(public\.is_active_team_member\(\), false\)\s+or coalesce\(pg_catalog\.current_setting\('app\.actor_id', true\), ''\) = '00000000-0000-0000-0000-000000000000'\) then\s+raise exception/.test(linkRefreshSql)
+  && /REVOKE ALL ON FUNCTION public\.refresh_lead_company_links\(\) FROM PUBLIC;/.test(linkRefreshSql)
+  && (linkRefreshSql.match(/GRANT[^;]*;/g) ?? []).join('') === 'GRANT EXECUTE ON FUNCTION public.refresh_lead_company_links() TO app_runtime, app_system;');
+check('step 031 never re-points a manual link and deletes nothing',
+  /where link\.method = 'contact_slug'/.test(linkRefreshSql) && !/\bdelete\b/i.test(linkRefreshSql));
+check('step 031 changes no table, policy or other grant',
+  !/\b(CREATE|ALTER|DROP) (TABLE|POLICY|VIEW|INDEX|TRIGGER)\b/i.test(linkRefreshSql) && !/\bREVOKE\b(?![^;]*refresh_lead_company_links)/.test(linkRefreshSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');

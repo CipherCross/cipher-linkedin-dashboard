@@ -339,6 +339,14 @@
       "owner_role_entered_by": "artifact",
       "session": "companies-countries",
       "description": "Adds countries and country_aliases (ISO reference data and LinkedIn/Airtable spellings, seeded) with geo_country_code(text); leads.location and leads.country_code (trigger-derived from location); airtable_companies and airtable_contacts (a mirror of every base's Companies and Contacts tables, typed columns plus every field as jsonb, country_code trigger-derived from hq_country); lead_company_links (a lead's Airtable company, by contact slug or set by hand; manual links survive refresh) and airtable_sync_state (incremental cursor and resumable offset). Members write the mirror and links through RLS (app_runtime), the daily cron through app_system under the system actor; members may DELETE only a manual link; no other DELETE; the AI sandbox reads every new relation."
+    },
+    {
+      "step": 31,
+      "artifact": "031_lead_company_link_refresh.sql",
+      "sha256": "f260aec3830a36b9b83c165c559a0250d9b0180f77eccaccb4bd9ebddf5f9038",
+      "owner_role_entered_by": "artifact",
+      "session": "companies-countries",
+      "description": "Adds refresh_lead_company_links(), a SECURITY DEFINER function owned by app_owner that authorizes its caller once (an active team member or the system actor) and re-derives the 'contact_slug' lead_company_links from the Airtable mirror with step 030's rule, never touching manual links and deleting nothing. Replaces the caller-run refresh whose per-row RLS checks exceeded the runtime statement timeout. EXECUTE only for app_runtime and app_system; no table, grant or policy change."
     }
   ]
 }
