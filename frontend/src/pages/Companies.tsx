@@ -10,7 +10,8 @@ import type { ActiveFilter } from '../ui'
 import { COPY } from '../ui/labels'
 import { useData } from '../lib/DataContext'
 import { useToast } from '../lib/ToastContext'
-import { accountLabeller } from '../lib/leads'
+import { accountLabeller, presetRanges, type DateRange } from '../lib/leads'
+import { DateRangePicker } from '../components/DateRangePicker'
 import { num, shortDate } from '../lib/format'
 import { AIRTABLE_BASES } from '../lib/airtableBases'
 import {
@@ -443,6 +444,12 @@ function CountriesTab({ reloadKey }: { reloadKey: number }) {
   const camp = params.get('camp') ?? 'all'
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
+  // The invite-cohort window: a preset when the URL's days match one, else custom.
+  const RANGES = useMemo(() => presetRanges(), [])
+  const range = useMemo<DateRange>(() => {
+    const preset = RANGES.find((r) => (r.from ?? '') === from && (r.to ?? '') === to)
+    return preset ?? { id: 'custom', label: 'Custom range', from: from || null, to: to || null }
+  }, [RANGES, from, to])
   const [result, setResult] = useState<CountriesFunnel | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -486,8 +493,12 @@ function CountriesTab({ reloadKey }: { reloadKey: number }) {
           <option value="all">All campaigns</option>
           {campaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>)}
         </SelectField>
-        <TextField label="Invited from (UTC)" labelHidden type="date" value={from} max={to || undefined} onChange={(e) => write({ from: e.target.value })} />
-        <TextField label="Invited to (UTC)" labelHidden type="date" value={to} min={from || undefined} onChange={(e) => write({ to: e.target.value })} />
+        <DateRangePicker
+          ariaLabel="Invited between"
+          presets={RANGES}
+          value={range}
+          onChange={(r) => write({ from: r.from, to: r.to })}
+        />
       </Toolbar>
 
       {error && (

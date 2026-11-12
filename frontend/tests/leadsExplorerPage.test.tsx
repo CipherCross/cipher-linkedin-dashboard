@@ -294,6 +294,13 @@ describe('the lead and reply columns', () => {
 })
 
 describe('country and company', () => {
+  it('keeps Company and Country behind More columns so the default view fits', async () => {
+    await paint()
+    const table = screen.getByRole('table', { name: 'Leads' })
+    expect(within(table).queryByRole('columnheader', { name: 'Company' })).toBeNull()
+    expect(within(table).queryByRole('columnheader', { name: 'Country' })).toBeNull()
+  })
+
   it("shows the lead's Airtable company as a link, LinkedIn's company beneath it, and the country", async () => {
     links.value = {
       l1: { base_key: 'web2mob', record_id: 'recAAAAAAAAAAAAAA', name: 'Engines Ltd', method: 'contact_slug' },
@@ -302,15 +309,15 @@ describe('country and company', () => {
       lead({ location: 'Lisbon, Portugal', country_code: 'PT' }),
       lead({ id: 'l2', profile_url: 'https://www.linkedin.com/in/bob', full_name: 'Bob Babbage', company: null }),
     ])
-    await paint()
+    await paint('/leads?cols=all')
     const table = screen.getByRole('table', { name: 'Leads' })
     expect(within(table).getByRole('columnheader', { name: 'Company' })).toBeTruthy()
     expect(within(table).getByRole('columnheader', { name: 'Country' })).toBeTruthy()
     const company = within(table).getByRole('link', { name: 'Engines Ltd' })
     expect(company.getAttribute('href')).toBe('/companies/web2mob/recAAAAAAAAAAAAAA')
+    expect(within(table).getByText('Portugal')).toBeTruthy()
     fireEvent.click(company)
     expect(openConversation).not.toHaveBeenCalled()
-    expect(within(table).getByText('Portugal')).toBeTruthy()
   })
 
   it('filters by country from the sheet and names it in the chip', async () => {

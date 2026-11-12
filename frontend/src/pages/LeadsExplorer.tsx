@@ -495,10 +495,11 @@ export function LeadsExplorer() {
   const dateColumns = DATE_COLUMNS.filter(
     (c) => (!c.optional || showAdded) && (showDetailColumns || !c.detail),
   )
-  // Lead, Reply, Company, Country, Account / campaign, Milestone, Pipeline, Next
-  // follow-up + the date columns, plus Headline / Age / Gender when the detail
-  // columns are shown.
-  const colSpan = 8 + (showDetailColumns ? 3 : 0) + dateColumns.length
+  // Lead, Reply, Account / campaign, Milestone, Pipeline, Next follow-up + the
+  // date columns, plus Company / Country / Headline / Age / Gender when the
+  // detail columns are shown (the Airtable company and country would otherwise
+  // push the default view past a 1440px screen).
+  const colSpan = 6 + (showDetailColumns ? 5 : 0) + dateColumns.length
 
   /* How many of the sheet's filters are engaged. The search box and the account
    * selector are on the page and visibly set, so they are not counted here. */
@@ -909,8 +910,8 @@ export function LeadsExplorer() {
             <tr>
               {sortHeader('full_name', 'Lead')}
               <th scope="col">Reply</th>
-              <th scope="col">Company</th>
-              <th scope="col">Country</th>
+              {showDetailColumns && <th scope="col">Company</th>}
+              {showDetailColumns && <th scope="col">Country</th>}
               {showDetailColumns && <th scope="col">Headline</th>}
               <th scope="col">Account / campaign</th>
               <th scope="col">Milestone</th>
@@ -952,6 +953,7 @@ export function LeadsExplorer() {
                     </div>
                   ) : <span className="text-app-text-muted">—</span>}
                 </td>
+                {showDetailColumns && (
                 <td className="max-w-[220px]" onClick={companyLink ? (e) => e.stopPropagation() : undefined}>
                   {companyLink ? (
                     <Link
@@ -966,9 +968,12 @@ export function LeadsExplorer() {
                     <div className="truncate text-app-meta text-app-text-muted" title={`LinkedIn: ${l.company}`}>{l.company}</div>
                   )}
                 </td>
+                )}
+                {showDetailColumns && (
                 <td className="whitespace-nowrap" title={l.location ?? undefined}>
                   {l.country_code ? countryName(l.country_code) : <span className="text-app-text-muted">—</span>}
                 </td>
+                )}
                 {showDetailColumns && (
                   <td className="max-w-[240px] truncate text-app-text-muted" title={l.headline ?? ''}>{l.headline ?? '—'}</td>
                 )}
