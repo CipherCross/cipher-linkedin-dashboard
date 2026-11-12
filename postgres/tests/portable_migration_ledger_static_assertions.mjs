@@ -192,6 +192,8 @@ const S08_ARTIFACTS = [
   'postgres/tenant-baseline/v1/028_coach_lead_context.sql',
   // Repeated outbound chat-store copies removed (step 029).
   'postgres/tenant-baseline/v1/029_repeated_outbound_cleanup.sql',
+  // Companies from Airtable, the lead <-> company link, and countries (step 030).
+  'postgres/tenant-baseline/v1/030_companies_countries.sql',
 ];
 
 const EXECUTABLE_SCRIPTS = [
@@ -436,8 +438,8 @@ check('manifest still declares the seven-role bootstrap dependency',
   Array.isArray(manifest.role_bootstrap?.required_roles)
   && manifest.role_bootstrap.required_roles.length === 7
   && manifest.role_bootstrap.is_ledger_step === false);
-check('manifest declares twenty-nine steps in order 1 -> 2 -> ... -> 29',
-  manifest.steps.length === 29 && manifest.steps.every((s, i) => s.step === i + 1));
+check('manifest declares thirty steps in order 1 -> 2 -> ... -> 30',
+  manifest.steps.length === 30 && manifest.steps.every((s, i) => s.step === i + 1));
 
 const contactsStep = manifest.steps.find((s) => s.step === 22);
 const contactsSql = readFileSync(join(BASELINE_DIR, '022_conversation_contacts.sql'), 'utf8')
@@ -624,6 +626,36 @@ check('step 029 deletes only later outbound chat-store copies and keeps the earl
 check('step 029 changes no schema, grant or policy and touches no other table',
   !/\b(CREATE|ALTER|DROP|GRANT|REVOKE|TRUNCATE|UPDATE|INSERT)\b/i.test(cleanupSql.replace(/DO \$\$|\$\$;/g, ''))
   && (cleanupSql.match(/public\.(\w+)/g) ?? []).every((t) => t === 'public.messages'));
+
+const companiesStep = manifest.steps.find((s) => s.step === 30);
+const companiesPath = join(BASELINE_DIR, '030_companies_countries.sql');
+const companiesSql = stripComments('030_companies_countries.sql', readFileSync(companiesPath, 'utf8'));
+const COMPANY_TABLES = ['airtable_companies', 'airtable_contacts', 'lead_company_links', 'airtable_sync_state'];
+check('manifest declares step 030 companies and countries',
+  companiesStep?.artifact === '030_companies_countries.sql' && companiesStep.owner_role_entered_by === 'artifact');
+check('step 030 manifest digest matches its artifact',
+  companiesStep?.sha256 === sha256(companiesPath), `manifest ${companiesStep?.sha256}, disk ${sha256(companiesPath)}`);
+check('step 030 runs as app_owner and returns to the session role',
+  /^\s*SET ROLE app_owner;/m.test(companiesSql) && /RESET ROLE;\s*$/.test(companiesSql));
+check('step 030 enables RLS on every new table',
+  [...COMPANY_TABLES, 'countries', 'country_aliases'].every((t) => new RegExp(`ALTER TABLE public\\.${t} ENABLE ROW LEVEL SECURITY`).test(companiesSql)));
+check('step 030 gives members, the system actor and the AI sandbox a policy on every mirror table',
+  COMPANY_TABLES.every((t) => new RegExp(`CREATE POLICY ${t}_active_member ON public\\.${t}[\\s\\S]*?is_active_team_member\\(\\)`).test(companiesSql)
+    && new RegExp(`CREATE POLICY ${t}_system_actor ON public\\.${t}[\\s\\S]*?00000000-0000-0000-0000-000000000000`).test(companiesSql)
+    && new RegExp(`CREATE POLICY ${t}_ai_read ON public\\.${t} FOR SELECT TO app_ai_runner USING \\(true\\)`).test(companiesSql)));
+check('step 030 grants DELETE only on lead_company_links, only to members, and only for manual links',
+  (companiesSql.match(/GRANT[^;]*\bDELETE\b[^;]*;/gi) ?? []).join('') === 'GRANT DELETE ON TABLE public.lead_company_links TO app_runtime;'
+  && /CREATE POLICY lead_company_links_manual_delete ON public\.lead_company_links\s+AS RESTRICTIVE FOR DELETE TO app_runtime\s+USING \(method = 'manual'\)/.test(companiesSql)
+  && !/\bTRUNCATE\b/i.test(companiesSql));
+check('step 030 gives the machine only reference reads and the country resolver',
+  (companiesSql.match(/GRANT[^;]*app_machine[^;]*;/g) ?? []).every((g) => /countries|geo_country_code/.test(g) && !/INSERT|UPDATE|DELETE/.test(g)));
+check('step 030 only adds location and country_code to leads, with the country kept by a trigger',
+  /ALTER TABLE public\.leads\s+ADD COLUMN location text,\s+ADD COLUMN country_code character\(2\)/.test(companiesSql)
+  && /CREATE TRIGGER refresh_lead_country_code BEFORE INSERT OR UPDATE OF location ON public\.leads/.test(companiesSql)
+  && (companiesSql.match(/ALTER TABLE public\.(\w+)\s+ADD/g) ?? []).every((m) => m.includes('leads')));
+check('step 030 writes rows only into the country reference tables',
+  (companiesSql.match(/INSERT INTO public\.(\w+)/g) ?? []).every((m) => /public\.(countries|country_aliases)$/.test(m))
+  && !/\bUPDATE public\./i.test(companiesSql) && !/\bDELETE FROM\b/i.test(companiesSql));
 
 const activationFixStep = manifest.steps.find((s) => s.step === 18);
 const activationFixPath = join(BASELINE_DIR, '018_manual_reply_review_activation_fix.sql');
