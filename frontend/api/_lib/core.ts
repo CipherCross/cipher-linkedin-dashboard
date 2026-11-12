@@ -233,7 +233,42 @@ leads — one row per person per campaign; milestone timestamps drive the funnel
     object-storage bucket, <instance_id>/<slug>.jpg; NULL = no photo. UI DISPLAY
     ONLY — never fetch for inference/classification; never pass to any model),
   photo_synced_at timestamptz (when the agent last resolved a photo; a non-NULL
-    photo_synced_at with NULL photo_path means "checked, none available")
+    photo_synced_at with NULL photo_path means "checked, none available"),
+  location text (the person's LinkedIn location as LH2 stores it, e.g. "Berlin,
+    Germany", "San Francisco Bay Area"; synced for every lead since agent 1.31.0,
+    NULL = not synced yet or LH2 has none),
+  country_code char(2) (ISO 3166 alpha-2 resolved from location by a DB trigger
+    through country_aliases; NULL = unknown/unresolved -> report it as "Unknown")
+  NOTE: leads.company is LH2's CURRENT company of the person, NOT the company we
+  write to them for. That company comes from Airtable: lead_company_links ->
+  airtable_companies (below).
+
+countries -- ISO reference: iso2 char(2) PK, name text, region text
+  ('Europe','North America','Latin America','Middle East','Africa','Asia','Oceania').
+  Join leads.country_code or airtable_companies.country_code to it for names/regions.
+country_aliases -- alias text PK (lower-case spelling) -> iso2; what the resolver
+  geo_country_code(text) matches.
+
+airtable_companies -- mirror of the Airtable Companies table of every base
+  (PK base_key, record_id; base_key in 'web2mob','fintech_arabic','healthcare_services'):
+  name, website, domain, linkedin_url, hq_country text (raw "HQ country"),
+  country_code char(2) (resolved from hq_country), industry, employees int,
+  founded_year int, ai_niche, approve_status, description, summary, keywords,
+  web_app_link, airtable_created, airtable_modified, fields jsonb (EVERY Airtable
+  field by its name, e.g. fields->>'Some Field'), synced_at.
+airtable_contacts -- mirror of the Airtable Contacts tables: base_key, record_id,
+  persona_slug (lower-case LinkedIn slug), persona_url, full_name, title,
+  company_record_id (-> airtable_companies.record_id in the same base_key),
+  approve_status, readiness, technicality, fields jsonb, synced_at.
+lead_company_links -- the company a person is written to for, one row per
+  (instance_id, profile_url) — the thread key, so join leads ON instance_id AND
+  profile_url: base_key, company_record_id (-> airtable_companies), contact_record_id,
+  method ('contact_slug' = matched by LinkedIn slug to an Airtable contact |
+  'manual' = set by a team member), linked_by, linked_at. No row = unlinked.
+  SEGMENT HINT — country: prefer the lead's own leads.country_code; company HQ
+  country is lead_company_links -> airtable_companies.country_code. Per-company
+  funnels: count DISTINCT (instance_id, profile_url) people, never lead rows
+  (a person sits in several campaigns), and compare rates by invite cohort.
 
 lead_gender_reviews -- append-only audit of explicit human gender review:
   id bigint, lead_id uuid|null, instance_id text, profile_url text,

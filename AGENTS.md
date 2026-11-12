@@ -119,7 +119,10 @@ Single-file, mapping-driven (LH2 has no API; its SQLite schema varies by version
   (`STEP_*_SQL`, `MESSAGES_SQL`, `FIRST_MESSAGE_SQL`), shipped via `deploy.sh`, fail safe
   to empty on schema drift. `ADDED_AT_SQL` fills a lead's `added_at` (LH2's
   `add_to_target_date`, the upload date the Overview tracker counts) when the mapping
-  gives none; the earliest milestone is only the last resort.
+  gives none; the earliest milestone is only the last resort. `extract_locations` does
+  the same for `leads.location` (LH2's `person_location → locations.name`, falling back
+  to the default/open position's location) for **every** lead since 1.31.0; a DB trigger
+  derives `leads.country_code` from it (`geo_country_code`, aliases in `country_aliases`).
 - **`person_external_ids` dedup pitfall**: LH2 stores ~2 'public' rows/person (human slug +
   opaque `AC…` id). Raw join double-counts → inflates aggregates ~1.6×. Every query dedupes
   to one slug/person (`PEI_ONE_SLUG_SQL`, `row_number()` window in leads mapping). Suspect a
@@ -237,6 +240,20 @@ names one base from `AIRTABLE_BASES` (`src/lib/airtableBases.ts`, env var per ba
   daily buckets; columns, weeks and the All bases sum are computed in `src/lib/teamStats.ts`. A
   base without its env var answers `configured: false`.
 
+### Companies & countries (Airtable mirror, ledger step 030)
+`leads.company` is LH2's *current* company, not the one we write for. The company comes
+from Airtable: lead → Contact (by LinkedIn slug, `linkedin_slug()` in SQL on both sides) →
+linked Company. `_lib/airtableSync.ts` mirrors every base's Companies and Contacts into
+`airtable_companies` / `airtable_contacts` (typed columns + `fields` jsonb = every field by
+name), incremental by `LAST_MODIFIED_TIME()` with a per-(base, table) cursor and a
+resumable offset in `airtable_sync_state`, then re-derives `lead_company_links`
+(`contact_slug`; two bases → newest contact). **Manual links are never overwritten**; a
+member may delete only a manual link. Deletions in Airtable are not mirrored. Runs from the
+daily `/api/classify` cron (app_system), `POST /api/import?op=airtable.sync` (any active
+member; answers `done:false` to be called again) and after a CSV commit; manual links via
+`POST /api/import?op=company.link`. Country analytics live in the Companies tab
+(`#/companies`); rates are by invite cohort and young cohorts are flagged maturing.
+
 ### Frontend
 React 18 + Vite + React Router (`HashRouter`), Recharts, `react-markdown`. `AuthContext.tsx`
 gates startup and resolves the signed-in team member; only then does `DataContext.tsx`
@@ -298,7 +315,7 @@ entering credentials or making data-changing actions.
   contract are inert, except `NEON_PHOTOS_DEFAULT=disabled`. `frontend/.env.example`
   lists every name.
 
-Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC, `/api/notify-replies` 06:30 UTC
+Crons (`frontend/vercel.json`): `/api/classify` 06:00 UTC (also the Airtable mirror), `/api/notify-replies` 06:30 UTC
 (sweep for pings lost to outages — the primary trigger is the agent's post-sync ping via the
 `notify_url` remote-config key), weekly `/api/briefing?kind=weekly` Monday 07:00 UTC,
 and short `/api/briefing?kind=daily` Monday–Friday 07:30 UTC. Both schedules reuse
