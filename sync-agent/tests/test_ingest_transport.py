@@ -3808,6 +3808,123 @@ class LeadProfilesTest(unittest.TestCase):
         self.assertEqual(set(row), fields)
 
 
+class LeadLocationTest(unittest.TestCase):
+    """Every lead's LinkedIn location (gateway step 030), not only the people
+    who replied. Discovered by name like the profiles, keyed by every public
+    slug like ADDED_AT_SQL, and fail safe to empty."""
+
+    def lh(self):
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        con.executescript("""
+            CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+            INSERT INTO person_external_ids VALUES
+              (1, 'ada', 'public'), (1, 'ACoAAA1', 'public'), (1, 'ada-private', 'private'),
+              (2, 'bob', 'public'), (3, 'cy', 'public'), (4, 'dee', 'public'), (5, 'eve', 'public');
+            CREATE TABLE person_location (id INTEGER, person_id INTEGER, location_id INTEGER);
+            INSERT INTO person_location VALUES (1, 1, 7), (2, 5, 8);
+            CREATE TABLE locations (id INTEGER, name TEXT);
+            INSERT INTO locations VALUES (7, '  Berlin,   Germany '), (8, '   ');
+            CREATE TABLE person_positions (person_id INTEGER, title TEXT, start_year INTEGER,
+                                           end_year INTEGER, location_name TEXT, is_default INTEGER);
+            INSERT INTO person_positions VALUES
+              (1, 'CTO', 2020, NULL, 'Paris, France', 1),
+              (2, 'Dev', 2015, 2019, 'Old Town', 0),
+              (2, 'Lead', 2019, 2022, 'Yerevan, Armenia', 1),
+              (3, 'Past', 2010, 2015, 'Nowhere', 0),
+              (3, 'Now', 2021, NULL, 'Lisbon, Portugal', 0),
+              (5, 'Ops', 2018, NULL, 'Kyiv, Ukraine', 0);
+        """)
+        return con
+
+    def test_keys_every_public_slug_and_prefers_person_location(self):
+        out = agent.extract_locations(self.lh())
+        url = "https://www.linkedin.com/in/"
+        # person_location -> locations wins over the default job; whitespace collapses.
+        self.assertEqual(out[url + "ada"], "Berlin, Germany")
+        self.assertEqual(out[url + "ACoAAA1"], "Berlin, Germany")
+        self.assertNotIn(url + "ada-private", out)
+        # The default position, even with an end year, over a non-default one.
+        self.assertEqual(out[url + "bob"], "Yerevan, Armenia")
+        # No default: the open position; a closed one never counts.
+        self.assertEqual(out[url + "cy"], "Lisbon, Portugal")
+        # A blank person_location falls through to the job.
+        self.assertEqual(out[url + "eve"], "Kyiv, Ukraine")
+        self.assertNotIn(url + "dee", out)
+
+    def test_reads_a_location_column_and_caps_it(self):
+        con = sqlite3.connect(":memory:")
+        con.executescript("""
+            CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT);
+            INSERT INTO person_external_ids VALUES (1, 'ada', 'public');
+            CREATE TABLE person_location (person_id INTEGER, location_name TEXT);
+        """)
+        con.execute("INSERT INTO person_location VALUES (1, ?)", ("x" * 500,))
+        out = agent.extract_locations(con)
+        self.assertEqual(out["https://www.linkedin.com/in/ada"], "x" * agent.MAX_LEAD_LOCATION)
+
+    def test_fails_safe_on_a_build_without_the_tables(self):
+        con = sqlite3.connect(":memory:")
+        with mock.patch("builtins.print"):
+            self.assertEqual(agent.extract_locations(con), {})
+        con.execute("CREATE TABLE person_external_ids (person_id INTEGER, external_id TEXT, type_group TEXT)")
+        con.execute("INSERT INTO person_external_ids VALUES (1, 'ada', 'public')")
+        con.execute("CREATE TABLE person_location (person_id INTEGER, location_id INTEGER)")
+        con.execute("CREATE TABLE person_positions (person_id INTEGER, title TEXT)")
+        self.assertEqual(agent.extract_locations(con), {})
+
+    def test_extraction_fills_every_lead_and_keeps_the_mappings_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "lh.db")
+            con = added_at_db(path)
+            con.executescript("""
+                CREATE TABLE person_location (person_id INTEGER, location_id INTEGER);
+                INSERT INTO person_location VALUES (11, 1), (12, 2), (14, 1);
+                CREATE TABLE locations (id INTEGER, name TEXT);
+                INSERT INTO locations VALUES (1, 'Berlin, Germany'), (2, 'Madrid, Spain');
+            """)
+            con.commit()
+            con.close()
+            mapping = dict(ADDED_AT_MAPPING, location="location")
+            mapping["query"] = mapping["query"].replace(
+                "AS added_at", "AS added_at, CASE WHEN m.person_id = 14 THEN ' Own  value ' END AS location")
+            cfg = {"instance_id": "nb", "lh2_db_path": path, "mapping": {"leads": mapping},
+                   "sync_steps": False, "sync_messages": False}
+            with mock.patch("builtins.print"):
+                _, leads, _, _, _, demo = agent.extract_local(cfg, [])
+        located = {(l["campaign_id"], agent.slug_from_profile_url(l["profile_url"])): l["location"]
+                   for l in leads}
+        self.assertEqual(located, {
+            # The mapping picked the opaque slug for Alice; it matches all the same.
+            ("nb:7", "ACalice"): "Berlin, Germany",
+            ("nb:9", "ACalice"): "Berlin, Germany",
+            # The mapping picked bob-b; PEI_ONE_SLUG_SQL would pick robert-b.
+            ("nb:7", "bob-b"): "Madrid, Spain",
+            ("nb:7", "carol-c"): None,
+            ("nb:7", "dan-d"): "Own value",
+            ("nb:7", "eve-e"): None,
+        })
+        self.assertEqual(demo["location_sources"], {"mapping": 1, "lh2": 3, "none": 2})
+
+    def test_location_travels_on_the_lead_and_parity_catches_a_change(self):
+        cfg = {"instance_id": "nb", "instance_label": "Notebook"}
+        cs, ls, ms, ss, demo = extraction()
+        ls[0]["location"] = "Berlin, Germany"
+        ms = agent.dedupe_messages(ms)
+        es = agent.dedupe_events(agent.derive_events("nb", ls))
+        payload = agent.build_ingest_payload(cfg, cs, ls, ms, es, ss, demo, "ok", "")
+        self.assertEqual(payload["leads"][0]["location"], "Berlin, Germany")
+        self.assertIsNone(payload["leads"][1]["location"])
+        chunks, problems = agent.plan_ingest(cfg, payload, cs, ls, ms, es, ss, demo, day="20260807")
+        self.assertEqual(problems, [])
+        chunks[0]["leads"][0]["location"] = "Paris, France"
+        changed = agent.verify_ingest_parity(chunks, cs, ls, ms, es, ss, demo["edu_map"], demo["job_map"])
+        self.assertTrue(any("location" in p for p in changed))
+
+    def test_the_gateway_cap_matches_the_agent_cap(self):
+        self.assertEqual(ts_number(read_ts(INGEST_TS), "MAX_LEAD_LOCATION"), agent.MAX_LEAD_LOCATION)
+
+
 class RepeatedOutboundTest(unittest.TestCase):
     """A connection-request note appears twice in LinkedIn's thread (sent, then
     again on acceptance); the agent sends it once, at its real send time."""

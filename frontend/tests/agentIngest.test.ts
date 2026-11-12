@@ -34,6 +34,7 @@ import {
 import {
   AGENT_INGEST_OP,
   MAX_INGEST_BYTES,
+  MAX_LEAD_LOCATION,
   MAX_ROWS_PER_COLLECTION,
   MAX_TOTAL_ROWS,
   canonicalJson,
@@ -72,6 +73,7 @@ import {
   MACHINE_OPERATIONS as MACHINE_OPS,
   refreshCandidatesOperation,
   upsertCampaignsOperation,
+  upsertLeadsOperation,
   upsertMessagesOperation,
 } from '../api/_lib/data/operations/agentIngest.js'
 
@@ -452,6 +454,52 @@ describe('the payload', () => {
     expect(parsed.leads[0].invited_at).toBe('2026-08-01T10:00:00.000Z')
   })
 
+  it('carries a lead location trimmed and clipped, and leaves it out when absent', () => {
+    const parsed = parseIngestPayload(
+      body({
+        leads: [
+          {
+            campaign_id: `${INSTANCE}:42`,
+            profile_url: 'https://example.invalid/in/one',
+            location: '  Berlin, Germany ',
+          },
+          {
+            campaign_id: `${INSTANCE}:42`,
+            profile_url: 'https://example.invalid/in/two',
+            location: 'x'.repeat(MAX_LEAD_LOCATION + 50),
+          },
+          { campaign_id: `${INSTANCE}:42`, profile_url: 'https://example.invalid/in/three', location: '  ' },
+          { campaign_id: `${INSTANCE}:42`, profile_url: 'https://example.invalid/in/four', location: null },
+        ],
+      }),
+    )
+    expect(MAX_LEAD_LOCATION).toBe(300)
+    expect(parsed.leads[0].location).toBe('Berlin, Germany')
+    expect(parsed.leads[1].location).toHaveLength(MAX_LEAD_LOCATION)
+    // Undefined, not null: an older agent's retried batch keeps its digest.
+    expect(parsed.leads[2].location).toBeUndefined()
+    expect(parsed.leads[3].location).toBeUndefined()
+    expect(() =>
+      parseIngestPayload(
+        body({
+          leads: [
+            { campaign_id: `${INSTANCE}:42`, profile_url: 'https://example.invalid/in/one', location: 7 },
+          ],
+        }),
+      ),
+    ).toThrow(/leads\[0\]\.location must be a string/)
+  })
+
+  it('keeps the digest of a batch from an agent that sends no location', () => {
+    const legacy = body()
+    const withNull = body({
+      leads: (legacy.leads as Record<string, unknown>[]).map((lead) => ({ ...lead, location: null })),
+    })
+    expect(payloadDigest(parseIngestPayload(withNull))).toBe(
+      payloadDigest(parseIngestPayload(legacy)),
+    )
+  })
+
   it('ignores an unknown key rather than refusing the batch', () => {
     const parsed = parseIngestPayload(
       body({
@@ -687,6 +735,19 @@ describe('the campaign upsert contract', () => {
     for (const field of ['runtime_status', 'is_archived', 'status_source', 'status_raw', 'status_observed_at']) {
       expect(sql).toContain(`ELSE public.campaigns.${field} END`)
     }
+  })
+})
+
+describe('the lead upsert contract', () => {
+  const sql = upsertLeadsOperation.build({
+    actor: { kind: 'machine', actorId: CREDENTIAL_ID, tenantId: TENANT, role: 'machine' },
+    params: { instanceId: INSTANCE, rows: '[]' },
+  }).text
+
+  it('reads the location out of the record list and never erases a stored one', () => {
+    expect(sql).toContain('location text')
+    expect(sql).toContain('r.location')
+    expect(sql).toContain('location = COALESCE(EXCLUDED.location, public.leads.location)')
   })
 })
 

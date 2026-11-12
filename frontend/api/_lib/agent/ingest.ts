@@ -92,6 +92,8 @@ export const MAX_TOTAL_ROWS = 20_000
 const MAX_TEXT = 2_000
 const MAX_ID = 200
 const MAX_URL = 500
+/** A lead's LinkedIn location ("Berlin, Germany"); the agent caps it the same. */
+export const MAX_LEAD_LOCATION = 300
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/
 const DIRECTIONS = new Set(['in', 'out'])
 const MAX_EXTERNAL_ID = 128
@@ -247,6 +249,14 @@ export interface LeadRow {
   readonly photo_synced_at: string | null
   readonly education_start_year: number | null
   readonly first_job_start_year: number | null
+  /**
+   * The LinkedIn location as LH2 stores it (step 030; the database derives
+   * `country_code` from it). Clipped rather than refused, like a headline.
+   * `undefined`, not `null`, when absent or empty: `canonicalJson` drops an
+   * undefined key, so a batch from an agent that predates the field keeps the
+   * digest it had, and the upsert's COALESCE keeps the stored value.
+   */
+  readonly location?: string | null
 }
 
 export interface MessageRow {
@@ -585,6 +595,8 @@ export function parseIngestPayload(body: unknown): IngestPayload {
         row.first_job_start_year,
         `leads[${index}].first_job_start_year`,
       ),
+      location:
+        optionalString(row.location, `leads[${index}].location`, MAX_LEAD_LOCATION) ?? undefined,
     } satisfies LeadRow
   })
 

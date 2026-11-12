@@ -43,7 +43,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 import yaml
 
-AGENT_VERSION = "1.30.1"
+AGENT_VERSION = "1.31.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Timezone applied to timezone-NAIVE timestamps parsed from LH2 (epoch values are
@@ -3298,6 +3298,7 @@ def _ingest_leads(leads, edu_map, job_map):
             "replied_at": lead.get("replied_at"),
             "last_action_at": lead.get("last_action_at"),
             "added_at": lead.get("added_at"),
+            "location": lead.get("location"),
             "photo_path": None,
             "photo_synced_at": None,
             "education_start_year": edu_map.get(lead["profile_url"]),
@@ -3491,7 +3492,7 @@ def chunk_ingest_payload(payload, max_rows=INGEST_CHUNK_ROWS,
 
 _PARITY_LEAD_FIELDS = ("full_name", "headline", "company", "status",
                        "invited_at", "connected_at", "first_message_at",
-                       "replied_at", "last_action_at", "added_at")
+                       "replied_at", "last_action_at", "added_at", "location")
 _PARITY_STEP_FIELDS = ("step_label", "step_type", "template_body",
                        "sent_count", "replied_count", "current_count")
 _PARITY_MAX_REPORTED = 8
@@ -5327,6 +5328,125 @@ def extract_lead_profiles(con, schema, profile_urls):
     return out
 
 
+# --------------------------------------------------------------- lead location
+# Every lead's LinkedIn location as LH2 stores it ("Berlin, Germany"), sent on
+# the lead row (gateway step 030; the database derives the country from it).
+# Unlike the coach's profiles this covers EVERY lead, not only the people who
+# replied. Discovered by name like the profiles: person_location (its own
+# column, or `location_id` -> `locations`), then a one-row-per-person table's
+# location column, then the current/default position's location. Keyed by EVERY
+# public slug of the person, exactly like ADDED_AT_SQL, so it matches whichever
+# slug the leads mapping picked. Print-only on drift, never note_warning, never
+# raises.
+
+MAX_LEAD_LOCATION = 300
+_POSITION_LOCATION_COLS = ("location_name", "location")
+
+
+def extract_locations(con):
+    """{profile_url -> location} for every person LH2 holds a location for, or
+    {} on any schema drift. Values are trimmed, capped at MAX_LEAD_LOCATION and
+    never empty."""
+    try:
+        table_names = {str(r[0]) for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")}
+        slugs = con.execute(
+            "SELECT person_id, 'https://www.linkedin.com/in/' || external_id "
+            "FROM person_external_ids WHERE type_group = 'public' "
+            "AND person_id IS NOT NULL AND external_id IS NOT NULL").fetchall()
+    except sqlite3.Error as e:
+        print(f"lead locations skipped ({e}) — leads carry no location")
+        return {}
+    urls_of = {}
+    for pid, url in slugs:
+        urls_of.setdefault(pid, []).append(url)
+    if not urls_of:
+        return {}
+    lower = {t.lower(): t for t in table_names}
+
+    def rows(sql):
+        try:
+            return con.execute(sql).fetchall()
+        except sqlite3.Error as e:
+            print(f"lead locations: a table was skipped ({e})")
+            return []
+
+    def columns(table):
+        try:
+            return [r[1] for r in con.execute(f"PRAGMA table_info({_ident(table)})")]
+        except sqlite3.Error:
+            return []
+
+    found = {}
+
+    def take(pairs):
+        for pid, value in pairs:
+            text = _clip_text(value, MAX_LEAD_LOCATION)
+            if pid in urls_of and text and pid not in found:
+                found[pid] = text
+
+    # person_location: the location itself, or its `<x>_id` through the lookup.
+    own = lower.get("person_location")
+    if own:
+        cols = columns(own)
+        key = _pick_column(cols, ("person_id",))
+        value = _pick_column(cols, _LOCATION_COLS)
+        if key and value:
+            take(rows(f"SELECT {_ident(key)}, {_ident(value)} FROM {_ident(own)}"))
+        elif key:
+            id_col = next((c for c in cols if c.lower().endswith("_id")
+                           and c.lower() not in ("person_id", "id")), None)
+            lookup = _lookup_table(id_col[:-3], table_names) if id_col else None
+            names = _lookup_names(con, lookup, rows) if lookup else {}
+            if names:
+                take((pid, names.get(ref)) for pid, ref in
+                     rows(f"SELECT {_ident(key)}, {_ident(id_col)} FROM {_ident(own)}"))
+
+    # A one-row-per-person table that carries a location column of its own.
+    for name in ("persons", "people", "person"):
+        table = lower.get(name)
+        if not table:
+            continue
+        cols = columns(table)
+        key, value = _person_key(cols, table), _pick_column(cols, _LOCATION_COLS)
+        if key and value:
+            take(rows(f"SELECT {_ident(key)}, {_ident(value)} FROM {_ident(table)}"))
+
+    # The current/default job's location, for anyone still without one: the
+    # `is_default` position first, then an open one (no end year), newest start.
+    positions = lower.get("person_positions")
+    if positions:
+        cols = columns(positions)
+        key = _pick_column(cols, ("person_id",))
+        value = _pick_column(cols, _POSITION_LOCATION_COLS)
+        default, end, start = (_pick_column(cols, ("is_default",)),
+                               _pick_column(cols, ("end_year",)),
+                               _pick_column(cols, ("start_year",)))
+        if key and value and (default or end):
+            picked = [key, value, default, end, start]
+            select = ", ".join(_ident(c) if c else "NULL" for c in picked)
+            best = {}
+            for pid, place, is_default, end_year, start_year in rows(
+                    f"SELECT {select} FROM {_ident(positions)}"):
+                if pid not in urls_of or pid in found:
+                    continue
+                is_default = str(is_default).strip().lower() in ("1", "true")
+                current = end_year is None if end else False
+                if not (is_default or current):
+                    continue
+                rank = (is_default, current, _plausible_year(start_year) or 0)
+                if _clip_text(place, MAX_LEAD_LOCATION) and (
+                        pid not in best or rank > best[pid][0]):
+                    best[pid] = (rank, place)
+            take((pid, place) for pid, (_, place) in best.items())
+
+    out = {}
+    for pid, location in found.items():
+        for url in urls_of[pid]:
+            out[url] = location
+    return out
+
+
 def extract_chat_contacts(con, instance_id, own_id, profile_urls):
     """Name and headline of the partner of every synced thread, or [].
 
@@ -5482,6 +5602,7 @@ def extract_local(cfg, warnings=None):
                 "replied_at": iso(row_get(row, lmap, "replied_at")),
                 "last_action_at": iso(row_get(row, lmap, "last_action_at")),
                 "added_at": iso(row_get(row, lmap, "added_at")),
+                "location": row_get(row, lmap, "location"),
                 "updated_at": now,
             })
     messages = []
@@ -5574,6 +5695,23 @@ def extract_local(cfg, warnings=None):
     # dry-run coverage counts.
     edu_map, job_map = extract_demographic_years(cfg, con)
 
+    # Location (gateway step 030): the mapping's value when it gives one, else
+    # LH2's own (built-in, extract_locations), for EVERY lead. Best-effort like
+    # the demographic signals: a build without the tables sends no location.
+    try:
+        locations = extract_locations(con)
+    except Exception as e:  # never let the location lookup break a sync
+        print(f"lead locations skipped ({e}) — leads carry no location")
+        locations = {}
+    location_sources = {"mapping": 0, "lh2": 0, "none": 0}
+    for lead in leads:
+        lead["location"] = _clip_text(lead.get("location"), MAX_LEAD_LOCATION)
+        if lead["location"]:
+            location_sources["mapping"] += 1
+            continue
+        lead["location"] = locations.get(lead["profile_url"])
+        location_sources["lh2" if lead["location"] else "none"] += 1
+
     # Names for threads whose person has no lead. Only the chat store knows
     # the partners, so a notebook on the legacy or mapping source sends none.
     contacts = []
@@ -5593,6 +5731,7 @@ def extract_local(cfg, warnings=None):
     demo = {"edu_map": edu_map, "job_map": job_map,
             "conversations": conversations, "contacts": contacts,
             "added_sources": added_sources,
+            "location_sources": location_sources,
             "profiles": profiles, "lh2_schema": lh2_schema}
     return campaigns, leads, messages, steps, owner, demo
 
@@ -5666,6 +5805,11 @@ def print_dry_run(instance_id, campaigns, leads, messages, steps, owner, demo):
                     per_day[day] += 1
         print("  added per UTC day, last 7: " + ", ".join(
             f"{day:%a %d %b} {n}" for day, n in per_day.items()))
+
+    located = demo.get("location_sources")
+    if located:
+        print(f"\nlocations: {located['lh2']} of {len(leads)} leads from LH2, "
+              f"{located['mapping']} from the mapping, {located['none']} have none.")
 
     conv = demo.get("conversations") or {}
     print("\nconversations:")

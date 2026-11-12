@@ -630,18 +630,19 @@ export const upsertLeadsOperation: NeonCommandOperation<number, CollectionParams
       'INSERT INTO public.leads' +
       ' (instance_id, campaign_id, profile_url, full_name, headline, company, status,' +
       '  invited_at, connected_at, first_message_at, replied_at, last_action_at, added_at,' +
-      '  photo_path, photo_synced_at, education_start_year, first_job_start_year, updated_at)' +
+      '  photo_path, photo_synced_at, education_start_year, first_job_start_year, location,' +
+      '  updated_at)' +
       ' SELECT $1, r.campaign_id, r.profile_url, r.full_name, r.headline, r.company, r.status,' +
       '        r.invited_at, r.connected_at, r.first_message_at, r.replied_at,' +
       '        r.last_action_at, r.added_at, r.photo_path, r.photo_synced_at,' +
-      '        r.education_start_year, r.first_job_start_year, now()' +
+      '        r.education_start_year, r.first_job_start_year, r.location, now()' +
       '   FROM jsonb_to_recordset($2::jsonb)' +
       '     AS r(campaign_id text, profile_url text, full_name text, headline text,' +
       '          company text, status text, invited_at timestamptz, connected_at timestamptz,' +
       '          first_message_at timestamptz, replied_at timestamptz,' +
       '          last_action_at timestamptz, added_at timestamptz, photo_path text,' +
       '          photo_synced_at timestamptz, education_start_year integer,' +
-      '          first_job_start_year integer)' +
+      '          first_job_start_year integer, location text)' +
       ' ON CONFLICT (campaign_id, profile_url) DO UPDATE SET' +
       '   full_name = COALESCE(EXCLUDED.full_name, public.leads.full_name),' +
       '   headline = COALESCE(EXCLUDED.headline, public.leads.headline),' +
@@ -657,6 +658,7 @@ export const upsertLeadsOperation: NeonCommandOperation<number, CollectionParams
       '   photo_synced_at = COALESCE(EXCLUDED.photo_synced_at, public.leads.photo_synced_at),' +
       '   education_start_year = COALESCE(EXCLUDED.education_start_year, public.leads.education_start_year),' +
       '   first_job_start_year = COALESCE(EXCLUDED.first_job_start_year, public.leads.first_job_start_year),' +
+      '   location = COALESCE(EXCLUDED.location, public.leads.location),' +
       '   updated_at = now()',
     values: [params?.instanceId ?? '', params?.rows ?? '[]'],
   }),
